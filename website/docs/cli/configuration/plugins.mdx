@@ -142,7 +142,7 @@ plugins:
   packages:
     secrets:
       source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
-      version: 1.0.0
+      version: 1.1.0
 
 stores:
   team:
@@ -159,23 +159,73 @@ auth:
         credentials:
           token:
             store: team
-            key: /services/example/token
+            path: /services/example/token
   identities:
     service:
       kind: secrets/env
       via:
         provider: service-secrets
-      principal:
-        environment:
-          SERVICE_TOKEN: token
+      spec:
+        env:
+          SERVICE_TOKEN: '{{ .credentials.token }}'
 ```
 
 </File>
 
 Install with `atmos plugin install`, commit the plugin lockfile, and select the `service` identity when running a command. Only the mapped fields enter the command environment. Values are masked, bounded to 1 MiB, and must be text without NUL bytes. Environment names must use letters, digits, and underscores, start with a letter or underscore, and be unique ignoring case.
 
-Each reference requires `store` and `key`; optionally supply both `stack` and `component` for a scoped lookup. The store must be secret-enabled. Its explicit store identity is respected; otherwise the backend uses ambient credentials. Circular dependencies between the provider and a store's identity fail before reading secrets.
+Each reference requires `store` and `path`; optionally supply both `stack` and `component` for a scoped lookup. For a structured backend such as Vault KV v2, add `field` to select one exact top-level document field. The `path` is relative to the configured KV mount, without the KV v2 `/data/` API segment. Field selection does not use the backend's default scalar convention, so a document may contain both `value` and the explicitly selected field. The store must be secret-enabled and support field selection when `field` is present. Its explicit store identity is respected; otherwise the backend uses ambient credentials. Circular dependencies between the provider and a store's identity fail before reading secrets.
+
+For example, two credential names can select different fields of the same document:
+
+```yaml
+auth:
+  providers:
+    service-credentials:
+      kind: secrets/store
+      spec:
+        credentials:
+          api-access-key:
+            store: bootstrap
+            path: service/credentials
+            field: access_key
+          api-secret-key:
+            store: bootstrap
+            path: service/credentials
+            field: secret_key
+  identities:
+    service-session:
+      kind: secrets/env
+      via:
+        provider: service-credentials
+      spec:
+        env:
+          API_ACCESS_KEY: '{{ index .credentials "api-access-key" }}'
+          API_SECRET_KEY: '{{ index .credentials "api-secret-key" }}'
+```
+
+The `bootstrap` store must already be configured and secret-enabled. The identity's `spec.env` is a nonempty map of environment names to Go text templates, evaluated after upstream authentication. Only the upstream credential envelope's data is available as `.credentials`. Dot references and `index` are supported; plain strings remain literal, and template composition is allowed. Missing keys through either lookup form and invalid templates stop authentication without including values in errors. Templates have no filesystem, process-environment, shell, or secret-store helpers. Rendered values are bounded to 1 MiB and cannot contain NUL bytes; at most 256 environment variables may be defined.
+
+The unreleased `principal.environment` syntax has been replaced by `spec.env`. Move those mappings to `spec.env` and use explicit credential templates. Credential references use `path` in place of the former `key` name.
 
 Authentication rereads the stores. Five-minute credentials allow reuse within the current process; a fresh process reads them again. Logout clears the identity's environment. Atmos does not change its own process environment or write cloud credential files for this identity. The native plugin runs as your operating-system user and must still be trusted.
 
 The package version is independent of the Atmos version. Releases contain all six supported platforms in an OCI index; installation downloads only your platform's executable payload. See the [official package release guide](https://github.com/cloudposse/atmos/tree/main/plugins) for publication and public GHCR setup.
+
+### Native identity schema selection
+
+Native identity exports validate `principal` by default. Plugin authors whose configuration belongs in `spec` can select that target in their `plugin.yaml` capability metadata:
+
+```yaml
+spec:
+  capabilities:
+    auth:
+      identities:
+        secrets/env:
+          schema: schemas/identity.json
+          schema_target: spec
+          accepts: [secret-values/v1]
+          credentials: [environment/v1]
+```
+
+The `schema_target` accepts `principal` or `spec`; omitting it preserves validation of `principal`. Both configuration objects are already part of the native identity protocol, so choosing the schema target does not change the wire format. The `secrets/env` identity selects `spec` for its `env` templates.

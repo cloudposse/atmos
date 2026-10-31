@@ -278,6 +278,23 @@ func TestResolveGCPAuthContext_NoGCPContext(t *testing.T) {
 	assert.Contains(t, err.Error(), "GCP auth context not available")
 }
 
+func TestResolveEnvironmentAuthContext_AuthFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().
+		AuthenticateIsolated(gomock.Any(), "bad-environment-identity").
+		Return(nil, errTestAuthFailed)
+
+	resolver := NewResolver(mockManager, nil)
+
+	authConfig, err := resolver.ResolveEnvironmentAuthContext(context.Background(), "bad-environment-identity")
+	require.ErrorIs(t, err, errTestAuthFailed)
+	assert.Nil(t, authConfig)
+	assert.Contains(t, err.Error(), `failed to authenticate identity "bad-environment-identity" for store`)
+}
+
 // TestResolver_NeverTouchesSharedManagerState verifies the resolver only calls AuthenticateIsolated.
 // The mock fails the test on any unexpected Authenticate or GetStackInfo call, because authenticating
 // on the shared manager overwrites its chain and auth context (issue #3544).
@@ -289,11 +306,12 @@ func TestResolver_NeverTouchesSharedManagerState(t *testing.T) {
 	mockManager.EXPECT().
 		AuthenticateIsolated(gomock.Any(), "store-identity").
 		Return(&schema.AuthContext{
-			AWS:   &schema.AWSAuthContext{Profile: "aws"},
-			Azure: &schema.AzureAuthContext{TenantID: "tenant"},
-			GCP:   &schema.GCPAuthContext{ProjectID: "project"},
+			AWS:         &schema.AWSAuthContext{Profile: "aws"},
+			Azure:       &schema.AzureAuthContext{TenantID: "tenant"},
+			GCP:         &schema.GCPAuthContext{ProjectID: "project"},
+			Environment: map[string]string{"VAULT_TOKEN": "identity-token"},
 		}, nil).
-		Times(3)
+		Times(4)
 	// Deliberately no expectations for Authenticate or GetStackInfo.
 
 	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
@@ -309,6 +327,10 @@ func TestResolver_NeverTouchesSharedManagerState(t *testing.T) {
 	gcpConfig, err := resolver.ResolveGCPAuthContext(context.Background(), "store-identity")
 	require.NoError(t, err)
 	assert.Equal(t, "project", gcpConfig.ProjectID)
+
+	environment, err := resolver.ResolveEnvironmentAuthContext(context.Background(), "store-identity")
+	require.NoError(t, err)
+	assert.Equal(t, "identity-token", environment.Environment["VAULT_TOKEN"])
 }
 
 // TestResolver_NilReturnedContext verifies a nil context from isolated authentication maps to
@@ -321,7 +343,7 @@ func TestResolver_NilReturnedContext(t *testing.T) {
 	mockManager.EXPECT().
 		AuthenticateIsolated(gomock.Any(), "test-identity").
 		Return(nil, nil).
-		Times(3)
+		Times(4)
 
 	resolver := NewResolver(mockManager, nil)
 
@@ -336,4 +358,8 @@ func TestResolver_NilReturnedContext(t *testing.T) {
 	_, err = resolver.ResolveGCPAuthContext(context.Background(), "test-identity")
 	require.ErrorIs(t, err, store.ErrAuthContextNotAvailable)
 	assert.Contains(t, err.Error(), "GCP auth context not available")
+
+	_, err = resolver.ResolveEnvironmentAuthContext(context.Background(), "test-identity")
+	require.ErrorIs(t, err, store.ErrAuthContextNotAvailable)
+	assert.Contains(t, err.Error(), "environment auth context not available")
 }

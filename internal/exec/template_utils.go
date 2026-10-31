@@ -17,6 +17,7 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/templatesource"
 	cfgpkg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
@@ -80,7 +81,7 @@ func ProcessStepTmpl(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStepTmpl")()
 
-	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, delims: delims})
+	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, delims: delims, stepSource: true})
 }
 
 // tmplInput describes a template to render with processTmpl.
@@ -106,6 +107,8 @@ type tmplInput struct {
 	sourceFile string
 	// yamlSource enables native-tag shielding only for YAML documents, never decoded text.
 	yamlSource bool
+	// stepSource identifies executable step text, whose auth-shaped payloads are ordinary data.
+	stepSource bool
 }
 
 // manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
@@ -132,13 +135,19 @@ func manifestLoadOnlyContextKeys(tmplData any) []string {
 // processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
 // manifest-load behavior.
 func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
-	protectedSource, restoreSource, protectErr := protectTemplateSource(in)
+	authSource, restoreAuthSource, authErr := protectAuthTemplateSource(in)
+	if authErr != nil {
+		return "", authErr
+	}
+	protectedInput := *in
+	protectedInput.value = authSource
+	protectedSource, restoreSource, protectErr := protectTemplateSource(&protectedInput)
 	if protectErr != nil {
 		return "", protectErr
 	}
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreSource(rendered)
+			rendered = restoreAuthSource(restoreSource(rendered))
 		}
 	}()
 
@@ -192,6 +201,15 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 	}
 
 	return restoreLiterals(res.String()), nil
+}
+
+// protectAuthTemplateSource defers credential templates in configuration, while executable steps
+// retain their ordinary template evaluation even when their payloads contain auth-shaped data.
+func protectAuthTemplateSource(in *tmplInput) (string, func(string) string, error) {
+	if in.stepSource {
+		return in.value, func(value string) string { return value }, nil
+	}
+	return templatesource.Protect(in.value)
 }
 
 // protectTemplateSource shields native YAML tags only when the caller has a YAML document.
@@ -373,16 +391,24 @@ func ProcessTmplWithDatasources(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
 
+	authSource, restoreAuthSource, authErr := templatesource.Protect(tmplValue)
+	if authErr != nil {
+		return "", authErr
+	}
 	protectedSource, restoreSource, protectErr := protectTemplateSource(&tmplInput{
-		name: tmplName, value: tmplValue, yamlSource: true,
+		name: tmplName, value: authSource, yamlSource: true,
 	})
 	if protectErr != nil {
 		return "", protectErr
 	}
 	tmplValue = protectedSource
+	var generatedAuthRestorers []func(string) string
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreSource(rendered)
+			for index := len(generatedAuthRestorers) - 1; index >= 0; index-- {
+				rendered = generatedAuthRestorers[index](rendered)
+			}
+			rendered = restoreAuthSource(restoreSource(rendered))
 		}
 	}()
 
@@ -562,6 +588,17 @@ func ProcessTmplWithDatasources(
 		}
 
 		result = restoreDelimiterSettings(restoreLiterals(res.String()))
+		// A pass can emit new identity configuration. Keep its credential expressions
+		// opaque before parsing or evaluating that output again, restoring all layers
+		// only after the final pass has completed.
+		protectedAuthResult, restoreGeneratedAuth, authErr := templatesource.Protect(result)
+		if authErr != nil {
+			return "", authErr
+		}
+		if protectedAuthResult != result {
+			generatedAuthRestorers = append(generatedAuthRestorers, restoreGeneratedAuth)
+			result = protectedAuthResult
+		}
 		resultMap, err := u.UnmarshalYAML[schema.AtmosSectionMapType](result)
 		if err != nil {
 			return "", err
@@ -682,10 +719,20 @@ func ProcessTmplWithDatasourcesGomplate(
 	tmplValue string,
 	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasourcesGomplate")()
 
-	return datasource.RenderWith(atmosConfig, tmplName, tmplValue, mergedData, func(topLevel, config *url.URL) (template.FuncMap, error) {
+	authSource, restoreAuthSource, authErr := templatesource.Protect(tmplValue)
+	if authErr != nil {
+		return "", authErr
+	}
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreAuthSource(rendered)
+		}
+	}()
+
+	return datasource.RenderWith(atmosConfig, tmplName, authSource, mergedData, func(topLevel, config *url.URL) (template.FuncMap, error) {
 		policyData := &data.Data{Ctx: context.Background(), Sources: map[string]*data.Source{".": {URL: topLevel}, "config": {URL: config}}}
 		functionPolicies, err := guard.Enabled("function")
 		if err != nil {

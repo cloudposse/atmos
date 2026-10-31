@@ -22,6 +22,16 @@ type RawStore interface {
 	GetRaw(stack string, component string, key string) (string, error)
 }
 
+// FieldStore is an optional capability for stores that hold structured documents. It selects one
+// exact top-level field without applying the store's default scalar decoding convention.
+type FieldStore interface {
+	Store
+	// GetField retrieves a named field from a stack/component/key document.
+	GetField(stack, component, key, field string) (any, error)
+	// GetKeyField retrieves a named field from a document addressed directly by key.
+	GetKeyField(key, field string) (any, error)
+}
+
 // DeletableStore extends Store with the ability to remove a value. Backends that support
 // deletion (SSM, ASM, Vault, Azure Key Vault, GCP Secret Manager) implement this; backends
 // that don't may return ErrDeleteNotSupported. The secrets CLI (`atmos secret delete`)

@@ -9,6 +9,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestEnvironmentMaterializerLifecycleAndIsolation(t *testing.T) {
@@ -20,12 +22,19 @@ func TestEnvironmentMaterializerLifecycleAndIsolation(t *testing.T) {
 	_, err = m.PrepareEnvironment(nil)
 	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	credentials := &types.PluginCredentials{Type: "environment/v1", ExpiresAt: time.Now().Add(time.Hour), Data: map[string]any{"TOKEN": "private-token"}, SensitiveKeys: []string{"TOKEN"}}
-	require.NoError(t, m.Apply(t.Context(), &types.PostAuthenticateParams{Credentials: credentials}))
+	authContext := &schema.AuthContext{}
+	require.NoError(t, m.Apply(t.Context(), &types.PostAuthenticateParams{AuthContext: authContext, Credentials: credentials}))
+	require.Equal(t, map[string]string{"TOKEN": "private-token"}, authContext.Environment)
 	credentials.Data["TOKEN"] = "mutated"
 	credentials.SensitiveKeys[0] = "changed"
+	require.Equal(t, "private-token", authContext.Environment["TOKEN"], "auth context must not alias source credentials")
 	values, err := m.Environment()
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"TOKEN": "private-token"}, values)
+	authContext.Environment["TOKEN"] = "context mutation"
+	values, err = m.Environment()
+	require.NoError(t, err)
+	require.Equal(t, "private-token", values["TOKEN"], "materializer must not alias auth context")
 	values["TOKEN"] = "output mutation"
 	loaded, err := m.Load(t.Context())
 	require.NoError(t, err)
@@ -74,4 +83,24 @@ func TestEnvironmentMaterializerRejectsInvalidCredentials(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	require.ErrorIs(t, EnvironmentMaterializer("identity", nil).Apply(ctx, nil), context.Canceled)
+}
+
+func TestEnvironmentMaterializerMasksComposedCredentials(t *testing.T) {
+	m := EnvironmentMaterializer("identity", nil)
+	credentials := &types.PluginCredentials{
+		Type:      "environment/v1",
+		ExpiresAt: time.Now().Add(time.Hour),
+		Data: map[string]any{
+			"ACCESS":        "private-access",
+			"SECRET":        "private-secret",
+			"AUTHORIZATION": "Bearer private-access:private-secret",
+		},
+		SensitiveKeys: []string{"ACCESS", "SECRET", "AUTHORIZATION"},
+	}
+	require.NoError(t, m.Apply(t.Context(), &types.PostAuthenticateParams{Credentials: credentials}))
+	require.Equal(t, "authorization="+atmosio.MaskReplacement,
+		atmosio.MaskString("authorization=Bearer private-access:private-secret"),
+		"the whole composed credential must be masked, including its non-secret prefix")
+	require.Equal(t, "access="+atmosio.MaskReplacement+" secret="+atmosio.MaskReplacement,
+		atmosio.MaskString("access=private-access secret=private-secret"))
 }

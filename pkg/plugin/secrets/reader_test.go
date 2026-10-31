@@ -19,7 +19,7 @@ var _ = store.StoreConfig{Secret: true, Identity: ""}
 
 func secretConfig(backend store.Store) *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
-		Auth:   schema.AuthConfig{Providers: map[string]schema.Provider{"vault": {Kind: "secrets/store", Spec: map[string]any{"credentials": map[string]any{"token": map[string]any{"store": "vault", "key": "private/path"}}}}}, Identities: map[string]schema.Identity{}},
+		Auth:   schema.AuthConfig{Providers: map[string]schema.Provider{"vault": {Kind: "secrets/store", Spec: map[string]any{"credentials": map[string]any{"token": map[string]any{"store": "vault", "path": "private/path"}}}}}, Identities: map[string]schema.Identity{}},
 		Stores: store.StoreRegistry{"vault": backend}, StoresConfig: store.StoresConfig{"vault": {Secret: true}},
 	}
 }
@@ -60,6 +60,28 @@ func TestReadSecretUsesOnlyGrantedReferences(t *testing.T) {
 			require.Equal(t, "private-value", value)
 			_, err = reader.ReadSecret(t.Context(), "private/path")
 			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+		})
+	}
+}
+
+func TestReadSecretSelectsExactConfiguredField(t *testing.T) {
+	for _, scoped := range []bool{false, true} {
+		t.Run(map[bool]string{false: "raw key", true: "stack component"}[scoped], func(t *testing.T) {
+			backend := store.NewMockFieldStore(gomock.NewController(t))
+			config := secretConfig(backend)
+			ref := config.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)
+			ref["field"] = "api_token"
+			if scoped {
+				ref["stack"], ref["component"] = "dev", "app"
+				backend.EXPECT().GetField("dev", "app", "private/path", "api_token").Return("private-value", nil)
+			} else {
+				backend.EXPECT().GetKeyField("private/path", "api_token").Return("private-value", nil)
+			}
+
+			reader := Factory(config)("vault", map[string]any{"kind": "secrets/store"})
+			value, err := reader.ReadSecret(t.Context(), "token")
+			require.NoError(t, err)
+			require.Equal(t, "private-value", value)
 		})
 	}
 }
@@ -108,11 +130,28 @@ func TestReadSecretInvalidConfigurationNeverReadsBackend(t *testing.T) {
 		change func(*schema.AtmosConfiguration)
 	}{
 		{"missing backend", func(c *schema.AtmosConfiguration) { delete(c.Stores, "vault") }},
-		{"empty key", func(c *schema.AtmosConfiguration) {
-			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["key"] = ""
+		{"empty path", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["path"] = ""
+		}},
+		{"non-string path", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["path"] = 42
+		}},
+		{"legacy key is not a path", func(c *schema.AtmosConfiguration) {
+			ref := c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)
+			delete(ref, "path")
+			ref["key"] = "private/path"
 		}},
 		{"partial scope", func(c *schema.AtmosConfiguration) {
 			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["stack"] = "dev"
+		}},
+		{"empty field", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["field"] = ""
+		}},
+		{"non-string field", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["field"] = 42
+		}},
+		{"field unsupported", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["field"] = "api_token"
 		}},
 		{"not secret", func(c *schema.AtmosConfiguration) { c.StoresConfig["vault"] = store.StoreConfig{} }},
 	} {
@@ -178,7 +217,7 @@ func TestSecretDependenciesRejectCyclesAndMissingNodes(t *testing.T) {
 func TestSharedSecretDependenciesAndDepthLimit(t *testing.T) {
 	config := secretConfig(nil)
 	refs := config.Auth.Providers["vault"].Spec["credentials"].(map[string]any)
-	refs["second"] = map[string]any{"store": "vault", "key": "other/path"}
+	refs["second"] = map[string]any{"store": "vault", "path": "other/path"}
 	config.StoresConfig["vault"] = store.StoreConfig{Secret: true, Identity: "leaf"}
 	config.Auth.Identities["leaf"] = schema.Identity{}
 	require.NoError(t, validateGraph(config, "provider:vault", make(map[string]bool)), "sharing a dependency must not be reported as a cycle")

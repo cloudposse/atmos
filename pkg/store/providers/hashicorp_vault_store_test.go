@@ -30,6 +30,10 @@ type fakeVaultKV struct {
 
 	getCalls  int // number of secret-DATA reads (Get) performed.
 	metaCalls int // number of metadata reads (HasMetadata) performed.
+	putCalls  int // number of writes (Put) performed.
+	delCalls  int // number of deletes (Delete) performed.
+	listCalls int // number of listings (List) performed.
+	token     string
 }
 
 func newFakeVaultKV() *fakeVaultKV {
@@ -39,7 +43,12 @@ func newFakeVaultKV() *fakeVaultKV {
 	}
 }
 
+func (f *fakeVaultKV) SetToken(token string) {
+	f.token = token
+}
+
 func (f *fakeVaultKV) Put(_ context.Context, path string, data map[string]any) error {
+	f.putCalls++
 	if f.putErr != nil {
 		return f.putErr
 	}
@@ -76,6 +85,7 @@ func (f *fakeVaultKV) HasMetadata(_ context.Context, path string) error {
 // List mirrors Vault KV v2's LIST semantics: it returns only the immediate child names under
 // path (folders end in "/"), not a full recursive listing.
 func (f *fakeVaultKV) List(_ context.Context, path string) ([]string, error) {
+	f.listCalls++
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
@@ -100,6 +110,7 @@ func (f *fakeVaultKV) List(_ context.Context, path string) ([]string, error) {
 }
 
 func (f *fakeVaultKV) Delete(_ context.Context, path string) error {
+	f.delCalls++
 	if f.delErr != nil {
 		return f.delErr
 	}

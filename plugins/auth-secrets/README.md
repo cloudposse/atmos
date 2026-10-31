@@ -11,7 +11,7 @@ plugins:
   packages:
     secrets:
       source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
-      version: 1.0.2
+      version: 1.1.0
 
 stores:
   team:
@@ -28,20 +28,26 @@ auth:
         credentials:
           token:
             store: team
-            key: /services/example/token
+            path: /services/example/token
   identities:
     service:
       kind: secrets/env
       via:
         provider: service-secrets
-      principal:
-        environment:
-          SERVICE_TOKEN: token
+      spec:
+        env:
+          SERVICE_TOKEN: '{{ .credentials.token }}'
 ```
 
 Install with `atmos plugin install`, commit `.atmos.plugins.lock.yaml`, and select `service` when running an Atmos command that supports identities. The selected process environment receives `SERVICE_TOKEN`. An identity maps only explicitly named fields; unused provider fields are not forwarded.
 
-Credential references require `store` and `key`. Supply both `stack` and `component` to use a store's scoped lookup; omit both for direct key lookup. The store must be marked secret, and its value must be text. Structured values, NUL bytes, values above 1 MiB, unknown names, and invalid environment variable names are rejected. Environment names that differ only by case are rejected for cross-platform consistency.
+Credential references require `store` and `path`. Supply both `stack` and `component` to use a store's scoped lookup; omit both for direct lookup. For a structured backend such as Vault KV v2, add `field` to select one exact top-level document field. The `path` is relative to the configured KV mount; do not include the KV v2 `/data/` API segment. Field selection ignores the default scalar convention, so a document may contain both `value` and the selected field. The store must be marked secret, support exact field selection when `field` is present, and return text.
+
+The identity's `spec.env` is a nonempty map of environment variable names to Go text templates. Templates run only after upstream authentication, with that credential envelope's data available as `.credentials`. Use `{{ .credentials.token }}` for ordinary names and `{{ index .credentials "api-access-key" }}` for hyphenated names. Plain strings are literal values, not implicit credential references; template composition is supported. Missing keys, malformed templates, NUL bytes, values above 1 MiB, and invalid environment names are rejected without exposing credential values in errors. Environment names that differ only by case are rejected, and each identity is limited to 256 variables. Filesystem, process-environment, shell, and store helpers are unavailable.
+
+Output actions and formatting helpers accept scalar values; select a credential instead of rendering the whole `.credentials` map. `printf` supports scalar Go formats, indexed arguments, dynamic integer widths/precision, and pipeline composition. Formatting is checked before allocation, including cumulative expansion from repeated directives. Escape and print helpers have the same 1 MiB limit. Conservative formatting estimates can reject a heavily escaped or high-precision value near that limit. Composite values, custom formatters, malformed formats, and noninteger dynamic widths/precision are rejected.
+
+The unreleased `principal.environment` mapping has been replaced by `spec.env`; move mappings there and reference credentials explicitly with templates. The former credential-reference `key` setting is now named `path`.
 
 A store's explicit `identity` is respected. Without one, the store uses ambient backend credentials rather than inheriting the identity currently being constructed. Direct and indirect cycles between providers, store identities, and identity chains are rejected before access. Secret backends without cancellation support can finish an in-flight read after cancellation; no result is returned to the canceled caller.
 

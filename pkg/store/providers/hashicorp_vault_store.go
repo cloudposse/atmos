@@ -28,8 +28,9 @@ type VaultStore struct {
 	mount          string
 	prefix         string
 	stackDelimiter *string
+	ambientToken   string
 
-	// Identity-based authentication fields (reserved for KMS/cloud auth methods).
+	// Identity-based authentication fields.
 	identityName string
 	authResolver store.AuthContextResolver
 }
@@ -47,6 +48,7 @@ type VaultStoreOptions struct {
 
 // VaultKVClient abstracts the Vault KV v2 operations the store needs (for testability).
 type VaultKVClient interface {
+	SetToken(token string)
 	Put(ctx context.Context, path string, data map[string]any) error
 	Get(ctx context.Context, path string) (map[string]any, error)
 	Delete(ctx context.Context, path string) error
@@ -64,6 +66,7 @@ type VaultKVClient interface {
 // Ensure VaultStore implements the expected interfaces.
 var (
 	_ store.Store              = (*VaultStore)(nil)
+	_ store.FieldStore         = (*VaultStore)(nil)
 	_ store.IdentityAwareStore = (*VaultStore)(nil)
 	_ store.DeletableStore     = (*VaultStore)(nil)
 	_ store.StatusStore        = (*VaultStore)(nil)
@@ -77,6 +80,14 @@ type vaultKVv2Client struct {
 	kv     *vault.KVv2
 	client *vault.Client
 	mount  string
+}
+
+func (c *vaultKVv2Client) SetToken(token string) {
+	if token == "" {
+		c.client.ClearToken()
+		return
+	}
+	c.client.SetToken(token)
 }
 
 func (c *vaultKVv2Client) Put(ctx context.Context, path string, data map[string]any) error {
@@ -170,18 +181,19 @@ func NewVaultStore(options *VaultStoreOptions, identityName string) (store.Store
 		return nil, fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
-	token := options.Token
-	if token == "" {
+	ambientToken := options.Token
+	if ambientToken == "" {
 		//nolint:forbidigo // VAULT_TOKEN is the standard HashiCorp Vault token environment variable.
-		token = os.Getenv("VAULT_TOKEN")
+		ambientToken = os.Getenv("VAULT_TOKEN")
 	}
-	if token != "" {
-		client.SetToken(token)
+	if identityName == "" && ambientToken != "" {
+		client.SetToken(ambientToken)
 	}
 
 	s := &VaultStore{
 		client:       &vaultKVv2Client{kv: client.KVv2(mount), client: client, mount: mount},
 		mount:        mount,
+		ambientToken: ambientToken,
 		identityName: identityName,
 	}
 	if options.Prefix != nil {
@@ -197,22 +209,53 @@ func NewVaultStore(options *VaultStoreOptions, identityName string) (store.Store
 	return s, nil
 }
 
-// SetAuthContext implements store.IdentityAwareStore. Vault token auth needs no resolver, but the
-// hook is kept for future cloud auth methods.
+// SetAuthContext implements store.IdentityAwareStore. A configured identity supplies VAULT_TOKEN
+// through native environment/v1 credentials and never falls back to a static or ambient token.
 func (s *VaultStore) SetAuthContext(resolver store.AuthContextResolver, identityName string) {
 	s.authResolver = resolver
 	if identityName != "" {
 		s.identityName = identityName
 	}
+	if s.identityName != "" {
+		s.client.SetToken("")
+	}
 }
 
-// ResetAuthContext clears inherited cloud authentication. Vault's token client is
-// independent of this resolver and remains valid.
+// ResetAuthContext clears inherited identity authentication and restores the static or ambient
+// token selected at construction. A subsequent identity binding clears it again; disabling Atmos
+// authentication leaves this restored token active.
 func (s *VaultStore) ResetAuthContext() {
 	defer perf.Track(nil, "providers.VaultStore.ResetAuthContext")()
 
 	s.authResolver = nil
 	s.identityName = ""
+	s.client.SetToken(s.ambientToken)
+}
+
+func (s *VaultStore) prepareAuth(ctx context.Context) error {
+	if s.identityName == "" {
+		return nil
+	}
+	if s.authResolver == nil {
+		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", store.ErrIdentityNotConfigured, s.identityName)
+	}
+	resolver, ok := s.authResolver.(store.EnvironmentAuthContextResolver)
+	if !ok {
+		return fmt.Errorf("%w: identity %q does not expose native environment credentials", store.ErrAuthContextNotAvailable, s.identityName)
+	}
+	auth, err := resolver.ResolveEnvironmentAuthContext(ctx, s.identityName)
+	if err != nil {
+		return fmt.Errorf("%w: failed to resolve environment auth context for identity %q: %w", store.ErrAuthContextNotAvailable, s.identityName, err)
+	}
+	if auth == nil {
+		return fmt.Errorf("%w: identity %q returned no environment auth context", store.ErrAuthContextNotAvailable, s.identityName)
+	}
+	token := auth.Environment["VAULT_TOKEN"]
+	if token == "" {
+		return fmt.Errorf("%w: identity %q does not provide VAULT_TOKEN", store.ErrAuthContextNotAvailable, s.identityName)
+	}
+	s.client.SetToken(token)
+	return nil
 }
 
 func (s *VaultStore) getKey(stack string, component string, key string) (string, error) {
@@ -235,6 +278,9 @@ func (s *VaultStore) Set(stack string, component string, key string, value any) 
 	path, err := s.getKey(stack, component, key)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+	}
+	if err := s.prepareAuth(context.TODO()); err != nil {
+		return err
 	}
 
 	if err := s.client.Put(context.TODO(), path, map[string]any{vaultValueKey: value}); err != nil {
@@ -262,14 +308,26 @@ func (s *VaultStore) GetKey(key string) (any, error) {
 	if key == "" {
 		return nil, store.ErrEmptyKey
 	}
-	path := key
-	if s.prefix != "" {
-		path = strings.TrimSuffix(s.prefix, "/") + "/" + strings.TrimPrefix(key, "/")
-	}
+	path := s.getRawKeyPath(key)
 	return s.getByPath(path)
 }
 
 func (s *VaultStore) getByPath(path string) (any, error) {
+	data, err := s.getDocumentByPath(path)
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := data[vaultValueKey]; ok {
+		return v, nil
+	}
+	// Fall back to returning the whole data map for secrets not written by Atmos.
+	return data, nil
+}
+
+func (s *VaultStore) getDocumentByPath(path string) (map[string]any, error) {
+	if err := s.prepareAuth(context.TODO()); err != nil {
+		return nil, err
+	}
 	data, err := s.client.Get(context.TODO(), path)
 	if err != nil {
 		return nil, fmt.Errorf("%w '%s': %w", store.ErrVaultRead, path, err)
@@ -277,11 +335,52 @@ func (s *VaultStore) getByPath(path string) (any, error) {
 	if data == nil {
 		return nil, fmt.Errorf("%w '%s'", store.ErrVaultEmptyData, path)
 	}
-	if v, ok := data[vaultValueKey]; ok {
-		return v, nil
-	}
-	// Fall back to returning the whole data map for secrets not written by Atmos.
 	return data, nil
+}
+
+func (s *VaultStore) getRawKeyPath(key string) string {
+	if s.prefix == "" {
+		return key
+	}
+	return strings.TrimSuffix(s.prefix, "/") + "/" + strings.TrimPrefix(key, "/")
+}
+
+// GetField reads one exact top-level field from a structured KV v2 document.
+func (s *VaultStore) GetField(stack, component, key, field string) (any, error) {
+	if key == "" {
+		return nil, store.ErrEmptyKey
+	}
+	if field == "" {
+		return nil, store.ErrEmptyField
+	}
+	path, err := s.getKey(stack, component, key)
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+	}
+	return s.getFieldByPath(path, field)
+}
+
+// GetKeyField reads one exact top-level field from a structured document addressed by raw key.
+func (s *VaultStore) GetKeyField(key, field string) (any, error) {
+	if key == "" {
+		return nil, store.ErrEmptyKey
+	}
+	if field == "" {
+		return nil, store.ErrEmptyField
+	}
+	return s.getFieldByPath(s.getRawKeyPath(key), field)
+}
+
+func (s *VaultStore) getFieldByPath(path, field string) (any, error) {
+	data, err := s.getDocumentByPath(path)
+	if err != nil {
+		return nil, err
+	}
+	value, ok := data[field]
+	if !ok {
+		return nil, fmt.Errorf("%w %q at %q", store.ErrFieldNotFound, field, path)
+	}
+	return value, nil
 }
 
 // Delete removes a KV v2 secret at the computed path.
@@ -294,6 +393,9 @@ func (s *VaultStore) Delete(stack string, component string, key string) error {
 	path, err := s.getKey(stack, component, key)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+	}
+	if err := s.prepareAuth(context.TODO()); err != nil {
+		return err
 	}
 	if err := s.client.Delete(context.TODO(), path); err != nil {
 		return fmt.Errorf(errWrapFormatWithID, store.ErrVaultDelete, path, err)
@@ -312,6 +414,9 @@ func (s *VaultStore) Has(stack string, component string, key string) (bool, erro
 	path, err := s.getKey(stack, component, key)
 	if err != nil {
 		return false, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+	}
+	if err := s.prepareAuth(context.TODO()); err != nil {
+		return false, err
 	}
 
 	if err := s.client.HasMetadata(context.TODO(), path); err != nil {
@@ -334,6 +439,9 @@ func (s *VaultStore) Keys(stack string, component string) ([]string, error) {
 	}
 
 	path := getKeyPrefix(s.prefix, *s.stackDelimiter, stack, component, "/")
+	if err := s.prepareAuth(context.TODO()); err != nil {
+		return nil, err
+	}
 
 	keys, err := s.client.List(context.TODO(), path)
 	if err != nil {
