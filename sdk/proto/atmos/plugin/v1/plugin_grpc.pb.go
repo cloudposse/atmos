@@ -162,6 +162,132 @@ var Info_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	Log_Write_FullMethodName = "/atmos.plugin.v1.Log/Write"
+)
+
+// LogClient is the client API for Log service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Log is served by Atmos on the Atmos API broker connection, next to the API services, and called by the
+// plugin. It delivers LogEntry messages while a call is still running, instead of in the response where they
+// show only when the call ends. Atmos renders each entry through its logger on the UI channel (stderr),
+// scoped to the component and stack of the call, with secret masking, and drops entries below the Atmos log
+// level. Entries arrive in the order of the calls, and a call returns only after Atmos has rendered its
+// entries, so a plugin that waits for its last call before it returns the result shows every entry before the
+// result. Delivery never changes the outcome of the call and is never part of a result. A call that fails with
+// UNAVAILABLE, PERMISSION_DENIED, UNIMPLEMENTED, or FAILED_PRECONDITION delivered nothing, and the plugin then
+// returns those entries in the logs field of its response. Entries delivered here are never repeated there.
+// Like the API services, Log accepts only calls that carry the active invocation ID in the
+// atmos-invocation-id metadata.
+type LogClient interface {
+	Write(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+}
+
+type logClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewLogClient(cc grpc.ClientConnInterface) LogClient {
+	return &logClient{cc}
+}
+
+func (c *logClient) Write(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Log_Write_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// LogServer is the server API for Log service.
+// All implementations must embed UnimplementedLogServer
+// for forward compatibility.
+//
+// Log is served by Atmos on the Atmos API broker connection, next to the API services, and called by the
+// plugin. It delivers LogEntry messages while a call is still running, instead of in the response where they
+// show only when the call ends. Atmos renders each entry through its logger on the UI channel (stderr),
+// scoped to the component and stack of the call, with secret masking, and drops entries below the Atmos log
+// level. Entries arrive in the order of the calls, and a call returns only after Atmos has rendered its
+// entries, so a plugin that waits for its last call before it returns the result shows every entry before the
+// result. Delivery never changes the outcome of the call and is never part of a result. A call that fails with
+// UNAVAILABLE, PERMISSION_DENIED, UNIMPLEMENTED, or FAILED_PRECONDITION delivered nothing, and the plugin then
+// returns those entries in the logs field of its response. Entries delivered here are never repeated there.
+// Like the API services, Log accepts only calls that carry the active invocation ID in the
+// atmos-invocation-id metadata.
+type LogServer interface {
+	Write(context.Context, *LogRequest) (*emptypb.Empty, error)
+	mustEmbedUnimplementedLogServer()
+}
+
+// UnimplementedLogServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedLogServer struct{}
+
+func (UnimplementedLogServer) Write(context.Context, *LogRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method Write not implemented")
+}
+func (UnimplementedLogServer) mustEmbedUnimplementedLogServer() {}
+func (UnimplementedLogServer) testEmbeddedByValue()             {}
+
+// UnsafeLogServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to LogServer will
+// result in compilation errors.
+type UnsafeLogServer interface {
+	mustEmbedUnimplementedLogServer()
+}
+
+func RegisterLogServer(s grpc.ServiceRegistrar, srv LogServer) {
+	// If the following call panics, it indicates UnimplementedLogServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&Log_ServiceDesc, srv)
+}
+
+func _Log_Write_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServer).Write(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Log_Write_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServer).Write(ctx, req.(*LogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Log_ServiceDesc is the grpc.ServiceDesc for Log service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Log_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "atmos.plugin.v1.Log",
+	HandlerType: (*LogServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Write",
+			Handler:    _Log_Write_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "atmos/plugin/v1/plugin.proto",
+}
+
+const (
 	AuthProvider_Validate_FullMethodName           = "/atmos.plugin.v1.AuthProvider/Validate"
 	AuthProvider_Authenticate_FullMethodName       = "/atmos.plugin.v1.AuthProvider/Authenticate"
 	AuthProvider_Refresh_FullMethodName            = "/atmos.plugin.v1.AuthProvider/Refresh"

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/sirupsen/logrus"
@@ -38,6 +39,8 @@ type LogSink struct {
 	size    int
 	mu      sync.Mutex
 	off     bool
+	// forward receives each kept event as it happens instead of the sink collecting it.
+	forward func(*model.LogEntry)
 }
 
 // NewLogSink returns a sink for the events of a call at the host's log level. Terragrunt's logger reports
@@ -57,6 +60,36 @@ func NewLogSink(level, root string) *LogSink {
 		sink.level, sink.off = log.TraceLevel, false
 	}
 	return sink
+}
+
+// Enabled reports whether the sink keeps any event, which depends on the level the host asked for.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) Enabled() bool { return !s.off }
+
+// Forward hands every kept event to deliver as it happens, in order, instead of collecting it for Entries.
+// Terragrunt may log from several goroutines, so deliver is called while the sink holds its lock to keep the
+// order of events; it must be fast and must not call back into the sink. Events are no longer bounded by
+// the sink: the deliverer owns that.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) Forward(deliver func(*model.LogEntry)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forward = deliver
+}
+
+// Event reports an event of the plugin itself, such as the start of an evaluation, the way the Terragrunt
+// logger's events are reported: kept at the sink's level, collected or forwarded in order.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) Event(level log.Level, message, unit string) {
+	if s == nil || s.off || level > s.level {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.keep(&model.LogEntry{Time: time.Now(), Level: level.String(), Message: message, Unit: s.relative(unit)})
 }
 
 // TerragruntLevel returns the Terragrunt logger level that produces every event the sink keeps.
@@ -126,10 +159,6 @@ func (s *LogSink) add(level log.Level, entry *logrus.Entry) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.entries) >= maxLogEntries || s.size >= maxLogBytes {
-		s.dropped++
-		return
-	}
 	fields := make(map[string]string, len(entry.Data))
 	unit := ""
 	for _, key := range slices.Sorted(maps.Keys(entry.Data)) {
@@ -140,12 +169,26 @@ func (s *LogSink) add(level log.Level, entry *logrus.Entry) {
 		}
 		fields[key] = value
 	}
-	message := truncate(entry.Message)
-	s.size += len(message) + len(unit)
-	for key, value := range fields {
-		s.size += len(key) + len(value)
+	s.keep(&model.LogEntry{Time: entry.Time, Level: level.String(), Message: truncate(entry.Message), Fields: fields, Unit: unit})
+}
+
+// keep forwards the event when a deliverer is set, and otherwise collects it up to the bounds. The caller
+// holds the lock.
+func (s *LogSink) keep(entry *model.LogEntry) {
+	if s.forward != nil {
+		s.forward(entry)
+		return
 	}
-	s.entries = append(s.entries, model.LogEntry{Time: entry.Time, Level: level.String(), Message: message, Fields: fields, Unit: unit})
+	size := len(entry.Message) + len(entry.Unit)
+	for key, value := range entry.Fields {
+		size += len(key) + len(value)
+	}
+	if len(s.entries) >= maxLogEntries || s.size >= maxLogBytes {
+		s.dropped++
+		return
+	}
+	s.size += size
+	s.entries = append(s.entries, *entry)
 }
 
 // relative makes a unit directory project relative, leaving a path outside the project unchanged.

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+	"github.com/cloudposse/atmos/sdk/api"
 	"github.com/cloudposse/atmos/sdk/component"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
@@ -32,14 +33,33 @@ type Provider struct {
 	pluginv1.UnimplementedComponentPreparationServer
 	pluginv1.UnimplementedComponentStateServer
 	evaluate Evaluator
+	// api delivers log events to Atmos while a call runs. Nil keeps them for the response.
+	api *api.Client
+}
+
+// Option configures a Provider.
+type Option func(*Provider)
+
+// WithAPI lets the provider deliver its log events to Atmos while a call runs, so a slow operation shows
+// progress instead of nothing until it ends.
+//
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
+func WithAPI(client *api.Client) Option {
+	return func(p *Provider) { p.api = client }
 }
 
 // New constructs a provider with the pinned evaluator when none is supplied.
-func New(evaluate Evaluator) *Provider {
+//
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
+func New(evaluate Evaluator, options ...Option) *Provider {
 	if evaluate == nil {
 		evaluate = engine.Resolve
 	}
-	return &Provider{evaluate: evaluate}
+	p := &Provider{evaluate: evaluate}
+	for _, apply := range options {
+		apply(p)
+	}
+	return p
 }
 
 func encode(value any) (*pluginv1.ComponentValue, error) {
