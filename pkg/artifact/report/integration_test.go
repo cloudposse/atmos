@@ -84,6 +84,8 @@ func TestReportGatesWithTheRealReporter(t *testing.T) {
 
 func TestDefaultReporterHonorsForcedCIMode(t *testing.T) {
 	summary, outputs := ciFiles(t)
+	// A real CI runner advertises its own provider, which would receive the output instead of the files.
+	t.Setenv("GITHUB_ACTIONS", "")
 	t.Setenv("ATMOS_CI", "true")
 	session := report.NewSession(enabledConfig())
 	session.Record(entry("publish", "a", 1, published("a", "components/vpc:1.2.0"), nil))
@@ -94,6 +96,8 @@ func TestDefaultReporterHonorsForcedCIMode(t *testing.T) {
 
 func TestUnconfiguredCIWritesNothing(t *testing.T) {
 	summary, outputs := ciFiles(t)
+	// A real CI runner advertises its own provider, which would receive the output instead of the files.
+	t.Setenv("GITHUB_ACTIONS", "")
 	t.Setenv("ATMOS_CI", "true")
 	session := report.NewSession(&schema.AtmosConfiguration{})
 	session.Record(entry("publish", "a", 1, published("a", "components/vpc:1.2.0"), nil))

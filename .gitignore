@@ -65,6 +65,8 @@ tools/gomodcheck/.gomodcheck
 # Frozen compatibility fixtures must be committed even when they are archives.
 !pkg/artifact/compat/testdata/**/*.tar
 *.gz
+# Byte-exact compatibility fixtures whose digests the tests pin.
+!/pkg/artifact/compat/testdata/**/*.tar
 /bin
 
 # Nix

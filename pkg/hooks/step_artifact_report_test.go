@@ -18,6 +18,8 @@ func reportFiles(t *testing.T, f *wiretest.Fixture) (summary, outputs string) {
 	t.Helper()
 	dir := t.TempDir()
 	summary, outputs = filepath.Join(dir, "summary.md"), filepath.Join(dir, "output.txt")
+	// A real CI runner advertises its own provider, which would receive the output instead of the files.
+	t.Setenv("GITHUB_ACTIONS", "")
 	t.Setenv("ATMOS_CI", "true")
 	t.Setenv("ATMOS_CI_SUMMARY", summary)
 	t.Setenv("ATMOS_CI_OUTPUT", outputs)
