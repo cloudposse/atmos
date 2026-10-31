@@ -49,6 +49,47 @@ func (e *Executor) prepareComponentExecution(
 	info *schema.ConfigAndStacksInfo,
 	shouldProcess bool,
 ) (*componentExecContext, error) {
+	execCtx, err := e.prepareConfigurationPhase(ctx, atmosConfig, info, shouldProcess)
+	if err != nil {
+		return nil, err
+	}
+
+	execCtx.componentPath, err = e.prepareComponentDirectory(ctx, writers, atmosConfig, info, execCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = checkComponentRestrictions(info); err != nil {
+		return nil, err
+	}
+
+	if execCtx.tenv, err = resolveExecutionToolchain(atmosConfig, info, execCtx.tenv, shouldProcess); err != nil {
+		return nil, err
+	}
+	execCtx.nameFiles(atmosConfig, info)
+
+	if err = e.runPreExecutionSteps(atmosConfig, info, execCtx.workingDir, execCtx.tenv); err != nil {
+		return nil, err
+	}
+	// Execution has now written its own files, so the directory is complete and must equal the reviewed one.
+	if execCtx.rebuild != nil {
+		if err = execCtx.rebuild.verify(execCtx.workingDir); err != nil {
+			return nil, err
+		}
+	}
+
+	return execCtx, nil
+}
+
+// prepareConfigurationPhase checks the Terraform configuration, evaluates the configuration provider,
+// skips excluded components, and runs the read-config hooks. The returned context carries the prepared
+// configuration, the toolchain environment the provider needed, and the reviewed-plan rebuild when one is pending.
+func (e *Executor) prepareConfigurationPhase(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	shouldProcess bool,
+) (*componentExecContext, error) {
 	if err := checkTerraformConfig(*atmosConfig); err != nil {
 		return nil, err
 	}
@@ -69,71 +110,71 @@ func (e *Executor) prepareComponentExecution(
 	if err = e.runReadConfigHooks(ctx, atmosConfig, info, prepared); err != nil {
 		return nil, err
 	}
+	return &componentExecContext{preparedConfiguration: prepared, tenv: tenv, rebuild: rebuild}, nil
+}
 
+// resolveExecutionToolchain installs the toolchain dependencies when none were resolved while the
+// configuration was prepared, and points the command at the resolved executable.
+func resolveExecutionToolchain(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	tenv *dependencies.ToolchainEnvironment,
+	shouldProcess bool,
+) (*dependencies.ToolchainEnvironment, error) {
+	if !shouldProcess || tenv != nil {
+		return tenv, nil
+	}
+	tenv, err := resolveAndInstallToolchainDeps(atmosConfig, info)
+	if err != nil {
+		return nil, err
+	}
+	info.Command = tenv.Resolve(info.Command)
+	return tenv, nil
+}
+
+// prepareComponentDirectory resolves the directory the component runs in, provisioning or rebuilding it
+// when needed, and writes the files the configuration provider generated into it.
+func (e *Executor) prepareComponentDirectory(
+	ctx context.Context,
+	writers provisioner.OutputWriters,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+) (string, error) {
+	prepared, rebuild := execCtx.preparedConfiguration, execCtx.rebuild
 	var componentPath string
+	var err error
 	switch {
 	case rebuild != nil:
 		// The plan was restored without its workdir: provision it again and prove it equals the reviewed one.
 		componentPath, err = e.rebuildReviewedWorkdir(ctx, writers, atmosConfig, info, rebuild)
-		if err != nil {
-			return nil, err
-		}
 	case prepared != nil && usesConfigurationPlan(info):
 		// A reviewed plan uses the retained workdir; provisioning could replace its modules.
 		componentPath = ConstructTerraformComponentWorkingDir(atmosConfig, info)
 	default:
 		componentPath, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
-		if err != nil {
-			return nil, err
-		}
+	}
+	if err != nil {
+		return "", err
 	}
 
 	if prepared != nil && !info.DryRun {
 		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
-			return nil, fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
+			return "", fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
 		}
 	}
+	return componentPath, nil
+}
 
-	if err = checkComponentRestrictions(info); err != nil {
-		return nil, err
-	}
-
-	if shouldProcess && tenv == nil {
-		tenv, err = resolveAndInstallToolchainDeps(atmosConfig, info)
-		if err != nil {
-			return nil, err
-		}
-		info.Command = tenv.Resolve(info.Command)
-	}
-
-	varFile := ConstructTerraformComponentVarfileName(info)
-	testVarFile := ""
+// nameFiles sets the variable, test variable, and plan files and the working directory of a component.
+func (c *componentExecContext) nameFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	c.testVarFile = ""
 	if hasTerraformTestVars(info) {
-		testVarFile = ConstructTerraformComponentTestVarfileName(info)
+		c.testVarFile = ConstructTerraformComponentTestVarfileName(info)
 	}
-	planFile := ConstructTerraformComponentPlanfileName(info)
-	workingDir := ConstructTerraformComponentWorkingDir(atmosConfig, info)
-
-	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv); err != nil {
-		return nil, err
-	}
-	// Execution has now written its own files, so the directory is complete and must equal the reviewed one.
-	if rebuild != nil {
-		if err = rebuild.verify(workingDir); err != nil {
-			return nil, err
-		}
-	}
-
-	return &componentExecContext{
-		preparedConfiguration: prepared,
-		componentPath:         componentPath,
-		varFile:               varFile,
-		testVarFile:           testVarFile,
-		planFile:              planFile,
-		workingDir:            workingDir,
-		tenv:                  tenv,
-		rebuild:               rebuild,
-	}, nil
+	c.varFile = ConstructTerraformComponentVarfileName(info)
+	c.planFile = ConstructTerraformComponentPlanfileName(info)
+	c.workingDir = ConstructTerraformComponentWorkingDir(atmosConfig, info)
 }
 
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
