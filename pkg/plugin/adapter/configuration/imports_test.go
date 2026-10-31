@@ -277,7 +277,7 @@ func TestImportOfAProviderWithInvalidSettingsReportsTheSetting(t *testing.T) {
 	_, handled, err := session.ImportComponents(t.Context(), "terragrunt://live")
 	require.True(t, handled)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	require.Contains(t, cockroachErrors.FlattenHints(err), "The only supported mode is `native`")
+	require.Contains(t, cockroachErrors.FlattenHints(err), "The supported modes are `native` and `executable`")
 	// A scheme no section configures is still not handled here.
 	_, handled, err = session.ImportComponents(t.Context(), "other://live")
 	require.NoError(t, err)

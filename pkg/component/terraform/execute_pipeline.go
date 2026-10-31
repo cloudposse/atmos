@@ -34,6 +34,8 @@ type componentExecContext struct {
 	workingDir            string
 	tenv                  *dependencies.ToolchainEnvironment
 	planPolicy            *planfile.Guard
+	// rebuild is set when the working directory was re-provisioned for a restored plan; it is verified before any command runs.
+	rebuild *reviewedRebuild
 }
 
 // prepareComponentExecution consolidates all per-component setup into one call:
@@ -55,7 +57,7 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
-	prepared, err := prepareConfiguration(ctx, atmosConfig, info)
+	prepared, rebuild, err := prepareConfigurationForExecution(ctx, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}
@@ -69,10 +71,17 @@ func (e *Executor) prepareComponentExecution(
 	}
 
 	var componentPath string
-	if prepared != nil && usesConfigurationPlan(info) {
+	switch {
+	case rebuild != nil:
+		// The plan was restored without its workdir: provision it again and prove it equals the reviewed one.
+		componentPath, err = e.rebuildReviewedWorkdir(ctx, writers, atmosConfig, info, rebuild)
+		if err != nil {
+			return nil, err
+		}
+	case prepared != nil && usesConfigurationPlan(info):
 		// A reviewed plan uses the retained workdir; provisioning could replace its modules.
 		componentPath = ConstructTerraformComponentWorkingDir(atmosConfig, info)
-	} else {
+	default:
 		componentPath, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
 		if err != nil {
 			return nil, err
@@ -108,6 +117,12 @@ func (e *Executor) prepareComponentExecution(
 	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv); err != nil {
 		return nil, err
 	}
+	// Execution has now written its own files, so the directory is complete and must equal the reviewed one.
+	if rebuild != nil {
+		if err = rebuild.verify(workingDir); err != nil {
+			return nil, err
+		}
+	}
 
 	return &componentExecContext{
 		preparedConfiguration: prepared,
@@ -117,6 +132,7 @@ func (e *Executor) prepareComponentExecution(
 		planFile:              planFile,
 		workingDir:            workingDir,
 		tenv:                  tenv,
+		rebuild:               rebuild,
 	}, nil
 }
 

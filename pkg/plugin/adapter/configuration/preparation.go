@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/terragruntexec"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
@@ -27,6 +28,10 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	}
 	if err := rejectSavedPlan(info); err != nil {
 		return nil, err
+	}
+	// Executable mode never reaches native preparation: the two modes must not mix silently.
+	if terragruntexec.Owns(info) {
+		return nil, fmt.Errorf("%w: component %q in stack %q runs through the terragrunt executable, so the provider does not prepare it", errUtils.ErrExecutableModeUnsupported, info.ComponentFromArg, info.Stack)
 	}
 	selected, err := s.componentRequest(ctx, info)
 	if err != nil {
@@ -52,7 +57,7 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 
 // rejectSavedPlan refuses a saved plan, which a plugin-provided configuration cannot bind to yet.
 func rejectSavedPlan(info *schema.ConfigAndStacksInfo) error {
-	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
+	if info.UseTerraformPlan || info.PlanFile != "" {
 		return fmt.Errorf("%w: plugin saved-plan binding is not implemented", errUtils.ErrPluginUnsupportedExtension)
 	}
 	return nil
@@ -69,6 +74,7 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 	if err != nil {
 		return nil, err
 	}
+	adapter.RenderLogs(logScope(selected.request, info), result.GetLogs())
 	// An error diagnostic fails the preparation; warnings are printed below.
 	for _, diagnostic := range result.Diagnostics {
 		if err = adapter.DiagnosticError(diagnostic); err != nil {
@@ -79,6 +85,11 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 		return nil, engineMismatch(info, selected.instance.Engine, result.Engine)
 	}
 	return result, nil
+}
+
+// logScope names the component and stack a plugin's log events belong to.
+func logScope(request *pluginv1.ComponentRequest, info *schema.ConfigAndStacksInfo) adapter.LogScope {
+	return adapter.LogScope{Provider: request.GetProvider(), Component: info.ComponentFromArg, Stack: info.Stack}
 }
 
 // checkSourceOverride rejects a stack that points the component at another module. The module
@@ -161,11 +172,12 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 	env := preparationEnvironment(info)
 	env["ATMOS_TERRAFORM_BINARY"] = info.Command
 	env["TF_WORKSPACE"] = info.TerraformWorkspace
+	mode, options := s.providerOperation(instance.Provider)
 	request := &pluginv1.ComponentRequest{
 		Provider: instance.Provider, Address: instance.Address, Source: instance.Source, RootDirectory: s.root,
 		Configuration: instance.Configuration, ProviderConfiguration: s.providerSettings(instance.Provider),
-		Invocation: &pluginv1.Invocation{Environment: env},
-		Operation:  &pluginv1.ComponentOperation{Command: info.SubCommand, Mode: "native", TerraformArguments: slices.Clone(info.AdditionalArgsAndFlags)},
+		Invocation: &pluginv1.Invocation{Environment: env, LogLevel: adapter.HostLogLevel()},
+		Operation:  &pluginv1.ComponentOperation{Command: info.SubCommand, Mode: mode, Options: options, TerraformArguments: slices.Clone(info.AdditionalArgsAndFlags)},
 	}
 	return &selectedComponent{request: request, provider: provider, instance: instance}, nil
 }
@@ -191,7 +203,7 @@ func (s *Session) instanceFor(info *schema.ConfigAndStacksInfo) *pluginv1.Discov
 }
 
 func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.PreparedComponentConfiguration, error) {
-	inputs, err := adapter.DecodeObject(result.Inputs)
+	inputs, err := adapter.DecodeInputs(result.Inputs)
 	if err != nil {
 		return nil, err
 	}

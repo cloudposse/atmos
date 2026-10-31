@@ -114,6 +114,8 @@ type ConfigMetadata struct {
 type AtmosConfiguration struct {
 	// ComponentConfigurations belongs to this invocation and is never serialized.
 	ComponentConfigurations ComponentConfigurationRuntime `yaml:"-" json:"-" mapstructure:"-"`
+	// ComponentProviderOptions are the provider options the user set for this invocation, by provider section.
+	ComponentProviderOptions map[string]map[string]ComponentProviderOption `yaml:"-" json:"-" mapstructure:"-"`
 
 	Scaffold *ScaffoldConfiguration `yaml:"scaffold,omitempty" json:"scaffold,omitempty" mapstructure:"scaffold"`
 	// ScaffoldConfigLoaded distinguishes an empty effective catalog from a
@@ -2297,11 +2299,14 @@ type ConfigAndStacksInfo struct {
 	Identity                   string
 	// RequestedIdentity preserves the CLI/environment choice before authentication
 	// stores an auto-selected identity. Nil means Identity has not been rewritten.
-	RequestedIdentity   *string
-	ClusterName         string // EKS cluster name from --cluster-name flag.
-	NeedsPathResolution bool   // True if ComponentFromArg is a path that needs resolution.
-	UIEnabled           bool   // Enable streaming UI mode for terraform commands.
-	UIFlagExplicitlySet bool   // Whether --ui flag was explicitly set (vs. config/default).
+	RequestedIdentity *string
+	// ComponentProviderOptions are the configuration provider options set on the command line or in
+	// the environment, by provider section. Unset options are absent.
+	ComponentProviderOptions map[string]map[string]ComponentProviderOption
+	ClusterName              string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution      bool   // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled                bool   // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet      bool   // Whether --ui flag was explicitly set (vs. config/default).
 
 	// NodeHooks fires lifecycle hooks around each component in bulk Terraform
 	// and single-component Helmfile runs. Single-component Terraform commands

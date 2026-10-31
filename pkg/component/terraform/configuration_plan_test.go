@@ -383,3 +383,50 @@ func TestConfigurationWorkdirDigestIgnoresPlanReachedThroughSymlink(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, direct, viaLink)
 }
+
+func TestConfigurationWorkdirDigestIgnoresPlanArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), []byte("module"), 0o600))
+	baseline, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	require.NoError(t, err)
+
+	// Plans are reviewed artifacts, not configuration: an earlier plan, the stored plan that deploy
+	// downloads, and the fresh plan it generates must not make the directory look edited.
+	for _, name := range []string{"earlier.planfile", "stored.plan.tfplan", "new.plan"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("plan "+name), 0o600))
+	}
+	withPlans, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	require.NoError(t, err)
+	require.Equal(t, baseline, withPlans)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "extra.tf"), []byte("added"), 0o600))
+	edited, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	require.NoError(t, err)
+	require.NotEqual(t, baseline, edited)
+}
+
+func TestDropCIPlanLocationKeepsEveryPlanTheUserNamed(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     schema.ConfigAndStacksInfo
+		wantPlan string
+	}{
+		{"hook recorded the location while downloading a stored plan", schema.ConfigAndStacksInfo{PlanFile: "w/plan", StoredPlanFile: "w/stored"}, ""},
+		{"a plan the user named", schema.ConfigAndStacksInfo{PlanFile: "w/plan", UseTerraformPlan: true, StoredPlanFile: "w/stored"}, "w/plan"},
+		{"a plan named without any stored plan", schema.ConfigAndStacksInfo{PlanFile: "w/plan"}, "w/plan"},
+		{"nothing named", schema.ConfigAndStacksInfo{}, ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dropCIPlanLocation(&test.info)
+			require.Equal(t, test.wantPlan, test.info.PlanFile)
+		})
+	}
+}
+
+func TestRestoreRefusesToApplyTheStoredPlanItself(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{SubCommand: "deploy", PlanFile: "w/stored", StoredPlanFile: "w/stored"}
+	require.False(t, restoresConfigurationPlan(info), "the plan deploy compares against is never what gets applied")
+	info.PlanFile = "w/new.plan"
+	require.True(t, restoresConfigurationPlan(info), "the fresh plan that matched it is")
+}

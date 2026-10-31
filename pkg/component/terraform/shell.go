@@ -10,6 +10,7 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/terragruntexec"
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -128,6 +129,11 @@ func (e *Executor) ExecuteTerraformShell(opts *tf.ShellOptions, atmosConfig *sch
 	info, err = e.services.ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, authManager)
 	if err != nil {
 		return err
+	}
+
+	// A shell in the provisioned module would not be the unit Terragrunt runs.
+	if terragruntexec.Owns(&info) {
+		return terragruntexec.CheckCommand(&info, "shell")
 	}
 
 	componentPath, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)

@@ -113,6 +113,7 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 	if err != nil {
 		return nil, err
 	}
+	adapter.RenderLogs(adapter.LogScope{Provider: request.Provider}, discovered.GetLogs())
 	// A broken unit that is imported by name fails the import, naming the unit: the user asked for it.
 	for _, diagnostic := range discovered.Diagnostics {
 		if diagnosticErr := adapter.DiagnosticError(diagnostic); diagnosticErr != nil {

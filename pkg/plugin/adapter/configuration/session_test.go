@@ -183,7 +183,7 @@ func TestSessionRejectsConflictingDiscovery(t *testing.T) {
 		want      error
 	}{
 		{name: "unsafe stack", change: func(c *pluginv1.DiscoveredComponent) { c.Address.Stack = "../outside" }, want: errUtils.ErrPluginProtocol},
-		{name: "unsupported engine", change: func(c *pluginv1.DiscoveredComponent) { c.Engine = "terragrunt" }, want: errUtils.ErrPluginUnsupportedExtension},
+		{name: "unsupported engine", change: func(c *pluginv1.DiscoveredComponent) { c.Engine = "pulumi" }, want: errUtils.ErrPluginUnsupportedExtension},
 		{name: "invalid values", change: func(c *pluginv1.DiscoveredComponent) { c.Configuration = &pluginv1.ComponentValue{} }, want: errUtils.ErrPluginProtocol},
 		{name: "duplicate", duplicate: true, want: errUtils.ErrDuplicatePluginExtension},
 	} {

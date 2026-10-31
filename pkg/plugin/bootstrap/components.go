@@ -2,16 +2,22 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/provideroptions"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	authadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/auth"
 	componentadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	"github.com/cloudposse/atmos/pkg/plugin/config"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
+	"github.com/cloudposse/atmos/pkg/plugin/install"
 	pluginlock "github.com/cloudposse/atmos/pkg/plugin/lock"
 	"github.com/cloudposse/atmos/pkg/plugin/manifest"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -58,6 +64,157 @@ func LoadComponents(ctx context.Context, atmos *schema.AtmosConfiguration, refer
 		return nil, err
 	}
 	return registry, nil
+}
+
+// ComponentOptions reads the static option declarations of the enabled configuration providers from
+// their package manifests. It never installs, restores, verifies, or starts a package, so command
+// registration and help stay cheap. A package that is not installed yet contributes nothing; the
+// command that uses the provider reports that instead.
+func ComponentOptions(ctx context.Context, atmos *schema.AtmosConfiguration) ([]provideroptions.Provider, error) {
+	defer perf.Track(atmos, "pluginbootstrap.ComponentOptions")()
+
+	wanted := enabledSections(atmos)
+	if len(wanted) == 0 {
+		return nil, nil
+	}
+	bindings, err := declaredComponentBindings(ctx, atmos, wanted)
+	if err != nil {
+		return nil, err
+	}
+	var providers []provideroptions.Provider
+	for _, binding := range bindings {
+		declared, err := bindingProviders(atmos, &binding, wanted[binding.Name])
+		if err != nil {
+			return nil, err
+		}
+		providers = append(providers, declared...)
+	}
+	return providers, nil
+}
+
+// enabledSections lists the enabled configuration sections by the provider they use.
+func enabledSections(atmos *schema.AtmosConfiguration) map[string][]string {
+	wanted := make(map[string][]string)
+	for section, settings := range atmos.Components.Terraform.ConfigurationProviders {
+		if !settings.Enabled {
+			continue
+		}
+		name := section
+		if settings.Provider != "" {
+			name = settings.Provider
+		}
+		wanted[name] = append(wanted[name], section)
+	}
+	return wanted
+}
+
+// bindingProviders turns one discovery export into a provider for each section that runs a mode it supports.
+func bindingProviders(atmos *schema.AtmosConfiguration, binding *extension.Binding, sections []string) ([]provideroptions.Provider, error) {
+	options, err := provideroptions.Parse(binding.Name, binding.Metadata["options"])
+	if err != nil {
+		return nil, err
+	}
+	modes, err := extension.ComponentModes(binding.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	var providers []provideroptions.Provider
+	for _, section := range slices.Sorted(slices.Values(sections)) {
+		mode := atmos.Components.Terraform.ConfigurationProviders[section].Mode
+		if mode == "" {
+			mode = provideroptions.ModeNative
+		}
+		if slices.Contains(modes, mode) {
+			providers = append(providers, provideroptions.Provider{Section: section, Name: binding.Name, Mode: mode, Options: options})
+		}
+	}
+	return providers, nil
+}
+
+// RegisterComponentFlags adds the options of the enabled configuration providers to the subcommands
+// of root they apply to. Declaration and collision problems are returned; a package that cannot be
+// read is skipped here because the command that uses the provider reports it when it activates.
+func RegisterComponentFlags(ctx context.Context, atmos *schema.AtmosConfiguration, root *cobra.Command) error {
+	defer perf.Track(atmos, "pluginbootstrap.RegisterComponentFlags")()
+
+	providers, err := ComponentOptions(ctx, atmos)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrProviderOption) {
+			return err
+		}
+		log.Debug("Skipped provider flag registration", "error", err)
+		return nil
+	}
+	return provideroptions.Register(root, providers)
+}
+
+// declaredComponentBindings lists the discovery exports of the wanted providers from installed manifests.
+func declaredComponentBindings(ctx context.Context, atmos *schema.AtmosConfiguration, wanted map[string][]string) ([]extension.Binding, error) {
+	state, err := readSelections(ctx, atmos)
+	if err != nil {
+		return nil, err
+	}
+	file, err := pluginlock.Load(ProjectDirectory(atmos))
+	if err != nil {
+		return nil, err
+	}
+	cache, err := install.NewCache(atmos.Plugins.CacheDir)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := Descriptors()
+	if err != nil {
+		return nil, err
+	}
+	var result []extension.Binding
+	for _, alias := range slices.Sorted(maps.Keys(atmos.Plugins.Packages)) {
+		declaration := atmos.Plugins.Packages[alias]
+		directory := packageDirectory(alias, state, file, cache)
+		if !enabled(&declaration) || directory == "" {
+			continue
+		}
+		bindings, err := discoveryBindings(registry, directory, wanted)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, bindings...)
+	}
+	return result, nil
+}
+
+// discoveryBindings reads a package manifest and keeps the discovery exports of the wanted providers.
+func discoveryBindings(registry *extension.Registry, directory string, wanted map[string][]string) ([]extension.Binding, error) {
+	definition, err := manifest.Load(directory)
+	if err != nil {
+		return nil, err
+	}
+	bindings, err := registry.Discover(definition.Spec.Capabilities)
+	if err != nil {
+		return nil, err
+	}
+	var result []extension.Binding
+	for _, binding := range bindings {
+		if binding.Capability == extension.ComponentDiscovery && wanted[binding.Name] != nil {
+			result = append(result, binding)
+		}
+	}
+	return result, nil
+}
+
+// packageDirectory returns where an installed package lives, or empty when it is not installed.
+func packageDirectory(alias string, state *config.Selections, file *pluginlock.File, cache *install.Cache) string {
+	if local, exists := state.Packages[alias]; exists {
+		return local.Path
+	}
+	entry, locked := file.Spec.Packages[alias]
+	if !locked {
+		return ""
+	}
+	directory, err := cache.Installed(&entry, install.CurrentPlatform())
+	if err != nil {
+		return ""
+	}
+	return directory
 }
 
 func requireComponentReferences(registry *componentadapter.Registry, references []ComponentReference) error {

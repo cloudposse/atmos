@@ -121,3 +121,34 @@ func TestDeleteReleaseConfirmation(t *testing.T) {
 		require.ErrorIs(t, deleteRelease(t.Context(), client, reference, true, deletePrompts{interactive: neverInteractive, confirm: noConfirm}), denied)
 	})
 }
+
+func TestPackOptionsSourceIsOptInAndNeverImplicit(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "")
+	t.Setenv("GITHUB_SERVER_URL", "")
+	values := func(source string) *viper.Viper {
+		result := viper.New()
+		result.Set(sourceFlag, source)
+		return result
+	}
+
+	opts, err := packOptions(values(""))
+	require.NoError(t, err)
+	require.Len(t, opts, 1, "without --source only the executable format check applies")
+
+	opts, err = packOptions(values("https://github.com/example/repo"))
+	require.NoError(t, err)
+	require.Len(t, opts, 2)
+
+	_, err = packOptions(values(sourceGitHubActions))
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig, "github-actions must fail loudly outside GitHub Actions")
+
+	t.Setenv("GITHUB_REPOSITORY", "example/repo")
+	opts, err = packOptions(values(sourceGitHubActions))
+	require.NoError(t, err)
+	require.Len(t, opts, 2)
+
+	t.Setenv("GITHUB_REPOSITORY", "example/repo")
+	opts, err = packOptions(values(""))
+	require.NoError(t, err)
+	require.Len(t, opts, 1, "the CI environment alone never links a package")
+}
