@@ -2,6 +2,8 @@
 package templatesource
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -16,10 +18,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-const templateOpening = "{{"
+const (
+	templateOpening = "{{"
+	newline         = "\n"
+)
 
 var (
-	controlLine    = regexp.MustCompile(`^\{\{-?\s*(if|else|end|range|with|define|block|template)\b.*\}\}$`)
+	controlLine    = regexp.MustCompile(`^\{\{-?\s*(if|else|end|range|with|define|block|template)\b(?:[^"'\x60{}]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60)*\}\}$`)
 	controlOpening = regexp.MustCompile(`\{\{-?\s*(if|range|with|define|block)\b(?:[^"'\x60]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60)*?\}\}`)
 	mappingKey     = regexp.MustCompile(`(?m)(^|[,{])\s*("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[[:alnum:]_]+)\s*:`)
 )
@@ -66,6 +71,7 @@ func mayContainAuth(input string) bool {
 
 func documentTemplateSpans(input string) ([]templateSpan, error) {
 	decoder := yaml.NewDecoder(strings.NewReader(templateYAML(input)))
+	inputLines := strings.Split(input, newline)
 	var spans []templateSpan
 	for {
 		var document yaml.Node
@@ -81,7 +87,7 @@ func documentTemplateSpans(input string) ([]templateSpan, error) {
 				WithExplanation("Auth credential templates cannot be protected in malformed YAML.").
 				WithHint("Use valid YAML and write each credential template inline in spec.env as a quoted string or block scalar.").Err()
 		}
-		if err := visitAuthMappings(&document, func(auth *yaml.Node) error {
+		if err := visitAuthMappings(inputLines, &document, func(auth *yaml.Node) error {
 			values, err := environmentTemplateSpans(input, auth)
 			spans = append(spans, values...)
 			return err
@@ -110,7 +116,12 @@ func malformedAuthSource(input string) bool {
 }
 
 func protectSpans(input string, spans []templateSpan) (string, func(string) string) {
-	prefix := "ATMOS_AUTH_ENV_TEMPLATE_"
+	// Each restoration map owns a fresh nonce, so rendered data cannot predict its tokens.
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		panic(err)
+	}
+	prefix := "ATMOS_AUTH_ENV_TEMPLATE_" + base64.RawURLEncoding.EncodeToString(id[:]) + "_"
 	for strings.Contains(input, prefix) {
 		prefix += "X"
 	}
@@ -260,18 +271,50 @@ func containsTemplate(node *yaml.Node, visited map[*yaml.Node]bool) bool {
 // Inline block openers become same-width scalar text; closing actions retain their markers too.
 // The returned source is never rendered, so controls and comments retain their spelling.
 func templateYAML(input string) string {
-	lines := strings.Split(input, "\n")
+	lines := strings.Split(input, newline)
 	for index, line := range lines {
-		if controlLine.MatchString(strings.TrimSpace(line)) {
+		trimmed := strings.TrimSpace(line)
+		if controlLine.MatchString(trimmed) {
 			indent := len(line) - len(strings.TrimLeft(line, " \t"))
 			lines[index] = line[:indent] + "#" + line[indent:]
 			continue
+		}
+		// Keep inline wrappers parseable for the mapping walk without erasing their payload.
+		// A comment retains the marker inside block/quoted data for alias checks.
+		if inlineAuthControl(trimmed) {
+			end := strings.LastIndex(line, templateOpening)
+			if end > 0 && controlLine.MatchString(strings.TrimSpace(line[end:])) {
+				line = line[:end] + " #" + line[end:]
+			}
 		}
 		lines[index] = controlOpening.ReplaceAllStringFunc(line, func(action string) string {
 			return strings.Repeat("x", utf8.RuneCountInString(action))
 		})
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, newline)
+}
+
+// inlineAuthControl detects a leading control followed by an explicit credential mapping.
+// Its payload must not be erased as a comment or renamed by scalar projection.
+func inlineAuthControl(line string) bool {
+	opening := controlOpening.FindStringIndex(line)
+	return len(opening) == 2 && opening[0] == 0 && opening[1] < len(line) && malformedAuthSource(line[opening[1]:])
+}
+
+// inlineAuthControlAt attributes wrapper syntax to a mapping key, not scalar contents.
+func inlineAuthControlAt(lines []string, key *yaml.Node) bool {
+	if key.Line < 1 || key.Line > len(lines) {
+		return false
+	}
+	line := lines[key.Line-1]
+	if !strings.HasPrefix(strings.TrimSpace(line), templateOpening) {
+		return false
+	}
+	columns := []rune(line)
+	if key.Column < 1 || key.Column > len(columns) {
+		return false
+	}
+	return inlineAuthControl(strings.TrimSpace(string(columns[key.Column-1:])))
 }
 
 func scalarSpan(input string, node *yaml.Node) (int, int) {
@@ -302,7 +345,7 @@ func scalarSpan(input string, node *yaml.Node) (int, int) {
 }
 
 func scalarStart(input string, node *yaml.Node) (int, []string) {
-	lines := strings.SplitAfter(input, "\n")
+	lines := strings.SplitAfter(input, newline)
 	if node.Line < 1 || node.Line > len(lines) {
 		return -1, nil
 	}
@@ -385,18 +428,36 @@ func templatedMerge(node *yaml.Node) bool {
 	return false
 }
 
-func visitAuthMappings(node *yaml.Node, visit func(*yaml.Node) error) error {
+func visitAuthMappings(lines []string, node *yaml.Node, visit func(*yaml.Node) error) error {
 	if node.Kind == yaml.MappingNode {
-		for index := 0; index < len(node.Content); index += 2 {
-			if node.Content[index].Value == "auth" {
-				if err := visit(node.Content[index+1]); err != nil {
-					return err
-				}
-			}
-		}
+		return visitAuthMappingEntries(lines, node, visit)
 	}
 	for _, child := range node.Content {
-		if err := visitAuthMappings(child, visit); err != nil {
+		if err := visitAuthMappings(lines, child, visit); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func visitAuthMappingEntries(lines []string, node *yaml.Node, visit func(*yaml.Node) error) error {
+	for index := 0; index < len(node.Content); index += 2 {
+		key, value := node.Content[index], node.Content[index+1]
+		// Application vars are data, including any auth-shaped descendants.
+		if key.Value == "vars" {
+			continue
+		}
+		if inlineAuthControlAt(lines, key) {
+			return errUtils.Build(errUtils.ErrInvalidAuthConfig).
+				WithExplanation("Inline template controls cannot wrap auth identity declarations safely.").
+				WithHint("Put template controls on standalone lines around auth configuration; keep credential templates inline in spec.env.").Err()
+		}
+		if key.Value == "auth" {
+			if err := visit(value); err != nil {
+				return err
+			}
+		}
+		if err := visitAuthMappings(lines, value, visit); err != nil {
 			return err
 		}
 	}

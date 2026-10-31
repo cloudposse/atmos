@@ -402,8 +402,12 @@ func ProcessTmplWithDatasources(
 		return "", protectErr
 	}
 	tmplValue = protectedSource
+	var generatedAuthRestorers []func(string) string
 	defer func() {
 		if renderErr == nil {
+			for index := len(generatedAuthRestorers) - 1; index >= 0; index-- {
+				rendered = generatedAuthRestorers[index](rendered)
+			}
 			rendered = restoreAuthSource(restoreSource(rendered))
 		}
 	}()
@@ -584,6 +588,17 @@ func ProcessTmplWithDatasources(
 		}
 
 		result = restoreDelimiterSettings(restoreLiterals(res.String()))
+		// A pass can emit new identity configuration. Keep its credential expressions
+		// opaque before parsing or evaluating that output again, restoring all layers
+		// only after the final pass has completed.
+		protectedAuthResult, restoreGeneratedAuth, authErr := templatesource.Protect(result)
+		if authErr != nil {
+			return "", authErr
+		}
+		if protectedAuthResult != result {
+			generatedAuthRestorers = append(generatedAuthRestorers, restoreGeneratedAuth)
+			result = protectedAuthResult
+		}
 		resultMap, err := u.UnmarshalYAML[schema.AtmosSectionMapType](result)
 		if err != nil {
 			return "", err
