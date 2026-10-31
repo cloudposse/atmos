@@ -47,7 +47,9 @@ func checkLockGuarantee(info *RepositoryInfo, operation string) error {
 }
 
 // acquireLocks checks every guarantee first, then acquires the locks in canonical repository alias
-// then resource order. Any failure (including cancellation) releases whatever was already taken.
+// then resource order. A repository that delegates locking (locking.repository) is locked through
+// its delegate, which is opened with its own identity. Any failure (including cancellation)
+// releases whatever was already taken.
 func (s *Service) acquireLocks(ctx context.Context, op *operation, operation string, targets []lockTarget) (*lockSet, error) {
 	for index := range targets {
 		if err := checkLockGuarantee(targets[index].info, operation); err != nil {
@@ -58,8 +60,13 @@ func (s *Service) acquireLocks(ctx context.Context, op *operation, operation str
 	set := &lockSet{}
 	for index := range ordered {
 		target := ordered[index]
-		handle, err := target.repo.Lock(ctx, artifact.LockRequest{
-			Resource:    target.resource,
+		provider, resource, err := s.lockProviderFor(ctx, &target)
+		if err != nil {
+			releaseErr := set.release(ctx, op)
+			return nil, errors.Join(err, releaseErr)
+		}
+		handle, err := provider.Lock(ctx, artifact.LockRequest{
+			Resource:    resource,
 			Owner:       s.owner,
 			OperationID: op.id,
 			Required:    requiredScope(target.info),
@@ -71,6 +78,43 @@ func (s *Service) acquireLocks(ctx context.Context, op *operation, operation str
 		set.held = append(set.held, heldLock{target: target, handle: handle})
 	}
 	return set, nil
+}
+
+// lockProviderFor returns the lock provider and lock resource for a target. A repository locks
+// itself unless locking.repository delegates coordination, in which case the delegate repository is
+// opened (resolving its own identity, never the target's) and the resource is scoped by the target
+// collection, so unrelated collections that share one coordinator never contend. The delegate must
+// advertise the required scope before anything is mutated.
+func (s *Service) lockProviderFor(ctx context.Context, target *lockTarget) (artifact.LockProvider, string, error) {
+	provider := target.info.LockProvider
+	if provider == "" || provider == target.alias {
+		return target.repo, target.resource, nil
+	}
+	delegateInfo, err := s.repos.Describe(provider)
+	if err != nil {
+		return nil, "", fmt.Errorf("lock delegate %q of repository %q: %w", provider, target.alias, err)
+	}
+	required := requiredScope(target.info)
+	if !delegateInfo.Capabilities.HasLockScope(required) {
+		return nil, "", artifact.NewUnsupportedCapability(provider, "lock", "lock/"+string(required),
+			fmt.Sprintf("the lock delegate of repository %q cannot provide %s-scope coordination", target.alias, required))
+	}
+	delegate, err := s.repos.Open(ctx, provider)
+	if err != nil {
+		return nil, "", fmt.Errorf("lock delegate %q of repository %q: %w", provider, target.alias, err)
+	}
+	return delegate, lockNamespace(target) + "/" + target.resource, nil
+}
+
+// lockNamespace identifies the collection a lock protects: the repository's own namespace when it
+// reports one, otherwise its alias.
+func lockNamespace(target *lockTarget) string {
+	if namespacer, ok := target.repo.(artifact.LockNamespacer); ok {
+		if namespace := namespacer.LockNamespace(); namespace != "" {
+			return namespace
+		}
+	}
+	return target.alias
 }
 
 // canonicalOrder sorts targets by repository alias then resource and drops exact duplicates.

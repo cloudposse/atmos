@@ -33,6 +33,7 @@ var (
 	_ artifact.Repository     = (*Repository)(nil)
 	_ artifact.EvidenceReader = (*Repository)(nil)
 	_ artifact.EvidenceWriter = (*Repository)(nil)
+	_ artifact.LockNamespacer = (*Repository)(nil)
 )
 
 // New returns an aws/s3 repository for the configuration. It performs no network access and
