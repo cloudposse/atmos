@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic" // Register the generic CI provider, as the binary does.
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ciReportFiles enables CI reporting on the harness and points the generic CI provider at files.
@@ -130,4 +131,49 @@ func TestDisabledReportingWritesNothing(t *testing.T) {
 	require.NoError(t, got.err)
 	assert.Empty(t, contentOf(t, summary))
 	assert.Empty(t, contentOf(t, outputs))
+}
+
+// A failure before the service runs still reaches the CI report, so the job summary shows a failed
+// row instead of nothing.
+func TestPreServiceFailuresAreReported(t *testing.T) {
+	failConstruction := func(*schema.AtmosConfiguration, ServiceOptions) (artifact.Service, error) {
+		return nil, errUtils.ErrArtifactConfigInvalid
+	}
+	tests := []struct {
+		name  string
+		setup func(h *harness)
+		args  []string
+		want  error
+	}{
+		{"publish without a repository", func(*harness) {}, []string{"publish", "./dist", "--name=team/app", "--version=1.0.0"}, errUtils.ErrRequiredFlagNotProvided},
+		{"publish with a failing service construction", func(*harness) { newService = failConstruction }, []string{"publish", "./dist", "-r", "dir", "--name=team/app", "--version=1.0.0"}, errUtils.ErrArtifactConfigInvalid},
+		{"inspect with a failing service construction", func(*harness) { newService = failConstruction }, []string{"inspect", "team/app:1", "-r", "dir"}, errUtils.ErrArtifactConfigInvalid},
+		{"list with invalid labels", func(*harness) {}, []string{"list", "--labels=nope"}, errUtils.ErrInvalidFlag},
+		{"search with a failing service construction", func(*harness) { newService = failConstruction }, []string{"search", "vpc", "-r", "dir"}, errUtils.ErrArtifactConfigInvalid},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, _ := newHarness(t)
+			summary, outputs := ciReportFiles(t, h)
+			tt.setup(h)
+
+			got := h.run(tt.args...)
+
+			require.ErrorIs(t, got.err, tt.want)
+			content := contentOf(t, summary)
+			assert.Contains(t, content, "1 operation: 1 failed.")
+			assert.Contains(t, content, "❌ Failed")
+			assert.Empty(t, contentOf(t, outputs), "a failure with no result writes no output variables")
+		})
+	}
+}
+
+func TestMissingConfigurationIsReported(t *testing.T) {
+	h, _ := newHarness(t)
+	summary, _ := ciReportFiles(t, h)
+	// The report session follows the loaded configuration, so a missing one has nothing to report to.
+	atmosConfigPtr = nil
+	got := h.run("inspect", "team/app:1", "-r", "dir", "--format=json")
+	require.ErrorIs(t, got.err, errUtils.ErrArtifactConfigInvalid)
+	assert.Empty(t, contentOf(t, summary))
 }

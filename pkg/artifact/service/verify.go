@@ -69,6 +69,8 @@ func verifySubject(ctx context.Context, alias string, repo artifact.Repository, 
 		result, verifyErr := repo.Verify(ctx, subject, call)
 		if failure := checkVerifyResult(subject, result, verifyErr); failure != nil {
 			combined.Status = artifact.VerificationFailed
+			// A signer that satisfied an earlier trust set is not a verified signer of a failed result.
+			combined.Claims = nil
 			if result != nil {
 				combined.Diagnostics = append(combined.Diagnostics, result.Diagnostics...)
 			}

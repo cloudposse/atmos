@@ -38,3 +38,20 @@ func (v *Variables) UseArtifactReport(config *schema.AtmosConfiguration, options
 	v.SetArtifactCollector(reporting)
 	return reporting.FlushAndLog
 }
+
+// FlushArtifactReport writes the report session installed on these variables, whichever execution
+// boundary installed it, and does nothing when no report session is installed. A caller that is
+// about to replace the Atmos process calls it first: a successful replacement never returns, so
+// the deferred flush of the owning boundary cannot run. The flush drains the buffered entries, so a
+// later flush on a normal return, or after a failed replacement, writes nothing twice.
+func (v *Variables) FlushArtifactReport() {
+	defer perf.Track(nil, "step.Variables.FlushArtifactReport")()
+
+	session := v.artifactSession()
+	session.mu.Lock()
+	collector := session.collector
+	session.mu.Unlock()
+	if reporting, ok := collector.(*report.Session); ok {
+		reporting.FlushAndLog()
+	}
+}

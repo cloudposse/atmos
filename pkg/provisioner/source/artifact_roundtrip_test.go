@@ -48,7 +48,9 @@ func assertProvisionedComponent(t *testing.T, target string) {
 	for _, kept := range []string{"main.tf", lockFileName, "README.md", filepath.Join("scripts", "helper.sh")} {
 		assert.FileExists(t, filepath.Join(target, kept), "%s is part of the component", kept)
 	}
-	for _, transient := range []string{".terraform", "terraform.tfstate", "terraform.tfstate.backup", "deploy.tfplan"} {
+	// NoFileExists passes for a directory, so the provider cache is checked as a directory.
+	assert.NoDirExists(t, filepath.Join(target, ".terraform"), "the Terraform provider cache is transient data")
+	for _, transient := range []string{"terraform.tfstate", "terraform.tfstate.backup", "deploy.tfplan"} {
 		assert.NoFileExists(t, filepath.Join(target, transient), "%s is Terraform transient data", transient)
 	}
 	assert.NoDirExists(t, filepath.Join(target, ".atmos"), "distribution metadata must not leak into the provisioned component")

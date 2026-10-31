@@ -29,6 +29,9 @@ const (
 	// The codeFence constant is the Markdown fence a hard truncation must leave balanced.
 	codeFence = "```"
 
+	// The lineBreak constant is the newline the renderer trims and appends around blocks.
+	lineBreak = "\n"
+
 	detailsOpen  = "<details>"
 	detailsClose = "</details>"
 )
@@ -112,7 +115,7 @@ func renderOnce(set *templateSet, report *Report, operations []*Operation, shown
 		view.Sections = append(view.Sections, section)
 	}
 	view.Omitted = len(operations) - shown
-	view.Notice = degradationNotice(view.Omitted, len(operations), compact)
+	view.Notice = degradationNotice(view.Omitted, len(operations), compact, compact && hasArtifactRefs(operations[:shown]))
 
 	frame, err := set.loader.RenderStrict(set.frame, &view)
 	if err != nil {
@@ -131,7 +134,7 @@ func renderSection(set *templateSet, operation *Operation) (string, error) {
 	if err != nil {
 		return "", renderError(err)
 	}
-	return strings.TrimRight(rendered, "\n"), nil
+	return strings.TrimRight(rendered, lineBreak), nil
 }
 
 // compacted returns a copy of an operation without the bulky details. The counts that remain say
@@ -155,37 +158,63 @@ func compacted(operation *Operation) *Operation {
 }
 
 // degradationNotice words what a size-reduced report left out. It is empty for a complete report.
-func degradationNotice(omitted, total int, compact bool) string {
-	switch {
-	case omitted > 0:
-		return fmt.Sprintf("%d of %d operation sections were left out to keep this summary within the size limit. The table above lists every operation.", omitted, total)
-	case compact:
-		return "Inventory, metadata, and long diagnostic lists were left out to keep this summary within the size limit."
-	default:
-		return ""
+func degradationNotice(omitted, total int, compact, refsDropped bool) string {
+	var notices []string
+	if omitted > 0 {
+		notices = append(notices, fmt.Sprintf("%d of %d operation sections were left out to keep this summary within the size limit. The table above lists every operation.", omitted, total))
 	}
+	if compact {
+		what := "Inventory, metadata, and long diagnostic lists"
+		if refsDropped {
+			what = "Inventory, metadata, artifact references, and long diagnostic lists"
+		}
+		notices = append(notices, what+" were left out to keep this summary within the size limit.")
+	}
+	return strings.Join(notices, " ")
+}
+
+// hasArtifactRefs reports whether any operation lists artifact references that compaction removes.
+func hasArtifactRefs(operations []*Operation) bool {
+	for _, operation := range operations {
+		if operation.Collection != nil && len(operation.Collection.Artifacts) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // truncateMarkdown cuts the text at a rune boundary below maxBytes, closes the code fence and
 // collapsible sections the cut left open, and appends a visible note.
+//
+// A limit smaller than the note leaves no room for report text, so the result is the start of the
+// note cut to the limit: the output never exceeds a positive limit.
 func truncateMarkdown(markdown string, maxBytes int) string {
+	if maxBytes < len(truncationNote) {
+		return cutAtRune(strings.TrimLeft(truncationNote, lineBreak), maxBytes)
+	}
 	reserved := len(truncationNote) + len(codeFence) + 1 + closeAllowance*(len(detailsClose)+1)
 	budget := max(maxBytes-reserved, 0)
-	if budget < len(markdown) {
-		cut := budget
-		for cut > 0 && !utf8.RuneStart(markdown[cut]) {
-			cut--
-		}
-		markdown = markdown[:cut]
-	}
+	markdown = cutAtRune(markdown, budget)
 	if strings.Count(markdown, codeFence)%2 == 1 {
-		markdown += "\n" + codeFence
+		markdown += lineBreak + codeFence
 	}
 	unclosed := strings.Count(markdown, detailsOpen) - strings.Count(markdown, detailsClose)
 	for index := 0; index < unclosed && index < closeAllowance; index++ {
-		markdown += "\n" + detailsClose
+		markdown += lineBreak + detailsClose
 	}
 	return markdown + truncationNote
+}
+
+// cutAtRune returns the longest prefix of text that ends at a rune boundary and is at most limit bytes.
+func cutAtRune(text string, limit int) string {
+	if limit >= len(text) {
+		return text
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
 }
 
 // renderError wraps a template loading or rendering failure with the report render sentinel.

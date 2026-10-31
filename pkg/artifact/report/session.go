@@ -54,7 +54,8 @@ func WithReporter(factory func(*schema.AtmosConfiguration) ci.Reporter) Option {
 }
 
 // WithMaxBytes sets the largest summary the session writes. Zero or a negative value keeps
-// [DefaultMaxBytes].
+// [DefaultMaxBytes]. A limit too small to hold even the truncation notice produces the start of the
+// notice cut to the limit, so the summary never exceeds a positive limit.
 func WithMaxBytes(limit int) Option {
 	defer perf.Track(nil, "report.WithMaxBytes")()
 

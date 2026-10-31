@@ -1,6 +1,7 @@
 package report_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -157,4 +158,101 @@ func TestEntriesWithoutResultsStillRender(t *testing.T) {
 	markdown := flushOne(t, enabledConfig(), &report.Entry{Action: artifact.ActionPull, Attempt: 1, Err: errors.New("boom")})
 	assert.Contains(t, markdown, "❌ Failed")
 	assert.Contains(t, markdown, "boom")
+}
+
+func TestFailedListingStatesTheFailureNotACollectionResult(t *testing.T) {
+	partial := &invoke.Outcome{Collection: &invoke.Collection{
+		Artifacts:  []invoke.Listed{{Ref: "a/b:1"}},
+		Incomplete: true,
+	}}
+	tests := []struct {
+		name    string
+		err     error
+		want    string
+		notWant string
+	}{
+		{"failed listing", errors.New("registry unavailable"), "The list operation failed.", "Failed 1 artifact"},
+		{"canceled listing", fmt.Errorf("list: %w", context.Canceled), "The list operation was canceled.", "Canceled 1 artifact"},
+		{"complete listing keeps the collection wording", nil, "Listed 1 artifact; the listing is incomplete", "The list operation"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			markdown := flushOne(t, enabledConfig(), &report.Entry{Action: artifact.ActionList, Attempt: 1, Outcome: partial, Err: tt.err})
+			assert.Contains(t, markdown, tt.want)
+			assert.NotContains(t, markdown, tt.notWant)
+		})
+	}
+}
+
+func TestUnparsableUrlsAreReplacedNotPartiallyCleaned(t *testing.T) {
+	// The standard library quotes the raw URL, userinfo included, in its parse error.
+	markdown := flushOne(t, enabledConfig(), entry("", "a", 1, published("a", "x/y:1"),
+		errors.New(`parse "https://hunter:password-two@%zz/path?token=abc": invalid URL escape "%zz"`)))
+	for _, leaked := range []string{"hunter", "password-two", "token=abc"} {
+		assert.NotContains(t, markdown, leaked)
+	}
+	assert.Contains(t, markdown, "redacted-url")
+}
+
+func TestLimitsSmallerThanTheTruncationNoteStayWithinTheLimit(t *testing.T) {
+	for _, limit := range []int{1, 7, 50, 99} {
+		t.Run(fmt.Sprintf("limit %d", limit), func(t *testing.T) {
+			fake := &fakeReporter{}
+			session := newSession(enabledConfig(), fake, report.WithMaxBytes(limit))
+			session.Record(entry("publish", "a", 1, published("a", "x/y:1"), nil))
+			require.NoError(t, session.Flush())
+			require.Len(t, fake.summaries, 1)
+			assert.LessOrEqual(t, len(fake.summaries[0]), limit)
+			assert.True(t, utf8.ValidString(fake.summaries[0]))
+		})
+	}
+}
+
+func TestCompactNoticeNamesTheOmittedArtifactReferences(t *testing.T) {
+	listing := func(count int) *invoke.Outcome {
+		artifacts := make([]invoke.Listed, count)
+		for index := range artifacts {
+			artifacts[index] = invoke.Listed{Ref: fmt.Sprintf("team/app-%03d:1.0.0", index)}
+		}
+		return &invoke.Outcome{Collection: &invoke.Collection{Artifacts: artifacts}}
+	}
+	render := func(withArtifacts int, trim int) string {
+		build := func(options ...report.Option) string {
+			fake := &fakeReporter{}
+			session := newSession(enabledConfig(), fake, options...)
+			session.Record(&report.Entry{Step: "list", Action: artifact.ActionList, Attempt: 1, Outcome: listing(withArtifacts)})
+			require.NoError(t, session.Flush())
+			return fake.summaries[0]
+		}
+		full := build()
+		return build(report.WithMaxBytes(len(full) - trim))
+	}
+
+	t.Run("a compacted collection names its references", func(t *testing.T) {
+		compact := render(40, 200)
+		assert.Contains(t, compact, "Inventory, metadata, artifact references, and long diagnostic lists were left out")
+		assert.NotContains(t, compact, "team/app-000:1.0.0")
+	})
+	t.Run("a collection without references keeps the original wording", func(t *testing.T) {
+		compact := renderNoRefs(t)
+		assert.Contains(t, compact, "Inventory, metadata, and long diagnostic lists were left out")
+		assert.NotContains(t, compact, "artifact references")
+	})
+}
+
+// renderNoRefs compacts a report whose only collection lists no artifacts.
+func renderNoRefs(t *testing.T) string {
+	t.Helper()
+	outcome := published("a", "x/y:1")
+	files := make([]artifact.Entry, 500)
+	for index := range files {
+		files[index] = artifact.Entry{Path: fmt.Sprintf("dir/file-%03d.tf", index), Type: artifact.EntryFile, Size: 10}
+	}
+	outcome.Result.Record.Inventory = files
+	full := flushOne(t, enabledConfig(), entry("publish", "a", 1, outcome, nil))
+	fake := &fakeReporter{}
+	session := newSession(enabledConfig(), fake, report.WithMaxBytes(len(full)-200))
+	session.Record(entry("publish", "a", 1, outcome, nil))
+	require.NoError(t, session.Flush())
+	return fake.summaries[0]
 }

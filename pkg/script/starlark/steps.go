@@ -183,3 +183,12 @@ func scheduleBranch(library api.StepLibrary, index int) api.StepLibrary {
 	}
 	return scheduledLibrary{StepLibrary: library, index: index}
 }
+
+// scheduleGroup reserves one scheduled position for a parallel group, and returns the library its
+// branches fork from. A library that does not position groups is returned unchanged.
+func scheduleGroup(library api.StepLibrary) api.StepLibrary {
+	if scheduler, ok := library.(api.GroupScheduler); ok {
+		return scheduler.ScheduleGroup()
+	}
+	return library
+}

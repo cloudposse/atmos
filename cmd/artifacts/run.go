@@ -107,21 +107,26 @@ func (c *command) execute(cmd *cobra.Command, args []string) error {
 
 // invoke builds the service, maps the flags onto operation parameters, and runs the operation
 // through the shared implementation. The result is non-nil whenever the operation produced one,
-// even alongside an error.
+// even alongside an error. A failure before the service runs is recorded into the report too, so
+// CI shows a failed row instead of no report at all.
 func (c *command) invoke(ctx context.Context, in *input, reporting report.Collector) (*result, error) {
+	failed := func(err error) (*result, error) {
+		reporting.Record(report.EntryFor(c.action, nil, err))
+		return nil, err
+	}
 	if atmosConfigPtr == nil {
-		return nil, errUtils.Build(errUtils.ErrArtifactConfigInvalid).
+		return failed(errUtils.Build(errUtils.ErrArtifactConfigInvalid).
 			WithExplanation("Atmos configuration is not loaded.").
 			WithHint("Run this command from a project directory that contains an `atmos.yaml`, or pass `--config`.").
-			Err()
+			Err())
 	}
 	svc, err := newService(atmosConfigPtr, ServiceOptions{AcceptTransparencyLog: in.v.GetBool(in.key(flagYes))})
 	if err != nil {
-		return nil, err
+		return failed(err)
 	}
 	params, err := c.params(in)
 	if err != nil {
-		return nil, err
+		return failed(err)
 	}
 	outcome, err := invoke.Run(ctx, svc, params)
 	reporting.Record(report.EntryFor(c.action, outcome, err))
