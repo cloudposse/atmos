@@ -59,6 +59,14 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
+	if excludedFromOperation(info, prepared) {
+		skipExcluded(info)
+		return nil, errUtils.ErrComponentExcluded
+	}
+	warnOverlappingRetry(info, prepared)
+	if err = e.runReadConfigHooks(ctx, atmosConfig, info, prepared); err != nil {
+		return nil, err
+	}
 
 	var componentPath string
 	if prepared != nil && usesConfigurationPlan(info) {

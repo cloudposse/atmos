@@ -24,8 +24,8 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
 		return nil, nil
 	}
-	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
-		return nil, fmt.Errorf("%w: plugin saved-plan binding is not implemented", errUtils.ErrPluginUnsupportedExtension)
+	if err := rejectSavedPlan(info); err != nil {
+		return nil, err
 	}
 	selected, err := s.componentRequest(ctx, info)
 	if err != nil {
@@ -39,10 +39,22 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
+	if err = checkTerraformBinary(info, selected.instance, prepared.TerraformBinary); err != nil {
+		return nil, err
+	}
+	warnDiagnostics(result.Diagnostics)
 	if err := checkSourcesInRoot(ctx, s.root, prepared.Sources); err != nil {
 		return nil, err
 	}
 	return prepared, nil
+}
+
+// rejectSavedPlan refuses a saved plan, which a plugin-provided configuration cannot bind to yet.
+func rejectSavedPlan(info *schema.ConfigAndStacksInfo) error {
+	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
+		return fmt.Errorf("%w: plugin saved-plan binding is not implemented", errUtils.ErrPluginUnsupportedExtension)
+	}
+	return nil
 }
 
 // runProviderPrepare asks the owning provider to reevaluate the selected unit with every effect
@@ -55,6 +67,12 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 	result, err := selected.provider.Prepare(ctx, selected.request)
 	if err != nil {
 		return nil, err
+	}
+	// An error diagnostic fails the preparation; warnings are printed below.
+	for _, diagnostic := range result.Diagnostics {
+		if err = adapter.DiagnosticError(diagnostic); err != nil {
+			return nil, err
+		}
 	}
 	if result.Engine != selected.instance.Engine {
 		return nil, engineMismatch(info, selected.instance.Engine, result.Engine)
@@ -188,6 +206,12 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 		return nil, err
 	}
 	prepared.Execution = execution
+	if prepared.IAM, err = preparedIAM(result.Iam); err != nil {
+		return nil, err
+	}
+	if err := applyParity(prepared, result); err != nil {
+		return nil, err
+	}
 	for _, file := range result.Files {
 		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive})
 	}

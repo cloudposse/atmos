@@ -2,11 +2,20 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"maps"
+	"math"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 
+	"github.com/zclconf/go-cty/cty"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+	"github.com/cloudposse/atmos/sdk/component"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
@@ -22,6 +31,9 @@ func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.Compo
 		return req, ErrUnsupported
 	}
 	req.Path = filepath.Join(request.RootDirectory, filepath.FromSlash(request.Source))
+	if err := withFeatures(&req, request.ProviderConfiguration); err != nil {
+		return req, err
+	}
 	var config struct {
 		Settings struct {
 			Terragrunt struct {
@@ -85,6 +97,13 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 		return nil, rpcError(err)
 	}
 	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution)}
+	if err := parityResponse(response, req, result); err != nil {
+		return nil, rpcError(err)
+	}
+	if response.Iam, err = iamResponse(result.IAM); err != nil {
+		return nil, rpcError(err)
+	}
+	response.Diagnostics = unitWarnings(req.BasePath, result.Warnings)
 	for _, name := range slices.Sorted(maps.Keys(result.Generated)) {
 		policy := result.GeneratedPolicies[name]
 		if policy == "" {
@@ -181,4 +200,194 @@ func hooksResponse(hooks []model.Hook) []*pluginv1.ComponentHook {
 		})
 	}
 	return result
+}
+
+// iamResponse hands the role to the host, which assumes it. The web identity token travels as a
+// sensitive value.
+func iamResponse(iam *model.IAM) (*pluginv1.ComponentIam, error) {
+	if iam == nil {
+		return nil, nil
+	}
+	response := &pluginv1.ComponentIam{Role: iam.Role, SessionName: iam.SessionName, DurationSeconds: uint32(max(0, min(iam.DurationSeconds, math.MaxUint32)))}
+	if iam.WebIdentityToken != "" {
+		token, err := component.Encode(cty.StringVal(iam.WebIdentityToken).Mark(component.Sensitive))
+		if err != nil {
+			return nil, err
+		}
+		response.WebIdentityToken = token
+	}
+	return response, nil
+}
+
+// featureEnvironment is the variable Terragrunt reads feature overrides from.
+const featureEnvironment = "TG_FEATURE"
+
+// featureSettings renders the `features` setting as strings. Values must be booleans, numbers, or
+// strings, because a feature is a scalar.
+func featureSettings(value any) (map[string]string, error) {
+	if value == nil {
+		return nil, nil
+	}
+	entries, ok := value.(map[string]any)
+	if !ok {
+		return nil, settingProblem("features", "Invalid value for `components.terraform.terragrunt.features`", "Set `features` to a map of feature names to booleans, numbers, or strings.")
+	}
+	result := make(map[string]string, len(entries))
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		switch typed := entries[name].(type) {
+		case bool:
+			result[name] = strconv.FormatBool(typed)
+		case string:
+			result[name] = typed
+		case json.Number:
+			result[name] = typed.String()
+		default:
+			return nil, settingProblem("features."+name, fmt.Sprintf("Invalid value for the `%s` feature override", name), "Use a boolean, a number, or a string.")
+		}
+	}
+	return result, nil
+}
+
+// withFeatures sets the request's feature overrides. Overrides from the `features` setting apply
+// first; TG_FEATURE in the invocation environment replaces them per name, as environment
+// variables outrank configuration files.
+func withFeatures(req *model.Request, configuration *pluginv1.ComponentValue) error {
+	var config map[string]any
+	if configuration != nil {
+		if err := decode(configuration, &config); err != nil {
+			return err
+		}
+	}
+	features, err := featureSettings(config["features"])
+	if err != nil {
+		return err
+	}
+	if raw := req.Environment[featureEnvironment]; raw != "" {
+		fromEnvironment, err := engine.ParseFeatureEnvironment(raw)
+		if err != nil {
+			return err
+		}
+		if features == nil {
+			features = map[string]string{}
+		}
+		maps.Copy(features, fromEnvironment)
+	}
+	req.Features = features
+	return nil
+}
+
+// unitEngine is the engine a unit runs with: its terraform_binary when it sets one, otherwise the
+// host's selection.
+func unitEngine(req model.Request, resolved *model.Resolution) string {
+	if resolved != nil && resolved.TerraformBinary != "" {
+		return engineName(resolved.TerraformBinary)
+	}
+	return engineName(req.Tofu)
+}
+
+// discoveryParity adds what the host needs before a unit is prepared: the executable the unit
+// selects, as the component's `command` so a stack-level `command` still overrides it, and the
+// exclude block that bulk commands consult.
+func discoveryParity(config map[string]any, resolved *model.Resolution) {
+	if resolved.TerraformBinary != "" {
+		config["command"] = resolved.TerraformBinary
+	}
+	if resolved.Exclude == nil {
+		return
+	}
+	settings, _ := config["settings"].(map[string]any)
+	terragrunt, _ := settings["terragrunt"].(map[string]any)
+	terragrunt["exclude"] = map[string]any{
+		"actions":              slices.Clone(resolved.Exclude.Actions),
+		"exclude_dependencies": resolved.Exclude.ExcludeDependencies,
+	}
+}
+
+// operationCommand is the command name Terragrunt matches exclude actions against: destroy for
+// `apply -destroy`, apply for deploy, otherwise the command itself.
+func operationCommand(command string, arguments []string) string {
+	if command == "deploy" {
+		command = "apply"
+	}
+	if command == "destroy" {
+		return command
+	}
+	if command == "apply" {
+		for _, argument := range slices.Backward(arguments) {
+			name, value, hasValue := strings.Cut(argument, "=")
+			if name != "-destroy" && name != "--destroy" {
+				continue
+			}
+			if !hasValue {
+				return "destroy"
+			}
+			if parsed, err := strconv.ParseBool(value); err == nil && parsed {
+				return "destroy"
+			}
+			return command
+		}
+	}
+	return command
+}
+
+// parityResponse adds the evaluated terraform_binary, errors, exclude, and feature flags to a
+// Prepare response. Exclude carries only the outcome for this operation: the block's no_run
+// semantics are applied here, so it is set exactly when the host must not run the command.
+func parityResponse(response *pluginv1.PrepareComponentResponse, req model.Request, resolved *model.Resolution) error {
+	response.TerraformBinary = resolved.TerraformBinary
+	response.FeatureFlags = maps.Clone(resolved.FeatureFlags)
+	errorsResponse, err := errorsResponse(resolved.Errors)
+	if err != nil {
+		return err
+	}
+	response.Errors = errorsResponse
+	command := operationCommand(req.Command, req.Arguments)
+	if engine.PreventsRun(resolved.Exclude, command) {
+		response.Exclude = &pluginv1.ComponentExclude{Condition: true, Actions: []string{command}, ExcludeDependencies: resolved.Exclude.ExcludeDependencies}
+	}
+	return nil
+}
+
+func errorsResponse(policies *model.Errors) (*pluginv1.ComponentErrorsConfiguration, error) {
+	if policies == nil {
+		return nil, nil
+	}
+	result := &pluginv1.ComponentErrorsConfiguration{}
+	for i := range policies.Retry {
+		retry := &policies.Retry[i]
+		result.Retry = append(result.Retry, &pluginv1.ComponentRetryPolicy{
+			Name: retry.Name, RetryableErrors: slices.Clone(retry.Patterns), MaxAttempts: uint32(retry.MaxAttempts), SleepIntervalSeconds: uint32(retry.SleepIntervalSec), //nolint:gosec // Validated as positive when the unit is evaluated.
+		})
+	}
+	for i := range policies.Ignore {
+		ignore := &policies.Ignore[i]
+		signals := make(map[string]*pluginv1.ComponentValue, len(ignore.Signals))
+		for _, name := range slices.Sorted(maps.Keys(ignore.Signals)) {
+			value, err := encode(ignore.Signals[name])
+			if err != nil {
+				return nil, err
+			}
+			signals[name] = value
+		}
+		result.Ignore = append(result.Ignore, &pluginv1.ComponentIgnorePolicy{Name: ignore.Name, IgnorableErrors: slices.Clone(ignore.Patterns), Message: ignore.Message, Signals: signals})
+	}
+	return result, nil
+}
+
+// unitWarnings reports findings about one unit as warnings, with paths relative to the project.
+func unitWarnings(root string, warnings []model.Warning) []*pluginv1.Diagnostic {
+	relativeWarnings := slices.Clone(warnings)
+	for i := range relativeWarnings {
+		if relativeWarnings[i].Path == "" {
+			continue
+		}
+		if path, err := relative(root, relativeWarnings[i].Path); err == nil {
+			relativeWarnings[i].Path = path
+		}
+	}
+	diagnostics := warningDiagnostics(relativeWarnings)
+	for _, diagnostic := range diagnostics {
+		diagnostic.Detail.Operation = "prepare"
+	}
+	return diagnostics
 }

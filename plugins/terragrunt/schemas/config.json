@@ -11,6 +11,17 @@
     "mode": {
       "const": "native"
     },
+    "features": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "number",
+          "string"
+        ]
+      },
+      "description": "Feature flag overrides applied to every unit, by feature name. TG_FEATURE overrides these per name."
+    },
     "discovery": {
       "type": "object",
       "properties": {
