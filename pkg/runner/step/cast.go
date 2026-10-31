@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	"github.com/cloudposse/atmos/pkg/duration"
@@ -19,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 var (
@@ -216,13 +215,13 @@ func startStepRecorder(step *schema.WorkflowStep, vars *Variables) (*asciicast.R
 	}
 	rec, err := asciicast.Start(&asciicast.Options{
 		Path:       path,
-		BasePath:   viper.GetString("cast.recording.base_path"),
+		BasePath:   viperguard.GetString("cast.recording.base_path"),
 		Name:       step.Name,
 		Title:      title,
 		Command:    castCommandArgs(step),
 		Width:      width,
 		Height:     height,
-		RecordIn:   viper.GetBool("cast.recording.input"),
+		RecordIn:   viperguard.GetBool("cast.recording.input"),
 		Explicit:   path != "",
 		Overwrite:  true, // Declarative steps own their output path; commit replaces it.
 		Env:        env,
@@ -347,11 +346,11 @@ func castRecorderEnv(step *schema.WorkflowStep, vars *Variables) (map[string]str
 func castRecorderDimensions(step *schema.WorkflowStep) (int, int) {
 	width := step.Width
 	if width <= 0 {
-		width = viper.GetInt("cast.recording.width")
+		width = viperguard.GetInt("cast.recording.width")
 	}
 	height := step.Height
 	if height <= 0 {
-		height = viper.GetInt("cast.recording.height")
+		height = viperguard.GetInt("cast.recording.height")
 	}
 	return width, height
 }
@@ -580,7 +579,7 @@ func inheritCastSessionBlockDefaults(parent, block *schema.WorkflowStep) {
 // anything else is an rc file path whose existence the session checks when it
 // starts.
 func castSessionShellInit(step *schema.WorkflowStep) string {
-	return firstNonEmpty(strings.TrimSpace(step.ShellInit), strings.TrimSpace(viper.GetString("cast.session.shell_init")))
+	return firstNonEmpty(strings.TrimSpace(step.ShellInit), strings.TrimSpace(viperguard.GetString("cast.session.shell_init")))
 }
 
 func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {

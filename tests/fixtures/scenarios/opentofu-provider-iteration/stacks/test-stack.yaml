@@ -1,0 +1,10 @@
+vars:
+  stage: "test"
+
+components:
+  terraform:
+    test-component:
+      vars:
+        accounts:
+          - dev
+          - prod

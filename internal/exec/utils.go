@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -29,6 +28,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
+	"github.com/cloudposse/atmos/pkg/terraform/inspect"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -1349,9 +1349,16 @@ func processStacks(
 	case cfg.TerraformComponentType:
 		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
-		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
+		// OpenTofu 1.9+ provider iteration (`provider = aws.by_account[each.key]`) is a terraform-config-inspect
+		// static-parser limitation, so inspect.LoadModule returns those diagnostics separately from diags.
+		terraformConfiguration, diags, providerIteration := inspect.LoadModule(componentPath)
 		if !diags.HasErrors() {
-			componentInfo[terraformConfigKey] = terraformConfiguration
+			if len(providerIteration) > 0 {
+				componentInfo[terraformConfigKey] = nil
+				recordProviderIterationSkip(componentInfo, providerIteration)
+			} else {
+				componentInfo[terraformConfigKey] = terraformConfiguration
+			}
 		} else {
 			diagErr := diags.Err()
 
@@ -1418,6 +1425,7 @@ func processStacks(
 					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
 					componentInfo[terraformConfigKey] = nil
 					componentInfo["validation_skipped_module_source_interpolation"] = true
+					recordProviderIterationSkip(componentInfo, providerIteration)
 				} else {
 					componentInfo[terraformConfigKey] = nil
 				}

@@ -207,3 +207,14 @@ func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool
 
 	return true
 }
+
+// recordProviderIterationSkip records in componentInfo that terraform-config-inspect validation was
+// skipped because of OpenTofu provider iteration, so `describe component` reports that reason rather
+// than module source interpolation. It does nothing if providerIteration is empty.
+func recordProviderIterationSkip(componentInfo map[string]any, providerIteration tfconfig.Diagnostics) {
+	if len(providerIteration) == 0 {
+		return
+	}
+	log.Debug("Skipping terraform-config-inspect validation for OpenTofu provider iteration diagnostic", "diagnostic", providerIteration.Err())
+	componentInfo["validation_skipped_provider_iteration"] = true
+}

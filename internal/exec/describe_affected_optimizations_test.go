@@ -625,6 +625,100 @@ module "remote_module" {
 		assert.Equal(t, patterns1, patterns2)
 	})
 
+	t.Run("OpenTofu provider iteration still yields module patterns", func(t *testing.T) {
+		t.Parallel()
+		// "Invalid provider reference" from OpenTofu 1.9+ provider iteration is a known
+		// terraform-config-inspect limitation. Loading must not fail, and the local module must
+		// still produce a pattern so changes to it are detected.
+		iterPath := filepath.Join(tempDir, "components", "terraform", "tofu-provider-iteration")
+		require.NoError(t, os.MkdirAll(filepath.Join(iterPath, "modules", "subnets"), 0o755))
+		mainTf := `
+provider "aws" {
+  alias    = "by_account"
+  for_each = toset(["dev", "prod"])
+  profile  = each.value
+}
+
+data "aws_caller_identity" "each" {
+  for_each = toset(["dev", "prod"])
+  provider = aws.by_account[each.value]
+}
+
+module "subnets" {
+  source = "./modules/subnets"
+}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(iterPath, "main.tf"), []byte(mainTf), 0o644))
+
+		freshCache := newComponentPathPatternCache()
+		patterns, err := freshCache.getTerraformModulePatterns("tofu-provider-iteration", atmosConfig)
+		require.NoError(t, err)
+		require.Len(t, patterns, 1)
+		assert.Contains(t, filepath.ToSlash(patterns[0]), "tofu-provider-iteration/modules/subnets")
+		assert.Contains(t, patterns[0], "/**")
+	})
+
+	t.Run("invalid provider reference that is not provider iteration still fails", func(t *testing.T) {
+		t.Parallel()
+		badPath := filepath.Join(tempDir, "components", "terraform", "conditional-provider")
+		require.NoError(t, os.MkdirAll(badPath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(badPath, "main.tf"), []byte(`
+data "aws_caller_identity" "bad" {
+  provider = var.use_dev ? aws.dev : aws.prod
+}
+`), 0o644))
+
+		freshCache := newComponentPathPatternCache()
+		_, err := freshCache.getTerraformModulePatterns("conditional-provider", atmosConfig)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+	})
+
+	t.Run("provider iteration with the index split across lines still yields module patterns", func(t *testing.T) {
+		t.Parallel()
+		// Terraform-config-inspect reports only the line where the provider expression starts, so the
+		// index has to be read across the following lines.
+		splitPath := filepath.Join(tempDir, "components", "terraform", "split-provider-iteration")
+		require.NoError(t, os.MkdirAll(filepath.Join(splitPath, "modules", "subnets"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(splitPath, "main.tf"), []byte(`
+data "aws_caller_identity" "each" {
+  for_each = toset(["dev", "prod"])
+  provider = aws.by_account[
+    each.value
+  ]
+}
+
+module "subnets" {
+  source = "./modules/subnets"
+}
+`), 0o644))
+
+		freshCache := newComponentPathPatternCache()
+		patterns, err := freshCache.getTerraformModulePatterns("split-provider-iteration", atmosConfig)
+		require.NoError(t, err)
+		require.Len(t, patterns, 1)
+		assert.Contains(t, filepath.ToSlash(patterns[0]), "split-provider-iteration/modules/subnets")
+	})
+
+	t.Run("conditional after an indexed provider alias still fails", func(t *testing.T) {
+		t.Parallel()
+		// The expression starts with an indexed provider alias, but the whole value is a conditional, which
+		// OpenTofu rejects. Only the complete expression may count as provider iteration.
+		badPath := filepath.Join(tempDir, "components", "terraform", "trailing-conditional-provider")
+		require.NoError(t, os.MkdirAll(badPath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(badPath, "main.tf"), []byte(`
+data "aws_caller_identity" "bad" {
+  for_each = toset(["dev", "prod"])
+  provider = aws.by_account[each.value] ? aws.dev : aws.prod
+}
+`), 0o644))
+
+		freshCache := newComponentPathPatternCache()
+		_, err := freshCache.getTerraformModulePatterns("trailing-conditional-provider", atmosConfig)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+	})
+
 	t.Run("non-existent component returns empty", func(t *testing.T) {
 		t.Parallel()
 		patterns, err := cache.getTerraformModulePatterns("nonexistent", atmosConfig)
@@ -2318,6 +2412,66 @@ module "subnets" {
 		changed, err := areTerraformComponentModulesChanged("vpc", atmosConfig, changedFiles)
 		require.NoError(t, err)
 		assert.True(t, changed)
+	})
+
+	t.Run("OpenTofu provider iteration does not block module change detection", func(t *testing.T) {
+		t.Parallel()
+		// OpenTofu 1.9+ provider iteration (`provider = aws.by_account[each.value]`) makes
+		// terraform-config-inspect report "Invalid provider reference". That is a static-parser
+		// limitation, not a configuration error, so the local module must still be detected.
+		componentPath := filepath.Join(tempDir, "components/terraform/tofu-provider-iteration")
+		modulePath := filepath.Join(componentPath, "modules/subnets")
+		err := os.MkdirAll(modulePath, 0o755)
+		require.NoError(t, err)
+
+		mainTf := `
+provider "aws" {
+  alias    = "by_account"
+  for_each = toset(["dev", "prod"])
+  profile  = each.value
+}
+
+data "aws_caller_identity" "each" {
+  for_each = toset(["dev", "prod"])
+  provider = aws.by_account[each.value]
+}
+
+module "subnets" {
+  source = "./modules/subnets"
+}
+`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(mainTf), 0o644)
+		require.NoError(t, err)
+		err = os.WriteFile(filepath.Join(modulePath, "main.tf"), []byte("# module"), 0o644)
+		require.NoError(t, err)
+
+		changed, err := areTerraformComponentModulesChanged("tofu-provider-iteration", atmosConfig,
+			[]string{filepath.Join(modulePath, "main.tf")})
+		require.NoError(t, err)
+		assert.True(t, changed, "a change in the local module must still mark the component as changed")
+
+		changed, err = areTerraformComponentModulesChanged("tofu-provider-iteration", atmosConfig,
+			[]string{filepath.Join(tempDir, "some/other/file.txt")})
+		require.NoError(t, err)
+		assert.False(t, changed, "an unrelated change must not mark the component as changed")
+	})
+
+	t.Run("invalid provider reference that is not provider iteration still fails", func(t *testing.T) {
+		t.Parallel()
+		// Terraform-config-inspect emits "Invalid provider reference" for a conditional provider expression
+		// too. OpenTofu rejects that as well, so it must not be tolerated as provider iteration.
+		componentPath := filepath.Join(tempDir, "components/terraform/conditional-provider")
+		require.NoError(t, os.MkdirAll(componentPath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(`
+data "aws_caller_identity" "bad" {
+  provider = var.use_dev ? aws.dev : aws.prod
+}
+`), 0o644))
+
+		_, err := areTerraformComponentModulesChanged("conditional-provider", atmosConfig,
+			[]string{filepath.Join(tempDir, "some/other/file.txt")})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
 	})
 
 	t.Run("component with unchanged module", func(t *testing.T) {

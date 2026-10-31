@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -18,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
+	"github.com/cloudposse/atmos/pkg/terraform/inspect"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -395,7 +395,10 @@ func areTerraformComponentModulesChanged(
 		return false, err
 	}
 
-	terraformConfiguration, diags := tfconfig.LoadModule(componentPathAbs)
+	// OpenTofu 1.9+ provider iteration is a terraform-config-inspect static-parser limitation, not a
+	// configuration error, so inspect.LoadModule sets those diagnostics aside. The parser records it and
+	// keeps loading, so the module calls it returns are complete and still drive affected detection below.
+	terraformConfiguration, diags, _ := inspect.LoadModule(componentPathAbs)
 	if diags.HasErrors() {
 		diagErr := diags.Err()
 

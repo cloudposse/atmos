@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 // Default color constants for code blocks.
@@ -39,10 +39,10 @@ func NewCodeblockStyle(renderer *lipgloss.Renderer) CodeblockStyle {
 	defer perf.Track(nil, "markdown.NewCodeblockStyle")()
 
 	// Bind environment variable for debug logging.
-	_ = viper.BindEnv("ATMOS_DEBUG_COLORS")
+	_ = viperguard.BindEnv("ATMOS_DEBUG_COLORS")
 
 	// Debug: Check renderer profile.
-	debugColors := viper.GetString("ATMOS_DEBUG_COLORS") != ""
+	debugColors := viperguard.GetString("ATMOS_DEBUG_COLORS") != ""
 	if debugColors {
 		fmt.Fprintf(os.Stderr, "[DEBUG] NewCodeblockStyle - Renderer Profile: %v\n", renderer.ColorProfile())
 	}
