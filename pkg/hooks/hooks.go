@@ -607,7 +607,7 @@ func (r hookRenderer) str(value string, info *schema.ConfigAndStacksInfo) (any, 
 		return nil, err
 	}
 	_, tagged := yamlsource.Decode(value)
-	if tagged || (!strict && strings.HasPrefix(trimmed, "!")) {
+	if tagged || yamlsource.Embedded(value) || (!strict && strings.HasPrefix(trimmed, "!")) {
 		return r.yamlFunction(value, info)
 	}
 
@@ -616,7 +616,15 @@ func (r hookRenderer) str(value string, info *schema.ConfigAndStacksInfo) (any, 
 		if info != nil && info.ComponentSection != nil {
 			tmplData = info.ComponentSection
 		}
-		return e.ProcessStepTmpl(r.atmosConfig, hookTemplateName, value, tmplData, r.delims)
+		rendered, err := e.ProcessStepTmpl(r.atmosConfig, hookTemplateName, value, tmplData, r.delims)
+		if err != nil {
+			return nil, err
+		}
+		// The section can hold a YAML function that hasn't run yet, so rendering can produce one.
+		if _, renderedTagged := yamlsource.Decode(rendered); renderedTagged || yamlsource.Embedded(rendered) {
+			return r.yamlFunction(rendered, info)
+		}
+		return rendered, nil
 	}
 
 	return value, nil

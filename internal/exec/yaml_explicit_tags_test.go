@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
@@ -209,4 +211,117 @@ func TestExplicitYAMLTagsLegacyFixtureAndCacheIsolation(t *testing.T) {
 			require.Equal(t, "!unset", vars["legacy_unset"])
 		}
 	}
+}
+
+func embeddedEnv(name string) string {
+	return yamlsource.Source{Tag: "!env", Argument: name, File: "/abs/stack.yaml", Line: 3}.Encode()
+}
+
+func TestProcessCustomYamlTagsResolvesEmbeddedSources(t *testing.T) {
+	t.Setenv("ATMOS_EMBED_A", "from-a")
+	t.Setenv("ATMOS_EMBED_B", "from-b")
+	a, b := embeddedEnv("ATMOS_EMBED_A"), embeddedEnv("ATMOS_EMBED_B")
+	literal := yamlsource.Source{Tag: "!literal", Argument: "{{ keep }}"}.Encode()
+	input := map[string]any{
+		"whole":   a,
+		"prefix":  "x-" + a,
+		"suffix":  a + "-post",
+		"middle":  "x-" + a + "-post",
+		"two":     a + "/" + b,
+		"twice":   a + "=" + a,
+		"literal": "x-" + literal,
+		"quoted":  `"` + a + `"`,
+		"plain":   "!env ATMOS_EMBED_A",
+		"nested":  map[string]any{"list": []any{"pre-" + b}},
+	}
+
+	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "", nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "from-a", result["whole"])
+	assert.Equal(t, "x-from-a", result["prefix"])
+	assert.Equal(t, "from-a-post", result["suffix"])
+	assert.Equal(t, "x-from-a-post", result["middle"])
+	assert.Equal(t, "from-a/from-b", result["two"])
+	assert.Equal(t, "from-a=from-a", result["twice"])
+	assert.Equal(t, "x-{{ keep }}", result["literal"])
+	assert.Equal(t, `"from-a"`, result["quoted"])
+	assert.Equal(t, "!env ATMOS_EMBED_A", result["plain"], "an authored string stays literal")
+	nested, ok := result["nested"].(map[string]any)
+	require.True(t, ok)
+	list, ok := nested["list"].([]any)
+	require.True(t, ok)
+	require.Len(t, list, 1)
+	assert.Equal(t, "pre-from-b", list[0])
+}
+
+func TestProcessCustomYamlTagsEmbeddedResultsAreStableAcrossRuns(t *testing.T) {
+	t.Setenv("ATMOS_EMBED_A", "from-a")
+	input := map[string]any{"name": "app-" + embeddedEnv("ATMOS_EMBED_A") + "-dev"}
+
+	first, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "", nil, nil)
+	require.NoError(t, err)
+	second, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "", nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "app-from-a-dev", first["name"])
+	assert.Equal(t, first["name"], second["name"])
+}
+
+func TestProcessCustomYamlTagsRejectsEmbeddedStructuredValue(t *testing.T) {
+	structured := yamlsource.Source{Tag: "!exec", Argument: `echo '{"k":"v"}'`}.Encode()
+	input := map[string]any{"name": "x-" + structured}
+
+	_, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "", nil, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrYamlFuncTemplateEmbedding)
+}
+
+func TestProcessCustomYamlTagsRejectsTransformedSource(t *testing.T) {
+	// A template function changed the source before it could be evaluated, so its value is unknowable.
+	input := map[string]any{"name": strings.ToUpper(embeddedEnv("ATMOS_EMBED_A"))}
+
+	_, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "", nil, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrYamlFuncTemplateEmbedding)
+}
+
+func TestProcessCustomYamlTagsLeavesSkippedEmbeddedSourceReadable(t *testing.T) {
+	t.Setenv("ATMOS_EMBED_A", "from-a")
+	input := map[string]any{"name": "x-" + embeddedEnv("ATMOS_EMBED_A")}
+
+	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "", []string{"!env"}, nil)
+
+	require.NoError(t, err)
+	name, ok := result["name"].(string)
+	require.True(t, ok)
+	assert.Equal(t, "x-!env ATMOS_EMBED_A", yamlsource.Display(name))
+}
+
+func TestProcessCustomYamlTagsResolvesSourceInsideTemplateFunction(t *testing.T) {
+	t.Setenv("ATMOS_EMBED_A", "from-a")
+	inner := embeddedEnv("ATMOS_EMBED_A")
+	input := map[string]any{
+		"embedded": yamlsource.Source{Tag: "!template", Argument: "x-" + inner}.Encode(),
+		"whole":    yamlsource.Source{Tag: "!template", Argument: inner}.Encode(),
+	}
+
+	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "", nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "x-from-a", result["embedded"])
+	assert.Equal(t, "from-a", result["whole"])
+}
+
+func TestProcessCustomYamlTagsKeepsProvisionalStackName(t *testing.T) {
+	transformed := strings.ToUpper(embeddedEnv("ATMOS_EMBED_A"))
+	input := map[string]any{"atmos_stack": transformed + "-stack", "stack": transformed}
+
+	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "", nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, input["atmos_stack"], result["atmos_stack"])
+	assert.Equal(t, input["stack"], result["stack"])
 }

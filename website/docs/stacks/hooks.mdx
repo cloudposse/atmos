@@ -465,6 +465,19 @@ hooks:
       vpc_id: .id
 ```
 
+:::note Store hooks and destroy
+Store hooks read Terraform outputs at the moment they run, and Atmos keeps no record of earlier values.
+That leaves a rough edge around `terraform destroy`:
+
+- A store hook with no `events:` also runs on `before.terraform.destroy` and `after.terraform.destroy`.
+- Outputs no longer exist after a successful destroy, or before a destroy retried after a partial failure.
+  Atmos logs a warning and skips those outputs, and the destroy continues.
+- Values already in the store stay there. Destroy doesn't remove them, so `!store` can return a value for
+  infrastructure that's gone.
+
+List `events:` explicitly, such as `events: [after.terraform.apply]`, to keep a store hook out of destroy runs.
+:::
+
 ### `kind: git`
 
 Publishes component artifacts to a Git repository on lifecycle events —

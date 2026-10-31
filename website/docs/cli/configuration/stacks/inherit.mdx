@@ -39,6 +39,11 @@ stacks:
     - `metadata.inherits` - Defines the inheritance relationship itself
     - `metadata.type` - Component type is per-component and not inherited
 
+    **Backend keys:** An instance that inherits `metadata.component` uses the inherited value for its module
+    directory and generated backend key, such as `workspace_key_prefix`. To set a different key, use
+    `metadata.name` or configure the prefix explicitly. See
+    [the upgrade note](/changelog/inherited-component-backend-keys) if state already exists under an older key.
+
     **Example - Enable metadata inheritance** (default):
     ```yaml
     stacks:

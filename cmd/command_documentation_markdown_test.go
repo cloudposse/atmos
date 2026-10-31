@@ -145,7 +145,13 @@ func TestDiscoveryMarkdownFlagSemantics(t *testing.T) {
 
 func TestCustomDiscoveryFlagRegistration(t *testing.T) {
 	for _, tc := range []struct{ name, kind, value string }{
-		{"docs", "bool", "true"}, {"docs", "string", "markdown"}, {"example", "bool", "true"},
+		{"docs", "bool", "true"},
+		{"docs", "string", "markdown"},
+		{"docs", "int", "7"},
+		{"example", "bool", "true"},
+		{"example", "string", "value"},
+		{"example", "", "value"},
+		{"example", "int", "7"},
 	} {
 		t.Run(tc.name+"/"+tc.kind, func(t *testing.T) {
 			mockDiscoveryDependencies(t)

@@ -1408,7 +1408,7 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 						"API_KEY": map[string]any{"store": "app-secrets", "required": true},
 					},
 				},
-				"vars": map[string]any{"api_key": taggedFunctionForTest("!secret ") + tt.secretName},
+				"vars": map[string]any{"api_key": taggedFunctionForTest("!secret " + tt.secretName)},
 			}
 			processor := newDescribeStacksProcessor(
 				atmosConfig,

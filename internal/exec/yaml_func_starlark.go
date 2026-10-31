@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/degradation"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/embedded"
 	"github.com/cloudposse/atmos/pkg/function/execbatch"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
@@ -123,6 +124,10 @@ func (r *configurationResolver) resolveNode(path []string, raw any) (any, error)
 func (r *configurationResolver) resolveMap(path []string, values map[string]any) (map[string]any, error) {
 	result := make(map[string]any, len(values))
 	for _, key := range slices.Sorted(maps.Keys(values)) {
+		if embedded.IsProvisionalStackName(key, values[key]) {
+			result[key] = values[key]
+			continue
+		}
 		value, err := r.resolve(append(slices.Clone(path), key), values[key])
 		if err != nil {
 			return nil, err
@@ -150,7 +155,7 @@ func (r *configurationResolver) resolveString(value string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, tagged := yamlsource.Decode(value); strict && !tagged {
+	if _, tagged := yamlsource.Decode(value); strict && !tagged && !yamlsource.Embedded(value) {
 		return value, nil
 	}
 	resolved, err := processCustomTagsWithContext(r.config, value, r.stack, r.skip, r.resolution, r.info)

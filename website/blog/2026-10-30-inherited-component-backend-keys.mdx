@@ -1,0 +1,73 @@
+---
+slug: inherited-component-backend-keys
+title: "Inherited Components Now Use the Backend Key of Their Module"
+authors: [osterman]
+tags: [bugfix, breaking-change]
+---
+
+A component that inherits [`metadata.component`](/cli/configuration/stacks/inherit) from a base should behave like one that sets it directly. Until now, parts of Atmos still treated it as a component named after the instance, which caused failed lookups and missed affected components. Fixing that also changes the backend key Atmos generates for these components, so existing projects may need one step when they upgrade.
+
+<!--truncate-->
+
+## The Problem
+
+Take a concrete instance that gets its module from an abstract base:
+
+```yaml
+components:
+  terraform:
+    k8s_nodes/lxd/defaults:
+      metadata:
+        type: abstract
+        component: lxd/talos-nodes
+    k8s_nodes:
+      metadata:
+        inherits:
+          - k8s_nodes/lxd/defaults
+```
+
+Terraform ran in the `lxd/talos-nodes` directory, while `atmos describe component` reported `k8s_nodes` as the component and template lookups through `atmos.Component` failed. The instance was using one identity for execution and another for everything around it.
+
+## The Fix
+
+The inherited value is now resolved before anything else consumes it, so the directory, descriptions, lookups, and affected detection all agree. The generated backend key follows the same value, matching a component that sets `metadata.component` itself:
+
+| Backend | Before | Now |
+| --- | --- | --- |
+| S3 `workspace_key_prefix` | `k8s_nodes` | `lxd-talos-nodes` |
+| GCS `prefix` | `k8s_nodes` | `lxd-talos-nodes` |
+| AzureRM `key` | `k8s_nodes.terraform.tfstate` | `lxd-talos-nodes.terraform.tfstate` |
+
+## Before You Upgrade
+
+This affects instances that inherit `metadata.component`, use a generated S3, GCS, or AzureRM backend, and don't set `metadata.name` or an explicit prefix or key. Their state remains at the old key, so Terraform starts from empty state at the new one:
+
+```console
+Plan: 1 to add, 0 to change, 0 to destroy.
+```
+
+Applying that plan creates duplicate resources, and a later destroy removes only the duplicates. Review plans for these components after upgrading, and pause any auto-approved applies until you have handled them. [Edition pins](/cli/configuration/edition) have no effect on this change.
+
+To see the key for a component, run [`atmos terraform generate backend`](/cli/commands/terraform/generate/backend) on the old and new versions and compare the output.
+
+## How to Use It
+
+Pick one of these for each affected instance.
+
+**Keep the existing key.** Give the instance a stable [`metadata.name`](/stacks/components/component-metadata#name), or set the prefix directly:
+
+```yaml
+components:
+  terraform:
+    k8s_nodes:
+      metadata:
+        name: k8s_nodes
+        inherits:
+          - k8s_nodes/lxd/defaults
+```
+
+**Adopt the new key.** Copy the state object from the old key to the new one before the next apply, for example from `k8s_nodes/test-k8s_nodes/terraform.tfstate` to `lxd-talos-nodes/test-k8s_nodes/terraform.tfstate`. The next plan should report `No changes`.
+
+## Get Involved
+
+If this upgrade affects you in a way these steps don't cover, [open an issue](https://github.com/cloudposse/atmos/issues) or ask in [Slack](https://cloudposse.com/slack).

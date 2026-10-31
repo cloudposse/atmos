@@ -675,9 +675,11 @@ func validateFlag(cmdName string, flag *schema.CommandFlag, seen map[string]bool
 	}
 
 	if existingFlag != nil {
-		// A custom boolean --docs keeps its original ownership even though the
-		// global discovery flag now also accepts the Markdown format.
-		if flag.Name == "docs" && flag.Type == "bool" && existingFlag == parentCommand.Root().PersistentFlags().Lookup("docs") {
+		// A custom --docs or --example of any type keeps its original ownership, even
+		// though global discovery flags with these names now exist. registerCustomCommandFlags
+		// registers it on the custom command so discovery can't intercept that command.
+		isDiscoveryFlag := flag.Name == "docs" || flag.Name == "example"
+		if isDiscoveryFlag && existingFlag == parentCommand.Root().PersistentFlags().Lookup(flag.Name) {
 			return nil
 		}
 		return validateFlagTypeConflict(cmdName, flag, existingFlag)
