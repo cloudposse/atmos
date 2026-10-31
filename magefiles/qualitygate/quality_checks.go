@@ -88,13 +88,40 @@ func qualityCIGuidance(gate *qualityGate, states map[string]string) {
 		return
 	}
 	waiting := qualityPendingSignals(gate.Signals)
-	failed := len(gate.Signals) - waiting
+	approval := qualityApprovalSignals(gate.Signals)
+	failed := len(gate.Signals) - waiting - approval
 	gate.Problem = fmt.Sprintf("%d CI results are still pending; no failed results are currently reported.", waiting)
 	gate.NextAction = "Wait for the listed checks and workflows to finish, then re-evaluate this head."
-	if failed > 0 {
+	switch {
+	case failed > 0 && approval > 0:
+		gate.Problem = fmt.Sprintf("%d CI results are unsuccessful; %d are waiting for workflow approval; %d are still pending.", failed, approval, waiting)
+		gate.NextAction = qualityFailedCIAction + " " + qualityApproveRunsAction
+	case failed > 0:
 		gate.Problem = fmt.Sprintf("%d CI results are unsuccessful; %d are still pending.", failed, waiting)
-		gate.NextAction = "Open the logs for the unsuccessful results listed below. Fix the reported cause and rerun those jobs; for cancelled or infrastructure-failed jobs, verify the cause before retrying."
+		gate.NextAction = qualityFailedCIAction
+	case approval > 0:
+		gate.Problem = fmt.Sprintf("%d CI results are waiting for a maintainer to approve their workflow runs; %d are still pending.", approval, waiting)
+		gate.NextAction = qualityApproveRunsAction + " Runs on pull requests from external contributors need approval before they can start; then re-evaluate this head."
 	}
+}
+
+const (
+	qualityFailedCIAction    = "Open the logs for the unsuccessful results listed below. Fix the reported cause and rerun those jobs; for cancelled or infrastructure-failed jobs, verify the cause before retrying."
+	qualityApproveRunsAction = "Approve the waiting workflow runs for this pull request from the Actions tab."
+)
+
+// A workflow run in action_required has no logs to inspect: GitHub is holding
+// it until a maintainer approves it. It stays non-passing because CI has not
+// run. Check runs from other apps also conclude action_required; their details
+// page states the required action, so they keep the unsuccessful-result guidance.
+func qualityApprovalSignals(signals []qualitySignal) int {
+	count := 0
+	for _, signal := range signals {
+		if signal.State == "action_required" && strings.HasPrefix(signal.Name, "workflow: ") {
+			count++
+		}
+	}
+	return count
 }
 
 func qualityBlockingSignals(states map[string]string, allowNeutral bool) []qualitySignal {
