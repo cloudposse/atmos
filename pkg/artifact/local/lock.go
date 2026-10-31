@@ -69,6 +69,13 @@ func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (ar
 	return r.acquire(ctx, request.Resource, owner, request.OperationID)
 }
 
+// LockNamespace implements [artifact.LockNamespacer]: the repository root identifies the collection.
+func (r *Repository) LockNamespace() string {
+	defer perf.Track(nil, "local.Repository.LockNamespace")()
+
+	return filepath.ToSlash(r.root)
+}
+
 // acquire takes the OS lock for resource.
 func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*fileLock, error) {
 	lockPath := filepath.Join(r.root, native(layout.LockPath(resource)))
