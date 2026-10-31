@@ -3,8 +3,13 @@ package bedrock
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -2085,4 +2090,52 @@ func TestExtractConfig_MultipleProviders(t *testing.T) {
 	assert.Equal(t, "anthropic.claude-3-haiku-20240307-v1:0", config.Model)
 	assert.Equal(t, 8000, config.MaxTokens)
 	assert.Equal(t, "ap-southeast-1", config.BaseURL)
+}
+
+func TestParseBedrockResponse_ThinkingBlockIgnored(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{"type": "thinking", "thinking": "plan", "signature": "sig"},
+			{"type": "text", "text": "Searching."},
+			{"type": "tool_use", "id": "tool_1", "name": "search", "input": {"query": "q"}}
+		],
+		"stop_reason": "tool_use",
+		"usage": {"input_tokens": 10, "output_tokens": 10}
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	assert.Equal(t, "Searching.", result.Content)
+	assert.Equal(t, types.StopReasonToolUse, result.StopReason)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Equal(t, "tool_1", result.ToolCalls[0].ID)
+}
+
+func TestSendMessageWithToolsAndHistory_ThinkingDisabled(t *testing.T) {
+	var requestBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&requestBody))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"content":[{"type":"thinking","thinking":"x","signature":"s"},{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	runtimeClient := bedrockruntime.NewFromConfig(aws.Config{
+		Region:      "us-east-1",
+		Credentials: credentials.NewStaticCredentialsProvider("id", "secret", ""),
+	}, func(o *bedrockruntime.Options) {
+		o.BaseEndpoint = aws.String(server.URL)
+	})
+	client := &Client{
+		client: runtimeClient,
+		config: &base.Config{Enabled: true, Model: DefaultModel, MaxTokens: DefaultMaxTokens},
+		region: "us-east-1",
+	}
+
+	result, err := client.SendMessageWithToolsAndHistory(context.Background(), []types.Message{{Role: types.RoleUser, Content: "hi"}}, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"type": "disabled"}, requestBody["thinking"])
+	assert.Equal(t, "ok", result.Content)
 }

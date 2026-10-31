@@ -135,6 +135,7 @@ func (c *SimpleClient) SendMessage(ctx context.Context, message string) (string,
 	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.config.Model),
 		MaxTokens: int64(c.config.MaxTokens),
+		Thinking:  thinkingDisabled(),
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(message)),
 		},
@@ -169,6 +170,7 @@ func (c *SimpleClient) SendMessageWithTools(ctx context.Context, message string,
 	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.config.Model),
 		MaxTokens: int64(c.config.MaxTokens),
+		Thinking:  thinkingDisabled(),
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(message)),
 		},
@@ -197,6 +199,7 @@ func (c *SimpleClient) SendMessageWithHistory(ctx context.Context, messages []ty
 	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.config.Model),
 		MaxTokens: int64(c.config.MaxTokens),
+		Thinking:  thinkingDisabled(),
 		Messages:  anthropicMessages,
 	})
 	if err != nil {
@@ -233,6 +236,7 @@ func (c *SimpleClient) SendMessageWithToolsAndHistory(ctx context.Context, messa
 	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.config.Model),
 		MaxTokens: int64(c.config.MaxTokens),
+		Thinking:  thinkingDisabled(),
 		Messages:  anthropicMessages,
 		Tools:     anthropicTools,
 	})
@@ -437,6 +441,7 @@ func (c *SimpleClient) SendMessageWithSystemPromptAndTools(
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.config.Model),
 		MaxTokens: int64(c.config.MaxTokens),
+		Thinking:  thinkingDisabled(),
 		Messages:  anthropicMessages,
 		Tools:     anthropicTools,
 	}
@@ -460,4 +465,12 @@ func (c *SimpleClient) SendMessageWithSystemPromptAndTools(
 
 	// Parse response.
 	return parseAnthropicResponse(response)
+}
+
+// thinkingDisabled turns off adaptive thinking, which newer Claude models run by default.
+// Atmos does not read thinking blocks and shares MaxTokens with them, so leaving it on can
+// consume the whole output budget and return an empty reply.
+func thinkingDisabled() anthropic.ThinkingConfigParamUnion {
+	disabled := anthropic.NewThinkingConfigDisabledParam()
+	return anthropic.ThinkingConfigParamUnion{OfDisabled: &disabled}
 }

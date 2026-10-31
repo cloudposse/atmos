@@ -598,3 +598,49 @@ func TestInitRegistersProvider(t *testing.T) {
 	// the registration happened (indirectly, via the provider name constant).
 	assert.Equal(t, "anthropic", ProviderName)
 }
+
+// TestSendMessageWithTools_ThinkingDisabledAndBlocksIgnored verifies that requests turn thinking off
+// and that thinking blocks in a response do not affect the parsed text or tool calls.
+func TestSendMessageWithTools_ThinkingDisabledAndBlocksIgnored(t *testing.T) {
+	var requestBody map[string]interface{}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&requestBody))
+		resp := map[string]interface{}{
+			"id":            "msg_think",
+			"type":          "message",
+			"role":          "assistant",
+			"model":         DefaultModel,
+			"stop_reason":   "tool_use",
+			"stop_sequence": nil,
+			"usage":         map[string]interface{}{"input_tokens": 10, "output_tokens": 10},
+			"content": []map[string]interface{}{
+				{"type": "thinking", "thinking": "plan", "signature": "sig"},
+				{"type": "text", "text": "Searching."},
+				{"type": "tool_use", "id": "toolu_1", "name": "search", "input": map[string]interface{}{"query": "q"}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		data, _ := json.Marshal(resp)
+		_, _ = w.Write(data)
+	})
+
+	client := newTestSimpleClient(t, handler)
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "search",
+			description: "Search for information.",
+			parameters: []tools.Parameter{
+				{Name: "query", Type: tools.ParamTypeString, Description: "Search query", Required: true},
+			},
+		},
+	}
+
+	result, err := client.SendMessageWithTools(context.Background(), "Search", availableTools)
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"type": "disabled"}, requestBody["thinking"])
+	assert.Equal(t, "Searching.", result.Content)
+	assert.Equal(t, types.StopReasonToolUse, result.StopReason)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Equal(t, "toolu_1", result.ToolCalls[0].ID)
+}

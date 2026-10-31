@@ -30,6 +30,7 @@ const (
 	bedrockAnthropicVersion = "bedrock-2023-05-31"
 	fieldAnthropicVersion   = "anthropic_version"
 	fieldMaxTokens          = "max_tokens"
+	fieldThinking           = "thinking"
 	fieldMessages           = "messages"
 )
 
@@ -91,6 +92,7 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	requestBody := map[string]interface{}{
 		fieldAnthropicVersion: bedrockAnthropicVersion,
 		fieldMaxTokens:        c.config.MaxTokens,
+		fieldThinking:         map[string]string{"type": "disabled"},
 		fieldMessages: []map[string]string{
 			{
 				"role":    "user",
@@ -158,6 +160,7 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	requestBody := map[string]interface{}{
 		fieldAnthropicVersion: bedrockAnthropicVersion,
 		fieldMaxTokens:        c.config.MaxTokens,
+		fieldThinking:         map[string]string{"type": "disabled"},
 		fieldMessages: []map[string]string{
 			{
 				"role":    "user",
@@ -205,6 +208,7 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 	requestBody := map[string]interface{}{
 		fieldAnthropicVersion: bedrockAnthropicVersion,
 		fieldMaxTokens:        c.config.MaxTokens,
+		fieldThinking:         map[string]string{"type": "disabled"},
 		fieldMessages:         bedrockMessages,
 	}
 
@@ -271,6 +275,7 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	requestBody := map[string]interface{}{
 		fieldAnthropicVersion: bedrockAnthropicVersion,
 		fieldMaxTokens:        c.config.MaxTokens,
+		fieldThinking:         map[string]string{"type": "disabled"},
 		fieldMessages:         bedrockMessages,
 		"tools":               bedrockTools,
 	}
