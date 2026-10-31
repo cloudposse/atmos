@@ -127,7 +127,8 @@ func (r *Repository) tryClaim(ctx context.Context, key string, doc *claimDoc, ra
 		return r.adopt(ctx, key, doc)
 	case blob.IsPreconditionFailed(err):
 		return nil, nil
-	case blob.IsAmbiguous(err):
+	case blob.IsAmbiguous(err) || ctx.Err() != nil:
+		// A request cut short by the context may still have created the claim, so read it back.
 		return r.settleClaim(ctx, key, doc)
 	case errors.Is(err, errUtils.ErrArtifactUnsupportedCapability):
 		unsupported := artifact.NewUnsupportedCapability(r.alias, opLock, "lock/repository", "the S3 endpoint cannot enforce If-None-Match, which owner claims require")
