@@ -173,7 +173,7 @@ Every row is checked across built-ins, YAML configuration, and all selected pack
 | Namespace | Key | Built-in or YAML claimant | Outcome |
 |---|---|---|---|
 | Auth provider and identity kinds | `kind` | `factory` kinds | Error |
-| Component types | `type` | [`component.Register`](../../../../pkg/component/registry.go) plus legacy terraform, helmfile, packer | Error |
+| Component types | `type` | [`component.Register`](../../../../pkg/component/registry.go) including Terraform, plus legacy helmfile and packer | Error |
 | Command names | top-level name and aliases | [`internal.Register`](../../../../cmd/internal/registry.go) and YAML `commands:` | Shortcut unavailable; `atmos plugin run <alias>` still works |
 | Hook kinds | `kind` | [`hooks.RegisterKind`](../../../../pkg/hooks/kind.go) | Error |
 | Step types and aliases | `type`, `aliases` (one namespace) | [`step.Register`](../../../../pkg/runner/step/registry.go) | Error |
@@ -373,7 +373,8 @@ An adapter implements one existing Atmos interface by calling a wire service, so
 | Extension | Adapter (`pkg/plugin/adapter/...`) | Existing interface implemented | Wire service | API services | Must not cross | Phase 0 |
 |---|---|---|---|---|---|---|
 | Auth | `auth.ProviderAdapter`, `auth.IdentityAdapter` | [`types.Provider`](../../../../pkg/auth/types/interfaces.go): `Kind`, `Name`, `PreAuthenticate`, `Authenticate`, `Validate`, `Environment`, `Paths`, `PrepareEnvironment`, `Logout`, `GetFilesDisplayPath`, `SetRealm`. `types.Identity`: `Kind`, `GetProviderName`, `Authenticate`, `Validate`, `Environment`, `Paths`, `PrepareEnvironment`, `PostAuthenticate`, `Logout`, `CredentialsExist`, `LoadCredentials`, `SetRealm`. Optional `Provisioner`, `JustificationConsumer`. | `AuthProvider`, `AuthIdentity` | `api.Credentials`, `api.Prompt`, `api.Browser`, `api.HTTP`, `api.Log` | `types.AuthManager`, `*schema.Provider`, `*schema.Identity`, `*schema.AuthContext` | P0.1, P0.2 |
-| Component | `component.Adapter` | [`ComponentProvider`](../../../../pkg/component/provider.go): `GetType`, `GetGroup`, `GetBasePath`, `ListComponents`, `ValidateComponent`, `Execute`, `GenerateArtifacts`, `GetAvailableCommands`. | `Component` | `api.Process`, `api.Toolchain`, `api.FS`, `api.Credentials`, `api.Log` | `ExecutionContext` struct, `*schema.AtmosConfiguration`, `schema.ConfigAndStacksInfo` | P0.3, P0.6 |
+| Component configuration | `component.Provider`, private `component.Registry` | Discovery, validation, preparation, and state clients; composition with existing engines remains required. | `ComponentDiscovery`, `ComponentValidation`, `ComponentPreparation`, `ComponentState` | No process, filesystem, network, or private-credential grants yet. | `ExecutionContext`, `*schema.AtmosConfiguration`, `schema.ConfigAndStacksInfo` | P0.3, P0.6 |
+| Component execution (planned) | Engine adapter | [`ComponentProvider`](../../../../pkg/component/provider.go); external engines must not replace built-in providers. | Optional execution contract | Scoped process, toolchain, filesystem, credentials, and logging services | Host execution structs and callbacks | P0.3, P0.6 |
 | CI provider | `ci.Adapter` | [`provider.Provider`](../../../../pkg/ci/internal/provider/types.go): `Name`, `Detect`, `Context`, `GetStatus`, `CreateCheckRun`, `UpdateCheckRun`, `PostComment`, `OutputWriter`, `ResolveBase`. Optional `LabelReader`, `DebugModeDetector`, `LogGrouper`. | `CIProvider` | `api.HTTP`, `api.Secrets`, `api.Log` | `OutputWriter`, `io.Writer` | P0.3, P0.7 |
 | Component CI | `cicomponent.Adapter` | [`plugin.Plugin`](../../../../pkg/ci/internal/plugin/types.go): `GetType`, `GetHookBindings` (`HookBinding{Event, Handler}`). | `CIComponent` | `api.CIReporter`, `api.FS`, `api.Log` | `HookHandler` func, `HookContext.Provider`, `TemplateLoader`, `CreatePlanfileStore` | P0.5 |
 | Command | `command.Adapter` (lives behind `cmd/plugin`) | [`internal.CommandProvider`](../../../../cmd/internal/command.go): `GetCommand`, `GetName`, `GetGroup`, `GetFlagsBuilder`, `GetPositionalArgsBuilder`, `GetCompatibilityFlags`, `GetAliases`, `IsExperimental`. | `Commands.Run` for native plugins; in-process binding proposed for Starlark | Native command bootstrap currently grants `api.HTTP`; output uses RPC events, not inherited stdio | `*cobra.Command` | P0.3 |
@@ -392,7 +393,11 @@ An adapter implements one existing Atmos interface by calling a wire service, so
 
 ### Component
 
-`ExecutionContext` is flattened into an `ExecuteRequest`: component and stack names, resolved `ComponentConfig` map, command, subcommand, args, flags, working directory, and a scoped environment. Output is not written to `io.Writer`s; the plugin streams output chunks that Atmos writes through its own masked writers. `GenerateArtifacts` returns file contents and relative paths, and Atmos writes them, so a plugin cannot write outside the working-directory grant. `ListComponents` and `ValidateComponent` run from manifest-declared schemas where possible and call the plugin only when the manifest declares dynamic discovery.
+Separate configuration providers from component types and execution engines. `ComponentDiscovery`, `ComponentValidation`, `ComponentPreparation`, and `ComponentState` are independent versioned services. Native Terragrunt configuration composes with the registered Terraform provider; it does not replace it. The SDK and runtime expose these services, but package activation and the host adapters remain pending.
+
+Requests flatten host context into explicit invocation, coordinates, source/root, operation/options, effects, and typed configuration. `ComponentValue` preserves cty types, exact numbers, unknowns, nulls, and sensitivity. Generated files return literal bytes and ownership policies for host validation. State resolution is separate from preparation. Optional execution must stream through masked host I/O and provide an authoritative outcome.
+
+Use the [component plugin PRD](../extensions/component-engines.md) for static flag metadata, collision rules, discovery/import integration, host service grants, and acceptance. The current protocol does not grant filesystem or process access merely by declaring an effect policy.
 
 ### CI provider and component CI
 
