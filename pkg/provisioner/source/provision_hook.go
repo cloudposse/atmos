@@ -58,6 +58,11 @@ func autoProvisionSourceTerraform(
 	return AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext, writers)
 }
 
+// afterTargetOwnerCheck runs right after the initial ownership check in AutoProvisionSource. It is a
+// seam that lets tests interleave a competing provisioner into the window between that check and the
+// publication lock, deterministically.
+var afterTargetOwnerCheck = func(string) {}
+
 // AutoProvisionSource automatically vendors component source on first use.
 // This enables JIT (Just-in-Time) vendoring - sources are fetched automatically
 // when running terraform/helmfile/packer commands if the target directory doesn't exist.
@@ -105,6 +110,7 @@ func AutoProvisionSource(
 	if err := validateTargetOwner(target, stack); err != nil {
 		return err
 	}
+	afterTargetOwnerCheck(target.Dir)
 	targetDir, isWorkdir := target.Dir, target.IsWorkdir
 
 	key := provisioningKey(target, componentType, componentConfig, sourceSpec, authContext)
@@ -133,6 +139,11 @@ func AutoProvisionSource(
 	// Check if provisioning is needed (version change, URI change, or fresh workdir).
 	needs, reason := needsProvisioning(targetDir, sourceSpec, isWorkdir)
 	if !needs {
+		// Another instance may have claimed an explicit target after the first owner check, so
+		// confirm ownership again before reporting the target as ready.
+		if err := validateTargetOwner(target, stack); err != nil {
+			return err
+		}
 		// No provisioning needed - touch LastAccessed and return.
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {

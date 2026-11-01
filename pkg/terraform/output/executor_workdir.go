@@ -124,12 +124,16 @@ func (e *Executor) ensureWorkdirProvisioned(
 ) error {
 	defer perf.Track(atmosConfig, "output.Executor.ensureWorkdirProvisioned")()
 
-	if !config.AutoProvisionWorkdirForOutputs {
+	if !provWorkdir.IsWorkdirEnabled(sections) {
 		return nil
 	}
 
-	if !provWorkdir.IsWorkdirEnabled(sections) {
-		return nil
+	// Without auto-provisioning, outputs run in whatever workdir is already on disk. The
+	// metadata.component subpath must still select the same directory the local-state reader uses,
+	// resolved against the disk like that reader does. Resolving earlier (before provisioning) would
+	// see a cold workdir and fall back to its root permanently.
+	if !config.AutoProvisionWorkdirForOutputs {
+		return applyOutputSubpath(sections, config)
 	}
 
 	cacheKey, err := workdirProvisionKey(&workdirProvisionIdentity{
@@ -223,18 +227,26 @@ func (e *Executor) ensureWorkdirProvisioned(
 		if reprovisioned, _ := res.Val.(bool); reprovisioned {
 			config.WorkdirReprovisioned = true
 		}
-		if metadata, ok := sections["metadata"].(map[string]any); ok {
-			subpath, _ := metadata["component"].(string)
-			resolved, resolveErr := componentpath.ResolveWorkdirSubpath(subpath, config.ComponentPath)
-			if resolveErr != nil {
-				return resolveErr
-			}
-			config.ComponentPath = resolved
-		}
-		return nil
+		return applyOutputSubpath(sections, config)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// applyOutputSubpath points config.ComponentPath at the metadata.component subpath inside the
+// workdir. It consults the disk, so it must run after any provisioning has finished.
+func applyOutputSubpath(sections map[string]any, config *ComponentConfig) error {
+	metadata, ok := sections["metadata"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	subpath, _ := metadata["component"].(string)
+	resolved, err := componentpath.ResolveWorkdirSubpath(subpath, config.ComponentPath)
+	if err != nil {
+		return err
+	}
+	config.ComponentPath = resolved
+	return nil
 }
 
 // workdirProvisionKey isolates HEAD/BASE checkouts and source/auth changes within a process.

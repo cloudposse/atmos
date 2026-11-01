@@ -320,6 +320,34 @@ func TestSourceRefreshMetadataFailureLeavesPriorReceipt(t *testing.T) {
 	assert.Equal(t, before, after)
 }
 
+// The state reader accepts the flat backend.path form as well as backend.local.path, so a refresh
+// must treat a custom state file (and its backup) as runtime-owned either way: a source that ships a
+// file at that location, even one it owned before, is rejected and the runtime bytes survive.
+func TestSourceRefreshProtectsFlatBackendPathState(t *testing.T) {
+	for name, backend := range map[string]map[string]any{
+		"flat":   {"path": "custom/state.data"},
+		"nested": {"local": map[string]any{"path": "custom/state.data"}},
+	} {
+		for _, collision := range []string{"exports/custom/state.data", "exports/custom/state.data.backup"} {
+			t.Run(name+" "+filepath.Base(collision), func(t *testing.T) {
+				src, target := t.TempDir(), filepath.Join(t.TempDir(), "target")
+				refreshWrite(t, src, "exports/main.tf", "# first")
+				refreshWrite(t, src, collision, "source fixture")
+				config := map[string]any{"component": "exports", "backend": backend}
+				spec := &schema.VendorComponentSource{Uri: src}
+				require.NoError(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(config)))
+				refreshWrite(t, target, collision, "opaque runtime bytes")
+				refreshWrite(t, src, collision, "changed source fixture")
+				err := VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(config))
+				require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
+				got, readErr := os.ReadFile(filepath.Join(target, collision))
+				require.NoError(t, readErr)
+				assert.Equal(t, "opaque runtime bytes", string(got))
+			})
+		}
+	}
+}
+
 func TestSourceExplicitTargetOwnership(t *testing.T) {
 	src := t.TempDir()
 	refreshWrite(t, src, "main.tf", "# module")
@@ -370,6 +398,44 @@ func TestSourceExplicitTargetOwnership(t *testing.T) {
 	after, err := downloader.TreeSHA256(target)
 	require.NoError(t, err)
 	assert.Equal(t, before, after)
+}
+
+// TestSourceExplicitTargetOwnershipHoldsWhenAnotherInstancePublishesFirst makes the race deterministic:
+// the second instance passes its owner check on an empty target, then the first instance publishes
+// before the second reaches its up-to-date early exit. The second must still be rejected.
+func TestSourceExplicitTargetOwnershipHoldsWhenAnotherInstancePublishesFirst(t *testing.T) {
+	src := t.TempDir()
+	refreshWrite(t, src, "main.tf", "# module")
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	target := filepath.Join(config.BasePath, "explicit")
+	component := func(name string) map[string]any {
+		return map[string]any{
+			"component": "module", "atmos_component": name, "atmos_stack": "dev",
+			"source":    map[string]any{"uri": src},
+			"settings":  map[string]any{"working_directory": target},
+			"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		}
+	}
+	ctx := workdir.WithOutputSuppressed(t.Context())
+
+	var interleaved bool
+	afterTargetOwnerCheck = func(string) {
+		if interleaved {
+			return
+		}
+		interleaved = true
+		require.NoError(t, AutoProvisionSource(ctx, config, "terraform", component("first"), nil, provisioner.OutputWriters{}))
+	}
+	t.Cleanup(func() { afterTargetOwnerCheck = func(string) {} })
+
+	// The second instance sees an empty target at its owner check; "first" then publishes inside the hook.
+	err := AutoProvisionSource(ctx, config, "terraform", component("second"), nil, provisioner.OutputWriters{})
+	require.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
+	require.True(t, interleaved, "the interleaving hook must have run")
+	metadata, readErr := workdir.ReadMetadata(target)
+	require.NoError(t, readErr)
+	require.NotNil(t, metadata)
+	assert.Equal(t, "first", metadata.Component)
 }
 
 func TestSourceReceiptPublicationFailureRollsBackCode(t *testing.T) {

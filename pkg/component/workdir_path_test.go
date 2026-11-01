@@ -921,3 +921,22 @@ func TestWrapWorkdirProvisionError(t *testing.T) {
 		})
 	}
 }
+
+func TestDryRunDefersMissingPath(t *testing.T) {
+	source := map[string]any{"source": map[string]any{"uri": "github.com/acme/mod"}}
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+		want bool
+	}{
+		{"dry run with a source component", &schema.ConfigAndStacksInfo{DryRun: true, ComponentSection: source}, true},
+		{"dry run without a source", &schema.ConfigAndStacksInfo{DryRun: true, ComponentSection: map[string]any{}}, false},
+		{"real run with a source component", &schema.ConfigAndStacksInfo{ComponentSection: source}, false},
+		{"nil info", nil, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, DryRunDefersMissingPath(test.info))
+		})
+	}
+}

@@ -294,22 +294,33 @@ func runtimePaths(target string, config map[string]any) map[string]bool {
 		for _, name := range []string{".terraform", "terraform.tfstate", "terraform.tfstate.backup", "terraform.tfstate.d"} {
 			protected[filepath.Join(root, name)] = true
 		}
-		backend, _ := config["backend"].(map[string]any)
-		local, _ := backend["local"].(map[string]any)
+		protectLocalBackendPaths(protected, root, config)
+	}
+	return protected
+}
+
+// protectLocalBackendPaths marks custom local backend locations as runtime-owned. The state reader
+// accepts both the flat form (backend.path) and the nested form (backend.local.path), so both are
+// protected here.
+func protectLocalBackendPaths(protected map[string]bool, root string, config map[string]any) {
+	backend, _ := config["backend"].(map[string]any)
+	local, _ := backend["local"].(map[string]any)
+	for _, section := range []map[string]any{backend, local} {
 		for _, key := range []string{"path", "workspace_dir"} {
-			if value, ok := local[key].(string); ok && value != "" {
-				path := value
-				if !filepath.IsAbs(path) {
-					path = filepath.Join(root, path)
-				}
-				protected[filepath.Clean(path)] = true
-				if key == "path" {
-					protected[filepath.Clean(path)+".backup"] = true
-				}
+			value, ok := section[key].(string)
+			if !ok || value == "" {
+				continue
+			}
+			path := value
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(root, path)
+			}
+			protected[filepath.Clean(path)] = true
+			if key == "path" {
+				protected[filepath.Clean(path)+".backup"] = true
 			}
 		}
 	}
-	return protected
 }
 
 func runtimeOwned(path, relative string, protected map[string]bool) (bool, error) {

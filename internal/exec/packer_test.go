@@ -997,3 +997,66 @@ func TestExecutePackerCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) 
 	require.NoError(t, readErr)
 	assert.Len(t, counterBytes, 1, "non-matching error must fail fast on the first attempt")
 }
+
+// writeColdSourceProject creates a project whose single component of the given type declares a JIT
+// source that has not been provisioned, so its component directory does not exist.
+func writeColdSourceProject(t *testing.T, componentType, component string) {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`base_path: .
+components:
+  `+componentType+`:
+    base_path: components/`+componentType+`
+stacks:
+  base_path: stacks
+  included_paths: ['*.yaml']
+  name_template: '{{ .vars.stage }}'
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars: {stage: dev}
+components:
+  `+componentType+`:
+    `+component+`:
+`+coldSourceComponentBody()), 0o600))
+	t.Chdir(root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Setenv("ATMOS_BASE_PATH", root)
+}
+
+func coldSourceComponentBody() string {
+	return `      source:
+        uri: github.com/cloudposse/atmos-test-nonexistent//modules/cold
+        version: v0.0.0
+      vars: {name: cold}
+`
+}
+
+// A dry run never downloads source, so a cold source component must not be rejected as missing.
+func TestExecutePacker_DryRunAcceptsColdSourceComponent(t *testing.T) {
+	writeColdSourceProject(t, "packer", "cold")
+	info := schema.ConfigAndStacksInfo{
+		Stack: "dev", ComponentType: "packer", ComponentFromArg: "cold", SubCommand: "validate",
+		ProcessTemplates: true, ProcessFunctions: true, DryRun: true,
+	}
+	err := ExecutePacker(&info, &PackerFlags{})
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidComponent)
+}
+
+// Without --dry-run the same component is provisioned (and the download fails here), proving the
+// existence check is only relaxed for dry runs and not for components without a source.
+func TestExecutePacker_DryRunStillRejectsMissingLocalComponent(t *testing.T) {
+	writeColdSourceProject(t, "packer", "local")
+	root, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars: {stage: dev}
+components:
+  packer:
+    local:
+      vars: {name: local}
+`), 0o600))
+	info := schema.ConfigAndStacksInfo{
+		Stack: "dev", ComponentType: "packer", ComponentFromArg: "local", SubCommand: "validate",
+		ProcessTemplates: true, ProcessFunctions: true, DryRun: true,
+	}
+	assert.ErrorIs(t, ExecutePacker(&info, &PackerFlags{}), errUtils.ErrInvalidComponent)
+}

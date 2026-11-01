@@ -296,6 +296,16 @@ func ProvisionAndResolveComponentPath(
 	return fallbackComponentPath, exists, err
 }
 
+// DryRunDefersMissingPath reports whether an absent component directory is expected for this run.
+// A dry run never downloads JIT source, so a source component that has not been provisioned yet has
+// no directory to find, and executors must not reject it as a missing component. Components without
+// a source keep failing when their local directory is missing.
+func DryRunDefersMissingPath(info *schema.ConfigAndStacksInfo) bool {
+	defer perf.Track(nil, "component.DryRunDefersMissingPath")()
+
+	return info != nil && info.DryRun && provSource.HasSource(info.ComponentSection)
+}
+
 // resolveDryRunComponentPath validates placement without downloading source or copying a workdir.
 // The existence result describes the current filesystem, not a simulated successful provision.
 func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallback string) (string, bool, error) {

@@ -323,6 +323,12 @@ func terraformHookOutcome(event h.HookEvent, commandErr error) h.Outcome {
 	if event.Normalize() != h.AfterTerraformPlan || outcome.ExitCode != 2 {
 		return outcome
 	}
+	// Exit 2 is the plan's own "changes present" status only when the plan subcommand produced it;
+	// an exit 2 from init or workspace selection is an ordinary failure.
+	var prerequisiteErr *errUtils.PrerequisiteError
+	if errors.As(commandErr, &prerequisiteErr) {
+		return outcome
+	}
 	for _, policyErr := range []error{errUtils.ErrPolicyInvalid, errUtils.ErrPolicyPlan, errUtils.ErrPolicyDenied, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyRequirements} {
 		if errors.Is(commandErr, policyErr) {
 			return outcome
@@ -495,9 +501,12 @@ func runHooksWithResult(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	}
 
 	// Success path: user hooks see a successful outcome (when: success / always).
-	if err := runUserHooks(&hctx, event, cmd_, args, terraformHookOutcome(event, commandErr)); err != nil {
-		return err
+	userErr := runUserHooks(&hctx, event, cmd_, args, terraformHookOutcome(event, commandErr))
+	if userErr != nil && commandErr == nil {
+		return userErr
 	}
+	// A detailed plan (exit 2) reaches here with a command error. A failing required user hook must
+	// still be returned, but only after the CI hooks publish the plan result.
 
 	// Check for --ci flag or CI environment variable. resolveCIMode reads
 	// directly from the Cobra flag first (not Viper) because pflags are only
@@ -528,12 +537,12 @@ func runHooksWithResult(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		// A misconfigured provider (invalid API URL) fails the command; every other
 		// CI hook error is reported and the command result stands.
 		if errors.Is(err, errUtils.ErrInvalidURL) {
-			return err
+			return errors.Join(userErr, err)
 		}
 		log.Warn(ciHookFailedMsg, "error", err)
 	}
 
-	return nil
+	return userErr
 }
 
 // resolveVerifyPlanMode resolves the explicit planfile-verify override from the
