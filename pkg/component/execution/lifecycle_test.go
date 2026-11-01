@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -289,11 +290,21 @@ type recoveryRun struct {
 	texts    []string
 	attempts int
 	pauses   []time.Duration
+	mu       sync.Mutex
+}
+
+// count reports the attempts made so far, for readers that run beside the recoverer.
+func (r *recoveryRun) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.attempts
 }
 
 func (r *recoveryRun) attempt(context.Context) (string, error) {
+	r.mu.Lock()
 	index := r.attempts
 	r.attempts++
+	r.mu.Unlock()
 	var text string
 	if index < len(r.texts) {
 		text = r.texts[index]
@@ -449,10 +460,10 @@ func TestRecovererStopsWhenCanceledDuringTheSleep(t *testing.T) {
 		done <- err
 	}()
 	// The first attempt fails and the run sleeps for an hour; cancellation must end it at once.
-	require.Eventually(t, func() bool { return run.attempts >= 1 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return run.count() >= 1 }, 5*time.Second, time.Millisecond)
 	cancel()
 	require.ErrorIs(t, <-done, context.Canceled)
-	require.Equal(t, 1, run.attempts)
+	require.Equal(t, 1, run.count())
 }
 
 func TestRecovererDoesNotRecoverAfterCancellation(t *testing.T) {

@@ -8,10 +8,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -118,7 +120,9 @@ func TestAssumeInlineRoleFailures(t *testing.T) {
 		_, err := AssumeInlineRole(context.Background(), InlineRole{Role: "arn:aws:iam::1:role/denied"},
 			[]string{"AWS_ACCESS_KEY_ID=AKIAX", "AWS_SECRET_ACCESS_KEY=secret-never-shown", "AWS_ENDPOINT_URL_STS=" + server.URL})
 		require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
-		assert.Contains(t, errUtils.Format(err, errUtils.FormatterConfig{}), "arn:aws:iam::1:role/denied")
+		// CI renders color and wraps long lines, so compare the text without escapes and whitespace.
+		rendered := strings.Join(strings.Fields(ansi.Strip(errUtils.Format(err, errUtils.FormatterConfig{}))), "")
+		assert.Contains(t, rendered, "arn:aws:iam::1:role/denied")
 		assert.NotContains(t, err.Error(), "secret-never-shown")
 	})
 	t.Run("no starting credentials", func(t *testing.T) {
