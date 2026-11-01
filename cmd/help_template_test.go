@@ -1443,7 +1443,8 @@ func TestPrintFlagsGroupsProviderFlagsUnderTheirProvider(t *testing.T) {
 	var buf bytes.Buffer
 	styles := createHelpStyles(lipgloss.NewRenderer(&buf))
 	printFlags(&buf, plan, &schema.AtmosConfiguration{}, &styles)
-	output := buf.String()
+	// Runners advertise color, and styling splits words with escape sequences; assert on the text.
+	output := ansi.Strip(buf.String())
 
 	flags, providerFlags, found := strings.Cut(output, "TOOL FLAGS")
 	if !found {

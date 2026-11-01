@@ -91,10 +91,14 @@ output "value" {
 }
 `
 
+// The unit directory is spelled with forward slashes only. On Windows, get_terragrunt_dir() returns
+// backslashes, and joining it with a slash-separated suffix would produce mixed separators.
+const proUnitDir = `${replace(get_terragrunt_dir(), "\\", "/")}`
+
 const proNetworkUnit = `terraform { source = "../../../modules/unit" }
 remote_state {
   backend  = "local"
-  config   = { path = "${get_terragrunt_dir()}/state/terraform.tfstate" }
+  config   = { path = "` + proUnitDir + `/state/terraform.tfstate" }
   generate = { path = "backend.tf", if_exists = "overwrite" }
 }
 inputs = { greeting = "network" }
@@ -104,12 +108,12 @@ const proAppUnit = `terraform {
   source = "../../../modules/unit"
   extra_arguments "vars" {
     commands           = ["plan", "apply"]
-    required_var_files = ["${get_terragrunt_dir()}/app.tfvars"]
+    required_var_files = ["` + proUnitDir + `/app.tfvars"]
   }
 }
 remote_state {
   backend  = "local"
-  config   = { path = "${get_terragrunt_dir()}/state/terraform.tfstate" }
+  config   = { path = "` + proUnitDir + `/state/terraform.tfstate" }
   generate = { path = "backend.tf", if_exists = "overwrite" }
 }
 dependency "network" {

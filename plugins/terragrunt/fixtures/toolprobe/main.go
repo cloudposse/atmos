@@ -38,13 +38,20 @@ func run() int {
 	if err != nil {
 		return fail(err)
 	}
-	if strings.TrimSuffix(filepath.Base(self), ".exe") == "terragrunt" {
+	if answersAsTerragrunt(self) {
 		return terragrunt(directory, strings.TrimSpace(string(real)), os.Args[1:])
 	}
 	if err := record(filepath.Join(directory, "invocations.log"), os.Args[1:]); err != nil {
 		return fail(err)
 	}
 	return execute(strings.TrimSpace(string(real)), "", os.Args[1:])
+}
+
+// answersAsTerragrunt reports whether the probe was launched under the Terragrunt executable name. Windows
+// resolves the extension as spelled in PATHEXT and file names are case-insensitive there, so "terragrunt.EXE"
+// must match too.
+func answersAsTerragrunt(self string) bool {
+	return strings.EqualFold(strings.TrimSuffix(strings.ToLower(filepath.Base(self)), ".exe"), "terragrunt")
 }
 
 // execute runs the real tool with the process streams.
