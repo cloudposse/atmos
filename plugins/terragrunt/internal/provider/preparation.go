@@ -56,13 +56,13 @@ func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.Compo
 // Prepare resolves current inputs after dependencies and returns literal files.
 // Terraform execution remains owned by Atmos.
 func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
-	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory())
+	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory())
 	response, err := p.prepare(ctx, request)
 	err = scoped(err, "prepare", request.GetRootDirectory(), request.GetAddress())
 	if response != nil {
-		response.Logs = logEntries(sink)
+		response.Logs = logs.entries()
 	}
-	return response, withFailureLogs(err, sink)
+	return response, withFailureLogs(err, logs)
 }
 
 func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
@@ -148,13 +148,13 @@ func stateIdentity(req model.Request, result *model.Resolution) (*pluginv1.Compo
 
 // Resolve reads backend identity in an overlay, independently of dependency outputs.
 func (p *Provider) Resolve(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
-	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory())
+	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory())
 	response, err := p.resolveState(ctx, request)
 	err = scoped(err, "resolve state", request.GetRootDirectory(), request.GetAddress())
 	if response != nil {
-		response.Logs = logEntries(sink)
+		response.Logs = logs.entries()
 	}
-	return response, withFailureLogs(err, sink)
+	return response, withFailureLogs(err, logs)
 }
 
 func (p *Provider) resolveState(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {

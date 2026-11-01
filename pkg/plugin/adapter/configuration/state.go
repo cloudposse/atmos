@@ -30,7 +30,7 @@ func (s *Session) ResolveState(ctx context.Context, info *schema.ConfigAndStacks
 	if !ok {
 		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
-	result, err := resolver.ResolveState(ctx, selected.request)
+	result, err := resolver.ResolveState(adapter.WithLogScope(ctx, logScope(selected.request, info)), selected.request)
 	if err != nil {
 		return nil, err
 	}

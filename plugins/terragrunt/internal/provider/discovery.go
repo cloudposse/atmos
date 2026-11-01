@@ -13,12 +13,12 @@ import (
 
 // Discover expands local stacks in an isolated overlay without preparing units.
 func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory())
+	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory())
 	response, err := p.discover(ctx, request)
 	if response != nil {
-		response.Logs = logEntries(sink)
+		response.Logs = logs.entries()
 	}
-	return response, withFailureLogs(err, sink)
+	return response, withFailureLogs(err, logs)
 }
 
 // discoveryRequest validates a discovery request and turns it into an inventory evaluation.
