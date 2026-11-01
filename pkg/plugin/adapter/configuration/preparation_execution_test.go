@@ -1,9 +1,15 @@
 package configuration
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
+	ctyjson "github.com/zclconf/go-cty/cty/json"
+	"github.com/zclconf/go-cty/cty/msgpack"
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -98,4 +104,68 @@ func TestPreparedConfigurationRejectsUnrunnableHooks(t *testing.T) {
 			require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 		})
 	}
+}
+
+// sensitiveString encodes a string the way a provider sends a secret: the whole value is sensitive.
+func sensitiveString(t *testing.T, text string) *pluginv1.ComponentValue {
+	t.Helper()
+	typeJSON, err := ctyjson.MarshalType(cty.String)
+	require.NoError(t, err)
+	payload, err := msgpack.Marshal(cty.StringVal(text), cty.String)
+	require.NoError(t, err)
+	return &pluginv1.ComponentValue{TypeJson: typeJSON, Msgpack: payload, SensitivePaths: []*pluginv1.ComponentValuePath{{}}}
+}
+
+func TestPreparedConfigurationCarriesIAM(t *testing.T) {
+	response := executionResponse(t, nil)
+	response.Iam = &pluginv1.ComponentIam{Role: "arn:aws:iam::1:role/x", SessionName: "s", DurationSeconds: 900}
+	got, err := preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", SessionName: "s", DurationSeconds: 900}, got.IAM)
+
+	response.Iam = nil
+	got, err = preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Nil(t, got.IAM)
+
+	response.Iam = &pluginv1.ComponentIam{}
+	got, err = preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Nil(t, got.IAM, "an IAM message without a role asks for nothing")
+}
+
+func TestPreparedIAMDistinguishesTokenFilesFromLiteralTokens(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(file, []byte("file-token\n"), 0o600))
+
+	fromFile, err := preparedIAM(&pluginv1.ComponentIam{Role: "r", WebIdentityToken: sensitiveString(t, file)})
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentIAM{Role: "r", WebIdentityTokenFile: file}, fromFile)
+
+	literal, err := preparedIAM(&pluginv1.ComponentIam{Role: "r", WebIdentityToken: sensitiveString(t, "literal-token")})
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentIAM{Role: "r", WebIdentityToken: "literal-token", WebIdentityTokenLiteral: true}, literal)
+
+	// A literal token never reaches a serialized record.
+	record, err := json.Marshal(literal)
+	require.NoError(t, err)
+	require.NotContains(t, string(record), "literal-token")
+
+	// A directory is not a token file.
+	directory, err := preparedIAM(&pluginv1.ComponentIam{Role: "r", WebIdentityToken: sensitiveString(t, t.TempDir())})
+	require.NoError(t, err)
+	require.Empty(t, directory.WebIdentityTokenFile)
+
+	_, err = preparedIAM(&pluginv1.ComponentIam{Role: "r", WebIdentityToken: &pluginv1.ComponentValue{TypeJson: []byte("{")}})
+	require.Error(t, err)
+}
+
+func TestDecodeStringRejectsNonStrings(t *testing.T) {
+	text, err := adapter.DecodeString(nil)
+	require.NoError(t, err)
+	require.Empty(t, text)
+	number, err := adapter.EncodeObject(map[string]any{"a": 1})
+	require.NoError(t, err)
+	_, err = adapter.DecodeString(number)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 }

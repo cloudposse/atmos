@@ -3,6 +3,7 @@ package terraform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -114,4 +115,37 @@ func TestConfigurationExplicitWorkdirRejectsAnotherOwner(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "existing state", string(state))
 	}
+}
+
+// A provider that excludes the operation ends preparation before any source is fetched; a failing
+// read-config hook stops it the same way, and the unit's other hooks stay out of preparation.
+func TestPrepareComponentExecutionHonorsExclusionAndReadConfigHooks(t *testing.T) {
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
+	config.Components.Terraform.BasePath = "components"
+	provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	config.ComponentConfigurations = provider
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": "./module"}}}
+	}
+
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
+		Engine: "terraform", Source: "./module", Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}, Workspace: "default",
+		Exclusion: &schema.ComponentExclusion{Actions: []string{"plan"}},
+	}, nil)
+	_, err = testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, newInfo(), false)
+	require.ErrorIs(t, err, errUtils.ErrComponentExcluded)
+	require.NoDirExists(t, filepath.Join(root, ".workdir"), "an excluded operation must not provision a source")
+
+	hooks := &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{{Name: "read", Commands: []string{"terragrunt-read-config"}, Execute: []string{"failing-hook"}}}}
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
+		Engine: "terraform", Source: "./module", Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}, Workspace: "default", Execution: hooks,
+	}, nil)
+	shell := &fakeShell{run: func(*shellCall) error { return errors.New("hook failed") }}
+	executor := NewExecutor(Services{ExecuteShellCommand: shell.execute})
+	_, err = executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, newInfo(), false)
+	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+	require.Equal(t, []string{"failing-hook"}, shell.names())
 }

@@ -82,9 +82,9 @@ func settings(value *pluginv1.ComponentValue) error {
 	}
 	for _, key := range slices.Sorted(maps.Keys(config)) {
 		switch key {
-		case "enabled", "provider", "mode", "discovery":
+		case "enabled", "provider", "mode", "discovery", "features":
 		default:
-			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, and `discovery`. Check the spelling.")
+			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, `discovery`, and `features`. Check the spelling.")
 		}
 	}
 	if mode, _ := config["mode"].(string); mode != "" && mode != "native" {
@@ -109,7 +109,7 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 }
 
 func engineName(binary string) string {
-	if strings.TrimSuffix(filepath.Base(binary), ".exe") == "tofu" {
+	if engine.IsOpenTofu(binary) {
 		return "opentofu"
 	}
 	return "terraform"

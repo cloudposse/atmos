@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -234,3 +235,50 @@ func TestOwnsComponentRecognizesProviderSections(t *testing.T) {
 	require.False(t, OwnsComponent(map[string]any{"settings": map[string]any{"team": "platform"}}))
 	require.False(t, OwnsComponent(nil))
 }
+
+// importStub serves provider imports without the rest of the runtime.
+type importStub struct {
+	schema.ComponentConfigurationRuntime
+	imports []string
+	err     error
+}
+
+func (r *importStub) ImportComponents(_ context.Context, uri string) (map[string]any, bool, error) {
+	r.imports = append(r.imports, uri)
+	unit := map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": "live/app/terragrunt.hcl"}}}
+	return map[string]any{"app": unit}, true, r.err
+}
+
+func TestImportProviderComponentsRouting(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	for _, uri := range []string{"ordinary", "https://example.com/config.yaml"} {
+		_, handled, err := ImportProviderComponents(config, uri, &schema.StackImport{})
+		require.NoError(t, err)
+		require.False(t, handled)
+	}
+	_, handled, err := ImportProviderComponents(nil, "terragrunt://live", &schema.StackImport{})
+	require.NoError(t, err)
+	require.False(t, handled)
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {}}
+	_, _, err = ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
+	require.ErrorContains(t, err, "disabled")
+	config.Components.Terraform.ConfigurationProviders["terragrunt"] = schema.ComponentConfiguration{Enabled: true}
+	_, _, err = ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	runtime := &importStub{}
+	config.ComponentConfigurations = runtime
+	for _, declaration := range []schema.StackImport{{Context: map[string]any{"stage": "dev"}}, {SkipIfMissing: true}, {TTL: "1h"}, {NestedImports: "local"}} {
+		_, _, err := ImportProviderComponents(config, "terragrunt://live", &declaration)
+		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	}
+	fragment, handled, err := ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
+	require.NoError(t, err)
+	require.True(t, handled)
+	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
+	require.Contains(t, fragment["components"].(map[string]any)["terraform"], "app")
+	runtime.err = errors.New("registration failed")
+	_, _, err = ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
+	require.ErrorIs(t, err, runtime.err)
+}
+
+// Imported units are merged into the manifest that imports them (and so into every stack that

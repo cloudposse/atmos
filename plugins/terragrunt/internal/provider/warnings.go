@@ -5,7 +5,7 @@ import (
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
-// warningDiagnostics turns discovery findings into diagnostics the host prints without
+// warningDiagnostics turns discovery and preparation findings into diagnostics the host prints without
 // failing the command. The messages never contain evaluated values: only paths and patterns.
 func warningDiagnostics(warnings []model.Warning) []*pluginv1.Diagnostic {
 	diagnostics := make([]*pluginv1.Diagnostic, 0, len(warnings))

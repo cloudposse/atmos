@@ -554,3 +554,226 @@ func TestHooksMatchTheTerraformCommandNotItsSubcommand(t *testing.T) {
 	require.NoError(t, hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"state", "list"}, t.TempDir()))
 	require.Equal(t, []string{"hook-state-hook arg", "terraform state"}, shell.names())
 }
+
+// shellScript scripts a sequence of results for one executable; other executables succeed.
+func scriptedFailures(stderr []string, failures ...error) func(call *shellCall) error {
+	attempt := 0
+	return func(call *shellCall) error {
+		if call.command != "terraform" {
+			return nil
+		}
+		index := attempt
+		attempt++
+		if index < len(stderr) && call.options.StderrCapture != nil {
+			_, _ = io.WriteString(call.options.StderrCapture, stderr[index])
+		}
+		if index < len(failures) {
+			return failures[index]
+		}
+		return nil
+	}
+}
+
+func errorsInfo(subCommand string, policy *schema.ComponentErrors, hooks ...schema.ComponentHook) *schema.ConfigAndStacksInfo {
+	return hookInfo(subCommand, &schema.ComponentExecution{Errors: policy, BeforeHooks: hooks})
+}
+
+func TestErrorsPolicyRetriesTheWholeHookedCommand(t *testing.T) {
+	failure := errUtils.ExitCodeError{Code: 1}
+	shell := &fakeShell{run: scriptedFailures([]string{"Error: connection timeout", "Error: connection timeout", ""}, failure, failure)}
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	info := errorsInfo("apply", policy, execHook("lint", "apply"))
+	var callerCapture strings.Builder
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"apply"}, t.TempDir(), component.WithStderrCapture(&callerCapture))
+	require.NoError(t, err)
+	require.Equal(t, []string{"hook-lint arg", "terraform apply", "hook-lint arg", "terraform apply", "hook-lint arg", "terraform apply"}, shell.names(),
+		"every attempt runs the before hook again, as Terragrunt retries the whole unit run")
+	require.Contains(t, callerCapture.String(), "connection timeout", "the caller's own capture keeps receiving the output")
+}
+
+func TestErrorsPolicyStopsAtMaxAttemptsAndKeepsTheExitCode(t *testing.T) {
+	failure := errUtils.ExitCodeError{Code: 3}
+	shell := &fakeShell{run: scriptedFailures([]string{"timeout", "timeout"}, failure, failure, failure)}
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 2}}}
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, errorsInfo("plan", policy), []string{"plan"}, t.TempDir())
+	require.ErrorIs(t, err, errUtils.ErrComponentMaxAttempts)
+	require.Equal(t, 3, resolveExitCode(err))
+	require.Len(t, shell.calls, 2)
+}
+
+func TestErrorsPolicyMatchesStandardErrorOnly(t *testing.T) {
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if call.command != "terraform" {
+			return nil
+		}
+		// A plan can print the word "timeout" on stdout without having failed because of it.
+		_, _ = io.WriteString(call.options.StdoutCapture, "resource with timeout = 5")
+		_, _ = io.WriteString(call.options.StderrCapture, "Error: invalid argument")
+		return errUtils.ExitCodeError{Code: 1}
+	}}
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	info := errorsInfo("plan", policy)
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan"}, t.TempDir(),
+		component.WithStdoutCapture(io.Discard))
+	require.Equal(t, 1, resolveExitCode(err))
+	require.Len(t, shell.calls, 1)
+}
+
+func TestErrorsPolicyIgnoresAFailureAndWritesSignals(t *testing.T) {
+	dir := t.TempDir()
+	shell := &fakeShell{run: scriptedFailures([]string{"Error: already exists"}, errUtils.ExitCodeError{Code: 1})}
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "exists", Patterns: []string{"already exists"}, Message: "reuse it", Signals: map[string]any{"alert": true}}}}
+	require.NoError(t, hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, errorsInfo("apply", policy), []string{"apply"}, dir))
+	data, err := os.ReadFile(filepath.Join(dir, "error-signals.json"))
+	require.NoError(t, err)
+	require.JSONEq(t, `{"alert": true}`, string(data))
+}
+
+func TestErrorsPolicyIgnoreInAPreparatoryStepEndsTheRun(t *testing.T) {
+	shell := &fakeShell{run: scriptedFailures([]string{"Error: already exists"}, errUtils.ExitCodeError{Code: 1})}
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "exists", Patterns: []string{"already exists"}}}}
+	e := hookExecutor(shell)
+	info := errorsInfo("plan", policy)
+	phase := &executionPhase{command: "init", args: []string{"init"}, insertAt: 1, componentPath: t.TempDir()}
+	err := e.runExecutionPhase(&schema.AtmosConfiguration{}, info, phase, nil, func(phaseInfo *schema.ConfigAndStacksInfo, args []string, opts []component.ExecutionOption) error {
+		return e.services.ExecuteShellCommand(schema.AtmosConfiguration{}, phaseInfo.Command, args, phase.componentPath, phaseInfo.ComponentEnvList, false, "", opts...)
+	})
+	require.ErrorIs(t, err, errUtils.ErrComponentRunIgnored, "the command that follows must not run after an ignored init failure")
+}
+
+func TestErrorsPolicyDoesNotChangeDetailedExitCodeResults(t *testing.T) {
+	shell := &fakeShell{run: scriptedFailures(nil, errUtils.ExitCodeError{Code: 2})}
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "all", Patterns: []string{".*"}}}}
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, errorsInfo("plan", policy), []string{"plan", "-detailed-exitcode"}, t.TempDir())
+	require.Equal(t, 2, resolveExitCode(err), "exit status 2 is a plan result and not a failure to recover from")
+}
+
+func TestExcludedFromOperation(t *testing.T) {
+	prepared := func(actions ...string) *schema.PreparedComponentConfiguration {
+		return &schema.PreparedComponentConfiguration{Exclusion: &schema.ComponentExclusion{Actions: actions}}
+	}
+	for _, test := range []struct {
+		name     string
+		info     schema.ConfigAndStacksInfo
+		prepared *schema.PreparedComponentConfiguration
+		want     bool
+	}{
+		{"no provider data", schema.ConfigAndStacksInfo{SubCommand: "plan"}, nil, false},
+		{"no exclusion", schema.ConfigAndStacksInfo{SubCommand: "plan"}, &schema.PreparedComponentConfiguration{}, false},
+		{"listed", schema.ConfigAndStacksInfo{SubCommand: "plan"}, prepared("plan"), true},
+		{"other command", schema.ConfigAndStacksInfo{SubCommand: "apply"}, prepared("plan"), false},
+		{"deploy is apply", schema.ConfigAndStacksInfo{SubCommand: "deploy"}, prepared("apply"), true},
+		{"apply destroy is destroy", schema.ConfigAndStacksInfo{SubCommand: "apply", AdditionalArgsAndFlags: []string{"-destroy"}}, prepared("destroy"), true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, excludedFromOperation(&test.info, test.prepared))
+		})
+	}
+}
+
+func TestWarnOverlappingRetryOnlyForBothMechanisms(t *testing.T) {
+	retry := &schema.PreparedComponentConfiguration{Execution: &schema.ComponentExecution{Errors: &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "n"}}}}}
+	withSettings := &schema.ConfigAndStacksInfo{ComponentRetrySection: &schema.RetryConfig{Conditions: []string{"x"}}}
+	require.NotPanics(t, func() {
+		warnOverlappingRetry(withSettings, retry)
+		warnOverlappingRetry(&schema.ConfigAndStacksInfo{}, retry)
+		warnOverlappingRetry(withSettings, nil)
+		warnOverlappingRetry(withSettings, &schema.PreparedComponentConfiguration{})
+	})
+}
+
+func TestReadConfigHooksRunOncePerPrepareInTheUnitDirectory(t *testing.T) {
+	unit := t.TempDir()
+	hook := func(name string, commands ...string) schema.ComponentHook {
+		return schema.ComponentHook{Name: name, Commands: commands, Execute: []string{"hook-" + name}, WorkingDirectory: unit}
+	}
+	prepared := &schema.PreparedComponentConfiguration{Execution: &schema.ComponentExecution{
+		AfterHooks:  []schema.ComponentHook{hook("alias", "read-config"), hook("canonical", "terragrunt-read-config"), hook("plain", "plan")},
+		BeforeHooks: []schema.ComponentHook{hook("before", "terragrunt-read-config")},
+	}}
+	shell := &fakeShell{}
+	info := hookInfo("plan", nil)
+	require.NoError(t, hookExecutor(shell).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, prepared))
+	require.Equal(t, []string{"hook-alias", "hook-canonical"}, shell.names(), "only after hooks run, and only those listing the lifecycle")
+	require.Equal(t, unit, shell.calls[0].dir)
+	require.Contains(t, shell.calls[0].env, "TG_CTX_COMMAND=terragrunt-read-config")
+
+	// A dry run, a unit without hooks, and a failing hook.
+	dry := hookInfo("plan", nil)
+	dry.DryRun = true
+	quiet := &fakeShell{}
+	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, dry, prepared))
+	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, nil))
+	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, &schema.PreparedComponentConfiguration{Execution: &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("plain", "plan")}}}))
+	require.Empty(t, quiet.calls)
+
+	failing := &fakeShell{run: func(*shellCall) error { return errors.New("boom") }}
+	err := hookExecutor(failing).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, prepared)
+	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+}
+
+func TestInitFromModuleHooksWrapTheSourceFetch(t *testing.T) {
+	unit := t.TempDir()
+	execution := &schema.ComponentExecution{
+		BeforeHooks: []schema.ComponentHook{{Name: "before", Commands: []string{"init-from-module"}, Execute: []string{"hook-before"}, WorkingDirectory: unit}},
+		AfterHooks:  []schema.ComponentHook{{Name: "after", Commands: []string{"init-from-module", "plan"}, Execute: []string{"hook-after"}, WorkingDirectory: unit}},
+		ErrorHooks:  []schema.ComponentHook{{Name: "report", Commands: []string{"init-from-module"}, Execute: []string{"hook-report"}, OnErrors: []string{"download failed"}}},
+	}
+	shell := &fakeShell{}
+	e := hookExecutor(shell)
+	info := hookInfo("plan", execution)
+
+	wrapper := e.initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	require.NotNil(t, wrapper)
+	var timeline []string
+	require.NoError(t, wrapper(t.Context(), func(context.Context) error {
+		timeline = append(timeline, strings.Join(shell.names(), ","))
+		return nil
+	}))
+	require.Equal(t, []string{"hook-before"}, strings.Split(timeline[0], ","), "the before hook ran before the fetch")
+	require.Equal(t, []string{"hook-before", "hook-after"}, shell.names())
+
+	shell.calls = nil
+	err := wrapper(t.Context(), func(context.Context) error { return errors.New("download failed: 404") })
+	require.Error(t, err)
+	require.Equal(t, []string{"hook-before", "hook-report"}, shell.names(), "a failed fetch skips the after hook and runs the matching error hook")
+
+	require.Nil(t, e.initFromModuleWrapper(&schema.AtmosConfiguration{}, hookInfo("plan", nil)))
+	require.Nil(t, e.initFromModuleWrapper(&schema.AtmosConfiguration{}, hookInfo("plan", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{execHook("x", "plan")}})))
+	ctx := e.withInitFromModule(t.Context(), &schema.AtmosConfiguration{}, hookInfo("plan", nil))
+	require.Equal(t, t.Context(), ctx, "a unit without lifecycle hooks leaves the context alone")
+	require.NotEqual(t, t.Context(), e.withInitFromModule(t.Context(), &schema.AtmosConfiguration{}, info))
+}
+
+func TestSourceFetchFollowsTheErrorsPolicyInsideTheHooks(t *testing.T) {
+	unit := t.TempDir()
+	hook := schema.ComponentHook{Name: "fetch", Commands: []string{"init-from-module"}, Execute: []string{"hook-fetch"}, WorkingDirectory: unit}
+	policy := &schema.ComponentErrors{
+		Retry:  []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"flaky download"}, MaxAttempts: 3}},
+		Ignore: []schema.ComponentIgnorePolicy{{Name: "gone", Patterns: []string{"permanently gone"}}},
+	}
+	shell := &fakeShell{}
+	e := hookExecutor(shell)
+	info := hookInfo("plan", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{hook}, Errors: policy})
+
+	wrapper := e.initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	require.NotNil(t, wrapper)
+	attempts := 0
+	require.NoError(t, wrapper(t.Context(), func(context.Context) error {
+		attempts++
+		if attempts < 3 {
+			return errors.New("flaky download")
+		}
+		return nil
+	}))
+	require.Equal(t, 3, attempts)
+	require.Equal(t, []string{"hook-fetch"}, shell.names(), "the hooks wrap the retries, they do not repeat with them")
+
+	err := wrapper(t.Context(), func(context.Context) error { return errors.New("permanently gone") })
+	require.ErrorIs(t, err, errUtils.ErrComponentRunIgnored)
+	err = wrapper(t.Context(), func(context.Context) error { return errors.New("other failure") })
+	require.EqualError(t, err, "other failure")
+
+	// An errors policy alone is enough to wrap the fetch.
+	require.NotNil(t, e.initFromModuleWrapper(&schema.AtmosConfiguration{}, hookInfo("plan", &schema.ComponentExecution{Errors: policy})))
+}

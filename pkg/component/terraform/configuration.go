@@ -5,11 +5,15 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"maps"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsidentity "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
@@ -38,7 +42,12 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	// Terragrunt evaluates version constraints or dependency outputs.
 	binary, err := exec.LookPath(info.Command)
 	if err != nil {
-		return nil, fmt.Errorf("%w: Terraform executable: %w", errUtils.ErrPluginInvalidConfig, err)
+		return nil, errUtils.Build(fmt.Errorf("%w: Terraform executable of component %q in stack %q: %w", errUtils.ErrPluginInvalidConfig, info.ComponentFromArg, info.Stack, err)).
+			WithContext("component", info.ComponentFromArg).
+			WithContext("stack", info.Stack).
+			WithContext("executable", info.Command).
+			WithHint("The unit's `terraform_binary` or the component's `command` must name an installed executable, a toolchain tool from `dependencies.tools`, or an absolute path").
+			Err()
 	}
 	binary, err = filepath.Abs(binary)
 	if err != nil {
@@ -58,6 +67,9 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 		return prepared, err
 	}
 	if err = applyStackOverrides(config, info, prepared); err != nil {
+		return nil, err
+	}
+	if err = applyIAMRole(ctx, info, prepared.IAM); err != nil {
 		return nil, err
 	}
 	info.ComponentVarsSection = prepared.Inputs
@@ -164,4 +176,71 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 		return nil, err
 	}
 	return tenv, nil
+}
+
+// assumeInlineRole is replaced by tests that must not call STS.
+var assumeInlineRole = awsidentity.AssumeInlineRole
+
+// applyIAMRole assumes the role a component asks for, on top of the credentials of the invocation, and
+// exports the session to every command the component runs. An Atmos identity that the user selected
+// explicitly decides who the component runs as, so it replaces the role instead of being layered under it.
+// The session lives only in the environment of this invocation: it is neither written to a file nor to a
+// saved plan, and it is registered with the output masker.
+func applyIAMRole(ctx context.Context, info *schema.ConfigAndStacksInfo, iam *schema.ComponentIAM) error {
+	if iam == nil {
+		return nil
+	}
+	if requested := requestedIdentity(info); requested != "" {
+		ui.Infof("Component `%s` in stack `%s` runs as Atmos identity `%s`; its Terragrunt `iam_role` `%s` is not assumed.", info.ComponentFromArg, info.Stack, info.Identity, iam.Role)
+		return nil
+	}
+	role := awsidentity.InlineRole{Role: iam.Role, SessionName: iam.SessionName, Duration: time.Duration(iam.DurationSeconds) * time.Second, WebIdentityToken: iam.WebIdentityToken}
+	if iam.WebIdentityTokenFile != "" {
+		token, err := os.ReadFile(iam.WebIdentityTokenFile)
+		if err != nil {
+			return iamRoleError(info, iam, fmt.Errorf("%w: web identity token file: %w", errUtils.ErrAuthenticationFailed, err))
+		}
+		role.WebIdentityToken = strings.TrimSpace(string(token))
+	}
+	if iam.WebIdentityTokenLiteral && role.WebIdentityToken == "" {
+		return iamRoleError(info, iam, fmt.Errorf("%w: the web identity token is not stored with a saved plan", errUtils.ErrAuthenticationFailed))
+	}
+	base := info.SanitizedEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	session, err := assumeInlineRole(ctx, role, append(slices.Clone(base), info.ComponentEnvList...))
+	if err != nil {
+		return iamRoleError(info, iam, err)
+	}
+	for _, key := range slices.Sorted(maps.Keys(session)) {
+		info.ComponentEnvList = append(info.ComponentEnvList, key+"="+session[key])
+	}
+	return nil
+}
+
+// requestedIdentity returns what the user asked for with --identity or ATMOS_IDENTITY, or empty when no
+// identity was requested. A default identity that authentication selected on its own is not a request, so
+// the role is assumed on top of it. Disabling authentication requests nothing either.
+func requestedIdentity(info *schema.ConfigAndStacksInfo) string {
+	requested := info.Identity
+	if info.RequestedIdentity != nil {
+		requested = *info.RequestedIdentity
+	}
+	if requested == cfg.IdentityFlagDisabledValue {
+		return ""
+	}
+	return requested
+}
+
+func iamRoleError(info *schema.ConfigAndStacksInfo, iam *schema.ComponentIAM, cause error) error {
+	return errUtils.Build(errUtils.ErrAuthenticationFailed).
+		WithCause(cause).
+		WithExplanationf("Component `%s` in stack `%s` sets the Terragrunt `iam_role` `%s`, and Atmos could not assume it", info.ComponentFromArg, info.Stack, iam.Role).
+		WithHint("Check that the credentials in use may assume the role, and that its trust policy allows them").
+		WithHint("To run as an Atmos identity instead of assuming `iam_role`, select it with `--identity <name>`").
+		WithHint("A web identity token must be a file path when a plan is saved and applied later").
+		WithContext("component", info.ComponentFromArg).
+		WithContext("stack", info.Stack).
+		Err()
 }

@@ -74,6 +74,51 @@ func DecodeObject(input *pluginv1.ComponentValue) (map[string]any, error) {
 	return object, nil
 }
 
+// DecodeValue adapts one fully evaluated value of any type, such as an entry of a value map.
+// A null value decodes to nil.
+func DecodeValue(input *pluginv1.ComponentValue) (any, error) {
+	defer perf.Track(nil, "componentadapter.DecodeValue")()
+
+	value, err := decodePlain(input)
+	if err != nil {
+		return nil, err
+	}
+	if !value.IsWhollyKnown() {
+		return nil, errUtils.ErrPluginUnsupportedExtension
+	}
+	if value.IsNull() {
+		return nil, nil
+	}
+	if err := registerSensitivePaths(value, input.SensitivePaths); err != nil {
+		return nil, err
+	}
+	return objectJSON(value)
+}
+
+// DecodeString reads a fully evaluated string value. Sensitivity paths are registered with masked I/O
+// before the text escapes, so a secret carried this way never reaches output unmasked.
+func DecodeString(input *pluginv1.ComponentValue) (string, error) {
+	defer perf.Track(nil, "componentadapter.DecodeString")()
+
+	if input == nil {
+		return "", nil
+	}
+	value, err := decodePlain(input)
+	if err != nil {
+		return "", err
+	}
+	if !value.IsWhollyKnown() {
+		return "", errUtils.ErrPluginUnsupportedExtension
+	}
+	if value.IsNull() || value.Type() != cty.String {
+		return "", errUtils.ErrPluginProtocol
+	}
+	if err := registerSensitivePaths(value, input.SensitivePaths); err != nil {
+		return "", err
+	}
+	return value.AsString(), nil
+}
+
 func decodePlain(input *pluginv1.ComponentValue) (cty.Value, error) {
 	if input == nil {
 		return cty.NilVal, errUtils.ErrPluginProtocol

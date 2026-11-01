@@ -1,14 +1,19 @@
 package terraform
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsidentity "github.com/cloudposse/atmos/pkg/auth/identities/aws"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -143,4 +148,122 @@ func TestPrepareConfigurationKeepsCacheLocalStateLocation(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, cache, info.ComponentBackendSection["path"])
+}
+
+// fakeAssume replaces STS and records what it was asked to assume and with which environment.
+func fakeAssume(t *testing.T, err error) *struct {
+	role    awsidentity.InlineRole
+	environ []string
+	calls   int
+} {
+	t.Helper()
+	recorded := &struct {
+		role    awsidentity.InlineRole
+		environ []string
+		calls   int
+	}{}
+	previous := assumeInlineRole
+	assumeInlineRole = func(_ context.Context, role awsidentity.InlineRole, environ []string) (map[string]string, error) {
+		recorded.role, recorded.environ, recorded.calls = role, environ, recorded.calls+1
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{"AWS_ACCESS_KEY_ID": "ASIASESSION", "AWS_SESSION_TOKEN": "session-token", "AWS_PROFILE": ""}, nil
+	}
+	t.Cleanup(func() { assumeInlineRole = previous })
+	return recorded
+}
+
+func TestApplyIAMRoleExportsTheSessionToTheComponent(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	info := &schema.ConfigAndStacksInfo{Stack: "live/dev", ComponentFromArg: "app", SanitizedEnv: []string{"AWS_PROFILE=atmos", "PATH=/bin"}, ComponentEnvList: []string{"TF_IN_AUTOMATION=true"}}
+	iam := &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", SessionName: "s", DurationSeconds: 1800}
+	require.NoError(t, applyIAMRole(t.Context(), info, iam))
+	require.Equal(t, 1, recorded.calls)
+	require.Equal(t, awsidentity.InlineRole{Role: "arn:aws:iam::1:role/x", SessionName: "s", Duration: 30 * time.Minute}, recorded.role)
+	require.Equal(t, []string{"AWS_PROFILE=atmos", "PATH=/bin", "TF_IN_AUTOMATION=true"}, recorded.environ, "the role is assumed on top of the invocation's own credentials")
+	require.Equal(t, []string{"TF_IN_AUTOMATION=true", "AWS_ACCESS_KEY_ID=ASIASESSION", "AWS_PROFILE=", "AWS_SESSION_TOKEN=session-token"}, info.ComponentEnvList)
+}
+
+func TestApplyIAMRoleIsSkippedForAnExplicitIdentity(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	asked := func(identity string) *string { return &identity }
+	iam := &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"}
+
+	for name, info := range map[string]*schema.ConfigAndStacksInfo{
+		"requested with --identity":   {Identity: "deployer", RequestedIdentity: asked("deployer")},
+		"requested interactively":     {Identity: "picked", RequestedIdentity: asked(cfg.IdentityFlagSelectValue)},
+		"identity without a recorder": {Identity: "deployer"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			info.Stack, info.ComponentFromArg = "live/dev", "app"
+			require.NoError(t, applyIAMRole(t.Context(), info, iam))
+			require.Empty(t, info.ComponentEnvList, "the selected identity decides who the component runs as")
+		})
+	}
+	require.Zero(t, recorded.calls)
+
+	// A default identity that authentication chose, and disabled authentication, request nothing: the
+	// role is assumed on top of whatever credentials the invocation has.
+	for name, info := range map[string]*schema.ConfigAndStacksInfo{
+		"default identity chosen by authentication": {Identity: "mock-identity", RequestedIdentity: asked("")},
+		"authentication disabled":                   {Identity: cfg.IdentityFlagDisabledValue, RequestedIdentity: asked(cfg.IdentityFlagDisabledValue)},
+		"no identity":                               {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := recorded.calls
+			info.Stack, info.ComponentFromArg = "live/dev", "app"
+			require.NoError(t, applyIAMRole(t.Context(), info, iam))
+			require.Equal(t, before+1, recorded.calls)
+		})
+	}
+}
+
+func TestApplyIAMRoleWithoutARoleDoesNothing(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	info := &schema.ConfigAndStacksInfo{}
+	require.NoError(t, applyIAMRole(t.Context(), info, nil))
+	require.Zero(t, recorded.calls)
+	require.Empty(t, info.ComponentEnvList)
+}
+
+func TestApplyIAMRoleReadsTheTokenFileAtAssumptionTime(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	file := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(file, []byte("  file-token \n"), 0o600))
+	info := &schema.ConfigAndStacksInfo{Stack: "s", ComponentFromArg: "app"}
+	require.NoError(t, applyIAMRole(t.Context(), info, &schema.ComponentIAM{Role: "r", WebIdentityTokenFile: file}))
+	require.Equal(t, "file-token", recorded.role.WebIdentityToken)
+
+	require.NoError(t, applyIAMRole(t.Context(), info, &schema.ComponentIAM{Role: "r", WebIdentityToken: "literal", WebIdentityTokenLiteral: true}))
+	require.Equal(t, "literal", recorded.role.WebIdentityToken)
+}
+
+func TestApplyIAMRoleFailuresNameTheRoleAndLeakNothing(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "live/dev", ComponentFromArg: "app"}
+	for name, test := range map[string]struct {
+		iam    *schema.ComponentIAM
+		assume error
+	}{
+		"STS rejects the role":           {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"}, errUtils.ErrAuthenticationFailed},
+		"missing token file":             {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", WebIdentityTokenFile: filepath.Join(t.TempDir(), "absent")}, nil},
+		"literal token lost with a plan": {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", WebIdentityTokenLiteral: true}, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fakeAssume(t, test.assume)
+			err := applyIAMRole(t.Context(), info, test.iam)
+			require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+			rendered := errUtils.Format(err, errUtils.FormatterConfig{})
+			require.Contains(t, rendered, "arn:aws:iam::1:role/x")
+			require.Contains(t, rendered, "--identity")
+		})
+	}
+}
+
+func TestComponentIAMNeverSerializesALiteralToken(t *testing.T) {
+	prepared := &schema.PreparedComponentConfiguration{IAM: &schema.ComponentIAM{Role: "r", WebIdentityToken: "super-secret-token", WebIdentityTokenLiteral: true}}
+	record, err := json.Marshal(prepared)
+	require.NoError(t, err)
+	require.NotContains(t, string(record), "super-secret-token")
+	require.Contains(t, string(record), "WebIdentityTokenLiteral")
 }
