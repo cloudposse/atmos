@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,6 +22,12 @@ func (Release) Previews(repo string) error {
 	c, err := newMilestoneClient(ctx, repo)
 	if err != nil {
 		return err
+	}
+	c.summaryHTTP = &http.Client{Timeout: releaseNotesHTTPTimeout}
+	c.summaryParams.OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
+	c.summaryParams.Model = os.Getenv("OPENAI_MODEL")
+	if c.summaryParams.Model == "" {
+		c.summaryParams.Model = defaultSummaryModel
 	}
 	return c.previews()
 }
@@ -159,7 +166,11 @@ func (c *milestoneClient) renderPreview(m Milestone, version string, items []pre
 		entries = append(entries, notes.noteEntry(&pr))
 	}
 	notes.sortEntries(entries)
-	writePreviewEntries(&body, entries, pulls)
+	summaries, err := releasenotes.SummarizeEntries(c.Context, c.summaryHTTP, &c.summaryParams, entries)
+	if err != nil {
+		return "", fmt.Errorf("summarize preview for milestone %d: %w", m.Number, err)
+	}
+	writePreviewEntries(&body, entries, pulls, summaries)
 	if len(entries) == 0 {
 		body.WriteString("No pull requests assigned yet.\n")
 	}
@@ -177,7 +188,7 @@ func (c *milestoneClient) renderPreview(m Milestone, version string, items []pre
 // writePreviewEntries writes sorted entries under category headings demoted one
 // level below "Included pull requests". As in the release body, uncategorized
 // PRs get a heading only when other PRs are categorized.
-func writePreviewEntries(body *strings.Builder, entries []releasenotes.PREntry, pulls map[int]*releasePull) {
+func writePreviewEntries(body *strings.Builder, entries []releasenotes.PREntry, pulls map[int]*releasePull, summaries []string) {
 	categorized := false
 	for _, entry := range entries {
 		categorized = categorized || entry.Category != ""
@@ -186,7 +197,7 @@ func writePreviewEntries(body *strings.Builder, entries []releasenotes.PREntry, 
 		if i == 0 || entry.Category != entries[i-1].Category {
 			writePreviewHeading(body, previewHeading(entry.Category, categorized), i > 0)
 		}
-		writePreviewPR(body, entry.Number, pulls[entry.Number])
+		writePreviewPR(body, entry.Number, pulls[entry.Number], summaries[i])
 	}
 }
 
@@ -207,7 +218,7 @@ func writePreviewHeading(body *strings.Builder, heading string, separate bool) {
 	fmt.Fprintf(body, "#%s\n\n", heading)
 }
 
-func writePreviewPR(body *strings.Builder, number int, pr *releasePull) {
+func writePreviewPR(body *strings.Builder, number int, pr *releasePull, summary string) {
 	state := previewOpen
 	if pr.Merged {
 		state = "merged"
@@ -215,7 +226,7 @@ func writePreviewPR(body *strings.Builder, number int, pr *releasePull) {
 		state = "closed, unmerged — blocks release"
 	}
 	fmt.Fprintf(body, "- #%d — %s (%s)\n", number, strings.Join(strings.Fields(pr.Title), " "), state)
-	if summary := releasenotes.FallbackSummary(pr.Body); summary != "" {
+	if summary != "" {
 		fmt.Fprintf(body, "\n  %s\n\n", strings.ReplaceAll(summary, "\n", "\n  "))
 	}
 }

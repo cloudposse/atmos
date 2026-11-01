@@ -77,7 +77,7 @@ func SummarizeRelease(ctx context.Context, client HTTPClient, p *SummarizeParams
 	}
 
 	res := Result{Entries: len(entries)}
-	summaries, err := condense(ctx, client, p, entries)
+	summaries, err := SummarizeEntries(ctx, client, p, entries)
 	if err != nil {
 		return Result{}, err
 	}
@@ -144,10 +144,15 @@ func fetchMissingBodies(ctx context.Context, client HTTPClient, p *SummarizePara
 	return nil
 }
 
-// condense produces one summary per entry: from the model when a key is
+// SummarizeEntries produces one summary per entry: from the model when a key is
 // configured (fed the cleaned description, without CodeRabbit's block),
 // otherwise FallbackSummary.
-func condense(ctx context.Context, client HTTPClient, p *SummarizeParams, entries []PREntry) ([]string, error) {
+func SummarizeEntries(ctx context.Context, client HTTPClient, p *SummarizeParams, entries []PREntry) ([]string, error) {
+	defer perf.Track(nil, "releasenotes.SummarizeEntries")()
+
+	if len(entries) == 0 {
+		return nil, nil
+	}
 	if p.OpenAIAPIKey == "" {
 		out := make([]string, len(entries))
 		for i, e := range entries {
