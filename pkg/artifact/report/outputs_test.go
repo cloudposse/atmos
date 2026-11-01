@@ -137,3 +137,33 @@ func TestOutputsRepeatedStepNameKeepsItsQualifiedName(t *testing.T) {
 	require.NoError(t, session.Flush())
 	assert.Equal(t, "x/two:1", outputMap(fake)["artifact_publish_ref"], "the same step name is one owner, and the last run wins")
 }
+
+func TestOutputsClaimQualifiedNamesPerOutputNotPerStep(t *testing.T) {
+	deleted := func(id string) *invoke.Outcome {
+		return result(&artifact.OperationResult{OperationID: id, Action: artifact.ActionDelete, Outcome: artifact.OutcomeDeleted})
+	}
+	t.Run("a delete step does not shadow a later publish step with a colliding segment", func(t *testing.T) {
+		fake := &fakeReporter{}
+		session := newSession(enabledConfig(), fake)
+		// The delete writes only the outcome; the publish writes the digests the delete never produced.
+		session.Record(entry("publish-vpc", "a", 1, deleted("a"), nil, 0))
+		session.Record(entry("publish_vpc", "b", 1, published("b", "x/underscore:1"), nil, 1))
+		require.NoError(t, session.Flush())
+
+		values := outputMap(fake)
+		assert.Equal(t, "deleted", values["artifact_publish_vpc_outcome"], "the first writer of a name keeps it")
+		assert.Equal(t, "x/underscore:1", values["artifact_publish_vpc_ref"], "the publish step owns the names the delete never wrote")
+		assert.Equal(t, string(digestOf("a")), values["artifact_publish_vpc_resolved_digest"])
+	})
+	t.Run("a name written by both steps stays with the first step", func(t *testing.T) {
+		fake := &fakeReporter{}
+		session := newSession(enabledConfig(), fake)
+		session.Record(entry("publish-vpc", "a", 1, published("a", "x/dash:1"), nil, 0))
+		session.Record(entry("publish_vpc", "b", 1, published("b", "x/underscore:1"), nil, 1))
+		require.NoError(t, session.Flush())
+
+		values := outputMap(fake)
+		assert.Equal(t, "x/dash:1", values["artifact_publish_vpc_ref"])
+		assert.Equal(t, "x/underscore:1", values["artifact_ref"], "the unqualified names follow the last operation")
+	})
+}

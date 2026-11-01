@@ -25,20 +25,21 @@ const OutputPrefix = "artifact_"
 // The location has its credentials and query string removed first, and every value is masked: a CI
 // output variable is readable by every later step and job.
 //
-// Step names that differ but normalize to the same segment (publish-vpc and publish_vpc) would write
-// the same qualified name. The first step in report order keeps the segment; the later one writes
-// only the unqualified names and a warning says so, so a qualified name never carries another step's
-// value.
+// Step names that differ but normalize to the same segment (publish-vpc and publish_vpc) can write
+// the same qualified name. A qualified name is claimed by the first step that actually writes it,
+// in report order; a later step with a different name writes only the unqualified names for that
+// output and a warning says so, so a qualified name never carries another step's value. Steps that
+// write disjoint outputs (for example a delete and a publish) do not conflict.
 func writeOutputs(reporter ci.Reporter, entries []*Entry) error {
-	claims := newSegmentClaims()
+	claims := newNameClaims()
 	for _, entry := range entries {
 		if entry.Outcome == nil || entry.Outcome.Result == nil {
 			continue
 		}
-		step := claims.segment(entry.Step)
+		segment := outputStepName(entry.Step)
 		for _, pair := range invoke.OutputPairs(&entry.Outcome.Result.OperationResult) {
 			value := outputValue(pair)
-			for _, name := range outputNames(step, pair.Name) {
+			for _, name := range outputNames(claims.qualifier(entry.Step, segment, pair.Name), pair.Name) {
 				// A provider that cannot write one output cannot write the rest, so the first
 				// failure ends the attempt instead of repeating the same error for every variable.
 				if _, err := reporter.Output(name, value); err != nil {
@@ -50,26 +51,26 @@ func writeOutputs(reporter ci.Reporter, entries []*Entry) error {
 	return nil
 }
 
-// segmentClaims remembers which step name owns each qualified output segment.
-type segmentClaims struct {
+// nameClaims remembers which step name owns each step-qualified output name.
+type nameClaims struct {
 	owners map[string]string
 	warned map[string]bool
 }
 
-func newSegmentClaims() *segmentClaims {
-	return &segmentClaims{owners: map[string]string{}, warned: map[string]bool{}}
+func newNameClaims() *nameClaims {
+	return &nameClaims{owners: map[string]string{}, warned: map[string]bool{}}
 }
 
-// segment returns the output segment for a step name, or "" when the step has no usable segment or
-// another step name already owns it.
-func (c *segmentClaims) segment(step string) string {
-	segment := outputStepName(step)
+// qualifier returns the segment to qualify one output of a step with, or "" when the step has no
+// usable segment or another step name already owns the qualified name of this output.
+func (c *nameClaims) qualifier(step, segment, name string) string {
 	if segment == "" {
 		return ""
 	}
-	owner, claimed := c.owners[segment]
+	qualified := OutputPrefix + segment + "_" + name
+	owner, claimed := c.owners[qualified]
 	if !claimed {
-		c.owners[segment] = step
+		c.owners[qualified] = step
 		return segment
 	}
 	if owner == step {
@@ -78,7 +79,8 @@ func (c *segmentClaims) segment(step string) string {
 	if !c.warned[step] {
 		c.warned[step] = true
 		log.Warn("Artifact step output names collide; step-qualified outputs are skipped for the later step",
-			"step", step, "collides_with", owner, "output_prefix", OutputPrefix+segment+"_")
+			"step", atmosio.MaskString(step), "collides_with", atmosio.MaskString(owner),
+			"output_prefix", atmosio.MaskString(OutputPrefix+segment+"_"))
 	}
 	return ""
 }
