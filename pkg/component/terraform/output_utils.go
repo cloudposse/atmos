@@ -1,0 +1,253 @@
+package terraform
+
+import (
+	"context"
+	"fmt"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
+	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// AuthContextWrapper passes existing authentication context to nested component lookups.
+// It exposes stack information but has no identity, provider, or credential configuration.
+// Authentication operations are unsupported; most panic if called.
+type AuthContextWrapper struct {
+	StackInfo *schema.ConfigAndStacksInfo
+}
+
+// GetStackInfo returns the stack information carrying the inherited authentication context.
+func (a *AuthContextWrapper) GetStackInfo() *schema.ConfigAndStacksInfo {
+	defer perf.Track(nil, "exec.authContextWrapper.GetStackInfo")()
+
+	return a.StackInfo
+}
+
+// Stub methods to satisfy AuthManager interface (not used by ExecuteDescribeComponent).
+func (a *AuthContextWrapper) GetCachedCredentials(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetCachedCredentials")()
+
+	panic("authContextWrapper.GetCachedCredentials should not be called")
+}
+
+func (a *AuthContextWrapper) Authenticate(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.Authenticate")()
+
+	panic("authContextWrapper.Authenticate should not be called")
+}
+
+// AuthenticateProvider returns ErrNotImplemented because this wrapper cannot authenticate providers.
+func (a *AuthContextWrapper) AuthenticateProvider(ctx context.Context, providerName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.AuthenticateProvider")()
+
+	return nil, fmt.Errorf("%w: authContextWrapper.AuthenticateProvider for template context", errUtils.ErrNotImplemented)
+}
+
+// AuthenticateIsolated returns ErrNotImplemented because this wrapper cannot authenticate identities.
+func (a *AuthContextWrapper) AuthenticateIsolated(ctx context.Context, identityName string) (*schema.AuthContext, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.AuthenticateIsolated")()
+
+	return nil, fmt.Errorf("%w: authContextWrapper.AuthenticateIsolated for template context", errUtils.ErrNotImplemented)
+}
+
+func (a *AuthContextWrapper) Whoami(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.Whoami")()
+
+	panic("authContextWrapper.Whoami should not be called")
+}
+
+func (a *AuthContextWrapper) Validate() error {
+	defer perf.Track(nil, "exec.authContextWrapper.Validate")()
+
+	panic("authContextWrapper.Validate should not be called")
+}
+
+func (a *AuthContextWrapper) GetDefaultIdentity(forceSelect bool) (string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetDefaultIdentity")()
+
+	panic("authContextWrapper.GetDefaultIdentity should not be called")
+}
+
+func (a *AuthContextWrapper) ListProviders() []string {
+	defer perf.Track(nil, "exec.authContextWrapper.ListProviders")()
+
+	panic("authContextWrapper.ListProviders should not be called")
+}
+
+func (a *AuthContextWrapper) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
+	defer perf.Track(nil, "exec.authContextWrapper.Logout")()
+
+	panic("authContextWrapper.Logout should not be called")
+}
+
+// GetChain returns an empty chain so nested components can select their own default identity.
+func (a *AuthContextWrapper) GetChain() []string {
+	defer perf.Track(nil, "exec.authContextWrapper.GetChain")()
+
+	// Return empty slice instead of panicking.
+	// This wrapper doesn't track the authentication chain; it only propagates auth context.
+	// When used in resolveAuthManagerForNestedComponent, an empty chain means
+	// no inherited identity, so the component will use its own defaults.
+	return []string{}
+}
+
+func (a *AuthContextWrapper) ListIdentities() []string {
+	defer perf.Track(nil, "exec.authContextWrapper.ListIdentities")()
+
+	panic("authContextWrapper.ListIdentities should not be called")
+}
+
+func (a *AuthContextWrapper) GetProviderForIdentity(identityName string) string {
+	defer perf.Track(nil, "exec.authContextWrapper.GetProviderForIdentity")()
+
+	panic("authContextWrapper.GetProviderForIdentity should not be called")
+}
+
+func (a *AuthContextWrapper) GetFilesDisplayPath(providerName string) string {
+	defer perf.Track(nil, "exec.authContextWrapper.GetFilesDisplayPath")()
+
+	panic("authContextWrapper.GetFilesDisplayPath should not be called")
+}
+
+func (a *AuthContextWrapper) GetProviderKindForIdentity(identityName string) (string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetProviderKindForIdentity")()
+
+	panic("authContextWrapper.GetProviderKindForIdentity should not be called")
+}
+
+func (a *AuthContextWrapper) GetIdentities() map[string]schema.Identity {
+	defer perf.Track(nil, "exec.authContextWrapper.GetIdentities")()
+
+	panic("authContextWrapper.GetIdentities should not be called")
+}
+
+func (a *AuthContextWrapper) GetProviders() map[string]schema.Provider {
+	defer perf.Track(nil, "exec.authContextWrapper.GetProviders")()
+
+	panic("authContextWrapper.GetProviders should not be called")
+}
+
+func (a *AuthContextWrapper) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
+	defer perf.Track(nil, "exec.authContextWrapper.LogoutProvider")()
+
+	panic("authContextWrapper.LogoutProvider should not be called")
+}
+
+func (a *AuthContextWrapper) LogoutAll(ctx context.Context, deleteKeychain bool) error {
+	defer perf.Track(nil, "exec.authContextWrapper.LogoutAll")()
+
+	panic("authContextWrapper.LogoutAll should not be called")
+}
+
+func (a *AuthContextWrapper) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetEnvironmentVariables")()
+
+	panic("authContextWrapper.GetEnvironmentVariables should not be called")
+}
+
+func (a *AuthContextWrapper) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.PrepareShellEnvironment")()
+
+	panic("authContextWrapper.PrepareShellEnvironment should not be called")
+}
+
+func (a *AuthContextWrapper) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.EnsureIdentityEnvironment")()
+
+	panic("authContextWrapper.EnsureIdentityEnvironment should not be called")
+}
+
+func (a *AuthContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string, opts ...auth_types.IntegrationOption) error {
+	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIntegration")()
+
+	panic("authContextWrapper.ExecuteIntegration should not be called")
+}
+
+func (a *AuthContextWrapper) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIdentityIntegrations")()
+
+	panic("authContextWrapper.ExecuteIdentityIntegrations should not be called")
+}
+
+func (a *AuthContextWrapper) GetIntegration(integrationName string) (*schema.Integration, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetIntegration")()
+
+	panic("authContextWrapper.GetIntegration should not be called")
+}
+
+func (a *AuthContextWrapper) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	defer perf.Track(nil, "exec.authContextWrapper.RevokeEphemeralIntegrations")()
+
+	panic("authContextWrapper.RevokeEphemeralIntegrations should not be called")
+}
+
+// ResolvePrincipalSetting reports no setting because the wrapper has no identity configuration.
+func (a *AuthContextWrapper) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	defer perf.Track(nil, "exec.authContextWrapper.ResolvePrincipalSetting")()
+
+	// Return false - this wrapper doesn't have access to identity/provider configuration.
+	// It only propagates existing auth context for nested component resolution.
+	return nil, false
+}
+
+// ResolveProviderConfig reports no provider because the wrapper carries context only.
+func (a *AuthContextWrapper) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	defer perf.Track(nil, "exec.authContextWrapper.ResolveProviderConfig")()
+
+	// Return false - this wrapper doesn't have access to provider configuration.
+	// It only propagates existing auth context for nested component resolution.
+	return nil, false
+}
+
+// GetRealm returns an empty realm because the wrapper does not resolve authentication realms.
+func (a *AuthContextWrapper) GetRealm() realm.RealmInfo {
+	defer perf.Track(nil, "exec.authContextWrapper.GetRealm")()
+
+	// Return empty realm - this wrapper doesn't track realm information.
+	// It only propagates existing auth context for nested component resolution.
+	return realm.RealmInfo{}
+}
+
+func (a *AuthContextWrapper) CredentialStoreType() string {
+	defer perf.Track(nil, "exec.authContextWrapper.CredentialStoreType")()
+
+	panic("authContextWrapper.CredentialStoreType should not be called")
+}
+
+func (a *AuthContextWrapper) MaybeOfferAnyProfileFallback(ctx context.Context) error {
+	defer perf.Track(nil, "exec.authContextWrapper.MaybeOfferAnyProfileFallback")()
+
+	panic("authContextWrapper.MaybeOfferAnyProfileFallback should not be called")
+}
+
+// NewAuthContextWrapper creates an AuthManager wrapper that returns the given AuthContext.
+func NewAuthContextWrapper(authContext *schema.AuthContext) *AuthContextWrapper {
+	defer perf.Track(nil, "terraform.NewAuthContextWrapper")()
+
+	if authContext == nil {
+		return nil
+	}
+	return &AuthContextWrapper{
+		StackInfo: &schema.ConfigAndStacksInfo{
+			AuthContext: authContext,
+		},
+	}
+}
+
+// propagateAuthDisabledManager returns authManager unchanged unless it is nil and
+// stackInfo.AuthDisabled is set, in which case it wraps stackInfo so downstream nested-auth
+// resolution (resolveNestedOutputAuth, used by both !terraform.output and
+// !aws.cloudformation.output) can see AuthDisabled via GetStackInfo() and skip resolving the
+// target component's own default identity. Without this, a nil authManager combined with
+// AuthDisabled would silently let the target component's own auth section override the
+// enclosing component's explicit opt-out.
+func propagateAuthDisabledManager(authManager any, stackInfo *schema.ConfigAndStacksInfo) any {
+	defer perf.Track(nil, "exec.propagateAuthDisabledManager")()
+
+	if authManager == nil && stackInfo != nil && stackInfo.AuthDisabled {
+		return &AuthContextWrapper{StackInfo: stackInfo}
+	}
+	return authManager
+}

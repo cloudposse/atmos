@@ -1,0 +1,460 @@
+package terraform
+
+// terraform_execute_helpers_workspace_test.go contains unit tests for workspace-related
+// and TTY-gating helpers extracted from ExecuteTerraform:
+//   - testExecutor(t).runWorkspaceSetup (all early-return paths + wsOpts branch)
+//   - checkTTYRequirement (nil-stdin paths)
+//   - testExecutor(t).executeMainTerraformCommand (bare-workspace short-circuit + error propagation)
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/cloudposse/atmos/pkg/component"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	process "github.com/cloudposse/atmos/pkg/process"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// testExecutor(t).runWorkspaceSetup (early-return paths — no shell required)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestRunWorkspaceSetup_InitSubcommand_ReturnsNil verifies init bypasses workspace
+// selection (init doesn't need a workspace to be active).
+func TestRunWorkspaceSetup_InitSubcommand_ReturnsNil(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "init"}
+	err := testExecutor(t).runWorkspaceSetup(&atmosConfig, &info, "/tmp/component")
+	assert.NoError(t, err)
+}
+
+// TestRunWorkspaceSetup_WorkspaceWithSubCommand2_ReturnsNil verifies that
+// explicit workspace sub-subcommands (new, select, delete) skip the auto-select.
+func TestRunWorkspaceSetup_WorkspaceWithSubCommand2_ReturnsNil(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:  "workspace",
+		SubCommand2: "new",
+	}
+	err := testExecutor(t).runWorkspaceSetup(&atmosConfig, &info, "/tmp/component")
+	assert.NoError(t, err)
+}
+
+// TestRunWorkspaceSetup_HTTPBackend_ReturnsNil verifies that HTTP backends skip
+// workspace selection (HTTP backend does not support workspaces).
+func TestRunWorkspaceSetup_HTTPBackend_ReturnsNil(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:           "apply",
+		ComponentBackendType: "http",
+	}
+	err := testExecutor(t).runWorkspaceSetup(&atmosConfig, &info, "/tmp/component")
+	assert.NoError(t, err)
+}
+
+// TestRunWorkspaceSetup_TFWorkspaceEnvSet_ReturnsNil verifies that when
+// TF_WORKSPACE is already set we defer workspace management to Terraform itself.
+func TestRunWorkspaceSetup_TFWorkspaceEnvSet_ReturnsNil(t *testing.T) {
+	t.Setenv("TF_WORKSPACE", "my-workspace")
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply"}
+	err := testExecutor(t).runWorkspaceSetup(&atmosConfig, &info, "/tmp/component")
+	assert.NoError(t, err)
+}
+
+// TestRunWorkspaceSetup_WorkspaceNoSubCommand2_ReturnsNil verifies that a bare
+// "workspace" subcommand with no SubCommand2 (e.g., "workspace list" already
+// handled) also returns nil when TF_WORKSPACE is set.
+func TestRunWorkspaceSetup_WorkspaceNoSubCommand2_TFWorkspace_ReturnsNil(t *testing.T) {
+	t.Setenv("TF_WORKSPACE", "dev")
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:  "workspace",
+		SubCommand2: "",
+	}
+	err := testExecutor(t).runWorkspaceSetup(&atmosConfig, &info, "/tmp/component")
+	assert.NoError(t, err)
+}
+
+// TestRunWorkspaceSetup_OutputSubcommand_HTTPBackend_EarlyReturn verifies that the
+// HTTP-backend early-return fires even when SubCommand is "output". The HTTP check
+// executes before the wsOpts branch, so this test exercises the HTTP backend
+// early-return path, not the wsOpts branch.
+func TestRunWorkspaceSetup_OutputSubcommand_HTTPBackend_EarlyReturn(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:           "output",
+		ComponentBackendType: "http",
+	}
+	err := testExecutor(t).runWorkspaceSetup(&atmosConfig, &info, "/tmp/component")
+	assert.NoError(t, err)
+}
+
+// TestRunWorkspaceSetup_OutputSubcommand_DryRun_RedirectsToStderr exercises the wsOpts
+// branch: when SubCommand is "output" or "show", a WithStdoutOverride(os.Stderr) option
+// is set so the "Switched to workspace…" message does not pollute captured stdout.
+// DryRun=true bypasses actual terraform execution.
+// Must not run in parallel — calls t.Setenv (incompatible with t.Parallel in Go 1.24+).
+func TestRunWorkspaceSetup_OutputSubcommand_DryRun_RedirectsToStderr(t *testing.T) {
+	// Ensure TF_WORKSPACE is empty so we reach the wsOpts branch and the DryRun-guarded
+	// ExecuteShellCommand call instead of the TF_WORKSPACE early-return.
+	t.Setenv("TF_WORKSPACE", "")
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "output",
+		DryRun:     true,
+	}
+	err := testExecutor(t).runWorkspaceSetup(&atmosConfig, &info, t.TempDir())
+	assert.NoError(t, err)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// checkTTYRequirement (nil-stdin branch)
+// ──────────────────────────────────────────────────────────────────────────────
+// NOTE: These tests temporarily set os.Stdin = nil to simulate a non-interactive
+// environment. They must NOT be run in parallel as they mutate global state.
+
+// TestCheckTTYRequirement_NilStdin_ApplyWithoutAutoApprove_ReturnsError verifies
+// that applying without -auto-approve in a non-interactive environment is an error.
+func TestCheckTTYRequirement_NilStdin_ApplyWithoutAutoApprove_ReturnsError(t *testing.T) {
+	origStdin := os.Stdin
+	os.Stdin = nil
+	t.Cleanup(func() { os.Stdin = origStdin })
+
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply"}
+	err := checkTTYRequirement(&info)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoTty)
+}
+
+// TestCheckTTYRequirement_NilStdin_ApplyWithAutoApprove_NoError verifies that
+// -auto-approve bypasses the TTY requirement.
+func TestCheckTTYRequirement_NilStdin_ApplyWithAutoApprove_NoError(t *testing.T) {
+	origStdin := os.Stdin
+	os.Stdin = nil
+	t.Cleanup(func() { os.Stdin = origStdin })
+
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "apply",
+		AdditionalArgsAndFlags: []string{autoApproveFlag},
+	}
+	err := checkTTYRequirement(&info)
+	assert.NoError(t, err)
+}
+
+// TestCheckTTYRequirement_NilStdin_NonApply_NoError verifies that non-apply
+// subcommands don't require a TTY even when stdin is nil.
+func TestCheckTTYRequirement_NilStdin_NonApply_NoError(t *testing.T) {
+	origStdin := os.Stdin
+	os.Stdin = nil
+	t.Cleanup(func() { os.Stdin = origStdin })
+
+	for _, sub := range []string{"plan", "destroy", "init", "workspace", "output"} {
+		info := schema.ConfigAndStacksInfo{SubCommand: sub}
+		err := checkTTYRequirement(&info)
+		assert.NoError(t, err, "subcommand %q should not require TTY", sub)
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// testExecutor(t).executeMainTerraformCommand (bare-workspace short-circuit)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestExecuteMainTerraformCommand_BareWorkspace_ReturnsNil verifies that a bare
+// "workspace" subcommand (no SubCommand2) is treated as a no-op since the
+// workspace listing was already handled by testExecutor(t).runWorkspaceSetup.
+func TestExecuteMainTerraformCommand_BareWorkspace_ReturnsNil(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:  "workspace",
+		SubCommand2: "",
+	}
+	err := testExecutor(t).executeMainTerraformCommand(&atmosConfig, &info, []string{"workspace"}, "/tmp/component", false)
+	assert.NoError(t, err)
+}
+
+// TestExecuteMainTerraformCommand_Error_Propagates verifies that when the underlying
+// ExecuteShellCommand returns an error (non-zero exit from the terraform binary), that
+// error is propagated to the caller rather than being swallowed.
+//
+// Cross-platform approach: uses the test binary itself (os.Executable) with
+// _ATMOS_TEST_EXIT_ONE=1 as the "terraform" command.  TestMain in testmain_test.go
+// intercepts this env var and calls os.Exit(1) immediately — before the test runner
+// starts.  The -test.run argument is irrelevant since TestMain exits before any test
+// selection happens, but it is included for documentation clarity.
+//
+// This test also acts as a contract test that ExecuteShellCommand correctly wraps
+// subprocess exit codes in errUtils.ExitCodeError: errors.As must succeed.
+func TestExecuteMainTerraformCommand_Error_Propagates(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
+		DryRun:           false,
+	}
+
+	execErr := testExecutor(t).executeMainTerraformCommand(
+		&atmosConfig, &info,
+		[]string{"-test.run=^$"}, // no test matches → exits 0 normally, but env overrides
+		"",                       // component path: current dir
+		false,                    // uploadStatusFlag
+	)
+	require.Error(t, execErr, "testExecutor(t).executeMainTerraformCommand must propagate non-zero exit from subprocess")
+
+	// Verify the error is wrapped as ExitCodeError (the contract of ExecuteShellCommand).
+	var exitCodeErr errUtils.ExitCodeError
+	require.True(
+		t,
+		errors.As(execErr, &exitCodeErr),
+		"error must be wrapped as ExitCodeError, got: %T (%v)", execErr, execErr,
+	)
+	assert.Equal(t, 1, exitCodeErr.Code, "ExitCodeError.Code must be 1")
+}
+
+func TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit(t *testing.T) {
+	originalDispatch := testExecutor(t).dispatchAfterInitFn
+	t.Cleanup(func() { testExecutor(t).dispatchAfterInitFn = originalDispatch })
+
+	var dispatched bool
+	var dispatchOpts []ShellCommandOption
+	testExecutor(t).dispatchAfterInitFn = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) {
+		dispatched = true
+		dispatchOpts = append([]ShellCommandOption(nil), opts...)
+		assert.Equal(t, "/tmp/component", componentPath)
+		assert.Equal(t, subcommandInit, info.SubCommand)
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: subcommandInit, DryRun: true}
+	ctx := provWorkdir.WithOutputSuppressed(t.Context())
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, testExecutor(t).executeMainTerraformCommand(
+		&atmosConfig,
+		&info,
+		[]string{subcommandInit},
+		"/tmp/component",
+		false,
+		WithProcessContext(ctx),
+		WithProcessStreams(process.Streams{Stdout: &stdout, Stderr: &stderr}),
+	))
+	require.True(t, dispatched, "successful explicit init must dispatch after.terraform.init provisioners")
+	assert.True(t, provWorkdir.OutputSuppressed(component.ContextFromOptions(dispatchOpts...)))
+	writers := executionOutputWriters(dispatchOpts...)
+	assert.Same(t, &stdout, writers.Stdout)
+	assert.Same(t, &stderr, writers.Stderr)
+}
+
+func TestExecuteMainTerraformCommand_FailedExplicitInitSkipsAfterInit(t *testing.T) {
+	originalDispatch := testExecutor(t).dispatchAfterInitFn
+	t.Cleanup(func() { testExecutor(t).dispatchAfterInitFn = originalDispatch })
+
+	testExecutor(t).dispatchAfterInitFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, ...ShellCommandOption) {
+		t.Fatal("failed init must not dispatch after.terraform.init provisioners")
+	}
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       subcommandInit,
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
+	}
+	require.Error(t, testExecutor(t).executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", false))
+}
+
+// TestExecuteMainTerraformCommand_ExplicitInitWritesMarker verifies that a successful explicit
+// `atmos terraform init` records the smart-init marker (recordAutoInit), exactly as an implicit
+// init would, so a later plan/apply against the same directory can skip a redundant init.
+func TestExecuteMainTerraformCommand_ExplicitInitWritesMarker(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	componentPath := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: subcommandInit,
+		Command:    exePath,
+	}
+
+	require.NoError(t, testExecutor(t).executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, componentPath, false))
+
+	dataDir := autoinit.DataDir(componentPath, nil)
+	marker, markerErr := autoinit.ReadMarker(autoinit.MarkerPath(dataDir))
+	require.NoError(t, markerErr)
+	require.NotNil(t, marker, "explicit init must record the smart-init marker")
+	assert.NotEmpty(t, marker.Fingerprint)
+}
+
+// TestExecuteMainTerraformCommand_LocalNeutralization_ExecMetadataOnly is the
+// reproduce-first regression test for FR-006e/research.md Decision 36: with
+// exec-metadata capture active (info.ExecMetadataDetailedExitCodeAdded true)
+// and ci.enabled NOT set — the common real-world case — a subprocess exiting
+// 2 ("changes detected") must still leave Atmos's own returned status
+// unaffected (nil, not an error), while info.ExecMetadataRawExitCode still
+// reports the real 2 so TerraformExecData.exit_code isn't silently
+// uninformative. The global atmosConfig.CI.Enabled switch itself must remain
+// untouched — this is a local, call-site-scoped remap, not a flip of it.
+func TestExecuteMainTerraformCommand_LocalNeutralization_ExecMetadataOnly(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:                        "plan",
+		Command:                           exePath,
+		ComponentEnvList:                  []string{"_ATMOS_TEST_EXIT_CODE=2"},
+		ExecMetadataDetailedExitCodeAdded: true,
+	}
+
+	execErr := testExecutor(t).executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", false)
+
+	assert.NoError(t, execErr, "exit code 2 from an exec-metadata-only -detailed-exitcode addition must be neutralized for Atmos's own returned status")
+	assert.Equal(t, 2, info.ExecMetadataRawExitCode, "the real subprocess exit code must still be recorded for TerraformExecData.exit_code")
+	assert.False(t, atmosConfig.CI.Enabled, "the global ci.enabled switch must remain untouched by this local neutralization")
+}
+
+// TestExecuteMainTerraformCommand_NoNeutralization_UploadStatusOnly verifies
+// the local neutralization does NOT apply when -detailed-exitcode's presence
+// is attributable to the legacy --upload-status flag rather than
+// exec-metadata capture (info.ExecMetadataDetailedExitCodeAdded false) — that
+// flag's pre-existing exit-2 propagation behavior must be unaffected by this
+// feature (research.md Decision 36).
+func TestExecuteMainTerraformCommand_NoNeutralization_UploadStatusOnly(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_CODE=2"},
+		// ExecMetadataDetailedExitCodeAdded intentionally left false.
+	}
+
+	execErr := testExecutor(t).executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", true)
+
+	require.Error(t, execErr, "exit code 2 must still propagate when -detailed-exitcode wasn't added for exec-metadata reasons")
+	var exitCodeErr errUtils.ExitCodeError
+	require.True(t, errors.As(execErr, &exitCodeErr))
+	assert.Equal(t, 2, exitCodeErr.Code)
+	assert.Equal(t, 2, info.ExecMetadataRawExitCode)
+}
+
+// TestExecuteMainTerraformCommand_GlobalCIRemap_StillTakesPrecedence verifies
+// that when atmosConfig.CI.Enabled is already true, the existing global
+// mapCIExitCode path neutralizes exit code 2 as before — this feature's local
+// neutralization is additive, not a replacement, and must not interfere with
+// the pre-existing global remap.
+func TestExecuteMainTerraformCommand_GlobalCIRemap_StillTakesPrecedence(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.CI.Enabled = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:                        "plan",
+		Command:                           exePath,
+		ComponentEnvList:                  []string{"_ATMOS_TEST_EXIT_CODE=2"},
+		ExecMetadataDetailedExitCodeAdded: true,
+	}
+
+	execErr := testExecutor(t).executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", false)
+
+	assert.NoError(t, execErr)
+	assert.Equal(t, 2, info.ExecMetadataRawExitCode)
+	assert.True(t, atmosConfig.CI.Enabled)
+}
+
+// TestCaptureExecMetadataSync_RawExitCodeSurvivesGlobalRemap is the
+// reproduce-first regression test reproducing the original production bug
+// (FR-006e): TerraformExecData.exit_code must report the real, pre-remap
+// subprocess exit code even when Atmos's own returned status/base-envelope
+// exit_code has been remapped/neutralized to success.
+func TestCaptureExecMetadataSync_RawExitCodeSurvivesGlobalRemap(t *testing.T) {
+	t.Setenv("CI", "true")
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:        "cdn",
+		Stack:                   "plat-use2-dev",
+		ExecMetadataRawExitCode: 2, // set by testExecutor(t).executeMainTerraformCommand before any remap.
+	}
+
+	var gotExitCode int
+	parser := func(subCommand string, exitCode int, output string) any {
+		gotExitCode = exitCode
+		return map[string]any{"exit_code": exitCode}
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	// params.Err is nil, mirroring testExecutor(t).executeMainTerraformCommand's neutralized return
+	// for Atmos's own status — the base envelope's exit_code (FR-003) derives from
+	// this and correctly reports 0/success.
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Parser: parser, Err: nil})
+
+	assert.Equal(t, 2, gotExitCode, "TerraformExecData.exit_code must report the real pre-remap exit code, not the neutralized 0")
+}
+
+// TestWorkspaceSetupPreservesFailureBoundaries distinguishes a missing workspace from
+// other command failures and only accepts an already-active workspace after exit code 1.
+func TestWorkspaceSetupPreservesFailureBoundaries(t *testing.T) {
+	t.Setenv("TF_WORKSPACE", "")
+	t.Setenv("TF_DATA_DIR", "")
+	selectErr := errors.New("select transport failed")
+	createErr := errors.New("create transport failed")
+	cases := []struct {
+		name      string
+		selectErr error
+		createErr error
+		active    string
+		wantErr   error
+		wantCalls int
+	}{
+		{"select non-exit error", selectErr, nil, "", selectErr, 1},
+		{"select exit 2", errUtils.ExitCodeError{Code: 2}, nil, "", errUtils.ExitCodeError{Code: 2}, 1},
+		{"create succeeds", errUtils.ExitCodeError{Code: 1}, nil, "", nil, 2},
+		{"create non-exit error", errUtils.ExitCodeError{Code: 1}, createErr, "dev", createErr, 2},
+		{"already active", errUtils.ExitCodeError{Code: 1}, errUtils.ExitCodeError{Code: 1}, "dev", nil, 2},
+		{"different active workspace", errUtils.ExitCodeError{Code: 1}, errUtils.ExitCodeError{Code: 1}, "prod", errUtils.ExitCodeError{Code: 1}, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.active != "" {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, ".terraform"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".terraform", "environment"), []byte(tc.active), 0o600))
+			}
+			executor := testExecutor(t)
+			calls := 0
+			executor.services.ExecuteShellCommand = func(_ schema.AtmosConfiguration, _ string, args []string, gotDir string, _ []string, _ bool, redirect string, _ ...component.ExecutionOption) error {
+				calls++
+				require.Equal(t, dir, gotDir)
+				require.Equal(t, "workspace-errors.log", redirect)
+				if calls == 1 {
+					require.Equal(t, []string{"workspace", "select", "-or-create", "dev"}, args)
+					return tc.selectErr
+				}
+				require.Equal(t, []string{"workspace", "new", "dev"}, args)
+				return tc.createErr
+			}
+			info := &schema.ConfigAndStacksInfo{SubCommand: "plan", TerraformWorkspace: "dev", RedirectStdErr: "workspace-errors.log", UIFlagExplicitlySet: true}
+			err := executor.runWorkspaceSetup(&schema.AtmosConfiguration{}, info, dir)
+			require.ErrorIs(t, err, tc.wantErr)
+			require.Equal(t, tc.wantCalls, calls)
+		})
+	}
+}
