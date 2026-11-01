@@ -24,12 +24,25 @@ jobs:
           add-to-path: 'true'
       - uses: ./.github/actions/setup-go-cache
         with:
+          # Official plugins build in their own modules. plugins/terragrunt requires the newest Go in the repository.
+          go-version-file: plugins/terragrunt/go.mod
           cache: 'false'
+      # A stacked pull request targets its parent branch, so the default comparison base would demand a
+      # version bump in every layer that touches a package input. Compare such pull requests with the merge
+      # base of the default branch instead, the same range the whole stack is released against. Pushes and
+      # pull requests that target the default branch keep the provider's default base.
+      - name: Resolve the release comparison base
+        id: base
+        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref != github.event.repository.default_branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: echo "ref=$(git merge-base HEAD "origin/${DEFAULT_BRANCH}")" >> "$GITHUB_OUTPUT"
       - name: Check plugin releases
         env:
           GOCACHE: ${{ runner.temp }}/plugin-go-build
           GOMODCACHE: ${{ runner.temp }}/plugin-go-mod
-        run: atmos plugin release --inventory plugins/releases.yaml --check
+          RELEASE_BASE: ${{ steps.base.outputs.ref }}
+        run: atmos plugin release --inventory plugins/releases.yaml --check ${RELEASE_BASE:+--base "$RELEASE_BASE"}
 
   release:
     needs: check
@@ -56,6 +69,8 @@ jobs:
           add-to-path: 'true'
       - uses: ./.github/actions/setup-go-cache
         with:
+          # Official plugins build in their own modules. plugins/terragrunt requires the newest Go in the repository.
+          go-version-file: plugins/terragrunt/go.mod
           cache: 'false'
       - name: Publish plugin releases and reconcile the catalog
         env:

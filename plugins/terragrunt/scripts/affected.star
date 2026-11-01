@@ -16,17 +16,26 @@ def seed_units(root):
     return fixtures.commit(root, "initial units")
 
 
-def affected(root, ref, *flags):
+def affected_result(root, ref, *flags):
+    # Returns the decoded rows together with the command's stderr, so a failing expectation can explain itself.
     result = fixtures.run(root, [
         "describe", "affected", "--base", ref, "--format=json",
     ] + list(flags))
     fixtures.check("treating BASE as empty" not in result.stderr, result.stderr)
-    return json.decode(result.stdout)
+    return struct(rows=json.decode(result.stdout), stderr=result.stderr)
 
 
-def expect_components(rows, expected):
+def affected(root, ref, *flags):
+    return affected_result(root, ref, *flags).rows
+
+
+def expect_components(rows, expected, stderr=""):
     actual = sorted([row["component"] for row in rows])
-    fixtures.check(actual == sorted(expected), "Unexpected affected components: " + str(actual))
+    message = "Unexpected affected components: " + str(actual) + "\nExpected: " + str(sorted(expected))
+    message += "\nAffected rows: " + json.encode(rows)
+    if stderr:
+        message += "\nCommand stderr:\n" + stderr
+    fixtures.check(actual == sorted(expected), message)
 
 
 def dry_plan(root, base, *flags):
@@ -103,9 +112,10 @@ def test_nested_stacks(root, package):
     path = "live/terragrunt.stack.hcl"
     fixtures.write(root, path, fs.read_file(root + "/" + path) + "\n# changed definition\n")
     fixtures.commit(root, "change explicit root")
-    expect_components(affected(root, base), [
+    changed = affected_result(root, base, "--logs-level=Debug")
+    expect_components(changed.rows, [
         "dev/app", "dev/network", "prod/app", "prod/network",
-    ])
+    ], changed.stderr)
     fixtures.check(not fs.exists(root + "/live/.terragrunt-stack"), "Discovery wrote generated stacks")
     fixtures.check(not fs.glob(root + "/**/*.tfstate"), "Discovery created state")
 

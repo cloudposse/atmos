@@ -127,3 +127,27 @@ func TestStateAndPreparationRejectEscapedProvenance(t *testing.T) {
 	_, err = p.Prepare(t.Context(), req)
 	require.Equal(t, codes.Unimplemented, status.Code(err))
 }
+
+// Watched paths reach the host as slash-separated, project-relative strings. Terragrunt reports paths with
+// mixed separators on Windows (a native directory plus a slash-separated suffix), so every spelling of the
+// same file must normalize to one slash-separated relative path.
+func TestRelativeNormalizesMixedSeparators(t *testing.T) {
+	// Terragrunt reports physical paths, so compare from the physical root.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	for name, spelling := range map[string]string{
+		"native":       filepath.Join(root, "live", "terragrunt.stack.hcl"),
+		"slash suffix": root + "/live/terragrunt.stack.hcl",
+		"redundant":    root + "/live/./sub/../terragrunt.stack.hcl",
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := relative(root, spelling)
+			require.NoError(t, err)
+			require.Equal(t, "live/terragrunt.stack.hcl", got)
+		})
+	}
+	for _, outside := range []string{filepath.Dir(root), root + "/../elsewhere/terragrunt.hcl"} {
+		_, err := relative(root, outside)
+		require.ErrorIs(t, err, ErrUnsupported)
+	}
+}

@@ -75,3 +75,15 @@ func TestConfigurationArtifactNames(t *testing.T) {
 	_, owned := configurationArtifactName(info, ".plan")
 	require.False(t, owned)
 }
+
+// A plan written by one process is applied by another, so the artifact name must never depend on
+// process state. The digest is pinned so a change to the naming scheme is deliberate.
+func TestConfigurationIdentityIsStableAndSeparatesFields(t *testing.T) {
+	const pinned = "060d8d2f24f80685c67572911d8f2cd5"
+	first := configurationIdentity("live/dev", "region/app")
+	require.Equal(t, pinned, first)
+	require.Equal(t, first, configurationIdentity("live/dev", "region/app"))
+	require.NotEqual(t, first, configurationIdentity("live/dev", "region/app2"))
+	// The separator keeps adjacent fields from sliding into each other.
+	require.NotEqual(t, configurationIdentity("ab", "c"), configurationIdentity("a", "bc"))
+}
