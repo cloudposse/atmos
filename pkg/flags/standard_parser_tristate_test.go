@@ -118,3 +118,42 @@ func TestIsBoolFlagExplicitlySet(t *testing.T) {
 		assert.False(t, val, "unknown flag should return false value")
 	})
 }
+
+// TestIsFlagExplicitlySet verifies the type-independent explicit detection used by provider options.
+func TestIsFlagExplicitlySet(t *testing.T) {
+	newParser := func(t *testing.T) (*flags.StandardParser, *cobra.Command) {
+		t.Helper()
+		parser := flags.NewStandardParser(
+			flags.WithStringFlag("level", "", "info", "Level"),
+			flags.WithEnvVars("level", "ATMOS_TEST_EXPLICIT_LEVEL"),
+			flags.WithIntFlag("retries", "", 3, "Retries"),
+		)
+		cmd := &cobra.Command{Use: "plan"}
+		parser.RegisterFlags(cmd)
+		require.NoError(t, parser.BindToViper(viper.New()))
+		return parser, cmd
+	}
+
+	t.Run("a registered default is not explicit", func(t *testing.T) {
+		parser, cmd := newParser(t)
+		assert.False(t, parser.IsFlagExplicitlySet(cmd, "level"))
+		assert.False(t, parser.IsFlagExplicitlySet(cmd, "retries"))
+	})
+	t.Run("a command line value is explicit even when it equals the default or is zero", func(t *testing.T) {
+		parser, cmd := newParser(t)
+		require.NoError(t, cmd.Flags().Set("level", ""))
+		require.NoError(t, cmd.Flags().Set("retries", "0"))
+		assert.True(t, parser.IsFlagExplicitlySet(cmd, "level"))
+		assert.True(t, parser.IsFlagExplicitlySet(cmd, "retries"))
+	})
+	t.Run("a registered environment variable is explicit, even when empty", func(t *testing.T) {
+		parser, cmd := newParser(t)
+		t.Setenv("ATMOS_TEST_EXPLICIT_LEVEL", "")
+		assert.True(t, parser.IsFlagExplicitlySet(cmd, "level"))
+		assert.False(t, parser.IsFlagExplicitlySet(cmd, "retries"), "a flag without an environment binding is unaffected")
+	})
+	t.Run("an unknown flag is never explicit", func(t *testing.T) {
+		parser, cmd := newParser(t)
+		assert.False(t, parser.IsFlagExplicitlySet(cmd, "unknown"))
+	})
+}

@@ -164,7 +164,16 @@ func inspectDefinition(release *Release, annotations map[string]string) error {
 	if err != nil {
 		return err
 	}
-	if !maps.Equal(annotations, releaseAnnotations(definition, release.Manifest)) {
+	expected := releaseAnnotations(definition, release.Manifest)
+	// The publisher may override the manifest repository with an explicit source;
+	// it is still held to the same publishable shape.
+	if source, overridden := annotations[annotationSource]; overridden {
+		if _, ok := publishableSource(source); !ok {
+			return errUtils.ErrOCIIntegrity
+		}
+		expected[annotationSource] = source
+	}
+	if !maps.Equal(annotations, expected) {
 		return errUtils.ErrOCIIntegrity
 	}
 	if len(definition.Spec.Platforms) != len(release.Platforms) {

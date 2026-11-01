@@ -156,6 +156,12 @@ func runUpload(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Include the plan record when the component keeps one, so another runner can verify and apply the plan.
+	if entry, closer, found := planfile.OpenBinding(planfilePath); found {
+		defer closer.Close()
+		files = append(files, entry)
+	}
+
 	// Resolve SHA: explicit flag > context resolution.
 	sha := opts.SHA
 	if sha == "" {
@@ -264,8 +270,7 @@ func resolveUploadPlanfilePath(opts *UploadOptions, atmosConfig *schema.AtmosCon
 		return "", fmt.Errorf("%w: failed to resolve component path: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 
-	planfilePath := exec.ConstructTerraformComponentPlanfilePath(atmosConfig, &info)
-	return planfilePath, nil
+	return canonicalPlanfilePath(atmosConfig, &info)
 }
 
 // resolveLockfilePath returns the lock file path from the explicit flag or auto-detected

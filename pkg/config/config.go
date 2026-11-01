@@ -90,6 +90,7 @@ func InitCliConfigWithContext(ctx context.Context, configAndStacksInfo schema.Co
 		}
 	}
 
+	atmosConfig.ComponentProviderOptions = configAndStacksInfo.ComponentProviderOptions
 	if err := configuration.Attach(ctx, &atmosConfig, configAndStacksInfo.SubCommand); err != nil {
 		return atmosConfig, err
 	}

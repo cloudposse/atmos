@@ -178,3 +178,99 @@ integration:
     script: |
       semantics = module.load("scripts/semantics.star")
       semantics.tflint_hook()
+  - name: values-exact-and-sensitive
+    type: script
+    interpreter: starlark
+    script: |
+      values = module.load("scripts/values_logging.star")
+      values.values()
+  - name: logging-through-atmos
+    type: script
+    interpreter: starlark
+    script: |
+      values = module.load("scripts/values_logging.star")
+      values.logging()
+  - name: warnings-once
+    type: script
+    interpreter: starlark
+    script: |
+      values = module.load("scripts/values_logging.star")
+      values.warnings_once()
+  - name: aws-identity-in-plugin
+    type: script
+    interpreter: starlark
+    script: |
+      values = module.load("scripts/values_logging.star")
+      values.aws_identity()
+  - name: provider-flags-help
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.help_lists_provider_flags()
+  - name: provider-flags-features
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.feature_flags()
+  - name: provider-flags-saved-plan
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.saved_plan_identity()
+  - name: executable-invocation
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_invocation()
+  - name: executable-flags-and-config
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_flags_and_config()
+  - name: executable-ordering
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_ordering()
+  - name: executable-consumers
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_consumers()
+  - name: executable-failures
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_failures()
+  - name: executable-requirements
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_requirements()
+  - name: executable-real-terragrunt
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.real_terragrunt()
+  - name: pro-cross-runner-saved-plan
+    type: script
+    interpreter: starlark
+    script: |
+      pro = module.load("scripts/pro.star")
+      pro.restored_plan_is_applied_on_another_runner()
+  - name: pro-deploy-verifies-stored-plan
+    type: script
+    interpreter: starlark
+    script: |
+      pro = module.load("scripts/pro.star")
+      pro.deploy_applies_after_verifying_the_stored_plan()

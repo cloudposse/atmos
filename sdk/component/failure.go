@@ -76,6 +76,15 @@ func (f *Failure) Warning() *Failure {
 	return f
 }
 
+// Logs attaches the log events produced before the failure, in order. The host renders them at the
+// Atmos log level, so Debug and Trace output explains the failure.
+//
+//nolint:lintroller // Pure SDK helper; the standalone SDK cannot import host perf tracking.
+func (f *Failure) Logs(entries []*pluginv1.LogEntry) *Failure {
+	f.detail.Logs = entries
+	return f
+}
+
 // Proto returns an independent copy of the wire form.
 func (f *Failure) Proto() *pluginv1.ErrorDetail {
 	return proto.Clone(f.detail).(*pluginv1.ErrorDetail)

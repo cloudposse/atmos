@@ -31,6 +31,7 @@ import (
 	citerraform "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/provideroptions"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -42,6 +43,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -1824,6 +1826,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
 	applyOptionsToInfo(&info, opts)
+	// Provider options are validated here, before any discovery or preparation can start a plugin.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(actualCmd, viper.GetViper()); err != nil {
+		return err
+	}
 	applyFromPlanSelection(&info, actualCmd)
 
 	// Honor a component already chosen interactively in PreRunE (runBeforeHooks) so the
@@ -2000,6 +2006,9 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	}
 
 	canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, info)
+	if workdirPath, ok := retainedWorkdirPlanfilePath(&verifyAtmosConfig, info); ok {
+		canonicalPlanPath = workdirPath
+	}
 	storedPlanPath := filepath.Join(filepath.Dir(canonicalPlanPath), planfile.StoredPlanPrefix+planfile.PlanFilename)
 	if _, statErr := os.Stat(storedPlanPath); statErr != nil {
 		// No stored planfile was downloaded. Whether that blocks the deploy is
@@ -2016,6 +2025,21 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	}
 
 	return verifyPlanfile(info, storedPlanPath, mode)
+}
+
+// retainedWorkdirPlanfilePath returns the plan file path inside the workdir of a workdir-enabled
+// component (every Terragrunt unit), where `plan` keeps its plan and the CI hooks store the
+// downloaded one. It derives the directory from configuration, so it works before anything is
+// provisioned on a fresh runner. It reports false for components without a workdir.
+func retainedWorkdirPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, bool) {
+	if !provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		return "", false
+	}
+	workdir, _, err := component.BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(workdir, filepath.Base(e.ConstructTerraformComponentPlanfilePath(atmosConfig, info))), true
 }
 
 // handleUnconfiguredPlanfileStorage resolves a verification request that cannot be

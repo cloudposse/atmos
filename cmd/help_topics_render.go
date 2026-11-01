@@ -21,10 +21,7 @@ func printLocalFlagsOnly(w io.Writer, cmd *cobra.Command, atmosConfig *schema.At
 		return
 	}
 
-	fmt.Fprintln(w, styles.heading.Render("FLAGS"))
-	fmt.Fprintln(w)
-	renderFlags(w, localFlags, styles.commandName, styles.flagName, styles.flagDesc, getTerminalWidth(), atmosConfig)
-	fmt.Fprintln(w)
+	renderLocalFlagSections(w, localFlags, styles, getTerminalWidth(), atmosConfig)
 }
 
 func commandSpecificFlagSet(cmd *cobra.Command) *pflag.FlagSet {

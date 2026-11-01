@@ -2,13 +2,18 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -332,4 +337,248 @@ func TestDiscoveryPublishesCommandAndExclude(t *testing.T) {
 	require.Equal(t, "opentofu", unitEngine(model.Request{Tofu: "terraform"}, &model.Resolution{TerraformBinary: "/opt/bin/tofu"}))
 	require.Equal(t, "terraform", unitEngine(model.Request{Tofu: "terraform"}, &model.Resolution{}))
 	require.Equal(t, "opentofu", unitEngine(model.Request{Tofu: "tofu"}, nil))
+}
+
+func TestPrepareReturnsExactInputsWithSensitivePaths(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		return &model.Resolution{
+			Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: filepath.Join(request.RootDirectory, "cache"), BackendType: "local",
+			Inputs: map[string]any{
+				"large": json.Number("9007199254740993"), "ratio": json.Number("0.1"), "list": []any{"a", json.Number("2"), nil}, "nothing": nil,
+				"password": "hunter2", "nested": map[string]any{"token": "t", "open": true}, "empty": map[string]any{},
+			},
+			SensitiveInputs: [][]string{{"password"}, {"nested", "token"}, {"missing"}},
+		}, nil
+	})
+
+	result, err := p.Prepare(t.Context(), request)
+
+	require.NoError(t, err)
+	value, err := component.Decode(result.Inputs)
+	require.NoError(t, err)
+	plain, marks := value.UnmarkDeepWithPaths()
+	paths := []string{}
+	for _, mark := range marks {
+		paths = append(paths, fmt.Sprintf("%#v", mark.Path))
+	}
+	require.ElementsMatch(t, []string{
+		fmt.Sprintf("%#v", cty.GetAttrPath("password")),
+		fmt.Sprintf("%#v", cty.GetAttrPath("nested").GetAttr("token")),
+	}, paths, "only paths that exist are marked")
+	require.Equal(t, "9007199254740993", plain.GetAttr("large").AsBigFloat().Text('f', -1))
+	require.Equal(t, "0.1", plain.GetAttr("ratio").AsBigFloat().Text('f', -1))
+	require.True(t, plain.GetAttr("nothing").IsNull())
+	require.True(t, plain.GetAttr("list").Type().IsTupleType())
+	require.True(t, plain.GetAttr("list").Index(cty.NumberIntVal(2)).IsNull())
+	require.True(t, plain.GetAttr("empty").Type().IsObjectType())
+	require.True(t, plain.IsWhollyKnown())
+
+	whole, err := encodeSensitive(map[string]any{"a": "b"}, [][]string{nil})
+	require.NoError(t, err)
+	require.Len(t, whole.SensitivePaths, 1)
+	require.Empty(t, whole.SensitivePaths[0].Steps, "the empty path marks the whole value")
+}
+
+func TestPrepareReturnsEngineLogsOnlyAtTheInvocationLevel(t *testing.T) {
+	root := fixture(t, "explicit-stack")
+	opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true, "included_paths": []string{"live/**"}}})
+	require.NoError(t, err)
+	provider := New(nil)
+	discover := func(level string) *pluginv1.DiscoverComponentsResponse {
+		response, err := provider.Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{LogLevel: level, Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}})
+		require.NoError(t, err)
+		return response
+	}
+	prepare := func(component *pluginv1.DiscoveredComponent, level string) *pluginv1.PrepareComponentResponse {
+		request := &pluginv1.ComponentRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, Address: component.Address, Source: component.Source, Configuration: component.Configuration, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{LogLevel: level, Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}}
+		request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
+		response, err := provider.Prepare(t.Context(), request)
+		require.NoError(t, err)
+		return response
+	}
+
+	quiet := discover("")
+	require.Empty(t, quiet.Logs, "engine chatter is hidden at the Atmos default level, even when Terragrunt warns")
+	require.Empty(t, discover("off").Logs)
+	noisy := discover("trace")
+	require.NotEmpty(t, noisy.Logs)
+	require.Empty(t, prepare(noisy.Components[1], "warn").Logs)
+	logs := prepare(noisy.Components[1], "debug").Logs
+	require.NotEmpty(t, logs)
+	for _, entry := range logs {
+		require.NotEqual(t, pluginv1.LogLevel_LOG_LEVEL_UNSPECIFIED, entry.Level)
+		require.NotEqual(t, pluginv1.LogLevel_LOG_LEVEL_TRACE, entry.Level, "trace events are below the requested level")
+		require.NotEmpty(t, entry.Message)
+		require.NotNil(t, entry.Time)
+	}
+}
+
+func TestFailureCarriesTheLogsThatPrecededIt(t *testing.T) {
+	root := t.TempDir()
+	root, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "module"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "terragrunt.hcl"), []byte("terraform { source = \"./module\" }\ninputs = { broken = local.absent }\n"), 0o644))
+	request := componentRequest(t)
+	request.RootDirectory, request.Source = root, "terragrunt.hcl"
+	request.Configuration, err = encode(map[string]any{})
+	require.NoError(t, err)
+	request.Invocation.LogLevel = "trace"
+
+	_, err = New(nil).Prepare(t.Context(), request)
+
+	require.Error(t, err)
+	detail, ok := component.FailureDetail(err)
+	require.True(t, ok)
+	require.NotEmpty(t, detail.Logs, "the events before the failure explain it")
+	request.Invocation.LogLevel = "off"
+	_, err = New(nil).Prepare(t.Context(), request)
+	detail, ok = component.FailureDetail(err)
+	require.True(t, ok)
+	require.Empty(t, detail.Logs)
+}
+
+func TestLogLevelsMapOntoTheProtocol(t *testing.T) {
+	for name, want := range map[string]pluginv1.LogLevel{
+		"trace": pluginv1.LogLevel_LOG_LEVEL_TRACE, "DEBUG": pluginv1.LogLevel_LOG_LEVEL_DEBUG, "info": pluginv1.LogLevel_LOG_LEVEL_INFO,
+		"warn": pluginv1.LogLevel_LOG_LEVEL_WARN, "error": pluginv1.LogLevel_LOG_LEVEL_ERROR, "other": pluginv1.LogLevel_LOG_LEVEL_UNSPECIFIED,
+	} {
+		require.Equal(t, want, logLevel(name), name)
+	}
+}
+
+func encodedOption(t *testing.T, value any) *pluginv1.ComponentValue {
+	t.Helper()
+	encoded, err := encode(value)
+	require.NoError(t, err)
+	return encoded
+}
+
+func TestOptionsOverrideTheEnvironmentAndTheUnit(t *testing.T) {
+	env := map[string]string{"TG_IAM_ASSUME_ROLE": "arn:aws:iam::1:role/environment", "TG_DOWNLOAD_DIR": "/env-cache", "UNRELATED": "kept"}
+	features, err := applyOptions(env, map[string]*pluginv1.ComponentValue{
+		"feature":                            encodedOption(t, map[string]any{"alpha": "true", "tier": "gold"}),
+		"iam_assume_role":                    encodedOption(t, "arn:aws:iam::1:role/option"),
+		"iam_assume_role_duration":           encodedOption(t, 900),
+		"iam_assume_role_session_name":       encodedOption(t, "ci"),
+		"iam_assume_role_web_identity_token": encodedOption(t, "token"),
+		"download_dir":                       encodedOption(t, "/option-cache"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"alpha": "true", "tier": "gold"}, features)
+	require.Equal(t, "arn:aws:iam::1:role/option", env["TG_IAM_ASSUME_ROLE"])
+	require.Equal(t, "900", env["TG_IAM_ASSUME_ROLE_DURATION"])
+	require.Equal(t, "ci", env["TG_IAM_ASSUME_ROLE_SESSION_NAME"])
+	require.Equal(t, "token", env["TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN"])
+	require.Equal(t, "/option-cache", env["TG_DOWNLOAD_DIR"])
+	require.Equal(t, "kept", env["UNRELATED"])
+
+	untouched := map[string]string{"A": "1"}
+	none, err := applyOptions(untouched, nil)
+	require.NoError(t, err)
+	require.Nil(t, none)
+	require.Equal(t, map[string]string{"A": "1"}, untouched, "absent options change nothing")
+}
+
+func TestOptionsRejectUnknownNamesAndWrongTypes(t *testing.T) {
+	_, err := applyOptions(map[string]string{}, map[string]*pluginv1.ComponentValue{"parallelism": encodedOption(t, 4)})
+	require.ErrorIs(t, err, ErrUnsupported)
+	_, err = applyOptions(map[string]string{}, map[string]*pluginv1.ComponentValue{"feature": encodedOption(t, "not-a-map")})
+	require.ErrorIs(t, err, ErrUnsupported)
+	_, err = applyOptions(map[string]string{}, map[string]*pluginv1.ComponentValue{"download_dir": {}})
+	require.ErrorIs(t, err, ErrUnsupported)
+}
+
+func TestFeatureOptionsRankAboveEnvironmentAndConfiguration(t *testing.T) {
+	config, err := encode(map[string]any{"enabled": true, "features": map[string]any{"tier": "config", "size": 3}})
+	require.NoError(t, err)
+	req := model.Request{Environment: map[string]string{"TG_FEATURE": "tier=environment,wide=true"}, Features: map[string]string{"tier": "option"}}
+	require.NoError(t, withFeatures(&req, config))
+	require.Equal(t, map[string]string{"tier": "option", "size": "3", "wide": "true"}, req.Features)
+}
+
+func TestOperationAcceptsBothModesAndDeclaredOptions(t *testing.T) {
+	request := componentRequest(t)
+	request.Operation.Options = map[string]*pluginv1.ComponentValue{"iam_assume_role": encodedOption(t, "arn:aws:iam::1:role/option")}
+	for _, mode := range []string{"native", "executable"} {
+		request.Operation.Mode = mode
+		got, err := operation(request.RootDirectory, "terragrunt", request.Operation, request.Invocation)
+		require.NoError(t, err, mode)
+		require.Equal(t, "arn:aws:iam::1:role/option", got.Environment["TG_IAM_ASSUME_ROLE"])
+		require.Equal(t, "native", got.Mode, "evaluation is the same in both modes")
+	}
+	require.Empty(t, request.Invocation.Environment["TG_IAM_ASSUME_ROLE"], "the host's invocation is never modified")
+}
+
+func TestExecutableModeNeverPreparesNatively(t *testing.T) {
+	request := componentRequest(t)
+	request.Operation.Mode = "executable"
+	prepared := false
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		prepared = true
+		return &model.Resolution{}, nil
+	})
+	_, err := p.Prepare(t.Context(), request)
+	require.Error(t, err)
+	require.False(t, prepared, "no HCL evaluation or command runs for a unit the executable owns")
+
+	// State resolution and validation remain available: Atmos reads state locations the same way in both modes.
+	_, err = p.Validate(t.Context(), request)
+	require.NoError(t, err)
+}
+
+func TestSettingsAcceptBothModes(t *testing.T) {
+	for _, mode := range []string{"native", "executable"} {
+		value, err := encode(map[string]any{"enabled": true, "mode": mode})
+		require.NoError(t, err)
+		require.NoError(t, settings(value), mode)
+	}
+	value, err := encode(map[string]any{"enabled": true, "mode": "cli"})
+	require.NoError(t, err)
+	require.Error(t, settings(value))
+}
+
+// TestManifestDeclaresExactlyTheOptionsThePluginAccepts keeps the static metadata the host builds flags
+// from in step with the options the plugin understands: a declared option the plugin rejects would fail
+// every command, and an accepted option nobody declared could never be set.
+func TestManifestDeclaresExactlyTheOptionsThePluginAccepts(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "plugin.yaml"))
+	require.NoError(t, err)
+	var manifest struct {
+		Spec struct {
+			Capabilities struct {
+				Components struct {
+					Discovery struct {
+						Terragrunt struct {
+							Modes   []string `yaml:"modes"`
+							Options []struct {
+								Name      string   `yaml:"name"`
+								Sensitive bool     `yaml:"sensitive"`
+								Commands  []string `yaml:"commands"`
+							} `yaml:"options"`
+						} `yaml:"terragrunt"`
+					} `yaml:"discovery"`
+				} `yaml:"components"`
+			} `yaml:"capabilities"`
+		} `yaml:"spec"`
+	}
+	require.NoError(t, yaml.Unmarshal(raw, &manifest))
+	declared := manifest.Spec.Capabilities.Components.Discovery.Terragrunt
+	require.ElementsMatch(t, []string{"native", "executable"}, declared.Modes)
+	require.NotEmpty(t, declared.Options)
+
+	names := []string{}
+	for _, option := range declared.Options {
+		names = append(names, option.Name)
+		require.NotEmpty(t, option.Commands, option.Name)
+		if option.Sensitive {
+			require.Equal(t, "iam_assume_role_web_identity_token", option.Name)
+		}
+	}
+	accepted := []string{"feature"}
+	for name := range toolEnvironment {
+		accepted = append(accepted, name)
+	}
+	require.ElementsMatch(t, accepted, names)
 }

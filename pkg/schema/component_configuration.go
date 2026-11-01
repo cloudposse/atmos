@@ -28,6 +28,14 @@ type ComponentDiscoveryConfig struct {
 	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
 }
 
+// ComponentProviderOption is a provider option the user set explicitly on the command line or in the
+// environment. Options the user did not set are absent, so a provider can tell them from false, zero, and empty.
+type ComponentProviderOption struct {
+	Value any
+	// Sensitive values are masked and never logged.
+	Sensitive bool
+}
+
 // ComponentConfigurationRuntime is an invocation-owned host service. It is not a wire contract.
 type ComponentConfigurationRuntime interface {
 	Discover(context.Context) (map[string]map[string]any, error)

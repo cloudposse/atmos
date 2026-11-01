@@ -59,7 +59,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	stackcmd "github.com/cloudposse/atmos/cmd/stack"
 	_ "github.com/cloudposse/atmos/cmd/store"
-	_ "github.com/cloudposse/atmos/cmd/terraform"
+	terraformcmd "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	terraformcache "github.com/cloudposse/atmos/cmd/terraform/cache"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
@@ -1901,6 +1901,11 @@ func Execute() error {
 
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
+			return err
+		}
+
+		// Provider options come from static package metadata and must exist before Cobra parses flags.
+		if err = terraformcmd.RegisterProviderFlags(&atmosConfig, os.Args[1:]); err != nil {
 			return err
 		}
 	}

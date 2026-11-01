@@ -6,10 +6,22 @@ components:
     base_path: components/terraform
     command: tofu
     # Settings for the Terragrunt configuration provider. The provider itself comes from
-    # plugins.packages.terragrunt; the `dev` profile supplies a local build (see profiles/dev).
+    # plugins.packages.terragrunt below.
     terragrunt:
       enabled: true
       mode: native
       discovery:
         enabled: true
         included_paths: [live/**]
+
+# The Terragrunt configuration provider is installed from the registry. The first command that needs it
+# creates the lock entry (`.atmos.plugins.lock.yaml`); `atmos plugin install` does the same up front,
+# and `atmos plugin install --frozen` restores exactly what the lock records, as CI does.
+#
+# To run a local build while developing the plugin itself, activate the `dev` profile instead
+# (ATMOS_PROFILE=dev, see profiles/dev/atmos.yaml): its `path` takes the place of this registry package.
+plugins:
+  packages:
+    terragrunt:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/terragrunt
+      version: "^0.1.0"

@@ -3,6 +3,10 @@ package component
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
@@ -72,6 +76,74 @@ func DecodeObject(input *pluginv1.ComponentValue) (map[string]any, error) {
 		return nil, errUtils.ErrPluginProtocol
 	}
 	return object, nil
+}
+
+// DecodeInputs adapts the evaluated variables of a component. It behaves like DecodeObject, but a value that
+// is not yet known is a defect of the plugin that the user must be able to trace, so the error names the
+// input and the path of the unknown value inside it. It never prints a value.
+func DecodeInputs(input *pluginv1.ComponentValue) (map[string]any, error) {
+	defer perf.Track(nil, "componentadapter.DecodeInputs")()
+
+	if input == nil {
+		return map[string]any{}, nil
+	}
+	value, err := decodePlain(input)
+	if err != nil {
+		return nil, err
+	}
+	if !value.IsWhollyKnown() && !value.IsNull() && (value.Type().IsObjectType() || value.Type().IsMapType()) {
+		return nil, unknownInputError(value)
+	}
+	return DecodeObject(input)
+}
+
+// unknownInputError names the first input, in key order, that holds an unknown value.
+func unknownInputError(object cty.Value) error {
+	if !object.IsKnown() {
+		return errUtils.Build(errUtils.ErrPluginProtocol).
+			WithExplanation("The plugin returned the inputs of the component as an unknown value.").
+			WithHint("Report this to the plugin author: inputs must be fully evaluated before they reach Atmos.").
+			Err()
+	}
+	attributes := object.AsValueMap()
+	for _, name := range slices.Sorted(maps.Keys(attributes)) {
+		if attributes[name].IsWhollyKnown() {
+			continue
+		}
+		path := name
+		_ = cty.Walk(attributes[name], func(at cty.Path, current cty.Value) (bool, error) {
+			if current.IsKnown() {
+				return true, nil
+			}
+			path = name + formatPath(at)
+			return false, nil
+		})
+		return errUtils.Build(errUtils.ErrPluginProtocol).
+			WithExplanationf("The input `%s` is not known when the component is prepared, so Atmos cannot write it to the variable file.", path).
+			WithContext("input", name).
+			WithHint("Terraform computes unknown values during apply; an input must be known before Terraform starts. Replace it with a value that does not depend on resources that do not exist yet.").
+			WithHint("If the input comes from a dependency output, give the dependency `mock_outputs` or apply the dependency first.").
+			Err()
+	}
+	return errUtils.ErrPluginProtocol
+}
+
+// formatPath renders a cty path as .key and [index] steps.
+func formatPath(path cty.Path) string {
+	var text strings.Builder
+	for _, step := range path {
+		switch step := step.(type) {
+		case cty.GetAttrStep:
+			text.WriteString("." + step.Name)
+		case cty.IndexStep:
+			if step.Key.Type() == cty.String {
+				text.WriteString("[" + strconv.Quote(step.Key.AsString()) + "]")
+			} else {
+				text.WriteString("[" + step.Key.AsBigFloat().String() + "]")
+			}
+		}
+	}
+	return text.String()
 }
 
 // DecodeValue adapts one fully evaluated value of any type, such as an entry of a value map.
