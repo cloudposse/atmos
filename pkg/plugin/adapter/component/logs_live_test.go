@@ -160,6 +160,7 @@ func TestCancellingTheCallStopsLiveDeliveryWithoutLeakingGoroutines(t *testing.T
 	_, err := provider.Prepare(t.Context(), liveRequest(t, warm, "live-logs"))
 	require.NoError(t, err)
 	baseline := settledGoroutines()
+	require.Positive(t, baseline, "the counter must see at least this test goroutine")
 
 	root := t.TempDir()
 	ctx, cancel := context.WithCancel(t.Context())
@@ -177,13 +178,15 @@ func TestCancellingTheCallStopsLiveDeliveryWithoutLeakingGoroutines(t *testing.T
 		t.Fatal("cancelling the command did not stop the call")
 	}
 	// Poll directly: a testify Eventually condition runs on a goroutine of its own and would count itself.
+	// Count only goroutines running Atmos code, so runtime and scheduler goroutines that come and go
+	// (garbage collection workers, timers, the race detector) cannot make the comparison flaky.
 	deadline := time.Now().Add(10 * time.Second)
-	for runtime.NumGoroutine() > baseline && time.Now().Before(deadline) {
+	for atmosGoroutines() > baseline && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if runtime.NumGoroutine() > baseline {
+	if atmosGoroutines() > baseline {
 		buffer := make([]byte, 1<<18)
-		t.Fatalf("goroutines after cancel: %d, baseline %d\n%s", runtime.NumGoroutine(), baseline, buffer[:runtime.Stack(buffer, true)])
+		t.Fatalf("Atmos goroutines after cancel: %d, baseline %d\n%s", atmosGoroutines(), baseline, buffer[:runtime.Stack(buffer, true)])
 	}
 	// Only the warm-up call produced a last entry: the cancelled call never reached its end.
 	assert.Equal(t, 1, strings.Count(output.String(), "last live entry"))
@@ -193,5 +196,18 @@ func TestCancellingTheCallStopsLiveDeliveryWithoutLeakingGoroutines(t *testing.T
 func settledGoroutines() int {
 	runtime.GC()
 	time.Sleep(200 * time.Millisecond)
-	return runtime.NumGoroutine()
+	return atmosGoroutines()
+}
+
+// atmosGoroutines counts goroutines with a frame in Atmos code.
+func atmosGoroutines() int {
+	buffer := make([]byte, 1<<20)
+	buffer = buffer[:runtime.Stack(buffer, true)]
+	count := 0
+	for _, stack := range strings.Split(string(buffer), "\n\n") {
+		if strings.Contains(stack, "github.com/cloudposse/atmos/") {
+			count++
+		}
+	}
+	return count
 }
