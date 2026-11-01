@@ -204,7 +204,9 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
-	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	// The query path loads configuration through InitCliConfigWithContext. InitCliConfig is only a
+	// wrapper around it, so patching the wrapper would not intercept this call.
+	patches.ApplyFunc(cfg.InitCliConfigWithContext, func(_ context.Context, info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 		require.Equal(t, "dev", info.Stack)
 		require.True(t, processStacks)
 		return schema.AtmosConfiguration{}, nil
@@ -298,9 +300,18 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
-	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	// Affected selection loads configuration through InitCliConfig; the query it schedules uses
+	// the context variant. Patch both entry points.
+	checkInit := func(info schema.ConfigAndStacksInfo, processStacks bool) {
 		require.Equal(t, "plan", info.SubCommand)
 		require.True(t, processStacks)
+	}
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		checkInit(info, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFunc(cfg.InitCliConfigWithContext, func(_ context.Context, info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		checkInit(info, processStacks)
 		return schema.AtmosConfiguration{}, nil
 	})
 	patches.ApplyFuncVar(&testExecutor(t).services.GetAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
@@ -397,7 +408,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 	var schedulerErr error
 	describePatches := gomonkey.NewPatches()
 	defer describePatches.Reset()
-	describePatches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+	describePatches.ApplyFunc(cfg.InitCliConfigWithContext, func(context.Context, schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
 		return schema.AtmosConfiguration{}, initErr
 	})
 	describePatches.ApplyFuncVar(&executor.services.ExecuteDescribeStacksWithMocks, func(

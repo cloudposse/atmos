@@ -79,7 +79,10 @@ inputs = {
 	for outcome := range outcomes {
 		require.NoError(t, outcome.err)
 		result, profile := outcome.result, outcome.profile
-		require.Equal(t, filepath.ToSlash(physical), result.Inputs["directory"])
+		// get_terragrunt_dir() returns native separators, which are backslashes on Windows.
+		directory, isString := result.Inputs["directory"].(string)
+		require.True(t, isString)
+		require.Equal(t, filepath.Clean(physical), filepath.Clean(filepath.FromSlash(directory)))
 		require.Equal(t, profile, result.Inputs["direct"])
 		child := result.Inputs["child"].(map[string]any)
 		require.Equal(t, filepath.Clean(physical), filepath.Clean(child["cwd"].(string)))

@@ -87,3 +87,28 @@ func TestDiscoveryReportsBrokenStacksAndMissingDependencies(t *testing.T) {
 		})
 	}
 }
+
+// Terragrunt builds stack template sources by concatenating a native directory with a slash-separated
+// suffix, for example "${values.project_root}/catalog/units/app". On Windows that yields mixed separators,
+// and the discovery helpers must treat those paths as equal to their native spelling.
+func TestPathHelpersAcceptMixedSeparators(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	nativeUnit := filepath.Join(root, "catalog", "units", "app")
+	for name, spelling := range map[string]string{
+		"native":         nativeUnit,
+		"slash suffix":   root + "/catalog/units/app",
+		"slash relative": root + string(filepath.Separator) + filepath.FromSlash("catalog/units/app"),
+		"redundant":      root + "/catalog/./units/app",
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.True(t, plainLocalSource(spelling))
+			require.True(t, within(spelling, root))
+			require.False(t, within(root, spelling))
+			require.Equal(t, nativeUnit, localPath("ignored", spelling))
+		})
+	}
+	// A relative source resolves against the stack directory in native form.
+	require.Equal(t, nativeUnit, localPath(root, "catalog/units/app"))
+	require.Equal(t, nativeUnit, localPath(filepath.Join(root, "live"), "../catalog/units/app"))
+}

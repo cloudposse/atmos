@@ -2,8 +2,9 @@ package terraform
 
 import (
 	"context"
-	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"maps"
 	"os/exec"
 	"path/filepath"
@@ -62,8 +63,18 @@ func configurationArtifactName(info *schema.ConfigAndStacksInfo, suffix string) 
 	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
 		return "", false
 	}
-	identity := sha256.Sum256([]byte(info.Stack + "\x00" + info.ComponentFromArg))
-	return fmt.Sprintf("atmos-%x%s", identity, suffix), true
+	return "atmos-" + configurationIdentity(info.Stack, info.ComponentFromArg) + suffix, true
+}
+
+// configurationIdentity names a stack and component pair for artifact files. The name must be the same in
+// every process (a plan in one run is applied by another), so it is a plain content digest with no secret.
+// It identifies a component for file naming only: it is not a credential hash and gives no security
+// guarantee, which is why a non-cryptographic 128-bit FNV-1a digest is used instead of SHA-256.
+func configurationIdentity(stack, component string) string {
+	digest := fnv.New128a()
+	// Writing to a hash never fails.
+	_, _ = digest.Write([]byte(stack + "\x00" + component))
+	return hex.EncodeToString(digest.Sum(nil))
 }
 
 // prepareConfigurationEnvironment applies the same authentication, RC, cache,
