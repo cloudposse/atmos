@@ -64,7 +64,8 @@ def restore_artifacts(root):
 def expect_rejected(root, reason, context):
     result = lifecycle.terraform(root, "apply", "planned", flags=["--from-plan"], failing=True)
     output = hardening.output_of(result)
-    fixtures.check(reason in output, "Expected '" + reason + "' for " + context + ":\n" + output)
+    # Error text is wrapped to the terminal width, which can split a phrase across lines.
+    fixtures.check(reason in " ".join(output.split()), "Expected '" + reason + "' for " + context + ":\n" + output)
     fixtures.check("Apply complete" not in output, "A plan was applied despite " + context)
     fixtures.check(not fs.exists(lifecycle.state_path(root, "planned")), context + " created state")
 
