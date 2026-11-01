@@ -800,6 +800,9 @@ func validateAtmosBinary(repoRoot string) (string, string) {
 
 // Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
+	if runJITEngineHelper() {
+		os.Exit(0)
+	}
 	// Parse flags first to get -v status
 	flag.Parse()
 

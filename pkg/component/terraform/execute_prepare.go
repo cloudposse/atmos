@@ -59,7 +59,7 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 		return "", err
 	}
 
-	if !componentPathExists {
+	if !componentPathExists && !info.DryRun {
 		basePath, _ := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
 		return "", fmt.Errorf(
 			"%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",

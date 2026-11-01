@@ -1478,42 +1478,18 @@ func TestWriteWorkdirMetadata_PreservesContentHash(t *testing.T) {
 // before.terraform.init hook), wiping out varfiles and backend configs written between
 // the two calls and causing the subprocess to fail with "file does not exist" errors.
 func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testing.T) {
-	// The guard is checked before any provisioning when invocationDoneKey is set.
-	// A component config with a valid source but the done-key present should return nil
-	// immediately without touching the filesystem.
-	componentConfig := map[string]any{
-		"component":   "null-label",
-		"atmos_stack": "demo",
-		"source": map[string]any{
-			"uri":     "github.com/cloudposse/terraform-null-label.git//",
-			"version": "0.25.0",
-			"ttl":     "0s",
-		},
-		"provision": map[string]any{
-			"workdir": map[string]any{
-				"enabled": true,
-			},
-		},
-		// Simulate that this invocation already ran AutoProvisionSource once.
-		invocationDoneKey: struct{}{},
-	}
-
-	// Use a real atmosConfig with base path pointing to a temp dir.
-	// The function should return nil without ever trying to resolve a target dir
-	// or call VendorSource (which would require network access).
-	tmpDir := t.TempDir()
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tmpDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
-			},
-		},
-	}
-
-	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
-	require.NoError(t, err, "second AutoProvisionSource call with invocationDoneKey set should be a no-op")
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# v1"), 0o644))
+	component := map[string]any{"component": "example", "atmos_stack": "dev", "source": map[string]any{"uri": sourceDir, "ttl": "0s"}, "provision": map[string]any{"workdir": map[string]any{"enabled": true}}}
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	require.NoError(t, AutoProvisionSource(t.Context(), config, "terraform", component, nil, provisioner.OutputWriters{}))
+	target, err := ResolveTarget(config, "terraform", "example", component)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# v2"), 0o644))
+	require.NoError(t, AutoProvisionSource(t.Context(), config, "terraform", component, nil, provisioner.OutputWriters{}))
+	contents, err := os.ReadFile(filepath.Join(target.Dir, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# v1", string(contents))
 }
 
 // TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning verifies that the
