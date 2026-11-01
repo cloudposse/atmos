@@ -20,7 +20,6 @@ const providerRecoveryDirPerm = 0o700
 // Call only after policy permits init; nil inputs (dry run) are a no-op. Invalid lockfiles remain
 // the engine's responsibility. The returned cache persists with the data directory so provider
 // links created by init remain usable on subsequent warm commands.
-
 func PrepareProviderInstallation(in *Inputs) (string, error) {
 	defer perf.Track(nil, "autoinit.PrepareProviderInstallation")()
 

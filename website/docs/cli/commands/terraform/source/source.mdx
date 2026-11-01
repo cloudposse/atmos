@@ -52,6 +52,12 @@ This means you can simply configure your component's source and run terraform—
 
 ## CLI Commands
 
+The explicit CLI commands are useful for fine-grained control:
+- Force re-vendor to get the latest version
+- Describe source configuration
+- Delete vendored sources
+- List components with sources
+
 ### Explicit working directory
 
 For source components with workdir provisioning enabled, `metadata.working_directory` takes precedence
@@ -63,12 +69,6 @@ previous workdir still contains files, Atmos stops before switching paths. Expli
 workdir and its state, or retain the earlier edition pin. Advancing an edition never moves state automatically.
 
 Dry-run Terraform commands resolve the intended directory without fetching source or creating a workdir.
-
-The explicit CLI commands are useful for fine-grained control:
-- Force re-vendor to get the latest version
-- Describe source configuration
-- Delete vendored sources
-- List components with sources
 
 ## How It Works
 

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -174,7 +175,7 @@ func (e *Executor) executeCommandPipeline(
 			return phaseErr
 		})
 		if err != nil {
-			return err
+			return errUtils.AsPrerequisiteError(err)
 		}
 	}
 
@@ -188,7 +189,7 @@ func (e *Executor) executeCommandPipeline(
 	}
 
 	if err = e.runWorkspaceSetupPhase(atmosConfig, info, componentPath, opts...); err != nil {
-		return err
+		return errUtils.AsPrerequisiteError(err)
 	}
 
 	if err = checkTTYRequirement(info, opts...); err != nil {
