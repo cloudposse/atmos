@@ -4,7 +4,7 @@
 
 **Decision:** Ship Terragrunt as a separately versioned native plugin. Use Terragrunt Go modules to interpret HCL and Atmos to execute native Terraform components. Provide executable mode as a separate compatibility path.
 
-This carries forward the [checkpointed pilot](https://github.com/cloudposse/atmos/tree/5fea956fd6061efae7c8c97ce76d3a2491446b9b/tools/terragrunt-poc). The [component plugin PRD](plugins/extensions/component-engines.md) defines shared contracts. Keep pilot evidence in engineering reports, not in the migration guide.
+This carries forward the checkpointed pilot. The [component plugin PRD](plugins/extensions/component-engines.md) defines shared contracts. Keep pilot evidence in engineering reports, not in the migration guide.
 
 ## User outcome
 
