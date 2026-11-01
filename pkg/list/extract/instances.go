@@ -15,6 +15,7 @@ func Instances(instances []schema.Instance) []map[string]any {
 			"component":      instance.Component,
 			"stack":          instance.Stack,
 			"component_type": instance.ComponentType,
+			"engine":         instance.Engine,
 			"vars":           instance.Vars,
 			"settings":       instance.Settings,
 			"env":            instance.Env,

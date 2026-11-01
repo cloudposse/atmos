@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 
@@ -97,4 +98,10 @@ func invalidAlias(alias string) error {
 		WithExplanationf("`%s` is not a valid plugin alias.", alias).
 		WithHint("Aliases start with a lowercase letter and contain only lowercase letters, digits, `-` and `_`.").
 		Err()
+}
+
+// defaultAlias derives the short product alias used when no alias is given.
+func defaultAlias(packageID string) string {
+	_, product, _ := strings.Cut(packageID, "/")
+	return product
 }

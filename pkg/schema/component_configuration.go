@@ -42,13 +42,17 @@ type ComponentConfigurationRevisionRuntime interface {
 
 // PreparedComponentConfiguration contains evaluated inputs and literal artifacts.
 type PreparedComponentConfiguration struct {
-	Engine      string
-	Source      string
-	Inputs      map[string]any
-	BackendType string
-	Backend     map[string]any
-	Workspace   string
-	Files       []ComponentConfigurationFile
+	Sources          []ComponentConfigurationSource
+	Engine           string
+	Source           string
+	Inputs           map[string]any
+	BackendType      string
+	Backend          map[string]any
+	Workspace        string
+	Files            []ComponentConfigurationFile
+	BackendGenerated bool
+	// Execution is data the host runs; it is nil when the provider adds no hooks or arguments.
+	Execution *ComponentExecution
 }
 
 // ComponentConfigurationFile must bypass template rendering.

@@ -264,7 +264,7 @@ func (e *Executor) GetOutput(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true, authManager)
 	if err != nil {
 		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
@@ -362,7 +362,7 @@ func (e *Executor) GetOutputWithOptions(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions, authManager)
 	if err != nil {
 		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
@@ -447,7 +447,7 @@ func (e *Executor) fetchAndCacheOutputs(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions, authManager)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
@@ -471,6 +471,7 @@ func (e *Executor) execute(
 	authContext *schema.AuthContext,
 	opts *OutputOptions,
 	processYamlFunctions bool,
+	authManagers ...any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.execute")()
 
@@ -487,6 +488,27 @@ func (e *Executor) execute(
 	config, err := ExtractComponentConfig(atmosConfig, sections, component, stack)
 	if err != nil {
 		return nil, err
+	}
+
+	state, err := ResolveConfigurationState(ctx, atmosConfig, &ConfigurationStateRequest{Sections: sections, Component: component, Stack: stack, AuthContext: authContext, AuthManagers: authManagers})
+	if err != nil {
+		return nil, err
+	}
+	if state != nil {
+		config.BaseEnvironment = configurationEnvironment(authManagers)
+		cleanup, err := configurationOutputConfig(config, state)
+		if err != nil {
+			return nil, err
+		}
+		defer cleanup()
+		// The scratch directory always needs init, even after an earlier apply.
+		copy := OutputOptions{}
+		if opts != nil {
+			copy = *opts
+		}
+		copy.SkipInit = false
+		opts = &copy
+		processYamlFunctions = true
 	}
 
 	// Step 2.5: Auto-provision JIT workdir if needed before toolchain resolution and init.

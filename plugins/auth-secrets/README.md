@@ -11,7 +11,7 @@ plugins:
   packages:
     secrets:
       source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
-      version: 1.0.2
+      version: 1.0.3
 
 stores:
   team:

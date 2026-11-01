@@ -42,6 +42,7 @@ func TestInstances(t *testing.T) {
 					"component":      "vpc",
 					"stack":          "plat-ue2-dev",
 					"component_type": "terraform",
+					"engine":         "",
 					"vars": map[string]any{
 						"tenant":      "plat",
 						"environment": "ue2",
@@ -89,6 +90,7 @@ func TestInstances(t *testing.T) {
 					"component":      "vpc",
 					"stack":          "plat-ue2-dev",
 					"component_type": "terraform",
+					"engine":         "",
 					"vars": map[string]any{
 						"tenant": "plat",
 						"stage":  "dev",
@@ -102,6 +104,7 @@ func TestInstances(t *testing.T) {
 					"component":      "eks",
 					"stack":          "plat-ue2-prod",
 					"component_type": "terraform",
+					"engine":         "",
 					"vars": map[string]any{
 						"tenant": "plat",
 						"stage":  "prod",

@@ -602,6 +602,34 @@ func TestProvisionAndResolveComponentPathDryRunDoesNotCreateSourceOrWorkdir(t *t
 	}
 }
 
+func TestResolveRetainedWorkdirRecordsPathWithoutProvisioning(t *testing.T) {
+	base := t.TempDir()
+	fallback := filepath.Join(base, "components", "vpc")
+	config := &schema.AtmosConfiguration{BasePath: base}
+	section := map[string]any{
+		"component": "vpc", "atmos_component": "vpc", "atmos_stack": "dev",
+		"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		"source":    map[string]any{"uri": "./module"},
+	}
+	info := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: section}
+
+	path, err := ResolveRetainedWorkdir(config, info, cfg.TerraformComponentType, fallback)
+
+	require.NoError(t, err)
+	assert.Equal(t, path, section[provWorkdir.WorkdirPathKey], "the retained workdir becomes the component's working directory")
+	assert.Contains(t, filepath.ToSlash(path), "/.workdir/terraform/dev-vpc-")
+	entries, err := os.ReadDir(base)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "locating a retained workdir must not create or download anything")
+
+	// Without a workdir the component keeps its own directory and nothing is recorded.
+	plain := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: map[string]any{}}
+	path, err = ResolveRetainedWorkdir(config, plain, cfg.TerraformComponentType, base)
+	require.NoError(t, err)
+	assert.Equal(t, base, path)
+	assert.NotContains(t, plain.ComponentSection, provWorkdir.WorkdirPathKey)
+}
+
 // TestProvisionAndResolveComponentPath_NoSourceReturnsFallback verifies the
 // short-circuit when no source is configured: the orchestrator must skip
 // AutoProvisionSource entirely and report whether the fallback exists.
