@@ -196,7 +196,10 @@ inputs = { here = local.here, sibling = local.sibling, absolute = local.absolute
 		require.Equal(t, physicalPath(t, want), physicalPath(t, report.Executable), key)
 		require.Equal(t, physicalPath(t, layout.unit), physicalPath(t, report.Directory), "%s must run in the unit directory", key)
 	}
-	require.Equal(t, filepath.ToSlash(physicalPath(t, layout.unit)), result.Inputs["dir"])
+	// get_terragrunt_dir() returns native separators, which are backslashes on Windows.
+	dir, isString := result.Inputs["dir"].(string)
+	require.True(t, isString)
+	require.Equal(t, physicalPath(t, layout.unit), filepath.Clean(filepath.FromSlash(dir)))
 }
 
 // A parent configuration included by the unit evaluates commands in the unit directory.
