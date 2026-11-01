@@ -297,7 +297,7 @@ func TestPublish_ConditionalGuardRejectsRacingWritersEvenWithoutAWriterLock(t *t
 		}()
 	}
 	wg.Wait()
-	assert.GreaterOrEqual(t, wins.Load(), int64(1))
+	assert.Equal(t, int64(1), wins.Load(), "exactly one writer wins the reference")
 	current, ok := bare.RecordDigestOf(exampleRef)
 	require.True(t, ok)
 	var count int
