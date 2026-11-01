@@ -182,6 +182,9 @@ more depth. If a name is not listed here, check that page before concluding it d
   Paths resolve like `fs.read_file`; parent directories must exist. Default creation fails if the destination
   exists. Explicit overwrite atomically replaces contents and preserves existing permissions, rejecting symlink and nonregular destinations. Mode applies to new files,
   subject to operating system permission rules and umask.
+- `fs.mkdir(path, parents=False, mode=0o700)`: create a directory; `parents=True` creates ancestors and accepts an existing directory.
+- `fs.mkdtemp(prefix="atmos-", dir="")`: create a unique temporary directory. An empty `dir` uses the OS temporary directory; a supplied parent must exist.
+- `fs.remove(path, recursive=False)`: remove a file, final symlink, or empty directory. `recursive=True` removes a tree and accepts absent paths. Empty paths and filesystem roots are rejected. Use `defer(fs.remove, work, recursive=True)` for temporary-directory cleanup after failures or cancellation.
 - `yaml.decode(content)`: one YAML data document as dictionaries, lists, and scalars;
   empty input returns `None`. Mapping keys must be strings. Duplicate keys, multiple
   documents, non-finite numbers, and recursive aliases fail. Tags do not execute
