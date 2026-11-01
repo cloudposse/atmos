@@ -7,7 +7,9 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -38,6 +40,7 @@ func printShellDryRunInfo(info *schema.ConfigAndStacksInfo, cfg *shellConfig) {
 
 // shellInfoFromOptions builds a ConfigAndStacksInfo from ShellOptions.
 func shellInfoFromOptions(opts *tf.ShellOptions) schema.ConfigAndStacksInfo {
+	identity := config.NormalizeIdentityValue(opts.Identity)
 	return schema.ConfigAndStacksInfo{
 		ComponentFromArg: opts.Component,
 		Stack:            opts.Stack,
@@ -45,7 +48,8 @@ func shellInfoFromOptions(opts *tf.ShellOptions) schema.ConfigAndStacksInfo {
 		ComponentType:    "terraform",
 		SubCommand:       "shell",
 		DryRun:           opts.DryRun,
-		Identity:         opts.Identity,
+		Identity:         identity,
+		AuthDisabled:     identity == config.IdentityFlagDisabledValue,
 		SkipInit:         opts.SkipInit,
 	}
 }
@@ -98,6 +102,9 @@ func (e *Executor) ExecuteTerraformShell(opts *tf.ShellOptions, atmosConfig *sch
 	)
 
 	info := shellInfoFromOptions(opts)
+	if info.AuthDisabled {
+		authdeferred.ConfigureAuth(atmosConfig, info.Identity)
+	}
 
 	// Create and authenticate AuthManager by merging global + component auth config.
 	// This enables YAML functions like !terraform.state to use authenticated credentials.
@@ -131,8 +138,14 @@ func (e *Executor) ExecuteTerraformShell(opts *tf.ShellOptions, atmosConfig *sch
 	// This handles the workdir provisioner which may copy component files to an isolated directory.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	if info.DryRun {
+		componentPath, _, err = component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, &info, config.TerraformComponentType, componentPath)
+		if err != nil {
+			return err
+		}
+	}
 
-	err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), atmosConfig, info.ComponentSection, info.AuthContext, provisioner.OutputWriters{})
+	err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), atmosConfig, info.ComponentSection, info.AuthContext, provisioner.OutputWriters{}, &provisioner.TerraformExecContext{DryRun: info.DryRun})
 	if err != nil {
 		return errUtils.Build(errUtils.ErrProvisionerFailed).
 			WithCause(err).

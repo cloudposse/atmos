@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,7 @@ func TestJITSource_OCIScheme(t *testing.T) {
 	resetSourceCommandState(t)
 	root := t.TempDir()
 	t.Chdir(root)
+	executable, logPath := setupJITEngine(t)
 
 	imageRef := ocitest.NewRegistry(t, "test/component:v1", map[string]string{
 		"context.tf": "# OCI_JIT_MARKER\n",
@@ -56,6 +58,7 @@ stacks:
 components:
   terraform:
     oci-component:
+      command: ` + strconv.Quote(executable) + `
       source:
         uri: "oci://` + imageRef + `"
       provision:
@@ -72,11 +75,15 @@ components:
 		"--stack", "dev",
 		"--dry-run",
 	})
-	// Execute may error since terraform isn't configured here, but JIT source
-	// provisioning should have already run before that point is reached.
-	_ = cmd.Execute()
+	require.NoError(t, cmd.Execute())
+	require.NoDirExists(t, filepath.Join(root, ".workdir"), "cold dry-run must not download OCI source")
+	require.NoFileExists(t, logPath, "dry-run must not execute the engine")
+	resetSourceCommandState(t)
+	cmd.RootCmd.SetArgs([]string{"terraform", "plan", "oci-component", "--stack", "dev"})
+	require.NoError(t, cmd.Execute())
 
 	workdirPath := filepath.Join(root, ".workdir", "terraform", "dev-oci-component-751f8f04")
+	requireJITEngineCommand(t, logPath, workdirPath, "plan")
 	info, err := os.Stat(workdirPath)
 	require.NoError(t, err, "workdir should exist at %s", workdirPath)
 	require.True(t, info.IsDir(), "workdir path should be a directory")

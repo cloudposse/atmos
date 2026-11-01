@@ -38,7 +38,7 @@ atmos terraform backend <subcommand> [options]
   <dd>Update backend configuration (idempotent)</dd>
 
   <dt>`delete <component>`</dt>
-  <dd>Delete backend infrastructure (requires --force)</dd>
+  <dd>Delete backend infrastructure and its contents (requires `--force`, even when empty)</dd>
 </dl>
 
 ## Creating Backends
@@ -102,7 +102,7 @@ atmos terraform backend update vpc --stack dev
 
 ### Delete Backend
 
-Remove backend infrastructure (requires --force for safety):
+Deletion requires `--force`, even for an empty backend. With `--force`, Atmos permanently deletes stored state and other backend contents before removing the backend. Back up any state you need first:
 
 ```shell
 atmos terraform backend delete vpc --stack dev --force
@@ -136,12 +136,12 @@ atmos terraform backend create rds --stack dev
   <dd>Output format for list and describe commands: `table`, `yaml`, `json` (default: varies by command)</dd>
 
   <dt>`--force`</dt>
-  <dd>Force deletion without confirmation (delete command only)</dd>
+  <dd>Permanently delete backend contents, including Terraform state, before deleting the backend (delete command only)</dd>
 </dl>
 
 ## Authentication
 
-Backend commands support both global and component-level authentication, consistent with regular Terraform commands.
+Backend create, update, and delete support both global and component-level authentication, consistent with regular Terraform commands. Use `--identity=false` to disable Atmos identity selection. Backend `!env` values are resolved after authentication using component environment settings before process environment variables. Nested Terraform output/state functions are not evaluated during manual backend provisioning.
 
 ### Component-Level Identity
 
