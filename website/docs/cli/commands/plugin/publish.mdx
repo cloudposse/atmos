@@ -50,9 +50,9 @@ published releases are immutable.
   <dt><code>--sign</code></dt>
   <dd>Sign the published index digest with Sigstore. Uses the same signing flow as <code>atmos plugin sign</code>.</dd>
   <dt><code>--verify-public</code></dt>
-  <dd>Require an existing public GHCR organization package before upload, then anonymously verify all
-  platform payloads against the release digest. Reads package metadata using GH_TOKEN or GITHUB_TOKEN.
-  Other registries do not yet have a visibility preflight adapter.</dd>
+  <dd>After upload and any requested signing, anonymously download and verify the published digest and
+  every platform payload. Disabled by default so private registries remain supported. This checks access;
+  it does not change registry visibility. Verification failure returns an error and leaves the upload intact.</dd>
   <dt><code>--cosign-version</code></dt>
   <dd>Exact managed Cosign 3 version used with <code>--sign</code>. Defaults to <code>3.1.3</code>. Requires <code>--sign</code>;
   without it the command fails instead of ignoring the flag.</dd>
@@ -89,3 +89,34 @@ Serialize catalog writes through one owner or CI concurrency group: revision che
 updates but are not a distributed lock or an atomic compare-and-swap guarantee.
 
 For source-to-release publication, use [plugin release](release.mdx). For automated batch catalog updates, use [plugin catalog sync](catalog-sync.mdx).
+
+## Public packages on GHCR
+
+Use `--verify-public` when consumers must be able to download without credentials:
+
+```shell
+atmos plugin publish ./oidc-release --to=oci://ghcr.io/acme/oidc --sign --yes --verify-public
+```
+
+GHCR creates new packages **private**, even when the source repository is public. Publishing through
+GitHub Actions or adding `org.opencontainers.image.source` associates the package with a repository;
+it does not inherit the repository's public visibility. GitHub currently provides no documented,
+supported REST or GraphQL API to change package visibility.
+
+The first-publication flow is:
+
+1. Run the publishing command. The upload creates the package; anonymous verification fails while it is private.
+2. Open the package in GitHub, then **Package settings → Danger Zone → Change visibility → Public**.
+3. Rerun the same command with identical inputs. Atmos reuses the existing immutable release and verifies anonymous access again.
+
+No separate bootstrap artifact is needed. The error identifies the uploaded reference and provides
+recovery instructions. Later versions retain the package's visibility. A plugin and its discovery
+catalog are separate GHCR packages, so configure each independently. An inventory release may stop
+at the first private plugin; after fixing it and retrying, the catalog may require the same one-time step.
+
+If access verification fails for an already-public package, inspect the underlying network, access,
+or integrity error rather than changing visibility again. A failed check does not remove uploaded content.
+Omit `--verify-public` for intentionally private distribution.
+
+See GitHub's [package visibility instructions](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility#configuring-visibility-of-packages-for-an-organization)
+and [Packages API reference](https://docs.github.com/en/rest/packages/packages).
