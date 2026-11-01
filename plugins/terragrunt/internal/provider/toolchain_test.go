@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -104,7 +105,7 @@ inputs = {
 		for key, value := range inputs["tool"].(map[string]any) {
 			report[key], _ = value.(string)
 		}
-		require.Equal(t, tool, report["executable"])
+		requireSamePath(t, tool, report["executable"])
 		require.Equal(t, toolDir, report["path"])
 		require.Equal(t, profile, report["profile"])
 		require.Equal(t, "", report["token"], "ambient credentials must not cross the plugin boundary")
@@ -116,4 +117,15 @@ inputs = {
 	t.Setenv("PATH", toolDir)
 	_, _, err = prepare("development", map[string]string{"PATH": ambient})
 	require.Error(t, err, "the evaluator error text is intentionally generic")
+}
+
+// requireSamePath compares paths the way the platform does. Windows paths are case-insensitive, and an
+// executable resolved through PATHEXT keeps the extension as spelled there (".EXE").
+func requireSamePath(t *testing.T, want, got string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		require.True(t, strings.EqualFold(filepath.Clean(want), filepath.Clean(got)), "want %s, got %s", want, got)
+		return
+	}
+	require.Equal(t, want, got)
 }
