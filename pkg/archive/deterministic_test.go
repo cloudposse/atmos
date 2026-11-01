@@ -150,6 +150,41 @@ func TestWriteDeterministic_ClearsPrivilegedBits(t *testing.T) {
 	assert.Equal(t, int64(0o755), header.Mode)
 }
 
+// stutteringReader returns one empty, error-free read before it yields its content.
+type stutteringReader struct {
+	stuttered bool
+	rest      io.Reader
+}
+
+func (r *stutteringReader) Read(p []byte) (int, error) {
+	if !r.stuttered {
+		r.stuttered = true
+		return 0, nil
+	}
+	return r.rest.Read(p)
+}
+
+func TestRejectExtraContent_ReadsPastEmptyReads(t *testing.T) {
+	tests := []struct {
+		name    string
+		rest    string
+		wantErr bool
+	}{
+		{"byte hidden behind an empty read", "x", true},
+		{"end of source behind an empty read", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := rejectExtraContent(&stutteringReader{rest: strings.NewReader(tt.rest)}, &Member{Path: "a", Size: 0})
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrArchiveWriteFailed)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 type failingWriter struct{ after int }
 
 func (f *failingWriter) Write(p []byte) (int, error) {

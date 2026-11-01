@@ -136,18 +136,16 @@ func (l *Layout) recordAttachment(ctx context.Context, desc ocispec.Descriptor) 
 	if desc.MediaType != ocispec.MediaTypeImageManifest && desc.MediaType != ocispec.MediaTypeImageIndex {
 		return nil
 	}
-	raw, err := FetchBytes(ctx, l.store, desc, maxAttachmentManifest)
+	subject, err := readSubject(ctx, l.store, &desc)
 	if err != nil {
 		return layoutError(err)
 	}
-	var manifest struct {
-		Subject *ocispec.Descriptor `json:"subject"`
-	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return errors.Join(errUtils.ErrOCILayout, err)
-	}
-	if manifest.Subject == nil {
+	if subject == nil {
 		return nil
+	}
+	// The size cap protects attachment handling only; a large manifest without a subject is valid.
+	if desc.Size > maxAttachmentManifest {
+		return layoutError(errUtils.ErrOCIIntegrity)
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()

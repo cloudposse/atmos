@@ -76,9 +76,9 @@ func (s *Service) copyArtifact(ctx context.Context, op *operation, request *arti
 		op.result.Outcome = artifact.OutcomeCreated
 	}
 	op.result.Repository = request.To
-	if op.result.Outcome != artifact.OutcomeUnchanged {
-		s.carryEvidence(ctx, op, plan)
-	}
+	// Evidence is carried even when the destination already holds the Record, because signatures
+	// added to the source after the first copy would otherwise never reach the destination.
+	s.carryEvidence(ctx, op, plan)
 	return nil
 }
 
@@ -281,7 +281,8 @@ func documentRoleFor(record *artifact.Record, digestValue string) (artifact.Docu
 
 // carryEvidence moves signature evidence along with a copy when both repositories support it.
 // Evidence is never invented: without both optional interfaces, a diagnostic explains that the
-// destination holds no signatures.
+// destination holds no signatures. Evidence is written only to the exact record the copy produced
+// or found, never to a record a concurrent writer repointed the destination reference to.
 func (s *Service) carryEvidence(ctx context.Context, op *operation, plan *copyPlan) {
 	reader, canRead := plan.src.repo.(artifact.EvidenceReader)
 	writer, canWrite := plan.dst.repo.(artifact.EvidenceWriter)
@@ -292,20 +293,64 @@ func (s *Service) carryEvidence(ctx context.Context, op *operation, plan *copyPl
 		return
 	}
 	blobs, err := reader.ReadEvidence(ctx, &plan.pinned)
-	if err != nil || len(blobs) == 0 {
-		if err != nil {
-			op.warn("evidence-read-failed", err.Error())
-		}
+	if err != nil {
+		op.warn("evidence-read-failed", err.Error())
 		return
 	}
-	dstRef, err := nativeRef(plan)
+	if len(blobs) == 0 {
+		return
+	}
+	dstPinned, err := resolveWritten(ctx, op, plan)
 	if err == nil {
-		var dstPinned artifact.PinnedReference
-		if dstPinned, err = plan.dst.repo.Resolve(ctx, dstRef); err == nil {
+		blobs = missingEvidence(ctx, plan.dst.repo, &dstPinned, blobs)
+		if len(blobs) > 0 {
 			_, err = writer.WriteEvidence(ctx, &dstPinned, blobs, nil)
 		}
 	}
 	if err != nil {
 		op.warn("evidence-write-failed", err.Error())
 	}
+}
+
+// resolveWritten resolves the destination reference and confirms it still points at the digest the
+// copy wrote or found. A mismatch means another writer repointed the reference after the
+// destination lock was released.
+func resolveWritten(ctx context.Context, op *operation, plan *copyPlan) (artifact.PinnedReference, error) {
+	dstRef, err := nativeRef(plan)
+	if err != nil {
+		return artifact.PinnedReference{}, err
+	}
+	dstPinned, err := plan.dst.repo.Resolve(ctx, dstRef)
+	if err != nil {
+		return artifact.PinnedReference{}, err
+	}
+	if want := op.result.ResolvedDigest; want != "" && dstPinned.ResolvedDigest != want {
+		return artifact.PinnedReference{}, fmt.Errorf("%w: %s in repository %q now points at %s, not the copied %s; evidence was not written",
+			errUtils.ErrArtifactConflict, dstRef, plan.dst.alias, dstPinned.ResolvedDigest, want)
+	}
+	return dstPinned, nil
+}
+
+// missingEvidence drops the blobs the destination already holds, so repeating a copy never
+// duplicates evidence. A destination that cannot list its evidence receives every blob.
+func missingEvidence(ctx context.Context, repo artifact.Repository, pinned *artifact.PinnedReference, blobs []artifact.EvidenceBlob) []artifact.EvidenceBlob {
+	existing, ok := repo.(artifact.EvidenceReader)
+	if !ok {
+		return blobs
+	}
+	held, err := existing.ReadEvidence(ctx, pinned)
+	if err != nil {
+		return blobs
+	}
+	have := make(map[string]bool, len(held))
+	for index := range held {
+		have[held[index].Evidence.Descriptor.Digest.String()] = true
+	}
+	var missing []artifact.EvidenceBlob
+	for index := range blobs {
+		if !have[blobs[index].Evidence.Descriptor.Digest.String()] {
+			missing = append(missing, blobs[index])
+		}
+	}
+	return missing
 }

@@ -178,11 +178,13 @@ func Materialize(ctx context.Context, content *artifact.Content, dest string, op
 	if err := os.Chmod(stage, parentDirMode); err != nil {
 		return fmt.Errorf("%w: set staging mode: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
-	return replaceDestination(stage, dest)
+	return replaceDestination(stage, dest, applyOptions(opts).replaceGuard)
 }
 
-// replaceDestination moves the staged tree into place without merging it over old files.
-func replaceDestination(stage, dest string) error {
+// replaceDestination moves the staged tree into place without merging it over old files. An
+// existing destination is opened once and every later step is checked against that same directory,
+// so a symlink swapped in after the initial check cannot redirect the removal or the moves.
+func replaceDestination(stage, dest string, guard func(dest string) error) error {
 	info, err := os.Lstat(dest)
 	switch {
 	case os.IsNotExist(err):
@@ -194,38 +196,91 @@ func replaceDestination(stage, dest string) error {
 	case !info.IsDir():
 		return fmt.Errorf("%w: destination %q exists and is not a directory", errUtils.ErrArtifactConflict, dest)
 	}
-	if err := clearDirectory(dest); err != nil {
+	bound, err := bindDestination(dest, info)
+	if err != nil {
 		return err
 	}
-	return moveChildren(stage, dest)
+	defer bound.root.Close()
+	if guard != nil {
+		if err := guard(dest); err != nil {
+			return err
+		}
+		if err := bound.verify(); err != nil {
+			return err
+		}
+	}
+	if err := clearDirectory(bound); err != nil {
+		return err
+	}
+	return moveChildren(stage, bound)
 }
 
-// clearDirectory removes every child of dir through an os.Root, so removal can never leave dir.
-func clearDirectory(dir string) error {
-	root, err := os.OpenRoot(dir)
+// boundDestination is a destination directory opened once, with the identity it must keep.
+type boundDestination struct {
+	path string
+	root *os.Root
+	info os.FileInfo
+}
+
+// bindDestination opens dest and confirms the opened directory is the one that was checked. A
+// destination swapped for a symlink or another directory between the check and the open fails.
+func bindDestination(dest string, checked os.FileInfo) (*boundDestination, error) {
+	root, err := os.OpenRoot(dest)
 	if err != nil {
-		return fmt.Errorf("%w: open destination %q: %w", errUtils.ErrArtifactPackagingInvalid, dir, err)
+		return nil, fmt.Errorf("%w: open destination %q: %w", errUtils.ErrArtifactPackagingInvalid, dest, err)
 	}
-	defer root.Close()
-	children, err := os.ReadDir(dir)
+	opened, err := root.Stat(".")
 	if err != nil {
-		return fmt.Errorf("%w: read destination %q: %w", errUtils.ErrArtifactPackagingInvalid, dir, err)
+		_ = root.Close()
+		return nil, fmt.Errorf("%w: inspect destination %q: %w", errUtils.ErrArtifactPackagingInvalid, dest, err)
+	}
+	if !os.SameFile(checked, opened) {
+		_ = root.Close()
+		return nil, changedDestination(dest)
+	}
+	return &boundDestination{path: dest, root: root, info: opened}, nil
+}
+
+// verify confirms the destination path still names the bound directory and is not a symlink.
+func (b *boundDestination) verify() error {
+	now, err := os.Lstat(b.path)
+	if err != nil || now.Mode()&os.ModeSymlink != 0 || !os.SameFile(now, b.info) {
+		return changedDestination(b.path)
+	}
+	return nil
+}
+
+func changedDestination(dest string) error {
+	return fmt.Errorf("%w: destination %q changed while it was being replaced", errUtils.ErrArtifactUnsafePath, dest)
+}
+
+// clearDirectory removes every child of the bound destination through its os.Root, so removal can
+// never leave the directory that was checked.
+func clearDirectory(bound *boundDestination) error {
+	children, err := fs.ReadDir(bound.root.FS(), ".")
+	if err != nil {
+		return fmt.Errorf("%w: read destination %q: %w", errUtils.ErrArtifactPackagingInvalid, bound.path, err)
 	}
 	for _, child := range children {
-		if err := root.RemoveAll(child.Name()); err != nil {
+		if err := bound.root.RemoveAll(child.Name()); err != nil {
 			return fmt.Errorf("%w: remove stale %q: %w", errUtils.ErrArtifactPackagingInvalid, child.Name(), err)
 		}
 	}
 	return nil
 }
 
-func moveChildren(stage, dest string) error {
+// moveChildren renames each staged child into the destination. The standard library cannot rename
+// across two directory handles, so the destination identity is re-verified before every move.
+func moveChildren(stage string, bound *boundDestination) error {
 	children, err := os.ReadDir(stage)
 	if err != nil {
 		return fmt.Errorf("%w: read staging tree: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
 	for _, child := range children {
-		if err := rename(filepath.Join(stage, child.Name()), filepath.Join(dest, child.Name())); err != nil {
+		if err := bound.verify(); err != nil {
+			return err
+		}
+		if err := rename(filepath.Join(stage, child.Name()), filepath.Join(bound.path, child.Name())); err != nil {
 			return err
 		}
 	}

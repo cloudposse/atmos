@@ -168,6 +168,29 @@ func (r *Repository) publishResult(record *artifact.Record, s *stored, outcome a
 	}
 }
 
+// checkExpectedCurrent is the delete staleness guard. It compares the digest the caller observed
+// with the digest currently stored under the pinned reference's own key, so a reference that moved
+// after pinning is a conflict. The key comes from the pinned reference rather than the Record's
+// name and version, because an alias can point at a Record named differently. A digest-addressed
+// pin has no mutable reference, so it is compared with the Record digest. Callers hold r.mu.
+func (r *Repository) checkExpectedCurrent(pinned *artifact.PinnedReference, expected *artifact.PinnedReference) error {
+	if expected == nil {
+		return nil
+	}
+	current := pinned.RecordDigest
+	if pinned.Ref.Digest == "" && pinned.Ref.Version != "" {
+		stored, ok := r.refs[refKey(pinned.Ref.Name, pinned.Ref.Version)]
+		if !ok {
+			return fmt.Errorf("%w: %s no longer exists", errUtils.ErrArtifactConflict, pinned.Ref)
+		}
+		current = stored
+	}
+	if expected.ResolvedDigest != current {
+		return fmt.Errorf("%w: the delete target changed (%s is now %s, the caller observed %s)", errUtils.ErrArtifactConflict, pinned.Ref, current, expected.ResolvedDigest)
+	}
+	return nil
+}
+
 // Delete implements [artifact.Repository]. The deletion is scoped to the pinned record: the
 // references pointing at it and its exclusively owned payload.
 //
@@ -185,8 +208,8 @@ func (r *Repository) Delete(_ context.Context, pinned artifact.PinnedReference, 
 	if !ok {
 		return nil, fmt.Errorf("%w: record %s", errUtils.ErrArtifactNotFound, pinned.RecordDigest)
 	}
-	if options.ExpectedCurrent != nil && options.ExpectedCurrent.ResolvedDigest != pinned.RecordDigest {
-		return nil, fmt.Errorf("%w: the delete target changed", errUtils.ErrArtifactConflict)
+	if err := r.checkExpectedCurrent(&pinned, options.ExpectedCurrent); err != nil {
+		return nil, err
 	}
 	result := &artifact.DeleteResult{Digest: pinned.RecordDigest}
 	for key, d := range r.refs {

@@ -203,7 +203,13 @@ func (s *registryStore) Tags(ctx context.Context) ([]string, error) {
 	return tags, nil
 }
 
+// Delete removes a manifest. A descriptor without a media type names the manifest by digest only:
+// it is deleted with a single DELETE request that needs no read access and performs no referrers
+// index cleanup, because the manifest is never fetched.
 func (s *registryStore) Delete(ctx context.Context, target ocispec.Descriptor) error {
+	if target.MediaType == "" {
+		return wrapRegistry(s.repo.Manifests().Delete(ctx, target))
+	}
 	return wrapRegistry(s.repo.Delete(ctx, target))
 }
 

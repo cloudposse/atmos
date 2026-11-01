@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -386,7 +387,18 @@ func TestMaterialize_ArchiveRejectsCorruptStreams(t *testing.T) {
 	require.ErrorIs(t, materialize.Materialize(context.Background(), badPackaging, dest(t)), errUtils.ErrArtifactPackagingInvalid)
 }
 
+// requireSymlinks skips the test only when the platform cannot create symlinks at all.
+func requireSymlinks(t *testing.T) {
+	t.Helper()
+	probe := t.TempDir()
+	fixtures.WriteFile(t, probe, "target.txt", "x", 0o644)
+	if !fixtures.Symlink(t, probe, "link", "target.txt") {
+		t.Skip("this platform cannot create symlinks")
+	}
+}
+
 func TestMaterialize_ChainedSymlinkEscapeIsRejected(t *testing.T) {
+	requireSymlinks(t)
 	record := sealedRecord(t, []artifact.Entry{
 		{Path: "a", Type: artifact.EntryDirectory, Mode: 0o755},
 		{Path: "a/b", Type: artifact.EntrySymlink, Target: ".."},
@@ -395,12 +407,182 @@ func TestMaterialize_ChainedSymlinkEscapeIsRejected(t *testing.T) {
 	content := &artifact.Content{Record: &record, Representation: artifact.Representation{Packaging: artifact.PackagingNone}}
 	out := dest(t)
 	err := materialize.Materialize(context.Background(), content, out)
-	if err == nil {
-		t.Skip("this platform cannot create the symlinks needed for the chained escape")
-	}
-	if !assert.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath) {
-		t.Logf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "a chained symlink escape must be rejected")
+	assert.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
 	_, statErr := os.Lstat(out)
 	assert.True(t, os.IsNotExist(statErr))
+}
+
+func TestMaterialize_DanglingChainedSymlinkEscapeIsRejected(t *testing.T) {
+	requireSymlinks(t)
+	tests := []struct {
+		name      string
+		inventory []artifact.Entry
+		wantErr   bool
+	}{
+		{
+			name: "dangling tail beyond the root",
+			inventory: []artifact.Entry{
+				{Path: "a", Type: artifact.EntryDirectory, Mode: 0o755},
+				{Path: "a/b", Type: artifact.EntrySymlink, Target: ".."},
+				{Path: "c", Type: artifact.EntrySymlink, Target: "a/b/../../missing"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "dangling tail inside the root",
+			inventory: []artifact.Entry{
+				{Path: "a", Type: artifact.EntryDirectory, Mode: 0o755},
+				{Path: "c", Type: artifact.EntrySymlink, Target: "a/missing/deeper"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			record := sealedRecord(t, tt.inventory)
+			content := &artifact.Content{Record: &record, Representation: artifact.Representation{Packaging: artifact.PackagingNone}}
+			err := materialize.Materialize(context.Background(), content, dest(t))
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
+				return
+			}
+			require.NoError(t, err, "a dangling link that stays inside the tree is allowed")
+		})
+	}
+}
+
+func TestMaterialize_PayloadForNonFileEntryIsRejected(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "sub/a.txt", "aaaa", 0o644)
+	content := contentOf(t, prepared(t, src, artifact.PackagingNone))
+	content.Streams = append(content.Streams, artifact.ContentStream{Role: artifact.BlobPayload, Path: "sub", Reader: io.NopCloser(bytes.NewReader([]byte("smuggled")))})
+	out := dest(t)
+	err := materialize.Materialize(context.Background(), content, out)
+	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
+	_, statErr := os.Lstat(out)
+	assert.True(t, os.IsNotExist(statErr))
+}
+
+// endlessReader yields zero bytes forever and counts how many it produced.
+type endlessReader struct{ read int64 }
+
+func (r *endlessReader) Read(p []byte) (int, error) {
+	r.read += int64(len(p))
+	return len(p), nil
+}
+
+func (r *endlessReader) Close() error { return nil }
+
+func TestMaterialize_ZipSpoolIsBoundedByTheDeclaredSize(t *testing.T) {
+	record := sealedRecord(t, []artifact.Entry{fileEntry("good.txt", "good", 0o644)})
+	const declared = 64
+	endless := &endlessReader{}
+	content := archiveContent(&record, artifact.PackagingZip, endless)
+	content.Streams[0].Descriptor.Size = declared
+	err := materialize.Materialize(context.Background(), content, dest(t))
+	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
+	assert.LessOrEqual(t, endless.read, int64(copyChunkBound), "the spool must stop shortly after the declared size")
+}
+
+func TestMaterialize_ZipLongerThanDeclaredSizeIsRejected(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "a.txt", "aaaa", 0o644)
+	p := prepared(t, src, artifact.PackagingZip)
+	tests := []struct {
+		name    string
+		adjust  int64
+		wantErr bool
+	}{
+		{"declared size matches", 0, false},
+		{"stream longer than declared", -1, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := contentOf(t, p)
+			for index := range content.Streams {
+				content.Streams[index].Descriptor.Size += tt.adjust
+			}
+			err := materialize.Materialize(context.Background(), content, dest(t))
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// copyChunkBound is the largest read the bounded spool may issue: one copy chunk.
+const copyChunkBound = 32 * 1024
+
+func TestMaterialize_ReplaceGuard(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "new.txt", "new", 0o644)
+	p := prepared(t, src, artifact.PackagingTgz)
+	errRefused := errors.New("guard refused")
+	tests := []struct {
+		name      string
+		guard     func(dest string) error
+		wantErr   error
+		wantStale bool
+	}{
+		{"guard accepts", func(string) error { return nil }, nil, false},
+		{"guard refuses", func(string) error { return errRefused }, errRefused, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := dest(t)
+			fixtures.WriteFile(t, out, "stale.txt", "stale", 0o644)
+			err := materialize.Materialize(context.Background(), contentOf(t, p), out, materialize.WithReplaceGuard(tt.guard))
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			_, staleErr := os.Stat(filepath.Join(out, "stale.txt"))
+			assert.Equal(t, tt.wantStale, staleErr == nil)
+			assertNoScratch(t, out)
+		})
+	}
+
+	t.Run("guard is not consulted for an absent destination", func(t *testing.T) {
+		called := false
+		out := dest(t)
+		err := materialize.Materialize(context.Background(), contentOf(t, p), out, materialize.WithReplaceGuard(func(string) error {
+			called = true
+			return errRefused
+		}))
+		require.NoError(t, err)
+		assert.False(t, called)
+	})
+}
+
+func TestMaterialize_DestinationSwappedForASymlinkNeverRedirectsRemoval(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a directory with an open handle cannot be renamed on Windows")
+	}
+	requireSymlinks(t)
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "new.txt", "new", 0o644)
+	p := prepared(t, src, artifact.PackagingTgz)
+
+	root := t.TempDir()
+	out := filepath.Join(root, "pulled")
+	outside := filepath.Join(root, "outside")
+	fixtures.WriteFile(t, out, "stale.txt", "stale", 0o644)
+	fixtures.WriteFile(t, outside, "keep.txt", "keep", 0o644)
+
+	swap := materialize.WithReplaceGuard(func(dest string) error {
+		// Simulate an attacker replacing the checked destination right after it was inspected.
+		require.NoError(t, os.Rename(dest, filepath.Join(root, "moved-away")))
+		require.NoError(t, os.Symlink(outside, dest))
+		return nil
+	})
+	err := materialize.Materialize(context.Background(), contentOf(t, p), out, swap)
+	require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
+	keep, readErr := os.ReadFile(filepath.Join(outside, "keep.txt"))
+	require.NoError(t, readErr, "the swapped-in link target must not lose files")
+	assert.Equal(t, "keep", string(keep))
+	_, newErr := os.Stat(filepath.Join(outside, "new.txt"))
+	assert.True(t, os.IsNotExist(newErr), "staged content must not land in the link target")
 }

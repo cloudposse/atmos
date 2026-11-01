@@ -19,6 +19,19 @@ type Option func(*options)
 
 type options struct {
 	maxBytes int64
+
+	// replaceGuard runs immediately before an existing destination is replaced.
+	replaceGuard func(dest string) error
+}
+
+// WithReplaceGuard registers a check that runs right before an existing destination directory is
+// replaced, after extraction finished and the destination was bound. A caller uses it to re-check
+// the destination state it decided on earlier, because the destination may have changed during the
+// download. A non-nil error aborts the replacement and leaves the destination untouched.
+func WithReplaceGuard(guard func(dest string) error) Option {
+	defer perf.Track(nil, "materialize.WithReplaceGuard")()
+
+	return func(o *options) { o.replaceGuard = guard }
 }
 
 // WithMaxBytes overrides the limit on total extracted file content.
@@ -101,16 +114,9 @@ func fill(ctx context.Context, t *tree, content *artifact.Content, scratch strin
 // fillFiles writes a per-file payload: file entries come from their path-addressed streams;
 // directories and symlinks come from the inventory.
 func fillFiles(ctx context.Context, t *tree, content *artifact.Content) error {
-	streams := make(map[string]*artifact.ContentStream, len(content.Streams))
-	for index := range content.Streams {
-		stream := &content.Streams[index]
-		if stream.Role != artifact.BlobPayload {
-			continue
-		}
-		if _, duplicate := streams[stream.Path]; duplicate {
-			return fmt.Errorf("%w: payload %q appears more than once", errUtils.ErrArtifactIntegrityFailed, stream.Path)
-		}
-		streams[stream.Path] = stream
+	streams, err := payloadStreams(t, content)
+	if err != nil {
+		return err
 	}
 	paths := make([]string, 0, len(t.inventory))
 	for entryPath := range t.inventory {
@@ -130,6 +136,27 @@ func fillFiles(ctx context.Context, t *tree, content *artifact.Content) error {
 		return fmt.Errorf("%w: payload %q is not in the artifact inventory", errUtils.ErrArtifactIntegrityFailed, extra)
 	}
 	return nil
+}
+
+// payloadStreams indexes the payload streams by inventory path. A stream may address only a file
+// entry, because directories and symlinks come from the inventory and a stream for them would
+// never be read or verified.
+func payloadStreams(t *tree, content *artifact.Content) (map[string]*artifact.ContentStream, error) {
+	streams := make(map[string]*artifact.ContentStream, len(content.Streams))
+	for index := range content.Streams {
+		stream := &content.Streams[index]
+		if stream.Role != artifact.BlobPayload {
+			continue
+		}
+		if _, duplicate := streams[stream.Path]; duplicate {
+			return nil, fmt.Errorf("%w: payload %q appears more than once", errUtils.ErrArtifactIntegrityFailed, stream.Path)
+		}
+		if entry, ok := t.inventory[stream.Path]; ok && entry.Type != artifact.EntryFile {
+			return nil, fmt.Errorf("%w: payload %q does not address a file entry", errUtils.ErrArtifactIntegrityFailed, stream.Path)
+		}
+		streams[stream.Path] = stream
+	}
+	return streams, nil
 }
 
 func fillInventoryEntry(t *tree, entry *artifact.Entry, streams map[string]*artifact.ContentStream) error {

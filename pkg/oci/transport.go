@@ -4,6 +4,7 @@ package oci
 import (
 	"context"
 	"io"
+	"math"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/opencontainers/go-digest"
@@ -94,7 +95,8 @@ type RepositoryStore interface {
 	ReferencePusher
 	// Tags lists every tag without interpreting it as a version.
 	Tags(ctx context.Context) ([]string, error)
-	// Delete removes a manifest by its full descriptor. It never deletes tags or shared blobs.
+	// Delete removes a manifest by its full descriptor. It never deletes tags or shared blobs. A
+	// descriptor with only a digest deletes the manifest without reading it first.
 	Delete(ctx context.Context, target ocispec.Descriptor) error
 	// Referrers lists attachments of the subject, optionally filtered by artifact type.
 	// Registries without the OCI 1.1 API use the referrers tag-schema fallback.
@@ -125,7 +127,13 @@ func FetchBytes(ctx context.Context, store Fetcher, target ocispec.Descriptor, l
 }
 
 func readVerified(reader io.Reader, target ocispec.Descriptor, limit int64) ([]byte, error) {
-	raw, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	// Read one byte past the declared size to detect oversized content. The declared size is already
+	// within limit, so the bound never depends on limit+1, which overflows for a MaxInt64 limit.
+	readLimit := target.Size
+	if readLimit < math.MaxInt64 {
+		readLimit++
+	}
+	raw, err := io.ReadAll(io.LimitReader(reader, readLimit))
 	if err != nil {
 		return nil, wrapIntegrity(err)
 	}

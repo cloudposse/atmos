@@ -10,6 +10,8 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -174,7 +176,7 @@ func (c *Client) Delete(ctx context.Context, ref name.Digest) error {
 	if err != nil {
 		return err
 	}
-	target, err := store.Resolve(ctx, ref.DigestStr())
+	target, err := resolveDeleteTarget(ctx, store, ref)
 	if err != nil {
 		return err
 	}
@@ -182,6 +184,26 @@ func (c *Client) Delete(ctx context.Context, ref name.Digest) error {
 		return c.reconcileDelete(ctx, store, ref, err)
 	}
 	return nil
+}
+
+// resolveDeleteTarget looks up the manifest descriptor to delete, because its media type lets the
+// store also clean up referrers indexes. A credential that may delete but not read is refused the
+// lookup with 401 or 403; the delete then goes out for the bare digest, which needs no read and
+// matches what a delete-only credential is allowed to do. Any other lookup failure, including a
+// missing digest, is returned unchanged and no DELETE is sent.
+func resolveDeleteTarget(ctx context.Context, store RepositoryStore, ref name.Digest) (ocispec.Descriptor, error) {
+	target, err := store.Resolve(ctx, ref.DigestStr())
+	if err == nil {
+		return target, nil
+	}
+	if status := statusOf(err); status != http.StatusUnauthorized && status != http.StatusForbidden {
+		return ocispec.Descriptor{}, err
+	}
+	parsed, parseErr := digest.Parse(ref.DigestStr())
+	if parseErr != nil {
+		return ocispec.Descriptor{}, err
+	}
+	return ocispec.Descriptor{Digest: parsed}, nil
 }
 
 // reconcileDelete treats a failed delete as complete only when the digest is gone.

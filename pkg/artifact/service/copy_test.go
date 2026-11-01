@@ -4,8 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync/atomic"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -270,4 +273,94 @@ func TestCopy_UsesNativeTransferWhenCompatible(t *testing.T) {
 	_, err = e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, native.copies, "an incompatible pair falls back to staging")
+}
+
+func diagnosticCodes(result *artifact.OperationResult) []string {
+	codes := make([]string, 0, len(result.Diagnostics))
+	for _, diagnostic := range result.Diagnostics {
+		codes = append(codes, diagnostic.Code)
+	}
+	return codes
+}
+
+func TestCopy_UnchangedDestinationStillReceivesLaterSignatures(t *testing.T) {
+	e := copyEnv(t, artifact.PackagingNone, artifact.PackagingTgz, service.WithSigner(releaseSigner))
+	published := e.publish("src", e.source("hello"))
+
+	first, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
+	require.NoError(t, err)
+	require.Equal(t, artifact.OutcomeCreated, first.Outcome)
+	assert.Zero(t, e.repos["dst"].Calls("WriteEvidence"), "the source was unsigned, so nothing could travel")
+
+	_, err = e.svc.Sign(context.Background(), artifact.SignRequest{Repository: "src", Ref: artifact.Ref{Name: "tools/example", Digest: published.Operation.RecordDigest}})
+	require.NoError(t, err)
+	e.setInfo("dst", func(info *service.RepositoryInfo) { info.Policy = releaseSigner.TrustedPolicy() })
+
+	second, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeUnchanged, second.Outcome)
+	assert.Equal(t, 1, e.repos["dst"].Calls("WriteEvidence"), "evidence is carried even though the Record was already there")
+	verified, err := e.svc.Verify(context.Background(), artifact.VerifyRequest{Repository: "dst", Ref: exampleRef})
+	require.NoError(t, err)
+	assert.Equal(t, artifact.VerificationVerified, verified.Verification.Status)
+
+	third, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeUnchanged, third.Outcome)
+	assert.Equal(t, 1, e.repos["dst"].Calls("WriteEvidence"), "repeating a copy never duplicates evidence the destination already holds")
+	held, err := e.repos["dst"].ReadEvidence(context.Background(), &artifact.PinnedReference{RecordDigest: published.Operation.RecordDigest})
+	require.NoError(t, err)
+	assert.Len(t, held, 1)
+}
+
+// repointingRepository answers Resolve with a different digest once a publish completed, as if
+// another writer forced the reference elsewhere after the destination lock was released.
+type repointingRepository struct {
+	*artifacttest.Repository
+	published atomic.Bool
+}
+
+func (r *repointingRepository) Publish(ctx context.Context, prepared *artifact.PreparedArtifact, options artifact.PublishOptions) (*artifact.PublishResult, error) {
+	result, err := r.Repository.Publish(ctx, prepared, options)
+	if err == nil {
+		r.published.Store(true)
+	}
+	return result, err
+}
+
+func (r *repointingRepository) Resolve(ctx context.Context, ref artifact.Ref) (artifact.PinnedReference, error) {
+	pinned, err := r.Repository.Resolve(ctx, ref)
+	if err == nil && r.published.Load() {
+		pinned.ResolvedDigest = digest.FromString("another writer")
+	}
+	return pinned, err
+}
+
+func TestCopy_EvidenceIsNotWrittenToARepointedDestination(t *testing.T) {
+	tests := []struct {
+		name      string
+		repoint   bool
+		wantWrite int
+		wantCode  bool
+	}{
+		{"reference still points at the copied record", false, 1, false},
+		{"reference repointed by another writer", true, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := copyEnv(t, artifact.PackagingNone, artifact.PackagingTgz, service.WithSigner(releaseSigner))
+			published := e.publish("src", e.source("hello"))
+			_, err := e.svc.Sign(context.Background(), artifact.SignRequest{Repository: "src", Ref: artifact.Ref{Name: "tools/example", Digest: published.Operation.RecordDigest}})
+			require.NoError(t, err)
+			dst := e.repos["dst"]
+			if tt.repoint {
+				e.static.Repositories["dst"] = &repointingRepository{Repository: dst}
+			}
+
+			result, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
+			require.NoError(t, err, "a skipped evidence write is a diagnostic, not a failed copy")
+			assert.Equal(t, tt.wantWrite, dst.Calls("WriteEvidence"))
+			assert.Equal(t, tt.wantCode, slices.Contains(diagnosticCodes(result), "evidence-write-failed"))
+		})
+	}
 }
