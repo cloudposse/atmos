@@ -128,6 +128,7 @@ func TestComparable(t *testing.T) {
 	assert.NotEqual(t, Comparable("x-"+here), Comparable("x-"+other), "arguments are compared")
 	assert.NotEqual(t, Comparable("x-"+here), Comparable("x-!env STAGE"), "a function differs from text spelling it")
 	assert.Equal(t, "plain", Comparable("plain"))
+	assert.NotEqual(t, Comparable("x-"+here), Comparable("x-\x00!env\x00STAGE\x00"), "authored text can't spell a delimiter")
 
 	nestedHere := Source{Tag: "!template", Argument: "a-" + here, File: "/checkout-a/stack.yaml"}.Encode()
 	nestedThere := Source{Tag: "!template", Argument: "a-" + there, File: "/checkout-b/stack.yaml"}.Encode()

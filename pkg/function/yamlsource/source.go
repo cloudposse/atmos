@@ -191,14 +191,15 @@ func Expression(value string) string {
 }
 
 // Comparable returns value with each source reduced to its tag and argument, so two
-// values can be compared regardless of metadata such as checkout paths. Delimiters
-// keep a source distinct from literal text that spells the same expression.
+// values can be compared regardless of metadata such as checkout paths. The delimiters
+// are process-local like the transport itself, so literal text can't spell a source.
+// Compare results only within one process.
 //
 //nolint:lintroller // Cannot import perf: schema conditions depend on this leaf package.
 func Comparable(value string) string {
 	// The resolver below never fails.
 	normalized, _ := Replace(value, func(_ string, source Source) (string, error) {
-		return "\x00" + source.Tag + "\x00" + Comparable(source.Argument) + "\x00", nil
+		return prefix + source.Tag + ":" + Comparable(source.Argument) + terminator, nil
 	})
 	return normalized
 }
