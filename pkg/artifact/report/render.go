@@ -115,7 +115,11 @@ func renderOnce(set *templateSet, report *Report, operations []*Operation, shown
 		view.Sections = append(view.Sections, section)
 	}
 	view.Omitted = len(operations) - shown
-	view.Notice = degradationNotice(view.Omitted, len(operations), compact, compact && hasArtifactRefs(operations[:shown]))
+	var removed []string
+	if compact {
+		removed = compactedDetails(operations[:shown])
+	}
+	view.Notice = degradationNotice(view.Omitted, len(operations), removed)
 
 	frame, err := set.loader.RenderStrict(set.frame, &view)
 	if err != nil {
@@ -158,29 +162,66 @@ func compacted(operation *Operation) *Operation {
 }
 
 // degradationNotice words what a size-reduced report left out. It is empty for a complete report.
-func degradationNotice(omitted, total int, compact, refsDropped bool) string {
+// The removed list names the details compaction actually dropped, so the notice never claims a
+// removal that did not happen.
+func degradationNotice(omitted, total int, removed []string) string {
 	var notices []string
 	if omitted > 0 {
 		notices = append(notices, fmt.Sprintf("%d of %d operation sections were left out to keep this summary within the size limit. The table above lists every operation.", omitted, total))
 	}
-	if compact {
-		what := "Inventory, metadata, and long diagnostic lists"
-		if refsDropped {
-			what = "Inventory, metadata, artifact references, and long diagnostic lists"
-		}
-		notices = append(notices, what+" were left out to keep this summary within the size limit.")
+	if len(removed) > 0 {
+		notices = append(notices, "Details were left out to keep this summary within the size limit: "+strings.Join(removed, ", ")+".")
 	}
 	return strings.Join(notices, " ")
 }
 
-// hasArtifactRefs reports whether any operation lists artifact references that compaction removes.
-func hasArtifactRefs(operations []*Operation) bool {
+// compactedDetails names the details that compacted() removes from the given operations, in a
+// stable order. It is empty when compaction changes nothing, for example when a long summary alone
+// made the report too large.
+func compactedDetails(operations []*Operation) []string {
+	var found compactionFlags
 	for _, operation := range operations {
-		if operation.Collection != nil && len(operation.Collection.Artifacts) > 0 {
-			return true
+		found.merge(flagsOf(operation))
+	}
+	var removed []string
+	for _, detail := range []struct {
+		dropped bool
+		name    string
+	}{
+		{found.inventory, "inventory"},
+		{found.metadata, "metadata"},
+		{found.references, "artifact references"},
+		{found.diagnostics, "long diagnostic lists"},
+	} {
+		if detail.dropped {
+			removed = append(removed, detail.name)
 		}
 	}
-	return false
+	return removed
+}
+
+// compactionFlags records which kinds of detail compaction would drop.
+type compactionFlags struct {
+	inventory, metadata, references, diagnostics bool
+}
+
+// merge adds the flags of another operation.
+func (f *compactionFlags) merge(other compactionFlags) {
+	f.inventory = f.inventory || other.inventory
+	f.metadata = f.metadata || other.metadata
+	f.references = f.references || other.references
+	f.diagnostics = f.diagnostics || other.diagnostics
+}
+
+// flagsOf reports which details of one operation compaction would drop.
+func flagsOf(operation *Operation) compactionFlags {
+	collection := operation.Collection
+	return compactionFlags{
+		inventory:   operation.Inventory != nil,
+		metadata:    len(operation.Labels) > 0 || operation.Description != "",
+		references:  collection != nil && (len(collection.Artifacts) > 0 || collection.More > 0),
+		diagnostics: len(operation.Diagnostics) > compactDiagnostics,
+	}
 }
 
 // truncateMarkdown cuts the text at a rune boundary below maxBytes, closes the code fence and

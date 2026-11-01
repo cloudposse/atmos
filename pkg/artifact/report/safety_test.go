@@ -143,7 +143,7 @@ func TestCompactionDropsDetailsBeforeSections(t *testing.T) {
 	session.Record(entry("publish", "a", 1, outcome, nil))
 	require.NoError(t, session.Flush())
 	compact := fake.summaries[0]
-	assert.Contains(t, compact, "Inventory, metadata, and long diagnostic lists were left out")
+	assert.Contains(t, compact, "Details were left out to keep this summary within the size limit: inventory, metadata.")
 	assert.NotContains(t, compact, "dir/file-000.tf")
 	assert.Contains(t, compact, "### ✅ 1. Publish `x/y:1`", "the section itself stays")
 }
@@ -230,14 +230,70 @@ func TestCompactNoticeNamesTheOmittedArtifactReferences(t *testing.T) {
 
 	t.Run("a compacted collection names its references", func(t *testing.T) {
 		compact := render(40, 200)
-		assert.Contains(t, compact, "Inventory, metadata, artifact references, and long diagnostic lists were left out")
+		assert.Contains(t, compact, "Details were left out to keep this summary within the size limit: artifact references.")
 		assert.NotContains(t, compact, "team/app-000:1.0.0")
 	})
-	t.Run("a collection without references keeps the original wording", func(t *testing.T) {
+	t.Run("a collection without references does not claim them", func(t *testing.T) {
 		compact := renderNoRefs(t)
-		assert.Contains(t, compact, "Inventory, metadata, and long diagnostic lists were left out")
+		assert.Contains(t, compact, "limit: inventory, metadata.")
 		assert.NotContains(t, compact, "artifact references")
 	})
+}
+
+func TestCompactNoticeNamesOnlyWhatCompactionRemoved(t *testing.T) {
+	manyDiagnostics := func() *invoke.Outcome {
+		outcome := published("a", "x/y:1")
+		outcome.Result.Record = nil
+		for index := 0; index < 8; index++ {
+			outcome.Result.Diagnostics = append(outcome.Result.Diagnostics,
+				artifact.Diagnostic{Severity: artifact.SeverityInfo, Message: fmt.Sprintf("note %d %s", index, strings.Repeat("x", 80))})
+		}
+		return outcome
+	}
+	bare := func() *invoke.Outcome {
+		outcome := published("a", "x/y:1")
+		outcome.Result.Record = nil
+		return outcome
+	}
+	tests := []struct {
+		name     string
+		outcome  *invoke.Outcome
+		err      error
+		trim     int
+		contains string
+		excludes []string
+	}{
+		{
+			name:     "long diagnostics are the only removed detail",
+			outcome:  manyDiagnostics(),
+			trim:     200,
+			contains: "limit: long diagnostic lists.",
+		},
+		{
+			name:     "a long summary that compaction cannot shrink claims no removed details",
+			outcome:  bare(),
+			err:      errors.New(strings.Repeat("long failure ", 200)),
+			trim:     100,
+			excludes: []string{"Details were left out"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			full := flushOne(t, enabledConfig(), entry("publish", "a", 1, tt.outcome, tt.err))
+			fake := &fakeReporter{}
+			session := newSession(enabledConfig(), fake, report.WithMaxBytes(len(full)-tt.trim))
+			session.Record(entry("publish", "a", 1, tt.outcome, tt.err))
+			require.NoError(t, session.Flush())
+			require.Len(t, fake.summaries, 1)
+			markdown := fake.summaries[0]
+			if tt.contains != "" {
+				assert.Contains(t, markdown, tt.contains)
+			}
+			for _, excluded := range tt.excludes {
+				assert.NotContains(t, markdown, excluded)
+			}
+		})
+	}
 }
 
 // renderNoRefs compacts a report whose only collection lists no artifacts.
