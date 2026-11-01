@@ -128,4 +128,10 @@ func TestComparable(t *testing.T) {
 	assert.NotEqual(t, Comparable("x-"+here), Comparable("x-"+other), "arguments are compared")
 	assert.NotEqual(t, Comparable("x-"+here), Comparable("x-!env STAGE"), "a function differs from text spelling it")
 	assert.Equal(t, "plain", Comparable("plain"))
+
+	nestedHere := Source{Tag: "!template", Argument: "a-" + here, File: "/checkout-a/stack.yaml"}.Encode()
+	nestedThere := Source{Tag: "!template", Argument: "a-" + there, File: "/checkout-b/stack.yaml"}.Encode()
+	nestedOther := Source{Tag: "!template", Argument: "a-" + other, File: "/checkout-a/stack.yaml"}.Encode()
+	assert.Equal(t, Comparable(nestedHere), Comparable(nestedThere), "nested metadata is ignored too")
+	assert.NotEqual(t, Comparable(nestedHere), Comparable(nestedOther), "nested arguments are compared")
 }

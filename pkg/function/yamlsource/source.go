@@ -198,7 +198,7 @@ func Expression(value string) string {
 func Comparable(value string) string {
 	// The resolver below never fails.
 	normalized, _ := Replace(value, func(_ string, source Source) (string, error) {
-		return "\x00" + source.Tag + "\x00" + source.Argument + "\x00", nil
+		return "\x00" + source.Tag + "\x00" + Comparable(source.Argument) + "\x00", nil
 	})
 	return normalized
 }
