@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -67,6 +68,10 @@ func getRunnableDescribeStacksCmd(
 
 		atmosConfig, err := g.initCliConfig(info, true)
 		if err != nil {
+			return err
+		}
+
+		if err := configuration.Attach(cmd.Context(), &atmosConfig, "stacks"); err != nil {
 			return err
 		}
 

@@ -906,3 +906,429 @@ var Commands_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "atmos/plugin/v1/plugin.proto",
 }
+
+const (
+	ComponentDiscovery_Discover_FullMethodName = "/atmos.plugin.v1.ComponentDiscovery/Discover"
+)
+
+// ComponentDiscoveryClient is the client API for ComponentDiscovery service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ComponentDiscoveryClient interface {
+	Discover(ctx context.Context, in *DiscoverComponentsRequest, opts ...grpc.CallOption) (*DiscoverComponentsResponse, error)
+}
+
+type componentDiscoveryClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewComponentDiscoveryClient(cc grpc.ClientConnInterface) ComponentDiscoveryClient {
+	return &componentDiscoveryClient{cc}
+}
+
+func (c *componentDiscoveryClient) Discover(ctx context.Context, in *DiscoverComponentsRequest, opts ...grpc.CallOption) (*DiscoverComponentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DiscoverComponentsResponse)
+	err := c.cc.Invoke(ctx, ComponentDiscovery_Discover_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ComponentDiscoveryServer is the server API for ComponentDiscovery service.
+// All implementations must embed UnimplementedComponentDiscoveryServer
+// for forward compatibility.
+type ComponentDiscoveryServer interface {
+	Discover(context.Context, *DiscoverComponentsRequest) (*DiscoverComponentsResponse, error)
+	mustEmbedUnimplementedComponentDiscoveryServer()
+}
+
+// UnimplementedComponentDiscoveryServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedComponentDiscoveryServer struct{}
+
+func (UnimplementedComponentDiscoveryServer) Discover(context.Context, *DiscoverComponentsRequest) (*DiscoverComponentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Discover not implemented")
+}
+func (UnimplementedComponentDiscoveryServer) mustEmbedUnimplementedComponentDiscoveryServer() {}
+func (UnimplementedComponentDiscoveryServer) testEmbeddedByValue()                            {}
+
+// UnsafeComponentDiscoveryServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ComponentDiscoveryServer will
+// result in compilation errors.
+type UnsafeComponentDiscoveryServer interface {
+	mustEmbedUnimplementedComponentDiscoveryServer()
+}
+
+func RegisterComponentDiscoveryServer(s grpc.ServiceRegistrar, srv ComponentDiscoveryServer) {
+	// If the following call panics, it indicates UnimplementedComponentDiscoveryServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ComponentDiscovery_ServiceDesc, srv)
+}
+
+func _ComponentDiscovery_Discover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DiscoverComponentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ComponentDiscoveryServer).Discover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ComponentDiscovery_Discover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ComponentDiscoveryServer).Discover(ctx, req.(*DiscoverComponentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ComponentDiscovery_ServiceDesc is the grpc.ServiceDesc for ComponentDiscovery service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ComponentDiscovery_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "atmos.plugin.v1.ComponentDiscovery",
+	HandlerType: (*ComponentDiscoveryServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Discover",
+			Handler:    _ComponentDiscovery_Discover_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "atmos/plugin/v1/plugin.proto",
+}
+
+const (
+	ComponentValidation_Validate_FullMethodName = "/atmos.plugin.v1.ComponentValidation/Validate"
+)
+
+// ComponentValidationClient is the client API for ComponentValidation service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Validation must precede discovery/preparation effects. It cannot silently
+// substitute CLI mode for unsupported native semantics.
+type ComponentValidationClient interface {
+	Validate(ctx context.Context, in *ComponentRequest, opts ...grpc.CallOption) (*ValidateResponse, error)
+}
+
+type componentValidationClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewComponentValidationClient(cc grpc.ClientConnInterface) ComponentValidationClient {
+	return &componentValidationClient{cc}
+}
+
+func (c *componentValidationClient) Validate(ctx context.Context, in *ComponentRequest, opts ...grpc.CallOption) (*ValidateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateResponse)
+	err := c.cc.Invoke(ctx, ComponentValidation_Validate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ComponentValidationServer is the server API for ComponentValidation service.
+// All implementations must embed UnimplementedComponentValidationServer
+// for forward compatibility.
+//
+// Validation must precede discovery/preparation effects. It cannot silently
+// substitute CLI mode for unsupported native semantics.
+type ComponentValidationServer interface {
+	Validate(context.Context, *ComponentRequest) (*ValidateResponse, error)
+	mustEmbedUnimplementedComponentValidationServer()
+}
+
+// UnimplementedComponentValidationServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedComponentValidationServer struct{}
+
+func (UnimplementedComponentValidationServer) Validate(context.Context, *ComponentRequest) (*ValidateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Validate not implemented")
+}
+func (UnimplementedComponentValidationServer) mustEmbedUnimplementedComponentValidationServer() {}
+func (UnimplementedComponentValidationServer) testEmbeddedByValue()                             {}
+
+// UnsafeComponentValidationServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ComponentValidationServer will
+// result in compilation errors.
+type UnsafeComponentValidationServer interface {
+	mustEmbedUnimplementedComponentValidationServer()
+}
+
+func RegisterComponentValidationServer(s grpc.ServiceRegistrar, srv ComponentValidationServer) {
+	// If the following call panics, it indicates UnimplementedComponentValidationServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ComponentValidation_ServiceDesc, srv)
+}
+
+func _ComponentValidation_Validate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ComponentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ComponentValidationServer).Validate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ComponentValidation_Validate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ComponentValidationServer).Validate(ctx, req.(*ComponentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ComponentValidation_ServiceDesc is the grpc.ServiceDesc for ComponentValidation service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ComponentValidation_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "atmos.plugin.v1.ComponentValidation",
+	HandlerType: (*ComponentValidationServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Validate",
+			Handler:    _ComponentValidation_Validate_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "atmos/plugin/v1/plugin.proto",
+}
+
+const (
+	ComponentPreparation_Prepare_FullMethodName = "/atmos.plugin.v1.ComponentPreparation/Prepare"
+)
+
+// ComponentPreparationClient is the client API for ComponentPreparation service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Reevaluate immediately before the selected operation, after its dependencies.
+// Preparing configuration does not authorize executing infrastructure commands.
+type ComponentPreparationClient interface {
+	Prepare(ctx context.Context, in *ComponentRequest, opts ...grpc.CallOption) (*PrepareComponentResponse, error)
+}
+
+type componentPreparationClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewComponentPreparationClient(cc grpc.ClientConnInterface) ComponentPreparationClient {
+	return &componentPreparationClient{cc}
+}
+
+func (c *componentPreparationClient) Prepare(ctx context.Context, in *ComponentRequest, opts ...grpc.CallOption) (*PrepareComponentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrepareComponentResponse)
+	err := c.cc.Invoke(ctx, ComponentPreparation_Prepare_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ComponentPreparationServer is the server API for ComponentPreparation service.
+// All implementations must embed UnimplementedComponentPreparationServer
+// for forward compatibility.
+//
+// Reevaluate immediately before the selected operation, after its dependencies.
+// Preparing configuration does not authorize executing infrastructure commands.
+type ComponentPreparationServer interface {
+	Prepare(context.Context, *ComponentRequest) (*PrepareComponentResponse, error)
+	mustEmbedUnimplementedComponentPreparationServer()
+}
+
+// UnimplementedComponentPreparationServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedComponentPreparationServer struct{}
+
+func (UnimplementedComponentPreparationServer) Prepare(context.Context, *ComponentRequest) (*PrepareComponentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Prepare not implemented")
+}
+func (UnimplementedComponentPreparationServer) mustEmbedUnimplementedComponentPreparationServer() {}
+func (UnimplementedComponentPreparationServer) testEmbeddedByValue()                              {}
+
+// UnsafeComponentPreparationServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ComponentPreparationServer will
+// result in compilation errors.
+type UnsafeComponentPreparationServer interface {
+	mustEmbedUnimplementedComponentPreparationServer()
+}
+
+func RegisterComponentPreparationServer(s grpc.ServiceRegistrar, srv ComponentPreparationServer) {
+	// If the following call panics, it indicates UnimplementedComponentPreparationServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ComponentPreparation_ServiceDesc, srv)
+}
+
+func _ComponentPreparation_Prepare_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ComponentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ComponentPreparationServer).Prepare(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ComponentPreparation_Prepare_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ComponentPreparationServer).Prepare(ctx, req.(*ComponentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ComponentPreparation_ServiceDesc is the grpc.ServiceDesc for ComponentPreparation service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ComponentPreparation_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "atmos.plugin.v1.ComponentPreparation",
+	HandlerType: (*ComponentPreparationServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Prepare",
+			Handler:    _ComponentPreparation_Prepare_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "atmos/plugin/v1/plugin.proto",
+}
+
+const (
+	ComponentState_Resolve_FullMethodName = "/atmos.plugin.v1.ComponentState/Resolve"
+)
+
+// ComponentStateClient is the client API for ComponentState service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Resolve backend identity without preparing a component, running hooks,
+// writing generated files, or reading unrelated dependency outputs.
+type ComponentStateClient interface {
+	Resolve(ctx context.Context, in *ComponentRequest, opts ...grpc.CallOption) (*ResolveComponentStateResponse, error)
+}
+
+type componentStateClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewComponentStateClient(cc grpc.ClientConnInterface) ComponentStateClient {
+	return &componentStateClient{cc}
+}
+
+func (c *componentStateClient) Resolve(ctx context.Context, in *ComponentRequest, opts ...grpc.CallOption) (*ResolveComponentStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveComponentStateResponse)
+	err := c.cc.Invoke(ctx, ComponentState_Resolve_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ComponentStateServer is the server API for ComponentState service.
+// All implementations must embed UnimplementedComponentStateServer
+// for forward compatibility.
+//
+// Resolve backend identity without preparing a component, running hooks,
+// writing generated files, or reading unrelated dependency outputs.
+type ComponentStateServer interface {
+	Resolve(context.Context, *ComponentRequest) (*ResolveComponentStateResponse, error)
+	mustEmbedUnimplementedComponentStateServer()
+}
+
+// UnimplementedComponentStateServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedComponentStateServer struct{}
+
+func (UnimplementedComponentStateServer) Resolve(context.Context, *ComponentRequest) (*ResolveComponentStateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Resolve not implemented")
+}
+func (UnimplementedComponentStateServer) mustEmbedUnimplementedComponentStateServer() {}
+func (UnimplementedComponentStateServer) testEmbeddedByValue()                        {}
+
+// UnsafeComponentStateServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ComponentStateServer will
+// result in compilation errors.
+type UnsafeComponentStateServer interface {
+	mustEmbedUnimplementedComponentStateServer()
+}
+
+func RegisterComponentStateServer(s grpc.ServiceRegistrar, srv ComponentStateServer) {
+	// If the following call panics, it indicates UnimplementedComponentStateServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ComponentState_ServiceDesc, srv)
+}
+
+func _ComponentState_Resolve_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ComponentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ComponentStateServer).Resolve(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ComponentState_Resolve_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ComponentStateServer).Resolve(ctx, req.(*ComponentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ComponentState_ServiceDesc is the grpc.ServiceDesc for ComponentState service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ComponentState_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "atmos.plugin.v1.ComponentState",
+	HandlerType: (*ComponentStateServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Resolve",
+			Handler:    _ComponentState_Resolve_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "atmos/plugin/v1/plugin.proto",
+}

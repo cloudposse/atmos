@@ -128,6 +128,7 @@ func applyOverrides(r *jsonschema.Reflector, root *jsonschema.Schema) {
 		root.Definitions = jsonschema.Definitions{}
 	}
 	overrideSchemasSection(r, root)
+	overrideComponentConfigurations(r, root)
 	applyPolymorphicOverrides(root)
 	allowYamlFunctions(root)
 }
@@ -463,4 +464,22 @@ func rejectsYamlFunctionString(s *jsonschema.Schema) bool {
 	default:
 		return false
 	}
+}
+
+// Dynamic configuration-provider names are map keys beside built-in Terraform
+// fields. Reflection skips inline maps, so describe their value schema explicitly.
+func overrideComponentConfigurations(r *jsonschema.Reflector, root *jsonschema.Schema) {
+	terraform := root.Definitions["Terraform"]
+	if terraform == nil {
+		return
+	}
+	reflected := r.Reflect(&schema.ComponentConfiguration{})
+	for name, definition := range reflected.Definitions {
+		root.Definitions[name] = definition
+	}
+	reflected.Definitions = nil
+	reflected.Version = ""
+	reflected.ID = ""
+	root.Definitions["ComponentConfiguration"] = reflected
+	terraform.AdditionalProperties = &jsonschema.Schema{If: &jsonschema.Schema{Type: typeObject}, Then: &jsonschema.Schema{Ref: "#/$defs/ComponentConfiguration"}}
 }

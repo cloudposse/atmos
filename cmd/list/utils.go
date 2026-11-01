@@ -47,7 +47,7 @@ func checkAtmosConfig(cmd *cobra.Command, v *viper.Viper, skipStackCheck ...bool
 	}
 
 	atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
-	if !atmosConfigExists || err != nil {
+	if (!atmosConfigExists || err != nil) && !atmosConfig.HasComponentDiscovery() {
 		return fmt.Errorf("atmos stacks directory not found at: %s", filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
 	}
 

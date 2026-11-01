@@ -18,6 +18,7 @@ import (
 	component "github.com/cloudposse/atmos/pkg/component"
 	deferred "github.com/cloudposse/atmos/pkg/deferred"
 	degradation "github.com/cloudposse/atmos/pkg/degradation"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	dependency "github.com/cloudposse/atmos/pkg/dependency"
 	generator "github.com/cloudposse/atmos/pkg/generator"
 	providers "github.com/cloudposse/atmos/pkg/generator/providers"
@@ -208,6 +209,8 @@ type Services struct {
 // Executor owns Terraform's execution pipeline and reference lookups.
 type Executor struct {
 	*Operations
+	prepareAuthEnvironmentFn      func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) error
+	resolveConfigurationToolsFn   func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*dependencies.ToolchainEnvironment, error)
 	services                      Services
 	executeTerraformInitForcedFn  func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, reconfigure, upgrade bool, opts ...component.ExecutionOption) error
 	dispatchAfterInitFn           func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...component.ExecutionOption)
@@ -231,6 +234,8 @@ func NewExecutor(services Services) *Executor {
 	defer perf.Track(nil, "terraform.NewExecutor")()
 
 	e := &Executor{Operations: NewOperations(services.OperationServices), services: services}
+	e.prepareAuthEnvironmentFn = auth.TerraformPreHook
+	e.resolveConfigurationToolsFn = resolveAndInstallToolchainDeps
 	e.executeTerraformInitForcedFn = e.executeTerraformInitForced
 	e.dispatchAfterInitFn = e.dispatchAfterInit
 	e.executeMainTerraformCommandFn = e.executeMainTerraformCommand
