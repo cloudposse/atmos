@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -145,7 +146,13 @@ func TestDiscoveryMarkdownFlagSemantics(t *testing.T) {
 
 func TestCustomDiscoveryFlagRegistration(t *testing.T) {
 	for _, tc := range []struct{ name, kind, value string }{
-		{"docs", "bool", "true"}, {"docs", "string", "markdown"}, {"example", "bool", "true"},
+		{"docs", "bool", "true"},
+		{"docs", "string", "markdown"},
+		{"docs", "int", "7"},
+		{"example", "bool", "true"},
+		{"example", "string", "value"},
+		{"example", "", "value"},
+		{"example", "int", "7"},
 	} {
 		t.Run(tc.name+"/"+tc.kind, func(t *testing.T) {
 			mockDiscoveryDependencies(t)
@@ -171,6 +178,59 @@ func TestCustomDiscoveryFlagRegistration(t *testing.T) {
 			assert.True(t, ran)
 		})
 	}
+}
+
+func TestCustomDiscoveryFlagShorthandValidation(t *testing.T) {
+	for _, name := range []string{"docs", "example"} {
+		t.Run(name, func(t *testing.T) {
+			root, _, _ := discoveryTestRoot(t)
+			require.NotNil(t, root.PersistentFlags().ShorthandLookup("C"), "the conflict below needs a global -C flag")
+
+			conflicting := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: name, Type: "string", Shorthand: "C"}}}
+			require.ErrorIs(t, validateCustomCommandFlags(&conflicting, root), errUtils.ErrReservedFlagName)
+
+			invalid := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: name, Type: "string", Shorthand: "zz"}}}
+			require.ErrorIs(t, validateCustomCommandFlags(&invalid, root), errUtils.ErrDuplicateFlagRegistration)
+
+			available := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: name, Type: "string", Shorthand: "z"}}}
+			require.NoError(t, validateCustomCommandFlags(&available, root))
+
+			// The conflict check uses the command's own parent, not just the root.
+			parent := &cobra.Command{Use: "parent"}
+			parent.PersistentFlags().StringP("option", "z", "", "")
+			root.AddCommand(parent)
+			nested := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: name, Type: "string", Shorthand: "z"}}}
+			require.ErrorIs(t, validateCustomCommandFlags(&nested, parent), errUtils.ErrReservedFlagName)
+		})
+	}
+}
+
+func TestCustomDiscoveryFlagShorthandFollowsFlagNameRule(t *testing.T) {
+	// Custom flags keep shorthands and long names in one namespace (see
+	// TestCustomCommand_ShorthandMatchesFlagName), and discovery names follow the same rule.
+	withShorthand := schema.CommandFlag{Name: "example", Type: "bool", Shorthand: "x"}
+	named := schema.CommandFlag{Name: "x", Type: "string"}
+
+	for name, flagList := range map[string][]schema.CommandFlag{
+		"shorthand first": {withShorthand, named},
+		"name first":      {named, withShorthand},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root, _, _ := discoveryTestRoot(t)
+			config := schema.Command{Name: "custom", Flags: flagList}
+			require.ErrorIs(t, validateCustomCommandFlags(&config, root), errUtils.ErrDuplicateFlagRegistration)
+		})
+	}
+}
+
+func TestCustomFlagDuplicatesStillFail(t *testing.T) {
+	root, _, _ := discoveryTestRoot(t)
+
+	names := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: "a"}, {Name: "a"}}}
+	require.ErrorIs(t, validateCustomCommandFlags(&names, root), errUtils.ErrDuplicateFlagRegistration)
+
+	shorthands := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: "a", Shorthand: "z"}, {Name: "b", Shorthand: "z"}}}
+	require.ErrorIs(t, validateCustomCommandFlags(&shorthands, root), errUtils.ErrDuplicateFlagRegistration)
 }
 
 func TestDiscoveryMarkdownResolvesLinksAfterRedirect(t *testing.T) {
