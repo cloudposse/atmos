@@ -236,10 +236,10 @@ def executable_invocation():
     first = recorded[0]
     unit_dir = project.root + "/live/dev/app"
     fixtures.check(first.engine == ["plan", "-no-color"], "Unexpected engine command: " + str(first.engine))
-    fixtures.check(first.before[0] == "--working-dir" and first.before[1].endswith("live/dev/app") and first.before[2] == "run", "Unexpected terragrunt arguments: " + str(first.before))
+    fixtures.check(first.before[0] == "--working-dir" and slashes(first.before[1]).endswith("live/dev/app") and first.before[2] == "run", "Unexpected terragrunt arguments: " + str(first.before))
     fixtures.check(first.env.get("TG_NON_INTERACTIVE") == "true", "Terragrunt was allowed to prompt: " + str(first.env))
     fixtures.check(first.env.get("TG_TF_FORWARD_STDOUT") == "true", "Engine output was not forwarded untouched: " + str(first.env))
-    fixtures.check(first.env.get("TG_TF_PATH", "").endswith(semantics.engine().rsplit("/", 1)[-1]), "Terragrunt did not run the Atmos-selected engine: " + str(first.env))
+    fixtures.check(first.env.get("TG_TF_PATH", "").endswith(slashes(semantics.engine()).rsplit("/", 1)[-1]), "Terragrunt did not run the Atmos-selected engine: " + str(first.env))
 
     # Native machinery never ran: no workdir, no generated varfile, no backend file written by Atmos.
     fixtures.check(not fs.exists(project.root + "/.workdir"), "Native provisioning ran for an executable unit")
@@ -293,19 +293,24 @@ def executable_flags_and_config():
     ui.success("Executable mode: provider flags and configured features become Terragrunt flags; secrets stay out of argv and output")
 
 
+def slashes(path):
+    # Recorded working directories use the platform separator; compare them slash-separated.
+    return path.replace("\\", "/")
+
+
 def executable_ordering():
     project = stand_in_project("atmos-terragrunt-exec-all-")
     write_stand_in_unit(project.root, "base")
     write_stand_in_unit(project.root, "app", dependencies=["base"])
     result = semantics.run(project.root, ["terraform", "apply", "--all", "-s", STACK, "--", "-auto-approve", "-no-color"])
     expect(result, "Apply complete", "apply --all")
-    order = [c.dir.rsplit("/", 1)[-1] for c in engine_calls(project) if c.engine[0] == "apply"]
+    order = [slashes(c.dir).rsplit("/", 1)[-1] for c in engine_calls(project) if c.engine[0] == "apply"]
     fixtures.check(order == ["base", "app"], "Dependencies were not applied first: " + str(order))
     # Atmos schedules the units; Terragrunt never receives --all.
     for call in engine_calls(project):
         fixtures.check("--all" not in call.before and "--all" not in call.engine, "terragrunt run --all was used: " + str(call.before))
     semantics.run(project.root, ["terraform", "destroy", "--all", "-s", STACK, "--", "-auto-approve", "-no-color"])
-    order = [c.dir.rsplit("/", 1)[-1] for c in engine_calls(project) if c.engine[0] == "destroy"]
+    order = [slashes(c.dir).rsplit("/", 1)[-1] for c in engine_calls(project) if c.engine[0] == "destroy"]
     fixtures.check(order == ["app", "base"], "Destroy did not run in reverse dependency order: " + str(order))
     ui.success("Executable mode: Atmos schedules units in dependency order, one terragrunt command each, never terragrunt run --all")
 
