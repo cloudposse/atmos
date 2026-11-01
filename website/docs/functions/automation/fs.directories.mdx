@@ -1,0 +1,73 @@
+---
+title: "Filesystem directories and cleanup"
+sidebar_label: "fs.mkdir, fs.mkdtemp, fs.remove"
+sidebar_class_name: command
+description: Create directories and temporary test workspaces, then remove them with explicit cleanup.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Create directories and temporary workspaces from Atmos scripts without requiring Python or shell utilities.
+    Register cleanup with `defer` so it runs even when an assertion fails.
+</Intro>
+
+## Usage
+
+```python
+fs.mkdir(path, parents = False, mode = 0o700)
+fs.mkdtemp(prefix = "atmos-", dir = "")
+fs.remove(path, recursive = False)
+```
+
+All paths follow the same resolution rules as [`fs.resolve`](/functions/automation/fs.resolve): relative paths
+use the script's working directory and a leading `~` expands to the home directory.
+
+## Create a directory
+
+The `fs.mkdir` function returns `None` after creating a directory.
+
+<dl>
+    <dt>`path`</dt>
+    <dd>Required, nonempty directory path.</dd>
+    <dt>`parents`</dt>
+    <dd>Defaults to `False`. Set to `True` to create missing parents and accept an existing directory.</dd>
+    <dt>`mode`</dt>
+    <dd>Permissions for new directories, from `0o000` to `0o777`. Defaults to `0o700`. Operating system permission rules and the umask apply.</dd>
+</dl>
+
+## Create a temporary directory
+
+The `fs.mkdtemp` function returns the path of a new, uniquely named directory. It does not register automatic cleanup.
+
+<dl>
+    <dt>`prefix`</dt>
+    <dd>Defaults to `"atmos-"`. The name prefix; path separators are not allowed.</dd>
+    <dt>`dir`</dt>
+    <dd>Defaults to `""`, which selects the operating system's temporary directory. A specified parent must already exist.</dd>
+</dl>
+
+## Remove a path
+
+The `fs.remove` function returns `None` after deleting a file, symlink, or directory.
+
+<dl>
+    <dt>`path`</dt>
+    <dd>Required. Empty paths and filesystem roots are rejected. A final symlink is removed without following it.</dd>
+    <dt>`recursive`</dt>
+    <dd>Defaults to `False`, which requires a directory to be empty and reports missing paths as errors. Set to `True` to remove a directory tree; an already absent path succeeds.</dd>
+</dl>
+
+## Temporary fixture example
+
+```python
+work = fs.mkdtemp(prefix = "fixture-")
+defer(fs.remove, work, recursive = True)
+fs.mkdir(work + "/project", parents = True)
+fs.write_file(work + "/project/atmos.yaml", "base_path: .\n")
+result = atmos.version(working_directory = work + "/project", output = "capture")
+```
+
+These operations report filesystem failures and honor cancellation before starting. A dry-run script performs
+no filesystem operations. Deferred cleanup also runs after a script failure or cancellation, using the
+[cleanup grace period](/functions/automation/defer).
