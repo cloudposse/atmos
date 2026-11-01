@@ -1220,7 +1220,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/mod
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/mod/+/v0.41.0:LICENSE
+    URL: https://cs.opensource.google/go/x/mod/+/v0.42.0:LICENSE
 
   - golang.org/x/net
     License: BSD-3-Clause
