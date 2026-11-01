@@ -96,4 +96,36 @@ func TestContainsTagFindsEverySource(t *testing.T) {
 	assert.True(t, ContainsTag(value, "!exec"))
 	assert.False(t, ContainsTag(value, "!store"))
 	assert.False(t, ContainsTag("plain", "!env"))
+
+	nested := Source{Tag: "!template", Argument: "a-" + env + "-b"}.Encode()
+	assert.True(t, ContainsTag(nested, "!template"))
+	assert.True(t, ContainsTag(nested, "!env"), "a function inside another function's argument is found")
+	assert.False(t, ContainsTag(nested, "!exec"))
+}
+
+func TestReplaceFindsSourceAfterUnclosedPrefix(t *testing.T) {
+	env := Source{Tag: "!env", Argument: "STAGE"}.Encode()
+	unclosed := prefix + "eyJ0YWciOiIhZW52In0:cut-off "
+
+	result, err := Replace(unclosed+env+"-z", func(string, Source) (string, error) { return "value", nil })
+
+	require.NoError(t, err)
+	assert.Equal(t, unclosed+"value-z", result)
+	assert.True(t, Contains(unclosed+env))
+	assert.True(t, ContainsTag(unclosed+env, "!env"))
+	assert.False(t, Contains(unclosed), "an unclosed prefix alone is not a source")
+
+	_, whole := Decode(unclosed + env)
+	assert.False(t, whole, "text before the complete source means it isn't the whole value")
+}
+
+func TestComparable(t *testing.T) {
+	here := Source{Tag: "!env", Argument: "STAGE", File: "/checkout-a/stack.yaml", Line: 3}.Encode()
+	there := Source{Tag: "!env", Argument: "STAGE", File: "/checkout-b/stack.yaml", Line: 9}.Encode()
+	other := Source{Tag: "!env", Argument: "OTHER", File: "/checkout-a/stack.yaml", Line: 3}.Encode()
+
+	assert.Equal(t, Comparable("x-"+here), Comparable("x-"+there), "metadata such as checkout paths is ignored")
+	assert.NotEqual(t, Comparable("x-"+here), Comparable("x-"+other), "arguments are compared")
+	assert.NotEqual(t, Comparable("x-"+here), Comparable("x-!env STAGE"), "a function differs from text spelling it")
+	assert.Equal(t, "plain", Comparable("plain"))
 }

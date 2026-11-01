@@ -12,8 +12,8 @@ The `--docs` and `--example` discovery flags were added as global flags. Custom 
 
 ## Changes
 
-- `cmd/cmd_utils.go`: a custom `docs` or `example` flag of any type passes validation when the existing flag is the global discovery flag.
-- `cmd/command_documentation_markdown_test.go`: extends `TestCustomDiscoveryFlagRegistration` with the failing types.
+- `cmd/cmd_utils.go`: a custom `docs` or `example` flag of any type passes the type check against the global discovery flag. Its shorthand is still validated, so reusing an inherited shorthand like `-C` is an error.
+- `cmd/command_documentation_markdown_test.go`: extends `TestCustomDiscoveryFlagRegistration` with the failing types and adds shorthand conflict coverage.
 
 ## Validation
 

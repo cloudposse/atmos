@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -175,6 +176,24 @@ func TestCustomDiscoveryFlagRegistration(t *testing.T) {
 			root.SetArgs(args)
 			require.NoError(t, root.Execute())
 			assert.True(t, ran)
+		})
+	}
+}
+
+func TestCustomDiscoveryFlagShorthandValidation(t *testing.T) {
+	for _, name := range []string{"docs", "example"} {
+		t.Run(name, func(t *testing.T) {
+			root, _, _ := discoveryTestRoot(t)
+			require.NotNil(t, root.PersistentFlags().ShorthandLookup("C"), "the conflict below needs a global -C flag")
+
+			conflicting := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: name, Type: "string", Shorthand: "C"}}}
+			require.ErrorIs(t, validateCustomCommandFlags(&conflicting, root), errUtils.ErrReservedFlagName)
+
+			invalid := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: name, Type: "string", Shorthand: "zz"}}}
+			require.ErrorIs(t, validateCustomCommandFlags(&invalid, root), errUtils.ErrDuplicateFlagRegistration)
+
+			available := schema.Command{Name: "custom", Flags: []schema.CommandFlag{{Name: name, Type: "string", Shorthand: "z"}}}
+			require.NoError(t, validateCustomCommandFlags(&available, root))
 		})
 	}
 }

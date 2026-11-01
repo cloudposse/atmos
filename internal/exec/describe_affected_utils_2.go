@@ -275,7 +275,7 @@ func deepEqualValues(a, b any) bool {
 			return aTagged && bTagged && aSource.Tag == bSource.Tag && aSource.Argument == bSource.Argument
 		}
 		// Embedded source metadata includes checkout paths, which differ between the compared trees.
-		return yamlsource.Expression(aTyped) == yamlsource.Expression(bTyped)
+		return yamlsource.Comparable(aTyped) == yamlsource.Comparable(bTyped)
 
 	case int:
 		bTyped, ok := b.(int)

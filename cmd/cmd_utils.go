@@ -680,7 +680,7 @@ func validateFlag(cmdName string, flag *schema.CommandFlag, seen map[string]bool
 		// registers it on the custom command so discovery can't intercept that command.
 		isDiscoveryFlag := flag.Name == "docs" || flag.Name == "example"
 		if isDiscoveryFlag && existingFlag == parentCommand.Root().PersistentFlags().Lookup(flag.Name) {
-			return nil
+			return validateFlagShorthand(cmdName, flag, seen, parentCommand)
 		}
 		return validateFlagTypeConflict(cmdName, flag, existingFlag)
 	}

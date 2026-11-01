@@ -297,6 +297,8 @@ func TestProcessCustomYamlTagsLeavesSkippedEmbeddedSourceReadable(t *testing.T) 
 	require.NoError(t, err)
 	name, ok := result["name"].(string)
 	require.True(t, ok)
+	// The source must survive intact so a later pass can still evaluate it.
+	assert.Equal(t, input["name"], name)
 	assert.Equal(t, "x-!env ATMOS_EMBED_A", yamlsource.Display(name))
 }
 

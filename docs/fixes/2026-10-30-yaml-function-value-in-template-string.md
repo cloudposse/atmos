@@ -18,9 +18,9 @@ The regression test for the upcoming release found this. v1.233.2 also got these
 
 ## Changes
 
-- `pkg/function/yamlsource`: transport strings now have a process-local terminator and nested sources are matched as balanced pairs. `Decode` accepts exactly one complete source. New `Replace`, `Embedded`, and `Transformed` helpers handle source inside larger text, and `Expression` and `Display` show it as readable function text.
+- `pkg/function/yamlsource`: transport strings now have a process-local terminator and nested sources are matched as balanced pairs. `Decode` accepts exactly one complete source. New `Replace`, `Embedded`, `Transformed`, and `Comparable` helpers handle source inside larger text, and `Expression` and `Display` show it as readable function text.
 - `pkg/function/embedded`: new package that substitutes embedded sources with their values. Structured results and sources rewritten by a template function now fail with `ErrYamlFuncTemplateEmbedding` rather than leaking a placeholder. YAML function processing in `internal/exec` calls it inline and supplies the evaluator.
-- `internal/exec/describe_affected_utils_2.go`: embedded sources compare by function text, because their metadata contains checkout paths.
+- `internal/exec/describe_affected_utils_2.go`: embedded sources compare by tag and argument, because their metadata contains checkout paths.
 - `pkg/hooks/hooks.go`: hook values use the same evaluation.
 - `website/docs/functions/yaml/index.mdx`: documents using a function value in a template, including what can't work.
 

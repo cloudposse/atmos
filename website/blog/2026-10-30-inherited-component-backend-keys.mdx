@@ -54,7 +54,7 @@ To see the key for a component, run [`atmos terraform generate backend`](/cli/co
 
 Pick one of these for each affected instance.
 
-**Keep the existing key.** Give the instance a stable [`metadata.name`](/stacks/components/component-metadata#name), or set the prefix directly:
+**Keep the existing key.** Give the instance a stable [`metadata.name`](/stacks/components/component-metadata#name), or set `workspace_key_prefix` (S3), `prefix` (GCS), or `key` (AzureRM) directly:
 
 ```yaml
 components:
@@ -66,7 +66,7 @@ components:
           - k8s_nodes/lxd/defaults
 ```
 
-**Adopt the new key.** Copy the state object from the old key to the new one before the next apply, for example from `k8s_nodes/test-k8s_nodes/terraform.tfstate` to `lxd-talos-nodes/test-k8s_nodes/terraform.tfstate`. The next plan should report `No changes`.
+**Adopt the new key.** Before the next apply, copy the state of every workspace whose path changes, for example from `k8s_nodes/test-k8s_nodes/terraform.tfstate` to `lxd-talos-nodes/test-k8s_nodes/terraform.tfstate`. On S3 that means every named workspace, because the prefix doesn't apply to the `default` workspace. On GCS and AzureRM it includes `default` as well. The next plan in each workspace should report `No changes`.
 
 ## Get Involved
 

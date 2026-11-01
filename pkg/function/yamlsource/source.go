@@ -61,18 +61,30 @@ func Decode(value string) (Source, bool) {
 	return parse(value)
 }
 
-// locate finds the first complete source in value. Arguments can contain other
-// sources after template rendering, so sources are matched like nested brackets.
+// locate finds the first complete source in value, moving past any prefix that is
+// never closed, such as one a template function truncated.
 func locate(value string) (start, end int, ok bool) {
-	start = strings.Index(value, prefix)
-	if start < 0 {
-		return 0, 0, false
+	for offset := 0; ; {
+		index := strings.Index(value[offset:], prefix)
+		if index < 0 {
+			return 0, 0, false
+		}
+		start = offset + index
+		if end, ok = sourceEnd(value, start); ok {
+			return start, end, true
+		}
+		offset = start + len(prefix)
 	}
+}
+
+// sourceEnd returns where the source beginning at start ends. Arguments can contain
+// other sources after template rendering, so sources are matched like nested brackets.
+func sourceEnd(value string, start int) (int, bool) {
 	position := start + len(prefix)
 	for depth := 1; depth > 0; {
 		closing := strings.Index(value[position:], terminator)
 		if closing < 0 {
-			return 0, 0, false
+			return 0, false
 		}
 		opening := strings.Index(value[position:], prefix)
 		if opening >= 0 && opening < closing {
@@ -83,7 +95,7 @@ func locate(value string) (start, end int, ok bool) {
 		depth--
 		position += closing + len(terminator)
 	}
-	return start, position, true
+	return position, true
 }
 
 // parse reads one complete source, including its metadata.
@@ -178,6 +190,19 @@ func Expression(value string) string {
 	return readable
 }
 
+// Comparable returns value with each source reduced to its tag and argument, so two
+// values can be compared regardless of metadata such as checkout paths. Delimiters
+// keep a source distinct from literal text that spells the same expression.
+//
+//nolint:lintroller // Cannot import perf: schema conditions depend on this leaf package.
+func Comparable(value string) string {
+	// The resolver below never fails.
+	normalized, _ := Replace(value, func(_ string, source Source) (string, error) {
+		return "\x00" + source.Tag + "\x00" + source.Argument + "\x00", nil
+	})
+	return normalized
+}
+
 // ContainsTag reports whether text embeds source for a tag, as can happen when
 // a template interpolates a computed value into a stack name.
 //
@@ -186,7 +211,7 @@ func ContainsTag(value, tag string) bool {
 	found := false
 	// The resolver below never fails.
 	_, _ = Replace(value, func(token string, source Source) (string, error) {
-		found = found || source.Tag == tag
+		found = found || source.Tag == tag || ContainsTag(source.Argument, tag)
 		return token, nil
 	})
 	return found
