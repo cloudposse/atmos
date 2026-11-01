@@ -116,8 +116,8 @@ func (p *Provider) ResolveState(ctx context.Context, input *pluginv1.ComponentRe
 		if result == nil {
 			return errUtils.ErrPluginProtocol
 		}
-		if len(result.Diagnostics) != 0 {
-			return errUtils.ErrPluginInvalidConfig
+		if err := firstDiagnosticError(result.Diagnostics); err != nil {
+			return err
 		}
 		if !validState(result.State) || !validSources(result.Sources) {
 			return errUtils.ErrPluginProtocol

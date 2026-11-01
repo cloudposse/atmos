@@ -34,6 +34,17 @@ func canonicalPath(path string) (string, error) {
 	return filepath.Join(resolved, filepath.Base(path)), nil
 }
 
+// logicalPath resolves symlinks in a configuration file's directory but not in the file
+// itself. Like upstream Terragrunt, a symlinked terragrunt.hcl is a unit at the place the
+// link lives, and the configuration is read through the link.
+func logicalPath(path string) (string, error) {
+	dir, err := canonicalPath(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, filepath.Base(path)), nil
+}
+
 func within(path, directory string) bool {
 	rel, err := filepath.Rel(directory, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
@@ -47,11 +58,12 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 		return nil, err
 	}
 	overlay := afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs())
-	stacks, units, err := discoveryPaths(root, request.IncludedPaths, request.ExcludedPaths)
+	scan, err := discoveryPaths(root, request.IncludedPaths, request.ExcludedPaths)
 	if err != nil {
 		return nil, err
 	}
-	result := &model.Resolution{}
+	stacks, units := scan.Stacks, scan.Units
+	result := &model.Resolution{Warnings: scan.Warnings}
 	templates := map[string]bool{}
 	skipped := func(path string) bool {
 		for dir := range templates {
@@ -79,7 +91,7 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 	var visit func(string, string, string, string, []string, []string, int) error
 	visit = func(path, stack, name, generationRoot string, files, folders []string, depth int) error {
 		if depth > 32 {
-			return fmt.Errorf("nested-stack discovery depth exceeded at %s", path)
+			return &model.Problem{Code: model.CodeEvaluationError, Summary: "Terragrunt stacks are nested too deeply", Detail: "Nested `terragrunt.stack.hcl` generation exceeded 32 levels, which usually means a stack includes itself.", Hints: []string{"Remove the circular `stack` reference."}, File: path, Safe: true}
 		}
 		resolved, err := parse(path, false)
 		if err != nil {
@@ -110,11 +122,17 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 			}
 			for _, entry := range entries {
 				if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), ".tf.json")) {
-					return fmt.Errorf("discovery of inline Terraform modules without terraform.source is not implemented: %s", path)
+					return missingSourceProblem(path)
 				}
 			}
+			// Shared include, not a runnable local-source unit. Say so: it is not listed.
+			rel, _ := filepath.Rel(root, path)
+			result.Warnings = append(result.Warnings, model.Warning{
+				Code: model.WarningUnitWithoutSource, Path: filepath.ToSlash(rel),
+				Message: fmt.Sprintf("%s has no terraform { source } block and no Terraform files next to it, so it is treated as a shared configuration and is not listed as a component", filepath.ToSlash(rel)),
+			})
 			return nil
-		} // Shared include, not a runnable local-source unit.
+		}
 		resolved.Files = append(resolved.Files, files...)
 		resolved.Folders = append(resolved.Folders, folders...)
 		if err := trackInputSources(overlay, root, resolved); err != nil {
@@ -140,7 +158,8 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 	}
 	for _, path := range stacks {
 		if err := failures[path]; err != nil && !skipped(path) {
-			return nil, fmt.Errorf("discover %s: %w", path, err)
+			// The components of a stack that cannot be generated are unknown, so the stack file itself is the unit.
+			result.Failures = append(result.Failures, model.UnitFailure{Stack: nameFor(filepath.Dir(path)), Name: filepath.Base(path), Err: problemFor(err, path)})
 		}
 	}
 	// A template that parsed independently is still a template, not another live stack.
@@ -154,8 +173,9 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 		if dir == root {
 			stack, name = "default", "root"
 		}
+		// One failing unit is recorded and reported on its own; the other units stay usable.
 		if err := visit(path, stack, name, "", nil, nil, 0); err != nil {
-			return nil, fmt.Errorf("discover %s: %w", path, err)
+			result.Failures = append(result.Failures, model.UnitFailure{Stack: stack, Name: filepath.ToSlash(name), Err: problemFor(err, path)})
 		}
 	}
 	slices.SortFunc(result.Inventory, func(a, b model.DiscoveredUnit) int { return strings.Compare(a.Stack+"/"+a.Name, b.Stack+"/"+b.Name) })
@@ -163,7 +183,10 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 	for _, unit := range result.Inventory {
 		key := unit.Stack + "\x00" + unit.Name
 		if previous, exists := identities[key]; exists {
-			return nil, fmt.Errorf("discovered instance collision %s/%s: %s and %s", unit.Stack, unit.Name, previous, unit.Config.Path)
+			return nil, &model.Problem{
+				Code: model.CodeEvaluationError, Summary: "Two Terragrunt units resolve to the same component", Detail: fmt.Sprintf("%s/%s is produced by both %s and %s.", unit.Stack, unit.Name, filepath.ToSlash(mustRel(root, previous)), filepath.ToSlash(mustRel(root, unit.Config.Path))), Safe: true,
+				Hints: []string{"Remove one of the units, a symlink that repeats a unit, or an overlapping `included_paths` entry."},
+			}
 		}
 		identities[key] = unit.Config.Path
 	}

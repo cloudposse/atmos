@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"cmp"
+	"slices"
 	"sync"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -107,7 +109,29 @@ func findAffectedParallel(
 	}
 	allAffected = append(allAffected, deletedAffected...)
 
+	// Stacks finish in any order and component maps iterate in any order, so the same
+	// comparison would otherwise print its results in a different order on every run.
+	sortAffected(allAffected)
+
 	return allAffected, nil
+}
+
+// sortAffected makes the order of results independent of goroutine scheduling and map
+// iteration: results are grouped by stack, and components of one type within a stack are
+// ordered by name. The order in which a stack lists its component types is already fixed
+// by the processing order and is preserved.
+func sortAffected(affected []schema.Affected) {
+	slices.SortStableFunc(affected, func(a, b schema.Affected) int { return cmp.Compare(a.Stack, b.Stack) })
+	for start := 0; start < len(affected); {
+		end := start + 1
+		for end < len(affected) && affected[end].Stack == affected[start].Stack && affected[end].ComponentType == affected[start].ComponentType {
+			end++
+		}
+		slices.SortStableFunc(affected[start:end], func(a, b schema.Affected) int {
+			return cmp.Or(cmp.Compare(a.Component, b.Component), cmp.Compare(a.Affected, b.Affected))
+		})
+		start = end
+	}
 }
 
 // processStackAffected processes a single stack to find affected components.

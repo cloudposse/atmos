@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/execution"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -107,15 +109,46 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	}
 
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts)}
-	return execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (string, error) {
-		if len(config.ErrorHooks) == 0 {
-			return "", action(&phaseInfo, applied.Args, opts)
+	// With -detailed-exitcode, exit status 2 reports a plan with changes. Hooks must not see that
+	// as a failure, but the status still has to reach the caller once the hooks are done.
+	var changesPresent error
+	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (string, error) {
+		output, actionErr := runObservedAction(&phaseInfo, applied.Args, opts, config, action)
+		if isDetailedExitCodeChanges(applied.Args, actionErr) {
+			changesPresent = actionErr
+			return output, nil
 		}
-		// Error hooks match against the failed command's output, which the caller may also be capturing.
-		var output bytes.Buffer
-		stdout, stderr := composeRetryCaptureWriters(opts, &output)
-		err := action(&phaseInfo, applied.Args, append(slices.Clone(opts), component.WithStdoutCapture(stdout), component.WithStderrCapture(stderr)))
-		return output.String(), err
+		return output, actionErr
+	})
+	if err != nil {
+		return err
+	}
+	return changesPresent
+}
+
+// runObservedAction runs the wrapped subprocess, capturing its output for error hooks when any exist.
+func runObservedAction(info *schema.ConfigAndStacksInfo, args []string, opts []component.ExecutionOption, config *schema.ComponentExecution, action phaseAction) (string, error) {
+	if len(config.ErrorHooks) == 0 {
+		return "", action(info, args, opts)
+	}
+	// Error hooks match against the failed command's output, which the caller may also be capturing.
+	var output bytes.Buffer
+	stdout, stderr := composeRetryCaptureWriters(opts, &output)
+	err := action(info, args, append(slices.Clone(opts), component.WithStdoutCapture(stdout), component.WithStderrCapture(stderr)))
+	return output.String(), err
+}
+
+// detailedExitCodeChanges is the status `plan -detailed-exitcode` returns when changes are present.
+const detailedExitCodeChanges = 2
+
+// isDetailedExitCodeChanges reports whether err is exit status 2 of a command run with
+// -detailed-exitcode, which Terragrunt treats as success for hooks and the success of the unit.
+func isDetailedExitCodeChanges(args []string, err error) bool {
+	if err == nil || errUtils.GetExitCode(err) != detailedExitCodeChanges {
+		return false
+	}
+	return slices.ContainsFunc(args, func(arg string) bool {
+		return arg == "-detailed-exitcode" || arg == "--detailed-exitcode"
 	})
 }
 
@@ -156,7 +189,7 @@ type hookRunner struct {
 func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *schema.ComponentHook) (string, error) {
 	defer perf.Track(r.atmosConfig, "terraform.hookRunner.RunHook")()
 
-	ui.Info(fmt.Sprintf("Executing %s: %s", strings.ReplaceAll(string(kind), "_", " "), hook.Name))
+	ui.Info(fmt.Sprintf("Executing %s: %s%s", strings.ReplaceAll(string(kind), "_", " "), hook.Name, hookUnitLabel(r.info)))
 
 	var base component.ExecutionOptions
 	for _, opt := range r.opts {
@@ -184,20 +217,45 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 		hookEnvCommand+"="+r.phase.command,
 		hookEnvHookName+"="+hook.Name,
 	)
-	err := r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], hook.Execute[1:], r.workingDirectory(hook), env, false, "", opts...)
+	directory, err := r.workingDirectory(hook)
+	if err != nil {
+		return "", err
+	}
+	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], hook.Execute[1:], directory, env, false, "", opts...)
 	return output.String(), err
 }
 
+// hookUnitLabel names the component and stack a hook runs for, so output of a bulk run can be attributed.
+func hookUnitLabel(info *schema.ConfigAndStacksInfo) string {
+	if info.ComponentFromArg == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (%s in %s)", info.ComponentFromArg, info.Stack)
+}
+
 // workingDirectory defaults to the provisioned module directory; relative paths resolve there.
-func (r *hookRunner) workingDirectory(hook *schema.ComponentHook) string {
+// A directory that does not exist is reported as such, instead of as a failure to start the program.
+func (r *hookRunner) workingDirectory(hook *schema.ComponentHook) (string, error) {
 	switch {
 	case hook.WorkingDirectory == "":
-		return r.phase.componentPath
+		return r.phase.componentPath, nil
 	case filepath.IsAbs(hook.WorkingDirectory):
-		return hook.WorkingDirectory
+		return hook.WorkingDirectory, requireDirectory(hook.WorkingDirectory, "")
 	default:
-		return filepath.Join(r.phase.componentPath, hook.WorkingDirectory)
+		resolved := filepath.Join(r.phase.componentPath, hook.WorkingDirectory)
+		return resolved, requireDirectory(resolved, hook.WorkingDirectory)
 	}
+}
+
+// requireDirectory fails with the missing directory's name; relative names also say where they resolved.
+func requireDirectory(directory, relative string) error {
+	if info, err := os.Stat(directory); err == nil && info.IsDir() {
+		return nil
+	}
+	if relative == "" {
+		return fmt.Errorf("%w: %s", errUtils.ErrComponentHookWorkingDirectory, directory)
+	}
+	return fmt.Errorf("%w: %s (working_dir %q resolves against the provisioned module directory, not the directory of terragrunt.hcl; use ${get_terragrunt_dir()}/%s for a directory beside it)", errUtils.ErrComponentHookWorkingDirectory, directory, relative, relative)
 }
 
 // extraArgumentsPosition is the index after the Terraform command and its subcommands, so extra

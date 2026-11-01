@@ -46,7 +46,8 @@ func TestDiscoveryRejectsInvalidOwnershipIdentityAndProvenance(t *testing.T) {
 	require.ErrorIs(t, p.checkDiscovery(nil), errUtils.ErrPluginProtocol)
 	require.ErrorIs(t, p.checkDiscovery(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{nil}}), errUtils.ErrPluginProtocol)
 	require.ErrorIs(t, p.checkDiscovery(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit, unit}}), errUtils.ErrDuplicatePluginExtension)
-	require.ErrorIs(t, p.checkDiscovery(&pluginv1.DiscoverComponentsResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}), errUtils.ErrPluginInvalidConfig)
+	// Diagnostics never invalidate the response; the discovery session interprets them per unit.
+	require.NoError(t, p.checkDiscovery(&pluginv1.DiscoverComponentsResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}))
 }
 
 func TestPreparationRejectsUnsafeArtifactsAndMissingStateIdentity(t *testing.T) {

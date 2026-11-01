@@ -104,9 +104,15 @@ func dropVariableArguments(arguments []string) []string {
 func requiredVarFiles(files []string, directory string) ([]string, error) {
 	files = keepLast(files)
 	for _, file := range files {
-		if !fileExists(resolve(directory, file)) {
+		resolved := resolve(directory, file)
+		if fileExists(resolved) {
+			continue
+		}
+		if filepath.IsAbs(file) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrComponentVarFileMissing, file)
 		}
+		// A relative name resolves in the provisioned module directory, not beside terragrunt.hcl.
+		return nil, fmt.Errorf("%w: %s (looked in %s, the directory Terraform runs in; for a file next to terragrunt.hcl use ${get_terragrunt_dir()}/%s)", errUtils.ErrComponentVarFileMissing, file, directory, file)
 	}
 	return files, nil
 }

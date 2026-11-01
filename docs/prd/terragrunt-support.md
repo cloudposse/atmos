@@ -66,8 +66,14 @@ Provide settings for the executable/version in executable mode, project/discover
 - Expand stacks without treating generated cache directories as separate projects.
 - Dispatch `terragrunt://` through a generic import interface. Share the evaluator with discovery.
 - Add definitions before commands require YAML stacks. Reuse naming precedence and path fallback.
-- Keep logical coordinates stable across imports, discovery, generated directories, and machines.
-- Deduplicate imports/discovery; fail on conflicting definitions, including YAML collisions.
+- Name automatically discovered units from paths: the component is the unit directory name; the stack is the directory above it (`default` and `root` at the base path); an explicit stack file names the stack after its own directory and the component after the unit's path inside the stack. Name templates and patterns do not apply to discovered stacks.
+- An import merges its units into the importing stack as components. Imports never create a stack. A mixin's import applies to every stack that imports the mixin; the same unit may be imported by several stacks. Imports ignore `included_paths` and `excluded_paths`, work without automatic discovery, and fail when they select no unit. An imported unit is removed from automatic discovery.
+- A YAML component with an imported unit's name is an override, never a conflict: the unit is the lowest layer of the importing manifest and all stack configuration deep-merges over it. Precedence for `vars` is the unit's evaluated inputs, then the stack's merged `vars`; stack `env` wins over the unit's `extra_arguments` environment. Only two different units with one name in a stack conflict. The unit owns its state backend, module (`metadata.component`, `source.uri`), and engine; overriding those is an error, never a silent ignore.
+- Keep logical coordinates stable across discovery, generated directories, and machines. An imported unit's coordinates are the importing stack and the unit's name.
+- Use one pattern language for `included_paths` and `excluded_paths`: doublestar globs relative to the base path that select the matched path and everything below it. Report an include pattern that selects nothing, a `terragrunt.hcl` without `terraform.source`, and skipped symlinks as warnings.
+- Follow Terragrunt v1.2.1 for symlinks: do not follow directory links, treat a symlinked `terragrunt.hcl` or `terragrunt.stack.hcl` as a unit at the link's location, and report what is skipped.
+- Fail on two units with one component name in one stack, and on a unit that shares its name with a YAML component, naming both definitions.
+- Do not attribute a plugin-provided component to an unrelated YAML manifest in provenance output.
 - Leave source configuration and state unchanged during listing. Report denied effects.
 
 Imported units have type `terraform`. Native mode reports engine `terraform` or `opentofu`; executable mode reports `terragrunt`. Do not infer the engine from HCL.
