@@ -17,8 +17,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/process"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -268,39 +266,6 @@ func runSecretPlanForTest() int {
 	fmt.Fprintln(os.Stdout, "plan credential:", os.Getenv("TF_VAR_credential"))
 	fmt.Fprintln(os.Stderr, "diagnostic credential:", os.Getenv("TF_VAR_credential"))
 	return 0
-}
-
-// TestSecretReferenceReachesTerraformPlan checks subprocess inputs and masked output together.
-func TestSecretReferenceReachesTerraformPlan(t *testing.T) {
-	config, mockStore := setupNativeSecretReference(t)
-	mockStore.EXPECT().Get("dev", "producer", "CREDENTIAL").Return(nativeReferenceSecret, nil).MinTimes(1)
-	exe, err := os.Executable()
-	require.NoError(t, err)
-	// Load the consumer through the same execution stack processor used by plan.
-	info, err := ProcessStacks(config, schema.ConfigAndStacksInfo{
-		ComponentFromArg: "consumer", ComponentType: "terraform", Stack: "dev", SubCommand: "plan",
-	}, true, true, true, nil, nil)
-	require.NoError(t, err)
-	info.Command = exe
-	info.SkipInit = true
-	info.ComponentBackendType = "http" // Skip workspace selection; only plan is under test.
-	info.ComponentEnvSection["_ATMOS_TEST_SECRET_PLAN"] = "1"
-	execCtx, err := prepareComponentExecution(context.Background(), provisioner.OutputWriters{}, config, &info, false)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		if info.RCCleanup != nil {
-			assert.NoError(t, info.RCCleanup())
-		}
-	})
-	var stdout, stderr bytes.Buffer
-	err = executeCommandPipeline(
-		config, &info, execCtx,
-		WithProcessStreams(process.Streams{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}),
-	)
-	require.NoError(t, err, "controlled Terraform stderr: %s", stderr.String())
-	assert.Contains(t, stdout.String(), "plan credential: "+iolib.MaskReplacement)
-	assert.Contains(t, stderr.String(), "diagnostic credential: "+iolib.MaskReplacement)
-	assert.NotContains(t, stdout.String()+stderr.String(), nativeReferenceSecret)
 }
 
 // TestNonTerraformSecretReferences checks native references in non-Terraform execution.

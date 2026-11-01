@@ -4,100 +4,46 @@ import (
 	"fmt"
 	"path/filepath"
 
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
+// constructTerraformComponentWorkingDir delegates to the Terraform component.
 func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	// Check if a provisioner (source or workdir) set a workdir path.
-	// This takes precedence over the standard component path.
-	// Use filepath.FromSlash to normalize path separators for cross-platform compatibility.
-	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return filepath.FromSlash(workdirPath)
-	}
-
-	// If we have a resolved absolute path, use GetComponentPath.
-	// Otherwise, just construct the path directly (for tests and simple cases).
-	if atmosConfig.TerraformDirAbsolutePath != "" {
-		path, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
-		if err == nil {
-			return path
-		}
-		// Log error but still try to return something.
-		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
-	}
-
-	// Direct path construction without converting to absolute.
-	// This maintains compatibility with tests that use simple paths.
-	return filepath.Join(
-		atmosConfig.BasePath,
-		atmosConfig.Components.Terraform.BasePath,
-		info.ComponentFolderPrefix,
-		info.FinalComponent,
-	)
+	return terraformcomponent.ConstructTerraformComponentWorkingDir(atmosConfig, info)
 }
 
-// constructTerraformComponentPlanfileName constructs the planfile name for a terraform component in a stack.
+// constructTerraformComponentPlanfileName delegates to the Terraform component.
 func constructTerraformComponentPlanfileName(info *schema.ConfigAndStacksInfo) string {
-	var planFile string
-	if len(info.ComponentFolderPrefixReplaced) == 0 {
-		planFile = fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
-	} else {
-		planFile = fmt.Sprintf("%s-%s-%s.planfile", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
-	}
-
-	return planFile
+	return terraformcomponent.ConstructTerraformComponentPlanfileName(info)
 }
 
-// constructTerraformComponentVarfileName constructs the varfile name for a terraform component in a stack.
+// constructTerraformComponentVarfileName delegates to the Terraform component.
 func constructTerraformComponentVarfileName(info *schema.ConfigAndStacksInfo) string {
-	var varFile string
-	if len(info.ComponentFolderPrefixReplaced) == 0 {
-		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
-	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.terraform.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
-	}
-
-	return varFile
+	return terraformcomponent.ConstructTerraformComponentVarfileName(info)
 }
 
-// constructTerraformComponentTestVarfileName constructs the test varfile name for a terraform component in a stack.
+// constructTerraformComponentTestVarfileName delegates to the Terraform component.
 func constructTerraformComponentTestVarfileName(info *schema.ConfigAndStacksInfo) string {
-	var varFile string
-	if len(info.ComponentFolderPrefixReplaced) == 0 {
-		varFile = fmt.Sprintf("%s-%s.terraform.test.tfvars.json", info.ContextPrefix, info.Component)
-	} else {
-		varFile = fmt.Sprintf("%s-%s-%s.terraform.test.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
-	}
-
-	return varFile
+	return terraformcomponent.ConstructTerraformComponentTestVarfileName(info)
 }
 
-// constructTerraformComponentVarfilePath constructs the varfile path for a terraform component in a stack.
+// constructTerraformComponentVarfilePath delegates to the Terraform component.
 func constructTerraformComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	return filepath.Join(
-		constructTerraformComponentWorkingDir(atmosConfig, info),
-		constructTerraformComponentVarfileName(info),
-	)
+	return terraformcomponent.ConstructTerraformComponentVarfilePath(atmosConfig, info)
 }
 
-// constructTerraformComponentTestVarfilePath constructs the test varfile path for a terraform component in a stack.
+// constructTerraformComponentTestVarfilePath delegates to the Terraform component.
 func constructTerraformComponentTestVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	return filepath.Join(
-		constructTerraformComponentWorkingDir(atmosConfig, info),
-		constructTerraformComponentTestVarfileName(info),
-	)
+	return terraformcomponent.ConstructTerraformComponentTestVarfilePath(atmosConfig, info)
 }
 
-// constructTerraformComponentPlanfilePath constructs the planfile path for a terraform component in a stack.
+// constructTerraformComponentPlanfilePath delegates to the Terraform component.
 func constructTerraformComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	return filepath.Join(
-		constructTerraformComponentWorkingDir(atmosConfig, info),
-		constructTerraformComponentPlanfileName(info),
-	)
+	return terraformcomponent.ConstructTerraformComponentPlanfilePath(atmosConfig, info)
 }
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack.
