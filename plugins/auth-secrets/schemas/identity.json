@@ -3,10 +3,10 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "environment"
+    "env"
   ],
   "properties": {
-    "environment": {
+    "env": {
       "type": "object",
       "minProperties": 1,
       "maxProperties": 256,
