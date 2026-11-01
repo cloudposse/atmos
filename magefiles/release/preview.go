@@ -106,7 +106,7 @@ func (c *milestoneClient) reconcilePreview(m Milestone, version string) error {
 		// remain repairable on the next reconciliation.
 		return c.pinPreview(existing.NodeID, false)
 	}
-	body, err := c.renderPreview(m, version, items)
+	body, err := c.renderPreview(m, version, items, existing)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,9 @@ func findOwnedPreview(items []previewIssue, milestoneNumber int) (*previewIssue,
 	return existing, nil
 }
 
-func (c *milestoneClient) renderPreview(m Milestone, version string, items []previewIssue) (string, error) {
+// renderPreview reuses an intact saved preview when its inputs match; changed
+// inputs are summarized and checked against the body limit before any write.
+func (c *milestoneClient) renderPreview(m Milestone, version string, items []previewIssue, existing *previewIssue) (string, error) {
 	var body strings.Builder
 	fmt.Fprintf(&body, "%s\n\n## Upcoming release v%s\n\n[Milestone](https://github.com/%s/milestone/%d)\n\nThis issue is a preview, not a release approval. Use `atmos release cut` to publish after all milestone PRs merge.\n\n## Included pull requests\n\n", previewMarker(m.Number), version, c.Repo, m.Number)
 	notes, err := loadReleaseNotesSelection()
@@ -166,6 +168,10 @@ func (c *milestoneClient) renderPreview(m Milestone, version string, items []pre
 		entries = append(entries, notes.noteEntry(&pr))
 	}
 	notes.sortEntries(entries)
+	fingerprint := c.previewInputFingerprint(body.String(), m.State, entries, pulls)
+	if cached, ok := cachedPreviewBody(existing, fingerprint); ok {
+		return cached, nil
+	}
 	summaries, err := releasenotes.SummarizeEntries(c.Context, c.summaryHTTP, &c.summaryParams, entries)
 	if err != nil {
 		return "", fmt.Errorf("summarize preview for milestone %d: %w", m.Number, err)
@@ -179,10 +185,11 @@ func (c *milestoneClient) renderPreview(m Milestone, version string, items []pre
 	}
 	// Keep a byte limit and reject before writing; never partially overwrite
 	// an existing preview when its rendered contents exceed the API limit.
-	if body.Len() > previewBodyLimit {
+	rendered := cachePreviewBody(body.String(), fingerprint)
+	if len(rendered) > previewBodyLimit {
 		return "", fmt.Errorf("%w: preview for milestone %d exceeds issue body limit", ErrMilestonePolicy, m.Number)
 	}
-	return body.String(), nil
+	return rendered, nil
 }
 
 // writePreviewEntries writes sorted entries under category headings demoted one

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestReleasePreviewUsesAISummariesBeforeSizeCheck(t *testing.T) {
 	c.summaryParams = releasenotes.SummarizeParams{OpenAIAPIKey: "test-key", Model: "test-model"}
 	client := releasenotes.NewMockHTTPClient(gomock.NewController(t))
 	c.summaryHTTP = client
-	client.EXPECT().Do(gomock.Any()).Times(2).DoAndReturn(func(req *http.Request) (*http.Response, error) {
+	client.EXPECT().Do(gomock.Any()).Times(1).DoAndReturn(func(req *http.Request) (*http.Response, error) {
 		require.Equal(t, "https://api.openai.com/v1/chat/completions", req.URL.String())
 		require.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
 		prompt, err := io.ReadAll(req.Body)
@@ -54,6 +55,7 @@ func TestReleasePreviewUsesAISummariesBeforeSizeCheck(t *testing.T) {
 	require.NoError(t, c.previews())
 	body := createdPreviewBody(t, f)
 	require.Less(t, len(body), previewBodyLimit)
+	require.NotContains(t, body, "test-key")
 	for i := 1; i <= 60; i++ {
 		require.Contains(t, body, fmt.Sprintf("- #%d — Change %d", i, i))
 		require.Contains(t, body, fmt.Sprintf("Condensed change %d.", i))
@@ -63,8 +65,11 @@ func TestReleasePreviewUsesAISummariesBeforeSizeCheck(t *testing.T) {
 	require.Contains(t, body, "(merged)")
 	require.Contains(t, body, "(closed, unmerged — blocks release)")
 	require.Contains(t, body, "(open)")
-	require.NoError(t, c.previews())
-	require.Len(t, f.writes, 1, "identical summaries do not rewrite the preview")
+	slices.Reverse(f.issues[1])
+	c.summaryParams.OpenAIAPIKey = "rotated-key"
+	fresh := &milestoneClient{Client: c.Client, summaryHTTP: client, summaryParams: c.summaryParams}
+	require.NoError(t, fresh.previews())
+	require.Len(t, f.writes, 1, "unchanged inputs reuse the saved preview without another model call")
 }
 
 func TestReleasePreviewSummaryFailuresLeaveExistingIssueUntouched(t *testing.T) {
