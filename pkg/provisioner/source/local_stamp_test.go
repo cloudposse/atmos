@@ -28,6 +28,7 @@ func TestLocalSourceStamp(t *testing.T) {
 	base := localSourceStamp(spec)
 	require.NotEmpty(t, base)
 	assert.Equal(t, base, localSourceStamp(spec), "an untouched source has a stable stamp")
+	assert.Len(t, base, 32, "the stamp is a hex-encoded 128-bit digest")
 
 	t.Run("edit changes the stamp", func(t *testing.T) {
 		writeStampFile(t, filepath.Join(root, "main.tf"), "# two, longer")

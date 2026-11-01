@@ -1,9 +1,9 @@
 package source
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"os"
@@ -41,12 +41,15 @@ func localSourceRoot(spec *schema.VendorComponentSource) (string, bool) {
 // localSourceStamp digests a stat manifest (relative path, size, modification time, mode) of the
 // local directory source. It reads no file contents, so refreshing decisions stay cheap for
 // modules with many or large files. It returns an empty string for any other kind of source.
+//
+// The stamp is a change-detection token compared across processes, not a credential hash, so it uses
+// a non-cryptographic 128-bit FNV-1a digest. It stays stable for an unchanged source.
 func localSourceStamp(spec *schema.VendorComponentSource) string {
 	root, ok := localSourceRoot(spec)
 	if !ok {
 		return ""
 	}
-	hash := sha256.New()
+	hash := fnv.New128a()
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
