@@ -9,6 +9,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	g "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -436,4 +437,92 @@ func ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 	}
 
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
+}
+
+// GetAffectedComponents retrieves the list of affected components based on the
+// provided arguments, dispatching to the right git-target resolution mode
+// (repo path / clone-and-diff / local ref checkout). Exported so other
+// affected-target dispatchers (e.g. `atmos terraform lint --affected`) reuse
+// this switch instead of re-declaring it against the same three
+// ExecuteDescribeAffectedWith* functions.
+func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.GetAffectedComponents")()
+
+	return GetAffectedComponentsWithOptions(args, DescribeStacksErrorOptions{})
+}
+
+// GetAffectedComponentsWithOptions is GetAffectedComponents plus opt-in graceful degradation
+// for recoverable per-value YAML function errors (see DescribeStacksErrorOptions), dispatching
+// to the *WithOptions variant of whichever git-target resolution mode applies.
+//
+//nolint:gocritic // Preserve the existing value-based options API shared by describe entry points.
+func GetAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.GetAffectedComponentsWithOptions")()
+
+	if args == nil {
+		return nil, errUtils.ErrNilParam
+	}
+	return dispatchAffectedComponentsWithOptions(args, errOptions)
+}
+
+// dispatchAffectedComponentsWithOptions is GetAffectedComponentsWithOptions's git-target
+// dispatch switch, split out so the exported entry point stays a short nil-check + delegate.
+//
+//nolint:gocritic // Forward the value-based options consistently with the describe entry points below.
+func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
+	switch {
+	case args.RepoPath != "":
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
+			args.CLIConfig,
+			args.RepoPath,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.affectedFilter(),
+			args.AuthManager,
+			args.AuthDisabled,
+			errOptions,
+		)
+		return affectedList, err
+	case args.CloneTargetRef:
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
+			args.CLIConfig,
+			args.Ref,
+			args.SHA,
+			args.SSHKeyPath,
+			args.SSHKeyPassword,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.affectedFilter(),
+			args.AuthManager,
+			args.AuthDisabled,
+			errOptions,
+		)
+		return affectedList, err
+	default:
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
+			args.CLIConfig,
+			args.Ref,
+			args.SHA,
+			args.TargetBranch,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.affectedFilter(),
+			args.AuthManager,
+			args.AuthDisabled,
+			errOptions,
+		)
+		return affectedList, err
+	}
 }

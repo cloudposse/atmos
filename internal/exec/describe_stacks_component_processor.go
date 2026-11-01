@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/function/literalsource"
@@ -206,7 +207,7 @@ func newDescribeStacksProcessorWithAuthDisabled( //nolint:revive // argument-lim
 		skip:                  skip,
 		authManager:           authManager,
 		finalStacksMap:        make(map[string]any),
-		componentAuthResolver: createComponentAuthManager,
+		componentAuthResolver: terraformcomponent.CreateComponentAuthManager,
 		authManagerCache:      make(map[string]auth.AuthManager),
 	}
 }
@@ -253,7 +254,7 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 		return componentAuthManager, nil
 	}
 	authSection, hasAuth := componentSection[cfg.AuthSectionName].(map[string]any)
-	if !hasAuth || !hasDefaultIdentity(authSection) {
+	if !hasAuth || !terraformcomponent.HasDefaultIdentity(authSection) {
 		return componentAuthManager, nil
 	}
 
@@ -269,7 +270,7 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 
 	resolver := p.componentAuthResolver
 	if resolver == nil {
-		resolver = createComponentAuthManager
+		resolver = terraformcomponent.CreateComponentAuthManager
 	}
 	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
 	if createErr != nil {
@@ -298,7 +299,7 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 // processor and the nested terraform.state path key per-component AuthManagers identically and cannot
 // drift. See buildComponentAuthCacheKey in terraform_nested_auth_helper.go.
 func (p *describeStacksProcessor) componentAuthCacheKey(authSection map[string]any) (string, bool) {
-	return buildComponentAuthCacheKey(p.authManager, authSection)
+	return terraformcomponent.BuildComponentAuthCacheKey(p.authManager, authSection)
 }
 
 // cacheComponentAuthManager stores a resolved manager, lazily creating the map so struct-literal

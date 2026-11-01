@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -46,8 +47,8 @@ func deferredTargetAuthAndCache(ac *schema.AtmosConfiguration, component, stack 
 	}
 	cache := stackdeferred.CacheFor(ac, info)
 	if info.AuthDisabled {
-		manager := cache.LoadOrStore("auth.disabled", &authContextWrapper{stackInfo: info})
-		return manager.(*authContextWrapper), cache, nil
+		manager := cache.LoadOrStore("auth.disabled", &terraformcomponent.AuthContextWrapper{StackInfo: info})
+		return manager.(*terraformcomponent.AuthContextWrapper), cache, nil
 	}
 	manager, _ := info.AuthManager.(auth.AuthManager)
 	return manager, cache, nil
@@ -55,12 +56,12 @@ func deferredTargetAuthAndCache(ac *schema.AtmosConfiguration, component, stack 
 
 func inheritDeferredAuth(section map[string]any, parents []auth.AuthManager) map[string]any {
 	targetAuth, _ := section[cfg.AuthSectionName].(map[string]any)
-	if hasDefaultIdentity(targetAuth) || len(parents) == 0 || parents[0] == nil {
+	if terraformcomponent.HasDefaultIdentity(targetAuth) || len(parents) == 0 || parents[0] == nil {
 		return section
 	}
 	if parent := parents[0].GetStackInfo(); parent != nil {
 		parentAuth, _ := parent.ComponentSection[cfg.AuthSectionName].(map[string]any)
-		if hasDefaultIdentity(parentAuth) {
+		if terraformcomponent.HasDefaultIdentity(parentAuth) {
 			section = maps.Clone(section)
 			section[cfg.AuthSectionName] = parentAuth
 		}

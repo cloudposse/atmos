@@ -11,227 +11,28 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestEnsureTerraformComponentExists_ExistingComponent tests that existing components pass validation.
-func TestEnsureTerraformComponentExists_ExistingComponent(t *testing.T) {
-	// Create a temporary directory structure.
-	tempDir := t.TempDir()
-	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
-	require.NoError(t, os.MkdirAll(componentPath, 0o755))
-
-	// Create a minimal main.tf to make it a valid component.
-	mainTF := filepath.Join(componentPath, "main.tf")
-	require.NoError(t, os.WriteFile(mainTF, []byte("# vpc component\n"), 0o644))
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: filepath.Join("components", "terraform"),
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:      "vpc",
-		FinalComponent:        "vpc",
-		ComponentFolderPrefix: "",
-		ComponentSection:      map[string]any{},
-	}
-
-	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.NoError(t, err, "existing component should not return error")
-}
 
 // TestEnsureTerraformComponentExists_MissingComponentNoSource tests error for missing component without source.
-func TestEnsureTerraformComponentExists_MissingComponentNoSource(t *testing.T) {
-	tempDir := t.TempDir()
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: filepath.Join("components", "terraform"),
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:      "nonexistent",
-		FinalComponent:        "nonexistent",
-		ComponentFolderPrefix: "",
-		ComponentSection:      map[string]any{},
-	}
-
-	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.Error(t, err, "missing component without source should return error")
-	assert.Contains(t, err.Error(), "nonexistent")
-}
 
 // TestEnsureTerraformComponentExists_WorkdirPathSet tests that workdir path set by provisioner is accepted.
-func TestEnsureTerraformComponentExists_WorkdirPathSet(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Create workdir path.
-	workdirPath := filepath.Join(tempDir, "workdir", "vpc")
-	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: filepath.Join("components", "terraform"),
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:      "vpc",
-		FinalComponent:        "vpc",
-		ComponentFolderPrefix: "",
-		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey: workdirPath,
-		},
-	}
-
-	// Even though the original component path doesn't exist, the workdir path is set.
-	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.NoError(t, err, "component with workdir path set should pass")
-}
 
 // TestEnsureTerraformComponentExists_WithFolderPrefix tests component resolution with a folder prefix.
-func TestEnsureTerraformComponentExists_WithFolderPrefix(t *testing.T) {
-	tempDir := t.TempDir()
-	componentPath := filepath.Join(tempDir, "components", "terraform", "myprefix", "vpc")
-	require.NoError(t, os.MkdirAll(componentPath, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("# vpc\n"), 0o644))
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: filepath.Join("components", "terraform"),
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:      "vpc",
-		FinalComponent:        "vpc",
-		ComponentFolderPrefix: "myprefix",
-		ComponentSection:      map[string]any{},
-	}
-
-	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.NoError(t, err, "component with folder prefix should be found")
-}
 
 // TestEnsureTerraformComponentExists_ReturnsErrorWithBasePath tests the error message contains base path info.
-func TestEnsureTerraformComponentExists_ReturnsErrorWithBasePath(t *testing.T) {
-	tempDir := t.TempDir()
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: filepath.Join("components", "terraform"),
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:      "missing-comp",
-		FinalComponent:        "missing-comp",
-		ComponentFolderPrefix: "",
-		ComponentSection:      map[string]any{},
-	}
-
-	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "missing-comp")
-	assert.Contains(t, err.Error(), filepath.Join("components", "terraform"))
-}
 
 // TestExecuteTerraformGenerateVarfileCmd_Deprecated tests the deprecated command returns an error.
-func TestExecuteTerraformGenerateVarfileCmd_Deprecated(t *testing.T) {
-	err := ExecuteTerraformGenerateVarfileCmd(nil, nil)
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrDeprecatedCmdNotCallable)
-}
 
 // TestEnsureTerraformComponentExists_JITProvisionFails tests the error wrapping when JIT provisioning fails.
-func TestEnsureTerraformComponentExists_JITProvisionFails(t *testing.T) {
-	tempDir := t.TempDir()
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: filepath.Join("components", "terraform"),
-			},
-		},
-	}
-
-	// Component doesn't exist and has a source with an unreachable URI — JIT provision will fail.
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:      "jit-fail",
-		FinalComponent:        "jit-fail",
-		ComponentFolderPrefix: "",
-		ComponentSection: map[string]any{
-			"source": map[string]any{
-				"uri": "file:///nonexistent/path/to/source",
-			},
-		},
-	}
-
-	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
-	assert.Contains(t, err.Error(), "auto-provision")
-}
 
 // TestEnsureTerraformComponentExists_PostJITComponentAppears tests the path where JIT provisioning
 // succeeds (no source, returns nil) and the component directory appears at the standard path.
-func TestEnsureTerraformComponentExists_PostJITComponentAppears(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Do NOT create the component directory initially.
-	componentPath := filepath.Join(tempDir, "components", "terraform", "lazy-vpc")
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: filepath.Join("components", "terraform"),
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:      "lazy-vpc",
-		FinalComponent:        "lazy-vpc",
-		ComponentFolderPrefix: "",
-		ComponentSection:      map[string]any{},
-	}
-
-	// First call: component doesn't exist, no source, no workdir → error.
-	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.Error(t, err, "should fail when component doesn't exist")
-
-	// Now create the directory to simulate JIT provisioning having put it there.
-	require.NoError(t, os.MkdirAll(componentPath, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("# lazy-vpc\n"), 0o644))
-
-	// Second call: component now exists at the standard path.
-	err = ensureTerraformComponentExists(atmosConfig, info)
-	assert.NoError(t, err, "should pass when component exists")
-}
 
 // TestExecuteGenerateVarfile_ProcessStacksFails tests that ExecuteGenerateVarfile returns an error
 // when ProcessStacks fails due to missing stack config files.
@@ -360,35 +161,6 @@ func TestExecuteGenerateBackend_Integration(t *testing.T) {
 	assert.Contains(t, string(content), "nonprod-tfstate")
 }
 
-func TestVarfileVarsToWrite(t *testing.T) {
-	const secret = "genvarfile-secret-aa11bb22"
-	iolib.RegisterSecret(secret)
-
-	newInfo := func() *schema.ConfigAndStacksInfo {
-		return &schema.ConfigAndStacksInfo{
-			ComponentVarsSection: map[string]any{
-				"db_password": secret,
-				"region":      "us-east-1-genvarfile",
-			},
-		}
-	}
-
-	t.Run("default omits secrets", func(t *testing.T) {
-		info := newInfo()
-		got := varfileVarsToWrite(info, false, "test.tfvars.json")
-		_, hasSecret := got["db_password"]
-		assert.False(t, hasSecret, "secret var must be omitted from the varfile by default")
-		assert.Equal(t, "us-east-1-genvarfile", got["region"], "non-secret var must remain")
-	})
-
-	t.Run("with-secrets includes secrets", func(t *testing.T) {
-		info := newInfo()
-		got := varfileVarsToWrite(info, true, "test.tfvars.json")
-		assert.Equal(t, secret, got["db_password"], "secret var must be written with --with-secrets")
-		assert.Equal(t, "us-east-1-genvarfile", got["region"])
-	})
-}
-
 // TestExecuteGenerateVarfile_SensitiveStateValueNeverLeaks reproduces the sensitive
 // YAML-function regression end-to-end. The explicit YAML tag must survive decoding,
 // the state lookup must be evaluated, and the sensitive consumer input must use
@@ -454,8 +226,8 @@ func TestExecuteGenerateVarfile_SensitiveStateValueNeverLeaks(t *testing.T) {
 		ComponentType:    cfg.TerraformComponentType,
 	}, true, true, true, nil, nil)
 	require.NoError(t, err)
-	computeTerraformSecretVarKeys(&info)
-	env, err := secretVarEnv(&info)
+	terraformcomponent.ComputeTerraformSecretVarKeys(&info)
+	env, err := terraformcomponent.SecretVarEnv(&info)
 	require.NoError(t, err)
 	joinedEnv := strings.Join(env, "\n")
 	assert.Contains(t, joinedEnv, "TF_VAR_sensitive_value="+resolved)

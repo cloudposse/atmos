@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	flagsPkg "github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -38,44 +39,7 @@ var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, th
 
 type DescribeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) DescribeAffectedExec
 
-type DescribeAffectedCmdArgs struct {
-	CLIConfig                   *schema.AtmosConfiguration
-	Base                        string // Unified base commit (ref or SHA). Takes precedence over Ref/SHA.
-	CloneTargetRef              bool
-	Format                      string
-	IncludeDependents           bool
-	IncludeSettings             bool
-	IncludeSpaceliftAdminStacks bool
-	OutputFile                  string
-	GithubOutputFile            string // Output file for $GITHUB_OUTPUT format (key=value).
-	Ref                         string
-	RepoPath                    string
-	SHA                         string
-	SSHKeyPath                  string
-	SSHKeyPassword              string
-	Verbose                     bool
-	Upload                      bool
-	Stack                       string
-	Query                       string
-	ProcessTemplates            bool
-	ProcessYamlFunctions        bool
-	Skip                        []string
-	ExcludeLocked               bool
-	Tags                        []string          // Keep only components whose `metadata.tags` contain any of these (from --tags).
-	LabelsRaw                   string            // Raw --labels value (comma-separated key=value pairs).
-	Labels                      map[string]string // Parsed --labels: keep only components whose `metadata.labels` contain all of these.
-	TagsEnvVar                  string            // Environment variable that supplied Tags (for example ATMOS_TAGS); empty when Tags came from the command line or are unset.
-	LabelsEnvVar                string            // Environment variable that supplied Labels; empty when Labels came from the command line or are unset.
-	Flatten                     bool              // Lift every dependent into the top-level list as `affected: dependent` (from --flatten); requires IncludeDependents.
-	FlattenEnvVar               string            // Environment variable that supplied Flatten; empty when it came from the command line or is unset.
-	AuthManager                 auth.AuthManager  // Optional: Auth manager for credential management (from --identity flag).
-	AuthDisabled                bool              // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
-	HeadSHAOverride             string            // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
-	CIEventType                 string            // CI event type (e.g., "pull_request", "push") for upload validation.
-	TargetBranch                string            // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
-	ErrorMode                   string            // How to handle recoverable errors: "strict" (default), "warn", or "silent".
-	Cmd                         *cobra.Command    // The invoking Cobra command, used to derive Flags for the exec-metadata sync capture (proexec.FlagsFromCommand).
-}
+type DescribeAffectedCmdArgs component.DescribeAffectedCmdArgs
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeAffectedExec interface {
