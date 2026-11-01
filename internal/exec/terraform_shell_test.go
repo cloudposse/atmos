@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -785,4 +786,19 @@ func TestPrepareShellExecution_InjectsAuthCredentials(t *testing.T) {
 		}
 	}
 	assert.True(t, hasProfile, "auth credentials must be injected into the shell env, got %v", info.ComponentEnvList)
+}
+
+// TestPrepareShellExecution_AuthErrorStopsSetup verifies an Atmos Auth pre-hook failure aborts
+// shell setup before backend generation and env assembly instead of continuing unauthenticated.
+func TestPrepareShellExecution_AuthErrorStopsSetup(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := newShellPrepInfo(tmpDir)
+	// A non-map providers section fails to decode into the auth config.
+	info.ComponentAuthSection = map[string]any{"providers": "not-a-map"}
+	cfg := &shellConfig{componentPath: tmpDir, workingDir: tmpDir, varFile: "dev-vpc.terraform.tfvars.json"}
+
+	err := prepareShellExecution(atmosConfig, info, cfg, false)
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	assert.Empty(t, info.ComponentEnvList, "env must not be assembled after an auth failure")
 }
