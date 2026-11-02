@@ -803,3 +803,31 @@ func TestGeminiMaxTokensVariations(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractGeminiUsage_IncludesThoughtsTokens(t *testing.T) {
+	result := &types.Response{}
+	extractGeminiUsage(&genai.GenerateContentResponseUsageMetadata{
+		PromptTokenCount:        10,
+		CandidatesTokenCount:    8,
+		ThoughtsTokenCount:      30,
+		CachedContentTokenCount: 4,
+		TotalTokenCount:         48,
+	}, result)
+
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(10), result.Usage.InputTokens)
+	assert.Equal(t, int64(38), result.Usage.OutputTokens, "output must include thinking tokens so input+output equals total")
+	assert.Equal(t, int64(48), result.Usage.TotalTokens)
+	assert.Equal(t, int64(4), result.Usage.CacheReadTokens)
+}
+
+func TestExtractGeminiUsage_NoThoughtsTokens(t *testing.T) {
+	result := &types.Response{}
+	extractGeminiUsage(&genai.GenerateContentResponseUsageMetadata{
+		PromptTokenCount:     10,
+		CandidatesTokenCount: 8,
+		TotalTokenCount:      18,
+	}, result)
+
+	assert.Equal(t, int64(8), result.Usage.OutputTokens)
+}
