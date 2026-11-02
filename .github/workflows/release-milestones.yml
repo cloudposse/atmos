@@ -74,6 +74,7 @@ jobs:
     if: always() && github.event_name != 'merge_group'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    environment: release-notes
     permissions:
       contents: read
       issues: write
@@ -89,3 +90,4 @@ jobs:
       - uses: ./.github/actions/release-preview
         with:
           github-token: ${{ github.token }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}

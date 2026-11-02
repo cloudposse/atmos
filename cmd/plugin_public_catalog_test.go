@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosoci "github.com/cloudposse/atmos/pkg/oci"
 )
 
 func TestPluginVerifyPublicCLI(t *testing.T) {
@@ -87,7 +88,9 @@ spec:
 	_, err = invokePluginCoverage(t, config, "catalog", "sync", target, "--inventory", "inventory.yaml", "--head", head.String(), "--skip-missing")
 	require.ErrorIs(t, err, errUtils.ErrPluginVersionNotFound, "committed inventory must reach registry reconciliation without a build plan")
 	_, err = invokePluginCoverage(t, config, "catalog", "sync", target, "--inventory", "inventory.yaml", "--verify-public")
-	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.True(t, atmosoci.IsNotFound(err), "public verification must reach the OCI registry, where the selected release is absent")
+	_, err = invokePluginCoverage(t, config, "catalog", "sync", target, "--inventory", "inventory.yaml", "--verify-public", "--skip-missing")
+	require.ErrorIs(t, err, errUtils.ErrPluginVersionNotFound)
 	_, err = invokePluginCoverage(t, config, "catalog", "sync", "bad alias", "--inventory", "inventory.yaml")
 	require.Error(t, err)
 	_, err = invokePluginCoverage(t, config, "catalog", "sync", target, "--inventory", "missing.yaml")

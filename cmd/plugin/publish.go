@@ -15,6 +15,7 @@ import (
 	atmosoci "github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/plugin/manage"
 	pluginoci "github.com/cloudposse/atmos/pkg/plugin/oci"
+	"github.com/cloudposse/atmos/pkg/plugin/publicaccess"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -60,11 +61,6 @@ func publishCommand() *cobra.Command {
 func publishLayout(ctx context.Context, manager *manage.Manager, layout string, values *viper.Viper) (*pluginoci.Release, error) {
 	repository := values.GetString(publishDestinationFlag)
 	access := newPublicVerifier()
-	if values.GetBool(verifyPublicFlag) {
-		if err := access.RequirePublic(ctx, repository); err != nil {
-			return nil, err
-		}
-	}
 	release, err := pluginoci.Publish(ctx, manager.Installer.Registry, layout, repository, manager.Installer.Descriptors, pluginoci.WithExecutableFormatCheck())
 	if err != nil {
 		return nil, err
@@ -80,7 +76,7 @@ func publishLayout(ctx context.Context, manager *manage.Manager, layout string, 
 	}
 	if values.GetBool(verifyPublicFlag) {
 		if _, err := access.Verify(ctx, repository, release.Digest, release.Digest); err != nil {
-			return nil, fmt.Errorf("release %s was published but public access verification failed: %w", reference, err)
+			return nil, publicaccess.PublicationError(repository, release.Digest, err)
 		}
 	}
 	return release, nil

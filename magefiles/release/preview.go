@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,6 +22,12 @@ func (Release) Previews(repo string) error {
 	c, err := newMilestoneClient(ctx, repo)
 	if err != nil {
 		return err
+	}
+	c.summaryHTTP = &http.Client{Timeout: releaseNotesHTTPTimeout}
+	c.summaryParams.OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
+	c.summaryParams.Model = os.Getenv("OPENAI_MODEL")
+	if c.summaryParams.Model == "" {
+		c.summaryParams.Model = defaultSummaryModel
 	}
 	return c.previews()
 }
@@ -99,7 +106,7 @@ func (c *milestoneClient) reconcilePreview(m Milestone, version string) error {
 		// remain repairable on the next reconciliation.
 		return c.pinPreview(existing.NodeID, false)
 	}
-	body, err := c.renderPreview(m, version, items)
+	body, err := c.renderPreview(m, version, items, existing)
 	if err != nil {
 		return err
 	}
@@ -136,7 +143,9 @@ func findOwnedPreview(items []previewIssue, milestoneNumber int) (*previewIssue,
 	return existing, nil
 }
 
-func (c *milestoneClient) renderPreview(m Milestone, version string, items []previewIssue) (string, error) {
+// renderPreview reuses an intact saved preview when its inputs match; changed
+// inputs are summarized and checked against the body limit before any write.
+func (c *milestoneClient) renderPreview(m Milestone, version string, items []previewIssue, existing *previewIssue) (string, error) {
 	var body strings.Builder
 	fmt.Fprintf(&body, "%s\n\n## Upcoming release v%s\n\n[Milestone](https://github.com/%s/milestone/%d)\n\nThis issue is a preview, not a release approval. Use `atmos release cut` to publish after all milestone PRs merge.\n\n## Included pull requests\n\n", previewMarker(m.Number), version, c.Repo, m.Number)
 	notes, err := loadReleaseNotesSelection()
@@ -159,7 +168,15 @@ func (c *milestoneClient) renderPreview(m Milestone, version string, items []pre
 		entries = append(entries, notes.noteEntry(&pr))
 	}
 	notes.sortEntries(entries)
-	writePreviewEntries(&body, entries, pulls)
+	fingerprint := c.previewInputFingerprint(body.String(), m.State, entries, pulls)
+	if cached, ok := cachedPreviewBody(existing, fingerprint); ok {
+		return cached, nil
+	}
+	summaries, err := releasenotes.SummarizeEntries(c.Context, c.summaryHTTP, &c.summaryParams, entries)
+	if err != nil {
+		return "", fmt.Errorf("summarize preview for milestone %d: %w", m.Number, err)
+	}
+	writePreviewEntries(&body, entries, pulls, summaries)
 	if len(entries) == 0 {
 		body.WriteString("No pull requests assigned yet.\n")
 	}
@@ -168,16 +185,17 @@ func (c *milestoneClient) renderPreview(m Milestone, version string, items []pre
 	}
 	// Keep a byte limit and reject before writing; never partially overwrite
 	// an existing preview when its rendered contents exceed the API limit.
-	if body.Len() > previewBodyLimit {
+	rendered := cachePreviewBody(body.String(), fingerprint)
+	if len(rendered) > previewBodyLimit {
 		return "", fmt.Errorf("%w: preview for milestone %d exceeds issue body limit", ErrMilestonePolicy, m.Number)
 	}
-	return body.String(), nil
+	return rendered, nil
 }
 
 // writePreviewEntries writes sorted entries under category headings demoted one
 // level below "Included pull requests". As in the release body, uncategorized
 // PRs get a heading only when other PRs are categorized.
-func writePreviewEntries(body *strings.Builder, entries []releasenotes.PREntry, pulls map[int]*releasePull) {
+func writePreviewEntries(body *strings.Builder, entries []releasenotes.PREntry, pulls map[int]*releasePull, summaries []string) {
 	categorized := false
 	for _, entry := range entries {
 		categorized = categorized || entry.Category != ""
@@ -186,7 +204,7 @@ func writePreviewEntries(body *strings.Builder, entries []releasenotes.PREntry, 
 		if i == 0 || entry.Category != entries[i-1].Category {
 			writePreviewHeading(body, previewHeading(entry.Category, categorized), i > 0)
 		}
-		writePreviewPR(body, entry.Number, pulls[entry.Number])
+		writePreviewPR(body, entry.Number, pulls[entry.Number], summaries[i])
 	}
 }
 
@@ -207,7 +225,7 @@ func writePreviewHeading(body *strings.Builder, heading string, separate bool) {
 	fmt.Fprintf(body, "#%s\n\n", heading)
 }
 
-func writePreviewPR(body *strings.Builder, number int, pr *releasePull) {
+func writePreviewPR(body *strings.Builder, number int, pr *releasePull, summary string) {
 	state := previewOpen
 	if pr.Merged {
 		state = "merged"
@@ -215,7 +233,7 @@ func writePreviewPR(body *strings.Builder, number int, pr *releasePull) {
 		state = "closed, unmerged — blocks release"
 	}
 	fmt.Fprintf(body, "- #%d — %s (%s)\n", number, strings.Join(strings.Fields(pr.Title), " "), state)
-	if summary := releasenotes.FallbackSummary(pr.Body); summary != "" {
+	if summary != "" {
 		fmt.Fprintf(body, "\n  %s\n\n", strings.ReplaceAll(summary, "\n", "\n  "))
 	}
 }

@@ -14,7 +14,7 @@ func catalogSyncCommand() *cobra.Command {
 		flags.WithStringFlag("inventory", "", "plugins/releases.yaml", "Repository-relative package inventory"),
 		flags.WithStringFlag("head", "", "HEAD", "Committed revision containing the accepted inventory"),
 		flags.WithBoolFlag("skip-missing", "", false, "Skip only releases absent from the registry"),
-		flags.WithBoolFlag("verify-public", "", false, "Require public GHCR packages and verify anonymous access"),
+		flags.WithBoolFlag("verify-public", "", false, "Verify releases anonymously before listing and the catalog after upload"),
 	)
 	command := &cobra.Command{Use: "sync <catalog>", Short: "Reconcile verified releases into a catalog in one publication", Args: cobra.ExactArgs(1)}
 	parser.RegisterFlags(command)

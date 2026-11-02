@@ -364,6 +364,71 @@ func TestForceColor_ColorProfile(t *testing.T) {
 	}
 }
 
+// TestColorProfileFor_HonorsForceFlagsRegardlessOfStream verifies that global
+// opt-outs (NO_COLOR, --force-color) apply to ColorProfileFor the same way
+// they apply to ColorProfile, for any stream argument -- these are explicit
+// overrides that must not depend on which stream's TTY status is consulted.
+func TestColorProfileFor_HonorsForceFlagsRegardlessOfStream(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	tests := []struct {
+		name       string
+		forceColor bool
+		noColor    bool
+		expected   ColorProfile
+	}{
+		{name: "NO_COLOR wins over force-color", forceColor: true, noColor: true, expected: ColorNone},
+		{name: "force-color enabled returns TrueColor", forceColor: true, noColor: false, expected: ColorTrue},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CI", "")
+			viper.Set("force-color", tt.forceColor)
+			viper.Set("force-tty", false)
+			viper.Set("no-color", false)
+			viper.Set("color", false)
+			if tt.noColor {
+				t.Setenv("NO_COLOR", "1")
+			}
+
+			term := New()
+
+			for _, stream := range []Stream{Stdin, Stdout, Stderr} {
+				assert.Equal(t, tt.expected, term.ColorProfileFor(stream),
+					"ColorProfileFor(%v) should match ColorProfile's own force-flag precedence", stream)
+			}
+			assert.Equal(t, term.ColorProfile(), term.ColorProfileFor(Stderr),
+				"ColorProfileFor(Stderr) must agree with ColorProfile, since ColorProfile is cached from stderr's TTY status")
+		})
+	}
+}
+
+// TestColorProfileForTTY_RespectsGivenTTYValue is a white-box test (same
+// package) of the precedence helper ColorProfileFor delegates to, proving the
+// auto-detect branch actually varies with whichever stream's TTY status is
+// passed in -- the real bug this exists to prevent: deciding color for one
+// stream (e.g. a subprocess's stdout) based on a different stream's TTY status.
+func TestColorProfileForTTY_RespectsGivenTTYValue(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	t.Setenv("CI", "")
+	t.Setenv("NO_COLOR", "")
+	viper.Set("force-color", false)
+	viper.Set("force-tty", false)
+	viper.Set("no-color", false)
+	viper.Set("color", true) // --color: enables when isTTY is true, ColorNone otherwise.
+
+	term := New().(*terminal)
+
+	assert.NotEqual(t, ColorNone, term.colorProfileForTTY(true),
+		"with --color and isTTY=true, color must be enabled")
+	assert.Equal(t, ColorNone, term.colorProfileForTTY(false),
+		"with --color and isTTY=false, color must stay disabled -- proves the TTY argument is actually honored")
+}
+
 func TestForceFlags_Combined(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()
