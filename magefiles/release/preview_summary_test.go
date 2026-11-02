@@ -120,6 +120,7 @@ func TestReleasePreviewEmptyMilestoneSkipsAI(t *testing.T) {
 func TestReleasePreviewWorkflowSuppliesSummaryKeyToTrustedCode(t *testing.T) {
 	var wf pipelineWorkflow
 	pipelineYAML(t, ".github/workflows/release-milestones.yml", &wf)
+	require.Equal(t, "release-notes", wf.Jobs["previews"].Environment, "release notes must use a dedicated environment without publishing credentials")
 	steps := wf.Jobs["previews"].Steps
 	checkout := pipelineUses(t, steps, "actions/checkout")
 	require.Equal(t, "${{ github.event.repository.default_branch }}", checkout.With["ref"])

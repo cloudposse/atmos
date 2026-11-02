@@ -5,6 +5,10 @@ per stable versioned milestone. PR links and merge states are refreshed from
 GitHub, with descriptions condensed by the same AI summarizer used for final
 release notes. Feature and nightly releases do not create issues.
 
+Here, a preview is a draft release-notes issue, not a website deployment.
+The workflow uses the dedicated `release-notes` GitHub environment for credentials.
+Configure `OPENAI_API_KEY` there; do not add release-signing or publishing secrets.
+GitHub issue updates use the job's built-in token with the declared permissions.
 Pass `openai-api-key` to enable AI summaries (`OPENAI_API_KEY` for direct Mage
 invocations); `OPENAI_MODEL` optionally overrides the shared release summary model.
 Without a key, previews use CodeRabbit summaries or truncated descriptions.
