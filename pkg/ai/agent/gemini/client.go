@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"math"
 
 	"google.golang.org/genai"
 
@@ -78,7 +79,8 @@ func (c *Client) generateContentConfig(geminiTools []*genai.Tool) *genai.Generat
 		Tools: geminiTools,
 	}
 	if c.config.MaxTokens > 0 {
-		config.MaxOutputTokens = int32(c.config.MaxTokens) //nolint:gosec // Token limits are far below math.MaxInt32.
+		// MaxOutputTokens is an int32; clamp so a very large configured value cannot wrap on 64-bit systems.
+		config.MaxOutputTokens = int32(min(c.config.MaxTokens, math.MaxInt32)) //nolint:gosec // Clamped to math.MaxInt32 above.
 	}
 	return config
 }

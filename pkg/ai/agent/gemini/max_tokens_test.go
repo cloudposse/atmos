@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -88,4 +89,16 @@ func TestClient_SendsConfiguredMaxTokens(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClient_ClampsMaxTokensToInt32(t *testing.T) {
+	var generationConfig map[string]any
+	var requestTools []any
+	// 1<<32 + 5 would wrap to 5 if converted to int32 without clamping.
+	client := newClientAgainst(t, 1<<32+5, &generationConfig, &requestTools)
+
+	_, err := client.SendMessage(context.Background(), "hi")
+	require.NoError(t, err)
+
+	assert.EqualValues(t, math.MaxInt32, generationConfig["maxOutputTokens"])
 }
