@@ -80,7 +80,7 @@ func (c *Client) generateContentConfig(geminiTools []*genai.Tool) *genai.Generat
 	}
 	if c.config.MaxTokens > 0 {
 		// MaxOutputTokens is an int32; clamp so a very large configured value cannot wrap on 64-bit systems.
-		config.MaxOutputTokens = int32(min(c.config.MaxTokens, math.MaxInt32)) //nolint:gosec // Clamped to math.MaxInt32 above.
+		config.MaxOutputTokens = int32(min(c.config.MaxTokens, math.MaxInt32))
 	}
 	return config
 }
