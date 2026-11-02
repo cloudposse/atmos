@@ -520,6 +520,18 @@ export AWS_PROFILE="bedrock-profile"
 Use the `global.` prefix for dynamic routing across regions, or the `anthropic.` prefix for a specific region. Cross-region inference profiles use IDs like `us.anthropic.claude-sonnet-4-6-v1:0`.
 :::
 
+:::note IAM permissions for the default model
+When `model` is not set, Atmos uses the global inference profile `global.anthropic.claude-sonnet-5`. Earlier versions defaulted to the foundation model `anthropic.claude-sonnet-4-5-20250929-v1:0`, so an IAM policy that only names that foundation-model ARN returns `AccessDenied`. Global cross-region inference needs `bedrock:InvokeModel` on all three resources (see the [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html)):
+
+- the inference profile in your region: `arn:aws:bedrock:<region>:<account>:inference-profile/global.anthropic.claude-sonnet-5`
+- the foundation model in your region: `arn:aws:bedrock:<region>::foundation-model/anthropic.claude-sonnet-5`
+- the global foundation model: `arn:aws:bedrock:::foundation-model/anthropic.claude-sonnet-5`
+
+Alternatively, set `model` explicitly to a model your policy already allows.
+
+Global inference profiles are not available in the AWS GovCloud regions (`us-gov-west-1`, `us-gov-east-1`). In those regions, set `model` to an ID that is valid there.
+:::
+
 #### Azure OpenAI
 
 :::warning Azure-Specific Configuration
