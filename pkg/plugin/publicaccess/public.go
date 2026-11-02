@@ -74,7 +74,7 @@ func New(options ...Option) *Client {
 	return c
 }
 
-// RequirePublic checks GHCR's package visibility before a publisher writes any bytes.
+// RequirePublic checks GHCR package visibility for the standalone metadata check.
 // The owner is derived from the repository; organization packages are supported.
 func (c *Client) RequirePublic(ctx context.Context, repository string) error {
 	defer perf.Track(nil, "publicaccess.RequirePublic")()
