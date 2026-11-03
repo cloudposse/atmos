@@ -34,20 +34,26 @@ func init() {
 func runSecretDelete(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretDelete")()
 
-	scope, err := parseScope(cmd, args)
-	if err != nil {
-		return err
-	}
-
 	all, _ := cmd.Flags().GetBool("all")
 	if all {
+		scope, err := parseScopeForStack(cmd, args, "delete")
+		if err != nil {
+			return err
+		}
 		return runSecretDeleteAll(cmd, scope)
 	}
 
+	name := ""
+	if len(args) > 0 {
+		name = args[0]
+	}
+	scope, err := parseScopeForName(cmd, args, name, "delete")
+	if err != nil {
+		return err
+	}
 	if len(args) != 1 {
 		return ErrSecretNameRequired
 	}
-	name := args[0]
 
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
@@ -70,7 +76,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ui.Successf("Deleted secret `%s` for component `%s` in stack `%s`", name, scope.Component, scope.Stack)
+	ui.Successf("Deleted secret `%s` for %s", name, describeScope(scope))
 	return nil
 }
 
@@ -78,7 +84,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 func runSecretDeleteAll(cmd *cobra.Command, scope secretScope) error {
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		confirmed, confErr := confirmActionFn("Delete ALL declared secrets for component `" + scope.Component + "` in stack `" + scope.Stack + "`?")
+		confirmed, confErr := confirmActionFn("Delete ALL declared secrets for " + describeScope(scope) + "?")
 		if confErr != nil {
 			return confErr
 		}
@@ -98,6 +104,6 @@ func runSecretDeleteAll(cmd *cobra.Command, scope secretScope) error {
 		return err
 	}
 
-	ui.Successf("Deleted %d declared secret(s) for component `%s` in stack `%s`", count, scope.Component, scope.Stack)
+	ui.Successf("Deleted %d declared secret(s) for %s", count, describeScope(scope))
 	return nil
 }
