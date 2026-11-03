@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -802,4 +803,11 @@ func TestGeminiMaxTokensVariations(t *testing.T) {
 			assert.Equal(t, tt.expected, client.GetMaxTokens())
 		})
 	}
+}
+
+func TestRequestTimeout(t *testing.T) {
+	assert.Equal(t, base.DefaultRequestTimeout, requestTimeout(nil))
+	assert.Equal(t, base.DefaultRequestTimeout, requestTimeout(&schema.AtmosConfiguration{}))
+	cfg := &schema.AtmosConfiguration{AI: schema.AISettings{TimeoutSeconds: 5}}
+	assert.Equal(t, 5*time.Second, requestTimeout(cfg))
 }
