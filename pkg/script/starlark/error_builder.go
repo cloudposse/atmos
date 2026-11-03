@@ -62,7 +62,8 @@ func (v *errorBuilderValue) Attr(name string) (starlark.Value, error) {
 			if err := starlark.UnpackArgs(b.Name(), args, kwargs); err != nil {
 				return nil, err
 			}
-			return nil, v.diagnostic.Err()
+			err := v.diagnostic.Err()
+			return nil, failWith(errUtils.ErrScriptRaised, err, "%s", err)
 		case "with_context":
 			return v.withContext(b, args, kwargs)
 		case "with_cause":

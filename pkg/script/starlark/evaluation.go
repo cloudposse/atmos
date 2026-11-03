@@ -27,6 +27,7 @@ func (e *Engine) EvaluateValue(ctx context.Context, spec script.Evaluation) (any
 	globals, sink := value.Globals(spec.Context)
 	globals["sum"] = starlark.NewBuiltin("sum", numericSum)
 	globals["round"] = starlark.NewBuiltin("round", numericRound)
+	globals["fail"] = starlark.NewBuiltin("fail", raiseFailure)
 	program, err := value.Compile(spec.Source, spec.Filename, spec.Line, globals)
 	if err != nil {
 		return nil, scriptError(ctx, err, "")

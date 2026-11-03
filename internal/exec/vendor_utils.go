@@ -583,7 +583,10 @@ func processTargets(params *processTargetsParams) ([]install.VendorPackage, erro
 		if err != nil {
 			return nil, err
 		}
-		targetPath := filepath.Join(params.VendorConfigFilePath, target)
+		targetPath := target
+		if !filepath.IsAbs(targetPath) {
+			targetPath = filepath.Join(params.VendorConfigFilePath, targetPath)
+		}
 		// Resolve to absolute so the vendor lock's target-containment check (pkg/vendoring/lockfile)
 		// compares two absolute paths; a relative VendorConfigFilePath otherwise makes targetPath
 		// relative to CWD, which the lock validation cannot reliably relate back to BasePath.
@@ -715,7 +718,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
 	}
 	if err == nil {
-		uri = &absPath
+		*uri = absPath
 		useLocalFileSystem = true
 		sourceIsLocalFile = u.FileExists(*uri)
 	}
@@ -726,9 +729,12 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	}
 	if parsedURL.Scheme != "" {
 		if parsedURL.Scheme == "file" {
-			trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
-			*uri = filepath.Clean(trimmedPath)
+			*uri, _ = vendor.ResolveFileURIPath(*uri)
+			if !filepath.IsAbs(*uri) {
+				*uri = filepath.Join(vendorConfigFilePath, *uri)
+			}
 			useLocalFileSystem = true
+			sourceIsLocalFile = u.FileExists(*uri)
 		}
 	}
 

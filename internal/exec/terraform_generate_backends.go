@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -318,6 +319,7 @@ func ExecuteTerraformGenerateBackends(
 				if err := finishValues(); err != nil {
 					return err
 				}
+				configAndStacksInfo.ComponentSection = literalsource.RestoreMap(configAndStacksInfo.ComponentSection)
 				if err := refreshTerraformGeneratorContext(atmosConfig, &configAndStacksInfo, stackFileName); err != nil {
 					return err
 				}

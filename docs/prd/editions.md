@@ -342,7 +342,7 @@ current schema.
   [PR #3352](https://github.com/cloudposse/atmos/pull/3352), and the migration note in
   [atmos-ai-local-providers.md](atmos-ai-local-providers.md#interactive-approval-and-progress-claude-code).
 
-  **Not gatable:** the auth credential realm isolation change (2026-02-10,
+  **Not gateable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
   break — cached credentials moved realms and every user had to re-login. Editions cannot roll it
   back; it is documented here so nobody expects a `KindBehavior` entry to cover it.

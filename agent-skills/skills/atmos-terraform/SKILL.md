@@ -69,10 +69,10 @@ components:
 
 ### Per-invocation override
 
-Pass `--terraform-command` on the CLI to override for a single command:
+Pass `--command` (or its compatibility alias `--terraform-command`) to override the executable for one invocation. Use one flag, with a name or path; put native arguments after `--`:
 
 ```bash
-atmos terraform plan vpc -s dev --terraform-command=tofu
+atmos terraform plan vpc -s dev --command=tofu
 ```
 
 ### Installing and Pinning the Binary via Toolchain

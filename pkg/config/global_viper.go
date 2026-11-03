@@ -159,6 +159,30 @@ func (r *mergedFilesRegistry) attach(parent, child *viper.Viper) func() {
 	}
 }
 
+// attachLowerPriority retains deferred defaults before sources already merged into the parent.
+// A separate tracker keeps cache imports in their own merge order without duplicating prior sources.
+func (r *mergedFilesRegistry) attachLowerPriority(parent, child *viper.Viper) func() {
+	r.mu.Lock()
+	tracker := r.trackers[parent]
+	imported := &mergedFilesTracker{}
+	if tracker != nil {
+		r.trackers[child] = imported
+	}
+	r.mu.Unlock()
+	return func() {
+		r.mu.Lock()
+		delete(r.trackers, child)
+		r.mu.Unlock()
+		if tracker == nil {
+			return
+		}
+		sources := imported.snapshot()
+		tracker.mu.Lock()
+		tracker.sources = append(sources, tracker.sources...)
+		tracker.mu.Unlock()
+	}
+}
+
 // track retains source content for a registered load or its attached import Viper.
 func (r *mergedFilesRegistry) track(v *viper.Viper, path string, content []byte) {
 	r.mu.Lock()

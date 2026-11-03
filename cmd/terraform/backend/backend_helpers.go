@@ -57,8 +57,6 @@ type promptedFlags struct {
 type Provisioner interface {
 	CreateBackend(params *CreateBackendParams) error
 	DeleteBackend(params *DeleteBackendParams) error
-	DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error
-	ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error
 }
 
 // defaultConfigInitializer implements ConfigInitializer using production code.
@@ -91,14 +89,6 @@ func (d *defaultProvisioner) DeleteBackend(params *DeleteBackendParams) error {
 		DescribeComponent: params.DescribeFunc,
 		AuthContext:       params.AuthContext,
 	})
-}
-
-func (d *defaultProvisioner) DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error {
-	return provisioner.DescribeBackend(atmosConfig, component, opts)
-}
-
-func (d *defaultProvisioner) ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error {
-	return provisioner.ListBackends(atmosConfig, opts)
 }
 
 // Package-level dependencies for production use. These can be overridden in tests.
@@ -284,51 +274,4 @@ func executeDeleteCommandWithValues(component, stack, identity string, force boo
 		DescribeFunc: describeFunc,
 		AuthContext:  authContext,
 	})
-}
-
-// executeDescribeCommandWithValues is the internal implementation for the describe command.
-// Used by commands that use StandardParser's prompting infrastructure. See promptedFlags for
-// what prompted records and why it's threaded through to InitConfigAndAuth.
-func executeDescribeCommandWithValues(component, stack, identity, format string, prompted promptedFlags) error {
-	// Validate required values.
-	if stack == "" {
-		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-			WithExplanation("--stack flag is required").
-			WithHint("Specify a stack with --stack or -s flag").
-			Err()
-	}
-
-	// Initialize config using injected dependency.
-	atmosConfig, _, err := configInit.InitConfigAndAuth(component, stack, identity, prompted.Component, prompted.Stack)
-	if err != nil {
-		return err
-	}
-
-	// Execute describe command using injected provisioner.
-	return prov.DescribeBackend(atmosConfig, component, map[string]string{"format": format})
-}
-
-// executeListCommandWithValues is the internal implementation for the list command.
-// Used by commands that use StandardParser's prompting infrastructure. The stackPrompted
-// parameter records whether stack was filled in via an interactive prompt (see
-// flags.StandardOptions.StackPrompted), so it can be threaded into auth.ReExecContext for
-// profile-fallback re-exec. There's no component parameter here (list operates across all
-// components in the stack), so componentPrompted is always false when calling InitConfigAndAuth.
-func executeListCommandWithValues(stack, identity, format string, stackPrompted bool) error {
-	// Validate required values.
-	if stack == "" {
-		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-			WithExplanation("--stack flag is required").
-			WithHint("Specify a stack with --stack or -s flag").
-			Err()
-	}
-
-	// Initialize config using injected dependency (no component needed for list).
-	atmosConfig, _, err := configInit.InitConfigAndAuth("", stack, identity, false, stackPrompted)
-	if err != nil {
-		return err
-	}
-
-	// Execute list command using injected provisioner.
-	return prov.ListBackends(atmosConfig, map[string]string{"format": format})
 }

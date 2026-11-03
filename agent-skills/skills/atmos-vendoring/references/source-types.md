@@ -31,17 +31,23 @@ The `//` delimiter separates the repository URL from the subdirectory within the
 
 ## OCI Registries
 
-Pull artifacts from OCI-compatible container registries:
+Extract files from any OCI image. No Atmos-specific image format, repository layout, or publisher
+is required. This example copies files from the nginx image to an asset directory:
 
 ```yaml
-# AWS ECR Public
-source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+source: "oci://docker.io/library/nginx:alpine"
+targets:
+  - "vendor-assets/nginx"
+```
 
-# GitHub Container Registry
-# source: "oci://ghcr.io/cloudposse/components/vpc:{{.Version}}"
+Select an image containing the files needed at your target. Replace the example registry,
+repository, and tag below with an existing image reference:
 
-# Docker Hub
-# source: "oci://docker.io/library/nginx:alpine"
+```yaml
+# AWS ECR Public: substitute an existing image reference.
+source: "oci://public.ecr.aws/YOUR_PUBLIC_ALIAS/example:{{.Version}}"
+# GitHub Container Registry: substitute an existing image reference.
+# source: "oci://ghcr.io/YOUR_ORG/example:{{.Version}}"
 ```
 
 OCI authentication precedence:

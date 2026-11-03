@@ -13,6 +13,7 @@ USAGE
 BUILT-IN COMMANDS
 
       add                 Add tools to .tool-versions file
+      aliases             List built-in and configured tool aliases
       clean               Clean tools and cache directories
       du                  Show disk space usage for installed tools
       env                 Export PATH entries for installed tools in shell-specific format

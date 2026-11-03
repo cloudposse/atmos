@@ -39,6 +39,8 @@ components:
   <dd>
     Specifies the executable to run for Ansible commands. Defaults to `ansible`.
 
+    For one invocation, use `--command /path/to/executable` (or `--ansible-command`). The flag overrides both this default and the stack component's `command`.
+
     Examples:
     - `ansible` - Use Ansible from PATH
     - `/usr/local/bin/ansible` - Use specific binary

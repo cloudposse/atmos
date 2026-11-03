@@ -118,7 +118,7 @@ The `spec` section follows the [Development Container Specification](https://con
     **Type:** object with fields:
     - `dockerfile` (string) - Path to Dockerfile
     - `context` (string) - Build context directory
-    - `args` (map) - Build arguments
+    - `args` (map) - Build arguments; key spelling is preserved to match Dockerfile `ARG` names
 
     **Example:**
     ```yaml
@@ -234,7 +234,7 @@ The `spec` section follows the [Development Container Specification](https://con
 <dl>
   <dt>`spec.containerEnv`</dt>
   <dd>
-    Environment variables to set inside the container.
+    Environment variables to set inside the container. Key spelling is preserved, including distinct uppercase and lowercase names.
 
     **Type:** object (key-value pairs)
 

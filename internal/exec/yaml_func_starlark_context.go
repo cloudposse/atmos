@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/degradation"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/script"
@@ -67,7 +68,7 @@ func (m *configurationContext) Get(key string) (any, bool, error) {
 	if _, unset := value.(UnsetMarker); unset {
 		return nil, false, nil
 	}
-	return value, true, err
+	return literalsource.Restore(value), true, err
 }
 
 func (r *configurationResolver) context() script.ValueMap {

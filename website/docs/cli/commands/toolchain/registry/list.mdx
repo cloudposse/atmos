@@ -23,7 +23,7 @@ List all configured registries or browse all tools available in a specific regis
 atmos toolchain registry list
 ```
 
-Shows all configured registries with their names, types, and tool counts.
+Shows effective registry names, types, and priorities without fetching tool catalogs. The built-in `atmos-builtin` registry is included. With no configured registries, `aqua-public` is also included.
 
 ### List Tools in a Registry
 
@@ -45,11 +45,18 @@ Output:
 ```
 Available registries:
 
-Default built-in registries:
+  - atmos-builtin (atmos, priority: 100)
   - aqua-public (aqua, priority: 10)
-
-Use 'atmos toolchain registry list aqua' to see tools in the Aqua registry.
 ```
+
+JSON and YAML formats also work without a registry name and return an array of `name`, `type`, and `priority` objects.
+
+```shell
+atmos toolchain registry list --format json
+atmos toolchain registry list my-tools --format yaml
+```
+
+`my-tools` must match a registry name in `toolchain.registries`. Named inspection reads that registry alone. Unknown names return an error.
 
 ### Browse Aqua Registry Tools
 
@@ -82,6 +89,8 @@ atmos toolchain registry list aqua --format json
 atmos toolchain registry list aqua --format yaml
 ```
 
+Inline registries honor `--limit` and `--offset` in stable `owner/repo` order. They use name order even when another sort is requested because inline definitions have no date or popularity metadata.
+
 ### Sort Results
 
 ```shell
@@ -103,7 +112,8 @@ atmos toolchain registry list aqua --sort popularity
         Name of the registry to list tools from. If omitted, lists all configured registries.
 
         Supported values:
-        - `aqua` or `aqua-public` - Official Aqua registry
+        - `aqua` or `aqua-public` - Configured registry with that name, or the default Aqua registry
+        - `atmos-builtin` - Curated tool definitions shipped with Atmos
         - Custom registry names from `atmos.yaml` configuration
     </dd>
 </dl>

@@ -992,13 +992,13 @@ func TestRunApplyAndDiffPrintResultsOnSuccess(t *testing.T) {
 	}
 
 	applyOut := captureKubernetesStderr(t, func() {
-		_, err := runApply([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+		_, err := runApply(context.Background(), []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
 		require.NoError(t, err)
 	})
 	assert.Contains(t, ansi.Strip(applyOut), "applied v1/ConfigMap default/settings")
 
 	diffOut := captureKubernetesStderr(t, func() {
-		_, err := runDiff([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+		_, err := runDiff(context.Background(), []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
 		require.NoError(t, err)
 	})
 	assert.Contains(t, ansi.Strip(diffOut), "v1/ConfigMap default/settings")
@@ -1111,22 +1111,22 @@ func TestRunOperationsUseSDKClientFactory(t *testing.T) {
 	newKubernetesSDKClient = func() (*sdkClient, error) {
 		return nil, errors.New("client failed")
 	}
-	_, err := runApply(nil)
+	_, err := runApply(context.Background(), nil)
 	require.ErrorContains(t, err, "client failed")
-	_, err = runDelete(nil)
+	_, err = runDelete(context.Background(), nil)
 	require.ErrorContains(t, err, "client failed")
-	_, err = runDiff(nil)
+	_, err = runDiff(context.Background(), nil)
 	require.ErrorContains(t, err, "client failed")
 
 	object := kubernetesObject("v1", "ConfigMap", "settings", "default")
 	newKubernetesSDKClient = func() (*sdkClient, error) {
 		return newFakeSDKClient(object.DeepCopy()), nil
 	}
-	_, err = runDelete([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+	_, err = runDelete(context.Background(), []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
 	require.NoError(t, err)
-	_, err = runApply([]*unstructured.Unstructured{object})
+	_, err = runApply(context.Background(), []*unstructured.Unstructured{object})
 	require.ErrorContains(t, err, "failed to apply")
-	_, err = runDiff([]*unstructured.Unstructured{object})
+	_, err = runDiff(context.Background(), []*unstructured.Unstructured{object})
 	require.ErrorContains(t, err, "server dry-run apply")
 }
 

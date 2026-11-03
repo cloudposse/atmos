@@ -19,6 +19,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	ctr "github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -44,6 +45,7 @@ const defaultStopTimeout = 10 * time.Second
 // resolved holds the merged, runtime-ready configuration for a container
 // component instance.
 type resolved struct {
+	retry       *recovery.Runner
 	atmosConfig schema.AtmosConfiguration
 	spec        ContainerSpec
 	env         map[string]string // container application env (incl. resolved secrets)
@@ -57,10 +59,11 @@ type resolved struct {
 
 // prepare resolves the component section (templates, YAML functions, secrets,
 // optional auth) and projects it onto a runtime-ready ContainerSpec.
-func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
+func prepare(info *schema.ConfigAndStacksInfo, commands ...string) (*resolved, error) {
 	defer perf.Track(nil, "container.prepare")()
 
 	info.ComponentType = cfg.ContainerComponentType
+	command := executionCommand(info.SubCommand, commands)
 	atmosConfig, err := initCliConfig(*info, true)
 	if err != nil {
 		return nil, err
@@ -100,8 +103,13 @@ func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
 		return nil, err
 	}
 
+	runner, err := executionRecovery(info, command)
+	if err != nil {
+		return nil, err
+	}
 	env := envListToMap(info.ComponentEnvList)
 	return &resolved{
+		retry:       runner,
 		atmosConfig: atmosConfig,
 		spec:        spec,
 		env:         env,
@@ -124,7 +132,12 @@ func (r *resolved) runtime(ctx context.Context) (ctr.Runtime, error) {
 	if setter, ok := resolution.runtime.(ctr.EnvSetter); ok {
 		setter.SetEnv(r.envList)
 	}
-	return resolution.runtime, nil
+	if r.retry == nil {
+		return resolution.runtime, nil
+	}
+	return ctr.WithRetry(resolution.runtime, func(ctx context.Context, stage string, fn func() error) error {
+		return recovery.Do(ctx, r.retry, stage, fn)
+	}), nil
 }
 
 // mounts returns runtime mounts with bind sources made absolute against the
@@ -205,7 +218,7 @@ func resolveComponentPath(ctx context.Context, atmosConfig *schema.AtmosConfigur
 func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteBuild")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "build")
 	if err != nil {
 		return err
 	}
@@ -243,7 +256,7 @@ func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 func ExecutePush(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecutePush")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "push")
 	if err != nil {
 		return err
 	}
@@ -291,7 +304,7 @@ func ExecutePush(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 func ExecutePull(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecutePull")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "pull")
 	if err != nil {
 		return err
 	}
@@ -321,7 +334,7 @@ func ExecutePull(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteRun")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "run")
 	if err != nil {
 		return err
 	}
@@ -370,7 +383,7 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteUp")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "up")
 	if err != nil {
 		return err
 	}
@@ -432,8 +445,8 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 }
 
 // r2 prepares the instance and detects a runtime (no instance lookup).
-func r2(ctx context.Context, info *schema.ConfigAndStacksInfo) (*resolved, ctr.Runtime, error) {
-	r, err := prepare(info)
+func r2(ctx context.Context, info *schema.ConfigAndStacksInfo, commands ...string) (*resolved, ctr.Runtime, error) {
+	r, err := prepare(info, commands...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -454,8 +467,8 @@ type discovered struct {
 
 // discover prepares the instance, detects a runtime, and finds the container by
 // label, erroring if it is not found.
-func discover(ctx context.Context, info *schema.ConfigAndStacksInfo) (*discovered, error) {
-	r, runtime, err := r2(ctx, info)
+func discover(ctx context.Context, info *schema.ConfigAndStacksInfo, commands ...string) (*discovered, error) {
+	r, runtime, err := r2(ctx, info, commands...)
 	if err != nil {
 		return nil, err
 	}
@@ -567,4 +580,18 @@ func firstNonEmpty(values []string) string {
 		}
 	}
 	return ""
+}
+
+func executionCommand(command string, fallback []string) string {
+	if command == "" && len(fallback) > 0 {
+		return fallback[0]
+	}
+	return command
+}
+
+func executionRecovery(info *schema.ConfigAndStacksInfo, command string) (*recovery.Runner, error) {
+	if command == "" {
+		return nil, nil
+	}
+	return recovery.New(info, "container", command)
 }

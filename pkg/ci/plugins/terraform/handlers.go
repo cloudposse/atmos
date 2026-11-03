@@ -94,7 +94,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	return nil
 }
 
-// onBeforeApply handles the before.terraform.apply event.
+// onBeforeApply handles the before.terraform.apply and before.terraform.destroy events.
 // Creates a check run with in_progress status.
 func (p *Plugin) onBeforeApply(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeApply")()
@@ -107,7 +107,7 @@ func (p *Plugin) onBeforeApply(ctx *plugin.HookContext) error {
 	return nil
 }
 
-// onAfterApply handles the after.terraform.apply event.
+// onAfterApply handles the after.terraform.apply and after.terraform.destroy events.
 // Writes summary, outputs, and updates check run.
 func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterApply")()
@@ -423,11 +423,7 @@ func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputRes
 func (p *Plugin) writeSummary(ctx *plugin.HookContext, result *plugin.OutputResult) (string, error) {
 	defer perf.Track(ctx.Config, "terraform.Plugin.writeSummary")()
 
-	// Get template name - prefer config override, fall back to command name.
-	templateName := ctx.Command
-	if ctx.Config != nil && ctx.Config.CI.Summary.Template != "" {
-		templateName = ctx.Config.CI.Summary.Template
-	}
+	templateName := summaryTemplateName(ctx)
 
 	if templateName == "" {
 		return "", nil
@@ -439,28 +435,9 @@ func (p *Plugin) writeSummary(ctx *plugin.HookContext, result *plugin.OutputResu
 		return "", nil
 	}
 
-	// Build template context.
-	tmplCtx, err := p.buildTemplateContext(ctx.Info, ctx.CICtx, ctx.Output, ctx.Command, result)
+	rendered, err := p.renderSummary(ctx, result)
 	if err != nil {
-		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithExplanation("Failed to build template context").
-			Err()
-	}
-
-	// Load and render template.
-	rendered, err := ctx.TemplateLoader.LoadAndRender(
-		"terraform",
-		templateName,
-		defaultTemplates,
-		tmplCtx,
-	)
-	if err != nil {
-		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
-			WithCause(err).
-			WithExplanation("Failed to render template").
-			WithContext("template", templateName).
-			Err()
+		return "", err
 	}
 
 	// Write to job summary.

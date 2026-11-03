@@ -117,6 +117,10 @@ type AtmosConfiguration struct {
 	// configuration constructed by a caller that still needs catalog discovery.
 	ScaffoldConfigLoaded bool          `yaml:"-" json:"-" mapstructure:"-"`
 	Plugins              PluginsConfig `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
+	// PreserveStackLiterals is set only on a stack loader copy, including its nested includes.
+	PreserveStackLiterals bool `yaml:"-" json:"-" mapstructure:"-"`
+	// DeferStackIncludes preserves include expressions during static inspection without reading their sources.
+	DeferStackIncludes bool `yaml:"-" json:"-" mapstructure:"-"`
 	// AuthManager carries the same invocation-local manager passed by the caller.
 	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
 	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`
@@ -1910,6 +1914,7 @@ type DocsGenerate struct {
 }
 
 type ArgsAndFlagsInfo struct {
+	ComponentCommand       string
 	AdditionalArgsAndFlags []string
 	SubCommand             string
 	SubCommand2            string
@@ -1983,6 +1988,10 @@ type AuthContext struct {
 
 	// GCP holds GCP credentials if a GCP identity is active.
 	GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty" mapstructure:"gcp"`
+
+	// Environment holds native environment/v1 credentials for in-process consumers.
+	// Values remain invocation-scoped and are never exposed by whoami.
+	Environment map[string]string `json:"environment,omitempty" yaml:"environment,omitempty" mapstructure:"environment"`
 
 	// Future: Add other cloud providers as needed
 	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
@@ -2105,18 +2114,20 @@ type ConfigAndStacksInfo struct {
 	BaseComponent                 string
 	FinalComponent                string
 	Command                       string
-	SubCommand                    string
-	SubCommand2                   string
-	StackSection                  AtmosSectionMapType
-	ComponentSection              AtmosSectionMapType
-	ComponentVarsSection          AtmosSectionMapType
-	ComponentSettingsSection      AtmosSectionMapType
-	ComponentOverridesSection     AtmosSectionMapType
-	ComponentProvidersSection     AtmosSectionMapType
-	ComponentHooksSection         AtmosSectionMapType
-	ComponentEnvSection           AtmosSectionMapType
-	ComponentAuthSection          AtmosSectionMapType
-	ComponentEnvList              []string
+	// ComponentCommand is the per-invocation executable override from --command.
+	ComponentCommand          string
+	SubCommand                string
+	SubCommand2               string
+	StackSection              AtmosSectionMapType
+	ComponentSection          AtmosSectionMapType
+	ComponentVarsSection      AtmosSectionMapType
+	ComponentSettingsSection  AtmosSectionMapType
+	ComponentOverridesSection AtmosSectionMapType
+	ComponentProvidersSection AtmosSectionMapType
+	ComponentHooksSection     AtmosSectionMapType
+	ComponentEnvSection       AtmosSectionMapType
+	ComponentAuthSection      AtmosSectionMapType
+	ComponentEnvList          []string
 	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
 	// whose value contains a resolved secret (detected via the masker). These variables
 	// are excluded from the on-disk Terraform varfile and injected at runtime as

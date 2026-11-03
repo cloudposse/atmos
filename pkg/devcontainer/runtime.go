@@ -78,7 +78,7 @@ func ToCreateConfig(config *Config, containerName, devcontainerName, instance st
 	}
 
 	createConfig.Mounts = convertMounts(config, cwd)
-	createConfig.Ports = convertPorts(config.ForwardPorts)
+	createConfig.Ports = convertPortsWithAttributes(config.ForwardPorts, config.PortsAttributes)
 
 	return createConfig
 }
@@ -134,23 +134,25 @@ func convertMounts(config *Config, cwd string) []container.Mount {
 }
 
 func convertPorts(forwardPorts []any) []container.PortBinding {
-	if len(forwardPorts) == 0 {
-		return nil
-	}
+	return convertPortsWithAttributes(forwardPorts, nil)
+}
 
-	ports := make([]container.PortBinding, 0, len(forwardPorts))
-
+func convertPortsWithAttributes(forwardPorts []any, attributes map[string]PortAttributes) []container.PortBinding {
+	var ports []container.PortBinding
 	for _, port := range forwardPorts {
-		portNum := parsePortNumber(port)
-		if portNum > 0 {
-			ports = append(ports, container.PortBinding{
-				ContainerPort: portNum,
-				HostPort:      portNum,
-				Protocol:      "tcp",
-			})
+		// JSON includes decode numbers as float64.
+		if number, ok := port.(float64); ok {
+			port = int(number)
+		}
+		binding, err := parsePort(port, attributes)
+		if err == nil {
+			// Dev Container application protocols use TCP Docker bindings.
+			if binding.Protocol == "http" || binding.Protocol == "https" {
+				binding.Protocol = "tcp"
+			}
+			ports = append(ports, binding)
 		}
 	}
-
 	return ports
 }
 

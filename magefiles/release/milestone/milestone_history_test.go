@@ -61,7 +61,7 @@ func TestMilestoneGateRejectsPatchAfterMinorPRMerged(t *testing.T) {
 					githubtest.JSON(t, w, map[string]any{})
 				}
 			})
-			require.NoError(t, c.publishPolicyVerdicts([]ReleasePR{pending, exempt}, nil, nil))
+			require.NoError(t, c.publishPolicyVerdicts([]ReleasePR{pending, exempt}, nil, nil, "main"))
 			require.Equal(t, "failure", states[pending.Head.SHA]["state"], "the lowest milestone must still be viable from the unreleased commits")
 			require.Contains(t, states[pending.Head.SHA]["description"], "v1.233.1")
 			require.Contains(t, states[pending.Head.SHA]["description"], "#44")
@@ -136,6 +136,7 @@ func TestCheckReleaseHistory(t *testing.T) {
 				"compare/v1.233.0..." + githubtest.SHA:  map[string]any{"status": "ahead", "total_commits": 2, "commits": []map[string]string{{"sha": githubtest.SHA}, {"sha": githubtest.Base}}},
 				"commits/" + githubtest.SHA + "/pulls":  []map[string]int{{"number": 42}},
 				"commits/" + githubtest.Base + "/pulls": []map[string]int{{"number": 42}},
+				"commits/" + githubtest.SHA:             unsignedCommit("direct push"),
 			}
 			failPath := "unreachable"
 			switch scenario {
@@ -210,6 +211,87 @@ func TestCheckReleaseHistory(t *testing.T) {
 			if scenario == "landed stack missing milestone" {
 				require.ErrorContains(t, err, "requires a release milestone")
 			}
+		})
+	}
+}
+
+func unsignedCommit(message string) map[string]any {
+	return signedCommit(message, false, "octocat")
+}
+
+func signedCommit(message string, verified bool, login string) map[string]any {
+	return map[string]any{
+		"commit":    map[string]any{"message": message, "verification": map[string]bool{"verified": verified}},
+		"committer": map[string]string{"login": login},
+	}
+}
+
+// TestCheckReleaseHistoryUnassociatedCommit covers a merge-queue push whose PR GitHub
+// never marked merged, so the commit association endpoint stays empty.
+func TestCheckReleaseHistoryUnassociatedCommit(t *testing.T) {
+	patch := Milestone{1, "v1.233.1", "open"}
+	for _, tc := range []struct {
+		name    string
+		commit  map[string]any
+		pr      func(*PullRequest)
+		prFails bool
+		wantErr string
+		pulls   int
+	}{
+		{name: "signed subject names open no-release PR", commit: signedCommit("fix(deps): bump levenshtein (#42)\n\n* body", true, "web-flow"), pr: func(pr *PullRequest) {
+			pr.ReleasePR = policyPR("no-release", nil)
+			pr.Base.Ref = "main"
+			pr.Merged = false
+		}, pulls: 1},
+		{name: "signed subject names open PR with milestone", commit: signedCommit("fix: thing (#42)", true, "web-flow"), pr: func(pr *PullRequest) { pr.Merged = false }, pulls: 1},
+		{name: "signed subject missing milestone still enforced", commit: signedCommit("fix: thing (#42)", true, "web-flow"), pr: func(pr *PullRequest) { pr.Milestone = nil; pr.Merged = false }, wantErr: "requires a release milestone", pulls: 1},
+		{name: "unsigned commit", commit: signedCommit("fix: thing (#42)", false, "web-flow"), wantErr: "has no associated PR"},
+		{name: "not committed by GitHub", commit: signedCommit("fix: thing (#42)", true, "octocat"), wantErr: "has no associated PR"},
+		{name: "no PR number in subject", commit: signedCommit("fix: thing", true, "web-flow"), wantErr: "has no associated PR"},
+		{name: "PR number only in body", commit: signedCommit("fix: thing\n\nCloses (#42)", true, "web-flow"), wantErr: "has no associated PR"},
+		{name: "PR on another base", commit: signedCommit("fix: thing (#42)", true, "web-flow"), pr: func(pr *PullRequest) { pr.Base.Ref = "other" }, wantErr: "has no associated PR", pulls: 1},
+		{name: "PR not found", commit: signedCommit("fix: thing (#42)", true, "web-flow"), prFails: true, wantErr: "has no associated PR", pulls: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := PullRequest{ReleasePR: policyPR("patch", &patch)}
+			pr.Base.Ref = "main"
+			if tc.pr != nil {
+				tc.pr(&pr)
+			}
+			pullReads := 0
+			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos"), "/")
+				switch path {
+				case "":
+					githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
+				case "commits/main":
+					githubtest.JSON(t, w, map[string]string{"sha": githubtest.SHA})
+				case "compare/v1.233.0..." + githubtest.SHA:
+					githubtest.JSON(t, w, map[string]any{"status": "ahead", "total_commits": 1, "commits": []map[string]string{{"sha": githubtest.SHA}}})
+				case "commits/" + githubtest.SHA + "/pulls":
+					githubtest.JSON(t, w, []any{})
+				case "commits/" + githubtest.SHA:
+					githubtest.JSON(t, w, tc.commit)
+				case "pulls/42":
+					pullReads++
+					if tc.prFails {
+						http.NotFound(w, r)
+						return
+					}
+					githubtest.JSON(t, w, pr)
+				default:
+					t.Errorf("unexpected request %s", r.URL)
+					http.NotFound(w, r)
+				}
+			})
+			err := c.CheckReleaseHistory([]Milestone{patch}, "v1.233.0")
+			require.Equal(t, tc.pulls, pullReads, "the PR is read only for a GitHub-signed commit naming it")
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, ErrMilestonePolicy)
+			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
 }

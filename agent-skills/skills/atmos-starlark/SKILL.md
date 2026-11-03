@@ -115,8 +115,12 @@ workflows:
   the braces into a `load()`ed module, or use `!include.raw`). `!literal` also works on `command`, `interpreter`,
   `working_directory`, `timeout`, and single `env` values; on any other step field it fails config load.
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
-  `ui.warning` (`⚠`) write human status to stderr. Bare email addresses render once;
-  explicit Markdown links retain their destination. `log.trace/debug/info/warn/error(message, **fields)`
+  `ui.warning` (`⚠`) write Markdown-formatted human status to stderr. Emphasis, code, links, and
+  lists are interpreted even without color: ordered lists retain numbering, bullets render as `•`,
+  and bare emails/URLs render once. Explicit Markdown links retain their destination.
+  Escape Markdown punctuation for literal markers:
+  `ui.info("1\\. literal")` prints `▶ 1. literal` (two Starlark backslashes pass one to Markdown).
+  `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
   fields; it honors `ATMOS_LOGS_LEVEL`, `--logs-level`, and `logs.file`, and masks secrets.
   `ci.summary`, `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`,
@@ -197,16 +201,14 @@ dependencies.tools("jqlang/jq", "1.7.1")
 exec.run(["jq", "--version"])
 ```
 
-The existing dependency installer installs missing tools and scopes `PATH` to the
-invocation. Declare dependencies in the main thread before parallel tasks; declarations
-inside branches are rejected. Repeated identical pins are cached and conflicting
-versions fail. `atmos.toolchain("install", "jqlang/jq@1.7.1")` runs an explicit toolchain
-command like the CLI: it pins the tool in the project's `.tool-versions`, after which every
-Atmos command in that project installs it automatically. It returns the usual process result
-and does not change the calling script's `PATH`. Use `dependencies.tools` for a script-scoped
-pin that puts the tool on `PATH`. Spell tools `owner/name`; a short name such as `jq` fails
-when it matches more than one package. There
-is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
+The dependency installer installs missing tools and scopes `PATH` to this invocation.
+Declare dependencies in the main thread before parallel tasks; branch declarations are
+rejected. Identical pins are cached; conflicting versions fail.
+`atmos.toolchain("install", "jqlang/jq@1.7.1")` pins the tool in `.tool-versions`.
+Subsequent commands honor `toolchain.install`. It returns a process result without
+changing the script's `PATH`; use `dependencies.tools` for a script-scoped pin on `PATH`.
+Spell tools `owner/name`; ambiguous short names fail. There is no
+`atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
 
 ## Process input and file output
 

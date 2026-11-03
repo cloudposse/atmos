@@ -317,7 +317,7 @@ the command runs.
 ## Multi-CLI MCP Export
 
 `atmos mcp export` generates MCP client config from `mcp.servers`. The format adapts to the
-client based on the output path or `--format` flag.
+client based on the output filename: `.toml` selects Codex TOML; other extensions use JSON.
 
 | Client       | Native config path                  | Format | Export command                                       |
 |--------------|-------------------------------------|--------|------------------------------------------------------|
@@ -378,8 +378,9 @@ not describe it as creating a long-running background service for stdio servers.
 - Pin MCP package versions when repeatability matters; avoid unreviewed `@latest` in production workflows.
 - Use `atmos toolchain` for binaries that MCP servers need, then rely on export/toolchain PATH injection.
 - Use `--identity=false`, `off`, `0`, or `no` only when deliberately disabling Atmos Auth for a command.
-- The exported `.mcp.json` is safe to commit -- it contains no secrets (worst case: IAM role
-  names). Credentials resolve at runtime via `atmos auth exec`.
+- Export preserves explicitly configured server `env` values. Review those values before
+  committing client configuration. Credentials supplied by an Atmos Auth identity resolve at
+  runtime through the exported `atmos auth exec` wrapper.
 - For `awslabs/*` MCP servers, prefer a single `readonly` identity by default and switch only
   for servers that genuinely need elevated access.
 

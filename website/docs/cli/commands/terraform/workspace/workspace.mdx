@@ -87,20 +87,21 @@ components:
 
 This keeps state paths stable when upgrading component versions. See [folder-based versioning](/design-patterns/version-management/folder-based-versioning) for details.
 
-### Advanced: Dynamic Workspace Naming
+### Advanced: Dynamic Workspace Key Prefix
 
-For advanced use cases requiring dynamic workspace keys, `workspace_key_prefix` supports Go templates. This is configured at the stack level, not in `atmos.yaml`:
+With `templates.settings.enabled: true` in `atmos.yaml`, the S3 backend’s `workspace_key_prefix` supports Go templates. Configure the prefix under `backend.s3` in the stack manifest:
 
 ```yaml
 components:
   terraform:
     vpc:
       backend:
-        # Use Go templates for dynamic workspace key prefix
-        workspace_key_prefix: "{{.vars.namespace}}-{{.vars.environment}}-{{.vars.stage}}"
+        s3:
+          # Use Go templates for the workspace key prefix
+          workspace_key_prefix: "{{.vars.namespace}}-{{.vars.environment}}-{{.vars.stage}}"
 ```
 
-This allows you to construct workspace names dynamically based on stack variables, providing flexible workspace organization strategies.
+This derives the S3 workspace key prefix from stack variables. The Terraform workspace name is configured separately.
 
 ## Examples
 

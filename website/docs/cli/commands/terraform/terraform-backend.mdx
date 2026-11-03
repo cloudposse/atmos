@@ -69,11 +69,14 @@ This creates an S3 bucket (if it doesn't exist) with:
 
 ### List Backends
 
-Show all backend configurations in a stack:
+Inspect the merged backend configurations of concrete Terraform components in a stack:
 
 ```shell
 atmos terraform backend list --stack dev
+atmos terraform backend list --stack dev --format json
 ```
+
+The default table identifies the stack, component, and backend type. JSON and YAML return an array of records with `stack`, `component`, `backend_type`, and `backend` (the backend settings). Results are sorted by component name. Abstract components and components without a configured backend are omitted. A stack with no configured backends returns an empty list.
 
 ### Describe Backend Configuration
 
@@ -82,7 +85,12 @@ View a component's backend configuration from the stack:
 ```shell
 atmos terraform backend describe vpc --stack dev
 atmos terraform backend describe vpc --stack dev --format json
+atmos terraform backend describe vpc --stack dev --format table
 ```
+
+The default YAML output contains one record with `stack`, `component`, `backend_type`, and `backend`. JSON uses the same object shape; table output includes the backend settings. Missing stacks, components, or backend configuration produce an error.
+
+Both inspection commands read merged stack configuration, including imports and inheritance, for any backend type. They do not authenticate, invoke Terraform, provision resources, or check whether remote backend storage exists. Stack templates and YAML functions are left unevaluated, so dynamic settings appear as their configured expressions. Remote stack imports are rejected rather than fetched. Imports that require template evaluation cannot be resolved during inspection; use locally available manifests with static import paths. Normal CLI configuration loading still applies.
 
 ### Update Backend
 
@@ -122,7 +130,7 @@ atmos terraform backend create rds --stack dev
   <dd>Atmos stack name (required). Can also be set via `ATMOS_STACK` environment variable</dd>
 
   <dt>`--identity` / `-i`</dt>
-  <dd>Identity to use for authentication. Overrides component's default identity. Use without value to select interactively</dd>
+  <dd>Identity to use for create, update, and delete authentication. Overrides component's default identity. Inspection with list/describe does not authenticate. Use without value to select interactively</dd>
 
   <dt>`--format` / `-f`</dt>
   <dd>Output format for list and describe commands: `table`, `yaml`, `json` (default: varies by command)</dd>

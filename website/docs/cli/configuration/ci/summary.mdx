@@ -9,7 +9,7 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-The `ci.summary` section configures rich Markdown job summaries that are written after plan and apply
+The `ci.summary` section configures rich Markdown job summaries that are written after plan, apply, deploy, and destroy
 operations. On GitHub Actions, these are written to `$GITHUB_STEP_SUMMARY`.
 </Intro>
 
@@ -106,3 +106,7 @@ cat /tmp/summary.md
 - [CI Configuration](/cli/configuration/ci) - Full configuration reference
 - [Templates](/cli/configuration/ci/templates) - Custom template configuration
 - [Job Summaries](/ci/job-summaries) - Feature overview
+
+## Destroy Summaries
+
+Single-component Terraform destroy summaries report success or failure and the destroyed resource count. They use the `terraform.destroy` template (`destroy.md` by default) and are written to the same summary destination as plan and apply.

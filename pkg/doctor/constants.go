@@ -8,6 +8,8 @@ const (
 	documentConfig               = "config"
 	documentStack                = "stack"
 	documentVendor               = "vendor"
+	documentAtmosWorkflow        = "atmos-workflow"
+	documentScaffold             = "scaffold"
 	httpsScheme                  = "https://"
 	schemeSeparator              = "://"
 	repositoryInconclusive       = "inconclusive"

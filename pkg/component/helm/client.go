@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"helm.sh/helm/v4/pkg/action"
+	helmchart "helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
@@ -24,6 +25,7 @@ import (
 	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 )
 
 // actionContext bundles an initialized Helm action configuration and settings
@@ -102,7 +104,7 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 		return releaseActionResult{}, err
 	}
 
-	actx, err := newActionContext(spec.Namespace)
+	actx, err := newRecoveryActionContext(spec.Namespace, spec.recovery)
 	if err != nil {
 		return releaseActionResult{}, err
 	}
@@ -214,11 +216,13 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	}
 
 	chartRef := resolveUpgradeChartRef(client, spec)
-	chartPath, err := client.LocateChart(chartRef, actx.settings)
+	chartPath, err := recovery.Call(ctx, spec.recovery, "chart", func() (string, error) { return client.LocateChart(chartRef, actx.settings) })
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to locate Helm chart %q for upgrade: %w", errUtils.ErrHelmRenderFailed, spec.Chart, err)
 	}
-	loaded, err := loadChartForAction(ctx, chartPath, actx.settings, actx.cfg.RegistryClient, spec.DependencyUpdate)
+	loaded, err := recovery.Call(ctx, spec.recovery, "dependencies", func() (helmchart.Charter, error) {
+		return loadChartForAction(ctx, chartPath, actx.settings, actx.cfg.RegistryClient, spec.DependencyUpdate)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -317,10 +321,14 @@ func resolveUpgradeChartRef(client *action.Upgrade, spec *chartSpec) string {
 // it can serve as the baseline for a live diff. A release that does not exist
 // yet yields an empty manifest (every object is reported as added) rather than an
 // error. This is the only diff path that requires cluster access.
-func getDeployedManifest(releaseName, namespace string) (string, error) {
+func getDeployedManifest(releaseName, namespace string, runners ...*recovery.Runner) (string, error) {
 	defer perf.Track(nil, "helm.getDeployedManifest")()
 
-	actx, err := newActionContext(namespace)
+	var runner *recovery.Runner
+	if len(runners) > 0 {
+		runner = runners[0]
+	}
+	actx, err := newRecoveryActionContext(namespace, runner)
 	if err != nil {
 		return "", err
 	}
@@ -348,7 +356,7 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 	operationCtx, cancel := releaseOperationContext(ctx, spec.Lifecycle.Policy.Timeout)
 	defer cancel()
 
-	actx, err := newActionContext(spec.Namespace)
+	actx, err := newRecoveryActionContext(spec.Namespace, spec.recovery)
 	if err != nil {
 		return err
 	}

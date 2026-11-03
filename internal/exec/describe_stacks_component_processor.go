@@ -15,6 +15,7 @@ import (
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -73,6 +74,7 @@ type describeStacksProcessor struct {
 	components           []string
 	sections             []string
 	componentTypes       []string
+	staticOnly           bool
 	processTemplates     bool
 	processYamlFunctions bool
 	authDisabled         bool
@@ -334,6 +336,10 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	canResolveNameEarly := stackManifestName != "" ||
 		(p.atmosConfig.Stacks.NameTemplate == "" && GetStackNamePattern(p.atmosConfig) == "")
 
+	if p.staticOnly && p.includeEmptyStacks && !canResolveNameEarly && !p.hasRequestedComponents(stackMap) {
+		return p.includeStaticEmptyStack(stackFileName, stackMap)
+	}
+
 	if p.includeEmptyStacks && canResolveNameEarly {
 		initialName := stackFileName
 		if stackManifestName != "" {
@@ -493,7 +499,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	// Resolve the logical stack name.  When the name_pattern path is taken, ResolveStackName
 	// also returns the populated Context so that BuildTerraformWorkspace and template functions
 	// that read info.Context see non-zero values (matching the original monolith's behaviour).
-	stackName, resolvedContext, err := ResolveStackName(p.atmosConfig, stackFileName, stackManifestName, info, secs.vars)
+	stackName, resolvedContext, err := p.resolveStackName(stackFileName, stackManifestName, info, secs.vars)
 	if err != nil {
 		return err
 	}
@@ -555,7 +561,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	ensureComponentEntryInMap(p.finalStacksMap, stackName, typeName, componentName)
 
 	// Terraform-only: build and attach the Terraform workspace.
-	if opts.buildWorkspace {
+	if opts.buildWorkspace && !p.staticOnly {
 		workspace, wsErr := BuildTerraformWorkspace(p.atmosConfig, info)
 		if wsErr != nil {
 			return wsErr
@@ -639,6 +645,12 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		componentSection[sourcesSectionName] = sources
 		info.ComponentSection[sourcesSectionName] = sources
 	}
+
+	componentSection = literalsource.RestoreMap(componentSection)
+	if hasSources {
+		componentSection[sourcesSectionName] = restoreConfigSourceLiterals(sources)
+	}
+	info.ComponentSection = componentSection
 
 	// Write the (optionally filtered) sections into the result map.
 	includeEmpty := resolveIncludeEmpty(p.atmosConfig, opts.checkIncludeEmpty)
@@ -1119,16 +1131,15 @@ func processComponentSectionTemplates(
 		return result, nil
 	}
 
-	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-		templateInput,
-		atmosConfig.Templates.Settings.Delimiters,
-	)
-	if err != nil {
+	var settingsSectionStruct schema.Settings
+	if err := mapstructure.Decode(settingsSection, &settingsSectionStruct); err != nil {
 		return nil, err
 	}
-
-	var settingsSectionStruct schema.Settings
-	if err = mapstructure.Decode(settingsSection, &settingsSectionStruct); err != nil {
+	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+		templateInput,
+		effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+	)
+	if err != nil {
 		return nil, err
 	}
 

@@ -1409,7 +1409,11 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
-	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
+	importContent, err := importContextYAML(content)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prepare import context: %w", errUtils.ErrMergeConfiguration, err)
+	}
+	if err := tempViper.MergeConfig(bytes.NewReader(importContent)); err != nil {
 		return nil, fmt.Errorf("%w: merge main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
 
@@ -1428,13 +1432,9 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 		return nil, fmt.Errorf("%w: parse main config base path: %w", errUtils.ErrMergeConfiguration, err)
 	}
 	if _, err := mergeImports(tempViper, configDir, basePathSource, runtimeBasePath); err != nil {
-		// A required (non-optional) import that fails to load must abort the whole config load
-		// (fail closed). Other import failures stay lenient (historical warn-and-continue): a
-		// bad optional import does not abort configuration loading.
-		if errors.Is(err, errUtils.ErrRequiredImportFailed) {
-			return nil, err
-		}
-		log.Debug("error process explicit imports", "file", tempViper.ConfigFileUsed(), "error", err)
+		// Optional missing imports are handled by the import resolver. Setup, policy,
+		// and required-import errors must never silently discard shared configuration.
+		return nil, err
 	}
 
 	// Get commands after defaults and explicit imports (without main commands).
@@ -1519,10 +1519,17 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		}
 	}
 
+	providersBeforeEvaluation := tempViper.GetStringMap("auth.providers")
+
 	// Process YAML functions. Custom commands are decoded separately, anchored to this config
 	// file and the project base path, so their !include paths do not depend on the working directory.
 	if err := preprocessAtmosYamlFuncExceptCommands(content, tempViper, configFilePath); err != nil {
 		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
+	}
+	if processImports {
+		if err := mergeDeferredProvisionedIdentities(tempViper, providersBeforeEvaluation, configFilePath); err != nil {
+			return err
+		}
 	}
 	if processedCommands == nil {
 		processedCommands, err = extractCommandsWithYamlFunctionsForFile(content, configFilePath)
@@ -1842,8 +1849,7 @@ func effectiveImportBasePath(runtimeBasePath, declared, declaredSource string) (
 
 // mergeImports processes imports from the atmos configuration and merges them into the destination configuration.
 func mergeImports(dst *viper.Viper, configDir, basePathSource, runtimeBasePath string) (string, error) {
-	var src schema.AtmosConfiguration
-	err := dst.Unmarshal(&src, atmosDecodeHook(dst))
+	src, err := decodeConfigForImports(dst)
 	if err != nil {
 		return "", err
 	}
@@ -1998,7 +2004,35 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 		return err
 	}
 	rememberConfigOrigins(&root, sourceFile)
-	return processNode(&root, v, "")
+	if err := prepareDevcontainerKeys(&root, v); err != nil {
+		return err
+	}
+	return processConfigNodeWithAuthSource(&root, v, sourceFile)
+}
+
+// processConfigNodeWithAuthSource retains identities introduced by a whole-auth include.
+// Record only its resolved data, so reconstruction preserves literal names without
+// evaluating the include again or retaining Viper's dot-split identity prefixes.
+func processConfigNodeWithAuthSource(root *goyaml.Node, v *viper.Viper, sourceFile string) error {
+	auth := findYAMLMappingPath(root, AuthSectionName)
+	includedAuth := auth != nil && auth.Kind == goyaml.ScalarNode && isIncludeTag(auth.Tag)
+	if err := processNode(root, v, ""); err != nil {
+		return err
+	}
+	if !includedAuth {
+		return nil
+	}
+	// Decode and marshal as data: function-like strings must not become executable tags.
+	var resolved any
+	if err := auth.Decode(&resolved); err != nil {
+		return err
+	}
+	content, err := goyaml.Marshal(map[string]any{AuthSectionName: resolved})
+	if err != nil {
+		return err
+	}
+	mergedFilesReg.track(v, sourceFile, content)
+	return nil
 }
 
 // commandsAreUnset distinguishes explicit removal from an omitted commands block.
@@ -2605,6 +2639,8 @@ func commandEnvValueCommand(value map[string]any) (any, bool) {
 // It processes all merged config files (main config + imports) with later files taking precedence.
 // This function operates on a best-effort basis - errors are logged but don't fail config loading.
 func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) {
+	restoreDevcontainerKeys(atmosConfig.Devcontainer)
+	restoreMCPEnvironmentKeys(atmosConfig.MCP.Servers)
 	sources := collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed())
 	if len(sources) == 0 {
 		return
@@ -2861,7 +2897,8 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 
 	mergedIdentities := make(map[string]schema.Identity)
 	for name, identityData := range identityMaps {
-		var identity schema.Identity
+		// Keep fields resolved from whole-auth expressions, which raw source traversal cannot see.
+		identity := atmosConfig.Auth.Identities[name]
 		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result:           &identity,
 			WeaklyTypedInput: true,

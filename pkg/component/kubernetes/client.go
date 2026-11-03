@@ -20,6 +20,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 )
 
 const (
@@ -33,6 +35,7 @@ const (
 )
 
 type sdkClient struct {
+	recovery      *recovery.Runner
 	dynamicClient dynamic.Interface
 	mapper        meta.RESTMapper
 	namespace     string
@@ -86,7 +89,7 @@ func (c *sdkClient) Apply(ctx context.Context, objects []*unstructured.Unstructu
 
 	results := make([]objectResult, 0, len(objects))
 	for _, obj := range objects {
-		resource, namespace, err := c.resourceFor(obj)
+		resource, namespace, err := c.resourceFor(ctx, obj)
 		if err != nil {
 			return nil, err
 		}
@@ -97,9 +100,11 @@ func (c *sdkClient) Apply(ctx context.Context, objects []*unstructured.Unstructu
 		}
 
 		force := true
-		_, err = resource.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
-			FieldManager: fieldManager,
-			Force:        &force,
+		_, err = recovery.Call(ctx, c.recovery, "patch", func() (*unstructured.Unstructured, error) {
+			return resource.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
+				FieldManager: fieldManager,
+				Force:        &force,
+			})
 		})
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrKubernetesApply, obj.GetKind(), obj.GetName(), err)
@@ -120,14 +125,14 @@ func (c *sdkClient) Delete(ctx context.Context, objects []*unstructured.Unstruct
 
 	results := make([]objectResult, 0, len(objects))
 	for _, obj := range objects {
-		resource, namespace, err := c.resourceFor(obj)
+		resource, namespace, err := c.resourceFor(ctx, obj)
 		if err != nil {
 			return nil, err
 		}
 
 		// Use a distinct variable name so the not-found check below inspects the
 		// delete result, not the (already nil-checked) error from resourceFor.
-		deleteErr := resource.Delete(ctx, obj.GetName(), metav1.DeleteOptions{})
+		deleteErr := recovery.Do(ctx, c.recovery, "delete", func() error { return resource.Delete(ctx, obj.GetName(), metav1.DeleteOptions{}) })
 		if deleteErr != nil && !errors.IsNotFound(deleteErr) {
 			return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrKubernetesDelete, obj.GetKind(), obj.GetName(), deleteErr)
 		}
@@ -151,7 +156,7 @@ func (c *sdkClient) Diff(ctx context.Context, objects []*unstructured.Unstructur
 
 	results := make([]objectResult, 0, len(objects))
 	for _, obj := range objects {
-		resource, namespace, err := c.resourceFor(obj)
+		resource, namespace, err := c.resourceFor(ctx, obj)
 		if err != nil {
 			return nil, err
 		}
@@ -162,16 +167,20 @@ func (c *sdkClient) Diff(ctx context.Context, objects []*unstructured.Unstructur
 		}
 
 		force := true
-		dryRunObject, err := resource.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
-			FieldManager: fieldManager,
-			Force:        &force,
-			DryRun:       []string{metav1.DryRunAll},
+		dryRunObject, err := recovery.Call(ctx, c.recovery, "patch", func() (*unstructured.Unstructured, error) {
+			return resource.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
+				FieldManager: fieldManager,
+				Force:        &force,
+				DryRun:       []string{metav1.DryRunAll},
+			})
 		})
 		if err != nil {
 			return nil, fmt.Errorf("%w: server dry-run apply %s/%s: %w", errUtils.ErrKubernetesDiff, obj.GetKind(), obj.GetName(), err)
 		}
 
-		liveObject, err := resource.Get(ctx, obj.GetName(), metav1.GetOptions{})
+		liveObject, err := recovery.Call(ctx, c.recovery, "get", func() (*unstructured.Unstructured, error) {
+			return resource.Get(ctx, obj.GetName(), metav1.GetOptions{})
+		})
 		action := "changed"
 		switch {
 		case errors.IsNotFound(err):
@@ -210,7 +219,7 @@ func (c *sdkClient) Validate(ctx context.Context, objects []*unstructured.Unstru
 	results := make([]objectResult, 0, len(objects))
 	var errs []error
 	for _, obj := range objects {
-		resource, namespace, err := c.resourceFor(obj)
+		resource, namespace, err := c.resourceFor(ctx, obj)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -223,12 +232,17 @@ func (c *sdkClient) Validate(ctx context.Context, objects []*unstructured.Unstru
 		}
 
 		force := true
-		_, err = resource.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
-			FieldManager: fieldManager,
-			Force:        &force,
-			DryRun:       []string{metav1.DryRunAll},
+		_, err = recovery.Call(ctx, c.recovery, "patch", func() (*unstructured.Unstructured, error) {
+			return resource.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
+				FieldManager: fieldManager,
+				Force:        &force,
+				DryRun:       []string{metav1.DryRunAll},
+			})
 		})
 		if err != nil {
+			if guard.IsPolicyError(err) || ctx.Err() != nil {
+				return results, err
+			}
 			errs = append(errs, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrKubernetesValidate, obj.GetKind(), obj.GetName(), err))
 			continue
 		}
@@ -244,7 +258,7 @@ func (c *sdkClient) Validate(ctx context.Context, objects []*unstructured.Unstru
 	return results, stderrors.Join(errs...)
 }
 
-func (c *sdkClient) resourceFor(obj *unstructured.Unstructured) (dynamic.ResourceInterface, string, error) {
+func (c *sdkClient) resourceFor(ctx context.Context, obj *unstructured.Unstructured) (dynamic.ResourceInterface, string, error) {
 	if obj.GetName() == "" {
 		return nil, "", fmt.Errorf("%w: %s", errUtils.ErrKubernetesMissingMetadataName, resourceID(obj))
 	}
@@ -254,7 +268,9 @@ func (c *sdkClient) resourceFor(obj *unstructured.Unstructured) (dynamic.Resourc
 		return nil, "", fmt.Errorf("%w: %s", errUtils.ErrKubernetesMissingGVK, obj.GetName())
 	}
 
-	mapping, err := c.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	mapping, err := recovery.Call(ctx, c.recovery, "RESTMapping", func() (*meta.RESTMapping, error) {
+		return c.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	})
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: GVK %s: %w", errUtils.ErrKubernetesResolveResource, gvk.String(), err)
 	}

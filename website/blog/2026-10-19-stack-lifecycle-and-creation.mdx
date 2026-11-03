@@ -95,6 +95,10 @@ Dependency expansion is opt-in through `--include-dependencies[=N]` or `--includ
 
 Deleted definitions are reported separately. Recovery for deleted-component teardown is still pending: `stack deploy --affected --allow-destroy` fails before any operations start when the selection contains deletions. The existing flat `stack get`, `set`, `delete`, and `format` aliases are deprecated and hidden; use `stack config` instead. In particular, `stack delete` retains its configuration-editing behavior and does not remove a manifest.
 
+## Before You Upgrade
+
+Built-in commands take precedence over custom commands of the same name. If your `atmos.yaml` defines a custom `stack` command with a `plan`, `test`, `deploy`, `destroy`, or `create` subcommand, the built-in now runs in its place and your steps are ignored, with a warning. This changes what those commands do: `atmos stack deploy` applies every selected component with auto-approve, and `atmos stack destroy` destroys them. Rename any custom commands that use these names before upgrading.
+
 ## Get Involved
 
 Try the [mixed-component stack example](https://github.com/cloudposse/atmos/tree/main/examples/stack-lifecycle), including its application-stack scaffold and image-build hook, and share feedback through [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

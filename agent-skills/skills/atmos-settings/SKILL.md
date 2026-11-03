@@ -95,9 +95,10 @@ Discover and preview themes (a theme controls tables, markdown rendering, and he
 atmos theme list                 # List all available themes
 atmos theme list --recommended   # Only themes tested for optimal compatibility
 atmos theme show <theme-name>    # Preview a theme's palette and sample UI elements
-atmos theme browse               # Interactive/searchable theme gallery (docs site)
 atmos list themes                # Alias for 'theme list'; defaults to recommended-only, use --all for all
 ```
+
+Search and preview themes in the [web theme gallery](https://atmos.tools/cli/commands/theme/browse).
 
 Activate a theme via `ATMOS_THEME=<theme-name>` env var or `settings.terminal.theme` in
 `atmos.yaml`.

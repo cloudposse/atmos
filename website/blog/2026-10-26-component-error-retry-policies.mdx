@@ -1,0 +1,61 @@
+---
+slug: component-error-retry-policies
+title: "Conditional Retries for Component Error Events"
+authors: [osterman]
+tags: [feature]
+---
+
+Transient failures need different recovery rules depending on which operation failed. A network timeout during initialization should not restart an entire deployment, and a failed polling request should not repeat a completed mutation. Atmos [retry policies](/policies/retries) let you select the operation, match its failure, and give that invocation a bounded retry budget.
+
+<!--truncate-->
+
+## The Problem
+
+The existing [component retry configuration](/stacks/components/terraform/retry) matches subprocess output for Terraform, Helmfile, Packer, and Ansible. Teams also need conditions on structured SDK errors and consistent retry controls for native Helm, Kubernetes, CloudFormation, containers, and emulators.
+
+## The Fix
+
+Policies can now select explicit error events such as `terraform.init.error` and `kubernetes.apply.error`. A policy accepts one event, a list, or a component wildcard such as `terraform.*.error`. The `rule` selects qualifying failures, and `with` configures the retry budget and backoff.
+
+An initialization failure during a plan emits `terraform.init.error`. Terraform output lookups also have separate initialization, workspace, and output events. SDK integrations retry the failed call while preserving earlier successful steps.
+
+## How to Use It
+
+Save this document in your [policy directory](/policies/configuration):
+
+```yaml title="policy.d/retries.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: retries
+spec:
+  policies:
+    retry-terraform-network-errors:
+      description: >-
+        Retry initialization, planning, and output retrieval when
+        Terraform encounters transient network failures.
+      on:
+        - terraform.init.error
+        - terraform.plan.error
+        - terraform.output.error
+      action: retry
+      rule: input.output.matches('(?i)connection reset|TLS handshake timeout')
+      with:
+        max_attempts: 3
+        initial_delay: 2s
+
+    retry-kubernetes-unavailable:
+      description: Retry apply calls when the Kubernetes API is temporarily unavailable.
+      on: kubernetes.apply.error
+      action: retry
+      rule: input.error.message.matches('(?i)service unavailable')
+      with:
+        max_attempts: 3
+        initial_delay: 2s
+```
+
+The maximum attempt count includes the first invocation. Each failure receives fresh output and error facts. A selected retry policy supplies one budget; it does not multiply the existing component retry budget. See [retry settings and precedence](/policies/retries#retry-settings-and-precedence) for ordering, denial handling, and fallback behavior.
+
+## Get Involved
+
+Read the [event and failure-input reference](/policies/retries#events) to adapt these policies to your components, and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

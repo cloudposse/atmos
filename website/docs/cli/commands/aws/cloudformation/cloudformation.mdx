@@ -90,7 +90,10 @@ atmos aws cloudformation apply --affected --base origin/main
 
 Component operations accept `--all`, `--affected`, `--tags`, and `--labels`.
 Use Git comparison flags such as `--base` to select affected components.
-Apply runs dependencies first; deletion runs consumers first.
+Selection is limited to CloudFormation components. Within that selection, apply runs dependencies
+first; deletion runs consumers first. Cross-type `dependencies.components` declarations do not make
+these commands deploy Terraform prerequisites. Deploy those first with `atmos terraform apply` or
+a separate workflow step.
 
 ### CI Summaries
 

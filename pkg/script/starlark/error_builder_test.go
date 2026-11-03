@@ -29,7 +29,7 @@ func TestErrorBuilderDiagnostics(t *testing.T) {
     .fail())
 `)
 	require.ErrorIs(t, err, errUtils.ErrStarlark)
-	assert.Equal(t, prefixText+": Deployment blocked", err.Error())
+	assert.Equal(t, "Deployment blocked", err.Error())
 	assert.Equal(t, 3, errUtils.GetExitCode(err))
 	assert.ElementsMatch(t, []string{
 		"TITLE:Release error", "Set vars.owner before deploying.",
@@ -67,7 +67,7 @@ cause = errors.build("Registry rejected the image").with_hint("Check registry pe
     .fail())
 `)
 	require.Error(t, err)
-	assert.Equal(t, prefixText+": Release failed: Registry rejected the image: image api:v1", err.Error())
+	assert.Equal(t, "Release failed: Registry rejected the image: image api:v1", err.Error())
 	assert.ElementsMatch(t, []string{"Check registry permissions", "Retry the release after fixing access"}, cockroach.GetAllHints(err))
 	assert.Equal(t, 3, errUtils.GetExitCode(err), "outer error settings override the cause regardless of builder call order")
 }

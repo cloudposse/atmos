@@ -1,0 +1,64 @@
+---
+slug: bulk-terraform-plan-summaries
+title: "Restore Component Details in Bulk Terraform Plan Summaries"
+authors: [osterman]
+tags: [bugfix, dx]
+---
+
+When a pull request plans changes across many components, you need to see what will change, which plans
+failed, and which components need no action. Opening a separate log for every component makes that
+review slow. Atmos puts the normal component summaries beneath the bulk-plan overview so you can
+review those results together in your CI summary or pull request comment.
+
+<!--truncate-->
+
+## The Problem
+
+Previously, Atmos showed a summary table for bulk plans. That overview was helpful for seeing which
+components changed, but it left out the normal per-component plan summaries, including "No Changes"
+results. To review each plan in detail, you had to open the individual component logs.
+
+## The Fix
+
+[Bulk plans](/cli/commands/terraform/plan#github-actions-ci-output) keep the aggregate overview
+and append the normal summary for each executed component,
+including no-change results. The summaries use the same [CI templates](/cli/configuration/ci/templates)
+and configured overrides as single-component plans, ordered by stack and component. Skipped components
+remain in the overview with their reason.
+
+Durations are easier to read, using seconds, minutes, and hours.
+
+If the summary cannot fit all component details, Atmos includes a warning with guidance for narrowing
+the plan's scope:
+
+> [!WARNING]
+> Output exceeds the maximum summary size. Consider reducing scope using `--tags` or `--labels`.
+
+You can inspect omitted details in component logs. For successful plans, you can also use saved plan
+artifacts when available; failed plans do not produce plan artifacts.
+
+## How to Use It
+
+Run a bulk plan in CI as usual; no new configuration is needed:
+
+```shell
+atmos terraform plan --all -s dev --ci --max-concurrency 4
+```
+
+The same summary behavior applies to bulk plans selected with `--components`, `--query`, or `--affected`.
+
+For a report that exceeds the size budget, narrow the selected components using
+[tags or labels](/cli/commands/terraform/plan#plan-components-by-tags-and-labels):
+
+```shell
+atmos terraform plan --all -s dev --ci --tags production
+atmos terraform plan --all -s dev --ci --labels cost-center=platform
+```
+
+Replace these selectors with tags or labels defined on your components.
+
+## Get Involved
+
+See [PR #3580](https://github.com/cloudposse/atmos/pull/3580) for the change, or
+[open an issue](https://github.com/cloudposse/atmos/issues/new/choose) if a bulk-plan summary is missing
+information you need to review your infrastructure changes.

@@ -11,6 +11,9 @@ import (
 // ErrStarlark identifies embedded Starlark execution or configuration failures.
 var ErrStarlark = errors.New("starlark execution failed")
 
+// ErrScriptRaised identifies an intentional failure raised by a script.
+var ErrScriptRaised = errors.New("script raised a failure")
+
 var (
 	// ErrStarlarkInvalidArgument identifies invalid arguments passed to an embedded Starlark builtin.
 	ErrStarlarkInvalidArgument = errors.New("invalid starlark argument")
@@ -247,6 +250,7 @@ var (
 
 	ErrLabelNotFound                    = errors.New("component label not found")
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
+	ErrYamlFuncTemplateEmbedding        = errors.New("a YAML function value cannot be used in this template expression")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
 	ErrComponentFuncDuringManifestLoad  = errors.New("atmos.Component cannot be evaluated while stack manifests are being loaded")
 	ErrDeferredTemplateContextMissing   = errors.New("cannot resolve deferred !template value: template context is unavailable because template processing was disabled for this invocation")

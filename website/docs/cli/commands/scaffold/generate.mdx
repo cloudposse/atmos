@@ -582,7 +582,8 @@ stores, Git, and CI integrations.
 
   <dt>`--base-ref`</dt>
   <dd>
-    Override the recorded merge base (used with `--update`; defaults to `HEAD`). Only applies to
+    Override the recorded merge base (used with `--update`; uses the initial-generation commit
+    when recorded, otherwise `HEAD`). Only applies to
     `--update-strategy=tracked` — `rendered`'s base comes from the target's own recorded
     `.atmos/scaffold.yaml`, not `--base-ref`. Combining `--base-ref` with
     `--update-strategy=rendered` is rejected; drop `--base-ref` when using `rendered`.
@@ -611,7 +612,7 @@ stores, Git, and CI integrations.
   </dd>
 
   <dt>`--merge-strategy` (default `manual`)</dt>
-  <dd>Choose `manual`, `ours`, or `theirs` for merge conflicts.</dd>
+  <dd>Choose `manual`, `ours`, or `theirs` for merge conflicts. Unresolved manual conflicts return a nonzero exit code.</dd>
 
   <dt>`--max-changes` (default `50`)</dt>
   <dd>

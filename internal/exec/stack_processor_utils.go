@@ -157,6 +157,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	if atmosConfig != nil {
 		cacheKey += "\x00edition=" + atmosConfig.Edition
 	}
+	if atmosConfig != nil && atmosConfig.PreserveStackLiterals {
+		cacheKey += "\x00stack-literals"
+	}
 	if raw, found := localsExtractionCache.Load(cacheKey); found {
 		if cached, ok := raw.(*extractLocalsResult); ok {
 			return cloneExtractLocalsResult(cached), nil
@@ -360,7 +363,7 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	// Use ignoreMissingTemplateValues=false so templates with missing values fail
 	// (e.g., {{ .atmos_component }} when component context isn't available yet).
 	// The caller will fall back to raw values, preserving templates for later processing.
-	processed, err := processTmpl(atmosConfig, &tmplInput{name: filePath, value: yamlStr, data: context, manifestLoadFile: filePath})
+	processed, err := processTmpl(atmosConfig, &tmplInput{name: filePath, value: yamlStr, data: context, manifestLoadFile: filePath, yamlSource: true})
 	if err != nil {
 		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to process templates in section: %w", err))
 	}
@@ -613,6 +616,23 @@ func ProcessYAMLConfigFiles(
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFiles")()
 
+	return processYAMLConfigFilesWithOptions(atmosConfig, stacksBasePath, terraformComponentsBasePath,
+		helmfileComponentsBasePath, packerComponentsBasePath, ansibleComponentsBasePath, filePaths,
+		processStackDeps, processComponentDeps, ignoreMissingFiles, nil)
+}
+
+// processYAMLConfigFilesWithOptions shares the ordinary merge pipeline while propagating loader restrictions to every import.
+//
+//nolint:revive,gocognit,cyclop,funlen // Shared existing concurrent merge pipeline preserves its arguments, return shape, and processing order.
+func processYAMLConfigFilesWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksBasePath, terraformComponentsBasePath, helmfileComponentsBasePath, packerComponentsBasePath, ansibleComponentsBasePath string,
+	filePaths []string,
+	processStackDeps, processComponentDeps, ignoreMissingFiles bool,
+	loadOptions *StackLoadOptions,
+) ([]string, map[string]any, map[string]map[string]any, AllStacksDeferredContexts, error) {
+	defer perf.Track(atmosConfig, "exec.processYAMLConfigFilesWithOptions")()
+
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := make(map[string]any, count)
@@ -623,6 +643,9 @@ func ProcessYAMLConfigFiles(
 	results := make(chan stackProcessResult, count)
 	var wg sync.WaitGroup
 	wg.Add(count)
+	// Workers must finish before callers can change shared state, including on error.
+	// The results buffer holds every worker's result even if collection stops early.
+	defer wg.Wait()
 
 	for i, filePath := range filePaths {
 		go func(i int, p string) {
@@ -649,14 +672,18 @@ func ProcessYAMLConfigFiles(
 				mergeContext.EnableProvenance()
 			}
 
-			processingResult, mergeContext, err := ProcessYAMLConfigFileWithContext(
+			processingResult, mergeContext, err := processYAMLConfigFileWithContextInternal(
 				atmosConfig,
 				stackBasePath,
 				p,
+				stackBasePath,
+				schema.StackImportNestedImportsLocal,
 				map[string]map[string]any{},
 				nil,
+				nil,
+				stackimports.MetadataScope{Config: atmosConfig},
 				ignoreMissingFiles,
-				false,
+				loadOptions != nil && loadOptions.SkipTemplates,
 				atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
 				false,
 				map[string]any{},
@@ -665,6 +692,7 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				"",
 				mergeContext,
+				loadOptions,
 			)
 			if err != nil {
 				results <- stackProcessResult{index: i, err: err}
@@ -710,6 +738,12 @@ func ProcessYAMLConfigFiles(
 				return
 			}
 
+			if loadOptions != nil && loadOptions.StaticOnly {
+				// Retain merged globals so an empty stack can still resolve its logical name.
+				for _, section := range []string{cfg.VarsSectionName, cfg.SettingsSectionName, cfg.EnvSectionName} {
+					finalConfig[section] = processingResult.DeepMergedConfig[section]
+				}
+			}
 			finalConfig["imports"] = uniqueImports
 
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
@@ -837,6 +871,8 @@ type StackLoadOptions struct {
 	// SkipTemplates keeps Go templates unevaluated in the manifest and in everything it imports,
 	// whatever each import declares.
 	SkipTemplates bool
+	// StaticOnly rejects remote imports rather than downloading or authenticating to resolve them.
+	StaticOnly bool
 }
 
 // ProcessYAMLConfigFileWithOptions is ProcessYAMLConfigFile for callers that only need to choose where
@@ -1188,6 +1224,11 @@ func processYAMLConfigFileWithContextInternal(
 	mergeContext *m.MergeContext,
 	loadOptions *StackLoadOptions,
 ) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
+	// Keep literal preservation local to stack loading; generic/config/workflow decoders
+	// retain their existing plain-string contract. Includes inherit this copy.
+	stackConfig := *atmosConfig
+	stackConfig.PreserveStackLiterals = true
+	atmosConfig = &stackConfig
 	var stackConfigs []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
@@ -1301,7 +1342,7 @@ func processYAMLConfigFileWithContextInternal(
 		}
 
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath, sourceFile: filePath})
+		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath, sourceFile: filePath, yamlSource: true})
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely
@@ -1577,6 +1618,12 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
+		if loadOptions != nil && loadOptions.StaticOnly {
+			if err := stackimports.ValidateStaticImportPath(atmosConfig, imp, relativeFilePath); err != nil {
+				return nil, nil, err
+			}
+		}
+
 		// Render Go templates in the import path so an import can reference values
 		// (`settings`/`vars`/`env`) defined by earlier imports in this manifest, plus
 		// this import's own `context`. Only the path string is rendered here; the
@@ -1600,6 +1647,9 @@ func processYAMLConfigFileWithContextInternal(
 		isRemote := stackimports.IsRemote(imp)
 
 		// Check if the import is a remote URL.
+		if isRemote && loadOptions != nil && loadOptions.StaticOnly {
+			return nil, nil, fmt.Errorf("%w: cannot inspect remote import %q in %q without fetching it", errUtils.ErrInvalidImport, imp, relativeFilePath)
+		}
 		if isRemote {
 			// Resolve the per-import cache TTL, falling back to the global default.
 			importTTL := importStruct.TTL

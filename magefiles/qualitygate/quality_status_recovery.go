@@ -9,7 +9,12 @@ import (
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 )
 
-const qualityStatusBlockersPrefix = "<!-- atmos-quality-status-blockers:"
+const (
+	qualityStatusBlockersPrefix = "<!-- atmos-quality-status-blockers:"
+	// Marks a report evaluated after reporter runs stopped counting as CI evidence.
+	// v2: Quality Gate Signal runs joined the excluded reporter runs.
+	qualityReporterRunsExcluded = "<!-- atmos-quality-reporter-runs-excluded:v2 -->"
+)
 
 type qualityStatusBlocker struct {
 	SHA     string `json:"sha"`
@@ -44,7 +49,18 @@ func qualityStatusBlockersMarker(pr *githubapi.PR, gates []qualityGate) string {
 // A replaced orchestration run in an old report needs one fresh evaluation.
 // Reports predating status snapshots also need one when they contain statuses;
 // successful publication adds a snapshot, preventing a recurring full sweep.
+// A report blocked by the reporter's own run, including an unapproved Quality
+// Gate Signal run, is re-evaluated once at any age. The fresh report carries the
+// current marker, so a blocker from an untrusted run of the same path remains in
+// that report without selecting the PR on every schedule.
 func qualityLegacyStatusReport(body string) bool {
+	if !strings.Contains(body, qualityReporterRunsExcluded) {
+		for _, workflow := range []string{qualityReportWorkflow, qualityReconcileWorkflow, qualitySignalWorkflow} {
+			if strings.Contains(body, "workflow: "+workflow) {
+				return true
+			}
+		}
+	}
 	return !strings.Contains(body, qualityStatusBlockersPrefix) &&
 		(strings.Contains(body, releaseMilestonesWorkflow) || strings.Contains(body, "status: "))
 }

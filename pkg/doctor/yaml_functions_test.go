@@ -56,7 +56,11 @@ func TestYAMLFunctionNames(t *testing.T) {
 			}
 			d := &document{kind: kind, path: "stacks/dev.yaml", node: &node}
 			var report Report
-			scanYAMLFunctions(d, &Options{}, &report)
+			if kind == documentStack {
+				scanFunctionNode(d, d.node, []string{"vars"}, &report)
+			} else {
+				scanYAMLFunctions(d, &Options{}, &report)
+			}
 			if tt.message == "" {
 				require.Empty(t, report.Findings)
 				return
@@ -90,9 +94,16 @@ func TestYAMLFunctionProseWarningDoesNotFailRun(t *testing.T) {
 func TestYAMLFunctionsAcceptCanonicalCatalog(t *testing.T) {
 	for _, name := range fntag.AllYAML() {
 		t.Run(name, func(t *testing.T) {
-			d := &document{kind: documentStack, node: &yaml.Node{Kind: yaml.ScalarNode, Tag: name, Value: "unevaluated"}}
+			kind := yaml.ScalarNode
+			if name == "!append" {
+				kind = yaml.SequenceNode
+			}
+			if name == "!cel" {
+				return
+			} // Conditions have their own field-specific dispatcher.
+			d := &document{kind: documentStack, node: &yaml.Node{Kind: kind, Tag: name, Value: "unevaluated"}}
 			var r Report
-			scanYAMLFunctions(d, &Options{}, &r)
+			scanFunctionNode(d, d.node, []string{"vars"}, &r)
 			require.Empty(t, r.Findings)
 		})
 	}

@@ -1,37 +1,17 @@
 name: Quality Gate
 
+# Per-PR reports only. Repository-wide true-ups (schedule, merges, milestone and
+# release changes, manual runs) live in quality-reconcile.yml, so a long true-up
+# never holds or cancels a queued report for one PR.
 on:
+  # CI Timing Summary calls this once a PR's CI completes.
   workflow_call:
-  # Release eligibility can change without a new commit. Always run trusted
-  # default-branch code; these events never execute pull request source.
+  # A PR's release label or milestone can change without a new commit. Always
+  # run trusted default-branch code; these events never execute pull request source.
   pull_request_target:
-    types: [labeled, unlabeled, milestoned, demilestoned, closed]
-  milestone:
-    types: [created, opened, edited, closed, deleted]
-  release:
-    types: [published]
-  # Actions has no review-thread resolution trigger. Reconcile these changes
-  # and third-party events not delivered to Actions every 15 minutes, for open
-  # main PRs with a head commit from the last 24 hours or no usable report for
-  # their current head. Bot comments and labels do not select a PR.
-  schedule:
-    - cron: '*/15 * * * *'
-  workflow_dispatch:
+    types: [labeled, unlabeled, milestoned, demilestoned]
 
 permissions: {}
-
-# Serialize final reports per PR/head; scheduled recovery has its own group.
-concurrency:
-  group: >-
-    atmos-quality-report-${{
-      github.event.issue.number ||
-      github.event.workflow_run.pull_requests[0].number ||
-      github.event.check_run.pull_requests[0].number ||
-      github.event.workflow_run.head_sha ||
-      github.event.check_run.head_sha ||
-      github.event.sha ||
-      'all' }}
-  cancel-in-progress: false
 
 jobs:
   report:
@@ -40,6 +20,16 @@ jobs:
       github.event_name != 'pull_request_target' ||
       (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
       contains(fromJSON('["major","minor","patch","no-release"]'), github.event.label.name)
+    # Serialize reports per PR; the true-up has its own group. Job-level, so a
+    # skipped label event never enters the group and replaces a queued report.
+    concurrency:
+      group: >-
+        atmos-quality-report-${{
+          github.event.pull_request.number ||
+          github.event.workflow_run.pull_requests[0].number ||
+          github.event.workflow_run.head_sha ||
+          github.run_id }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
@@ -68,17 +58,8 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - name: Set up Go and restore build cache
-        uses: ./.github/actions/setup-go-cache
-      - name: Reconcile current-head quality gates
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: go tool mage quality:report "$GITHUB_REPOSITORY"
-      - name: Save recovered benchmark comparisons
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Report quality gates for this PR
+        uses: ./.github/actions/quality-gate
         with:
-          name: quality-gate-reports-${{ github.run_id }}-${{ github.run_attempt }}
-          path: build/benchmarks/report/
-          retention-days: 90
-          if-no-files-found: ignore
+          operation: report
+          github-token: ${{ github.token }}

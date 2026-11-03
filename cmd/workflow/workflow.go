@@ -58,6 +58,7 @@ func init() {
 	// Create StandardParser with functional options.
 	workflowParser = flags.NewStandardParser(
 		flags.WithStringFlag("file", "f", "", "Specify workflow file to run (optional if workflow name is unique)"),
+		flags.WithStringFlag("workflows-dir", "", "", "Override the directory containing workflow definitions"),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate the workflow without making any changes"),
 		flags.WithStringFlag("stack", "s", "", "Stack name"),
 		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),

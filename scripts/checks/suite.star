@@ -47,7 +47,8 @@ def run_suite(sandbox, mode, only, base, skip):
     if not config["files"]:
         message = "No files selected for **" + config["scope"] + "** checks."
         if config["scope"] == "pr":
-            message += " PR scope uses committed changes; stage edits and use `check staged`, or use `check all` for tracked working files."
+            command = "format" if config["mode"] == "format" else "check"
+            message += " PR scope uses committed changes; stage edits and use `atmos " + command + " staged`, or use `atmos " + command + " all` for tracked working files."
         ui.info(message)
     steps.test(
         name = "Repository checks · " + config["scope"],

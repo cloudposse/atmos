@@ -128,12 +128,22 @@ atmos terraform plan --all -s dev \
 
 When CI mode is enabled with `--ci`, `ci.enabled: true`, or GitHub Actions auto-detection,
 graph-backed multi-component `plan` runs write a single aggregate CI result after the scheduler
-finishes. This applies to `--all`, `--components`, and `--query` plan runs. Single-component
+finishes. This applies to `--all`, `--components`, `--query`, and `--affected` plan runs. Single-component
 `plan`, `apply`, and `deploy` keep their existing per-command CI output.
 
 In GitHub Actions, the aggregate result writes once to `$GITHUB_STEP_SUMMARY` and `$GITHUB_OUTPUT`.
 The job summary includes component counts, total resource counts, failed/changed/no-change/skipped
-groups, a per-component table, and details for failed or changed components. Output variables include
+groups, and a per-component table, followed by the normal formatted plan summary for every executed
+component—including components with no changes. Component summaries use the same templates and
+configured overrides as single-component plans, ordered by stack and component. Skipped components
+appear in the overview with their reason rather than a completed plan summary.
+
+The report is also used for the `summary` output and the aggregate pull request comment when enabled.
+If component summaries exceed the job-summary size budget, whole component sections are omitted and
+the report includes an omission notice. Inspect omitted details in component logs. For successful plans,
+you can also use saved plan artifacts when available; failed plans do not produce plan artifacts.
+
+Output variables include
 `has_changes`, `has_errors`, `exit_code`, resource totals, component totals, `summary`, `command`,
 `stack`, and `component`.
 

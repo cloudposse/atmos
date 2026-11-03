@@ -23,7 +23,7 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.2.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/adrg/xdg v0.5.3
 	github.com/agiledragon/gomonkey/v2 v2.14.2
 	github.com/alecthomas/chroma/v2 v2.27.0
@@ -32,7 +32,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.43.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
-	github.com/aws/aws-sdk-go-v2 v1.47.1
+	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.2
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.2
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.60.0
@@ -41,14 +41,14 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/eks v1.97.0
 	github.com/aws/aws-sdk-go-v2/service/inspector2 v1.57.0
 	github.com/aws/aws-sdk-go-v2/service/organizations v1.58.0
-	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.39.0
+	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.41.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.110.0
 	github.com/aws/aws-sdk-go-v2/service/securityhub v1.79.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.76.0
 	github.com/aws/aws-sdk-go-v2/service/sso v1.36.0
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.41.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.48.0
-	github.com/aws/smithy-go v1.28.1
+	github.com/aws/smithy-go v1.28.5
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -177,9 +177,9 @@ require (
 	github.com/Shopify/ejson v1.5.4
 	github.com/a8m/envsubst v1.4.3 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
-	github.com/agnivade/levenshtein v1.2.1
+	github.com/agnivade/levenshtein v1.2.2
 	github.com/andybalholm/brotli v1.2.1 // indirect
-	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/arsham/rainbow v1.2.1 // indirect
@@ -188,8 +188,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.19.1 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.34 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.1 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.1 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.6 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.6 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.1 // indirect
@@ -359,7 +359,7 @@ require (
 	github.com/nwaples/rardecode/v2 v2.2.3 // indirect
 	github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98
 	github.com/otiai10/mint v1.6.3 // indirect
-	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
+	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81 // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/pjbgf/sha1cd v0.7.0 // indirect
@@ -476,7 +476,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4 v4.1.0
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.76.4
 	github.com/cli/go-gh/v2 v2.16.0
-	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
+	github.com/cyberphone/json-canonicalization v0.0.0-20261011152517-32a48195b9b2
 	github.com/databus23/helm-diff/v3 v3.15.10
 	github.com/google/certificate-transparency-go v1.3.3
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
@@ -497,6 +497,7 @@ require (
 	golang.org/x/perf v0.0.0-20260409210113-8e83ce0f7b1c
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	k8s.io/api v0.36.3
+	k8s.io/cli-runtime v0.36.2
 )
 
 require (
@@ -638,7 +639,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	k8s.io/apiextensions-apiserver v0.36.1 // indirect
 	k8s.io/apiserver v0.36.1 // indirect
-	k8s.io/cli-runtime v0.36.2 // indirect
 	k8s.io/component-base v0.36.3 // indirect
 	k8s.io/kubectl v0.36.1 // indirect
 )

@@ -53,6 +53,10 @@ func ListToolVersions(showAll bool, limit int, toolName, format string) error {
 		return errUtils.ErrToolchainPlainFormatWithAllFlag
 	}
 
+	if toolName == "" {
+		return listConfiguredToolVersions(showAll, limit, format)
+	}
+
 	filePath := GetToolVersionsFilePath()
 	installer := NewInstaller()
 

@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -442,6 +443,14 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 
 // runRemoteOperation dispatches an operation after confirmation and client setup.
 func runRemoteOperation(octx *opContext, operation Operation, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+	runner, err := recovery.New(octx.Info, "aws/cloudformation", string(operation))
+	if err != nil {
+		return summary, err
+	}
+	if runner != nil {
+		client = &recoveryClient{CloudFormationClient: client, runner: runner}
+	}
+
 	handler, ok := operationHandlers[operation]
 	if !ok {
 		return summary, fmt.Errorf("%w: %q", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, operation)

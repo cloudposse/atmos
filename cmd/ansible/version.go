@@ -54,6 +54,11 @@ func runVersion(cmd *cobra.Command, _ []string) error {
 		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
 		ProfilesFromArg:         globalFlags.Profile,
 	}
+	var err error
+	configAndStacksInfo.ComponentCommand, err = flags.ComponentCommand(cmd, "ansible")
+	if err != nil {
+		return err
+	}
 
 	// Get the ansible component provider from the registry.
 	provider, ok := getComponentProvider("ansible")

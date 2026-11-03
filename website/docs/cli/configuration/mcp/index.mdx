@@ -115,7 +115,7 @@ These fields are compatible with the `mcpServers` JSON format used by Claude Cod
   <dd>Arguments passed to the command. Typically the package name and version (e.g., `awslabs.aws-pricing-mcp-server@latest`).</dd>
 
   <dt>`env`</dt>
-  <dd>Environment variables passed to the server subprocess. Supports [YAML functions](#yaml-functions-in-env-values) like `!env` and `!exec`.</dd>
+  <dd>Environment variables passed to the server subprocess. Key spelling is preserved, including distinct names such as `TOKEN` and `token`. Supports [YAML functions](#yaml-functions-in-env-values) like `!env` and `!exec`.</dd>
 </dl>
 
 ### Atmos Extensions

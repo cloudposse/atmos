@@ -578,7 +578,7 @@ func TestCustomRenderer_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestBuildStyleOptions_AsciiProfile tests that Ascii profile skips styles for NO_COLOR mode.
+// TestBuildStyleOptions_AsciiProfile tests that NO_COLOR keeps structural styles.
 func TestBuildStyleOptions_AsciiProfile(t *testing.T) {
 	cfg := &customRendererConfig{
 		colorProfile: termenv.Ascii,
@@ -586,7 +586,7 @@ func TestBuildStyleOptions_AsciiProfile(t *testing.T) {
 
 	styleOpts, err := buildStyleOptions(cfg)
 	assert.NoError(t, err)
-	assert.Empty(t, styleOpts, "Ascii profile should return empty style options")
+	assert.Len(t, styleOpts, 1, "Ascii profile needs uncolored Markdown layout styles")
 }
 
 // TestBuildStyleOptions_WithCustomStyles tests custom styles are used when provided.

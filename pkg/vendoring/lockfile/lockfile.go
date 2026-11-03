@@ -75,6 +75,9 @@ type Source struct {
 	Digest       string `yaml:"digest,omitempty" json:"digest,omitempty"`
 	ETag         string `yaml:"etag,omitempty" json:"etag,omitempty"`
 	LastModified string `yaml:"last_modified,omitempty" json:"last_modified,omitempty"`
+	// QueryDigest distinguishes fetch options such as Git refs without storing raw
+	// query parameters, which may contain credentials, in a committed receipt.
+	QueryDigest string `yaml:"query_digest,omitempty" json:"query_digest,omitempty"`
 	// VersionConstraint is the raw semver-range expression declared in a source's `version:` field
 	// (e.g. "^1.0.0"), populated only when `version:` was a range rather than an exact pin. Empty
 	// for every exact-pinned source -- the overwhelming common case. Distinct from Resolved above:
@@ -206,6 +209,9 @@ func normalizeSaveArtifacts(config *schema.AtmosConfiguration, lock *LockFile) e
 			return fmt.Errorf("%w: artifact %q: %w", ErrNormalizeLockTarget, id, targetErr)
 		}
 		artifact.Target = target
+		if digest := sourceQueryDigest(artifact.Source.Declared); digest != "" {
+			artifact.Source.QueryDigest = digest
+		}
 		artifact.Source.Declared = downloader.RedactSource(projectRelativeSource(config, artifact.Source.Declared))
 		artifact.Source.Resolved = downloader.RedactSource(projectRelativeSource(config, artifact.Source.Resolved))
 		sort.Slice(artifact.Files, func(i, j int) bool { return artifact.Files[i].Path < artifact.Files[j].Path })
@@ -631,6 +637,9 @@ func IsMaterialized(config *schema.AtmosConfiguration, params MaterializationPar
 	}
 	if artifact.Source.Declared != downloader.RedactSource(projectRelativeSource(config, params.Declared)) {
 		return notMaterialized("declared source changed")
+	}
+	if artifact.Source.QueryDigest != sourceQueryDigest(params.Declared) {
+		return notMaterialized("declared source query changed")
 	}
 	if !slices.Equal(artifact.IncludedPaths, params.IncludedPaths) || !slices.Equal(artifact.ExcludedPaths, params.ExcludedPaths) {
 		return notMaterialized("included/excluded paths changed")

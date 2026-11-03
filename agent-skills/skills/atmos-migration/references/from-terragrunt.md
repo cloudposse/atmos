@@ -315,13 +315,11 @@ define execution order. Ordering and value-passing across units is
 `dependencies.components` and `!terraform.state`, exactly as shown above, whether the
 source project uses classic Terragrunt or Terragrunt Stacks.
 
-One difference worth naming to the user: Terragrunt Stacks pins each unit's catalog
-source and version inline in the `unit` block. Atmos separates that concern into
-`vendor.yaml` (or direct component authoring), so a stack manifest's `components:`
-section only carries values, not source references. This is a cleaner separation of
-concerns, not a missing capability — see
-[from-terragrunt.md](#terraform-source-pinning--vendoring) above for the vendoring
-side.
+Terragrunt Stacks pins each unit's catalog source and version inline in the `unit`
+block. Atmos supports both centralized `vendor.yaml` declarations and per-component
+`source` declarations in stack manifests. Choose the ownership and versioning model
+that fits the repository; see [source pinning](#terraform-source-pinning--vendoring)
+and the component source configuration documentation.
 
 ## Migration Workflow
 

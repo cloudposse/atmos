@@ -127,27 +127,6 @@ func ProvisionWithParams(params *ProvisionParams) error {
 	return nil
 }
 
-// ListBackends lists all backends in a stack.
-func ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error {
-	defer perf.Track(atmosConfig, "provision.ListBackends")()
-
-	return errUtils.Build(errUtils.ErrNotImplemented).
-		WithExplanation("List backends functionality is not yet implemented").
-		WithHint("This feature is planned for a future release").
-		Err()
-}
-
-// DescribeBackend returns the backend configuration from stack.
-func DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error {
-	defer perf.Track(atmosConfig, "provision.DescribeBackend")()
-
-	return errUtils.Build(errUtils.ErrNotImplemented).
-		WithExplanation("Describe backend functionality is not yet implemented").
-		WithHint("This feature is planned for a future release").
-		WithContext("component", component).
-		Err()
-}
-
 // DeleteBackendParams contains parameters for the DeleteBackend function.
 type DeleteBackendParams struct {
 	AtmosConfig       *schema.AtmosConfiguration

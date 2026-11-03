@@ -65,7 +65,7 @@ spec:
     <dl>
       <dt>`ref`</dt>
       <dd>
-        Pass the `ref` as a query string with either the tag, branch, or commit hash to download the correct version of the artifact. e.g. `?ref={{.Version}}` will pass the `version` attribute to the `ref` query string.
+        Pass the `ref` as a query string with either the tag, branch, or commit hash to download the correct version of the artifact. e.g. `?ref={{.Version}}` will pass the `version` attribute to the `ref` query string. Changing the resolved `ref` makes the next pull recognize the new source, even when local files match the previous lock receipt. With strict lock enforcement, pass `--refresh-lock` to accept the change.
       </dd>
       <dt>`depth`</dt>
       <dd>
@@ -165,7 +165,7 @@ You can also use any of the [hundreds of go-template functions](/functions/templ
 
 ```yaml
 targets:
-  - "components/terraform/{{ .Component }}/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
+  - "components/terraform/{{ .Component }}/{{ (slice (splitList \".\" .Version) 0 2) | join \".\" }}"
 ```
 
 ## Authenticating to Private Git Repositories
@@ -240,7 +240,8 @@ metadata:
 spec:
   sources:
     - component: "vpc"
-      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/{{ .Component }}:{{ .Version }}"
+      # Example image reference: replace with the OCI image containing the files you need.
+      source: "oci://registry.example.com/team/{{ .Component }}:{{ .Version }}"
       version: "latest"
       targets:
         - "components/terraform/{{ .Component }}"

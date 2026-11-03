@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -44,7 +45,7 @@ func (r Resolver) ResolveStackName(
 		return name, schema.Context{}, nil
 
 	case atmosConfig.Stacks.NamePattern != "":
-		context := cfg.GetContextFromVars(varsSection)
+		context := cfg.GetContextFromVars(literalsource.RestoreMap(varsSection))
 		name, err := cfg.GetContextPrefix(stackFileName, context, atmosConfig.Stacks.NamePattern, stackFileName)
 		if err != nil {
 			// Fall back to filename when pattern validation fails.
@@ -68,6 +69,10 @@ func (r Resolver) ProcessStackContextPrefix(
 ) error {
 	defer perf.Track(atmosConfig, "naming.ProcessStackContextPrefix")()
 
+	// Workspace patterns need context for every stack naming strategy. Decode a
+	// copy so template inputs and cached component variables remain protected.
+	configAndStacksInfo.Context = cfg.GetContextFromVars(literalsource.RestoreMap(configAndStacksInfo.ComponentVarsSection))
+
 	// If stack has explicit name, skip template/pattern processing.
 	// The explicit name takes precedence over any generated name.
 	// Still populate Context from vars to avoid stale values from previous iterations.
@@ -75,7 +80,6 @@ func (r Resolver) ProcessStackContextPrefix(
 		if err := EnsureLiteralStackIdentity(stackName, stackManifestName, configAndStacksInfo.ComponentSection); err != nil {
 			return err
 		}
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.ContextPrefix = stackManifestName
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
@@ -90,9 +94,6 @@ func (r Resolver) ProcessStackContextPrefix(
 		}
 		configAndStacksInfo.ContextPrefix = tmpl
 	case atmosConfig.Stacks.NamePattern != "":
-		// Process context.
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-
 		var err error
 		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
 			configAndStacksInfo.Stack,

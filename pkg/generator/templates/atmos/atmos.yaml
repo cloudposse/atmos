@@ -1,8 +1,6 @@
 # Atmos CLI configuration
 # https://atmos.tools/cli/configuration
 
-version: 1
-
 # CLI configuration
 cli:
   colors: true

@@ -189,7 +189,7 @@ type apiErrorMapping struct {
 var knownAPIErrors = []apiErrorMapping{
 	{
 		patterns: []string{"Function calling is not enabled"},
-		message:  "This model doesn't support function calling (tool use). Please switch to a different model using Ctrl+P. Try gemini-2.5-flash or gemini-1.5-pro.",
+		message:  "This model doesn't support function calling (tool use). Please switch to a different model using Ctrl+P. Try gemini-3.8-flash.",
 	},
 	{
 		patterns: []string{"429", "Too Many Requests", "rate_limit_error"},

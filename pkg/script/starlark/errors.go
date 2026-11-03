@@ -160,6 +160,11 @@ func scriptError(ctx context.Context, err error, projectRoot string) error {
 		cause = recursionFailure(cause)
 	}
 	builder := errUtils.Build(errUtils.ErrStarlark).WithCause(displayError(projectRoot, cause))
+	if raised(cause) {
+		// The script intentionally rejected its input or check result. Keep its
+		// explanation and error chain without implying the interpreter broke.
+		builder = errUtils.Build(displayError(projectRoot, cause))
+	}
 	script.EnrichDiagnostics(builder, cause)
 	var eval *starlark.EvalError
 	if errors.As(err, &eval) {

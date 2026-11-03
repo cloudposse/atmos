@@ -611,3 +611,12 @@ func TestIsArchiveURI_CaseMatchesGoGetter(t *testing.T) {
 	assert.True(t, IsArchiveURI("https://example.com/module.ZIP?archive=zip"))
 	assert.True(t, IsArchiveURI("https://example.com/MODULE.zip"))
 }
+
+func TestSanitizeFileNameNativeAbsolutePaths(t *testing.T) {
+	for _, name := range []string{"context.tf", "context#copy.tf", "context%copy.tf"} {
+		source := filepath.Join(t.TempDir(), "source with spaces", name)
+		for _, path := range []string{source, filepath.ToSlash(source)} {
+			assert.Equal(t, name, SanitizeFileName(path), "native paths must not be parsed as URLs: %s", path)
+		}
+	}
+}

@@ -107,31 +107,3 @@ func (mr *MockProvisionerMockRecorder) DeleteBackend(params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBackend", reflect.TypeOf((*MockProvisioner)(nil).DeleteBackend), params)
 }
-
-// DescribeBackend mocks base method.
-func (m *MockProvisioner) DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts any) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeBackend", atmosConfig, component, opts)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DescribeBackend indicates an expected call of DescribeBackend.
-func (mr *MockProvisionerMockRecorder) DescribeBackend(atmosConfig, component, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeBackend", reflect.TypeOf((*MockProvisioner)(nil).DescribeBackend), atmosConfig, component, opts)
-}
-
-// ListBackends mocks base method.
-func (m *MockProvisioner) ListBackends(atmosConfig *schema.AtmosConfiguration, opts any) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListBackends", atmosConfig, opts)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ListBackends indicates an expected call of ListBackends.
-func (mr *MockProvisionerMockRecorder) ListBackends(atmosConfig, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBackends", reflect.TypeOf((*MockProvisioner)(nil).ListBackends), atmosConfig, opts)
-}

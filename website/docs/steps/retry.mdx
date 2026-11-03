@@ -21,6 +21,8 @@ steps:
       max_delay: 60s
 ```
 
+An omitted or empty (`retry: {}`) policy runs the step once. A nonempty policy enables retries; set `max_attempts` or `max_elapsed_time` to bound them.
+
 ## Fields
 
 <dl>
@@ -34,7 +36,7 @@ steps:
   <dd>Delay strategy: `constant`, `linear`, or `exponential`. Defaults to `constant`.</dd>
 
   <dt>`initial_delay`</dt>
-  <dd>Delay before the first retry.</dd>
+  <dd>Delay before the first retry. Omit for no delay.</dd>
 
   <dt>`max_delay`</dt>
   <dd>Maximum delay between retries.</dd>

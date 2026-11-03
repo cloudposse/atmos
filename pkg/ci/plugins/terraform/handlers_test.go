@@ -2552,3 +2552,52 @@ func TestCreateCheckRun_DetailsURLFromCIContext(t *testing.T) {
 		})
 	}
 }
+
+func TestDestroyBinding_WritesSummaryAndOutputs(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+	ctx := &plugin.HookContext{
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Summary: schema.CISummaryConfig{Enabled: boolPtr(true)}, Output: schema.CIOutputConfig{Enabled: boolPtr(true)}, Checks: schema.CIChecksConfig{Enabled: boolPtr(false)}}},
+		Provider:       mp, Command: "destroy", Info: &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "demo"}, Output: "Destroy complete! Resources: 1 destroyed.",
+	}
+	binding := findBinding(p.GetHookBindings(), "after.terraform.destroy")
+	require.NotNil(t, binding)
+	require.NoError(t, binding.Handler(ctx))
+	require.Len(t, mp.writer.summaries, 1)
+	assert.Contains(t, mp.writer.summaries[0], "Destroy")
+	assert.Regexp(t, "</summary>\n\n+```hcl", mp.writer.summaries[0])
+	assert.Equal(t, "destroy", mp.writer.outputs["command"])
+	assert.Equal(t, "1", mp.writer.outputs["resources_to_destroy"])
+	assert.Equal(t, "demo", mp.writer.outputs["component"])
+}
+
+func TestDestroyBinding_FailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("destroy", fmt.Errorf("%w: destroy denied", errUtils.ErrComponentExecutionFailed))
+	binding := findBinding(p.GetHookBindings(), "after.terraform.destroy")
+	require.NotNil(t, binding)
+	require.NoError(t, binding.Handler(ctx))
+	mp := ctx.Provider.(*mockProvider)
+	require.Len(t, mp.writer.summaries, 1)
+	assert.Contains(t, mp.writer.summaries[0], "Destroy Failed for")
+	assert.Regexp(t, "</summary>\n\n+```hcl", mp.writer.summaries[0])
+	assert.Contains(t, mp.writer.summaries[0], "destroy denied")
+	assert.NotContains(t, mp.writer.summaries[0], "Destroy Succeeded")
+}
+
+func TestDestroyBinding_WarningsStayInsideCallouts(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("destroy", errUtils.ErrComponentExecutionFailed)
+	ctx.Output = "Warning: First warning\n\nFirst detail\n\nWarning: Second warning\n\nSecond detail\n"
+	binding := findBinding(p.GetHookBindings(), "after.terraform.destroy")
+	require.NotNil(t, binding)
+	require.NoError(t, binding.Handler(ctx))
+	mp := ctx.Provider.(*mockProvider)
+	require.Len(t, mp.writer.summaries, 1)
+	summary := mp.writer.summaries[0]
+	for _, warning := range []string{"First", "Second"} {
+		assert.Contains(t, summary, "> [!WARNING]\n> ```\n> Warning: "+warning+" warning\n>\n> "+warning+" detail\n> ```")
+	}
+	assert.NotContains(t, summary, "> > Warning:")
+}

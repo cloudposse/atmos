@@ -9,6 +9,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
@@ -101,6 +102,9 @@ func (e *Executor) runOutputWithInitRecovery(
 		return outputMeta, nil
 	}
 
+	if guard.IsPolicyError(err) {
+		return nil, err
+	}
 	diag := autoinit.Classify(diagnosticText(err, stderrCapture))
 	optedOut := skipInit || config.InitMode == schema.TerraformInitModeNever
 	rec, policyErr := autoinit.ShouldRecover(diag, config.InitMode, config.InitReconfigure, config.InitUpgrade, optedOut)

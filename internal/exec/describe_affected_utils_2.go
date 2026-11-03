@@ -272,9 +272,10 @@ func deepEqualValues(a, b any) bool {
 		aSource, aTagged := yamlsource.Decode(aTyped)
 		bSource, bTagged := yamlsource.Decode(bTyped)
 		if aTagged || bTagged {
-			return aTagged && bTagged && aSource.Tag == bSource.Tag && aSource.Argument == bSource.Argument
+			return aTagged && bTagged && aSource.Tag == bSource.Tag && yamlsource.Comparable(aSource.Argument) == yamlsource.Comparable(bSource.Argument)
 		}
-		return aTyped == bTyped
+		// Embedded source metadata includes checkout paths, which differ between the compared trees.
+		return yamlsource.Comparable(aTyped) == yamlsource.Comparable(bTyped)
 
 	case int:
 		bTyped, ok := b.(int)

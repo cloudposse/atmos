@@ -280,6 +280,7 @@ func (s *session) predeclared() starlark.StringDict {
 		"config": configmodule.New(configmodule.Host{ReadFile: s.engine.readFile, ResolvePath: s.modulePath, HTTPClient: s.engine.schemaHTTP}),
 		"schema": configmodule.Schema(),
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
+		"fail":   starlark.NewBuiltin("fail", raiseFailure),
 		"module": module("module", starlark.StringDict{"load": starlark.NewBuiltin("module.load", s.loadModule)}),
 		"sum":    starlark.NewBuiltin("sum", numericSum),
 		"round":  starlark.NewBuiltin("round", numericRound),

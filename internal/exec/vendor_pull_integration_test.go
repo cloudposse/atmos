@@ -247,10 +247,7 @@ func vendorPullWorkflowSandbox(t *testing.T, srcDir string) string {
 
 	vendorYAML, err := os.ReadFile(filepath.Join(srcDir, "vendor.yaml"))
 	require.NoError(t, err, "Failed to read vendor.yaml fixture")
-	rewritten := strings.NewReplacer(
-		"file:///../../../fixtures/components/terraform/mock", mockComponentURI,
-		"../../../fixtures/components/terraform/mock", mockComponentURI,
-	).Replace(string(vendorYAML))
+	rewritten := strings.ReplaceAll(string(vendorYAML), "../../../fixtures/components/terraform/mock", mockComponentURI)
 	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "vendor.yaml"), []byte(rewritten), 0o644), "Failed to write vendor.yaml copy")
 
 	vendor2YAML, err := os.ReadFile(filepath.Join(srcDir, "vendor", "vendor2.yaml"))

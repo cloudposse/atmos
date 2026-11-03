@@ -1,0 +1,66 @@
+name: Quality Gate Reconcile
+
+# Repository-wide true-up. Per-PR reports (label and milestone changes, CI
+# completion) live in quality-report.yml with per-PR concurrency.
+on:
+  # A merged PR changes release viability for every remaining open PR.
+  pull_request_target:
+    types: [closed]
+  # Release eligibility can change without a new commit. Always run trusted
+  # default-branch code; these events never execute pull request source.
+  milestone:
+    types: [created, opened, edited, closed, deleted]
+  # Editing, unpublishing or deleting a release can change the stable baseline.
+  release:
+    types: [published, edited, unpublished, deleted]
+  # Actions has no review-thread resolution trigger. Reconcile these changes
+  # and third-party events not delivered to Actions every 15 minutes, for open
+  # main PRs with a head commit from the last 24 hours or no usable report for
+  # their current head. Bot comments and labels do not select a PR.
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+# One true-up at a time. A queued true-up replaced by a newer one loses nothing:
+# every run reads current repository state.
+concurrency:
+  group: atmos-quality-reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      statuses: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          # setup-go follows GitHub release redirects; the Go hosts cover its fallback.
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-actions
+            github-blob-storage
+            go-checksums
+            go-proxy
+            go-toolchain
+      - name: Check out trusted reporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Reconcile quality gates across open PRs
+        uses: ./.github/actions/quality-gate
+        with:
+          operation: reconcile
+          github-token: ${{ github.token }}

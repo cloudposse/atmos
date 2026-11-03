@@ -5,12 +5,16 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 )
 
 // destroyParser handles flag parsing for destroy command.
 var destroyParser *flags.StandardParser
+
+// capturedDestroyOutput is reset for each invocation and consumed by its after hooks.
+var capturedDestroyOutput string
 
 // destroyCmd represents the terraform destroy command.
 var destroyCmd = &cobra.Command{
@@ -23,12 +27,13 @@ For complete Terraform/OpenTofu documentation, see:
   https://opentofu.org/docs/cli/commands/destroy`,
 	PreRunE: prepareBeforeHooks,
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		capturedDestroyOutput = ""
 		wasMultiComponentExecution = false
 		// Cobra skips PostRunE on failure. Bulk runs report each node's outcome
 		// through NodeHooks, so only single-component failures need this call.
 		defer func() {
 			if runErr != nil && !wasMultiComponentExecution {
-				runHooksOnErrorWithOutput(h.AfterTerraformDestroy, cmd, args, runErr, "")
+				runHooksOnErrorWithOutput(h.AfterTerraformDestroy, cmd, args, runErr, capturedDestroyOutput)
 			}
 		}()
 
@@ -43,19 +48,28 @@ For complete Terraform/OpenTofu documentation, see:
 		if err != nil {
 			return err
 		}
-		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
+		var component string
+		if len(args) > 0 {
+			component = args[0]
+		}
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(component, v.GetString("stack"))
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		capturedDestroyOutput = ansi.Strip(stdoutBuf.String() + "\n" + stderrBuf.String())
+		return err
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
 		if wasMultiComponentExecution {
 			return nil
 		}
-		return runHooksWithOutput(h.AfterTerraformDestroy, cmd, args, "")
+		return runHooksWithOutput(h.AfterTerraformDestroy, cmd, args, capturedDestroyOutput)
 	},
 }
 
 func init() {
 	destroyParser = flags.NewStandardParser(
 		WithBackendExecutionFlags(),
+		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
+		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 		flags.WithBoolFlag("affected", "", false, "Destroy the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Destroy all components in all stacks"),
 		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform destroy components to execute concurrently"),

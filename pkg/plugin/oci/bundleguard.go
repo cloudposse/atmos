@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	pathpkg "path"
+	"path/filepath"
 	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -140,6 +141,13 @@ func scanBundle(reader io.Reader, rules *bundleRules) ([]BundleFile, error) {
 		}
 		if err != nil {
 			return nil, errors.Join(errUtils.ErrOCIIntegrity, err)
+		}
+		// Validate host-local paths before exposing archive names to callers.
+		// Keep the stricter portable bundle rules below as well.
+		if !filepath.IsLocal(header.Name) {
+			return nil, errUtils.Build(fmt.Errorf("%w: %q is not a local path", errUtils.ErrPluginBundlePathForbidden, header.Name)).
+				WithHint("Use a relative bundle path without a volume, reserved device name, or parent traversal.").
+				Err()
 		}
 		if err := checkEntry(header, rules, seen); err != nil {
 			return nil, err

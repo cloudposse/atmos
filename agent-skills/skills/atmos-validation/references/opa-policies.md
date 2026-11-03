@@ -150,6 +150,8 @@ errors[message] {
 ```rego
 package atmos
 
+import future.keywords.in
+
 # Required tags
 errors[message] {
     required := {"Environment", "Team", "CostCenter", "Project"}
@@ -190,6 +192,8 @@ errors[message] {
 
 ```rego
 package atmos
+
+import future.keywords.in
 
 # Require approval for production
 errors[message] {
@@ -320,6 +324,8 @@ errors[message] {
 ```rego
 package atmos
 
+import future.keywords.in
+
 # Minimum node count for production
 errors[message] {
     input.vars.stage == "prod"
@@ -347,6 +353,8 @@ errors[message] {
 
 ```rego
 package atmos
+
+import future.keywords.in
 
 # Block expensive instance types in dev
 errors[message] {

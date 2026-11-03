@@ -13,6 +13,8 @@ import Intro from '@site/src/components/Intro'
     Use it to pass template-like syntax (e.g., `{{...}}` or `${...}`) to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them.
 </Intro>
 
+<YamlFunctionAvailability name="literal" />
+
 ## Usage
 
 ```yaml
@@ -197,11 +199,15 @@ a rendering error comes from an included script that contains `{{`, the error hi
 
 Other fields of the same step keep rendering as templates, so you can combine a literal `script` with a templated `env` value. Only a field that carries the tag directly is literal: tagging a whole `env` map or `steps` list has no effect on the entries inside it.
 
-`!literal` on stack `vars`, `settings`, `env`, and similar data keeps its existing behavior: Atmos clears the tag and keeps the value as written.
+`!literal` on scalar stack values in `vars`, `settings`, `env`, and similar data protects the value through inheritance,
+merging, template rendering, and YAML-function processing. Final descriptions and generated configuration contain the
+original ordinary string.
 
 ## Why `!literal` is Needed
 
-Atmos processes Go templates and Gomplate expressions in stack configurations. When your configuration contains `{{...}}` or `${...}` syntax intended for downstream tools, Atmos attempts to evaluate these expressions, causing errors or unexpected behavior.
+Atmos processes Go templates and Gomplate expressions in stack configurations. When your configuration contains
+`{{...}}` syntax intended for downstream tools, Atmos can attempt to evaluate those expressions, causing errors or
+unexpected behavior. `${...}` alone is not an Atmos Go-template expression.
 
 ### The Problem
 

@@ -4,11 +4,13 @@ sidebar_label: Context
 description: Shared environment, runtime, calendar, and CI evidence for every native policy engine.
 ---
 
-# Policy Context
+import Intro from '@site/src/components/Intro'
 
+<Intro>
 Native policies share one context across CEL, Starlark, OPA, and JSON Schema. Atmos collects
 runtime facts outside the evaluators and supplies the same snapshot to each rule within an evaluation. This
 capability requires the release containing these changes; it is not available in 1.233.0.
+</Intro>
 
 ## Available facts
 

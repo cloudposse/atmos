@@ -5,10 +5,10 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 // WorkerModeEnv carries an orchestrator's resolved CI mode into child Atmos
@@ -43,7 +43,7 @@ func ModeEnabled(cmd *cobra.Command) bool {
 			return value
 		}
 	}
-	return ResolveMode(viper.GetBool(modeFlag))
+	return ResolveMode(viperguard.GetBool(modeFlag))
 }
 
 // Enabled reports whether the ci.enabled master switch is set.

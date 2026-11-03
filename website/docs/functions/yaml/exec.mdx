@@ -13,6 +13,8 @@ import Intro from '@site/src/components/Intro'
     the results to the sections in Atmos stack manifests.
 </Intro>
 
+<YamlFunctionAvailability name="exec" />
+
 ## Usage
 
 ```yaml
@@ -64,7 +66,7 @@ It aims to support POSIX and to behave like Bash, but it does not support all of
 
 :::tip
 You can use [Atmos Stack Manifest Templating](/templates) in the `!exec` YAML function expressions.
-Atmos processes the templates first, and then executes the `!exec` function, allowing you to provide the parameters to
+In stack component values, Atmos processes templates before executing the `!exec` function, allowing you to provide the parameters to
 the function dynamically.
 :::
 

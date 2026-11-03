@@ -54,6 +54,9 @@ atmos devcontainer exec geodesic -- terraform version
 # Run a command with arguments
 atmos devcontainer exec geodesic -- atmos terraform plan vpc -s dev
 
+# Flags after -- belong to the container command
+atmos devcontainer exec geodesic -- sh -c 'printf "%s\n" "$PWD"'
+
 # Check environment variables (output masked)
 atmos devcontainer exec geodesic -- env | grep AWS
 

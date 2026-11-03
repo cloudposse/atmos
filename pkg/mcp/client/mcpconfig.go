@@ -13,20 +13,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// MCPJSONConfig represents the .mcp.json file format used by Claude Code, Codex CLI, and IDEs.
+// MCPJSONConfig represents the .mcp.json file format used by Claude Code and IDEs; TOML tags support Codex CLI.
 type MCPJSONConfig struct {
-	MCPServers map[string]MCPJSONServer `json:"mcpServers"`
+	MCPServers map[string]MCPJSONServer `json:"mcpServers" toml:"mcp_servers"`
 }
 
 // MCPJSONServer represents a single MCP server entry in .mcp.json.
 type MCPJSONServer struct {
-	Type    string            `json:"type,omitempty"`
-	URL     string            `json:"url,omitempty"`
-	Command string            `json:"command,omitempty"`
-	Args    []string          `json:"args,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Cwd     string            `json:"cwd,omitempty"`
+	Type    string            `json:"type,omitempty" toml:"-"`
+	URL     string            `json:"url,omitempty" toml:"url,omitempty"`
+	Command string            `json:"command,omitempty" toml:"command,omitempty"`
+	Args    []string          `json:"args,omitempty" toml:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty" toml:"env,omitempty"`
+	Headers map[string]string `json:"headers,omitempty" toml:"http_headers,omitempty"`
+	Cwd     string            `json:"cwd,omitempty" toml:"cwd,omitempty"`
 }
 
 // BuildMCPJSONEntry creates a .mcp.json entry for a server.

@@ -196,8 +196,10 @@ atmos init --update --update-strategy=rendered
 ```
 
 `manual` is the default merge strategy and surfaces conflicts. `ours` preserves local changes;
-`theirs` applies the template side of a conflict. `atmos init` creates Git history by default; pass
-`--no-git` when that is not wanted.
+`theirs` applies the template side of a conflict. `atmos init` creates Git history by default
+when the destination is outside an existing repository. Inside an existing repository,
+it skips Git initialization and the initial commit. Pass `--no-git` to disable initialization
+for a new standalone project.
 
 `--update-strategy` controls where the merge's *base* comes from — an independent choice from
 `--merge-strategy`. `tracked` (the default) reads it from the project's own Git history at

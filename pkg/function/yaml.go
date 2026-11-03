@@ -2,10 +2,10 @@ package function
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"unicode"
 
+	"github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -28,7 +28,7 @@ func EvaluateDeferredYAML(ctx context.Context, input string, skip []string, exec
 	if boundary := strings.IndexFunc(name, unicode.IsSpace); boundary >= 0 {
 		name, args = name[:boundary], strings.TrimSpace(name[boundary:])
 	}
-	if _, enabled := deferredYAMLFunctions[name]; !enabled || slices.Contains(skip, name) {
+	if _, enabled := deferredYAMLFunctions[name]; !enabled || tag.IsSkipped(skip, name) {
 		return input, nil
 	}
 	fn, err := DefaultRegistry().Get(name)

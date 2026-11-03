@@ -22,6 +22,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -237,8 +238,12 @@ func runWithPreparedHooks(ctx *component.ExecutionContext, atmosConfig *schema.A
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}
-	if operationUsesRenderedChart(operation) {
-		if err := setupRepositories(spec.Repositories); err != nil {
+	if operationUsesRenderedChart(operation) && (spec.RepoURL == "" || spec.DependencyUpdate) {
+		spec.recovery, err = recovery.New(info, "helm", string(operation))
+		if err != nil {
+			return err
+		}
+		if err := setupRepositoriesWithRecovery(ctx.GoContext(), spec.Repositories, spec.recovery); err != nil {
 			return err
 		}
 	}
@@ -307,6 +312,11 @@ func runOperation(
 	operation Operation,
 	spec *chartSpec,
 ) (map[string]any, error) {
+	runner, err := recovery.New(info, "helm", string(operation))
+	if err != nil {
+		return nil, err
+	}
+	spec.recovery = runner
 	summary := helmSummary(info, spec, ctx.Flags)
 	switch operation {
 	case OperationTemplate:
@@ -455,7 +465,7 @@ func resolveDiffBaseline(
 		return fetchTargetBaseline(ctx, atmosConfig, info, against)
 	}
 
-	return getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	return getDeployedManifest(spec.ReleaseName, spec.Namespace, spec.recovery)
 }
 
 // fetchTargetBaseline reads the current manifests from a non-cluster provision

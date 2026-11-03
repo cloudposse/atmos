@@ -300,14 +300,15 @@ components:
 
 ### Dynamic Workspace Key Prefix with Go Templates
 
-For advanced use cases:
+With `templates.settings.enabled: true` in `atmos.yaml`, configure the prefix under the selected backend:
 
 ```yaml
 components:
   terraform:
     vpc:
       backend:
-        workspace_key_prefix: "{{.vars.namespace}}-{{.vars.environment}}-{{.vars.stage}}"
+        s3:
+          workspace_key_prefix: "{{.vars.namespace}}-{{.vars.environment}}-{{.vars.stage}}"
 ```
 
 ## Backend Provisioning

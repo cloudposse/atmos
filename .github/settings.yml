@@ -6,6 +6,12 @@ repository:
   homepage: https://atmos.tools
   topics: ""
 environments:
+  # The settings app deletes environments omitted from this list and _extends,
+  # including their secrets. Keep workflow-owned environments declared here.
+  - name: algolia
+  - name: production
+  - name: preview
+  - name: plugin-release
   - name: feature-releases
     deployment_branch_policy:
       custom_branches:

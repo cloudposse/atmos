@@ -81,6 +81,16 @@ atmos validate component station/2 --stack dev  # ✓ Explicit and unambiguous
 Run `atmos validate component --help` to see all the available options
 :::
 
+## Schema directory overrides
+
+Use `--schemas-jsonschema-dir` and `--schemas-opa-dir` to select schema base directories for this invocation. These flags override `schemas.jsonschema.base_path` / `schemas.opa.base_path` and their environment variables. Relative directories resolve from the Atmos base path; absolute directories are preserved.
+
+```shell
+atmos validate component infra/vpc -s tenant1-ue2-dev \
+  --schemas-jsonschema-dir stacks/schemas/jsonschema \
+  --schemas-opa-dir stacks/schemas/opa
+```
+
 ## Examples
 
 ### Component Name Examples
@@ -138,6 +148,12 @@ atmos validate component . --stack dev --timeout 15
 
   <dt>`--schema-path` <em>(optional)</em></dt>
   <dd>Path to the schema file.<br/>Can be an absolute path or a path relative to `schemas.jsonschema.base_path`<br/>and `schemas.opa.base_path` defined in `atmos.yaml`.</dd>
+
+  <dt>`--schemas-jsonschema-dir` <em>(optional)</em></dt>
+  <dd>Base directory for JSON Schema files. Overrides `schemas.jsonschema.base_path` and its environment variable. Relative paths resolve from the Atmos base path.</dd>
+
+  <dt>`--schemas-opa-dir` <em>(optional)</em></dt>
+  <dd>Base directory for OPA policies. Overrides `schemas.opa.base_path` and its environment variable. Relative paths resolve from the Atmos base path.</dd>
 
   <dt>`--schema-type` <em>(optional)</em></dt>
   <dd>Schema type: `jsonschema` or `opa`.</dd>

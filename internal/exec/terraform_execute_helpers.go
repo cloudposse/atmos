@@ -44,6 +44,10 @@ import (
 // resolveTerraformCommand sets info.Command from atmosConfig if not already set.
 // Falls back to the cfg.TerraformComponentType default when neither is configured.
 func resolveTerraformCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+		return
+	}
 	if info.Command != "" {
 		return
 	}
@@ -62,15 +66,18 @@ func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schem
 	if err != nil {
 		return err
 	}
-	return ExecuteShellCommand(
-		*atmosConfig,
-		tenv.Resolve(info.Command),
-		[]string{info.SubCommand},
-		"",
-		tenv.EnvVars(),
-		false,
-		info.RedirectStdErr,
-	)
+	return ExecuteShellCommandWithRetry(atmosConfig, info, "version", func(opts ...ShellCommandOption) error {
+		return ExecuteShellCommand(
+			*atmosConfig,
+			tenv.Resolve(info.Command),
+			[]string{info.SubCommand},
+			"",
+			tenv.EnvVars(),
+			false,
+			info.RedirectStdErr,
+			opts...,
+		)
+	})
 }
 
 // setupTerraformAuth builds the merged auth config (global + component-specific via

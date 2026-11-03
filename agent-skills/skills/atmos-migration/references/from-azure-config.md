@@ -96,8 +96,8 @@ requiring a prior `az login`:
   Conditional Access context that the device code flow can't.
 
 All Azure provider fields (`tenant_id`, `subscription_id`, `location`, `client_id`,
-`cloud_environment`) live under `spec:`, unlike AWS and GCP providers where most fields are
-top-level -- this is a common transcription mistake when translating from an AWS-config example.
+`cloud_environment`) live under `spec:`, as do GCP provider-specific fields. Do not copy
+top-level AWS fields without checking the selected provider schema.
 
 ## CI Service Principal with Federated Credential → `azure/oidc`
 
@@ -176,7 +176,7 @@ set explicitly even if the user's az CLI is already pointed at the sovereign clo
 - **`azure/subscription` is never standalone** -- it always needs `via.provider` pointing at one
   of `azure/cli`, `azure/device-code`, `azure/interactive`, or `azure/oidc`.
 - **All provider-specific fields live under `spec:`**, not top-level -- easy to get wrong if the
-  user is also migrating AWS or GCP profiles in the same session, where most fields are top-level.
+  user is also migrating AWS profiles in the same session. GCP provider-specific fields also use `spec:`.
 - **No client-secret service principal or Managed Identity kind exists yet.** Don't guess at
   field names for these -- confirm the gap and suggest the federated-credential (`azure/oidc`)
   alternative where possible.

@@ -261,7 +261,7 @@ atmos terraform backend create <component> --stack <stack>
 
 ### backend list
 
-List all backends in a stack.
+List merged backend configurations for concrete Terraform components in a stack. Components without backends and abstract components are omitted.
 
 ```shell
 atmos terraform backend list --stack <stack> [--format table|yaml|json]
@@ -274,6 +274,8 @@ Show backend configuration for a component from the stack.
 ```shell
 atmos terraform backend describe <component> --stack <stack> [--format table|yaml|json]
 ```
+
+These commands inspect configuration without authentication, Terraform execution, or remote status checks. Stack templates and YAML functions remain unevaluated. Remote stack imports are rejected; imports requiring template evaluation cannot be resolved during inspection. JSON/YAML list output is an array of `{stack, component, backend_type, backend}` records; describe returns one record. List defaults to table; describe defaults to YAML.
 
 ### backend update
 

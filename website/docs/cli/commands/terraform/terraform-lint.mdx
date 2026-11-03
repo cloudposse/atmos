@@ -40,6 +40,19 @@ atmos terraform lint --affected
 a deterministic stack context for each component so toolchain and stack-specific
 settings can be resolved, but runs TFLint just once per component directory.
 
+## TFLint executable
+
+Declare `dependencies.tools.tflint` on the component to select its TFLint version. Atmos resolves and, when toolchain policy permits, installs that dependency before standalone lint runs. A separate TFLint installation on the ambient `PATH` is not required. The component declaration takes precedence over project toolchain defaults.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          tflint: "0.59.1"
+```
+
 ## TFLint configuration
 
 Atmos detects TFLint configuration in this order:

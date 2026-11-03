@@ -50,13 +50,14 @@ A structured step is the same object documented for workflows. See the
 
 ## Conditional steps
 
-Structured custom command steps support the same `when` condition syntax as
-workflow steps. Omitted `when` means the step runs while the command status is
+Structured custom command steps support the same condition expressions as workflow steps.
+In CLI configuration, write CEL as a string: native `!cel` tags are not supported by
+the configuration loader. Omitted `when` means the step runs while the command status is
 still `success`. After a step fails, Atmos keeps evaluating later structured
 steps so `when: failure` and `when: always` steps can run. A false condition
 skips the step without failing the command. Atmos evaluates built-in predicate
 keywords first; any other scalar string is evaluated as a CEL expression. Use
-`!cel` when you want to make that explicit.
+a quoted `!cel` prefix when you want to make that explicit, such as `when: "!cel true"`.
 
 ```yaml
 commands:
@@ -72,7 +73,7 @@ commands:
           not: ci
       - type: shell
         command: ./scripts/prod-only.sh
-        when: !cel 'stack == "prod" && ci'
+        when: '!cel stack == "prod" && ci'
 ```
 
 String shorthand steps remain plain shell commands and always run. Use the
@@ -143,7 +144,7 @@ commands:
     steps:
       - type: shell
         command: terraform apply
-        when: !cel '!flags["dry-run"]'
+        when: '!cel !flags["dry-run"]'
 ```
 
 Also available: `os`/`arch`/`platform` (for example `when: "os == 'darwin'"`)

@@ -35,7 +35,8 @@ import CardGroup from '@site/src/components/CardGroup'
       - "vendor/something"
     sources:
       - component: "vpc"
-        source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+        # Example image reference: replace with the OCI image containing the files you need.
+        source: "oci://registry.example.com/team/vpc:{{.Version}}"
         version: "latest"
         targets: ["components/terraform/infra/vpc/{{.Version}}"]
         included_paths: ["**/*.tf"]

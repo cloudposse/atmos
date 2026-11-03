@@ -18,7 +18,7 @@ Example usage:
 // helmfileApplyCmd represents the helmfile apply subcommand.
 var helmfileApplyCmd = &cobra.Command{
 	Use:                "apply",
-	Aliases:            []string{},
+	Aliases:            []string{"deploy"},
 	Short:              helmfileApplyShort,
 	Long:               helmfileApplyLong,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},

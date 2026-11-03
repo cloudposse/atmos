@@ -11,6 +11,10 @@ import Intro from '@site/src/components/Intro'
 The `identity` field authenticates an Atmos auth identity before a custom command runs. This is useful when commands need to interact with cloud resources that require specific credentials or elevated permissions.
 </Intro>
 
+Use `--identity=<name>` to override the configured identity for one invocation. Custom commands
+also accept `-i` unless an inherited flag already uses it. For example, custom commands under
+`ansible` retain `-i` for inventory selection and use the long `--identity` flag for authentication.
+
 ## Using Authentication with Custom Commands
 
 When an identity is specified, Atmos will:

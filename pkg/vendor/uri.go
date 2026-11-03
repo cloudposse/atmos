@@ -442,6 +442,13 @@ func AppendDoubleSlashDot(uri string) string {
 func SanitizeFileName(uri string) string {
 	defer perf.Track(nil, "vendor.SanitizeFileName")()
 
+	// A native absolute path is not a URL. In particular, url.Parse interprets
+	// Windows drive paths as opaque URLs with an empty Path, and treats '#' in
+	// a local filename as a fragment. Preserve the filesystem basename.
+	if filepath.IsAbs(uri) {
+		return filepath.Base(uri)
+	}
+
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return filepath.Base(uri)

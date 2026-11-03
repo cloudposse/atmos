@@ -908,3 +908,20 @@ atmos terraform plan station -s dev
 ```
 
 </TryExample>
+
+## Executable override
+
+<dl>
+  <dt>`--command`</dt>
+  <dd>
+    Executable name or path for this invocation. Overrides the CLI configuration and
+    the selected component's `command`, including inherited or templated values.
+    Pass a single executable; put its arguments after `--`.
+  </dd>
+  <dt>`--terraform-command`</dt>
+  <dd>Compatibility alias for `--command`. Specify only one of these flags.</dd>
+</dl>
+
+```shell
+atmos terraform plan app -s dev --command=tofu
+```

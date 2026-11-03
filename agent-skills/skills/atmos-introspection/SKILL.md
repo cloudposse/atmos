@@ -165,7 +165,7 @@ atmos list components
 atmos list components -s 'plat-*-prod'
 atmos list components --type abstract
 atmos list components --enabled true
-atmos list components --format tree
+atmos list components --format json
 ```
 
 Key flags:
@@ -235,7 +235,9 @@ atmos list metadata                 # Metadata information
 | Command Type | Formats |
 |-------------|---------|
 | Describe commands | yaml, json |
-| List commands | table (default), json, yaml, csv, tsv, tree |
+| `list components`, `list workflows` | table (default), json, yaml, csv, tsv |
+| `list stacks` | table (default), json, yaml, csv, tsv, tree |
+| `list instances` | table (default), json, yaml, csv, tsv, tree, matrix |
 
 ### Column Customization (List Commands)
 

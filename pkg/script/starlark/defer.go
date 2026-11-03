@@ -84,7 +84,7 @@ func (s *session) runDeferred(ctx context.Context, t *starlark.Thread, bodyErr e
 		call := stack.calls[last]
 		stack.calls = stack.calls[:last]
 		if _, err := starlark.Call(thread, call.fn, call.args, call.kwargs); err != nil {
-			failures = append(failures, failWith(errUtils.ErrStarlark, err, "deferred %s failed: %s", call.fn.Name(), evalSummary(err)))
+			failures = append(failures, failWith(failureKind(err), err, "deferred %s failed: %s", call.fn.Name(), evalSummary(err)))
 		}
 	}
 	return combineDeferred(bodyErr, failures)
@@ -98,13 +98,14 @@ func combineDeferred(bodyErr error, failures []error) error {
 	case bodyErr == nil && len(failures) == 1:
 		return failures[0]
 	case bodyErr == nil:
-		return failWithAll(errUtils.ErrStarlark, failures, "%d deferred calls failed", len(failures))
+		return failWithAll(combinedFailureKind(failures), failures, "%d deferred calls failed", len(failures))
 	}
 	messages := make([]string, 0, len(failures))
 	for _, failure := range failures {
 		messages = append(messages, failure.Error())
 	}
-	combined := failWithAll(errUtils.ErrStarlark, append([]error{bodyErr}, failures...), "%s", evalSummary(bodyErr))
+	causes := append([]error{bodyErr}, failures...)
+	combined := failWithAll(combinedFailureKind(causes), causes, "%s", evalSummary(bodyErr))
 	return withDetail(combined, "Deferred calls also failed:\n"+strings.Join(messages, "\n"))
 }
 

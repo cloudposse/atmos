@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"unicode"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/embedded"
 	"github.com/cloudposse/atmos/pkg/function/execbatch"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
@@ -171,7 +171,7 @@ func processNodesWithContext(
 		case *execbatch.Value:
 			return v.Data
 		case string:
-			if _, tagged := yamlsource.Decode(v); strict && !tagged {
+			if _, tagged := yamlsource.Decode(v); strict && !tagged && !yamlsource.Embedded(v) {
 				return v
 			}
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
@@ -220,6 +220,10 @@ func processNodesWithContext(
 					// Skip adding this key to the map - effectively deleting it.
 					continue
 				}
+				if embedded.IsProvisionalStackName(k, val) {
+					newNestedMap[k] = val
+					continue
+				}
 				processed := recurse(val)
 				// Check if the processed value is the unset marker.
 				if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
@@ -261,6 +265,10 @@ func processNodesWithContext(
 		// Check if the value is a string with !unset tag and it's not skipped.
 		if strVal, ok := v.(string); !strict && ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
 			// Skip adding this key to the map - effectively deleting it.
+			continue
+		}
+		if embedded.IsProvisionalStackName(k, v) {
+			newMap[k] = v
 			continue
 		}
 		processed := recurse(v)
@@ -358,6 +366,14 @@ func processSimpleTags(
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
+	if matchesPrefix(input, u.AtmosYamlFuncRandom, skip) {
+		result, err := u.ProcessTagRandom(input)
+		return result, true, err
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncCwd, skip) {
+		result, err := u.ProcessTagCwd(input)
+		return result, true, err
+	}
 	// Handle !unset tag - return marker to indicate value should be deleted.
 	if matchesPrefix(input, u.AtmosYamlFuncUnset, skip) {
 		return UnsetMarker{IsUnset: true}, true, nil
@@ -553,6 +569,12 @@ func processCustomTagsWithContext(
 	if starlarksource.IsEncoded(input) && !skipFunc(skip, starlarksource.Tag) {
 		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
 	}
+	evaluate := func(value string) (any, error) {
+		return processCustomTagsWithContext(atmosConfig, value, currentStack, skip, resolutionCtx, stackInfo)
+	}
+	if yamlsource.Embedded(input) {
+		return embedded.Resolve(input, evaluate)
+	}
 	if source, tagged := yamlsource.Decode(input); tagged {
 		if source.Tag == u.AtmosYamlFuncLiteral {
 			return source.Argument, nil
@@ -561,6 +583,10 @@ func processCustomTagsWithContext(
 			return input, nil
 		}
 		defer func() {
+			if err != nil {
+				return
+			}
+			result, err = embedded.ResolveResult(result, func(tag string) bool { return skipFunc(skip, tag) }, evaluate)
 			if err == nil {
 				result = yamlsource.Display(result)
 			}
@@ -597,9 +623,7 @@ func processCustomTagsWithContext(
 }
 
 func skipFunc(skip []string, f string) bool {
-	t := strings.TrimPrefix(f, "!")
-	c := slices.Contains(skip, t)
-	return c
+	return fntag.IsSkipped(skip, f)
 }
 
 func getStringAfterTag(input string, tag string) (string, error) {

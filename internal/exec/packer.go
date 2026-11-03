@@ -65,6 +65,9 @@ func ExecutePacker(
 	}
 
 	// Add the `command` from `components.packer.command` from `atmos.yaml`.
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+	}
 	if info.Command == "" {
 		if atmosConfig.Components.Packer.Command != "" {
 			info.Command = atmosConfig.Components.Packer.Command

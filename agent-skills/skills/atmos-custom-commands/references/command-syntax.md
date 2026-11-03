@@ -26,7 +26,7 @@ commands:
 commands:
   - name: string                     # Required: Command name
     description: string              # Optional: Help text description
-    verbose: boolean                 # Optional: Print commands before execution (default: true)
+    verbose: boolean                 # Optional: Request verbose execution output (default: false)
     identity: string                 # Optional: Authentication identity name
     working_directory: string        # Optional: Working directory for steps
     arguments: []                    # Optional: Positional arguments
@@ -86,11 +86,11 @@ Supports multiline YAML strings.
 
 ### verbose (Optional)
 
-Controls whether step commands are printed before execution. Default: `true`.
+Requests verbose execution output. Default: `false`.
 
 ```yaml
 - name: set-eks-cluster
-  verbose: false    # Suppress command echo
+  verbose: false    # Default verbosity
 ```
 
 ### identity (Optional)
@@ -122,6 +122,10 @@ Path resolution rules:
 - Absolute paths are used as-is
 - Relative paths resolve against the Atmos `base_path`
 - `!repo-root` or `!repo-root .` resolves to the git repository root
+
+A relative step-level `working_directory` resolves against the command's resolved directory.
+When the command-level field is unset, step paths resolve against the invocation directory.
+An absolute step override is used as-is; a step without an override inherits the command directory.
 
 ## Arguments
 

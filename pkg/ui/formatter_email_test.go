@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
-func TestFormatterInfoEmail(t *testing.T) {
+func TestFormatterInfoAutolinks(t *testing.T) {
 	for _, profile := range []terminal.ColorProfile{terminal.ColorNone, terminal.ColorTrue} {
 		for _, tc := range []struct{ name, input, want string }{
 			{"bare email", "hello a@b.com", "hello a@b.com"},
@@ -22,6 +22,8 @@ func TestFormatterInfoEmail(t *testing.T) {
 			{"named email link", "hello [support](mailto:a@b.com)", "hello support mailto:a@b.com"},
 			{"named web link", "see [docs](https://atmos.tools)", "see docs https://atmos.tools"},
 			{"bare web link", "see https://atmos.tools", "see https://atmos.tools"},
+			{"www web link", "see www.atmos.tools now", "see http://www.atmos.tools now"},
+			{"angle web link", "see <https://atmos.tools> now", "see https://atmos.tools now"},
 			{"tool reference", "run terraform@1.5.0", "run terraform@1.5.0"},
 		} {
 			t.Run(tc.name+"/"+strconv.Itoa(int(profile)), func(t *testing.T) {

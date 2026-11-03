@@ -9,11 +9,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// uncategorizedHeading is given to entries release-drafter left without a
+// UncategorizedHeading is given to entries release-drafter left without a
 // category heading - it puts PRs matching no category first, headingless -
 // whenever the release also has categorized groups, so the first group does
 // not read as a missing chapter.
-const uncategorizedHeading = "## 📦 Other Changes"
+const UncategorizedHeading = "## 📦 Other Changes"
 
 // summaryToken matches the two pieces of Markdown release-drafter puts in a
 // summary line that GitHub will not render inside an HTML <summary> (blank
@@ -54,7 +54,7 @@ func RenderBody(entries []PREntry, summaries []string) (string, error) {
 		if e.Category != lastCategory || i == 0 {
 			heading := e.Category
 			if heading == "" && mixed {
-				heading = uncategorizedHeading
+				heading = UncategorizedHeading
 			}
 			if heading != "" {
 				b.WriteString(heading)

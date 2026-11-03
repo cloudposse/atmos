@@ -45,7 +45,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
-				Model:     "gemini-2.5-flash",
+				Model:     DefaultModel,
 				APIKey:    "",
 				MaxTokens: 8192,
 			},
@@ -104,7 +104,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   true,
-				Model:     "gemini-2.5-flash",
+				Model:     DefaultModel,
 				APIKey:    "my-gemini-api-key-value",
 				MaxTokens: 8192,
 			},
@@ -123,7 +123,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   true,
-				Model:     "gemini-2.5-flash",
+				Model:     DefaultModel,
 				APIKey:    "",
 				MaxTokens: 32768,
 			},
@@ -192,7 +192,7 @@ func TestClientGetters(t *testing.T) {
 func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "gemini", ProviderName)
 	assert.Equal(t, 8192, DefaultMaxTokens)
-	assert.Equal(t, "gemini-2.5-flash", DefaultModel)
+	assert.Equal(t, "gemini-3.8-flash", DefaultModel)
 	assert.Equal(t, "GEMINI_API_KEY", DefaultAPIKeyEnvVar)
 }
 

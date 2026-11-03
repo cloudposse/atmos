@@ -38,6 +38,8 @@ components:
   <dd>
     Specifies the executable to run for Packer commands. Defaults to `packer`.
 
+    For one invocation, use `--command /path/to/executable` (or `--packer-command`). The flag overrides both this default and the stack component's `command`.
+
     Examples:
     - `packer` - Use Packer from PATH
     - `/usr/local/bin/packer` - Use specific binary

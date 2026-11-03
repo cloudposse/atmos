@@ -331,6 +331,9 @@ type initOptions struct {
 func executeInit(ctx context.Context, opts *initOptions) error {
 	defer opts.stopProgress()
 	opts.updateProgress("Preparing source")
+	if err := resolveRecordedInitSource(opts); err != nil {
+		return err
+	}
 	// Convert to absolute path if provided.
 	opts.targetDir = resolveTargetDir(opts.targetDir)
 

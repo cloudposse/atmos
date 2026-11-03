@@ -3,8 +3,7 @@
 
 Workflow Error
 
-Error: workflow step execution failed: max attempts (3) exceeded, last error: starlark execution failed: fail: always
-fails
+Error: workflow step execution failed: max attempts (3) exceeded, last error: always fails
 
  Traceback (most recent call last):
    flaky:2:5: in <toplevel>

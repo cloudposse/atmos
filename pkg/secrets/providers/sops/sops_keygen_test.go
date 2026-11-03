@@ -280,3 +280,21 @@ func TestSopsKeygen_RejectsNonAgeKind(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, providers.ErrKeygenNotSupported)
 }
+
+func TestSopsKeygen_FirstWriteBesideRecipientsFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("SOPS_AGE_KEY", "")
+	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(dir, "unused.txt"))
+	p := &sopsProvider{name: "local", kind: "sops/age", file: "secrets.enc.yaml", ageKeyFile: filepath.Join(dir, "age-keys.txt"), recipientsFile: ".sops.yaml"}
+	_, err := p.GenerateKey(dir)
+	require.NoError(t, err)
+	coord := providers.Coordinate{Stack: "dev", Component: "app", Key: "TOKEN"}
+	require.NoError(t, p.Set(coord, "owned-test-secret"))
+	encrypted, err := os.ReadFile(filepath.Join(dir, "secrets.enc.yaml"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(encrypted), "owned-test-secret")
+	value, err := p.Get(coord)
+	require.NoError(t, err)
+	assert.Equal(t, "owned-test-secret", value)
+}

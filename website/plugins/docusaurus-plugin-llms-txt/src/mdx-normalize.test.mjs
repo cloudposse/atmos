@@ -4,6 +4,22 @@ import { readFile } from 'node:fs/promises';
 
 import { normalizeMdxToMarkdown } from './mdx-normalize.mjs';
 
+test('YAML function availability survives plain-Markdown export', async () => {
+  const random = await normalizeMdxToMarkdown('<YamlFunctionAvailability name="random" />');
+  assert.match(random, /## Availability and evaluation/);
+  assert.match(random, /Each evaluation generates a value/);
+  assert.match(random, /\[YAML function scope\]\(\/functions\/yaml\/scope\)/);
+  assert.doesNotMatch(random, /YamlFunctionAvailability/);
+
+  const version = await normalizeMdxToMarkdown('<YamlFunctionAvailability name="version" />');
+  assert.match(version, /ai\.skills\.<name>\.ref/);
+  assert.match(version, /installed or synchronized/);
+  await assert.rejects(
+    normalizeMdxToMarkdown('<YamlFunctionAvailability name="unknown" />'),
+    /Unknown YAML function availability/,
+  );
+});
+
 async function normalize(src) {
   return (await normalizeMdxToMarkdown(src)).trim();
 }

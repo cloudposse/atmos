@@ -18,6 +18,7 @@ import (
 	emu "github.com/cloudposse/atmos/pkg/emulator"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -61,6 +62,7 @@ type emulatorManager interface {
 // resolved holds the merged, runtime-ready configuration for an emulator
 // component instance.
 type resolved struct {
+	retry       *recovery.Runner
 	atmosConfig schema.AtmosConfiguration
 	spec        emu.Spec
 	env         map[string]string
@@ -73,10 +75,11 @@ type resolved struct {
 
 // prepare resolves the component section (templates, YAML functions, secrets,
 // optional auth) and projects it onto an emulator Spec.
-func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
+func prepare(info *schema.ConfigAndStacksInfo, commands ...string) (*resolved, error) {
 	defer perf.Track(nil, "componentemulator.prepare")()
 
 	info.ComponentType = cfg.EmulatorComponentType
+	command := executionCommand(info.SubCommand, commands)
 	atmosConfig, err := initCliConfig(*info, true)
 	if err != nil {
 		return nil, err
@@ -108,8 +111,13 @@ func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
 		return nil, err
 	}
 
+	runner, err := executionRecovery(info, command)
+	if err != nil {
+		return nil, err
+	}
 	env := envListToMap(info.ComponentEnvList)
 	return &resolved{
+		retry:       runner,
 		atmosConfig: atmosConfig,
 		spec:        spec,
 		env:         env,
@@ -119,10 +127,6 @@ func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
 		component:   info.ComponentFromArg,
 		dryRun:      info.DryRun,
 	}, nil
-}
-
-func (r *resolved) manager() emulatorManager {
-	return newManager(r.runtimePref, r.autoStart)
 }
 
 // ExecuteUp starts (or reuses) the emulator's long-running container.
@@ -146,7 +150,7 @@ func ExecuteUpEphemeral(ctx context.Context, info *schema.ConfigAndStacksInfo) e
 func executeUp(ctx context.Context, info *schema.ConfigAndStacksInfo, ephemeralOverride bool) error {
 	defer perf.Track(nil, "componentemulator.executeUp")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "up")
 	if err != nil {
 		return err
 	}
@@ -181,7 +185,7 @@ func executeUp(ctx context.Context, info *schema.ConfigAndStacksInfo, ephemeralO
 func ExecuteDown(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "componentemulator.ExecuteDown")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "down")
 	if err != nil {
 		return err
 	}
@@ -208,7 +212,7 @@ var confirmReset = defaultConfirmReset
 func ExecuteReset(ctx context.Context, info *schema.ConfigAndStacksInfo, force bool) error {
 	defer perf.Track(nil, "componentemulator.ExecuteReset")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "reset")
 	if err != nil {
 		return err
 	}
@@ -256,7 +260,7 @@ func defaultConfirmReset(message string) (bool, error) {
 func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo, runtimeOnly bool) error {
 	defer perf.Track(nil, "componentemulator.ExecutePs")()
 
-	statuses, err := emulatorStatuses(ctx, info, runtimeOnly)
+	statuses, err := emulatorStatuses(ctx, info, runtimeOnly, "ps")
 	if err != nil {
 		return fmt.Errorf("%w: ps: %w", errUtils.ErrComponentExecutionFailed, err)
 	}
@@ -270,7 +274,7 @@ func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo, runtimeOnl
 func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo, runtimeOnly bool) error {
 	defer perf.Track(nil, "componentemulator.ExecuteList")()
 
-	statuses, err := emulatorStatuses(ctx, info, runtimeOnly)
+	statuses, err := emulatorStatuses(ctx, info, runtimeOnly, "list")
 	if err != nil {
 		return fmt.Errorf("%w: list: %w", errUtils.ErrComponentExecutionFailed, err)
 	}
@@ -290,7 +294,7 @@ type configuredEmulator struct {
 // emulatorStatuses returns configured component rows by default. The runtime
 // path intentionally preserves the old container-discovery behavior behind the
 // explicit --runtime command flag.
-func emulatorStatuses(ctx context.Context, info *schema.ConfigAndStacksInfo, runtimeOnly bool) ([]emu.Status, error) {
+func emulatorStatuses(ctx context.Context, info *schema.ConfigAndStacksInfo, runtimeOnly bool, commands ...string) ([]emu.Status, error) {
 	info.ComponentType = cfg.EmulatorComponentType
 	atmosConfig, err := initCliConfig(*info, true)
 	if err != nil {
@@ -300,6 +304,14 @@ func emulatorStatuses(ctx context.Context, info *schema.ConfigAndStacksInfo, run
 	// Listing status is read-only; never attempt Podman auto-recovery just to
 	// check whether emulators are running (see NewManagerNoRecovery).
 	manager := newReadOnlyManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider))
+	command := executionCommand(info.SubCommand, commands)
+	if command != "" {
+		runner, err := recovery.New(info, "emulator", command)
+		if err != nil {
+			return nil, err
+		}
+		setManagerRetry(manager, runner)
+	}
 	if runtimeOnly {
 		return manager.Ps(ctx, info.Stack)
 	}
@@ -540,7 +552,7 @@ func shortID(id string) string {
 func ExecuteLogs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "componentemulator.ExecuteLogs")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "logs")
 	if err != nil {
 		return err
 	}
@@ -555,7 +567,7 @@ func ExecuteLogs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 func ExecuteExec(ctx context.Context, info *schema.ConfigAndStacksInfo, command []string) error {
 	defer perf.Track(nil, "componentemulator.ExecuteExec")()
 
-	r, err := prepare(info)
+	r, err := prepare(info, "exec")
 	if err != nil {
 		return err
 	}

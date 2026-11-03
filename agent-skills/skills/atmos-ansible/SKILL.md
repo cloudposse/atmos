@@ -13,10 +13,9 @@ Atmos wraps the Ansible CLI to provide stack-aware orchestration of configuratio
 manually managing variables, inventory, and playbook paths for each Ansible component, Atmos resolves the full
 configuration from stack manifests and handles all of these concerns automatically.
 
-> **Note:** `atmos ansible playbook` is designed for interactive operator sessions where a human is present to
-> monitor output, respond to prompts, and approve changes. It is not suitable for headless CI/CD automation where
-> no interactive terminal is available. For automated pipelines, use a dedicated Ansible CI runner or invoke
-> `ansible-playbook` directly from a CI step with pre-exported credentials.
+`atmos ansible playbook` supports interactive sessions and unattended execution. For CI,
+supply authentication and secrets without prompts, for example with an explicit identity and
+`--vault-password-file`. Use `--step` or `--ask-vault-pass` when an operator can answer prompts.
 
 ## How Atmos Orchestrates Ansible
 
@@ -428,7 +427,7 @@ components:
 Use `atmos describe component` to see the fully resolved configuration:
 
 ```shell
-atmos describe component hello-world -s dev --type ansible
+atmos describe component hello-world -s dev
 ```
 
 ### Dry Run
@@ -441,9 +440,8 @@ atmos ansible playbook webserver -s prod --dry-run
 
 ## Best Practices
 
-> **Interactive use only:** `atmos ansible playbook` is intended for interactive operator sessions, not
-> headless CI/CD automation. Ensure a human is present to monitor output and respond to any interactive
-> prompts. For fully automated pipelines, invoke `ansible-playbook` directly from a CI step.
+For unattended runs, provide required credentials and secret inputs without prompts. Interactive
+options such as `--step` and `--ask-vault-pass` require an operator.
 
 1. **Use stack manifest settings for playbook configuration.** Define `settings.ansible.playbook` and
     `settings.ansible.inventory` rather than passing flags every time.
@@ -468,3 +466,9 @@ atmos ansible playbook webserver -s prod --dry-run
 ## Additional Resources
 
 - For the complete command reference, see [references/commands-reference.md](references/commands-reference.md)
+
+### Per-invocation executable
+
+Use `--command=<executable>` to override the configured component executable for one invocation.
+The value is a name or path, not a shell command. Pass native arguments after `--`.
+`--ansible-command` is a compatibility alias; do not combine the two flags.

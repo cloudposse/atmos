@@ -32,7 +32,22 @@ import (
 // (for example because its producer is not deployed) never blocks commands on declarations that do
 // not use it. `!secret` is included because retrieving secret values is a separate, explicit step.
 func credentialFreeSkip() []string {
-	return append(authenticatedSecretSkip(), strings.TrimPrefix(u.AtmosYamlFuncAwsCloudFormationOutput, "!"))
+	skip := authenticatedSecretSkip()
+	// Discovery may resolve local declaration templates, but code execution and
+	// cloud identity reads belong to the lazy selector evaluation for the secret
+	// actually requested. This also covers functions reached through dependencies.
+	for _, tag := range []string{
+		u.AtmosYamlFuncAwsCloudFormationOutput,
+		u.AtmosYamlFuncExec,
+		u.AtmosYamlFuncStarlark,
+		u.AtmosYamlFuncAwsAccountID,
+		u.AtmosYamlFuncAwsCallerIdentityArn,
+		u.AtmosYamlFuncAwsCallerIdentityUserID,
+		u.AtmosYamlFuncAwsOrganizationID,
+	} {
+		skip = append(skip, strings.TrimPrefix(tag, "!"))
+	}
+	return skip
 }
 
 // authenticatedSecretSkip leaves secret values and Terraform/store reads lazy, while allowing

@@ -36,6 +36,9 @@ result and a text snapshot; `enforcement.log` contains only generated probe
 fields. Raw agent logs, status files, and configuration are never uploaded or
 printed. Rejection matching reads only fresh log lines and requires an exact
 record for the probe's unique hostname, with bounded polling for delayed writes.
+It recognizes both the community proxy's `domain not allowed` records and eBPF
+`dns-request-dropped` events with `matchedPolicy=NONE`. Ordinary DNS requests,
+different hostnames, and command audit lines do not confirm enforcement.
 
 Commands use argument arrays with no shell and bounded execution times. Tests
 inject command results and use temporary files; they do not change local DNS,

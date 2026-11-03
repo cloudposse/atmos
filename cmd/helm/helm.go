@@ -77,7 +77,9 @@ func init() {
 		panic(err)
 	}
 
-	helmCmd.AddCommand(newOperationCommand("template", "Render Helm chart manifests"))
+	templateCmd := newOperationCommand("template", "Render Helm chart manifests")
+	templateCmd.Aliases = []string{"render"}
+	helmCmd.AddCommand(templateCmd)
 	helmCmd.AddCommand(newOperationCommand("diff", "Show changes a Helm apply would make"))
 	helmCmd.AddCommand(newOperationCommand("plan", "Preview changes a Helm apply would make"))
 	helmCmd.AddCommand(newOperationCommand(helmValuesName, "Show resolved Helm values as formatted YAML"))

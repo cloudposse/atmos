@@ -23,11 +23,14 @@ func (f fakeTerminal) Write(string) error                  { return nil }
 func (f fakeTerminal) IsTTY(terminal.Stream) bool          { return true }
 func (f fakeTerminal) IsPiped(terminal.Stream) bool        { return false }
 func (f fakeTerminal) ColorProfile() terminal.ColorProfile { return terminal.ColorNone }
-func (f fakeTerminal) Width(terminal.Stream) int           { return f.width }
-func (f fakeTerminal) Height(terminal.Stream) int          { return 24 }
-func (f fakeTerminal) SetTitle(string)                     {}
-func (f fakeTerminal) RestoreTitle()                       {}
-func (f fakeTerminal) Alert()                              {}
+func (f fakeTerminal) ColorProfileFor(terminal.Stream) terminal.ColorProfile {
+	return terminal.ColorNone
+}
+func (f fakeTerminal) Width(terminal.Stream) int  { return f.width }
+func (f fakeTerminal) Height(terminal.Stream) int { return 24 }
+func (f fakeTerminal) SetTitle(string)            {}
+func (f fakeTerminal) RestoreTitle()              {}
+func (f fakeTerminal) Alert()                     {}
 
 // newTestProgressRenderer builds an enabled ProgressRenderer with an injected
 // fake terminal so the rendering logic can be tested without a real TTY.
