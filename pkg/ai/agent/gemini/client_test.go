@@ -811,3 +811,30 @@ func TestRequestTimeout(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{AI: schema.AISettings{TimeoutSeconds: 5}}
 	assert.Equal(t, 5*time.Second, requestTimeout(cfg))
 }
+
+func TestNewClient_PassesConfiguredTimeoutToSDK(t *testing.T) {
+	var got *genai.ClientConfig
+	orig := newGenaiClient
+	newGenaiClient = func(_ context.Context, cc *genai.ClientConfig) (*genai.Client, error) {
+		got = cc
+		return &genai.Client{}, nil
+	}
+	t.Cleanup(func() { newGenaiClient = orig })
+
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:        true,
+			TimeoutSeconds: 7,
+			Providers: map[string]*schema.AIProviderConfig{
+				"gemini": {ApiKey: "test-key"},
+			},
+		},
+	}
+
+	client, err := NewClient(context.Background(), atmosConfig)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	require.NotNil(t, got)
+	require.NotNil(t, got.HTTPOptions.Timeout)
+	assert.Equal(t, 7*time.Second, *got.HTTPOptions.Timeout)
+}

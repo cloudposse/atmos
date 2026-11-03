@@ -57,7 +57,7 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 
 	// Create Gemini client.
 	timeout := requestTimeout(atmosConfig)
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+	client, err := newGenaiClient(ctx, &genai.ClientConfig{
 		APIKey:      apiKey,
 		HTTPOptions: genai.HTTPOptions{Timeout: &timeout},
 	})
@@ -73,6 +73,9 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 		config: config,
 	}, nil
 }
+
+// newGenaiClient creates the SDK client. It is a variable so tests can capture the config passed to it.
+var newGenaiClient = genai.NewClient
 
 // requestTimeout returns the HTTP request timeout, honoring ai.timeout_seconds.
 func requestTimeout(atmosConfig *schema.AtmosConfiguration) time.Duration {
