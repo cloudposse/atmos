@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -36,6 +37,13 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 
 	all, _ := cmd.Flags().GetBool("all")
 	if all {
+		// --all never reads NAME, so a stray NAME (possibly with --force) would delete far more than asked.
+		if len(args) > 0 {
+			return errUtils.Build(errUtils.ErrMutuallyExclusiveFlags).
+				WithExplanation("--all cannot be combined with a secret NAME").
+				WithHint("Omit NAME to delete every declared secret for the scope, or omit --all to delete one secret").
+				Err()
+		}
 		scope, err := parseScopeForStack(cmd, args, "delete")
 		if err != nil {
 			return err

@@ -181,10 +181,12 @@ func findSharedStackContext(scope secretScope, op string) (string, string, error
 	return "", "", componentRequiredForStack(op, "no single component declares every shared secret in the stack")
 }
 
+// sameSharedDeclaration reports whether two shared declarations and their providers are identical.
 func sameSharedDeclaration(a, b *sharedDeclaration) bool {
 	return a.declaration == b.declaration && reflect.DeepEqual(a.provider, b.provider)
 }
 
+// sharedEntryMatches reports whether an enumerated entry belongs to the scope's stack and component type.
 func sharedEntryMatches(scope secretScope, entry scopeEntry) bool {
 	if entry.Stack != "" && entry.Stack != scope.Stack {
 		return false
@@ -192,6 +194,8 @@ func sharedEntryMatches(scope secretScope, entry scopeEntry) bool {
 	return scope.ComponentType == "" || entry.ComponentType == "" || entry.ComponentType == scope.ComponentType
 }
 
+// validateSharedDeclaration rejects an instance-scoped declaration, or one that differs from the
+// previously selected shared declaration, because neither can be addressed without a component.
 func validateSharedDeclaration(op, name string, current, selected *sharedDeclaration) error {
 	if scope := current.declaration.Scope; scope != secrets.ScopeGlobal && scope != secrets.ScopeStack {
 		return componentRequiredForName(op, name, "the declaration is instance-scoped")
@@ -202,6 +206,7 @@ func validateSharedDeclaration(op, name string, current, selected *sharedDeclara
 	return nil
 }
 
+// componentRequiredForName builds the "--component is required" error for a named secret.
 func componentRequiredForName(op, name, reason string) error {
 	return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 		WithExplanationf("--component is required to %s secret %q: %s", op, name, reason).
@@ -209,6 +214,7 @@ func componentRequiredForName(op, name, reason string) error {
 		Err()
 }
 
+// componentRequiredForStack builds the "--component is required" error for a whole-scope command.
 func componentRequiredForStack(op, reason string) error {
 	return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 		WithExplanationf("--component is required to %s: %s", op, reason).

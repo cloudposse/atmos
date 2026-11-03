@@ -306,3 +306,17 @@ func TestDescribeScope(t *testing.T) {
 	assert.Contains(t, describeScope(secretScope{Stack: "dev", Component: "vpc", SharedOnly: true}), "stack `dev`")
 	assert.NotContains(t, describeScope(secretScope{Stack: "dev", Component: "vpc", SharedOnly: true}), "vpc")
 }
+
+// A positional NAME is never silently dropped by --all, which would delete every shared secret.
+func TestStackScope_DeleteAllRejectsName(t *testing.T) {
+	svc := stackScopedService()
+	scopes := captureLoadedScopes(t, svc)
+	overrideEnumerateScopes(t, []scopeEntry{sharedEntry("vpc", map[string]map[string]any{"TOKEN": stackSpec()})}, nil)
+
+	err := runSecretSubcommand(t, "delete", "TOKEN", "--all", "-s", "dev", "--force")
+
+	require.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+	assert.Empty(t, *scopes)
+	assert.Zero(t, svc.deleteAllCalls)
+	assert.Empty(t, svc.deletedNames)
+}
