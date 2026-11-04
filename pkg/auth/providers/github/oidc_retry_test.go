@@ -128,6 +128,20 @@ func respondHang() http.HandlerFunc {
 	}
 }
 
+// respondHeadersThenHang sends 200 headers and part of the body, then blocks until the client
+// gives up, so the failure happens while the body is being read.
+func respondHeadersThenHang() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"value":`))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		<-r.Context().Done()
+	}
+}
+
 // newTestOIDCProvider returns a provider that trusts ts and times out each attempt after attemptTimeout.
 func newTestOIDCProvider(ts *tokenServer, clock *fakeClock, attemptTimeout time.Duration) *oidcProvider {
 	// Copy the server's client: it is shared, and callers may run concurrently.
@@ -178,6 +192,13 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 		{
 			name:           "hang times out then success",
 			handlers:       []http.HandlerFunc{respondHang(), respondToken(validJWT)},
+			attemptTimeout: 100 * time.Millisecond,
+			wantToken:      validJWT,
+			wantRequests:   2,
+		},
+		{
+			name:           "body stalls after headers then success",
+			handlers:       []http.HandlerFunc{respondHeadersThenHang(), respondToken(validJWT)},
 			attemptTimeout: 100 * time.Millisecond,
 			wantToken:      validJWT,
 			wantRequests:   2,

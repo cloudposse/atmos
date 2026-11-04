@@ -32,6 +32,7 @@ const (
 	oidcMaxBackoff     = 8 * time.Second
 	oidcBackoffJitter  = 0.5
 	oidcMaxDrainBytes  = 4 << 10 // Error-response bytes read so the connection can be reused.
+	oidcMaxBodyBytes   = 1 << 20 // Upper bound on a token response; a JWT is a few KiB.
 )
 
 // defaultOIDCHTTPClient is shared by every provider instance so retries and repeated requests can
@@ -318,8 +319,8 @@ func isRetryableOIDCError(ctx context.Context, err error) bool {
 }
 
 // fetchOIDCTokenOnce makes one request to GitHub's OIDC endpoint. Transport errors (including the
-// per-attempt timeout), 429 and 5xx are wrapped with ErrGitHubOIDCEndpointUnavailable so the
-// caller can retry them.
+// per-attempt timeout, whether it fires before the headers or while the body is read), 429 and
+// 5xx are wrapped with ErrGitHubOIDCEndpointUnavailable so the caller can retry them.
 func (p *oidcProvider) fetchOIDCTokenOnce(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
@@ -345,10 +346,21 @@ func (p *oidcProvider) fetchOIDCTokenOnce(ctx context.Context, requestURL, reque
 		}
 		return "", fmt.Errorf("%w: OIDC endpoint returned status %s", errUtils.ErrAuthenticationFailed, resp.Status)
 	}
+	return readOIDCTokenResponse(resp.Body)
+}
+
+// readOIDCTokenResponse extracts the token from a 200 response. The body is read in full before
+// it is parsed, so a read that fails (the per-attempt timeout firing mid-body, a dropped
+// connection) is reported as retryable, while a body that arrives intact but does not parse is not.
+func readOIDCTokenResponse(body io.Reader) (string, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, oidcMaxBodyBytes))
+	if err != nil {
+		return "", fmt.Errorf("%w: %w: read OIDC response: %w", errUtils.ErrAuthenticationFailed, errUtils.ErrGitHubOIDCEndpointUnavailable, err)
+	}
 	var out struct {
 		Value string `json:"value"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return "", fmt.Errorf("%w: decode OIDC response: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	if out.Value == "" {
