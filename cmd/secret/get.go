@@ -39,11 +39,11 @@ func init() {
 func runSecretGet(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretGet")()
 
-	scope, err := parseScope(cmd, args)
+	name := args[0]
+	scope, err := parseScopeForName(cmd, args, name, "get")
 	if err != nil {
 		return err
 	}
-	name := args[0]
 	format, _ := cmd.Flags().GetString("format")
 	path, _ := cmd.Flags().GetString("path")
 	raw, _ := cmd.Flags().GetBool("raw")
