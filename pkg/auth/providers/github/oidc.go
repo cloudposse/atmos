@@ -277,7 +277,9 @@ func (p *oidcProvider) joinOIDCTokenFlight(ctx context.Context, key, requestURL,
 		}
 		token, err := p.fetchOIDCTokenWithRetry(ctx, requestURL, requestToken, audience)
 		if err != nil {
-			return jwtFlightResult{abandoned: ctx.Err() != nil}, err
+			// Only a failure caused by the starter's cancellation counts; an endpoint error that lands
+			// as the context ends is a real answer and is returned to every waiter as is.
+			return jwtFlightResult{abandoned: ctx.Err() != nil && errors.Is(err, ctx.Err())}, err
 		}
 		processJWTCache.put(key, token, p.now())
 		return jwtFlightResult{token: token}, nil
