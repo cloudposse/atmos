@@ -43,8 +43,8 @@ const (
 // connections. Its Timeout bounds each attempt, not the whole retry sequence.
 var defaultOIDCHTTPClient = newOIDCHTTPClient()
 
-// newOIDCHTTPClient returns a client with its own connection pool, so dropping idle connections
-// before a retry never touches other users of http.DefaultTransport.
+// newOIDCHTTPClient returns a client with its own connection pool, so connection handling here
+// never touches other users of http.DefaultTransport.
 func newOIDCHTTPClient() *http.Client {
 	transport, ok := http.DefaultTransport.(*http.Transport)
 	if ok {
@@ -316,13 +316,12 @@ func (p *oidcProvider) fetchOIDCTokenWithRetry(ctx context.Context, requestURL, 
 	attempt := 0
 	err := executor.ExecuteWithPredicate(ctx, func() error {
 		attempt++
+		client := p.getHTTPClient()
 		if attempt > 1 {
-			// A timed-out attempt can leave its connection in the pool. Over HTTP/2 every later
-			// attempt would be multiplexed onto that same connection, so one stalled connection
-			// would fail them all; dropping idle connections makes the retry dial afresh.
-			p.getHTTPClient().CloseIdleConnections()
+			client = freshConnectionClient(client)
+			defer client.CloseIdleConnections()
 		}
-		t, err := p.fetchOIDCTokenOnce(ctx, requestURL, requestToken, audience)
+		t, err := fetchOIDCTokenOnce(ctx, client, requestURL, requestToken, audience)
 		if err != nil {
 			if attempt < oidcMaxAttempts && shouldRetry(err) {
 				log.Warn("GitHub OIDC token request failed, retrying", logKeyProvider, p.name,
@@ -337,6 +336,23 @@ func (p *oidcProvider) fetchOIDCTokenWithRetry(ctx context.Context, requestURL, 
 		return "", err
 	}
 	return token, nil
+}
+
+// freshConnectionClient returns a copy of client whose transport has an empty connection pool.
+// A timed-out attempt can leave its connection in the shared pool, and over HTTP/2 a retry would
+// be multiplexed onto it, so one stalled connection would fail every attempt. Dropping idle
+// connections is not enough: the timed-out stream is torn down asynchronously, so the connection
+// can still look busy when the retry starts. A client whose transport is not an *http.Transport
+// cannot be cloned; it is returned as is after dropping its idle connections.
+func freshConnectionClient(client *http.Client) *http.Client {
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		client.CloseIdleConnections()
+		return client
+	}
+	fresh := *client
+	fresh.Transport = transport.Clone()
+	return &fresh
 }
 
 // oidcRetryConfig returns the retry policy for the token request.
@@ -368,7 +384,7 @@ func isRetryableOIDCError(ctx context.Context, err error) bool {
 // fetchOIDCTokenOnce makes one request to GitHub's OIDC endpoint. Transport errors (including the
 // per-attempt timeout, whether it fires before the headers or while the body is read), 429 and
 // 5xx are wrapped with ErrGitHubOIDCEndpointUnavailable so the caller can retry them.
-func (p *oidcProvider) fetchOIDCTokenOnce(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
+func fetchOIDCTokenOnce(ctx context.Context, client *http.Client, requestURL, requestToken, audience string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("%w: create OIDC request: %w", errUtils.ErrAuthenticationFailed, err)
@@ -380,7 +396,7 @@ func (p *oidcProvider) fetchOIDCTokenOnce(ctx context.Context, requestURL, reque
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("Authorization", "bearer "+requestToken)
 	req.Header.Set("Accept", "application/json")
-	resp, err := p.getHTTPClient().Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w: call OIDC endpoint: %w", errUtils.ErrAuthenticationFailed, errUtils.ErrGitHubOIDCEndpointUnavailable, err)
 	}

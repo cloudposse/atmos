@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -367,6 +368,26 @@ func TestNewOIDCHTTPClient_OwnsItsTransport(t *testing.T) {
 			return nil, errors.New("must not be used")
 		})
 		assertOwnTransport(t)
+	})
+}
+
+func TestFreshConnectionClient(t *testing.T) {
+	t.Run("clones an *http.Transport", func(t *testing.T) {
+		base := &http.Client{Timeout: 7 * time.Second, Transport: &http.Transport{ForceAttemptHTTP2: true}}
+		fresh := freshConnectionClient(base)
+		require.NotSame(t, base, fresh)
+		transport, ok := fresh.Transport.(*http.Transport)
+		require.True(t, ok)
+		assert.NotSame(t, base.Transport, transport, "the retry must not share the pool")
+		assert.True(t, transport.ForceAttemptHTTP2)
+		assert.Equal(t, base.Timeout, fresh.Timeout)
+	})
+
+	t.Run("returns any other transport as is", func(t *testing.T) {
+		base := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("unused")
+		})}
+		assert.Same(t, base, freshConnectionClient(base))
 	})
 }
 
