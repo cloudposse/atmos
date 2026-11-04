@@ -46,6 +46,8 @@ def record():
     else:
         # --base records the tracked check files as they were at that revision instead of the
         # working tree, so a real diff against HEAD exists when the working tree has no edits.
+        # Paths the revision lacks keep their HEAD version on purpose: the hook loads its catalog
+        # and check scripts from the staged tree, so removing them would break the recorded run.
         stage_revision(root, private_index, base, paths)
     selected = exec.run(["git", "diff", "--cached", "--name-only", "-z"], working_directory = root, env = private_index, output = "capture").stdout
     if not selected:
