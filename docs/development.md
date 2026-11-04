@@ -167,7 +167,8 @@ The recording selects actual working changes in `.atmos-git-hooks.yaml`, the che
 scripts and commands, and this guide using a temporary index. It checks those
 inputs read-only before recording `atmos git hooks run pre-commit`, verifies the
 live index and selected working files are unchanged, and removes the temporary
-index afterward. Make an intended edit to one of those files before regenerating;
+index afterward. Make an intended edit to one of those files before regenerating,
+or pass `--base <rev>` to diff them against an earlier revision (default `HEAD`);
 the recorder does not manufacture sample changes. Go checks are skipped when the
 selected changes contain no Go files.
 
