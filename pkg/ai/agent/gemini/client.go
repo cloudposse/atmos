@@ -408,8 +408,9 @@ func extractGeminiFunctionCalls(functionCalls []*genai.FunctionCall, result *typ
 // extractGeminiUsage extracts usage metadata and adds it to the result.
 func extractGeminiUsage(metadata *genai.GenerateContentResponseUsageMetadata, result *types.Response) {
 	result.Usage = &types.Usage{
-		InputTokens:         int64(metadata.PromptTokenCount),
-		OutputTokens:        int64(metadata.CandidatesTokenCount),
+		InputTokens: int64(metadata.PromptTokenCount),
+		// Gemini reports thinking tokens separately from candidates, but bills them as output.
+		OutputTokens:        int64(metadata.CandidatesTokenCount) + int64(metadata.ThoughtsTokenCount),
 		TotalTokens:         int64(metadata.TotalTokenCount),
 		CacheReadTokens:     int64(metadata.CachedContentTokenCount),
 		CacheCreationTokens: 0, // Gemini doesn't separately report cache creation tokens.
