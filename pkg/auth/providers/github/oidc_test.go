@@ -363,9 +363,9 @@ func TestOIDCProvider_Authenticate_URLValidation(t *testing.T) {
 }
 
 // TestOidcProvider_IsAmbient verifies that the GitHub OIDC provider opts into the auth
-// manager's ambient handling. Its token is requested fresh from the Actions token
-// endpoint on every call, so persisting it to the keyring would replay a token the
-// Actions runtime has already rotated (issue #2695, same shape).
+// manager's ambient handling. Its token comes from the Actions token endpoint and is
+// reused only in memory within one process, so persisting it to the keyring would replay
+// a token the Actions runtime has already rotated (issue #2695, same shape).
 func TestOidcProvider_IsAmbient(t *testing.T) {
 	p := &oidcProvider{name: "gh-oidc"}
 

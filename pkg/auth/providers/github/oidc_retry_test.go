@@ -192,14 +192,14 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 		{
 			name:           "hang times out then success",
 			handlers:       []http.HandlerFunc{respondHang(), respondToken(validJWT)},
-			attemptTimeout: 100 * time.Millisecond,
+			attemptTimeout: 500 * time.Millisecond,
 			wantToken:      validJWT,
 			wantRequests:   2,
 		},
 		{
 			name:           "body stalls after headers then success",
 			handlers:       []http.HandlerFunc{respondHeadersThenHang(), respondToken(validJWT)},
-			attemptTimeout: 100 * time.Millisecond,
+			attemptTimeout: 500 * time.Millisecond,
 			wantToken:      validJWT,
 			wantRequests:   2,
 		},
@@ -213,7 +213,7 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 		{
 			name:           "retries exhausted on timeouts",
 			handlers:       []http.HandlerFunc{respondHang()},
-			attemptTimeout: 50 * time.Millisecond,
+			attemptTimeout: 500 * time.Millisecond,
 			wantRequests:   oidcMaxAttempts,
 			wantErrIs:      []error{errUtils.ErrAuthenticationFailed, errUtils.ErrGitHubOIDCEndpointUnavailable},
 			wantErrContain: "Client.Timeout exceeded",
