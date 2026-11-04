@@ -158,6 +158,8 @@ const (
 	HelmForceConflictsSectionName     = "force_conflicts"
 	HelmDependencyUpdateSectionName   = "dependency_update"
 	HelmCreateNamespaceSectionName    = "create_namespace"
+	HelmKubeVersionSectionName        = "kube_version"
+	HelmAPIVersionsSectionName        = "api_versions"
 	HelmDefaultMaxHistory             = 10
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"

@@ -12,6 +12,7 @@ import (
 
 	"helm.sh/helm/v4/pkg/action"
 	helmchart "helm.sh/helm/v4/pkg/chart"
+	"helm.sh/helm/v4/pkg/chart/common"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/downloader"
@@ -50,6 +51,13 @@ type chartSpec struct {
 	// pre-existing namespace instead, so an identity that lacks cluster-level
 	// namespace-create permission can run the install.
 	CreateNamespace bool
+	// KubeVersion is the Kubernetes version a client-side render reports as
+	// .Capabilities.KubeVersion (`helm template --kube-version`). Nil keeps
+	// Helm's built-in default.
+	KubeVersion *common.KubeVersion
+	// APIVersions are extra API versions a client-side render reports through
+	// .Capabilities.APIVersions (`helm template --api-versions`).
+	APIVersions []string
 	// Values is the merged Helm values map.
 	Values map[string]any
 	// IncludeCRDs includes CRDs from the chart's crds/ directory in the output.
@@ -114,6 +122,7 @@ func renderManifest(ctx context.Context, spec *chartSpec) (string, error) {
 	}
 	client.DryRunStrategy = action.DryRunClient
 	client.IncludeCRDs = spec.IncludeCRDs
+	applyRenderCapabilities(client, spec)
 
 	manifest, err := runInstall(ctx, client, settings, spec)
 	if err != nil {

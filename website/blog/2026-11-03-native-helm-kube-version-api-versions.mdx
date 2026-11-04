@@ -1,0 +1,71 @@
+---
+slug: native-helm-kube-version-api-versions
+title: "Render Native Helm Charts Offline With the Target Cluster's Capabilities"
+authors: [ZoesDev]
+tags: [enhancement]
+date: 2026-11-03T12:00:00.000Z
+---
+
+Many charts only render some objects when the cluster supports them. A chart checks
+`.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor"` before emitting a
+ServiceMonitor, or branches on the Kubernetes version. When native Helm renders a chart without a
+cluster, those checks see only Helm's built-in defaults, so the objects silently disappear from the
+output.
+
+<!--truncate-->
+
+## The Problem
+
+Native Helm renders client-side for [`atmos helm template`](/cli/commands/helm/template),
+[`atmos helm diff`](/cli/commands/helm/diff), and delivery to a Git deployment repository. A
+client-side render has no API server to ask, so `.Capabilities` holds Helm's defaults: a fixed
+Kubernetes version and only the built-in API groups.
+
+Charts such as `grafana/loki` gate their ServiceMonitor on the Prometheus Operator CRD. Rendered
+offline for a GitOps repository, the ServiceMonitor never appears, there is no error, and Argo CD or
+Flux then deploys a release with no monitoring. The Helm CLI solves this with
+`helm template --kube-version` and `--api-versions`; native Helm had no equivalent.
+
+## The Fix
+
+Native Helm components now accept `kube_version` and `api_versions`, and the rendering commands
+accept matching `--kube-version` and `--api-versions` flags:
+
+```yaml
+components:
+  helm:
+    loki:
+      chart: grafana/loki
+      namespace: monitoring
+      kube_version: "1.37.0"
+      api_versions:
+        - monitoring.coreos.com/v1
+        - monitoring.coreos.com/v1/ServiceMonitor
+```
+
+Both settings inherit like any other component field, so an abstract base component can describe a
+cluster once and every chart for that cluster can inherit it. Installs and upgrades against a live
+cluster are unchanged: they use the cluster's own capabilities.
+
+## How to Use It
+
+Set the fields on a component or a shared base component, then render or deliver as usual:
+
+```shell
+atmos helm deploy loki -s plat-ue2-dev --target=deployment-repo
+```
+
+For a one-off render, pass the flags instead:
+
+```shell
+atmos helm template loki -s plat-ue2-dev --kube-version 1.37.0 \
+  --api-versions monitoring.coreos.com/v1/ServiceMonitor
+```
+
+See the [Helm component reference](/stacks/components/helm) for details.
+
+## Get Involved
+
+Atmos is open source and we'd love your feedback. Join the conversation in the
+[Atmos community Slack](https://cloudposse.com/slack) or open an issue on
+[GitHub](https://github.com/cloudposse/atmos).

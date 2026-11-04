@@ -99,6 +99,8 @@ fields:
 | `name` | Release name. Defaults to the component's last path segment. |
 | `values` | The chart's values, merged through Atmos inheritance. This map **is** the values passed to the chart. |
 | `values_files` | Value files layered *underneath* inline `values` (templated, in listed order). |
+| `kube_version` | Kubernetes version for `.Capabilities.KubeVersion` in client-side renders (template, diff/plan, external targets), like `helm template --kube-version`. Quote it (`"1.30.0"`). CLI: `--kube-version`. |
+| `api_versions` | Extra API versions for `.Capabilities.APIVersions` in client-side renders, like `helm template --api-versions`; needed for charts that gate objects on CRDs (e.g. `monitoring.coreos.com/v1/ServiceMonitor`). CLI: `--api-versions` (replaces the list). Cluster installs/upgrades use live capabilities. |
 | `render` | Default output for `atmos helm template` (`output.path`, `output.split`). |
 | `provision` | Delivery targets for `apply`/`deploy` — the cluster (default) or an external target such as a Git deployment repository. |
 

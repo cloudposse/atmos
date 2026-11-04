@@ -566,3 +566,37 @@ func TestBuildConfigAndStacksInfoWithNoTagsOrLabels(t *testing.T) {
 	assert.Empty(t, info.Tags)
 	assert.Empty(t, info.Labels)
 }
+
+func TestCapabilityFlagsRegisteredOnRenderingOperations(t *testing.T) {
+	for _, name := range []string{"template", "diff", "plan", "apply", "deploy"} {
+		opCmd := newOperationCommand(name, name)
+		assert.NotNil(t, opCmd.Flag("kube-version"), "expected --kube-version on %q", name)
+		assert.NotNil(t, opCmd.Flag("api-versions"), "expected --api-versions on %q", name)
+	}
+	for _, name := range []string{"delete", "values"} {
+		opCmd := newOperationCommand(name, name)
+		assert.Nil(t, opCmd.Flag("kube-version"), "%q does not render a chart", name)
+		assert.Nil(t, opCmd.Flag("api-versions"), "%q does not render a chart", name)
+	}
+}
+
+func TestGetOperationFlagsMapsCapabilityFlags(t *testing.T) {
+	cmd := newOperationCommand("template", "Template")
+	require.NoError(t, cmd.Flags().Set("kube-version", "1.37.0"))
+	require.NoError(t, cmd.Flags().Set("api-versions", "monitoring.coreos.com/v1,monitoring.coreos.com/v1/ServiceMonitor"))
+	require.NoError(t, cmd.Flags().Set("api-versions", "autoscaling.k8s.io/v1"))
+
+	actual := getOperationFlags(cmd)
+	assert.Equal(t, "1.37.0", actual[cfg.HelmKubeVersionSectionName])
+	assert.Equal(t, []string{
+		"monitoring.coreos.com/v1",
+		"monitoring.coreos.com/v1/ServiceMonitor",
+		"autoscaling.k8s.io/v1",
+	}, actual[cfg.HelmAPIVersionsSectionName])
+
+	// Unset flags must not leak into the resolved map, or they would clobber the
+	// component's own kube_version / api_versions.
+	defaults := getOperationFlags(newOperationCommand("template", "Template"))
+	assert.NotContains(t, defaults, cfg.HelmKubeVersionSectionName)
+	assert.NotContains(t, defaults, cfg.HelmAPIVersionsSectionName)
+}

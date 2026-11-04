@@ -71,6 +71,12 @@ included in affected runs.
   <dt>`values_files`</dt>
   <dd>A list of value files layered <em>underneath</em> the inline <code>values</code> (templated, in listed order).</dd>
 
+  <dt>`kube_version`</dt>
+  <dd>The Kubernetes version the chart sees as <code>.Capabilities.KubeVersion</code> when it is rendered client-side (<code>atmos helm template</code>, <code>diff</code>/<code>plan</code>, and delivery to an external target such as a Git deployment repository), like <code>helm template --kube-version</code>. It also drives the chart's own <code>kubeVersion</code> constraint check. Quote the value (<code>"1.30.0"</code>); an unquoted <code>1.30</code> is a YAML number and is rejected. Defaults to Helm's built-in version. Overridden by <code>--kube-version</code>.</dd>
+
+  <dt>`api_versions`</dt>
+  <dd>Extra Kubernetes API versions added to <code>.Capabilities.APIVersions</code> for client-side renders, like <code>helm template --api-versions</code>. Use it when a chart gates objects on a CRD being installed, for example <code>.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor"</code>; without it an offline render silently omits those objects. List both forms a chart may check, <code>group/version</code> and <code>group/version/Kind</code>. Replaced by <code>--api-versions</code>. Installs and upgrades against a cluster use the cluster's own capabilities and ignore both settings.</dd>
+
   <dt>`render`</dt>
   <dd>Default output for <code>atmos helm template</code> (<code>output.path</code> and <code>output.split</code>).</dd>
 

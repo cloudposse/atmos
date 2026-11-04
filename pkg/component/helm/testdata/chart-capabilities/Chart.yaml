@@ -1,0 +1,5 @@
+apiVersion: v2
+name: capabilities
+description: Chart whose output depends on .Capabilities, for kube_version / api_versions tests.
+type: application
+version: 0.1.0

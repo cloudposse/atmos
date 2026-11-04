@@ -1794,6 +1794,7 @@ var (
 	ErrHelmUnsupportedSubcommand     = errors.New("unsupported helm subcommand")
 	ErrHelmChartNotConfigured        = errors.New("helm component is missing a 'chart' reference")
 	ErrHelmRenderFailed              = errors.New("failed to render helm chart")
+	ErrHelmKubeVersionInvalid        = errors.New("invalid helm kube_version")
 	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
 	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
 	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")

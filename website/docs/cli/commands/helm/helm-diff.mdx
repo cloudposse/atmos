@@ -72,6 +72,12 @@ precedence (`--from-manifest` → `--against` → deployed release):
   <dt>`--dependency-update` <em>(optional)</em></dt>
   <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
 
+  <dt>`--kube-version` <em>(optional)</em></dt>
+  <dd>Kubernetes version reported to the chart as <code>.Capabilities.KubeVersion</code> during client-side rendering, like <code>helm template --kube-version</code>. Overrides the component's [`kube_version`](/stacks/components/helm).</dd>
+
+  <dt>`--api-versions` <em>(optional)</em></dt>
+  <dd>Kubernetes API versions added to <code>.Capabilities.APIVersions</code> during client-side rendering, like <code>helm template --api-versions</code>. Comma-separated or repeated. Replaces the component's [`api_versions`](/stacks/components/helm).</dd>
+
   <dt>`-f` / `--values`, `--set`, `--set-string`, `--set-file`, `--set-json`, `--set-literal` <em>(optional)</em></dt>
   <dd>Repeatable Helm-compatible value overrides for this preview. Reuse them with <code>apply</code> to preview the exact deployment; they do not modify stack configuration. See <a href="/cli/commands/helm/usage#runtime-value-overrides">runtime value overrides</a>.</dd>
 

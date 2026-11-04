@@ -53,6 +53,11 @@ func buildChartSpec(
 		return nil, err
 	}
 
+	kubeVersion, err := resolveKubeVersion(section)
+	if err != nil {
+		return nil, err
+	}
+
 	return &chartSpec{
 		Chart:           chart,
 		RepoURL:         stringField(section, "repository"),
@@ -60,6 +65,8 @@ func buildChartSpec(
 		ReleaseName:     resolveReleaseName(section, info),
 		Namespace:       resolveNamespace(section),
 		CreateNamespace: resolveCreateNamespace(section),
+		KubeVersion:     kubeVersion,
+		APIVersions:     asStringSlice(section[cfg.HelmAPIVersionsSectionName]),
 		Values:          values,
 		IncludeCRDs:     true,
 		Repositories:    mergeRepositories(atmosConfig, section),
