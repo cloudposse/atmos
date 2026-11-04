@@ -7,21 +7,24 @@ tags: [bugfix, dx]
 
 When a pull request plans changes across many components, you need to see what will change, which plans
 failed, and which components need no action. Opening a separate log for every component makes that
-review slow. Atmos puts the normal component summaries beneath the bulk-plan overview so you can
+review slow. Atmos brings back the normal component summaries beneath the bulk-plan overview so you can
 review those results together in your CI summary or pull request comment.
 
 <!--truncate-->
 
 ## The Problem
 
-Previously, Atmos showed a summary table for bulk plans. That overview was helpful for seeing which
-components changed, but it left out the normal per-component plan summaries, including "No Changes"
-results. To review each plan in detail, you had to open the individual component logs.
+Bulk plans used to write the normal summary for every component, including "No Changes" results. In
+v1.221.0, we dropped those summaries as part of the refactoring work to support DAGs, where components
+run concurrently in dependency order
+([#2577](https://github.com/cloudposse/atmos/pull/2577)). Bulk plans showed a single overview table
+instead. That overview was helpful for seeing which components changed, but it only expanded failed and
+changed components. To review any other plan in detail, you had to open the individual component logs.
 
 ## The Fix
 
 [Bulk plans](/cli/commands/terraform/plan#github-actions-ci-output) keep the aggregate overview
-and append the normal summary for each executed component,
+and bring back the normal summary for each executed component,
 including no-change results. The summaries use the same [CI templates](/cli/configuration/ci/templates)
 and configured overrides as single-component plans, ordered by stack and component. Skipped components
 remain in the overview with their reason.
