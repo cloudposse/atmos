@@ -28,7 +28,7 @@ the exit code itself prints as `×` unless it is wrapped in `redact.Safe`.
   event over the 1 MiB envelope limit and drop it, and a secret split by the cut is still masked. `buildExceptionEvent` also tolerates a nil `info`.
 - `pkg/pro/exception_event_message_test.go`: tests for the message, the command prefix, wrapped context, the
   retained error-type diagnostics, masking of a registered secret in the built event, a secret that straddles
-  the truncation cut, truncation on a rune boundary, and nil `info`.
+  the truncation cut, truncation on a rune boundary, the encoded size of a worst-case event, and nil `info`.
 - `website/docs/cli/configuration/settings/pro.mdx`: documents the event message, the 8 KiB limit, and that the
   failed command's own output is not part of the event.
 

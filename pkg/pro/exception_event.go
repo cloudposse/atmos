@@ -21,7 +21,8 @@ import (
 
 const (
 	// The event message is cut at this many bytes, so one verbose error cannot push the whole
-	// event over the envelope limit and drop it.
+	// event over the envelope limit and drop it. The text is written to both the message and the
+	// top exception value, so it adds at most twice this size (about 16 KiB of the 1 MiB limit).
 	maxExceptionMessageBytes = 8 << 10
 	// This marker is appended to error text that was cut at maxExceptionMessageBytes.
 	truncationMarker = "… [truncated]"

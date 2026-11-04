@@ -1,6 +1,7 @@
 package pro
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -135,4 +136,9 @@ func TestBuildExceptionEvent_OversizedMessageIsBoundedAndStillSends(t *testing.T
 	assert.True(t, utf8.ValidString(masked.Message), "truncation must not split a rune")
 	assert.LessOrEqual(t, len(topExceptionValue(t, masked)), maxExceptionMessageBytes+len(truncationMarker))
 	assert.Contains(t, masked.Message, truncationMarker)
+
+	// The summary is written to the message and to the top exception value, so it counts twice.
+	encoded, err := json.Marshal(masked)
+	require.NoError(t, err)
+	assert.Less(t, len(encoded), maxExceptionEnvelopeBytes/16, "the worst-case summary must stay a small share of the envelope limit")
 }
