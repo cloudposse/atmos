@@ -32,6 +32,13 @@ const (
 	fieldMaxTokens          = "max_tokens"
 	fieldMessages           = "messages"
 	fieldSystem             = "system"
+
+	// Bedrock/Anthropic content block keys and values used in the "system" field.
+	fieldBlockType        = "type"
+	fieldBlockText        = "text"
+	fieldCacheControl     = "cache_control"
+	blockTypeText         = "text"
+	cacheControlEphemeral = "ephemeral"
 )
 
 // Client provides an interface to AWS Bedrock for Atmos.
@@ -350,9 +357,9 @@ func (c *Client) buildSystemBlocks(systemPrompt, atmosMemory string) []map[strin
 		if text == "" {
 			return
 		}
-		block := map[string]interface{}{"type": "text", "text": text}
+		block := map[string]interface{}{fieldBlockType: blockTypeText, fieldBlockText: text}
 		if cache.enabled && cached {
-			block["cache_control"] = map[string]string{"type": "ephemeral"}
+			block[fieldCacheControl] = map[string]string{fieldBlockType: cacheControlEphemeral}
 		}
 		blocks = append(blocks, block)
 	}
