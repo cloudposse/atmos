@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -148,7 +149,8 @@ func decodeClaims(jwt string) (*Claims, error) {
 
 // ExpiresAt returns the expiry time from a JWT's "exp" claim. The signature is not verified: the
 // result only decides whether a token minted earlier in this process is still worth reusing. It
-// returns ErrTokenDecode when the token is malformed or has no positive "exp" claim.
+// returns ErrTokenDecode when the token is malformed, has no positive "exp" claim, or has an "exp"
+// too large to represent as a time.
 func ExpiresAt(jwt string) (time.Time, error) {
 	payload, err := decodePayload(jwt)
 	if err != nil {
@@ -164,7 +166,12 @@ func ExpiresAt(jwt string) (time.Time, error) {
 	if c.Exp <= 0 {
 		return time.Time{}, fmt.Errorf("%w: missing exp claim", ErrTokenDecode)
 	}
-	return time.Unix(int64(c.Exp), 0), nil
+	// float64(math.MaxInt64) rounds up to 2^63, so this rejects exactly the values int64 cannot hold.
+	if c.Exp >= math.MaxInt64 {
+		return time.Time{}, fmt.Errorf("%w: exp claim out of range", ErrTokenDecode)
+	}
+	sec, frac := math.Modf(c.Exp)
+	return time.Unix(int64(sec), int64(frac*float64(time.Second))), nil
 }
 
 // decodePayload returns the decoded payload (middle segment) of a JWT.

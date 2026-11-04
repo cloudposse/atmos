@@ -173,7 +173,7 @@ auth:
   <dd>**Required.** OIDC audience that matches the cloud IAM trust policy.</dd>
 </dl>
 
-:::info Credentials are never cached
+:::info Credentials are never persisted
 `github/oidc` requests a token from the GitHub Actions token endpoint, and Atmos never writes
 the resulting credentials to the keyring. A rotated Actions token is always picked up on the
 next run. Within a single Atmos command, identities that share the provider reuse one token

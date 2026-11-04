@@ -33,7 +33,10 @@ const (
 	oidcBackoffJitter  = 0.5
 	oidcMaxDrainBytes  = 4 << 10 // Error-response bytes read so the connection can be reused.
 	oidcMaxBodyBytes   = 1 << 20 // Upper bound on a token response; a JWT is a few KiB.
-	logKeyProvider     = "provider"
+	// Fallback transport settings, matching net/http's DefaultTransport.
+	oidcTLSHandshakeTimeout = 10 * time.Second
+	oidcIdleConnTimeout     = 90 * time.Second
+	logKeyProvider          = "provider"
 )
 
 // defaultOIDCHTTPClient is shared by every provider instance so repeated requests can reuse
@@ -43,11 +46,20 @@ var defaultOIDCHTTPClient = newOIDCHTTPClient()
 // newOIDCHTTPClient returns a client with its own connection pool, so dropping idle connections
 // before a retry never touches other users of http.DefaultTransport.
 func newOIDCHTTPClient() *http.Client {
-	client := &http.Client{Timeout: OidcTimeout * time.Second}
-	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
-		client.Transport = transport.Clone()
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if ok {
+		transport = transport.Clone()
+	} else {
+		// http.DefaultTransport was replaced (for example by instrumentation). Build a pool of our
+		// own rather than fall back to it, since a nil Transport would resolve to the shared one.
+		transport = &http.Transport{
+			Proxy:               http.ProxyFromEnvironment,
+			ForceAttemptHTTP2:   true,
+			TLSHandshakeTimeout: oidcTLSHandshakeTimeout,
+			IdleConnTimeout:     oidcIdleConnTimeout,
+		}
 	}
-	return client
+	return &http.Client{Timeout: OidcTimeout * time.Second, Transport: transport}
 }
 
 // oidcProvider implements GitHub OIDC authentication.
@@ -388,24 +400,44 @@ func (p *oidcProvider) fetchOIDCTokenOnce(ctx context.Context, requestURL, reque
 	return readOIDCTokenResponse(resp.Body)
 }
 
-// readOIDCTokenResponse extracts the token from a 200 response. The body is read in full before
-// it is parsed, so a read that fails (the per-attempt timeout firing mid-body, a dropped
-// connection) is reported as retryable, while a body that arrives intact but does not parse is not.
+// readOIDCTokenResponse extracts the token from a 200 response. It decodes from the stream and
+// returns once the JSON object is complete, without waiting for the end of the body. A read that
+// fails first (the per-attempt timeout firing mid-body, a dropped connection, a body cut short)
+// is reported as retryable. A body that is not a token object, or whose object is larger than
+// oidcMaxBodyBytes, is not.
 func readOIDCTokenResponse(body io.Reader) (string, error) {
-	raw, err := io.ReadAll(io.LimitReader(body, oidcMaxBodyBytes))
-	if err != nil {
-		return "", fmt.Errorf("%w: %w: read OIDC response: %w", errUtils.ErrAuthenticationFailed, errUtils.ErrGitHubOIDCEndpointUnavailable, err)
-	}
+	limited := &countingReader{r: io.LimitReader(body, oidcMaxBodyBytes+1)}
 	var out struct {
 		Value string `json:"value"`
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return "", fmt.Errorf("%w: decode OIDC response: %w", errUtils.ErrAuthenticationFailed, err)
+	err := json.NewDecoder(limited).Decode(&out)
+	if limited.n > oidcMaxBodyBytes {
+		return "", fmt.Errorf("%w: OIDC response exceeds %d bytes", errUtils.ErrAuthenticationFailed, oidcMaxBodyBytes)
+	}
+	if err != nil {
+		var syntaxErr *json.SyntaxError
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &syntaxErr) || errors.As(err, &typeErr) {
+			return "", fmt.Errorf("%w: decode OIDC response: %w", errUtils.ErrAuthenticationFailed, err)
+		}
+		return "", fmt.Errorf("%w: %w: read OIDC response: %w", errUtils.ErrAuthenticationFailed, errUtils.ErrGitHubOIDCEndpointUnavailable, err)
 	}
 	if out.Value == "" {
 		return "", fmt.Errorf("%w: empty token in OIDC response", errUtils.ErrAuthenticationFailed)
 	}
 	return out.Value, nil
+}
+
+// countingReader counts the bytes read through it.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(b []byte) (int, error) {
+	n, err := c.r.Read(b)
+	c.n += int64(n)
+	return n, err
 }
 
 // Validate validates the provider configuration.

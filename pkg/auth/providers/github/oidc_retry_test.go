@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -160,6 +161,20 @@ func respondHeadersThenHang() http.HandlerFunc {
 	}
 }
 
+// respondTokenThenHang sends a complete token object, then holds the body open until the client
+// gives up, as an unterminated chunked response would.
+func respondTokenThenHang(jwt string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintf(w, `{"value":%q}`, jwt)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		<-r.Context().Done()
+	}
+}
+
 // newTestOIDCProvider returns a provider that trusts ts and times out each attempt after attemptTimeout.
 func newTestOIDCProvider(ts *tokenServer, clock *fakeClock, attemptTimeout time.Duration) *oidcProvider {
 	// Copy the server's client: it is shared, and callers may run concurrently.
@@ -224,6 +239,15 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 			wantRequests:   2,
 		},
 		{
+			// The token is used as soon as its object is complete; an attempt that waited for the end
+			// of the body would time out and retry.
+			name:           "complete token then body stalls succeeds on first attempt",
+			handlers:       []http.HandlerFunc{respondTokenThenHang(validJWT), respondToken(validJWT)},
+			attemptTimeout: 2 * time.Second,
+			wantToken:      validJWT,
+			wantRequests:   1,
+		},
+		{
 			// Over HTTP/2 the timed-out attempt's connection stays pooled; the retry must not be
 			// multiplexed onto it, or a stalled connection would fail every attempt.
 			name:           "HTTP/2 hang times out then success on a new connection",
@@ -271,6 +295,20 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 			wantErrIs:      []error{errUtils.ErrAuthenticationFailed},
 			wantErrNotIs:   []error{errUtils.ErrGitHubOIDCEndpointUnavailable},
 			wantErrContain: "decode OIDC response",
+		},
+		{
+			name:           "oversized response is not retried",
+			handlers:       []http.HandlerFunc{respondBody(`{"value":"` + strings.Repeat("a", oidcMaxBodyBytes) + `"}`), respondToken(validJWT)},
+			wantRequests:   1,
+			wantErrIs:      []error{errUtils.ErrAuthenticationFailed},
+			wantErrNotIs:   []error{errUtils.ErrGitHubOIDCEndpointUnavailable},
+			wantErrContain: "exceeds",
+		},
+		{
+			name:         "truncated JSON is retried",
+			handlers:     []http.HandlerFunc{respondBody(`{"value":"abc`), respondToken(validJWT)},
+			wantToken:    validJWT,
+			wantRequests: 2,
 		},
 		{
 			name:           "empty token is not retried",

@@ -66,7 +66,8 @@ func TestExpiresAt(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "integer exp", jwt: makeJWT(t, map[string]any{"exp": 1793836800}), want: time.Unix(1793836800, 0)},
-		{name: "fractional exp", jwt: makeJWT(t, map[string]any{"exp": 1793836800.75}), want: time.Unix(1793836800, 0)},
+		{name: "fractional exp", jwt: makeJWT(t, map[string]any{"exp": 1793836800.75}), want: time.Unix(1793836800, 750_000_000)},
+		{name: "exp beyond int64", jwt: makeJWT(t, map[string]any{"exp": 1e19}), wantErr: true},
 		{name: "missing exp", jwt: makeJWT(t, map[string]any{"sub": "x"}), wantErr: true},
 		{name: "zero exp", jwt: makeJWT(t, map[string]any{"exp": 0}), wantErr: true},
 		{name: "non-numeric exp", jwt: makeJWT(t, map[string]any{"exp": "soon"}), wantErr: true},

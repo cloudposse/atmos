@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -345,6 +346,33 @@ func TestOIDCProvider_getHTTPClient(t *testing.T) {
 	p.httpClient = custom
 	assert.Equal(t, custom, p.getHTTPClient())
 }
+
+func TestNewOIDCHTTPClient_OwnsItsTransport(t *testing.T) {
+	assertOwnTransport := func(t *testing.T) {
+		t.Helper()
+		client := newOIDCHTTPClient()
+		transport, ok := client.Transport.(*http.Transport)
+		require.True(t, ok, "client must have its own *http.Transport")
+		if shared, ok := http.DefaultTransport.(*http.Transport); ok {
+			assert.NotSame(t, shared, transport)
+		}
+	}
+
+	t.Run("default transport is cloned", assertOwnTransport)
+
+	t.Run("replaced default transport is not shared", func(t *testing.T) {
+		orig := http.DefaultTransport
+		t.Cleanup(func() { http.DefaultTransport = orig })
+		http.DefaultTransport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("must not be used")
+		})
+		assertOwnTransport(t)
+	})
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestOIDCProvider_Authenticate_URLValidation(t *testing.T) {
 	config := validOidcSpec()
