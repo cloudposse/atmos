@@ -31,6 +31,7 @@ const (
 	fieldAnthropicVersion   = "anthropic_version"
 	fieldMaxTokens          = "max_tokens"
 	fieldMessages           = "messages"
+	fieldSystem             = "system"
 )
 
 // Client provides an interface to AWS Bedrock for Atmos.
@@ -38,6 +39,7 @@ type Client struct {
 	client *bedrockruntime.Client
 	config *base.Config
 	region string
+	cache  *cacheConfig
 }
 
 // NewClient creates a new AWS Bedrock client from Atmos configuration.
@@ -80,6 +82,7 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 		client: client,
 		config: cfg,
 		region: region,
+		cache:  extractCacheConfig(atmosConfig),
 	}, nil
 }
 
@@ -261,6 +264,16 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
 	defer perf.Track(nil, "bedrock.Client.SendMessageWithToolsAndHistory")()
 
+	return c.sendWithTools(ctx, nil, messages, availableTools)
+}
+
+// sendWithTools sends messages and tools, with optional system blocks, through InvokeModel.
+func (c *Client) sendWithTools(
+	ctx context.Context,
+	system []map[string]interface{},
+	messages []types.Message,
+	availableTools []tools.Tool,
+) (*types.Response, error) {
 	// Convert messages to Bedrock/Anthropic format.
 	bedrockMessages := convertMessagesToBedrockFormat(messages)
 
@@ -273,6 +286,11 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 		fieldMaxTokens:        c.config.MaxTokens,
 		fieldMessages:         bedrockMessages,
 		"tools":               bedrockTools,
+	}
+
+	// System prompts go in the separate "system" field; the messages array has user and assistant turns only.
+	if len(system) > 0 {
+		requestBody[fieldSystem] = system
 	}
 
 	bodyBytes, err := json.Marshal(requestBody)
@@ -304,8 +322,9 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 }
 
 // SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
-// For Bedrock, caching happens automatically with up to 90% discount.
-// The system prompt and atmosMemory are prepended as system messages.
+// The system prompt and atmosMemory are sent in the request's "system" field. Claude on Bedrock caches only
+// content marked with cache_control, so each block is marked for caching when enabled (cached reads cost a tenth
+// of the input price or less).
 func (c *Client) SendMessageWithSystemPromptAndTools(
 	ctx context.Context,
 	systemPrompt string,
@@ -315,12 +334,32 @@ func (c *Client) SendMessageWithSystemPromptAndTools(
 ) (*types.Response, error) {
 	defer perf.Track(nil, "bedrock.Client.SendMessageWithSystemPromptAndTools")()
 
-	// Build messages with system prompts prepended using shared utility.
-	systemMessages := base.PrependSystemMessages(systemPrompt, atmosMemory, messages)
+	return c.sendWithTools(ctx, c.buildSystemBlocks(systemPrompt, atmosMemory), messages, availableTools)
+}
 
-	// Call existing method with system messages prepended.
-	// Bedrock automatically caches content with up to 90% discount (simplified auto mode).
-	return c.SendMessageWithToolsAndHistory(ctx, systemMessages, availableTools)
+// buildSystemBlocks builds the "system" field: the agent system prompt and the ATMOS.md content as separate
+// text blocks, each marked for caching when enabled, matching the Anthropic provider.
+func (c *Client) buildSystemBlocks(systemPrompt, atmosMemory string) []map[string]interface{} {
+	cache := c.cache
+	if cache == nil {
+		cache = defaultCacheConfig()
+	}
+
+	var blocks []map[string]interface{}
+	addBlock := func(text string, cached bool) {
+		if text == "" {
+			return
+		}
+		block := map[string]interface{}{"type": "text", "text": text}
+		if cache.enabled && cached {
+			block["cache_control"] = map[string]string{"type": "ephemeral"}
+		}
+		blocks = append(blocks, block)
+	}
+	addBlock(systemPrompt, cache.cacheSystemPrompt)
+	addBlock(atmosMemory, cache.cacheProjectInstructions)
+
+	return blocks
 }
 
 // convertMessagesToBedrockFormat converts our Message slice to Bedrock/Anthropic's format.
@@ -387,8 +426,10 @@ type bedrockAPIResponse struct {
 	Content    []bedrockContentBlock `json:"content"`
 	StopReason string                `json:"stop_reason"`
 	Usage      struct {
-		InputTokens  int64 `json:"input_tokens"`
-		OutputTokens int64 `json:"output_tokens"`
+		InputTokens              int64 `json:"input_tokens"`
+		OutputTokens             int64 `json:"output_tokens"`
+		CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
+		CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
 	} `json:"usage"`
 }
 
@@ -419,11 +460,12 @@ func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
 	// Extract usage information.
 	if apiResponse.Usage.InputTokens > 0 || apiResponse.Usage.OutputTokens > 0 {
 		result.Usage = &types.Usage{
-			InputTokens:         apiResponse.Usage.InputTokens,
-			OutputTokens:        apiResponse.Usage.OutputTokens,
-			TotalTokens:         apiResponse.Usage.InputTokens + apiResponse.Usage.OutputTokens,
-			CacheReadTokens:     0, // Bedrock/Anthropic doesn't provide cache tokens in this format.
-			CacheCreationTokens: 0,
+			InputTokens:  apiResponse.Usage.InputTokens,
+			OutputTokens: apiResponse.Usage.OutputTokens,
+			TotalTokens:  apiResponse.Usage.InputTokens + apiResponse.Usage.OutputTokens,
+			// Claude on Bedrock reports cache usage in the same fields as the Anthropic API.
+			CacheReadTokens:     apiResponse.Usage.CacheReadInputTokens,
+			CacheCreationTokens: apiResponse.Usage.CacheCreationInputTokens,
 		}
 	}
 

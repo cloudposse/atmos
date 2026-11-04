@@ -42,8 +42,8 @@ type AIProviderConfig struct {
 // AICacheSettings contains token caching configuration.
 type AICacheSettings struct {
 	Enabled                  bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                                          // Enable token caching
-	CacheSystemPrompt        bool `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`                      // Cache system prompt (Anthropic only)
-	CacheProjectInstructions bool `yaml:"cache_project_instructions,omitempty" json:"cache_project_instructions,omitempty" mapstructure:"cache_project_instructions"` // Cache ATMOS.md content (Anthropic only)
+	CacheSystemPrompt        bool `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`                      // Cache system prompt (Anthropic and Bedrock)
+	CacheProjectInstructions bool `yaml:"cache_project_instructions,omitempty" json:"cache_project_instructions,omitempty" mapstructure:"cache_project_instructions"` // Cache ATMOS.md content (Anthropic and Bedrock)
 }
 
 // AISessionSettings contains session management configuration.
