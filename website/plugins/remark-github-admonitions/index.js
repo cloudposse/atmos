@@ -1,16 +1,18 @@
 /**
- * Remark plugin that renders GitHub-style alerts as Docusaurus admonitions.
+ * Remark plugin that renders GitHub-style alerts the way GitHub renders them.
  *
  * Transforms:
  *   > [!WARNING]
  *   > Something to watch out for.
- * Into the same node Docusaurus produces for:
- *   :::warning
- *   Something to watch out for.
- *   :::
+ * Into:
+ *   <div class="github-alert github-alert-warning">
+ *     <p class="github-alert-title">Warning</p>
+ *     <p>Something to watch out for.</p>
+ *   </div>
  *
- * The content keeps rendering as a regular blockquote on GitHub, and on the site
- * it picks up the theme's admonition styling.
+ * The content keeps rendering as a regular blockquote on GitHub. On the site it gets
+ * GitHub's alert look (colored left bar, icon and title, no tinted box) from the
+ * `.github-alert` rules in `src/css/custom.css`, not the Docusaurus admonition theme.
  */
 
 // The marker must end its line (or the paragraph), as on GitHub: `> [!NOTE] text` stays a
@@ -18,17 +20,16 @@
 // it, leaves the marker alone in its text node, which the `$` alternative covers.
 const ALERT_MARKER = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\r?\n|$)/i;
 
-// Maps a GitHub alert type to a Docusaurus admonition type. GitHub's CAUTION is the
-// severe (red) alert, which Docusaurus calls `danger` (its `caution` is a warning alias).
-const ADMONITION_TYPES = {
-  note: 'note',
-  tip: 'tip',
-  important: 'important',
-  warning: 'warning',
-  caution: 'danger',
+// GitHub's alert types and the title each one shows.
+const ALERT_TITLES = {
+  note: 'Note',
+  tip: 'Tip',
+  important: 'Important',
+  warning: 'Warning',
+  caution: 'Caution',
 };
 
-// Returns the admonition type for a blockquote that starts with an alert marker.
+// Returns the alert type for a blockquote that starts with an alert marker.
 // When it does, the marker is stripped from the blockquote's first paragraph.
 function extractAlertType(blockquote) {
   const paragraph = blockquote.children && blockquote.children[0];
@@ -52,17 +53,27 @@ function extractAlertType(blockquote) {
   if (paragraph.children.length === 0) {
     blockquote.children.shift();
   }
-  return ADMONITION_TYPES[match[1].toLowerCase()];
+  return match[1].toLowerCase();
 }
 
-// Walks the tree and tags every alert blockquote so it renders as an admonition.
+// Builds the title paragraph shown above the alert body.
+function alertTitle(type) {
+  return {
+    type: 'paragraph',
+    data: { hName: 'p', hProperties: { className: ['github-alert-title'] } },
+    children: [{ type: 'text', value: ALERT_TITLES[type] }],
+  };
+}
+
+// Walks the tree and turns every alert blockquote into a titled `github-alert` block.
 function transform(node) {
   if (!node || !Array.isArray(node.children)) return;
 
   if (node.type === 'blockquote') {
     const type = extractAlertType(node);
     if (type) {
-      node.data = { hName: 'admonition', hProperties: { type } };
+      node.data = { hName: 'div', hProperties: { className: ['github-alert', `github-alert-${type}`] } };
+      node.children.unshift(alertTitle(type));
     }
   }
 
