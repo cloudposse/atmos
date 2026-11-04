@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -15,17 +16,35 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// OidcTimeout is the per-attempt timeout, in seconds, for a token request.
 const OidcTimeout = 10
+
+// Retry policy for the token request. The endpoint occasionally hangs or returns 5xx for a
+// request while the next one succeeds, so a few spaced-out attempts turn a failed command into a
+// slower one. Worst case is about 4 x 10 s of attempts plus 1 + 2 + 4 s of backoff (+/- jitter).
+const (
+	oidcMaxAttempts    = 4
+	oidcInitialBackoff = 1 * time.Second
+	oidcMaxBackoff     = 8 * time.Second
+	oidcBackoffJitter  = 0.5
+	oidcMaxDrainBytes  = 4 << 10 // Error-response bytes read so the connection can be reused.
+)
+
+// defaultOIDCHTTPClient is shared by every provider instance so retries and repeated requests can
+// reuse connections. Its Timeout bounds each attempt, not the whole retry sequence.
+var defaultOIDCHTTPClient = &http.Client{Timeout: OidcTimeout * time.Second}
 
 // oidcProvider implements GitHub OIDC authentication.
 type oidcProvider struct {
 	name       string
 	config     *schema.Provider
 	realm      string       // Credential isolation realm set by auth manager.
-	httpClient *http.Client // Optional; if nil, a default client is created per request.
+	httpClient *http.Client // Optional; if nil, the shared default client is used.
+	clock      retry.Clock  // Optional; if nil, wall-clock time is used. Tests inject a fake.
 }
 
 // NewOIDCProvider creates a new GitHub OIDC provider.
@@ -49,7 +68,15 @@ func (p *oidcProvider) getHTTPClient() *http.Client {
 	if p.httpClient != nil {
 		return p.httpClient
 	}
-	return &http.Client{Timeout: OidcTimeout * time.Second}
+	return defaultOIDCHTTPClient
+}
+
+// now returns the current time from the injected clock, or wall-clock time.
+func (p *oidcProvider) now() time.Time {
+	if p.clock != nil {
+		return p.clock.Now()
+	}
+	return time.Now()
 }
 
 // Name returns the provider name.
@@ -67,11 +94,12 @@ func (p *oidcProvider) PreAuthenticate(_ types.AuthManager) error {
 	return nil
 }
 
-// IsAmbient satisfies types.AmbientProvider. The OIDC token is requested fresh from the
-// GitHub Actions token endpoint (ACTIONS_ID_TOKEN_REQUEST_URL / _TOKEN) on every call and
-// is short-lived. Persisting it would let the auth manager replay a token that the Actions
-// runtime has already rotated, so the manager must never cache credentials for chains
-// rooted at this provider.
+// IsAmbient satisfies types.AmbientProvider. The OIDC token is requested from the GitHub
+// Actions token endpoint (ACTIONS_ID_TOKEN_REQUEST_URL / _TOKEN) and is short-lived.
+// Persisting it would let the auth manager replay a token that the Actions runtime has
+// already rotated, so the manager must never cache credentials for chains rooted at this
+// provider. The provider itself reuses a token only within one process, in memory, while
+// it has more than oidcTokenMinRemaining left (see processJWTCache).
 func (p *oidcProvider) IsAmbient() bool {
 	return true
 }
@@ -197,8 +225,102 @@ func (p *oidcProvider) resolveJWT(ctx context.Context, requestURL, token, aud st
 	return jwtToken, nil
 }
 
-// getOIDCToken retrieves the JWT token from GitHub's OIDC endpoint.
+// getOIDCToken returns a JWT for the audience, reusing one fetched earlier in this process while
+// it is still fresh. Concurrent callers that miss the cache share a single fetch.
 func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
+	key := jwtCacheKey(requestURL, requestToken, audience)
+	if token, ok := processJWTCache.get(key, p.now()); ok {
+		log.Debug("Reusing GitHub OIDC token fetched earlier in this process", "provider", p.name)
+		return token, nil
+	}
+
+	// The shared fetch runs with the context of the caller that started it. Atmos authenticates
+	// the identities of one command with the same context, so a cancellation applies to all of
+	// them anyway; a caller whose own context ends first stops waiting and returns its error.
+	flight := processJWTCache.flights.DoChan(key, func() (any, error) {
+		// Another flight may have filled the cache between the lookup above and this one.
+		if token, ok := processJWTCache.get(key, p.now()); ok {
+			return token, nil
+		}
+		token, err := p.fetchOIDCTokenWithRetry(ctx, requestURL, requestToken, audience)
+		if err != nil {
+			return "", err
+		}
+		processJWTCache.put(key, token, p.now())
+		return token, nil
+	})
+
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("%w: wait for OIDC token: %w", errUtils.ErrAuthenticationFailed, ctx.Err())
+	case res := <-flight:
+		if res.Err != nil {
+			return "", res.Err
+		}
+		token, _ := res.Val.(string)
+		return token, nil
+	}
+}
+
+// fetchOIDCTokenWithRetry requests a JWT, retrying timeouts, transport errors, 429 and 5xx with
+// exponential backoff and jitter. Other failures, and a cancelled ctx, end the sequence at once.
+func (p *oidcProvider) fetchOIDCTokenWithRetry(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
+	var opts []retry.Option
+	if p.clock != nil {
+		opts = append(opts, retry.WithClock(p.clock))
+	}
+	executor := retry.New(oidcRetryConfig(), opts...)
+	shouldRetry := func(err error) bool { return isRetryableOIDCError(ctx, err) }
+
+	var token string
+	attempt := 0
+	err := executor.ExecuteWithPredicate(ctx, func() error {
+		attempt++
+		t, err := p.fetchOIDCTokenOnce(ctx, requestURL, requestToken, audience)
+		if err != nil {
+			if attempt < oidcMaxAttempts && shouldRetry(err) {
+				log.Warn("GitHub OIDC token request failed, retrying", "provider", p.name,
+					"attempt", attempt, "max_attempts", oidcMaxAttempts, "error", err)
+			}
+			return err
+		}
+		token = t
+		return nil
+	}, shouldRetry)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// oidcRetryConfig returns the retry policy for the token request.
+func oidcRetryConfig() schema.RetryConfig {
+	maxAttempts := oidcMaxAttempts
+	initialDelay := oidcInitialBackoff
+	maxDelay := oidcMaxBackoff
+	jitter := oidcBackoffJitter
+	return schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		RandomJitter:    &jitter,
+	}
+}
+
+// isRetryableOIDCError reports whether a failed attempt is worth repeating. A cancelled or expired
+// ctx is never retried, even though the transport reports it like any other request error.
+func isRetryableOIDCError(ctx context.Context, err error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	return errors.Is(err, errUtils.ErrGitHubOIDCEndpointUnavailable)
+}
+
+// fetchOIDCTokenOnce makes one request to GitHub's OIDC endpoint. Transport errors (including the
+// per-attempt timeout), 429 and 5xx are wrapped with ErrGitHubOIDCEndpointUnavailable so the
+// caller can retry them.
+func (p *oidcProvider) fetchOIDCTokenOnce(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("%w: create OIDC request: %w", errUtils.ErrAuthenticationFailed, err)
@@ -212,10 +334,15 @@ func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToke
 	req.Header.Set("Accept", "application/json")
 	resp, err := p.getHTTPClient().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: call OIDC endpoint: %w", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: %w: call OIDC endpoint: %w", errUtils.ErrAuthenticationFailed, errUtils.ErrGitHubOIDCEndpointUnavailable, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		// Drain a bounded amount so the shared client can reuse the connection.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, oidcMaxDrainBytes))
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+			return "", fmt.Errorf("%w: %w: OIDC endpoint returned status %s", errUtils.ErrAuthenticationFailed, errUtils.ErrGitHubOIDCEndpointUnavailable, resp.Status)
+		}
 		return "", fmt.Errorf("%w: OIDC endpoint returned status %s", errUtils.ErrAuthenticationFailed, resp.Status)
 	}
 	var out struct {
