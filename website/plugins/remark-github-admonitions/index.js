@@ -13,7 +13,10 @@
  * it picks up the theme's admonition styling.
  */
 
-const ALERT_MARKER = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*\r?\n?/i;
+// The marker must end its line (or the paragraph), as on GitHub: `> [!NOTE] text` stays a
+// plain blockquote. A paragraph that ends right after the marker, or has a hard break after
+// it, leaves the marker alone in its text node, which the `$` alternative covers.
+const ALERT_MARKER = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\r?\n|$)/i;
 
 // Maps a GitHub alert type to a Docusaurus admonition type. GitHub's CAUTION is the
 // severe (red) alert, which Docusaurus calls `danger` (its `caution` is a warning alias).
@@ -41,12 +44,18 @@ function extractAlertType(blockquote) {
   if (text.value === '') {
     paragraph.children.shift();
   }
+  // A marker line ending in two spaces or a backslash parses as a hard break after the marker;
+  // drop it so the body does not start with a blank line.
+  while (paragraph.children[0] && paragraph.children[0].type === 'break') {
+    paragraph.children.shift();
+  }
   if (paragraph.children.length === 0) {
     blockquote.children.shift();
   }
   return ADMONITION_TYPES[match[1].toLowerCase()];
 }
 
+// Walks the tree and tags every alert blockquote so it renders as an admonition.
 function transform(node) {
   if (!node || !Array.isArray(node.children)) return;
 
@@ -60,6 +69,7 @@ function transform(node) {
   node.children.forEach(transform);
 }
 
+// Remark plugin entry point: returns the tree transformer that converts GitHub alerts.
 function remarkGithubAdmonitions() {
   return (tree) => {
     transform(tree);

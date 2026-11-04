@@ -95,3 +95,50 @@ test('empty blockquotes do not throw', () => {
 
   assert.equal(quote.data, undefined);
 });
+
+test('same-line text after the marker leaves the blockquote unchanged', () => {
+  const quote = blockquote(paragraph(text('[!NOTE]worthy text')));
+  const spaced = blockquote(paragraph(text('[!NOTE] same line text')));
+  run(root(quote, spaced));
+
+  assert.equal(quote.data, undefined);
+  assert.equal(quote.children[0].children[0].value, '[!NOTE]worthy text');
+  assert.equal(spaced.data, undefined);
+  assert.equal(spaced.children[0].children[0].value, '[!NOTE] same line text');
+});
+
+test('marker followed by trailing spaces and a newline still converts', () => {
+  const quote = blockquote(paragraph(text('[!TIP]  \nBody text.')));
+  run(root(quote));
+
+  assert.equal(quote.data.hProperties.type, 'tip');
+  assert.equal(quote.children[0].children[0].value, 'Body text.');
+});
+
+test('a hard break after the marker is removed from the body', () => {
+  // A marker line ending in two spaces or a backslash parses as text, break, text.
+  const quote = blockquote(paragraph(text('[!WARNING]'), { type: 'break' }, text('Body text.')));
+  run(root(quote));
+
+  assert.equal(quote.data.hProperties.type, 'warning');
+  const children = quote.children[0].children;
+  assert.equal(children.length, 1);
+  assert.equal(children[0].value, 'Body text.');
+});
+
+test('a break after a marker with nothing else leaves an empty blockquote removed', () => {
+  const quote = blockquote(paragraph(text('[!NOTE]'), { type: 'break' }));
+  run(root(quote));
+
+  assert.equal(quote.data.hProperties.type, 'note');
+  assert.equal(quote.children.length, 0);
+});
+
+test('breaks later in the body are preserved', () => {
+  const quote = blockquote(paragraph(text('[!NOTE]\nLine one.'), { type: 'break' }, text('Line two.')));
+  run(root(quote));
+
+  const children = quote.children[0].children;
+  assert.equal(children.length, 3);
+  assert.equal(children[1].type, 'break');
+});
