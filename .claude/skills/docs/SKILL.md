@@ -37,6 +37,10 @@ Every new or changed `atmos.yaml` section needs configuration docs.
 - Use `<dl>`, `<dt>`, and `<dd>` for configuration keys and option definitions.
 - Include defaults, supported values, and environment variables when they are part of the public interface.
 
+## Admonitions
+
+Docs and changelog posts support both Docusaurus `:::warning` blocks and GitHub alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`). The `remark-github-admonitions` plugin renders alerts as themed admonitions, and `CAUTION` maps to the `danger` style. Prefer the GitHub alert syntax in content that also renders on GitHub.
+
 ## Sidebar Hierarchy
 
 For configuration docs, make the sidebar resemble the YAML hierarchy.
