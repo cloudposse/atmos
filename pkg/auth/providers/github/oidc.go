@@ -68,7 +68,7 @@ type oidcProvider struct {
 	config     *schema.Provider
 	realm      string       // Credential isolation realm set by auth manager.
 	httpClient *http.Client // Optional; if nil, the shared default client is used.
-	clock      retry.Clock  // Optional; if nil, wall-clock time is used. Tests inject a fake.
+	clock      retry.Clock  // Optional; retry.WithClock ignores nil and keeps wall-clock time. Tests inject a fake.
 }
 
 // NewOIDCProvider creates a new GitHub OIDC provider.
@@ -309,11 +309,7 @@ func (p *oidcProvider) joinOIDCTokenFlight(ctx context.Context, key, requestURL,
 // fetchOIDCTokenWithRetry requests a JWT, retrying timeouts, transport errors, 429 and 5xx with
 // exponential backoff and jitter. Other failures, and a cancelled ctx, end the sequence at once.
 func (p *oidcProvider) fetchOIDCTokenWithRetry(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
-	var opts []retry.Option
-	if p.clock != nil {
-		opts = append(opts, retry.WithClock(p.clock))
-	}
-	executor := retry.New(oidcRetryConfig(), opts...)
+	executor := retry.New(oidcRetryConfig(), retry.WithClock(p.clock))
 	shouldRetry := func(err error) bool { return isRetryableOIDCError(ctx, err) }
 
 	var token string
