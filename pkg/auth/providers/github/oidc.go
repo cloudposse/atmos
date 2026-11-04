@@ -33,11 +33,22 @@ const (
 	oidcBackoffJitter  = 0.5
 	oidcMaxDrainBytes  = 4 << 10 // Error-response bytes read so the connection can be reused.
 	oidcMaxBodyBytes   = 1 << 20 // Upper bound on a token response; a JWT is a few KiB.
+	logKeyProvider     = "provider"
 )
 
-// defaultOIDCHTTPClient is shared by every provider instance so retries and repeated requests can
-// reuse connections. Its Timeout bounds each attempt, not the whole retry sequence.
-var defaultOIDCHTTPClient = &http.Client{Timeout: OidcTimeout * time.Second}
+// defaultOIDCHTTPClient is shared by every provider instance so repeated requests can reuse
+// connections. Its Timeout bounds each attempt, not the whole retry sequence.
+var defaultOIDCHTTPClient = newOIDCHTTPClient()
+
+// newOIDCHTTPClient returns a client with its own connection pool, so dropping idle connections
+// before a retry never touches other users of http.DefaultTransport.
+func newOIDCHTTPClient() *http.Client {
+	client := &http.Client{Timeout: OidcTimeout * time.Second}
+	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
+		client.Transport = transport.Clone()
+	}
+	return client
+}
 
 // oidcProvider implements GitHub OIDC authentication.
 type oidcProvider struct {
@@ -231,35 +242,53 @@ func (p *oidcProvider) resolveJWT(ctx context.Context, requestURL, token, aud st
 func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToken, audience string) (string, error) {
 	key := jwtCacheKey(requestURL, requestToken, audience)
 	if token, ok := processJWTCache.get(key, p.now()); ok {
-		log.Debug("Reusing GitHub OIDC token fetched earlier in this process", "provider", p.name)
+		log.Debug("Reusing GitHub OIDC token fetched earlier in this process", logKeyProvider, p.name)
 		return token, nil
 	}
 
-	// The shared fetch runs with the context of the caller that started it. Atmos authenticates
-	// the identities of one command with the same context, so a cancellation applies to all of
-	// them anyway; a caller whose own context ends first stops waiting and returns its error.
+	for {
+		token, abandoned, err := p.joinOIDCTokenFlight(ctx, key, requestURL, requestToken, audience)
+		// A flight abandoned because its starter's context ended says nothing about this caller or
+		// the endpoint, so a caller whose own context is still live starts (or joins) a new one.
+		if abandoned && ctx.Err() == nil {
+			log.Debug("Shared GitHub OIDC token request was cancelled by another caller; requesting again", logKeyProvider, p.name)
+			continue
+		}
+		return token, err
+	}
+}
+
+// jwtFlightResult is the value a shared token fetch hands to every caller waiting on it.
+type jwtFlightResult struct {
+	token string
+	// abandoned reports that the fetch stopped because the context of the caller that started it
+	// ended, rather than because the endpoint failed.
+	abandoned bool
+}
+
+// joinOIDCTokenFlight starts the fetch for key, or waits for one already in flight. The fetch runs
+// with the context of the caller that started it; a caller whose own context ends first stops
+// waiting and returns its context error.
+func (p *oidcProvider) joinOIDCTokenFlight(ctx context.Context, key, requestURL, requestToken, audience string) (string, bool, error) {
 	flight := processJWTCache.flights.DoChan(key, func() (any, error) {
-		// Another flight may have filled the cache between the lookup above and this one.
+		// Another flight may have filled the cache between the caller's lookup and this one.
 		if token, ok := processJWTCache.get(key, p.now()); ok {
-			return token, nil
+			return jwtFlightResult{token: token}, nil
 		}
 		token, err := p.fetchOIDCTokenWithRetry(ctx, requestURL, requestToken, audience)
 		if err != nil {
-			return "", err
+			return jwtFlightResult{abandoned: ctx.Err() != nil}, err
 		}
 		processJWTCache.put(key, token, p.now())
-		return token, nil
+		return jwtFlightResult{token: token}, nil
 	})
 
 	select {
 	case <-ctx.Done():
-		return "", fmt.Errorf("%w: wait for OIDC token: %w", errUtils.ErrAuthenticationFailed, ctx.Err())
+		return "", false, fmt.Errorf("%w: wait for OIDC token: %w", errUtils.ErrAuthenticationFailed, ctx.Err())
 	case res := <-flight:
-		if res.Err != nil {
-			return "", res.Err
-		}
-		token, _ := res.Val.(string)
-		return token, nil
+		result, _ := res.Val.(jwtFlightResult)
+		return result.token, result.abandoned, res.Err
 	}
 }
 
@@ -277,10 +306,16 @@ func (p *oidcProvider) fetchOIDCTokenWithRetry(ctx context.Context, requestURL, 
 	attempt := 0
 	err := executor.ExecuteWithPredicate(ctx, func() error {
 		attempt++
+		if attempt > 1 {
+			// A timed-out attempt can leave its connection in the pool. Over HTTP/2 every later
+			// attempt would be multiplexed onto that same connection, so one stalled connection
+			// would fail them all; dropping idle connections makes the retry dial afresh.
+			p.getHTTPClient().CloseIdleConnections()
+		}
 		t, err := p.fetchOIDCTokenOnce(ctx, requestURL, requestToken, audience)
 		if err != nil {
 			if attempt < oidcMaxAttempts && shouldRetry(err) {
-				log.Warn("GitHub OIDC token request failed, retrying", "provider", p.name,
+				log.Warn("GitHub OIDC token request failed, retrying", logKeyProvider, p.name,
 					"attempt", attempt, "max_attempts", oidcMaxAttempts, "error", err)
 			}
 			return err
@@ -311,6 +346,8 @@ func oidcRetryConfig() schema.RetryConfig {
 
 // isRetryableOIDCError reports whether a failed attempt is worth repeating. A cancelled or expired
 // ctx is never retried, even though the transport reports it like any other request error.
+// The retry executor would stop on the done ctx anyway; checking here keeps such a failure from
+// being logged as a retry.
 func isRetryableOIDCError(ctx context.Context, err error) bool {
 	if ctx.Err() != nil {
 		return false

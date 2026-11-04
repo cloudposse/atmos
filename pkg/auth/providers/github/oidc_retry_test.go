@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -86,19 +87,36 @@ func makeJWT(t *testing.T, exp time.Time, subject string) string {
 type tokenServer struct {
 	*httptest.Server
 	requests atomic.Int32
+	conns    atomic.Int32 // Connections accepted.
+	proto    atomic.Int32 // HTTP major version of the last request.
 }
 
 func newTokenServer(t *testing.T, handlers ...http.HandlerFunc) *tokenServer {
 	t.Helper()
+	return startTokenServer(t, false, handlers...)
+}
+
+// startTokenServer starts the server over HTTP/2 when http2 is set; the GitHub Actions token
+// endpoint negotiates HTTP/2, while a plain httptest TLS server only speaks HTTP/1.1.
+func startTokenServer(t *testing.T, http2 bool, handlers ...http.HandlerFunc) *tokenServer {
+	t.Helper()
 	require.NotEmpty(t, handlers, "tokenServer needs at least one handler")
 	ts := &tokenServer{}
-	ts.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts.Server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts.proto.Store(int32(r.ProtoMajor))
 		n := int(ts.requests.Add(1)) - 1
 		if n >= len(handlers) {
 			n = len(handlers) - 1
 		}
 		handlers[n](w, r)
 	}))
+	ts.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			ts.conns.Add(1)
+		}
+	}
+	ts.EnableHTTP2 = http2
+	ts.StartTLS()
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -165,8 +183,10 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 		name           string
 		handlers       []http.HandlerFunc
 		attemptTimeout time.Duration
+		http2          bool
 		wantToken      string
 		wantRequests   int32
+		wantConns      int32 // Zero skips the check.
 		wantErrIs      []error
 		wantErrNotIs   []error
 		wantErrContain string
@@ -192,16 +212,27 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 		{
 			name:           "hang times out then success",
 			handlers:       []http.HandlerFunc{respondHang(), respondToken(validJWT)},
-			attemptTimeout: 500 * time.Millisecond,
+			attemptTimeout: 2 * time.Second,
 			wantToken:      validJWT,
 			wantRequests:   2,
 		},
 		{
 			name:           "body stalls after headers then success",
 			handlers:       []http.HandlerFunc{respondHeadersThenHang(), respondToken(validJWT)},
-			attemptTimeout: 500 * time.Millisecond,
+			attemptTimeout: 2 * time.Second,
 			wantToken:      validJWT,
 			wantRequests:   2,
+		},
+		{
+			// Over HTTP/2 the timed-out attempt's connection stays pooled; the retry must not be
+			// multiplexed onto it, or a stalled connection would fail every attempt.
+			name:           "HTTP/2 hang times out then success on a new connection",
+			handlers:       []http.HandlerFunc{respondHang(), respondToken(validJWT)},
+			attemptTimeout: 2 * time.Second,
+			http2:          true,
+			wantToken:      validJWT,
+			wantRequests:   2,
+			wantConns:      2,
 		},
 		{
 			name:           "retries exhausted on 502",
@@ -213,7 +244,7 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 		{
 			name:           "retries exhausted on timeouts",
 			handlers:       []http.HandlerFunc{respondHang()},
-			attemptTimeout: 500 * time.Millisecond,
+			attemptTimeout: 1 * time.Second,
 			wantRequests:   oidcMaxAttempts,
 			wantErrIs:      []error{errUtils.ErrAuthenticationFailed, errUtils.ErrGitHubOIDCEndpointUnavailable},
 			wantErrContain: "Client.Timeout exceeded",
@@ -258,12 +289,18 @@ func TestOIDCProvider_getOIDCToken_Retry(t *testing.T) {
 			if attemptTimeout == 0 {
 				attemptTimeout = 5 * time.Second
 			}
-			ts := newTokenServer(t, tt.handlers...)
+			ts := startTokenServer(t, tt.http2, tt.handlers...)
 			p := newTestOIDCProvider(ts, clock, attemptTimeout)
 
 			token, err := p.getOIDCToken(context.Background(), ts.URL, testRequestToken, testAudience)
 
 			assert.Equal(t, tt.wantRequests, ts.requests.Load(), "token endpoint request count")
+			if tt.http2 {
+				assert.Equal(t, int32(2), ts.proto.Load(), "test server must negotiate HTTP/2")
+			}
+			if tt.wantConns > 0 {
+				assert.Equal(t, tt.wantConns, ts.conns.Load(), "connections accepted")
+			}
 			// One backoff wait between consecutive attempts, growing exponentially within the jitter band.
 			delays := clock.recordedDelays()
 			require.Len(t, delays, int(tt.wantRequests)-1)
@@ -458,6 +495,50 @@ func TestOIDCProvider_getOIDCToken_Cache(t *testing.T) {
 			assert.Equal(t, tt.wantRequests, ts.requests.Load(), "token endpoint request count")
 		})
 	}
+}
+
+// TestOIDCProvider_getOIDCToken_FollowerSurvivesCancelledLeader covers two callers sharing one
+// fetch with different contexts: the one that started it is cancelled mid-request, and the other,
+// whose context is still live, must still get a token rather than the first caller's cancellation.
+func TestOIDCProvider_getOIDCToken_FollowerSurvivesCancelledLeader(t *testing.T) {
+	isolateJWTCache(t)
+	clock := newFakeClock()
+	jwt := makeJWT(t, clock.Now().Add(5*time.Minute), "s")
+	arrived := make(chan struct{})
+	ts := newTokenServer(t, func(w http.ResponseWriter, r *http.Request) {
+		close(arrived)
+		respondHang()(w, r)
+	}, respondToken(jwt))
+	leader := newTestOIDCProvider(ts, clock, 30*time.Second)
+	follower := newTestOIDCProvider(ts, clock, 30*time.Second)
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	defer cancelLeader()
+	leaderErr := make(chan error, 1)
+	go func() {
+		_, err := leader.getOIDCToken(leaderCtx, ts.URL, testRequestToken, testAudience)
+		leaderErr <- err
+	}()
+	<-arrived
+
+	type result struct {
+		token string
+		err   error
+	}
+	followerResult := make(chan result, 1)
+	go func() {
+		token, err := follower.getOIDCToken(context.Background(), ts.URL, testRequestToken, testAudience)
+		followerResult <- result{token: token, err: err}
+	}()
+	// Give the follower time to join the in-flight fetch before its starter goes away.
+	time.Sleep(100 * time.Millisecond)
+	cancelLeader()
+
+	require.ErrorIs(t, <-leaderErr, context.Canceled)
+	got := <-followerResult
+	require.NoError(t, got.err)
+	assert.Equal(t, jwt, got.token)
+	assert.Equal(t, int32(2), ts.requests.Load(), "token endpoint request count")
 }
 
 func TestOIDCProvider_getOIDCToken_ErrorIsNotCached(t *testing.T) {
