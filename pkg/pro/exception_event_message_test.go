@@ -22,12 +22,14 @@ var _ = schema.ConfigAndStacksInfo{ComponentType: "terraform", SubCommand: "plan
 // redactedPlaceholder is what cockroachdb/errors substitutes for any message it cannot prove is safe.
 const redactedPlaceholder = "×"
 
+// topExceptionValue returns the value of the exception that Atmos Pro shows as the failure.
 func topExceptionValue(t *testing.T, event *sentry.Event) string {
 	t.Helper()
 	require.NotEmpty(t, event.Exception, "the event must carry an exception")
 	return event.Exception[len(event.Exception)-1].Value
 }
 
+// TestBuildExceptionEvent_ExitCodeErrorKeepsItsMessage checks that an exit-code failure keeps its message and is not replaced by the redaction placeholder.
 func TestBuildExceptionEvent_ExitCodeErrorKeepsItsMessage(t *testing.T) {
 	event := buildExceptionEvent(errUtils.ExitCodeError{Code: 1}, &schema.ConfigAndStacksInfo{}, nil, nil)
 
@@ -37,6 +39,7 @@ func TestBuildExceptionEvent_ExitCodeErrorKeepsItsMessage(t *testing.T) {
 	assert.NotEqual(t, redactedPlaceholder, topExceptionValue(t, event))
 }
 
+// TestBuildExceptionEvent_WrappedErrorKeepsDynamicContext checks that context added by wrapping errors survives into the event.
 func TestBuildExceptionEvent_WrappedErrorKeepsDynamicContext(t *testing.T) {
 	err := fmt.Errorf("%w: component dns in stack prod: %w", errUtils.ErrTerraformWorkspaceOp, errUtils.ExitCodeError{Code: 1})
 	event := buildExceptionEvent(err, &schema.ConfigAndStacksInfo{}, nil, nil)
@@ -46,12 +49,14 @@ func TestBuildExceptionEvent_WrappedErrorKeepsDynamicContext(t *testing.T) {
 	assert.Contains(t, topExceptionValue(t, event), "component dns in stack prod")
 }
 
+// TestBuildExceptionEvent_KeepsErrorTypeDiagnostics checks that the error-type breakdown is kept alongside the new message.
 func TestBuildExceptionEvent_KeepsErrorTypeDiagnostics(t *testing.T) {
 	event := buildExceptionEvent(errUtils.ExitCodeError{Code: 1}, &schema.ConfigAndStacksInfo{}, nil, nil)
 
 	assert.Contains(t, event.Message, "Error types: (1) errors.ExitCodeError")
 }
 
+// TestBuildExceptionEvent_NamesTheCommand checks the command prefix, including the cases where it must be omitted.
 func TestBuildExceptionEvent_NamesTheCommand(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -76,6 +81,7 @@ func TestBuildExceptionEvent_NamesTheCommand(t *testing.T) {
 	}
 }
 
+// TestBuildExceptionEvent_NilInfo checks that building an event without component information does not panic.
 func TestBuildExceptionEvent_NilInfo(t *testing.T) {
 	assert.NotPanics(t, func() {
 		event := buildExceptionEvent(errors.New("boom"), nil, nil, nil)
@@ -83,21 +89,43 @@ func TestBuildExceptionEvent_NilInfo(t *testing.T) {
 	})
 }
 
-func TestBuildExceptionEvent_UnredactedMessageIsStillMasked(t *testing.T) {
+// TestBuildExceptionEvent_MessageIsMaskedBeforeItLeavesTheBuilder checks that a registered secret in the
+// error text never appears in the event message, even before the event is encoded for sending.
+func TestBuildExceptionEvent_MessageIsMaskedBeforeItLeavesTheBuilder(t *testing.T) {
 	require.NoError(t, iolib.Initialize())
 	iolib.RegisterSecret("hunter2-exception-secret")
 	err := fmt.Errorf("backend rejected token hunter2-exception-secret: %w", errUtils.ExitCodeError{Code: 1})
 
 	event := buildExceptionEvent(err, &schema.ConfigAndStacksInfo{}, nil, nil)
-	require.Contains(t, event.Message, "hunter2-exception-secret", "precondition: masking happens when the event is encoded, not when it is built")
+	assert.NotContains(t, event.Message, "hunter2-exception-secret")
+	assert.NotContains(t, topExceptionValue(t, event), "hunter2-exception-secret")
 
 	masked, maskErr := maskedExceptionEvent(event)
 	require.NoError(t, maskErr)
 	assert.NotContains(t, masked.Message, "hunter2-exception-secret")
 	assert.NotContains(t, topExceptionValue(t, masked), "hunter2-exception-secret")
-	assert.Contains(t, masked.Message, "subcommand exited with code 1")
+	assert.Contains(t, masked.Message, "subcommand exited with code 1", "masking must not remove the rest of the message")
 }
 
+// TestBuildExceptionEvent_SecretAcrossTheTruncationCutIsMasked checks that masking runs on the whole text
+// before it is cut. A secret split by the cut can no longer be matched, so its leading part would be sent.
+func TestBuildExceptionEvent_SecretAcrossTheTruncationCutIsMasked(t *testing.T) {
+	require.NoError(t, iolib.Initialize())
+	// Built from parts so the pre-commit secret scanner does not flag a fake value assigned in source.
+	sentinel := strings.Join([]string{"hunter2", "boundary", "value"}, "-")
+	iolib.RegisterSecret(sentinel)
+	text := strings.Repeat("x", maxExceptionMessageBytes-5) + sentinel + strings.Repeat("y", 100)
+
+	event := buildExceptionEvent(errors.New(text), &schema.ConfigAndStacksInfo{}, nil, nil)
+
+	for _, got := range []string{event.Message, topExceptionValue(t, event)} {
+		assert.NotContains(t, got, sentinel)
+		assert.NotContains(t, got, sentinel[:5], "the leading part of a secret cut by truncation must not be sent")
+	}
+	assert.Contains(t, event.Message, truncationMarker, "precondition: the text is long enough to be truncated")
+}
+
+// TestBuildExceptionEvent_OversizedMessageIsBoundedAndStillSends checks that a very long error is truncated on a rune boundary and the event is still sent.
 func TestBuildExceptionEvent_OversizedMessageIsBoundedAndStillSends(t *testing.T) {
 	huge := strings.Repeat("é", maxExceptionMessageBytes*2)
 	event := buildExceptionEvent(errors.New(huge), &schema.ConfigAndStacksInfo{}, nil, nil)

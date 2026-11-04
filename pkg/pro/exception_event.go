@@ -27,6 +27,9 @@ const (
 	truncationMarker = "… [truncated]"
 )
 
+// buildExceptionEvent builds the Sentry event for a failure: the cockroachdb/errors report, hints as
+// breadcrumbs, component metadata, and runtime identity, with a readable message in place of the
+// redacted one.
 func buildExceptionEvent(err error, info *schema.ConfigAndStacksInfo, custom map[string]string, runtime map[string]string) *sentry.Event {
 	if info == nil {
 		info = &schema.ConfigAndStacksInfo{}
@@ -64,13 +67,14 @@ func buildExceptionEvent(err error, info *schema.ConfigAndStacksInfo, custom map
 // with the command that failed when it is known. The cockroachdb/errors library redacts every
 // message it cannot prove safe, which turns a bare exit-code failure into "×". Atmos masks the
 // whole event before it leaves the process (see maskedExceptionEvent), so the original text is
-// sent instead.
+// sent instead. The text is masked here as well, before it is truncated: a secret split by the
+// cut could no longer be matched, and its leading part would be sent.
 func exceptionSummary(err error, info *schema.ConfigAndStacksInfo) string {
 	summary := err.Error()
 	if info.ComponentType != "" && info.SubCommand != "" {
 		summary = info.ComponentType + " " + info.SubCommand + ": " + summary
 	}
-	return truncateExceptionText(summary)
+	return truncateExceptionText(ioLayer.MaskString(summary))
 }
 
 // applyExceptionSummary replaces the redacted message and the top exception value with summary.

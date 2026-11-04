@@ -24,11 +24,11 @@ the exit code itself prints as `×` unless it is wrapped in `redact.Safe`.
 - `pkg/pro/exception_event.go`: `buildExceptionEvent` now sets the event message and the top exception value
   from `err.Error()`, prefixed with `<component type> <subcommand>: ` when both are known. The error-type
   breakdown that `cockroachdb/errors` appends to the message is kept, since it names types and no message text.
-  The text is truncated to 8 KiB on a rune boundary so one verbose error cannot push the event over the 1 MiB
-  envelope limit and drop it. `buildExceptionEvent` also tolerates a nil `info`.
+  The text is masked first and then truncated to 8 KiB on a rune boundary, so one verbose error cannot push the
+  event over the 1 MiB envelope limit and drop it, and a secret split by the cut is still masked. `buildExceptionEvent` also tolerates a nil `info`.
 - `pkg/pro/exception_event_message_test.go`: tests for the message, the command prefix, wrapped context, the
-  retained error-type diagnostics, masking of a registered secret after the message is restored, truncation on a
-  rune boundary, and nil `info`.
+  retained error-type diagnostics, masking of a registered secret in the built event, a secret that straddles
+  the truncation cut, truncation on a rune boundary, and nil `info`.
 - `website/docs/cli/configuration/settings/pro.mdx`: documents the event message, the 8 KiB limit, and that the
   failed command's own output is not part of the event.
 
@@ -42,7 +42,8 @@ still uses `cockroachdb/errors` redaction.
 ## Validation
 
 - `go test ./pkg/pro`: passes, including the new tests. The new tests failed before the change with the message
-  equal to `×`.
+  equal to `×`. The straddling-secret test failed against the first version of the change, which truncated
+  before masking and sent the first five characters of the secret (`hunte… [truncated]`).
 - `atmos lint --changed`: 0 issues, after fixing three `godot` comment findings in the new code.
 - `cd website && npm run build`: succeeds. The build reports broken anchors on pages unrelated to this change;
   none involve the edited Pro settings page.
