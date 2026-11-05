@@ -321,7 +321,7 @@ func (p *Plugin) downloadPlanfileForVerification(ctx *plugin.HookContext) error 
 			WithExplanation("Invalid planfile store type").Err()
 	}
 
-	results, _, err := store.Download(context.Background(), key)
+	results, key, err := p.downloadStoredPlanfile(ctx, store, key)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
 			WithExplanation("Failed to download planfile from store").
@@ -576,58 +576,6 @@ func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
 	}
 
 	logArtifactOperation("Uploaded", key, store.Name(), "", ctx.Info)
-	return nil
-}
-
-// downloadPlanfile downloads a planfile from the configured storage backend.
-func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
-	defer perf.Track(ctx.Config, "terraform.Plugin.downloadPlanfile")()
-
-	planfilePath := ctx.Info.PlanFile
-	if planfilePath == "" {
-		planfilePath = p.resolveArtifactPath(ctx)
-	}
-	if planfilePath == "" {
-		log.Debug("No planfile path specified, skipping download")
-		return nil
-	}
-
-	key, err := p.getArtifactKey(ctx.Info, ctx.CICtx)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
-			WithExplanation("Failed to generate artifact key for planfile download").Err()
-	}
-
-	storeAny, err := ctx.CreatePlanfileStore()
-	if err != nil {
-		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
-			WithExplanation("Failed to create planfile store").Err()
-	}
-
-	store, ok := storeAny.(planfile.Store)
-	if !ok {
-		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).
-			WithExplanation("Invalid planfile store type").Err()
-	}
-
-	results, _, err := store.Download(context.Background(), key)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
-			WithExplanation("Failed to download planfile from store").
-			WithContext("key", key).WithContext("store", store.Name()).Err()
-	}
-	defer func() {
-		for _, r := range results {
-			r.Data.Close()
-		}
-	}()
-
-	// Write downloaded files to disk using the shared helper.
-	if err := planfile.WritePlanfileResults(results, planfilePath); err != nil {
-		return err
-	}
-	logArtifactOperation("Downloaded", key, store.Name(), planfilePath, ctx.Info)
-
 	return nil
 }
 

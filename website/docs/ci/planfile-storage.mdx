@@ -219,6 +219,37 @@ state moves, and whose base credentials come from the apply environment, not the
 on a PR can fail to apply on merge). (To replay the stored binary directly, use `--from-plan` /
 `--planfile`.) Verification runs on `deploy` only — `apply` stays a thin wrapper.
 
+### Deploying after a pull request merges
+
+Stored plans are keyed by the commit they were planned on. A pull request's plan runs on its head
+commit, but a deploy dispatched after the merge (for example, by Atmos Pro on `pull_request.merged`)
+runs on the commit that landed on the base branch. With squash, merge-commit, or rebase merging,
+that commit is not the pull request's head.
+
+`deploy` resolves the stored plan to verify against in this order:
+
+1. **The plan stored for the deploy's own commit.** Use this when you plan the merged commit before
+   applying it, for example by dispatching your plan workflow on `pull_request.merged` and applying
+   once that plan is approved. That plan reflects the base branch after the merge.
+2. **The plan stored for the merged pull request's head commit.** When nothing is stored for the
+   deploy's commit, Atmos on GitHub Actions looks up the pull request that was merged as that commit
+   and uses the plan from its review. This is what makes a deploy dispatched straight after the merge
+   find the plan the reviewers saw.
+
+Either way, verification compares the stored plan with a fresh plan of the merged commit. If the base
+branch changed in a way that alters the plan, the deploy fails verification instead of applying an
+unreviewed change.
+
+The lookup uses the GitHub API, so the deploy workflow's token needs read access to pull requests:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: read
+```
+
+Without it, Atmos logs a warning and continues as if no stored plan were found.
+
 :::note GitHub Actions runtime token
 With the `github/artifacts` store, the automatic download (like the upload) talks to the GitHub
 Artifacts runtime API, so `deploy` must also run after the

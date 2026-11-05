@@ -331,6 +331,11 @@ what happens. It defaults to tracking `verify` strictness, so a fail-by-default 
 rather than silently applying an unverified fresh plan — a green `deploy` therefore proves verification
 ran. Set `required: false` to allow a fresh apply when the stored plan is absent.
 
+When `deploy` runs after a pull request merges, it verifies against the plan stored for the merged
+commit if one exists, for example from a plan workflow you dispatch on `pull_request.merged`.
+Otherwise, on GitHub Actions, it verifies against the plan stored for the merged pull request's head
+commit. The workflow needs the `pull-requests: read` permission for that lookup. See [Deploying after a pull request merges](/ci/planfile-storage#deploying-after-a-pull-request-merges).
+
 With the `github/artifacts` store, the automatic download talks to the GitHub Artifacts runtime API, so
 the workflow must surface the runner's `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` with the
 [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action before
