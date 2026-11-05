@@ -213,6 +213,26 @@ func withReference(entries []ocispec.Descriptor, named ocispec.Descriptor) []oci
 	return append(entries, named)
 }
 
+// Untag removes a named root from index.json without touching blobs, which may be shared by
+// other references. Digest references are implicit and cannot be untagged.
+func (l *Layout) Untag(ctx context.Context, reference string) error {
+	defer perf.Track(nil, "oci.Layout.Untag")()
+
+	if err := l.store.Untag(ctx, reference); err != nil {
+		return layoutError(err)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	kept := l.index[:0:0]
+	for i := range l.index {
+		if l.index[i].Annotations[ocispec.AnnotationRefName] != reference {
+			kept = append(kept, l.index[i])
+		}
+	}
+	l.index = kept
+	return l.writeIndex()
+}
+
 // References returns the named roots in index.json in insertion order.
 func (l *Layout) References() []string {
 	defer perf.Track(nil, "oci.Layout.References")()

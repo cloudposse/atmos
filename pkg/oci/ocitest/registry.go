@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -164,6 +165,32 @@ type Server struct {
 	server *httptest.Server
 }
 
+// ServerOption customizes a test registry.
+type ServerOption func(*serverConfig)
+
+type serverConfig struct {
+	tagsFollowManifestDelete bool
+	referrers                bool
+}
+
+// WithTagsFollowManifestDelete makes deleting a manifest by digest also delete every tag that
+// resolves to it, like a production registry, where a tag whose manifest is gone no longer
+// resolves. The bare in-process registry keeps such tags, which would hide a delete that is not
+// tag-safe.
+//
+//nolint:lintroller // Functional option only.
+func WithTagsFollowManifestDelete() ServerOption {
+	return func(config *serverConfig) { config.tagsFollowManifestDelete = true }
+}
+
+// WithoutReferrersAPI turns off the OCI 1.1 referrers API, so clients must use the referrers
+// tag-schema fallback.
+//
+//nolint:lintroller // Functional option only.
+func WithoutReferrersAPI() ServerOption {
+	return func(config *serverConfig) { config.referrers = false }
+}
+
 // NewServer starts an empty in-process OCI registry (OCI 1.1 referrers included). When
 // credential is non-nil, every request must carry exactly that Basic identity; any other
 // request receives a 401 challenge, so a client that downgraded to anonymous or reused
@@ -173,7 +200,23 @@ func NewServer(t *testing.T, credential *Credential) *Server {
 
 	t.Helper()
 
-	handler := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	return NewServerWithOptions(t, credential)
+}
+
+// NewServerWithOptions is NewServer with registry behavior options.
+func NewServerWithOptions(t *testing.T, credential *Credential, options ...ServerOption) *Server {
+	defer perf.Track(nil, "ocitest.NewServerWithOptions")()
+
+	t.Helper()
+
+	config := serverConfig{referrers: true}
+	for _, option := range options {
+		option(&config)
+	}
+	handler := registry.New(registry.Logger(log.New(io.Discard, "", 0)), registry.WithReferrersSupport(config.referrers))
+	if config.tagsFollowManifestDelete {
+		handler = tagsFollowDelete{next: handler}
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if credential != nil {
 			user, password, ok := r.BasicAuth()
@@ -187,6 +230,42 @@ func NewServer(t *testing.T, credential *Credential) *Server {
 	}))
 	t.Cleanup(srv.Close)
 	return &Server{Host: strings.TrimPrefix(srv.URL, "http://"), server: srv}
+}
+
+// tagsFollowDelete deletes the tags of a manifest together with the manifest itself.
+type tagsFollowDelete struct{ next http.Handler }
+
+//nolint:lintroller // Test-registry request wrapper.
+func (d tagsFollowDelete) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	repository, reference, isManifest := splitManifestPath(r.URL.Path)
+	if r.Method != http.MethodDelete || !isManifest || !strings.HasPrefix(reference, "sha256:") {
+		d.next.ServeHTTP(w, r)
+		return
+	}
+	tags := httptest.NewRecorder()
+	d.next.ServeHTTP(tags, httptest.NewRequest(http.MethodGet, "/v2/"+repository+"/tags/list", nil))
+	var listing struct {
+		Tags []string `json:"tags"`
+	}
+	_ = json.Unmarshal(tags.Body.Bytes(), &listing)
+	for _, tag := range listing.Tags {
+		head := httptest.NewRecorder()
+		d.next.ServeHTTP(head, httptest.NewRequest(http.MethodHead, "/v2/"+repository+"/manifests/"+tag, nil))
+		if head.Header().Get("Docker-Content-Digest") == reference {
+			d.next.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodDelete, "/v2/"+repository+"/manifests/"+tag, nil))
+		}
+	}
+	d.next.ServeHTTP(w, r)
+}
+
+// splitManifestPath splits /v2/<repository>/manifests/<reference>.
+func splitManifestPath(path string) (repository, reference string, ok bool) {
+	trimmed := strings.TrimPrefix(path, "/v2/")
+	index := strings.LastIndex(trimmed, "/manifests/")
+	if trimmed == path || index < 0 {
+		return "", "", false
+	}
+	return trimmed[:index], trimmed[index+len("/manifests/"):], true
 }
 
 // Close shuts the registry down now; calling it again is harmless.
