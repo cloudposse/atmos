@@ -173,10 +173,13 @@ auth:
   <dd>**Required.** OIDC audience that matches the cloud IAM trust policy.</dd>
 </dl>
 
-:::info Credentials are never cached
-`github/oidc` requests a fresh token from the GitHub Actions token endpoint on every
-authentication, and Atmos never writes the resulting credentials to the keyring. A rotated
-Actions token is always picked up on the next run.
+:::info Credentials are never persisted
+`github/oidc` requests a token from the GitHub Actions token endpoint, and Atmos never writes
+the resulting credentials to the keyring. A rotated Actions token is always picked up on the
+next run. Within a single Atmos command, identities that share the provider reuse one token
+while it has more than a minute left before it expires, so the endpoint is called once rather
+than once per identity. A request that times out, fails on the network, or gets HTTP 429 or 5xx
+is retried with exponential backoff, up to four attempts in total.
 :::
 
 </TabItem>
