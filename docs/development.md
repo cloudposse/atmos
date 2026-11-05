@@ -167,8 +167,15 @@ The recording selects actual working changes in `.atmos-git-hooks.yaml`, the che
 scripts and commands, and this guide using a temporary index. It checks those
 inputs read-only before recording `atmos git hooks run pre-commit`, verifies the
 live index and selected working files are unchanged, and removes the temporary
-index afterward. Make an intended edit to one of those files before regenerating;
-the recorder does not manufacture sample changes. Go checks are skipped when the
+index afterward. Make an intended edit to one of those files before regenerating,
+or pass `--base <rev>` to diff them against an earlier revision (default `HEAD`).
+With `--base HEAD` (the default), the tracked files are staged from the working tree. With
+any other `--base <rev>`, they are staged as they were at that revision and working-tree edits
+are ignored; a file the revision does not have keeps its `HEAD` version, because the hook
+reads its catalog from the staged tree (the check scripts always run from the working tree).
+In either mode the selection must include one of the tracked YAML files
+(`.atmos-git-hooks.yaml`, `.atmos.d/check.yaml`, or `.atmos.d/format.yaml`); otherwise
+`check-yaml` is skipped and `casts validate` rejects the recording. The recorder does not manufacture sample changes. Go checks are skipped when the
 selected changes contain no Go files.
 
 ### Repository checks in CI
