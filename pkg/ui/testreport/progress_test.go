@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,5 +71,39 @@ func TestReporterSpinnerRespectsThemeAndColorProfile(t *testing.T) {
 				assert.NotContains(t, view, "\x1b")
 			}
 		}
+	}
+}
+
+// TestReporterRunningRowStaysAlignedWithStyledSpinnerFrame feeds the reporter the same styled frame
+// the live model passes (spinner.View() wraps the Dot frame and its trailing space in an ANSI style),
+// and checks the running row's connector lines up with a settled row's.
+func TestReporterRunningRowStaysAlignedWithStyledSpinnerFrame(t *testing.T) {
+	original := ui.GetColorProfile()
+	t.Cleanup(func() { ui.SetColorProfile(original) })
+	for _, profile := range []termenv.Profile{termenv.TrueColor, termenv.ANSI256, termenv.Ascii} {
+		ui.SetColorProfile(profile)
+		reporter := New("Checks", []*Node{
+			{ID: "done", Name: "Done", Status: Passed},
+			{ID: "running", Name: "Health", Status: Running},
+		}, io.Discard)
+		frame := ui.NewSpinner().View()
+		require.NotEmpty(t, strings.TrimSpace(ansi.Strip(frame)), "the spinner must render a frame")
+
+		rows := strings.Split(ansi.Strip(reporter.View(100, frame, false)), "\n")
+		doneCol, runningCol := -1, -1
+		for _, row := range rows {
+			switch {
+			case strings.Contains(row, "Done"):
+				doneCol = strings.Index(row, "├")
+			case strings.Contains(row, "Health"):
+				runningCol = strings.Index(row, "└")
+			}
+		}
+		require.NotEqual(t, -1, doneCol, "settled row must have a connector")
+		require.NotEqual(t, -1, runningCol, "running row must have a connector")
+		assert.Equal(t, doneCol, runningCol, "running connector must align with settled rows (profile %v)", profile)
+
+		running := reporter.View(100, frame, false)
+		assert.NotContains(t, running, "\x1b[0m\x1b[0m", "the spinner style must be applied once")
 	}
 }

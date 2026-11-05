@@ -838,3 +838,28 @@ func TestNewClient_PassesConfiguredTimeoutToSDK(t *testing.T) {
 	require.NotNil(t, got.HTTPOptions.Timeout)
 	assert.Equal(t, 7*time.Second, *got.HTTPOptions.Timeout)
 }
+
+func TestParseGeminiResponse_CountsThoughtsTokensAsOutput(t *testing.T) {
+	response := &genai.GenerateContentResponse{
+		Candidates: []*genai.Candidate{
+			{
+				Content:      &genai.Content{Parts: []*genai.Part{{Text: "Answer"}}},
+				FinishReason: genai.FinishReasonStop,
+			},
+		},
+		UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
+			PromptTokenCount:     10,
+			CandidatesTokenCount: 5,
+			ThoughtsTokenCount:   20,
+			TotalTokenCount:      35,
+		},
+	}
+
+	result, err := parseGeminiResponse(response)
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(10), result.Usage.InputTokens)
+	assert.Equal(t, int64(25), result.Usage.OutputTokens)
+	assert.Equal(t, int64(35), result.Usage.TotalTokens)
+}
