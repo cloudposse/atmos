@@ -13,7 +13,6 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hairyhenderson/gomplate/v4"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -240,7 +239,7 @@ func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFi
 	}
 
 	if lo.FromPtr(tmplConfig.Templates.Settings.Gomplate.Experimental) {
-		ctx = gomplate.SetExperimental(ctx)
+		ctx = data.SetExperimental(ctx)
 	}
 
 	var atmosFuncMap template.FuncMap
@@ -516,7 +515,7 @@ func ProcessTmplWithDatasources(
 			defer cancelFunc()
 
 			if lo.FromPtr(templateSettings.Gomplate.Experimental) {
-				ctx = gomplate.SetExperimental(ctx)
+				ctx = data.SetExperimental(ctx)
 			}
 
 			d = data.Data{}
