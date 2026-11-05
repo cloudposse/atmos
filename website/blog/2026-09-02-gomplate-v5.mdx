@@ -5,36 +5,43 @@ authors: [osterman]
 tags: [security, breaking-change]
 ---
 
-Some scanner findings cannot be fixed by bumping a version. A dependency reaches end of life, its
-advisories stay open forever, and every project that pulls it in transitively inherits a permanent
-red mark. Atmos had exactly this problem: the template engine embedded in Atmos depended on the
-AWS SDK for Go v1, which is no longer maintained and carries advisories that no v1 release will
-ever address. Atmos never executed the affected code, but supply-chain scanners flagged it
-anyway, and there was no version of Atmos that could make the finding go away. The template
-engine has now moved to Gomplate v5, and the end-of-life SDK is gone from the Atmos build
-entirely.
+Some security findings cannot be fixed by bumping a version. When a dependency's major release
+line stops being maintained, its CVEs stay open forever, and every project that pulls it in
+inherits them. That is where Atmos was: the template engine it embeds, Gomplate, had moved on from
+the release line Atmos used, and that line depended on the AWS SDK for Go v1, which has reached end
+of support and carries CVEs no v1 release will ever fix. Atmos never executed the affected code,
+but there was no way to clear the findings without leaving those unsupported releases behind. The
+CVEs forced our hand: the template engine now runs on Gomplate v5, and the end-of-life SDK is gone
+from the Atmos build entirely.
 
 <!--truncate-->
 
 ## The Problem
 
 Atmos stack manifests support Go templates, and the Gomplate library supplies most of the
-functions and every datasource behind them. The version Atmos embedded, Gomplate v3, was built on
-the AWS SDK for Go v1. AWS retired that SDK, and its open advisories (GO-2022-0635 and
-GO-2022-0646) will never be resolved upstream because there will never be another v1 release.
+functions and every datasource behind them. The version Atmos embedded, Gomplate v3, is no longer
+maintained, and neither is v4; both were built on the AWS SDK for Go v1. AWS retired that SDK, and
+its published vulnerabilities (Go advisories GO-2022-0635 and GO-2022-0646) will never be resolved upstream because there will
+never be another v1 release.
 
 Tools like OpenSSF Scorecard and dependency scanners do not distinguish between a library you
 call and a library that merely sits in your dependency tree. Every Atmos release showed the same
 findings, and the only honest explanation was that the code is present but never reached. That is
-not an answer anyone should have to keep giving. The only way to clear it was to remove the SDK
-from the build altogether, which meant upgrading the template engine across two major versions.
+not an answer anyone should have to keep giving. The only supported way out was Gomplate v5, which
+meant crossing two major versions of a library that made a large number of breaking changes along
+the way.
 
 ## The Fix
 
-Atmos now embeds Gomplate v5, which is built on the AWS SDK for Go v2. Most stack templates keep
-working unchanged, and Sprig functions are still layered on top by default. Function names Gomplate
-removed in v5 keep working too, through a compatibility shim that logs a warning naming the
-replacement the first time a stack manifest calls one. A handful of datasource behaviors changed in
+Atmos now embeds Gomplate v5, which is built on the AWS SDK for Go v2. Upgrading was not optional,
+but breaking your stacks along with it would not have been acceptable either. Despite the sheer
+number of breaking changes between Gomplate v3 and v5, we went through them one by one and kept
+backward compatibility everywhere it made sense to: we built a compatibility test suite that runs
+the same templates through the previous release and this one and compares the results, and added a
+shim for every removed function we could restore faithfully. Most stack templates keep working
+unchanged, and Sprig functions are still layered on top by default. Each shim logs a warning naming
+the replacement the first time a stack manifest calls a removed function, so you can migrate on
+your own schedule. A handful of datasource behaviors changed in
 ways Atmos cannot paper over with a shim — [what to check in your stacks](#what-to-check-in-your-stacks)
 below covers each one. What changed unconditionally is what ships inside the binary: the AWS SDK for
 Go v1 is no longer present in any form.
@@ -174,7 +181,9 @@ example `{{ semver.CheckConstraint ">= 1.5.0" .vars.version }}`. See the
 
 ## Get Involved
 
-If a template that worked before this release fails after it, and the cause is not on the list
-above, [open an issue](https://github.com/cloudposse/atmos/issues) with the template expression
-and the error. The goal of this upgrade was to change what ships in the binary, not what your
-stacks can do.
+We will fix forward. If a template that worked before this release fails after it, or quietly
+renders a different value, and the cause is not on the list above,
+[open an issue](https://github.com/cloudposse/atmos/issues) with the template expression and the
+error. Where a gap can be closed with another compatibility shim, we will close it in a patch
+release. The goal of this upgrade was to change what ships in the binary, not what your stacks can
+do.
