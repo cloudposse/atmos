@@ -38,7 +38,7 @@ type copyWrite struct {
 func (s *Service) Copy(ctx context.Context, request artifact.CopyRequest) (*artifact.OperationResult, error) {
 	defer perf.Track(nil, "service.Service.Copy")()
 
-	op := s.begin(artifact.ActionCopy, request.To, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionCopy, request.To, request.Ref.String())
 	err := s.copyArtifact(ctx, op, &request)
 	result := op.done(err)
 	return &result, err

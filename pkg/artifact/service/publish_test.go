@@ -241,7 +241,7 @@ func TestPublish_NameAndVersionResolutionHappensBeforeAnyWrite(t *testing.T) {
 		{"missing repository", func(r *artifact.PublishRequest) { r.Repository = "" }, errUtils.ErrArtifactConfigInvalid},
 		{"missing source", func(r *artifact.PublishRequest) { r.Source = "" }, errUtils.ErrArtifactConfigInvalid},
 		{"invalid kind", func(r *artifact.PublishRequest) { r.Kind = "Bad Kind" }, errUtils.ErrArtifactRecordInvalid},
-		{"unregistered kind", func(r *artifact.PublishRequest) { r.Kind = "scaffold" }, errUtils.ErrArtifactConfigInvalid},
+		{"unregistered kind", func(r *artifact.PublishRequest) { r.Kind = "toolchain/package" }, errUtils.ErrArtifactConfigInvalid},
 		{"bad labels", func(r *artifact.PublishRequest) { r.Metadata.Labels = map[string]string{"a=b": "c"} }, errUtils.ErrArtifactConfigInvalid},
 		{"unknown repository", func(r *artifact.PublishRequest) { r.Repository = "nope" }, errUtils.ErrArtifactConfigInvalid},
 	}
@@ -406,4 +406,56 @@ func TestPublish_PackagingFollowsRepository(t *testing.T) {
 			assert.Equal(t, packaging, result.Inspection.Representation.Packaging)
 		})
 	}
+}
+
+func TestPublish_ComponentKindReportsDefaultExclusionsAndGenericKindDoesNot(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	src := e.source("hello")
+	fixtures.WriteFile(t, src, "main.tf", "# component\n", 0o644)
+	fixtures.WriteFile(t, src, ".terraform/modules.json", "{}\n", 0o644)
+	fixtures.WriteFile(t, src, "terraform.tfstate", "{}\n", 0o644)
+
+	excluded := func(outcome *service.PublishOutcome) []string {
+		var messages []string
+		for _, diagnostic := range outcome.Operation.Diagnostics {
+			if diagnostic.Code == "excluded" {
+				messages = append(messages, diagnostic.Message)
+			}
+		}
+		return messages
+	}
+
+	request := e.publishRequest("dst", src)
+	request.Kind = "component/terraform"
+	request.DryRun = true
+	dryRun, err := e.svc.PublishDetailed(context.Background(), request)
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeDryRun, dryRun.Operation.Outcome)
+	assert.Equal(t, "component/terraform", dryRun.Record.Kind)
+	assert.Equal(t, []string{"excluded .terraform (rule .terraform/**)", "excluded terraform.tfstate (rule *.tfstate)"}, excluded(dryRun),
+		"the dry run shows what the component producer leaves out and why")
+	for _, entry := range dryRun.Record.Inventory {
+		assert.NotContains(t, entry.Path, "terraform.tfstate")
+		assert.NotContains(t, entry.Path, ".terraform/")
+	}
+
+	request.DryRun = false
+	published, err := e.svc.PublishDetailed(context.Background(), request)
+	require.NoError(t, err)
+	assert.Len(t, excluded(published), 2, "a real publication reports the same exclusions")
+
+	generic := e.publishRequest("dst", src)
+	generic.DryRun = true
+	plain, err := e.svc.PublishDetailed(context.Background(), generic)
+	require.NoError(t, err)
+	assert.Empty(t, excluded(plain), "generic files never inherit component exclusions")
+	assert.Contains(t, inventoryPathsOf(&plain.Record), "terraform.tfstate")
+}
+
+func inventoryPathsOf(record *artifact.Record) []string {
+	paths := make([]string, 0, len(record.Inventory))
+	for index := range record.Inventory {
+		paths = append(paths, record.Inventory[index].Path)
+	}
+	return paths
 }

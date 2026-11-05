@@ -16,7 +16,7 @@ import (
 func (s *Service) Sign(ctx context.Context, request artifact.SignRequest) (*artifact.SignResult, error) {
 	defer perf.Track(nil, "service.Service.Sign")()
 
-	op := s.begin(artifact.ActionSign, request.Repository, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionSign, request.Repository, request.Ref.String())
 	result := &artifact.SignResult{}
 	err := s.sign(ctx, op, &request, result)
 	result.Operation = op.done(err)
@@ -123,7 +123,7 @@ func checkSigningCapability(alias string, info *RepositoryInfo, signer artifact.
 func (s *Service) Verify(ctx context.Context, request artifact.VerifyRequest) (*artifact.VerifyResult, error) {
 	defer perf.Track(nil, "service.Service.Verify")()
 
-	op := s.begin(artifact.ActionVerify, request.Repository, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionVerify, request.Repository, request.Ref.String())
 	result := &artifact.VerifyResult{}
 	err := s.verify(ctx, op, &request, result)
 	result.Operation = op.done(err)

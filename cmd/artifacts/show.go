@@ -1,12 +1,11 @@
 package artifacts
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/data"
 )
 
@@ -25,10 +24,8 @@ func newDocumentCommand(role artifact.DocumentRole) *cobra.Command {
 	parser := newRepositoryParser(showPrefix + "." + string(role))
 	c := &command{
 		action: artifact.ActionShow, parser: parser, prefix: showPrefix + "." + string(role),
-		run: func(ctx context.Context, svc artifact.Service, in *input) (*result, error) {
-			return runShow(ctx, svc, in, role)
-		},
-		text: textDocument,
+		params: func(in *input) (*invoke.Params, error) { return paramsShow(in, role) },
+		text:   textDocument,
 	}
 	cmd := &cobra.Command{
 		Use:   string(role) + " <ref>",
@@ -44,27 +41,12 @@ func newDocumentCommand(role artifact.DocumentRole) *cobra.Command {
 	return cmd
 }
 
-func runShow(ctx context.Context, svc artifact.Service, in *input, role artifact.DocumentRole) (*result, error) {
+func paramsShow(in *input, role artifact.DocumentRole) (*invoke.Params, error) {
 	repository, err := in.repository()
 	if err != nil {
 		return nil, err
 	}
-	ref, err := in.ref()
-	if err != nil {
-		return nil, err
-	}
-	document, err := svc.ShowDocument(ctx, artifact.ShowDocumentRequest{Repository: repository, Ref: ref, Role: role})
-	if document == nil {
-		return nil, err
-	}
-	res := operationFrom(&document.Operation)
-	if document.Document.Digest != "" {
-		descriptor := document.Document
-		res.Document = &descriptor
-		content := string(document.Content)
-		res.Content = &content
-	}
-	return res, err
+	return &invoke.Params{Action: artifact.ActionShow, Repository: repository, Ref: in.args[0], Document: string(role)}, nil
 }
 
 // textDocument prints the document itself, so it can be piped or redirected as-is.

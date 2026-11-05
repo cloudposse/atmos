@@ -59,7 +59,7 @@ func (s *Service) afterFailure(ctx context.Context, pub *publication, cur *curre
 		pub.op.info("reconciled", fmt.Sprintf("the repository reported %q but the completed reference holds the expected digests; success was confirmed by reading it", writeErr))
 		return syntheticResult(&found.pinned, found.inspection), false, nil
 	case reconcileNotCommitted:
-		if !isTemporary(writeErr) || attempt >= s.attempts || ctx.Err() != nil {
+		if !isTemporary(writeErr) || attempt >= pub.op.attempts || ctx.Err() != nil {
 			return nil, false, writeErr
 		}
 		if sleepErr := s.sleep(ctx, s.backoff<<(attempt-1)); sleepErr != nil {

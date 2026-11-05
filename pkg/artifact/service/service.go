@@ -60,6 +60,7 @@ type Service struct {
 	signer      artifact.Signer
 	journal     Journal
 	immutable   ImmutabilityPolicy
+	enumerator  Enumerator
 	clock       func() time.Time
 	newID       func() string
 	sleep       func(ctx context.Context, d time.Duration) error
@@ -156,7 +157,8 @@ func WithRepacker(repacker Repacker) Option {
 	return func(s *Service) { s.repacker = repacker }
 }
 
-// New returns a Service. With a nil producer registry, only the generic files producer is available.
+// New returns a Service. With a nil producer registry, the built-in producers are available: the
+// generic files producer and the scaffold and component/terraform producers.
 func New(repos Repositories, producers *artifact.ProducerRegistry, opts ...Option) (*Service, error) {
 	defer perf.Track(nil, "service.New")()
 
@@ -186,7 +188,7 @@ func New(repos Repositories, producers *artifact.ProducerRegistry, opts ...Optio
 	}
 	if s.producers == nil {
 		s.producers = artifact.NewProducerRegistry()
-		if err := produce.Register(s.producers, produce.WithStagingRoot(s.stagingRoot)); err != nil {
+		if err := produce.RegisterDefaults(s.producers, produce.WithStagingRoot(s.stagingRoot)); err != nil {
 			return nil, err
 		}
 	}
@@ -222,16 +224,32 @@ type operation struct {
 	preparedAt time.Time
 	started    time.Time
 	clock      func() time.Time
+	attempts   int
 	result     artifact.OperationResult
 }
 
-func (s *Service) begin(action artifact.Action, repository, requested string) *operation {
+// begin captures the operation identity. A wrapper that retries the whole operation supplies the
+// identity it captured before its first attempt, so the ID and the preparation time survive every
+// retry; otherwise the service generates both. The duration always measures the current call.
+func (s *Service) begin(execution *artifact.Execution, action artifact.Action, repository, requested string) *operation {
 	now := s.clock().UTC()
+	id, preparedAt := execution.OperationID, execution.PreparedAt.UTC()
+	if id == "" {
+		id = s.newID()
+	}
+	if execution.PreparedAt.IsZero() {
+		preparedAt = now
+	}
+	attempts := s.attempts
+	if execution.MaxAttempts > 0 {
+		attempts = execution.MaxAttempts
+	}
 	return &operation{
-		id:         s.newID(),
-		preparedAt: now,
+		id:         id,
+		preparedAt: preparedAt,
 		started:    now,
 		clock:      s.clock,
+		attempts:   attempts,
 		result: artifact.OperationResult{
 			OperationID: "",
 			Action:      action,

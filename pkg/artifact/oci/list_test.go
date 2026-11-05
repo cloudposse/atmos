@@ -24,6 +24,7 @@ type failingCatalog struct {
 
 func (f failingCatalog) Repositories(context.Context, string) ([]string, error) { return nil, f.err }
 
+//nolint:gocritic // Test helper; the query is a small literal.
 func listAll(t *testing.T, repo *Repository, query artifact.ListQuery) []string {
 	t.Helper()
 	var seen []string

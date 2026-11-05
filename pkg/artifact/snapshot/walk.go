@@ -30,11 +30,13 @@ type capturer struct {
 	root    string
 	dataDir string
 	entries []artifact.Entry
-	staged  map[string]string
-	dirs    map[string][]string
-	sources []sourceRecord
-	total   int64
-	counter int
+	// exclusions are the entries the excluder left out.
+	exclusions []artifact.Exclusion
+	staged     map[string]string
+	dirs       map[string][]string
+	sources    []sourceRecord
+	total      int64
+	counter    int
 }
 
 // walkDir captures the directory at abs, whose slash-separated inventory path is rel ("" for the root).
@@ -67,6 +69,12 @@ func (c *capturer) captureChild(abs, rel string) error {
 		return changedError(rel, err)
 	}
 	mode := info.Mode()
+	if c.opts.excluder != nil {
+		if rule, excluded := c.opts.excluder(rel, mode.IsDir()); excluded {
+			c.exclusions = append(c.exclusions, artifact.Exclusion{Path: rel, Rule: rule})
+			return nil
+		}
+	}
 	switch {
 	case mode.IsDir():
 		if err := c.addEntry(&artifact.Entry{Path: rel, Type: artifact.EntryDirectory, Mode: permBits(info)}); err != nil {

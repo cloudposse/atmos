@@ -1,19 +1,19 @@
 package artifacts
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func newSignCommand() *cobra.Command {
 	parser := newSignParser()
-	c := &command{action: artifact.ActionSign, parser: parser, prefix: signPrefix, run: runSign, text: textSign}
+	c := &command{action: artifact.ActionSign, parser: parser, prefix: signPrefix, params: paramsSign, text: textSign}
 	cmd := &cobra.Command{
 		Use:   "sign <digest-ref>",
 		Short: "Add signature evidence to an immutable artifact digest",
@@ -30,25 +30,12 @@ Signing does not verify the artifact against trust policy: use atmos artifacts v
 	return cmd
 }
 
-func runSign(ctx context.Context, svc artifact.Service, in *input) (*result, error) {
+func paramsSign(in *input) (*invoke.Params, error) {
 	repository, err := in.repository()
 	if err != nil {
 		return nil, err
 	}
-	ref, err := in.ref()
-	if err != nil {
-		return nil, err
-	}
-	signed, err := svc.Sign(ctx, artifact.SignRequest{Repository: repository, Ref: ref})
-	if signed == nil {
-		return nil, err
-	}
-	res := operationFrom(&signed.Operation)
-	if signed.Subject.Digest != "" {
-		res.Subject = &signed.Subject
-	}
-	res.Evidence = signed.Evidence
-	return res, err
+	return &invoke.Params{Action: artifact.ActionSign, Repository: repository, Ref: in.args[0]}, nil
 }
 
 func textSign(res *result) error {

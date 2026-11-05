@@ -2,6 +2,9 @@ package artifact
 
 // PublishRequest publishes a local source to one repository.
 type PublishRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Repository is the required configured repository alias.
 	Repository string
 
@@ -35,6 +38,9 @@ type PublishRequest struct {
 
 // PullRequest materializes an artifact into a local directory.
 type PullRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Repository is the required configured repository alias.
 	Repository string
 
@@ -50,6 +56,9 @@ type PullRequest struct {
 
 // CopyRequest copies an artifact between two configured repositories.
 type CopyRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Ref selects the artifact in the source repository.
 	Ref Ref
 
@@ -65,6 +74,9 @@ type CopyRequest struct {
 
 // InspectRequest inspects an artifact without downloading its payload.
 type InspectRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Repository is the required configured repository alias.
 	Repository string
 
@@ -104,6 +116,9 @@ type SearchRequest struct {
 
 // DeleteRequest deletes an artifact from one repository.
 type DeleteRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Repository is the required configured repository alias.
 	Repository string
 
@@ -113,6 +128,9 @@ type DeleteRequest struct {
 
 // ShowDocumentRequest reads one package document.
 type ShowDocumentRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Repository is the required configured repository alias.
 	Repository string
 
@@ -125,6 +143,9 @@ type ShowDocumentRequest struct {
 
 // SignRequest adds signature evidence to an immutable subject.
 type SignRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Repository is the required configured repository alias.
 	Repository string
 
@@ -134,6 +155,9 @@ type SignRequest struct {
 
 // VerifyRequest verifies an artifact's signature evidence against the effective policy.
 type VerifyRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Repository is the required configured repository alias.
 	Repository string
 
@@ -143,6 +167,9 @@ type VerifyRequest struct {
 
 // PinRequest creates an immutable reference for consumer lockfiles.
 type PinRequest struct {
+	// Execution carries the wrapper-owned operation identity and retry budget.
+	Execution Execution
+
 	// Repository is the required configured repository alias.
 	Repository string
 

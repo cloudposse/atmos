@@ -18,7 +18,7 @@ import (
 func (s *Service) Pull(ctx context.Context, request artifact.PullRequest) (*artifact.OperationResult, error) {
 	defer perf.Track(nil, "service.Service.Pull")()
 
-	op := s.begin(artifact.ActionPull, request.Repository, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionPull, request.Repository, request.Ref.String())
 	err := s.pull(ctx, op, &request)
 	result := op.done(err)
 	return &result, err

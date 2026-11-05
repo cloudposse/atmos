@@ -1,18 +1,17 @@
 package artifacts
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func newPullCommand() *cobra.Command {
 	parser := newPullParser()
-	c := &command{action: artifact.ActionPull, parser: parser, prefix: pullPrefix, run: runPull, text: textPull}
+	c := &command{action: artifact.ActionPull, parser: parser, prefix: pullPrefix, params: paramsPull, text: textPull}
 	cmd := &cobra.Command{
 		Use:   "pull <ref>",
 		Short: "Verify and materialize an artifact into a directory",
@@ -28,12 +27,8 @@ directory needs --force and is replaced, never overlaid.`,
 	return cmd
 }
 
-func runPull(ctx context.Context, svc artifact.Service, in *input) (*result, error) {
+func paramsPull(in *input) (*invoke.Params, error) {
 	repository, err := in.repository()
-	if err != nil {
-		return nil, err
-	}
-	ref, err := in.ref()
 	if err != nil {
 		return nil, err
 	}
@@ -41,8 +36,7 @@ func runPull(ctx context.Context, svc artifact.Service, in *input) (*result, err
 	if err != nil {
 		return nil, err
 	}
-	op, err := svc.Pull(ctx, artifact.PullRequest{Repository: repository, Ref: ref, Destination: destination, Force: in.flag(flagForce)})
-	return operationFrom(op), err
+	return &invoke.Params{Action: artifact.ActionPull, Repository: repository, Ref: in.args[0], Destination: destination, Force: in.flag(flagForce)}, nil
 }
 
 func textPull(res *result) error {

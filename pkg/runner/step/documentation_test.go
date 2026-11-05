@@ -48,7 +48,7 @@ func TestStepDocumentationCoversRegisteredTypes(t *testing.T) {
 	// wait-all is documented with wait because both types operate on the same
 	// background-service model. Every other canonical registry type owns a page.
 	documents := map[string]string{
-		"alert": "alert", "archive": "archive", "atmos": "atmos", "cancel": "cancel",
+		"alert": "alert", "archive": "archive", "artifact": "artifact", "atmos": "atmos", "cancel": "cancel",
 		"cast": "cast", "choose": "choose", "clear": "clear", "confirm": "confirm",
 		"container": "container", "emulator": "emulator", "env": "env", "exec": "exec",
 		"exit": "exit", "file": "file", "filter": "filter", "format": "format",

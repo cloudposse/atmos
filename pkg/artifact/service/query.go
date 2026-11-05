@@ -20,7 +20,7 @@ import (
 func (s *Service) Inspect(ctx context.Context, request artifact.InspectRequest) (*artifact.InspectResult, error) {
 	defer perf.Track(nil, "service.Service.Inspect")()
 
-	op := s.begin(artifact.ActionInspect, request.Repository, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionInspect, request.Repository, request.Ref.String())
 	result := &artifact.InspectResult{}
 	err := s.inspect(ctx, op, &request, result)
 	result.Operation = op.done(err)
@@ -59,7 +59,7 @@ func (s *Service) inspect(ctx context.Context, op *operation, request *artifact.
 func (s *Service) ShowDocument(ctx context.Context, request artifact.ShowDocumentRequest) (*artifact.DocumentResult, error) {
 	defer perf.Track(nil, "service.Service.ShowDocument")()
 
-	op := s.begin(artifact.ActionShow, request.Repository, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionShow, request.Repository, request.Ref.String())
 	result := &artifact.DocumentResult{}
 	err := s.showDocument(ctx, op, &request, result)
 	result.Operation = op.done(err)
@@ -201,6 +201,7 @@ func (s *Service) runEnumeration(ctx context.Context, request *enumeration, resu
 		succeeded++
 	}
 	sortEntries(result.Artifacts)
+	result.Incomplete = len(errs) > 0
 	if explicit && len(errs) > 0 || succeeded == 0 && len(errs) > 0 {
 		return errors.Join(errs...)
 	}

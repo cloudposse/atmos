@@ -2,36 +2,36 @@ package discovery
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
-	"os"
 	"path/filepath"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact/discovery/cache"
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/registryauth"
-	"github.com/cloudposse/atmos/pkg/filelock"
-	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/plugin/catalog"
 	pluginpolicy "github.com/cloudposse/atmos/pkg/plugin/policy"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
-	maxCacheSize         = 32 << 20
-	privateDirectoryMode = 0o700
-	privateFileMode      = 0o600
+	// The maximum size of one snapshot file is the shared cache bound.
+	maxCacheSize = cache.DefaultMaxSize
+
+	// The snapshot version is the plugin snapshot schema version.
+	snapshotVersion = 1
 )
 
+// indexCache is the plugin discovery cache: the shared store scoped to this configuration.
 type indexCache struct {
-	directory, scope string
-	ttl              time.Duration
+	store *cache.Store
 }
 
+// snapshot is the plugin schema stored in a source's snapshot file. It keeps the four shared header
+// fields itself so the serialized keys stay version, source, kind, fetched_at, digest, entries,
+// releases.
 type snapshot struct {
 	Version   int                      `json:"version"`
 	Source    string                   `json:"source"`
@@ -40,6 +40,22 @@ type snapshot struct {
 	Digest    string                   `json:"digest,omitempty"`
 	Entries   []catalog.Entry          `json:"entries"`
 	Releases  map[string]catalog.Entry `json:"releases,omitempty"`
+}
+
+var _ cache.Snapshot = (*snapshot)(nil)
+
+// SnapshotHeader implements [cache.Snapshot].
+//
+//nolint:lintroller // Trivial accessor.
+func (s *snapshot) SnapshotHeader() cache.Header {
+	return cache.Header{Version: s.Version, Source: s.Source, Kind: s.Kind, FetchedAt: s.FetchedAt}
+}
+
+// SetSnapshotHeader implements [cache.Snapshot].
+//
+//nolint:lintroller // Trivial accessor.
+func (s *snapshot) SetSnapshotHeader(header cache.Header) {
+	s.Version, s.Source, s.Kind, s.FetchedAt = header.Version, header.Source, header.Kind, header.FetchedAt
 }
 
 func (s *Service) newCache() (*indexCache, error) {
@@ -56,7 +72,7 @@ func (s *Service) newCache() (*indexCache, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := json.Marshal([]any{s.Config.Auth, info.Value, bindings})
+	scope, err := cache.Scope(s.Config.Auth, info.Value, bindings)
 	if err != nil {
 		return nil, err
 	}
@@ -67,26 +83,35 @@ func (s *Service) newCache() (*indexCache, error) {
 			return nil, errors.Join(errUtils.ErrPluginInvalidConfig, err)
 		}
 	}
-	return &indexCache{directory: directory, scope: hash(raw), ttl: ttl}, nil
+	return &indexCache{store: cache.New(directory, scope, cache.WithTTL(ttl), cache.WithMaxSize(maxCacheSize))}, nil
 }
 
-func hash(raw []byte) string { sum := sha256.Sum256(raw); return hex.EncodeToString(sum[:]) }
-
-func (s *Service) loadSource(ctx context.Context, cache *indexCache, item source, refresh bool) ([]catalog.Entry, error) {
-	key := hash([]byte(cache.scope + "\x00" + item.kind + "\x00" + item.reference))
-	if err := os.MkdirAll(cache.directory, privateDirectoryMode); err != nil {
-		return nil, err
+func (s *Service) loadSource(ctx context.Context, store *indexCache, item source, refresh bool) ([]catalog.Entry, error) {
+	spec := &cache.Source[snapshot, *snapshot]{
+		Kind:      item.kind,
+		Reference: item.reference,
+		Version:   snapshotVersion,
+		Decode:    decodeSnapshot,
+		Fetch: func(ctx context.Context, previous *snapshot) (*snapshot, error) {
+			return s.refresh(ctx, item, previous)
+		},
+		Authorize: func(ctx context.Context, cached bool) error {
+			var options []pluginpolicy.Option
+			if cached {
+				options = append(options, pluginpolicy.WithCache())
+			}
+			return pluginpolicy.Source(ctx, "search", item.reference, options...)
+		},
+		ErrOffline:  errUtils.ErrPluginOfflineArtifact,
+		ErrTooLarge: errUtils.ErrPluginPayloadTooLarge,
 	}
-	path := filepath.Join(cache.directory, key+".json")
-	var result []catalog.Entry
-	var cached bool
-	err := filelock.New(path+".lock").WithExclusive(ctx, func() error {
-		var err error
-		result, cached, err = s.updateSnapshot(ctx, cache, item, refresh, path)
-		return err
-	})
+	value, cached, err := cache.Load(ctx, store.store, spec, cache.Mode{Refresh: refresh, Offline: s.Config.Plugins.Policy.Offline})
 	if err != nil {
 		return nil, err
+	}
+	var result []catalog.Entry
+	if value != nil {
+		result = value.Entries
 	}
 	if err := checkEntrySources(ctx, result, cached); err != nil {
 		return nil, err
@@ -107,65 +132,16 @@ func checkEntrySources(ctx context.Context, entries []catalog.Entry, cached bool
 	return nil
 }
 
-func (s *Service) updateSnapshot(ctx context.Context, cache *indexCache, item source, refresh bool, path string) ([]catalog.Entry, bool, error) {
-	old := readSnapshot(path, item)
-	if old != nil && (s.Config.Plugins.Policy.Offline || (!refresh && fresh(old.FetchedAt, cache.ttl))) {
-		if err := pluginpolicy.Source(ctx, "search", item.reference, pluginpolicy.WithCache()); err != nil {
-			return nil, true, err
-		}
-		return old.Entries, true, nil
-	}
-	if s.Config.Plugins.Policy.Offline {
-		return nil, false, errUtils.ErrPluginOfflineArtifact
-	}
-	if err := pluginpolicy.Source(ctx, "search", item.reference); err != nil {
-		return nil, false, err
-	}
-	return s.refreshSnapshot(ctx, item, old, path)
-}
-
-func (s *Service) refreshSnapshot(ctx context.Context, item source, old *snapshot, path string) ([]catalog.Entry, bool, error) {
-	current, err := s.refresh(ctx, item, old)
-	if err != nil {
-		return nil, false, err
-	}
-	if current == nil {
-		// Do not cache an unavailable optional catalog as an empty result.
-		return nil, false, nil
-	}
-	current.Version, current.Source, current.Kind, current.FetchedAt = 1, item.reference, item.kind, time.Now().UTC()
-	if err := ctx.Err(); err != nil {
-		return nil, false, err
-	}
-	if err := writeSnapshot(path, current); err != nil {
-		return nil, false, err
-	}
-	return current.Entries, false, nil
-}
-
-func fresh(fetched time.Time, ttl time.Duration) bool {
-	age := time.Since(fetched)
-	return age >= 0 && age < ttl
-}
-
-func readSnapshot(path string, item source) *snapshot {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	defer file.Close()
-	raw, err := io.ReadAll(io.LimitReader(file, maxCacheSize+1))
-	if err != nil || len(raw) > maxCacheSize {
-		return nil
-	}
+// decodeSnapshot parses a plugin snapshot and rejects one whose entries or releases are invalid.
+func decodeSnapshot(raw []byte) (*snapshot, error) {
 	var value snapshot
-	if json.Unmarshal(raw, &value) != nil || value.Version != 1 || value.Source != item.reference || value.Kind != item.kind {
-		return nil
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
 	}
 	if !validSnapshot(&value) {
-		return nil
+		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	return &value
+	return &value, nil
 }
 
 func validSnapshot(value *snapshot) bool {
@@ -192,13 +168,8 @@ func validEntries(entries []catalog.Entry) bool {
 	return err == nil
 }
 
+// writeSnapshot atomically replaces the snapshot file at path, leaving the previous contents in
+// place when the new value cannot be serialized or exceeds the size bound.
 func writeSnapshot(path string, value *snapshot) error {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	if len(raw) > maxCacheSize {
-		return errUtils.ErrPluginPayloadTooLarge
-	}
-	return filesystem.NewOSFileSystem().WriteFileAtomic(path, raw, privateFileMode)
+	return cache.New("", "", cache.WithMaxSize(maxCacheSize)).WriteSnapshot(path, value, errUtils.ErrPluginPayloadTooLarge)
 }
