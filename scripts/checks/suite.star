@@ -2,9 +2,11 @@ load("checks.star", "check_specs", "check_files", "module_dirs")
 
 # Prepare formatter side effects and execute the enabled checks sequentially through the test UI.
 def run_suite(sandbox, mode, only, base, skip):
-    # Read the catalog and check script from the sandbox checkout, not the live tree, so a
-    # run uses the files it is checking (for a commit, the staged ones) even when the working
-    # tree has unstaged edits to them.
+    # The catalog is data, so read it from the sandbox checkout: a run then uses the catalog it
+    # is checking (for a commit, the staged one) even when the working tree has unstaged edits
+    # to it. The check code is not read from the sandbox: Starlark loads the helpers above
+    # statically from the working tree, so the copy executed below must come from the same
+    # place, or validation and execution could use different handler sets.
     specs = check_specs(sandbox.path + "/.atmos-git-hooks.yaml")
     config = {
         "root": sandbox.root,
@@ -31,7 +33,7 @@ def run_suite(sandbox, mode, only, base, skip):
 
     # Pass filenames as data, never as step script text (which supports templates).
     fs.write_file(".git/repository-checks.json", json.encode(config))
-    fs.write_file(".git/repository-checks.star", fs.read_file(sandbox.path + "/scripts/checks/checks.star"))
+    fs.write_file(".git/repository-checks.star", fs.read_file(sandbox.root + "/scripts/checks/checks.star"))
     checks = []
     for spec in specs:
         if only and spec["id"] not in only:

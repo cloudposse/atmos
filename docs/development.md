@@ -172,10 +172,10 @@ or pass `--base <rev>` to diff them against an earlier revision (default `HEAD`)
 With `--base HEAD` (the default), the tracked files are staged from the working tree. With
 any other `--base <rev>`, they are staged as they were at that revision and working-tree edits
 are ignored; a file the revision does not have keeps its `HEAD` version, because the hook
-loads its catalog and check scripts from the staged tree. In either mode the selection must
-include one of the tracked YAML files (`.atmos-git-hooks.yaml`, `.atmos.d/check.yaml`, or
-`.atmos.d/format.yaml`); otherwise `check-yaml` is skipped and `casts validate` rejects the
-recording. The recorder does not manufacture sample changes. Go checks are skipped when the
+reads its catalog from the staged tree (the check scripts always run from the working tree).
+In either mode the selection must include one of the tracked YAML files
+(`.atmos-git-hooks.yaml`, `.atmos.d/check.yaml`, or `.atmos.d/format.yaml`); otherwise
+`check-yaml` is skipped and `casts validate` rejects the recording. The recorder does not manufacture sample changes. Go checks are skipped when the
 selected changes contain no Go files.
 
 ### Repository checks in CI
