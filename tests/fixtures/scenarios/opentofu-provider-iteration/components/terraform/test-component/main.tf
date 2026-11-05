@@ -5,6 +5,12 @@ variable "accounts" {
   type = list(string)
 }
 
+# Atmos keeps sensitive inputs out of the generated varfile, which needs the parsed module.
+variable "api_token" {
+  type      = string
+  sensitive = true
+}
+
 provider "aws" {
   alias    = "by_account"
   for_each = toset(var.accounts)

@@ -1351,14 +1351,12 @@ func processStacks(
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
 		// OpenTofu 1.9+ provider iteration (`provider = aws.by_account[each.key]`) is a terraform-config-inspect
 		// static-parser limitation, so inspect.LoadModule returns those diagnostics separately from diags.
+		// The module is still complete apart from those provider references, so keep it: consumers such as
+		// terraformSensitiveVarKeys need its variable declarations.
 		terraformConfiguration, diags, providerIteration := inspect.LoadModule(componentPath)
 		if !diags.HasErrors() {
-			if len(providerIteration) > 0 {
-				componentInfo[terraformConfigKey] = nil
-				recordProviderIterationSkip(componentInfo, providerIteration)
-			} else {
-				componentInfo[terraformConfigKey] = terraformConfiguration
-			}
+			componentInfo[terraformConfigKey] = terraformConfiguration
+			recordProviderIterationSkip(componentInfo, providerIteration)
 		} else {
 			diagErr := diags.Err()
 

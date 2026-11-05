@@ -3,8 +3,11 @@ package exec
 import (
 	"testing"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestOpenTofuProviderIteration tests that OpenTofu 1.9+ provider iteration
@@ -32,7 +35,13 @@ func TestOpenTofuProviderIteration(t *testing.T) {
 	// The skip is recorded under its own reason, not as module source interpolation.
 	assert.Equal(t, true, componentInfo["validation_skipped_provider_iteration"])
 	assert.NotContains(t, componentInfo, "validation_skipped_module_source_interpolation")
-	assert.Nil(t, componentInfo[terraformConfigKey], "%s should be nil when validation was skipped", terraformConfigKey)
+
+	// The parsed module is kept, so sensitive variables are still kept out of the varfile.
+	module, ok := componentInfo[terraformConfigKey].(*tfconfig.Module)
+	require.True(t, ok, "%s should hold the parsed module", terraformConfigKey)
+	require.NotNil(t, module)
+	assert.Equal(t, map[string]bool{"api_token": true},
+		terraformSensitiveVarKeys(&schema.ConfigAndStacksInfo{ComponentSection: componentSection}))
 
 	componentVars, ok := componentSection["vars"].(map[string]any)
 	require.True(t, ok, "component vars should be a map")
