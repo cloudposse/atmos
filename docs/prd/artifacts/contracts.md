@@ -123,7 +123,7 @@ repository is an error; only collection list/search intentionally default to all
 | List | `list [name] [--repository R] [--labels L] [--refresh]` | `action: list`, optional `artifact_name`, `repository`, `labels`, `refresh` |
 | Search | `search [text] [--repository R] [--labels L] [--refresh]` | `action: search`, `query`, `repository`, `labels`, `refresh` |
 | Delete | `delete <ref> --repository R` | `action: delete`, `ref`, `repository` |
-| Documents | `show readme|changelog <ref> --repository R` | `action: show`, `document`, `ref`, `repository` |
+| Documents | `show readme\|changelog <ref> --repository R` | `action: show`, `document`, `ref`, `repository` |
 
 Publishing defaults to kind `files`; specialized convenience commands supply their kind. Name
 precedence is explicit flag, producer metadata, source basename. Version precedence is explicit
