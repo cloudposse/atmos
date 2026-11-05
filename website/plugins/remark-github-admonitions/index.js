@@ -17,7 +17,9 @@
 
 // The marker must end its line (or the paragraph), as on GitHub: `> [!NOTE] text` stays a
 // plain blockquote. A paragraph that ends right after the marker, or has a hard break after
-// it, leaves the marker alone in its text node, which the `$` alternative covers.
+// it, leaves the marker alone in its text node, which the `$` alternative covers. The `$`
+// alternative also matches when an inline node such as `**text**` follows the marker, so
+// extractAlertType checks the next sibling too.
 const ALERT_MARKER = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\r?\n|$)/i;
 
 // GitHub's alert types and the title each one shows.
@@ -40,6 +42,11 @@ function extractAlertType(blockquote) {
 
   const match = ALERT_MARKER.exec(text.value);
   if (!match) return undefined;
+
+  // The marker's text node ended without a line ending, so it ends its line only when the
+  // paragraph stops there or a hard break follows. Any other inline node is same-line text.
+  const next = paragraph.children[1];
+  if (!/\n$/.test(match[0]) && next && next.type !== 'break') return undefined;
 
   text.value = text.value.slice(match[0].length);
   if (text.value === '') {

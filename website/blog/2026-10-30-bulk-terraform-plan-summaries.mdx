@@ -24,8 +24,8 @@ changed components. To review any other plan in detail, you had to open the indi
 ## The Fix
 
 [Bulk plans](/cli/commands/terraform/plan#github-actions-ci-output) keep the aggregate overview
-and bring back the normal summary for each executed component,
-including no-change results. The summaries use the same [CI templates](/cli/configuration/ci/templates)
+and bring back the normal summary for each executed component, including no-change results, as long
+as the summaries fit within the shared size limit. The summaries use the same [CI templates](/cli/configuration/ci/templates)
 and configured overrides as single-component plans, ordered by stack and component. Skipped components
 remain in the overview with their reason.
 

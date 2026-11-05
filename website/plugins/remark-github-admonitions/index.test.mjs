@@ -126,6 +126,22 @@ test('same-line text after the marker leaves the blockquote unchanged', () => {
   assert.equal(spaced.children[0].children[0].value, '[!NOTE] same line text');
 });
 
+test('an inline node on the marker line leaves the blockquote unchanged', () => {
+  // `> [!NOTE] **text**` is a plain blockquote on GitHub: the marker's text node ends where the
+  // inline node starts, but the marker does not end its line.
+  const strong = { type: 'strong', children: [text('text')] };
+  const spaced = blockquote(paragraph(text('[!NOTE] '), strong));
+  const tight = blockquote(paragraph(text('[!NOTE]'), strong));
+  run(root(spaced, tight));
+
+  assert.equal(spaced.data, undefined);
+  assert.equal(spaced.children[0].children[0].value, '[!NOTE] ');
+  assert.equal(spaced.children[0].children[1], strong);
+  assert.equal(tight.data, undefined);
+  assert.equal(tight.children[0].children[0].value, '[!NOTE]');
+  assert.equal(tight.children[0].children[1], strong);
+});
+
 test('marker followed by trailing spaces and a newline still converts', () => {
   const quote = blockquote(paragraph(text('[!TIP]  \nBody text.')));
   run(root(quote));

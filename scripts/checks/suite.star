@@ -2,7 +2,10 @@ load("checks.star", "check_specs", "check_files", "module_dirs")
 
 # Prepare formatter side effects and execute the enabled checks sequentially through the test UI.
 def run_suite(sandbox, mode, only, base, skip):
-    specs = check_specs(sandbox.root + "/.atmos-git-hooks.yaml")
+    # Read the catalog and check script from the sandbox checkout, not the live tree, so a
+    # run uses the files it is checking (for a commit, the staged ones) even when the working
+    # tree has unstaged edits to them.
+    specs = check_specs(sandbox.path + "/.atmos-git-hooks.yaml")
     config = {
         "root": sandbox.root,
         "scope": sandbox.scope,
@@ -28,7 +31,7 @@ def run_suite(sandbox, mode, only, base, skip):
 
     # Pass filenames as data, never as step script text (which supports templates).
     fs.write_file(".git/repository-checks.json", json.encode(config))
-    fs.write_file(".git/repository-checks.star", fs.read_file(sandbox.root + "/scripts/checks/checks.star"))
+    fs.write_file(".git/repository-checks.star", fs.read_file(sandbox.path + "/scripts/checks/checks.star"))
     checks = []
     for spec in specs:
         if only and spec["id"] not in only:

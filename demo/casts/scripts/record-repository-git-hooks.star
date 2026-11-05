@@ -50,8 +50,11 @@ def record():
         # and check scripts from the staged tree, so removing them would break the recorded run.
         stage_revision(root, private_index, base, paths)
     selected = exec.run(["git", "diff", "--cached", "--name-only", "-z"], working_directory = root, env = private_index, output = "capture").stdout
+    if not selected and base == "HEAD":
+        fail("Recording needs actual edits to the repository check catalog, scripts, commands, or development guide relative to HEAD. Make an intended change first, or pass --base <rev> to record the diff against an earlier revision; no demo files are synthesized.")
     if not selected:
-        fail("Recording needs actual edits to the repository check catalog, scripts, commands, or development guide relative to " + base + ". Make an intended change first, or pass --base <rev> to record the diff against an earlier revision; no demo files are synthesized.")
+        # --base stages the revision's files and ignores working-tree edits, so editing a file cannot help.
+        fail("Revision " + base + " has no differences from HEAD in the repository check catalog, scripts, commands, or development guide. --base ignores working-tree edits: choose a different revision, or omit --base to record your working-tree edits; no demo files are synthesized.")
     # Fail before recording if checks would fix anything; the hook then runs the same inputs.
     atmos.run(["check", "staged"], working_directory = root, env = private_index, output = "capture")
     atmos.run(["casts", "record", "repository", "git-hooks"], working_directory = fs.resolve("."), env = private_index)
