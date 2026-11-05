@@ -71,6 +71,7 @@ func (c *ConfigRepositories) Describe(alias string) (RepositoryInfo, error) {
 		info.Defaults = artifact.Metadata{Description: repoCfg.Defaults.Metadata.Description, Labels: repoCfg.Defaults.Metadata.Labels}
 	}
 	if plan.Provider != alias {
+		info.LockProvider = plan.Provider
 		info.Capabilities.LockScopes = c.delegatedScopes(&info.Capabilities, plan.Provider)
 	}
 	return info, nil

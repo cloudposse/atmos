@@ -1,0 +1,109 @@
+---
+title: atmos artifacts show
+sidebar_label: show
+sidebar_class_name: command
+id: show
+description: Show the README or CHANGELOG of an artifact without downloading its payload.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Read the README or CHANGELOG that ships with an artifact, straight from its stored Record. Only the document is fetched, so you can read what a package contains before you pull it.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts show --help" src="/casts/screengrabs/atmos-artifacts-show--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts show readme <ref> --repository=<alias> [flags]
+atmos artifacts show changelog <ref> --repository=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# Show the README of an artifact
+atmos artifacts show readme components/terraform/vpc:1.2.0 --repository=shared
+
+# Show the CHANGELOG of an artifact
+atmos artifacts show changelog components/terraform/vpc:1.2.0 --repository=shared
+
+# Save a document
+atmos artifacts show readme components/terraform/vpc:1.2.0 --repository=shared > README.md
+
+# Document text and descriptor as JSON
+atmos artifacts show changelog components/terraform/vpc:1.2.0 --repository=shared --format=json
+```
+
+## Behavior
+
+Package documents come from the reserved `.atmos/artifact/` directory of the published source, or from the paths given to `--readme` and `--changelog` at publish time. Show verifies the document bytes against the digest in the Record and enforces a size limit. The payload is never downloaded.
+
+## Subcommands
+
+<dl>
+    <dt>`readme`</dt>
+    <dd>Show the README of the artifact.</dd>
+
+    <dt>`changelog`</dt>
+    <dd>Show the CHANGELOG of the artifact.</dd>
+</dl>
+
+## Arguments
+
+<dl>
+    <dt>`ref` <em>(required)</em></dt>
+    <dd>
+        `name:version` or `name@sha256:<digest>`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`. The text format prints the document verbatim.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+With the text format, stdout carries the document exactly as published, so it can be piped or redirected. Stderr carries diagnostics only. The `json` and `yaml` formats return the standard result fields plus the `document` descriptor (role, source path, media type, size, and digest) and the document `content`.
+
+## Errors
+
+<dl>
+    <dt>Missing repository</dt>
+    <dd>Exit code 2. The hint lists the configured aliases.</dd>
+
+    <dt>Missing document</dt>
+    <dd>The artifact was published without that document. Fails with an artifact document not found error.</dd>
+
+    <dt>Not found</dt>
+    <dd>The reference does not exist in the repository.</dd>
+
+    <dt>Malformed reference</dt>
+    <dd>A reference without a version or digest fails: there is no implicit `latest`.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+
+## Related
+
+- [`atmos artifacts publish`](/cli/commands/artifacts/publish)
+- [`atmos artifacts inspect`](/cli/commands/artifacts/inspect)
+- [Artifacts Configuration](/cli/configuration/artifacts)

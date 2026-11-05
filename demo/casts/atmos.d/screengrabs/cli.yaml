@@ -105,6 +105,19 @@ commands:
           atmos atlantis --help
           atmos atlantis generate --help
           atmos atlantis generate repo-config --help
+          atmos artifacts --help
+          atmos artifacts publish --help
+          atmos artifacts pull --help
+          atmos artifacts copy --help
+          atmos artifacts inspect --help
+          atmos artifacts list --help
+          atmos artifacts search --help
+          atmos artifacts delete --help
+          atmos artifacts sign --help
+          atmos artifacts verify --help
+          atmos artifacts show --help
+          atmos artifacts show readme --help
+          atmos artifacts show changelog --help
           atmos auth --help
           atmos auth console --help
           atmos auth env --help
@@ -610,6 +623,19 @@ commands:
           atmos atlantis --help
           atmos atlantis generate --help
           atmos atlantis generate repo-config --help
+          atmos artifacts --help
+          atmos artifacts publish --help
+          atmos artifacts pull --help
+          atmos artifacts copy --help
+          atmos artifacts inspect --help
+          atmos artifacts list --help
+          atmos artifacts search --help
+          atmos artifacts delete --help
+          atmos artifacts sign --help
+          atmos artifacts verify --help
+          atmos artifacts show --help
+          atmos artifacts show readme --help
+          atmos artifacts show changelog --help
           atmos auth --help
           atmos auth console --help
           atmos auth env --help

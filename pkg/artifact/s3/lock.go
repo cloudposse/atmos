@@ -73,6 +73,13 @@ func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (ar
 	return r.acquire(ctx, request.Resource, owner, request.OperationID)
 }
 
+// LockNamespace implements [artifact.LockNamespacer]: the bucket and prefix identify the collection.
+func (r *Repository) LockNamespace() string {
+	defer perf.Track(nil, "s3.Repository.LockNamespace")()
+
+	return "s3://" + r.bucket + "/" + r.prefix
+}
+
 // acquire takes the claim for resource, waiting for a competing owner.
 func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*claimHandle, error) {
 	if !r.store.Capabilities().ConditionalPut {

@@ -1,0 +1,106 @@
+---
+title: atmos artifacts sign
+sidebar_label: sign
+sidebar_class_name: command
+id: sign
+description: Add signature evidence to an immutable artifact digest.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Sign the immutable subject of a digest reference and store the signature evidence beside the artifact. Signing adds evidence without changing the artifact or its digests.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts sign --help" src="/casts/screengrabs/atmos-artifacts-sign--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts sign <name>@sha256:<digest> --repository=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# Sign an immutable digest reference
+atmos artifacts sign 'components/terraform/vpc@sha256:<digest>' --repository=shared
+
+# Accept Sigstore transparency log publication in CI
+atmos artifacts sign 'components/terraform/vpc@sha256:<digest>' --repository=shared --yes
+```
+
+## Behavior
+
+Sign accepts digest references only, because evidence must bind to an immutable subject. The digest can be the one the repository resolved (the OCI manifest digest on OCI repositories, the Record digest on local and S3) or the Record digest. Either one selects the same artifact and the same signed subject.
+
+The signed subject is the portable Record for an Atmos package, so evidence survives changes of physical representation. For a foreign OCI image or an existing plugin release, the subject is the original manifest or index digest, which Atmos never rewrites. The result lists the `subject` and the stored `evidence` descriptors; when the digest you named differs from the subject, a message explains which subject was signed.
+
+Signing uses the managed Cosign executable and public Sigstore keyless authentication. Locally, Cosign opens its identity-provider login flow. In supported CI environments Cosign can use the workload identity; for GitHub Actions, grant the job `id-token: write`. The signer identity and the signing event are recorded in the public transparency log. Registry authentication is separate from the signing identity.
+
+Signing does not verify the artifact against your trust policy. Run [`atmos artifacts verify`](/cli/commands/artifacts/verify) for that.
+
+Sign takes the repository's write lock. The result reports the actual `lock_scope`.
+
+## Arguments
+
+<dl>
+    <dt>`digest-ref` <em>(required)</em></dt>
+    <dd>
+        `name@sha256:<digest>`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--yes`, `-y` <em>(optional)</em></dt>
+    <dd>
+        Accept Sigstore transparency log publication without prompting.
+        Environment variable: `ATMOS_ARTIFACTS_YES`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries `outcome` (`created`), `ref`, `location`, the digests, `lock_scope`, the `subject` (kind and digest), and one `evidence` entry per stored evidence blob. Stderr carries the status line, which reminds you that signing is not verification.
+
+## Errors
+
+<dl>
+    <dt>Missing repository</dt>
+    <dd>Exit code 2. The hint lists the configured aliases.</dd>
+
+    <dt>Version reference</dt>
+    <dd>A `name:version` reference fails: sign accepts digest references only.</dd>
+
+    <dt>Digest names another artifact</dt>
+    <dd>A digest that is none of the subject, resolved, or Record digests of the resolved artifact is rejected, and no evidence is written.</dd>
+
+    <dt>Unsupported capability</dt>
+    <dd>No signer is available, the repository cannot store evidence for this subject kind or format, or it cannot provide the required lock scope. Nothing is written.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+
+## Related
+
+- [`atmos artifacts verify`](/cli/commands/artifacts/verify)
+- [`atmos artifacts inspect`](/cli/commands/artifacts/inspect)
+- [Artifacts Configuration](/cli/configuration/artifacts)
