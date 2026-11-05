@@ -2,6 +2,8 @@ package config
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -239,8 +241,11 @@ repositories:
 }
 
 func TestDecodedPRDDocumentValidatesWithAnchoredPaths(t *testing.T) {
-	cfg, _ := decodeYAMLDocument(t, prdDocument)
-	origin := NewOrigin("/project/atmos.yaml", false)
+	root := t.TempDir()
+	// The document's trusted key is absolute on POSIX hosts but has no drive letter on Windows.
+	document := strings.ReplaceAll(prdDocument, "/etc/atmos/cosign.pub", filepath.ToSlash(filepath.Join(root, "cosign.pub")))
+	cfg, _ := decodeYAMLDocument(t, document)
+	origin := NewOrigin(filepath.Join(root, "atmos.yaml"), false)
 	for alias, repo := range cfg.Repositories {
 		repo.PathOrigin = origin
 		cfg.Repositories[alias] = repo

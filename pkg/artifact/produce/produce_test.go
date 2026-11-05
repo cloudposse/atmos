@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -254,7 +255,12 @@ func listTree(t *testing.T, root string) []string {
 		}
 		info, err := d.Info()
 		require.NoError(t, err)
-		out = append(out, path+"|"+info.Mode().String()+"|"+info.ModTime().String())
+		modified := info.ModTime().String()
+		if d.IsDir() && runtime.GOOS == "windows" {
+			// NTFS updates a directory's timestamp lazily after its children change, so it is not stable.
+			modified = ""
+		}
+		out = append(out, path+"|"+info.Mode().String()+"|"+modified)
 		return nil
 	}))
 	return out

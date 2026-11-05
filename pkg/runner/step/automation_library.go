@@ -60,6 +60,33 @@ func (l *AutomationLibrary) Fork() api.StepLibrary {
 	return &AutomationLibrary{vars: l.vars.Clone(), workflow: l.workflow, processChanges: maps.Clone(l.processChanges)}
 }
 
+var (
+	_ api.GroupScheduler  = (*AutomationLibrary)(nil)
+	_ api.ScheduledForker = (*automationGroup)(nil)
+)
+
+// ScheduleGroup reserves the scheduled position of a parallel group and returns the library its
+// branches fork from, so artifact reports order the branches by where they were scheduled. It
+// implements api.GroupScheduler.
+func (l *AutomationLibrary) ScheduleGroup() api.ScheduledForker {
+	defer perf.Track(nil, "step.AutomationLibrary.ScheduleGroup")()
+	return &automationGroup{AutomationLibrary: l, group: l.vars.ScheduleGroup()}
+}
+
+// automationGroup is the library of one parallel group: it forks every branch at the group's
+// reserved position.
+type automationGroup struct {
+	*AutomationLibrary
+	group *ScheduledGroup
+}
+
+// ForkAt isolates a parallel branch like Fork and records the branch's scheduled index. It
+// implements api.ScheduledForker.
+func (g *automationGroup) ForkAt(index int) api.StepLibrary {
+	defer perf.Track(nil, "step.automationGroup.ForkAt")()
+	return &AutomationLibrary{vars: g.group.ForkAt(index), workflow: g.workflow, processChanges: maps.Clone(g.processChanges)}
+}
+
 // Run validates configuration and dispatches through the shared step executor.
 func (l *AutomationLibrary) Run(ctx context.Context, call *api.StepCall) (*api.StepResult, error) {
 	defer perf.Track(nil, "step.AutomationLibrary.Run")()

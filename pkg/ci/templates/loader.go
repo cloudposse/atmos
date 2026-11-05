@@ -18,6 +18,9 @@ import (
 // containerComponentType is the component type of container image summaries.
 const containerComponentType = "container"
 
+// artifactsComponentType is the component type of artifact operation summaries.
+const artifactsComponentType = "artifacts"
+
 // templateFuncs provides custom template functions for CI summary templates.
 var templateFuncs = template.FuncMap{
 	"replace": strings.ReplaceAll,
@@ -77,10 +80,10 @@ func (l *Loader) Load(componentType, command string, defaultTemplates fs.FS) (st
 // loadFromConfigOverride attempts to load template from config overrides.
 //
 // A configured override that cannot be read falls through to the next layer for the native
-// plugin component types, which have always tolerated it. The container component is strict: a
-// configured ci.templates.container.<command> file that is missing is an error, so a typo in the
-// path cannot silently revert to the embedded default. The embedded default is used for the
-// container only when the key is unset.
+// plugin component types, which have always tolerated it. The container and artifacts components
+// are strict: a configured ci.templates.container.<command> or ci.templates.artifacts.<command>
+// file that is missing is an error, so a typo in the path cannot silently revert to the embedded
+// default. The embedded default is used for them only when the key is unset.
 func (l *Loader) loadFromConfigOverride(componentType, command string) (string, bool, error) {
 	if l.atmosConfig == nil {
 		return "", false, nil
@@ -99,12 +102,18 @@ func (l *Loader) loadFromConfigOverride(componentType, command string) (string, 
 	path := l.resolvePath(filename)
 	content, err := os.ReadFile(path)
 	if err != nil {
-		if componentType == containerComponentType {
+		if isStrictComponentType(componentType) {
 			return "", false, l.overrideNotFoundError(componentType, command, filename, path, err)
 		}
 		return "", false, nil
 	}
 	return string(content), true, nil
+}
+
+// isStrictComponentType reports whether a configured template override that cannot be read is an
+// error for the component type, instead of falling through to the next layer.
+func isStrictComponentType(componentType string) bool {
+	return componentType == containerComponentType || componentType == artifactsComponentType
 }
 
 // overrideNotFoundError describes a configured template override that cannot be read.
@@ -222,6 +231,8 @@ func (l *Loader) getComponentOverrides(componentType string) map[string]string {
 		return cfg.Helmfile
 	case containerComponentType:
 		return cfg.Container
+	case artifactsComponentType:
+		return cfg.Artifacts
 	default:
 		return nil
 	}

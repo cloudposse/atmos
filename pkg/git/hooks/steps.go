@@ -70,6 +70,8 @@ func runSteps(name string, entry schema.GitHookEntry, args []string, opts []RunO
 	}
 	vars := step.NewVariables()
 	vars.SetAtmosConfig(options.config)
+	// Artifact steps record into one CI report that is written after the hook ends, even on failure.
+	defer vars.UseArtifactReport(options.config)()
 	if err := vars.ApplyTemplateDelimiters(options.config); err != nil {
 		return wrapHookError(name, err)
 	}

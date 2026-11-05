@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -25,10 +26,15 @@ func newConfiguredService(t *testing.T) (*service.Service, string) {
 	root := t.TempDir()
 	registry := artifact.NewRepositoryRegistry()
 	require.NoError(t, RegisterWith(registry))
+	// Windows cannot enforce POSIX file modes, so an explicit permissions request is refused there.
+	permissions := "0600"
+	if runtime.GOOS == "windows" {
+		permissions = ""
+	}
 	cfg := &schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
 		"files": {Kind: artifact.RepositoryKindLocalDir, Options: map[string]any{"path": filepath.Join(root, "files")}},
 		"packed": {
-			Kind: artifact.RepositoryKindLocalArchive, Packaging: "tgz", Permissions: "0600",
+			Kind: artifact.RepositoryKindLocalArchive, Packaging: "tgz", Permissions: permissions,
 			Options: map[string]any{"path": filepath.Join(root, "packed")},
 		},
 	}}

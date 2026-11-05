@@ -39,7 +39,9 @@ atmos artifacts search vpc --format=json
 
 ## Behavior
 
-Search reads repositories and caches and never changes them, including catalogs. Without `--repository`, every configured repository is searched. Labels are exact `key=value` selectors, and every selector must match. Omitting the text returns every entry that satisfies the label selectors.
+Search reads repositories and caches and never changes them, including catalogs. Without `--repository`, every configured repository is searched. A search served from a fresh discovery snapshot makes no repository request.
+
+Remote repositories are cached for fifteen minutes; `--refresh` revalidates them, and `plugins.policy.offline: true` serves existing snapshots only and fails when one is missing or corrupt. A repository that could not be searched is reported on stderr and marks the structured result `incomplete: true`. See [`atmos artifacts list`](/cli/commands/artifacts/list) for the full cache, refresh, and offline behavior. Labels are exact `key=value` selectors, and every selector must match. Omitting the text returns every entry that satisfies the label selectors.
 
 ## Arguments
 
@@ -67,7 +69,7 @@ Search reads repositories and caches and never changes them, including catalogs.
 
     <dt>`--refresh` <em>(optional)</em></dt>
     <dd>
-        Bypass cached discovery snapshots.
+        Revalidate the selected sources instead of using a fresh cached snapshot. Fails when offline policy is enabled.
         Environment variable: `ATMOS_ARTIFACTS_REFRESH`
     </dd>
 

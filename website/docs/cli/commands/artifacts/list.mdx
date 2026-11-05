@@ -44,7 +44,19 @@ atmos artifacts list --repository=shared,backups --format=json
 
 List reads repositories and never changes them. Entries are sorted by name and then version. A repository that cannot enumerate its collection, or that fails to refresh, is reported under `repositories` in the structured result and as a message on stderr, so a missing result is explained rather than silent.
 
-Labels are exact `key=value` selectors. An entry is kept only when every selector matches exactly.
+Labels are exact `key=value` selectors that apply to the labels published with each version. An entry is kept only when every selector matches exactly, so a repository default or an S3 object tag never matches an older artifact.
+
+### Cache, refresh, and offline
+
+Remote repositories (`aws/s3` and `oci/registry`) are listed once and cached for fifteen minutes. Within that window a listing makes no repository request at all and does not resolve credentials. Local directories, archives, and OCI layouts are always listed live. Each repository under `repositories` reports its `source` (`live`, `cache`, or `catalog`) and, for a snapshot, when it was `fetched_at`.
+
+`--refresh` revalidates every selected source. Unchanged references are resolved again but their metadata is reused by digest, and a reference that disappeared is dropped only after the whole refresh completed. A failed refresh reports its error and keeps the previous snapshot.
+
+With `plugins.policy.offline: true`, only existing snapshots are served, of any age, and nothing contacts a repository. A missing or corrupt snapshot fails, and so does `--refresh`.
+
+A collection listing of an `oci/registry` repository uses the registry's repository catalog scoped to the repository prefix, or the repository's configured [catalog](/cli/commands/artifacts/catalog). Listing the versions of one `name` needs neither. A collection that can be enumerated by neither fails with an unsupported-capability error instead of returning an empty list.
+
+When a repository could not be listed but others were, the command still succeeds with the readable entries, reports the failure on stderr, and sets `incomplete: true` in structured output. An incomplete result is never complete.
 
 ## Arguments
 
@@ -72,7 +84,7 @@ Labels are exact `key=value` selectors. An entry is kept only when every selecto
 
     <dt>`--refresh` <em>(optional)</em></dt>
     <dd>
-        Bypass cached discovery snapshots.
+        Revalidate the selected sources instead of using a fresh cached snapshot. Fails when offline policy is enabled.
         Environment variable: `ATMOS_ARTIFACTS_REFRESH`
     </dd>
 
@@ -85,7 +97,7 @@ Labels are exact `key=value` selectors. An entry is kept only when every selecto
 
 ## Output
 
-The table shows the repository alias, name, version, kind, description, and labels. When piped, the table becomes plain tab-separated rows. `json` and `yaml` return an `artifacts` array, which is `[]` when nothing matches, and a `repositories` array with the per-repository counts and diagnostics. Each entry carries `repository`, `ref`, `name`, `version`, `kind`, `description`, `labels`, `documents`, `resolved_digest`, `record_digest`, `content_digest`, and the `pinned` reference that a consumer lockfile can store.
+The table shows the repository alias, name, version, kind, description, and labels. When piped, the table becomes plain tab-separated rows. `json` and `yaml` return an `artifacts` array, which is `[]` when nothing matches, an `incomplete` flag when a repository could not be listed, and a `repositories` array with the per-repository counts, sources, and diagnostics. Each entry carries `repository`, `ref`, `name`, `version`, `kind`, `description`, `labels`, `documents`, `resolved_digest`, `record_digest`, `content_digest`, and the `pinned` reference that a consumer lockfile can store.
 
 When nothing matches, stderr reports `No artifacts found.`, or says that no repositories are configured.
 
@@ -98,6 +110,9 @@ When nothing matches, stderr reports `No artifacts found.`, or says that no repo
     <dt>Malformed label</dt>
     <dd>A selector without `=` or `:` fails before any repository is read.</dd>
 
+    <dt>Offline without a snapshot</dt>
+    <dd>Offline discovery fails with an offline error when a repository has no valid snapshot, or when `--refresh` is requested.</dd>
+
     <dt>Unsupported format</dt>
     <dd>`text` is not a collection format. Use `table`, `json`, `yaml`, `csv`, or `tsv`.</dd>
 </dl>
@@ -108,4 +123,5 @@ Every failure exits with a nonzero status. With `--format=json` or `--format=yam
 
 - [`atmos artifacts search`](/cli/commands/artifacts/search)
 - [`atmos artifacts inspect`](/cli/commands/artifacts/inspect)
+- [`atmos artifacts catalog`](/cli/commands/artifacts/catalog)
 - [Artifacts Configuration](/cli/configuration/artifacts)

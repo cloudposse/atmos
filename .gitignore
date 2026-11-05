@@ -63,6 +63,8 @@ tools/gomodcheck/.gomodcheck
 /variant
 *.tar
 *.gz
+# Byte-exact compatibility fixtures whose digests the tests pin.
+!/pkg/artifact/compat/testdata/**/*.tar
 /bin
 
 # Nix

@@ -1,0 +1,114 @@
+---
+title: atmos artifacts catalog
+sidebar_label: catalog
+sidebar_class_name: command
+id: catalog
+description: Build and maintain the optional discovery catalog of an artifact repository.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+A catalog is a maintained discovery snapshot of one repository. It lets you list and search a whole OCI registry collection when the registry cannot enumerate its repositories. Direct reads never need a catalog.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts catalog --help" src="/casts/screengrabs/atmos-artifacts-catalog--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts catalog build --repository=<alias> --input=<inventory> --output=<file>
+atmos artifacts catalog publish <file> --repository=<alias>
+atmos artifacts catalog add <ref>... --repository=<alias>
+atmos artifacts catalog remove <ref> --repository=<alias>
+atmos artifacts catalog sync --repository=<alias> --input=<inventory>
+```
+
+## Examples
+
+```shell
+# Resolve an inventory into a snapshot, then publish it
+atmos artifacts catalog build --repository=shared --input=inventory.yaml --output=catalog.json
+atmos artifacts catalog publish catalog.json --repository=shared
+
+# List or unlist one release
+atmos artifacts catalog add components/terraform/vpc:1.2.0 --repository=shared
+atmos artifacts catalog remove components/terraform/vpc:1.2.0 --repository=shared
+
+# Merge an inventory into the published catalog and keep every other entry
+atmos artifacts catalog sync --repository=shared --input=inventory.yaml
+```
+
+## Configure a catalog
+
+A catalog belongs to a repository and is configured on it. Only `oci/registry` repositories accept one, and the catalog must be on the repository's registry host and below its `prefix`.
+
+```yaml
+artifacts:
+  repositories:
+    shared:
+      kind: oci/registry
+      identity: registry-reader
+      options:
+        registry: ghcr.io
+        prefix: acme/atmos
+      catalog: oci://ghcr.io/acme/atmos/catalog:stable
+```
+
+Commands that change the catalog fail before any write when the repository has no `catalog`. Directory, archive, S3, and OCI layout repositories list their own records and never need one.
+
+## Inventory
+
+An `AtmosArtifactInventory` lists the releases to resolve, relative to the selected repository. There is no implicit `latest`.
+
+```yaml
+apiVersion: atmos/v1
+kind: AtmosArtifactInventory
+metadata:
+  name: releases
+spec:
+  refs:
+    - components/terraform/vpc:1.2.0
+    - tools/helper@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+## Behavior
+
+The catalog is an `AtmosArtifactCatalog` manifest, separate from the plugin catalog. Each entry has an artifact name, kind, description, and the repository path it is bound to. Each version carries its resolved, record, and content digests, the labels published with it, and its README and CHANGELOG descriptors, never the Markdown. Version labels are opaque: names and versions sort lexically with no SemVer ordering. The manifest is stored in the repository as a regular artifact of kind `catalog` with artifact type `application/vnd.atmos.artifact.catalog.v1` and one JSON layer of type `application/vnd.atmos.artifact.catalog.v1+json`.
+
+A catalog is discoverable data, never a trust grant. Atmos checks every entry against the repository it is configured on and the current policy before using it, and it never follows a location a catalog names. Listing from a catalog does not prove that a payload is still available, and does not replace signature verification.
+
+Publishing, signing, or deleting an artifact never edits a catalog. Removing a catalog entry only unlists it: the artifact, its signatures, and every consumer lock file stay as they are.
+
+### One writer at a time
+
+Catalog changes need one externally serialized writer that spans reading the latest catalog, building, and publishing. Atmos reads the latest catalog after it takes the repository's write lock, rejects a snapshot whose revision or digest no longer matches the published catalog, and checks the previous reference immediately before it moves the tag. Registries have no atomic compare-and-swap, so these checks detect stale input but do not replace serializing your writers, for example with a single CI job. When the repository offers no write coordinator, serialize writers yourself.
+
+## Subcommands
+
+<dl>
+    <dt>[`build`](/cli/commands/artifacts/catalog-build)</dt>
+    <dd>Resolve an inventory into a catalog snapshot file. Reads metadata only and never publishes.</dd>
+
+    <dt>[`publish`](/cli/commands/artifacts/catalog-publish)</dt>
+    <dd>Publish a snapshot to the repository's configured catalog.</dd>
+
+    <dt>[`add`](/cli/commands/artifacts/catalog-add)</dt>
+    <dd>List releases in the latest published catalog.</dd>
+
+    <dt>[`remove`](/cli/commands/artifacts/catalog-remove)</dt>
+    <dd>Unlist a release without deleting the artifact.</dd>
+
+    <dt>[`sync`](/cli/commands/artifacts/catalog-sync)</dt>
+    <dd>Merge an inventory into the latest catalog, keeping every other entry.</dd>
+</dl>
+
+## Related
+
+- [`atmos artifacts list`](/cli/commands/artifacts/list)
+- [`atmos artifacts search`](/cli/commands/artifacts/search)
+- [Artifacts Configuration](/cli/configuration/artifacts)

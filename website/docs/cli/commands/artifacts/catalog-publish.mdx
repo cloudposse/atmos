@@ -1,0 +1,97 @@
+---
+title: atmos artifacts catalog publish
+sidebar_label: catalog publish
+sidebar_class_name: command
+id: catalog-publish
+description: Publish a catalog snapshot to the repository's configured catalog.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Publish a catalog snapshot to the catalog configured on a repository. The command refuses to overwrite newer catalog metadata with a stale snapshot.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts catalog publish --help" src="/casts/screengrabs/atmos-artifacts-catalog-publish--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts catalog publish <file> --repository=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# Publish a built snapshot
+atmos artifacts catalog publish catalog.json --repository=shared
+
+# Publish only if the catalog is still the one the snapshot was built from
+atmos artifacts catalog publish catalog.json --repository=shared --expected-digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+## Behavior
+
+Publish replaces the catalog's entries with the snapshot. Before it writes, it checks that the repository has a `catalog` configured, that every entry is bound to the repository path, and that the snapshot's revision equals the published catalog's revision. With `--expected-digest` it also checks the catalog's manifest digest. After a successful write the revision increases by one.
+
+The write takes the repository's lock when the repository provides one, reads the latest catalog inside the lock, and checks the previous reference immediately before it moves the tag. Run only one catalog writer at a time. See [One writer at a time](/cli/commands/artifacts/catalog#one-writer-at-a-time).
+
+## Arguments
+
+<dl>
+    <dt>`file` <em>(required)</em></dt>
+    <dd>
+        A catalog snapshot written by `atmos artifacts catalog build`, in JSON or YAML.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias. Its `catalog` setting selects where the catalog is published.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--expected-digest` <em>(optional)</em></dt>
+    <dd>
+        Require the published catalog to have this manifest digest. Use the `base_digest` that `build` printed.
+        Environment variable: `ATMOS_ARTIFACTS_EXPECTED_DIGEST`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries `catalog`, the new `digest`, the `previous_digest`, `revision`, `listed`, `added`, and `lock_scope`.
+
+## Errors
+
+<dl>
+    <dt>Catalog not configured</dt>
+    <dd>The repository has no `catalog`. Nothing is written.</dd>
+
+    <dt>Catalog changed</dt>
+    <dd>The published catalog has a different revision or digest than the snapshot expects. Rebuild the snapshot from the latest catalog.</dd>
+
+    <dt>Location outside the repository</dt>
+    <dd>An entry names another registry, prefix, or path than the repository. Nothing is written.</dd>
+</dl>
+
+Every failure exits with a nonzero status.
+
+## Related
+
+- [`atmos artifacts catalog build`](/cli/commands/artifacts/catalog-build)
+- [`atmos artifacts catalog sync`](/cli/commands/artifacts/catalog-sync)
+- [Artifacts Configuration](/cli/configuration/artifacts)

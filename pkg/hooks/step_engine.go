@@ -12,6 +12,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact/report"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
@@ -78,6 +79,9 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 		return nil, err
 	}
 	vars := stepVariables(ctx)
+	// A hook reuses the runner's artifact report: the step handler records the operation, and the
+	// report is written once after the hook, so the hook output itself carries no second copy.
+	defer vars.UseArtifactReport(ctx.AtmosConfig)()
 	ws, err := stepFromHookWithVariables(ctx, vars)
 	if err != nil {
 		return nil, err
@@ -244,12 +248,18 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 		return nil, err
 	}
 
+	// One report session spans every attempt of the hook, so the report is written once, after the
+	// last attempt, and never by the hook output itself.
+	artifactReport := report.NewSession(ctx.AtmosConfig)
+	defer artifactReport.FlushAndLog()
+
 	var lastResult *runnerstep.StepResult
 	run := func() error {
 		lastResult = nil
 		// A retry is a fresh invocation of the step list. Neither template nor
 		// process environment values from a failed attempt may leak into it.
 		vars := stepVariables(ctx)
+		vars.SetArtifactCollector(artifactReport)
 		executor := runnerstep.NewStepExecutorWithVars(vars)
 		runCtx := context.Background()
 		if ctx.Stdout != nil || ctx.Stderr != nil {

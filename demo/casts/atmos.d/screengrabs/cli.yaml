@@ -118,6 +118,12 @@ commands:
           atmos artifacts show --help
           atmos artifacts show readme --help
           atmos artifacts show changelog --help
+          atmos artifacts catalog --help
+          atmos artifacts catalog build --help
+          atmos artifacts catalog publish --help
+          atmos artifacts catalog add --help
+          atmos artifacts catalog remove --help
+          atmos artifacts catalog sync --help
           atmos auth --help
           atmos auth console --help
           atmos auth env --help
@@ -454,6 +460,7 @@ commands:
           atmos scaffold list --help
           atmos scaffold validate --help
           atmos scaffold generate --help
+          atmos scaffold publish --help
           """
           FIXTURE = REPO / ".context" / "cast-fixtures" / "demo-stacks"
           OUT = REPO / "website" / "static" / "casts" / "screengrabs"
@@ -636,6 +643,12 @@ commands:
           atmos artifacts show --help
           atmos artifacts show readme --help
           atmos artifacts show changelog --help
+          atmos artifacts catalog --help
+          atmos artifacts catalog build --help
+          atmos artifacts catalog publish --help
+          atmos artifacts catalog add --help
+          atmos artifacts catalog remove --help
+          atmos artifacts catalog sync --help
           atmos auth --help
           atmos auth console --help
           atmos auth env --help
@@ -972,6 +985,7 @@ commands:
           atmos scaffold list --help
           atmos scaffold validate --help
           atmos scaffold generate --help
+          atmos scaffold publish --help
           """
 
           commands = [line.strip() for line in COMMANDS.splitlines() if line.strip()]

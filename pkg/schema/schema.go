@@ -1608,6 +1608,12 @@ type CITemplatesConfig struct {
 
 	// Container maps a container operation name (`image`) to a template file name under base_path.
 	Container map[string]string `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
+
+	// Artifacts maps an artifact operation name (`summary` for the whole report frame, or an action
+	// such as `publish`, `pull`, `copy`, `delete`, `sign`, `verify`, `inspect`, `show`, `list`, or
+	// `search` for one operation's section) to a template file name under base_path. A configured
+	// file that does not exist is an error; the built-in template is used only when the key is unset.
+	Artifacts map[string]string `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
 }
 
 type Helmfile struct {
