@@ -1125,7 +1125,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           # This job was skipped in the only sampled run (upstream test matrix
           # had a failed shard), so there's no observed egress data to build an
@@ -1250,7 +1250,6 @@ jobs:
             github
             github-archives
             github-releases
-            trivy
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

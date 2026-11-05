@@ -49,7 +49,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.41.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.48.0
 	github.com/aws/smithy-go v1.28.5
-	github.com/bmatcuk/doublestar/v4 v4.10.0
+	github.com/bmatcuk/doublestar/v4 v4.10.3
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
@@ -492,7 +492,7 @@ require (
 	github.com/sigstore/sigstore-go v1.2.2
 	github.com/theupdateframework/go-tuf/v2 v2.4.2
 	github.com/updatecli/updatecli v0.999.0
-	go.starlark.net v0.0.0-20260930220527-d7438c5a85ac
+	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 	golang.org/x/image v0.45.0
 	golang.org/x/perf v0.0.0-20260409210113-8e83ce0f7b1c
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473

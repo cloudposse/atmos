@@ -1192,7 +1192,7 @@ BSD LICENSED DEPENDENCIES
 
   - go.starlark.net
     License: BSD-3-Clause
-    URL: https://github.com/google/starlark-go/blob/d7438c5a85ac/LICENSE
+    URL: https://github.com/google/starlark-go/blob/4f4267fb140d/LICENSE
 
   - go4.org/intern
     License: BSD-3-Clause
@@ -1642,7 +1642,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/bmatcuk/doublestar/v4
     License: MIT
-    URL: https://github.com/bmatcuk/doublestar/blob/v4.10.0/LICENSE
+    URL: https://github.com/bmatcuk/doublestar/blob/v4.10.3/LICENSE
 
   - github.com/buger/jsonparser
     License: MIT
