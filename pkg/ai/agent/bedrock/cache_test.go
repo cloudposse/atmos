@@ -47,6 +47,8 @@ func newCapturingClient(t *testing.T, cache *cacheConfig, response string) (*Cli
 
 const okResponse = `{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`
 
+// TestSendMessageWithSystemPromptAndTools_SendsSystemField checks the request carries the system prompt and
+// ATMOS.md in the "system" field, with cache_control per the cache settings, and keeps the messages array intact.
 func TestSendMessageWithSystemPromptAndTools_SendsSystemField(t *testing.T) {
 	ephemeral := map[string]interface{}{"type": "ephemeral"}
 
@@ -139,6 +141,7 @@ func TestSendMessageWithSystemPromptAndTools_SendsSystemField(t *testing.T) {
 	}
 }
 
+// TestSendMessageWithToolsAndHistory_NoSystemField checks the history-only path still sends no "system" field.
 func TestSendMessageWithToolsAndHistory_NoSystemField(t *testing.T) {
 	client, requestBody := newCapturingClient(t, nil, okResponse)
 
@@ -148,6 +151,7 @@ func TestSendMessageWithToolsAndHistory_NoSystemField(t *testing.T) {
 	assert.NotContains(t, *requestBody, "system")
 }
 
+// TestParseBedrockResponse_CacheUsage checks cache read and creation token counts are read from the response.
 func TestParseBedrockResponse_CacheUsage(t *testing.T) {
 	responseBody := `{
 		"content": [{"type": "text", "text": "ok"}],
@@ -166,6 +170,7 @@ func TestParseBedrockResponse_CacheUsage(t *testing.T) {
 	assert.Equal(t, int64(300), result.Usage.CacheCreationTokens)
 }
 
+// TestExtractCacheConfig checks the cache settings match the Anthropic provider's defaults and overrides.
 func TestExtractCacheConfig(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -209,6 +214,7 @@ func TestExtractCacheConfig(t *testing.T) {
 	}
 }
 
+// TestExtractCacheConfig_NoProviderConfig checks caching stays on when the provider has no configuration.
 func TestExtractCacheConfig_NoProviderConfig(t *testing.T) {
 	got := extractCacheConfig(&schema.AtmosConfiguration{})
 
