@@ -639,6 +639,8 @@ ai:
   <dd>Cache the ATMOS.md project instructions content (default: `true`).</dd>
 </dl>
 
+For Anthropic and Bedrock (Claude), these settings control where cache markers go. A marker caches everything up to and including the block it is on, so a marker on ATMOS.md also caches the system prompt before it, even when `cache_system_prompt` is `false`.
+
 :::tip Maximize Cache Savings
 For Anthropic and Bedrock, keep your ATMOS.md content stable during conversations and use named sessions for extended work on the same topic. For the other providers, caching works transparently with no action required.
 :::
