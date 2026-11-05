@@ -25,10 +25,40 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// KeySignature is a genuine key-only Sigstore bundle together with the public half of the key.
+type KeySignature struct {
+	// Bundle is the raw Sigstore bundle.
+	Bundle []byte
+	// Hint is the key identifier embedded in the bundle.
+	Hint string
+	// PublicKey verifies the signature; an operator would configure it as a trusted key.
+	PublicKey crypto.PublicKey
+	// Logs is the transparency-log trust material for this test authority.
+	Logs root.TrustedMaterial
+}
+
+// KeyHint is the identifier SignWithKey embeds in every bundle.
+const KeyHint = "fixture-key"
+
 // SignWithPublicKey generates a genuine key-only signature and Rekor evidence.
 // This intentionally unsupported signing mode must never satisfy a certificate policy.
 func (a *Authority) SignWithPublicKey(t *testing.T, artifact []byte) ([]byte, root.TrustedMaterial) {
 	defer perf.Track(nil, "signaturetest.Authority.SignWithPublicKey")()
+
+	t.Helper()
+	signed := a.SignWithKey(t, artifact)
+	verifier, err := sig.LoadVerifier(signed.PublicKey, crypto.SHA256)
+	require.NoError(t, err)
+	keyTrust := root.NewTrustedPublicKeyMaterial(func(string) (root.TimeConstrainedVerifier, error) {
+		return root.NewExpiringKey(verifier, time.Now().Add(-time.Hour), time.Now().Add(time.Hour)), nil
+	})
+	return signed.Bundle, root.TrustedMaterialCollection{a.TrustedMaterial, keyTrust}
+}
+
+// SignWithKey generates a genuine key-only signature with a fresh key and returns the public key
+// so tests can configure it explicitly as trusted.
+func (a *Authority) SignWithKey(t *testing.T, artifact []byte) KeySignature {
+	defer perf.Track(nil, "signaturetest.Authority.SignWithKey")()
 
 	t.Helper()
 	key := newKey(t)
@@ -52,7 +82,7 @@ func (a *Authority) SignWithPublicKey(t *testing.T, artifact []byte) ([]byte, ro
 	bundle := &protobundle.Bundle{
 		MediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
 		VerificationMaterial: &protobundle.VerificationMaterial{
-			Content:     &protobundle.VerificationMaterial_PublicKey{PublicKey: &common.PublicKeyIdentifier{Hint: "fixture-key"}},
+			Content:     &protobundle.VerificationMaterial_PublicKey{PublicKey: &common.PublicKeyIdentifier{Hint: KeyHint}},
 			TlogEntries: []*rekor.TransparencyLogEntry{a.logEntry(t, body)},
 		},
 		Content: &protobundle.Bundle_MessageSignature{MessageSignature: &common.MessageSignature{
@@ -61,10 +91,5 @@ func (a *Authority) SignWithPublicKey(t *testing.T, artifact []byte) ([]byte, ro
 	}
 	raw, err := protojson.Marshal(bundle)
 	require.NoError(t, err)
-	verifier, err := sig.LoadECDSAVerifier(&key.PublicKey, crypto.SHA256)
-	require.NoError(t, err)
-	keyTrust := root.NewTrustedPublicKeyMaterial(func(string) (root.TimeConstrainedVerifier, error) {
-		return root.NewExpiringKey(verifier, time.Now().Add(-time.Hour), time.Now().Add(time.Hour)), nil
-	})
-	return raw, root.TrustedMaterialCollection{a.TrustedMaterial, keyTrust}
+	return KeySignature{Bundle: raw, Hint: KeyHint, PublicKey: &key.PublicKey, Logs: a.TrustedMaterial}
 }

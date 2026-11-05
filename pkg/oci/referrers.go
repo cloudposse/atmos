@@ -2,13 +2,12 @@ package oci
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -19,16 +18,22 @@ type ReferrerRegistry interface {
 }
 
 // Referrers uses the shared credentials and transport, including the standard
-// referrers-tag fallback on registries without the OCI 1.1 API.
+// referrers-tag fallback on registries without the OCI 1.1 API. Attachment
+// descriptors are returned as an index; no content is fetched.
 func (c *Client) Referrers(ctx context.Context, ref name.Digest) (v1.ImageIndex, error) {
 	defer perf.Track(c.config, "oci.Client.Referrers")()
-	options, err := c.options(ctx, ref.Context())
+
+	store, err := c.Repository(ctx, repositoryOf(ref.Context()))
 	if err != nil {
 		return nil, err
 	}
-	index, err := remote.Referrers(ref, options...)
+	found, err := store.Referrers(ctx, ocispec.Descriptor{Digest: digest.Digest(ref.DigestStr())}, "")
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrOCIRegistry, err)
+		return nil, err
+	}
+	index, err := newReferrersIndex(found)
+	if err != nil {
+		return nil, err
 	}
 	return index, nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -101,73 +102,95 @@ func (c *Client) Get(ctx context.Context, ref name.Reference) (*remote.Descripto
 }
 
 // Head resolves the immutable descriptor without downloading artifact layers.
+// It runs on the shared ORAS transport.
 func (c *Client) Head(ctx context.Context, ref name.Reference) (*v1.Descriptor, error) {
 	defer perf.Track(c.config, "oci.Client.Head")()
 
-	options, err := c.options(ctx, ref.Context())
+	store, err := c.Repository(ctx, repositoryOf(ref.Context()))
 	if err != nil {
 		return nil, err
 	}
-	result, err := remote.Head(ref, options...)
+	resolved, err := store.Resolve(ctx, ref.Identifier())
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrPullImage, err)
 	}
-	return result, nil
+	hash, err := v1.NewHash(resolved.Digest.String())
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrPullImage, err)
+	}
+	return &v1.Descriptor{MediaType: types.MediaType(resolved.MediaType), Size: resolved.Size, Digest: hash}, nil
 }
 
 // Tags lists repository tags without interpreting them as versions.
 func (c *Client) Tags(ctx context.Context, repo name.Repository) ([]string, error) {
 	defer perf.Track(c.config, "oci.Client.Tags")()
 
-	options, err := c.options(ctx, repo)
+	store, err := c.Repository(ctx, repositoryOf(repo))
 	if err != nil {
 		return nil, err
 	}
-	result, err := remote.List(repo, options...)
-	if err != nil {
-		return nil, errors.Join(errUtils.ErrOCIRegistry, err)
-	}
-	return result, nil
+	return store.Tags(ctx)
 }
 
-// WriteImage uploads an image and its blobs. Rejected writes never retry anonymously.
+// WriteImage uploads an image and its blobs, preserving the image's existing raw bytes.
+// Rejected writes never retry anonymously, and an unknown outcome is reconciled by
+// resolving the destination rather than writing again.
 func (c *Client) WriteImage(ctx context.Context, ref name.Reference, img v1.Image) error {
 	defer perf.Track(c.config, "oci.Client.WriteImage")()
 
-	options, err := c.options(ctx, ref.Context())
+	store, err := c.Repository(ctx, repositoryOf(ref.Context()))
 	if err != nil {
 		return err
 	}
-	if err := remote.Write(ref, img, options...); err != nil {
-		return errors.Join(errUtils.ErrOCIRegistry, err)
+	graph, err := legacyImageGraph(img)
+	if err != nil {
+		return err
 	}
-	return nil
+	_, err = Copy(ctx, Source{Store: graph, Reference: legacyRoot}, Destination{Store: store, Reference: ref.Identifier()}, WithoutSubjectTraversal())
+	return err
 }
 
 // WriteIndex uploads the complete index and its children without platform filtering.
 func (c *Client) WriteIndex(ctx context.Context, ref name.Reference, index v1.ImageIndex) error {
 	defer perf.Track(c.config, "oci.Client.WriteIndex")()
 
-	options, err := c.options(ctx, ref.Context())
+	store, err := c.Repository(ctx, repositoryOf(ref.Context()))
 	if err != nil {
 		return err
 	}
-	if err := remote.WriteIndex(ref, index, options...); err != nil {
-		return errors.Join(errUtils.ErrOCIRegistry, err)
+	graph, err := legacyIndexGraph(index)
+	if err != nil {
+		return err
 	}
-	return nil
+	_, err = Copy(ctx, Source{Store: graph, Reference: legacyRoot}, Destination{Store: store, Reference: ref.Identifier()}, WithoutSubjectTraversal())
+	return err
 }
 
 // Delete deletes only an explicitly selected digest, never a mutable tag.
 func (c *Client) Delete(ctx context.Context, ref name.Digest) error {
 	defer perf.Track(c.config, "oci.Client.Delete")()
 
-	options, err := c.options(ctx, ref.Context())
+	store, err := c.Repository(ctx, repositoryOf(ref.Context()))
 	if err != nil {
 		return err
 	}
-	if err := remote.Delete(ref, options...); err != nil {
-		return errors.Join(errUtils.ErrOCIRegistry, err)
+	target, err := store.Resolve(ctx, ref.DigestStr())
+	if err != nil {
+		return err
+	}
+	if err := store.Delete(ctx, target); err != nil {
+		return c.reconcileDelete(ctx, store, ref, err)
 	}
 	return nil
+}
+
+// reconcileDelete treats a failed delete as complete only when the digest is gone.
+func (c *Client) reconcileDelete(ctx context.Context, store RepositoryStore, ref name.Digest, cause error) error {
+	if !ambiguousWrite(ctx, cause) {
+		return cause
+	}
+	if _, err := store.Resolve(ctx, ref.DigestStr()); IsNotFound(err) {
+		return nil
+	}
+	return cause
 }

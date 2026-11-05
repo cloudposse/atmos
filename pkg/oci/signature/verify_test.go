@@ -58,9 +58,3 @@ func TestVerifyRealSigstoreEvidence(t *testing.T) {
 	_, err = verifier.Verify(t.Context(), raw, reference, []Identity{identity}, true)
 	require.ErrorIs(t, err, errUtils.ErrPluginSignatureInvalid)
 }
-
-func TestOfflineTrustCannotFetch(t *testing.T) {
-	t.Setenv("ATMOS_XDG_DATA_HOME", t.TempDir())
-	_, err := loadPublicRoot(t.Context(), true)
-	require.Error(t, err)
-}

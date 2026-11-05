@@ -2,9 +2,7 @@
 package sign
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -15,15 +13,14 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
-	"github.com/sigstore/sigstore-go/pkg/bundle"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/oci"
-	"github.com/cloudposse/atmos/pkg/oci/signature"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	pluginoci "github.com/cloudposse/atmos/pkg/plugin/oci"
 	pluginpolicy "github.com/cloudposse/atmos/pkg/plugin/policy"
+	sigcore "github.com/cloudposse/atmos/pkg/signature"
 )
 
 // BlobSigner produces a standard Sigstore bundle for the exact supplied bytes.
@@ -94,19 +91,15 @@ func (s Service) signIndex(ctx context.Context, ref name.Digest, descriptor *v1.
 }
 
 func validateBundle(raw, artifact []byte) error {
-	if len(raw) == 0 || len(raw) > signature.MaxBundleSize {
-		return errUtils.ErrPluginSignatureInvalid
+	err := sigcore.CheckBundleSubject(raw, artifact)
+	if err == nil {
+		return nil
 	}
-	var signed bundle.Bundle
-	if err := json.Unmarshal(raw, &signed); err != nil {
-		return errors.Join(errUtils.ErrPluginSignatureInvalid, err)
+	var shared *sigcore.Error
+	if errors.As(err, &shared) && shared.Cause != nil {
+		return errors.Join(errUtils.ErrPluginSignatureInvalid, shared.Cause)
 	}
-	digest := sha256.Sum256(artifact)
-	message := signed.GetMessageSignature()
-	if message == nil || message.MessageDigest == nil || message.MessageDigest.Algorithm.String() != "SHA2_256" || !bytes.Equal(message.MessageDigest.Digest, digest[:]) {
-		return errUtils.ErrPluginSignatureInvalid
-	}
-	return nil
+	return errUtils.ErrPluginSignatureInvalid
 }
 
 func (s Service) attach(ctx context.Context, ref name.Digest, subject *v1.Descriptor, raw []byte) error {
