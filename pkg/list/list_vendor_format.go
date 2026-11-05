@@ -1,6 +1,7 @@
 package list
 
 import (
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"strings"
@@ -88,30 +89,24 @@ func buildVendorDataMap(rows []map[string]interface{}, capitalizeKeys bool) map[
 }
 
 // buildVendorCSVTSV returns CSV/TSV output for vendor rows with proper header order and value rows.
+// Values are written with encoding/csv so delimiters, quotes, and newlines inside a cell are escaped.
 func buildVendorCSVTSV(headers []string, rows []map[string]interface{}, delimiter string) string {
 	var b strings.Builder
-	// Write header row
-	for i, h := range headers {
-		b.WriteString(h)
-		if i < len(headers)-1 {
-			b.WriteString(delimiter)
-		}
+	w := csv.NewWriter(&b)
+	if delimiter != "" {
+		w.Comma = []rune(delimiter)[0]
 	}
-	b.WriteString(NewLine)
-	// Write value rows
+	_ = w.Write(headers)
 	for _, row := range rows {
+		record := make([]string, len(headers))
 		for i, h := range headers {
-			val := ""
 			if v, ok := row[h]; ok && v != nil {
-				val = fmt.Sprintf("%v", v)
-			}
-			b.WriteString(val)
-			if i < len(headers)-1 {
-				b.WriteString(delimiter)
+				record[i] = fmt.Sprintf("%v", v)
 			}
 		}
-		b.WriteString(NewLine)
+		_ = w.Write(record)
 	}
+	w.Flush()
 	return b.String()
 }
 
