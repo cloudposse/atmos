@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"math"
 
 	"google.golang.org/genai"
 
@@ -71,6 +72,19 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 	}, nil
 }
 
+// generateContentConfig builds the request config shared by every send method.
+// It applies the configured max_tokens as the response limit; zero leaves the model default.
+func (c *Client) generateContentConfig(geminiTools []*genai.Tool) *genai.GenerateContentConfig {
+	config := &genai.GenerateContentConfig{
+		Tools: geminiTools,
+	}
+	if c.config.MaxTokens > 0 {
+		// MaxOutputTokens is an int32; clamp so a very large configured value cannot wrap on 64-bit systems.
+		config.MaxOutputTokens = int32(min(c.config.MaxTokens, math.MaxInt32))
+	}
+	return config
+}
+
 // SendMessage sends a message to the AI and returns the response.
 func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
 	defer perf.Track(nil, "gemini.Client.SendMessage")()
@@ -78,7 +92,7 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	// Use the convenience function to create content from text.
 	content := genai.NewContentFromText(message, genai.RoleUser)
 
-	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, []*genai.Content{content}, nil)
+	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, []*genai.Content{content}, c.generateContentConfig(nil))
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrAISendMessage).
 			WithCause(err).
@@ -116,9 +130,7 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	content := genai.NewContentFromText(message, genai.RoleUser)
 
 	// Create GenerateContentConfig with tools.
-	config := &genai.GenerateContentConfig{
-		Tools: geminiTools,
-	}
+	config := c.generateContentConfig(geminiTools)
 
 	// Send message with tools.
 	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, []*genai.Content{content}, config)
@@ -143,7 +155,7 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 	geminiContents := convertMessagesToGeminiFormat(messages)
 
 	// Send messages.
-	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, geminiContents, nil)
+	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, geminiContents, c.generateContentConfig(nil))
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrAISendMessage).
 			WithCause(err).
@@ -182,9 +194,7 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	geminiTools := convertToolsToGeminiFormat(availableTools)
 
 	// Create GenerateContentConfig with tools.
-	config := &genai.GenerateContentConfig{
-		Tools: geminiTools,
-	}
+	config := c.generateContentConfig(geminiTools)
 
 	// Send messages with tools.
 	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, geminiContents, config)
