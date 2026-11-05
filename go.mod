@@ -492,7 +492,7 @@ require (
 	github.com/sigstore/sigstore-go v1.2.2
 	github.com/theupdateframework/go-tuf/v2 v2.4.2
 	github.com/updatecli/updatecli v0.999.0
-	go.starlark.net v0.0.0-20260930220527-d7438c5a85ac
+	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 	golang.org/x/image v0.45.0
 	golang.org/x/perf v0.0.0-20260409210113-8e83ce0f7b1c
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
