@@ -139,7 +139,10 @@ func TestReleasePlanValidationFailures(t *testing.T) {
 		{name: "empty cut", want: "no changes since", change: func(r map[string]any) {
 			r["compare/v1.233.0..."+githubtest.SHA] = map[string]any{"status": "identical", "total_commits": 0, "commits": []any{}}
 		}},
-		{name: "direct commit without PR", want: "has no associated PR", change: func(r map[string]any) { r["commits/"+githubtest.Base+"/pulls"] = []any{} }},
+		{name: "direct commit without PR", want: "has no associated PR", change: func(r map[string]any) {
+			r["commits/"+githubtest.Base+"/pulls"] = []any{}
+			r["commits/"+githubtest.Base] = map[string]any{"commit": map[string]any{"message": "direct push", "verification": map[string]bool{"verified": false}}, "committer": map[string]string{"login": "octocat"}}
+		}},
 		{name: "unmerged associated PR", want: "no eligible merged PR", change: func(r map[string]any) {
 			r["issues"] = []map[string]any{} // Exercise commit association independently of milestone membership.
 			pr := r["pulls/42"].(releasePull)

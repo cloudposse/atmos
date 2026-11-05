@@ -131,11 +131,11 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/internal/configsources
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/configsources/v1.5.1/internal/configsources/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/configsources/v1.5.6/internal/configsources/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/endpoints/v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.8.1/internal/endpoints/v2/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.8.6/internal/endpoints/v2/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/v4a
     License: Apache-2.0
@@ -191,7 +191,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/resourcegroupstaggingapi/v1.39.0/service/resourcegroupstaggingapi/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/resourcegroupstaggingapi/v1.41.4/service/resourcegroupstaggingapi/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/s3
     License: Apache-2.0
@@ -1578,7 +1578,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/agnivade/levenshtein
     License: MIT
-    URL: https://github.com/agnivade/levenshtein/blob/v1.2.1/License.txt
+    URL: https://github.com/agnivade/levenshtein/blob/v1.2.2/License.txt
 
   - github.com/alecthomas/chroma/v2
     License: MIT
