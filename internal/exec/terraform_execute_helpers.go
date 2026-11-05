@@ -418,7 +418,9 @@ func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool
 	}
 	module, ok := componentInfo[terraformConfigKey].(*tfconfig.Module)
 	if !ok || module == nil {
-		return nil
+		// When validation was skipped for a static-parser limitation, terraform_config is nil and only the
+		// sensitive variable names are recorded (see recordSensitiveVariableNames).
+		return recordedSensitiveVariableNames(componentInfo)
 	}
 
 	keys := make(map[string]bool)

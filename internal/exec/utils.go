@@ -38,6 +38,9 @@ import (
 const (
 	// TerraformConfigKey is the key used in componentInfo maps to store terraform configuration.
 	terraformConfigKey = "terraform_config"
+	// SensitiveVariablesKey is the key used in componentInfo maps to store the names of variables declared
+	// `sensitive = true` when terraform_config is nil because validation was skipped.
+	sensitiveVariablesKey = "sensitive_variables"
 	// SourcesSectionName is the generated component provenance section.
 	sourcesSectionName = "sources"
 )
@@ -1423,6 +1426,7 @@ func processStacks(
 					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
 					componentInfo[terraformConfigKey] = nil
 					componentInfo["validation_skipped_module_source_interpolation"] = true
+					recordSensitiveVariableNames(componentInfo, terraformConfiguration)
 					recordProviderIterationSkip(componentInfo, providerIteration)
 				} else {
 					componentInfo[terraformConfigKey] = nil

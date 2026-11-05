@@ -8,3 +8,11 @@ components:
         accounts:
           - dev
           - prod
+    mixed-component:
+      vars:
+        accounts:
+          - dev
+          - prod
+        module_name: "example"
+        aws_provider_version: "~> 5.0"
+        api_token: "not-a-real-token"
