@@ -1,0 +1,56 @@
+---
+slug: opper-ai-provider
+title: "Opper for Atmos AI"
+authors: [Felixkw12]
+tags: [feature]
+---
+Trying a different model usually means another vendor account, another API key, and another bill. A gateway puts
+many models behind one key, so switching models is a one-line change. Some teams also want that gateway to be outside
+the US.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos AI has first-class providers for single vendors and for OpenRouter, but not for Opper, a European AI gateway.
+Reaching it meant pointing the generic OpenAI provider at a hand-copied base URL and picking a model name by hand.
+
+## The Fix
+
+Atmos AI adds an [Opper provider](/cli/configuration/ai/providers) you can select by name as `opper`. Opper serves
+700+ models behind one OpenAI-compatible API key. Switch models by changing the `model` name (`claude-sonnet-5`,
+`gpt-5.5`, `deepseek-v4-flash`, ...) without touching anything else. The default model is `claude-sonnet-5`, the same
+model as the Anthropic and Bedrock providers.
+
+It behaves like every other Atmos AI provider: set the API key with the `!env` function, and optionally override the
+model, `base_url`, or token limits. It works everywhere the existing providers do: [`atmos ai ask`](/cli/commands/ai/ask),
+`atmos ai chat`, and the [`--ai` flag](/cli/global-flags).
+
+## How to Use It
+
+Add the provider under `ai.providers` in `atmos.yaml` and select it as the default:
+
+```yaml
+ai:
+  enabled: true
+  default_provider: opper
+  providers:
+    opper:
+      model: "claude-sonnet-5"   # any Opper model name, e.g. "gpt-5.5"
+      api_key: !env "OPPER_API_KEY"
+```
+
+Then ask away:
+
+```shell
+export OPPER_API_KEY=...
+atmos ai ask "What stacks and components do we have?"
+```
+
+Create an API key at [platform.opper.ai](https://platform.opper.ai). See the full list of options on the
+[AI providers configuration page](/cli/configuration/ai/providers).
+
+## Get Involved
+
+If something does not work as expected with the Opper provider, open an issue on
+[cloudposse/atmos](https://github.com/cloudposse/atmos).
