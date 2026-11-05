@@ -1138,6 +1138,11 @@ var (
 	ErrVoiceListUnsupported         = errors.New("voice enumeration not supported for backend")
 	ErrUserAborted                  = errors.New("user aborted")
 
+	// GitHub OIDC provider errors.
+	// ErrGitHubOIDCEndpointUnavailable marks a token request that failed in a way worth retrying:
+	// a timeout or other transport error, HTTP 429, or HTTP 5xx.
+	ErrGitHubOIDCEndpointUnavailable = errors.New("GitHub OIDC token endpoint unavailable")
+
 	// AWS credential_process errors (consuming and producing the AWS process-credential format).
 	ErrCredentialProcessFailed        = errors.New("credential_process command failed")
 	ErrCredentialProcessInvalidOutput = errors.New("credential_process returned invalid output")

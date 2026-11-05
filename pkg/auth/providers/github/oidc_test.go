@@ -2,10 +2,12 @@ package github
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -346,6 +348,53 @@ func TestOIDCProvider_getHTTPClient(t *testing.T) {
 	assert.Equal(t, custom, p.getHTTPClient())
 }
 
+func TestNewOIDCHTTPClient_OwnsItsTransport(t *testing.T) {
+	assertOwnTransport := func(t *testing.T) {
+		t.Helper()
+		client := newOIDCHTTPClient()
+		transport, ok := client.Transport.(*http.Transport)
+		require.True(t, ok, "client must have its own *http.Transport")
+		if shared, ok := http.DefaultTransport.(*http.Transport); ok {
+			assert.NotSame(t, shared, transport)
+		}
+	}
+
+	t.Run("default transport is cloned", assertOwnTransport)
+
+	t.Run("replaced default transport is not shared", func(t *testing.T) {
+		orig := http.DefaultTransport
+		t.Cleanup(func() { http.DefaultTransport = orig })
+		http.DefaultTransport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("must not be used")
+		})
+		assertOwnTransport(t)
+	})
+}
+
+func TestFreshConnectionClient(t *testing.T) {
+	t.Run("clones an *http.Transport", func(t *testing.T) {
+		base := &http.Client{Timeout: 7 * time.Second, Transport: &http.Transport{ForceAttemptHTTP2: true}}
+		fresh := freshConnectionClient(base)
+		require.NotSame(t, base, fresh)
+		transport, ok := fresh.Transport.(*http.Transport)
+		require.True(t, ok)
+		assert.NotSame(t, base.Transport, transport, "the retry must not share the pool")
+		assert.True(t, transport.ForceAttemptHTTP2)
+		assert.Equal(t, base.Timeout, fresh.Timeout)
+	})
+
+	t.Run("returns any other transport as is", func(t *testing.T) {
+		base := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("unused")
+		})}
+		assert.Same(t, base, freshConnectionClient(base))
+	})
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
 func TestOIDCProvider_Authenticate_URLValidation(t *testing.T) {
 	config := validOidcSpec()
 	provider, err := NewOIDCProvider("github-oidc", config)
@@ -363,9 +412,9 @@ func TestOIDCProvider_Authenticate_URLValidation(t *testing.T) {
 }
 
 // TestOidcProvider_IsAmbient verifies that the GitHub OIDC provider opts into the auth
-// manager's ambient handling. Its token is requested fresh from the Actions token
-// endpoint on every call, so persisting it to the keyring would replay a token the
-// Actions runtime has already rotated (issue #2695, same shape).
+// manager's ambient handling. Its token comes from the Actions token endpoint and is
+// reused only in memory within one process, so persisting it to the keyring would replay
+// a token the Actions runtime has already rotated (issue #2695, same shape).
 func TestOidcProvider_IsAmbient(t *testing.T) {
 	p := &oidcProvider{name: "gh-oidc"}
 
