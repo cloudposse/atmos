@@ -83,8 +83,9 @@ live progress tree; CI gets static results.
 ### Checking, formatting, and committing
 
 - `atmos check staged` checks a temporary copy of the index without changing your
-  files. `check pr` selects committed branch changes relative to `origin/main`
-  and checks their current working-tree contents; `check all` checks all tracked files.
+  files. `check pr` selects committed branch changes relative to the comparison base
+  (`origin/main` unless a stack base is set, as described below) and checks their
+  current working-tree contents; `check all` checks all tracked files.
 - `atmos format staged|pr|all` applies formatting and module cleanup as unstaged
   changes. It never stages files and reports operational failures.
 - `git commit` runs the full suite against the index. Automatic fixes are returned
@@ -102,7 +103,8 @@ Formatting exclusions are check-specific and preserve golden snapshots, generate
 SVGs, and other existing exclusions. The suite also verifies symlinks, instruction
 file sizes, YAML syntax, large files, EditorConfig, module compatibility, and
 secrets. The `branch-file-limit` check permits at most 150 files in the branch diff
-against the merge base with `origin/main`, including the pending staged changes.
+against the merge base with the comparison base (`origin/main` by default), including the
+pending staged changes.
 Deletions count, renames count once, and unstaged edits are excluded. Initial commits
 compare against an empty tree. This is our review-size policy; CodeRabbit's published
 file allowance varies by plan. Split larger changes into smaller PRs or a PR stack;
