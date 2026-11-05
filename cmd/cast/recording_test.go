@@ -19,7 +19,7 @@ import (
 func TestRecordedCommandArgsCopiesResolvedArgs(t *testing.T) {
 	input := []string{"terraform", "plan", "--stack", "dev"}
 	got := recordedCommandArgs(input)
-	want := []string{"terraform", "plan", "--stack", "dev"}
+	want := []string{"atmos", "terraform", "plan", "--stack", "dev"}
 	if len(got) != len(want) {
 		t.Fatalf("got %#v want %#v", got, want)
 	}
@@ -28,9 +28,33 @@ func TestRecordedCommandArgsCopiesResolvedArgs(t *testing.T) {
 			t.Fatalf("got %#v want %#v", got, want)
 		}
 	}
-	got[0] = "changed"
+	got[1] = "changed"
 	if input[0] != "terraform" {
 		t.Fatalf("recordedCommandArgs must copy input, got input %#v", input)
+	}
+	input[1] = "mutated"
+	if got[2] != "plan" {
+		t.Fatalf("recordedCommandArgs result must not alias input, got %#v", got)
+	}
+}
+
+func TestRecordedCommandArgsIncludesProgramName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []string
+		want  []string
+	}{
+		{name: "root help flag", input: []string{"--help"}, want: []string{"atmos", "--help"}},
+		{name: "subcommand help", input: []string{"ai", "--help"}, want: []string{"atmos", "ai", "--help"}},
+		{name: "no arguments", input: nil, want: []string{"atmos"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := recordedCommandArgs(tt.input)
+			if strings.Join(got, "\x00") != strings.Join(tt.want, "\x00") {
+				t.Fatalf("got %#v want %#v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -127,7 +151,7 @@ func TestStartRecordingWithExplicitPath(t *testing.T) {
 	if err := json.Unmarshal([]byte(headerLine), &header); err != nil {
 		t.Fatal(err)
 	}
-	if header.Command != "terraform plan --stack dev" {
+	if header.Command != "atmos terraform plan --stack dev" {
 		t.Fatalf("recorded command = %q", header.Command)
 	}
 	if header.Term.Cols != 100 || header.Term.Rows != 30 {
@@ -178,7 +202,7 @@ func TestStartRecordingWithBareCastFlagUsesGeneratedPath(t *testing.T) {
 	if err := json.Unmarshal([]byte(headerLine), &header); err != nil {
 		t.Fatal(err)
 	}
-	if header.Command != "terraform plan" {
+	if header.Command != "atmos terraform plan" {
 		t.Fatalf("recorded command = %q", header.Command)
 	}
 }
