@@ -39,7 +39,7 @@ Every new or changed `atmos.yaml` section needs configuration docs.
 
 ## Admonitions
 
-Docs and changelog posts support both Docusaurus `:::warning` blocks and GitHub alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`). The `remark-github-admonitions` plugin renders alerts the way GitHub does (a colored left bar with an icon and title, no tinted box) using the `.github-alert` styles in `website/src/css/custom.css`, and each type keeps GitHub's title, including `Caution`. The marker must be alone on its line. Prefer the GitHub alert syntax in content that also renders on GitHub.
+Docs and changelog posts support both Docusaurus `:::warning` blocks and GitHub alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`). The `remark-github-admonitions` plugin renders alerts the way GitHub does (a colored left bar with an icon and title, no tinted box) using the `.github-alert` styles in `website/src/css/custom.css`, and each type keeps GitHub's title, including `Caution`. The marker must be alone on its line. Prefer the GitHub alert syntax in content that also renders on GitHub. GitHub renders an alert only at the top level of a document, so in shared content place alerts outside lists and blockquotes; the plugin also converts nested alerts on the site, but GitHub shows them as plain blockquotes.
 
 ## Sidebar Hierarchy
 
