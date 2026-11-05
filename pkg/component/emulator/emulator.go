@@ -126,11 +126,13 @@ var verbExecutors = map[string]verbExecutor{
 func (p *EmulatorComponentProvider) Execute(execCtx *component.ExecutionContext) error {
 	defer perf.Track(execCtx.AtmosConfig, "emulator.Execute")()
 
+	execCtx.ConfigAndStacksInfo.SubCommand = execCtx.SubCommand
+
 	exec, ok := verbExecutors[execCtx.SubCommand]
 	if !ok {
 		return fmt.Errorf("%w: unknown emulator subcommand %q", errUtils.ErrComponentExecutionFailed, execCtx.SubCommand)
 	}
-	return exec(context.Background(), execCtx)
+	return exec(execCtx.GoContext(), execCtx)
 }
 
 // GenerateArtifacts is a no-op for emulator components (no generated files).

@@ -3,14 +3,15 @@ title: atmos sbom
 sidebar_label: sbom
 sidebar_class_name: command
 id: usage
-description: Generate provenance and software bills of materials for Terraform dependency evidence managed by Atmos.
+description: "Produce a software bill of materials (SBOM) from Atmos-managed sources and Terraform dependency evidence."
 ---
 
 import Experimental from '@site/src/components/Experimental'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Generate a provenance/build-input SBOM from Atmos source receipts and Terraform dependency evidence.
+Produce a software bill of materials (SBOM) from Atmos-managed sources and Terraform dependency
+evidence. Use it to document dependency versions and their origins for reviews and audits.
 </Intro>
 
 <Experimental />
@@ -90,7 +91,7 @@ Use the default `provenance` mode to inspect the available graph and its coverag
 
 ## Terraform Evidence
 
-Provider inventory comes from each initialized component's `.terraform.lock.hcl`. Module inventory comes only from the configured Terraform command's structured interface:
+Provider inventory comes from each initialized component's `.terraform.lock.hcl`. An initialized module-only configuration is discovered through `.terraform/modules/modules.json` even when it has no provider lock. Module inventory comes only from the configured Terraform command's structured interface:
 
 ```shell
 <components.terraform.command> modules -json

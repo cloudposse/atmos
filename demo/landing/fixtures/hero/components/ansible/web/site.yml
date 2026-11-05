@@ -1,0 +1,10 @@
+# Minimal Ansible playbook for the "ship anything" demo (listed, not run).
+---
+- name: Web tier
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Configure web tier
+      ansible.builtin.debug:
+        msg: "Configuring {{ stage }} web tier"

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,14 +17,26 @@ import (
 )
 
 // stackValidateTestStreams is a minimal io.Streams implementation for
-// capturing ui.* output (UIStream) in tests.
+// capturing ui.* output (UIStream) in tests. Captured text is stored without
+// ANSI escapes because CI runners can advertise color support, which would
+// otherwise split the text that tests assert on.
 type stackValidateTestStreams struct{ output *bytes.Buffer }
 
+// plainWriter strips ANSI escape sequences before writing to the buffer.
+type plainWriter struct{ buffer *bytes.Buffer }
+
+func (w plainWriter) Write(p []byte) (int, error) {
+	if _, err := w.buffer.WriteString(ansi.Strip(string(p))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
 func (s stackValidateTestStreams) Input() stdio.Reader     { return bytes.NewReader(nil) }
-func (s stackValidateTestStreams) Output() stdio.Writer    { return s.output }
-func (s stackValidateTestStreams) Error() stdio.Writer     { return s.output }
-func (s stackValidateTestStreams) RawOutput() stdio.Writer { return s.output }
-func (s stackValidateTestStreams) RawError() stdio.Writer  { return s.output }
+func (s stackValidateTestStreams) Output() stdio.Writer    { return plainWriter{s.output} }
+func (s stackValidateTestStreams) Error() stdio.Writer     { return plainWriter{s.output} }
+func (s stackValidateTestStreams) RawOutput() stdio.Writer { return plainWriter{s.output} }
+func (s stackValidateTestStreams) RawError() stdio.Writer  { return plainWriter{s.output} }
 
 func TestStackValidateCmd_RegisteredUnderStack(t *testing.T) {
 	found := false

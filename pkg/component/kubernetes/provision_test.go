@@ -79,7 +79,7 @@ func TestDeliverApplyRoutesToExternalTarget(t *testing.T) {
 		newObject("Service", "demo"),
 	}
 
-	results, err := deliverApply(&schema.AtmosConfiguration{}, info, flags, objects)
+	results, err := deliverApply(context.Background(), &schema.AtmosConfiguration{}, info, flags, objects)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 	assert.Equal(t, "delivered", results[0].Action)
@@ -136,7 +136,7 @@ func TestDeliverApplyPrintsSuccessConfirmation(t *testing.T) {
 	flags := map[string]any{"target": "deployment-repo"}
 	objects := []*unstructured.Unstructured{newObject("Namespace", "atmos-demo")}
 
-	_, err = deliverApply(&schema.AtmosConfiguration{}, info, flags, objects)
+	_, err = deliverApply(context.Background(), &schema.AtmosConfiguration{}, info, flags, objects)
 	require.NoError(t, err)
 
 	assert.Contains(t, uiOutput.String(), "deployment-repo",
@@ -153,7 +153,7 @@ func TestDeliverApplyUnknownTargetErrors(t *testing.T) {
 	}
 	flags := map[string]any{"target": "does-not-exist"}
 
-	_, err := deliverApply(&schema.AtmosConfiguration{}, info, flags, nil)
+	_, err := deliverApply(context.Background(), &schema.AtmosConfiguration{}, info, flags, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetNotFound)
 }

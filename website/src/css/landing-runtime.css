@@ -466,6 +466,10 @@ html[data-theme="light"] .landing-page .lp-hero-visual .terminal {
   align-items: center;
 }
 
+.lp-how-grid > * {
+  min-width: 0;
+}
+
 .lp-steps {
   list-style: none;
   margin: 0;

@@ -1,0 +1,116 @@
+commands:
+  - name: casts generate demo fixtures ai-ask interactive-ask
+    description: Regenerate the interactive atmos ai ask cast (needs a logged-in claude)
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: interactive-ask
+        working_directory: "../../.context/cast-fixtures/ai-ask"
+        title: atmos ai ask
+        mode: session
+        shell: /bin/sh
+        write_rate: 30ms
+        key_interval: 90ms
+        timeout: 4m
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+        # Same recording environment as the other casts, inlined because a session cast takes
+        # a plain env map. The model is the real Claude Code, so answers vary between runs.
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/demo/fixtures/ai-ask/interactive-ask.cast"
+        steps:
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "atmos ai ask 'Run `atmos validate stacks` and tell me if everything is valid.'"
+          - type: key
+            key: enter
+          # The model decides to run a command; Atmos asks before it does.
+          - type: wait
+            text: "Allow execution?"
+            timeout: 2m
+          - type: pause
+            duration: 1500ms
+          # "Allow once" is the default choice.
+          - type: key
+            key: enter
+          # The answer arrives and the conversation stays open for a follow-up.
+          - type: wait
+            text: "Follow up?"
+            timeout: 2m
+          - type: pause
+            duration: 1200ms
+          - type: write
+            text: "In one line starting with Verdict:, is it safe to deploy?"
+          - type: key
+            key: enter
+          # The typed question only ever contains "Verdict:," (a comma follows the colon), so
+          # "Verdict: " with a space matches the start of the answer and nothing earlier.
+          - type: wait
+            text: "Verdict: "
+            timeout: 2m
+          - type: pause
+            duration: 1500ms
+          - type: key
+            key: esc
+          - type: pause
+            duration: 800ms
+      - type: script
+        name: sanitize-runtime-paths
+        interpreter: python3
+        script: |
+          from pathlib import Path
+
+          path = Path("../../website/static/casts/demo/fixtures/ai-ask/interactive-ask.cast")
+          fixture = Path("../../.context/cast-fixtures/ai-ask").resolve()
+          text = path.read_text()
+          text = text.replace(str(fixture), ".")
+          path.write_text(text)
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/demo/fixtures/ai-ask/interactive-ask.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)
+      - type: shell
+        name: validate
+        command: atmos casts validate demo fixtures ai-ask interactive-ask
+  - name: casts validate demo fixtures ai-ask interactive-ask
+    description: Validate the interactive atmos ai ask cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/demo/fixtures/ai-ask/interactive-ask.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          # The model's wording varies; these are the parts Atmos itself renders.
+          for needle in ["atmos ai ask", "Allow execution?", "Allowed Bash", "Follow up?", "Verdict:"]:
+              if needle not in plain:
+                  raise SystemExit(f"interactive-ask cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "/Users/"]:
+              if bad in plain:
+                  raise SystemExit(f"interactive-ask cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

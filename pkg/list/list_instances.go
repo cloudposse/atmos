@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/git"
@@ -66,12 +67,7 @@ type InstancesCommandOptions struct {
 	Delimiter   string
 	Query       string
 	AuthManager auth.AuthManager
-	// AuthDisabled is true when the caller did not request an identity or
-	// explicitly used --identity=false. It prevents per-component auth
-	// auto-detection while still allowing templates and YAML functions that do
-	// not require credentials to run.
-	AuthDisabled bool
-	OutputFile   string
+	OutputFile  string
 	// ProcessTemplates toggles Go template processing of stack manifests
 	// (controls the `processTemplates` parameter of `ExecuteDescribeStacks`).
 	// Default true for parity with `describe affected` / `describe stacks`.
@@ -92,10 +88,10 @@ type InstancesCommandOptions struct {
 	// Tags filters instances to those whose component metadata.tags contains
 	// at least one of these tags (any-match). Empty means no filter.
 	Tags []string
-	// LabelsRaw is the raw --labels flag value (comma-separated key=value or
-	// key:value pairs, all-match), parsed at filter-build time so an invalid
-	// value surfaces as a command error.
-	LabelsRaw string
+	// LabelsRaw is the raw --labels flag value (one element per pflag StringSlice
+	// occurrence/comma-split entry -- key=value or key:value pairs, all-match),
+	// parsed at filter-build time so an invalid value surfaces as a command error.
+	LabelsRaw []string
 	// IncludeDependencies/IncludeDependents expand the selection preview with
 	// the dependency closure, matching the terraform bulk commands (0 = off,
 	// -1 = unlimited, N>0 = N levels). With either set, the rendered rows are
@@ -704,7 +700,6 @@ type scopedStacksProcessor interface {
 		includeEmptyStacks bool,
 		skip []string,
 		authManager auth.AuthManager,
-		authDisabled bool,
 		tagsFilter []string,
 		labelsFilter map[string]string,
 	) (map[string]any, error)
@@ -729,7 +724,6 @@ type evalSectionsStacksProcessor interface {
 		includeEmptyStacks bool,
 		skip []string,
 		authManager auth.AuthManager,
-		authDisabled bool,
 		tagsFilter []string,
 		labelsFilter map[string]string,
 		evalSections []string,
@@ -759,6 +753,10 @@ func executeDescribeStacksForInstances(
 	labelsFilter map[string]string,
 	evalSections []string,
 ) (map[string]any, error) {
+	// Adapt legacy callers to the manager-owned policy before selecting a processor.
+	if authDisabled && !authdeferred.AuthDisabled(authManager) {
+		authManager = authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true})
+	}
 	if evalSections != nil {
 		if processor, ok := stacksProcessor.(evalSectionsStacksProcessor); ok {
 			return processor.ExecuteDescribeStacksWithEvalSections(
@@ -769,7 +767,6 @@ func executeDescribeStacksForInstances(
 				false, // includeEmptyStacks
 				skip,
 				authManager,
-				authDisabled,
 				tagsFilter,
 				labelsFilter,
 				evalSections,
@@ -787,7 +784,6 @@ func executeDescribeStacksForInstances(
 				false, // includeEmptyStacks
 				skip,
 				authManager,
-				authDisabled,
 				tagsFilter,
 				labelsFilter,
 			)
@@ -884,6 +880,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
+	atmosConfig.AuthManager = opts.AuthManager
 
 	// Read flags from the options struct (populated via viper, so env vars
 	// like ATMOS_FORMAT / ATMOS_UPLOAD are honored). Reading from
@@ -896,7 +893,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// only shape the rendered table, so allowing them alongside --upload would
 	// show a filtered table while silently uploading everything. Reject the
 	// combination outright (matching the matrix/tree guards below).
-	if upload && (len(opts.Tags) > 0 || opts.LabelsRaw != "") {
+	if upload && (len(opts.Tags) > 0 || len(opts.LabelsRaw) > 0) {
 		return fmt.Errorf("%w: --tags/--labels is not supported with --upload (the inventory upload is always unfiltered)", errUtils.ErrInvalidFlag)
 	}
 	if upload && opts.closureRequested() {
@@ -914,7 +911,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		if opts.Query != "" {
 			return fmt.Errorf("%w: --query is not supported with --format=matrix", errUtils.ErrInvalidFlag)
 		}
-		if len(opts.Tags) > 0 || opts.LabelsRaw != "" {
+		if len(opts.Tags) > 0 || len(opts.LabelsRaw) > 0 {
 			return fmt.Errorf("%w: --tags/--labels is not supported with --format=matrix", errUtils.ErrInvalidFlag)
 		}
 		if opts.closureRequested() {
@@ -943,7 +940,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		if opts.Query != "" {
 			return fmt.Errorf("%w: --query is not supported with --format=tree", errUtils.ErrInvalidFlag)
 		}
-		if len(opts.Tags) > 0 || opts.LabelsRaw != "" {
+		if len(opts.Tags) > 0 || len(opts.LabelsRaw) > 0 {
 			return fmt.Errorf("%w: --tags/--labels is not supported with --format=tree", errUtils.ErrInvalidFlag)
 		}
 		if opts.closureRequested() {
@@ -958,10 +955,11 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		e.ClearFindStacksMapCache()
 
 		// Get all stacks for provenance-based import resolution (single call).
+		atmosConfig.ListEvaluationPaths = [][]string{{"metadata"}}
 		// Honor the caller-supplied template/function flags so tree output is
 		// consistent with non-tree runs of the same command invocation, matching
 		// the behavior of `list stacks --format=tree`.
-		stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+		stacksMap, err := e.ExecuteDescribeStacks(
 			&atmosConfig, "", nil, nil, nil,
 			false, // ignoreMissingFiles
 			opts.ProcessTemplates,
@@ -969,7 +967,6 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			false, // includeEmptyStacks
 			opts.Skip,
 			opts.AuthManager,
-			opts.AuthDisabled,
 		)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -1006,7 +1003,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// For non-tree formats, process instances normally. The single call threads
 	// every relevant option through one canonical path: --skip bypasses named
 	// YAML functions, opts.Stack applies the glob filter post-describe, and
-	// --identity=false (opts.AuthDisabled) short-circuits per-component auth.
+	// the manager's --identity=false policy short-circuits per-component auth.
 	// Without closure flags, --tags/--labels also scope the describe pass
 	// (early-skip): excluded components never evaluate templates/functions/auth.
 	// With closure flags, the whole flow goes through the shared scoped closure
@@ -1023,6 +1020,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 
 	var instances []schema.Instance
 	var closureMembers map[string]struct{}
+	atmosConfig.ListEvaluationPaths = resolveInstancesEvaluationPaths(&atmosConfig, columns, opts)
 	if opts.closureRequested() {
 		instances, closureMembers, err = processInstancesScopedClosure(&atmosConfig, opts, labels)
 	} else {
@@ -1037,7 +1035,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			opts.ProcessFunctions,
 			opts.Skip,
 			opts.Stack,
-			opts.AuthDisabled,
+			authdeferred.AuthDisabled(opts.AuthManager),
 			opts.Tags,
 			labels,
 			evalSections,
@@ -1062,7 +1060,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// (closure members must not be re-pruned by the selectors that seeded them).
 	rowTags, rowLabelsRaw := opts.Tags, opts.LabelsRaw
 	if opts.closureRequested() {
-		rowTags, rowLabelsRaw = nil, ""
+		rowTags, rowLabelsRaw = nil, nil
 	}
 	filters, err := buildInstanceFilters(opts.FilterSpec, rowTags, rowLabelsRaw, &atmosConfig)
 	if err != nil {
@@ -1195,7 +1193,7 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 	// Get stacksMap to extract component_path from component_info. Honor the
 	// caller-supplied template/function flags so matrix output stays consistent
 	// with non-matrix runs of the same command invocation.
-	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	stacksMap, err := e.ExecuteDescribeStacks(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -1203,7 +1201,6 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 		false, // includeEmptyStacks
 		opts.Skip,
 		opts.AuthManager,
-		opts.AuthDisabled,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -1233,7 +1230,7 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 // evaluated per row; rows for which the expression is truthy are kept. Tags
 // use any-match, labels all-match semantics against the flattened `tags`/
 // `labels` row fields. Empty inputs produce no filters.
-func buildInstanceFilters(filterSpec string, tagsFilter []string, labelsRaw string, atmosConfig *schema.AtmosConfiguration) ([]filter.Filter, error) {
+func buildInstanceFilters(filterSpec string, tagsFilter []string, labelsRaw []string, atmosConfig *schema.AtmosConfiguration) ([]filter.Filter, error) {
 	var filters []filter.Filter
 	if filterSpec != "" {
 		f, err := filter.NewYQPredicateFilter(filterSpec, atmosConfig)
@@ -1275,7 +1272,6 @@ func processInstancesScopedClosure(atmosConfig *schema.AtmosConfiguration, opts 
 			false, // includeEmptyStacks
 			opts.Skip,
 			opts.AuthManager,
-			opts.AuthDisabled,
 			nil, // tagsFilter: closure scoping owns selection.
 			nil, // labelsFilter: closure scoping owns selection.
 		)

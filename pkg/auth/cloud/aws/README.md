@@ -95,3 +95,41 @@ return config.WithBaseEndpoint(url)
 ```
 
 This ensures all AWS services (STS, SSO, etc.) use the custom endpoint. The base endpoint approach is the recommended method in AWS SDK v2 for setting custom endpoints.
+
+## Process Credentials (`credential_process`)
+
+`credential_process.go` implements the AWS [process-credential format](https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html)
+for both directions of Atmos Auth's `credential_process` support.
+
+### Producing credentials
+
+`NewProcessCredentials` converts Atmos AWS credentials into the process-credential document and
+`MarshalProcessCredentials` renders it as compact JSON:
+
+```json
+{"Version":1,"AccessKeyId":"ASIA...","SecretAccessKey":"...","SessionToken":"...","Expiration":"2026-10-02T18:30:00Z"}
+```
+
+`SessionToken` and `Expiration` are omitted when empty (long-lived keys). `Expiration` is RFC3339 in UTC.
+This backs `atmos aws credential-process` and `atmos auth env --format=credential-process`.
+
+### Consuming a helper
+
+`RetrieveProcessCredentials` runs a configured `credential_process` command on behalf of the
+`aws/credential-process` identity and returns the credentials it prints.
+
+- The command runs through the platform shell, like the AWS SDK for Go: `sh -c` on Linux and macOS,
+  `%COMSPEC% /S /C "<command>"` on Windows (via `pkg/process.NewShellCommand`). The AWS CLI does not
+  use a shell, so pipes and environment variable expansion work in Atmos only. Stdin and stderr are
+  inherited so a helper can prompt for MFA when Atmos runs interactively.
+- The default timeout is 1 minute. `WithCredentialProcessTimeout` overrides it for Go callers, but the
+  `aws/credential-process` identity does not expose it, so users cannot change it. `exec.Cmd.WaitDelay`
+  (2 seconds) bounds how long Wait blocks on the output pipe after a timeout kill.
+- `ATMOS_AUTH_CREDENTIAL_PROCESS_CHAIN` is set for every helper to detect recursion when a helper
+  calls back into Atmos for an identity that is already resolving.
+- Errors never include the helper's stdout, because the AWS SDK embeds raw output in parse errors.
+  Invalid output is reported as the list of missing or invalid fields without their values.
+- `WithCredentialProcessCommandBuilder` and `WithCredentialProcessEnviron` let tests substitute the
+  command builder and base environment.
+
+See `docs/prd/aws-credential-process.md` for the full design.

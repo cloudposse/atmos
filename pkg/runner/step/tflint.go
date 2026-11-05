@@ -58,6 +58,14 @@ func (h *TFLintHandler) Execute(ctx context.Context, workflowStep *schema.Workfl
 		return nil, err
 	}
 
+	// The step's `timeout:` bounds component resolution and the scan.
+	deadline, err := StartStepDeadline(ctx, workflowStep, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
 	stepCfg := tflintConfig(workflowStep)
 
 	component, err := vars.Resolve(stepCfg.Component)
@@ -72,7 +80,7 @@ func (h *TFLintHandler) Execute(ctx context.Context, workflowStep *schema.Workfl
 	if err != nil {
 		return nil, err
 	}
-	env, err := vars.ResolveEnvMap(stepCfg.Env)
+	env, err := vars.ResolveStepEnvMap(workflowStep, stepCfg.Env)
 	if err != nil {
 		return nil, fmt.Errorf("step %q: failed to resolve env: %w", workflowStep.Name, err)
 	}
@@ -92,6 +100,7 @@ func (h *TFLintHandler) Execute(ctx context.Context, workflowStep *schema.Workfl
 		ToolchainPATH: vars.ToolchainPATH,
 	})
 
+	err = deadline.Wrap(err)
 	result := tflintStepResult(component, stack, out)
 	if err != nil {
 		if result == nil {

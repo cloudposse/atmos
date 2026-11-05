@@ -1,8 +1,10 @@
 ---
 title: Terraform Planfiles
 sidebar_label: Planfiles
-sidebar_position: 5
+sidebar_position: 6
 id: planfiles
+sidebar_group: component-library
+sidebar_parent: components/terraform/terraform
 ---
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -141,15 +143,15 @@ When using `-backend-config` or hardcoding backend credentials in your configura
 **Best Practice**: Use environment variables for backend authentication or choose backends that support secure credential management.
 :::
 
-### Backends That DO NOT Support Local Planfiles
+### Remote Execution and Planfile Limitations
 
 The following backends have limitations with `terraform plan -out=<file>`:
 
 | Backend | Type | Actual Limitation | Recommended Approach |
 |---------|------|------------------|---------------------|
-| **Remote Backend** | Enhanced | Does not support saving execution plans locally. Returns error: "The 'remote' backend does not support saving the generated execution plan locally" | Use remote execution mode or migrate to standard backend with `skip_planfile: true` in Atmos |
-| **Terraform Cloud** | Enhanced | Remote execution mode doesn't allow local plan output | Use VCS-driven workflow or configure `skip_planfile: true` in Atmos |
-| **Terraform Enterprise** | Enhanced | Same as Terraform Cloud - remote execution limitation | Use VCS-driven workflow or configure `skip_planfile: true` in Atmos |
+| **Legacy remote execution** | Remote | Some configurations reject saved execution plans | Use `--skip-planfile` for those configurations, or adopt the supported `cloud` workflow |
+| **HCP Terraform** | Remote | Saved remote plans require Terraform CLI 1.6+ and a compatible CLI-driven workspace | Use the [saved-plan workflow](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/run/cli#saved-plans); skip planfiles for unsupported configurations |
+| **Terraform Enterprise** | Remote | Support depends on the CLI and Enterprise versions and workspace configuration | Check the [CLI-driven workflow](https://developer.hashicorp.com/terraform/enterprise/workspaces/run/cli) for your installation |
 | **HTTP Backend** | Standard | ⚠️ **Security Risk**: While technically supports `-out`, backend credentials are embedded in planfiles making it effectively unusable | Do not use planfiles with HTTP backend. Use environment variables for auth or switch backends |
 
 ### Backends That Support Planfiles
@@ -174,7 +176,7 @@ All standard backends support local planfile generation. These are the most comm
 
 When using a backend that doesn't support planfiles, you'll see one of these errors:
 
-**Terraform Cloud/Enterprise:**
+**Legacy remote execution configurations:**
 ```
 Error: Saving a generated plan is currently not supported
 
@@ -241,16 +243,15 @@ $ atmos terraform plan vpc -s dev --skip-planfile
 
 #### Option 2: Use Backend-Specific Workflows
 
-**For Terraform Cloud/Enterprise:**
+**For remote execution configurations that reject saved plans:**
 ```yaml title="atmos.yaml"
 components:
   terraform:
-    backend:
-      type: remote
-      organization: your-org
     plan:
-      skip_planfile: true  # Required for remote backend
+      skip_planfile: true
 ```
+
+Configure the backend separately in your [stack configuration](/stacks/backend).
 
 ## How Atmos Manages Planfiles
 
@@ -563,7 +564,9 @@ apply:
 
 ## Terraform Cloud Integration
 
-Terraform Cloud doesn't support the `-out` flag for planfiles. When using Terraform Cloud:
+HCP Terraform (formerly Terraform Cloud) supports saved remote plans with Terraform CLI 1.6 and later through its `cloud` integration. The local saved-plan file refers to a remote run; it is not the same as a self-contained local execution plan. Follow the [CLI-driven saved-plan workflow](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/run/cli#saved-plans) for workspace requirements. Terraform Enterprise users should check the [workflow supported by their installation](https://developer.hashicorp.com/terraform/enterprise/workspaces/run/cli).
+
+For legacy or older remote execution configurations that reject `-out`, disable planfile generation using one of the following options. This is not a blanket requirement for HCP Terraform.
 
 ### Configuration
 
@@ -571,7 +574,7 @@ Terraform Cloud doesn't support the `-out` flag for planfiles. When using Terraf
 components:
   terraform:
     plan:
-      skip_planfile: true  # Required for Terraform Cloud
+      skip_planfile: true  # Only for configurations that reject saved plans
 ```
 
 ### Environment Variable
@@ -744,7 +747,7 @@ aws s3 cp change-request-12345.planfile \
 
 **Skip planfiles when:**
 - Working in development environments with rapid iteration
-- Using backends that don't support them (Remote, Terraform Cloud)
+- Using remote execution configurations that reject saved plans
 - Backend credentials would be embedded (HTTP backend)
 - Real-time infrastructure state is critical
 
@@ -860,7 +863,7 @@ Error: Saved plan is stale; either terraform.tfstate was modified, or the plan f
 Error: Run variables are currently not supported
 ```
 
-**Solution**: Use `--skip-planfile` flag or configure `skip_planfile: true` in `atmos.yaml`.
+**Solution**: This error concerns variable delivery, not planfile output. Follow the variable-input requirements of your remote execution configuration (for example, workspace variables or uploaded auto-loaded variable files). Use the supported `cloud` integration where appropriate. Disabling planfile generation alone does not resolve unsupported run variables.
 
 ### Debugging
 

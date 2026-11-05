@@ -31,4 +31,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(graphCmd)
+	internal.RegisterCommandMetadata(
+		graphCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/graph"),
+	)
 }

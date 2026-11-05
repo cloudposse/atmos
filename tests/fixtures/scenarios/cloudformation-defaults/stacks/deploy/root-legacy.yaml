@@ -1,0 +1,17 @@
+vars:
+  stage: root-legacy
+
+# Legacy spelling at the stack root: inherited by every component type's `settings`.
+settings:
+  aws_cloudformation:
+    region: root-legacy-region
+
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: root-legacy-plain
+  terraform:
+    tf-reader:
+      vars:
+        region_from_settings: "{{ .settings.aws_cloudformation.region }}"

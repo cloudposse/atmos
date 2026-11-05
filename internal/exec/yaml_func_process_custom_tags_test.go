@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -126,7 +127,7 @@ func TestProcessCustomTags_AllSupportedTags(t *testing.T) {
 			if tt.input == "!env PATH" && len(tt.skip) == 0 {
 				assert.NotEmpty(t, result, "PATH environment variable should not be empty")
 			} else {
-				assert.Equal(t, tt.expected, result)
+				assert.Equal(t, tt.expected, yamlsource.Display(result))
 			}
 		})
 	}
@@ -174,7 +175,7 @@ func TestProcessCustomTags_TagPrefixes(t *testing.T) {
 
 			result, err := processCustomTags(atmosConfig, tt.input, "test-stack", []string{}, nil)
 			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expected, yamlsource.Display(result))
 		})
 	}
 }
@@ -305,9 +306,9 @@ func TestProcessNodes_ComplexStructures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := processNodes(atmosConfig, tt.input, "test-stack", tt.skip, nil)
+			result, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(tt.input), "test-stack", tt.skip, nil)
 			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expected, yamlsource.Display(result))
 		})
 	}
 }
@@ -348,7 +349,7 @@ func TestProcessTagTemplate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			result := processTagTemplate(tt.input)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expected, yamlsource.Display(result))
 		})
 	}
 }
@@ -405,7 +406,7 @@ func TestProcessCustomTags_EdgeCases(t *testing.T) {
 
 			result, err := processCustomTags(atmosConfig, tt.input, "test-stack", []string{}, nil)
 			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expected, yamlsource.Display(result))
 		})
 	}
 }
@@ -429,7 +430,7 @@ func TestProcessNodes_LargeDataStructure(t *testing.T) {
 		}
 	}
 
-	result, err := processNodes(atmosConfig, largeMap, "test-stack", []string{}, nil)
+	result, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(largeMap), "test-stack", []string{}, nil)
 	assert.NoError(t, err)
 
 	// Verify structure is preserved.

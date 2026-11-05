@@ -1,7 +1,6 @@
 package terraform
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -13,10 +12,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// commentMarkerFormat is the HTML comment marker format used to find and
-// update existing PR comments on repeat runs. Order: command, component,
-// stack. Example: "<!-- atmos:ci:plan:vpc:plat-ue2-dev -->".
-const commentMarkerFormat = "<!-- atmos:ci:%s:%s:%s -->"
+// commentKeyFormat is the key of a per-component PR comment. Order: command, component, stack.
+// The Reporter wraps it into the HTML marker used to find and update the comment on repeat runs:
+// "<!-- atmos:ci:plan:vpc:plat-ue2-dev -->".
+const commentKeyFormat = "%s:%s:%s"
 
 // logKeyStack is the structured-log key for the stack name. Extracted as
 // a constant so lint doesn't flag repeated string literals.
@@ -24,6 +23,9 @@ const logKeyStack = "stack"
 
 // logKeyComponent is the structured-log key for the component name.
 const logKeyComponent = "component"
+
+// logKeyName is the structured-log and error-context key for a commit status name.
+const logKeyName = "name"
 
 // logCommentError logs PR comment errors. Token-related failures and
 // "provider does not support comments" cases are logged at Debug level (not
@@ -40,12 +42,11 @@ func logCommentError(msg string, err error) {
 	log.Warn(msg, "error", err)
 }
 
-// buildCommentMarker builds the HTML comment marker used to find and update
-// existing PR comments on repeat runs. The marker is unique per
-// (command, component, stack) triple and its segments are in the same order
-// as the rendered marker string for readability at the callsite.
-func buildCommentMarker(command, component, stack string) string {
-	return fmt.Sprintf(commentMarkerFormat, command, component, stack)
+// buildCommentKey builds the key of the per-component PR comment. The Reporter wraps it into the
+// HTML comment marker used to find and update existing PR comments on repeat runs, so the key is
+// unique per (command, component, stack) triple, in that order.
+func buildCommentKey(command, component, stack string) string {
+	return fmt.Sprintf(commentKeyFormat, command, component, stack)
 }
 
 // shouldSkipComment returns a non-empty reason when the comment post should
@@ -87,17 +88,8 @@ func (p *Plugin) postComment(ctx *plugin.HookContext, renderedSummary string) er
 		return err
 	}
 
-	marker := buildCommentMarker(ctx.Command, ctx.Info.ComponentFromArg, ctx.Info.Stack)
-	opts := &provider.PostCommentOptions{
-		Owner:    ctx.CICtx.RepoOwner,
-		Repo:     ctx.CICtx.RepoName,
-		PRNumber: ctx.CICtx.PullRequest.Number,
-		Marker:   marker,
-		Body:     marker + "\n" + renderedSummary,
-		Behavior: behavior,
-	}
-
-	result, err := ctx.Provider.PostComment(context.Background(), opts)
+	key := buildCommentKey(ctx.Command, ctx.Info.ComponentFromArg, ctx.Info.Stack)
+	result, err := postKeyedComment(ctx, key, renderedSummary, behavior)
 	if err != nil {
 		return err
 	}

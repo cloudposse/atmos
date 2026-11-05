@@ -3,6 +3,7 @@ package track
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -66,4 +67,8 @@ func statusRows(track string, entries []manager.StatusEntry) []map[string]any {
 func init() {
 	flags.NewStandardParser(trackTableParserOptions(groupFlagOption())...).RegisterFlags(trackStatusCmd)
 	trackCmd.AddCommand(trackStatusCmd)
+	internal.RegisterCommandMetadata(
+		trackStatusCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/track/status"),
+	)
 }

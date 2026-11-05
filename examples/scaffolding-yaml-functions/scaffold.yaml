@@ -1,0 +1,43 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: "Load shared reference data via !include and other YAML functions like !env and !git.branch"
+spec:
+  fields:
+    - name: license
+      label: License
+      description: >-
+        Options sourced from lib/licenses.yaml via a YQ-filtered !include,
+        instead of hand-duplicating the same {label, value} list.
+      type: select
+      options: !include "./lib/licenses.yaml '. | to_entries | map({\"label\": .value.full_name, \"value\": .key})'"
+
+    - name: license_lookup
+      type: computed
+      description: >-
+        The same lib/licenses.yaml, included unfiltered this time -- the
+        raw table lands here as-is, not a template expression, reachable
+        from any file via .Config.license_lookup.
+      value: !include ./lib/licenses.yaml
+
+    - name: generated_from_branch
+      type: computed
+      description: >-
+        The git branch this project was generated from, via !git.branch --
+        falls back to "unknown" outside a git repository.
+      value: !git.branch unknown
+
+    - name: maintainer
+      type: computed
+      description: >-
+        An environment variable read via !env, with a fallback default when
+        it isn't set.
+      value: !env ATMOS_EXAMPLE_MAINTAINER "the project team"
+
+  files:
+    # lib/licenses.yaml only exists to be included above -- it's
+    # automatically excluded from generated output, so only NOTICE.md
+    # actually gets generated.
+    - path: lib/licenses.yaml
+    - path: NOTICE.md

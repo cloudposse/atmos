@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "scripts": {
+    "synth": "cdk synth Demo --exclusively --quiet --output cdk.out"
+  },
+  "devDependencies": {
+    "aws-cdk": "2.1146.0",
+    "aws-cdk-lib": "2.274.0",
+    "constructs": "10.7.2",
+    "tsx": "4.20.6"
+  }
+}

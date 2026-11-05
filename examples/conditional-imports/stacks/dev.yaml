@@ -1,0 +1,8 @@
+name: dev
+
+metadata:
+  labels:
+    pci: false
+
+import:
+  - catalog/environment

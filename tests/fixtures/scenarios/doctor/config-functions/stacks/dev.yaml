@@ -1,0 +1,4 @@
+vars:
+  stage: dev
+  banner: "!git.branches are protected"
+  idx: "!terraform.state[0]"

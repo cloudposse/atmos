@@ -1,0 +1,22 @@
+# Go-template manifest: {{ }} inside a Starlark body must stay literal, while a real Go template
+# elsewhere in the same file is rendered.
+vars:
+  stage: computed-tmpl
+  region: '{{ printf "%s-%d" "tmpl-region" 7 }}'
+
+components:
+  terraform:
+    mock:
+      vars:
+        message: tmpl
+        rendered_by_go: '{{ printf "%s" "go-template-value" }}'
+        literal_in_starlark: !starlark |
+          return "{{ not.a.template }}"
+        reads_rendered: !starlark |
+          return ctx.vars["region"] + "/" + ctx.vars["rendered_by_go"]
+        uses_dict_braces: !starlark |
+          d = {"k": "v"}
+          return "{{%s}}" % d["k"]
+        template_in_comment: !starlark |
+          # {{ .vars.stage }} inside a comment
+          return 1

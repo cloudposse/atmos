@@ -9,6 +9,8 @@ Consistent, idiomatic Terraform doesn't happen by accident — it takes a linter
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 `terraform validate` only proves your configuration parses and is internally consistent. It says nothing about the things that keep a growing codebase healthy:
@@ -65,3 +67,15 @@ And because it produces SARIF through the shared handler, tflint automatically i
 tflint runs first — before init — and renders its findings. The builtin `terraform` ruleset enforces core conventions with no setup; add a `.tflint.hcl` and run `tflint --init` once for provider rulesets (aws/google/azurerm) that catch cloud-specific mistakes (a `kind: command` hook works for that). A working, credential-free setup lives in [`examples/hooks-tflint`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-tflint).
 
 Findings default to `on_failure: warn`, so conventions surface as guidance first — flip to `fail` when you're ready to enforce them as a gate.
+
+## Try it out
+
+<TryExample example="hooks-tflint">
+
+Install Terraform and TFLint before running the lint hook.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

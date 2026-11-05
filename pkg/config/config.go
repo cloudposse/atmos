@@ -10,7 +10,9 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -81,6 +83,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	return atmosConfig, nil
 }
 
+// setLogConfig applies early logging, color, and pager overrides before stack processing.
+// It also configures the global log level so authentication pre-hooks honor those settings.
 func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	// TODO: This is a quick patch to mitigate the issue we can look for better code later
 	// Issue: https://linear.app/cloudposse/issue/DEV-3093/create-a-cli-command-core-library
@@ -105,17 +109,10 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if v, ok := flagKeyValue["verbose"]; ok && v == "true" {
 		atmosConfig.Logs.Level = "Debug"
 	}
-	if val, ok := flagKeyValue["no-color"]; ok {
-		valLower := strings.ToLower(val)
-		switch valLower {
-		case "true":
-			atmosConfig.Settings.Terminal.NoColor = true
-			atmosConfig.Settings.Terminal.Color = false
-		case "false":
-			atmosConfig.Settings.Terminal.NoColor = false
-			atmosConfig.Settings.Terminal.Color = true
-		}
-		// If value is neither "true" nor "false", leave defaults unchanged
+	// Resolve boolean color flags without consuming the following command name.
+	if options := terminalenv.ColorOptionsFromArgs(os.Args[1:]); options.NoColorSet {
+		atmosConfig.Settings.Terminal.NoColor = options.NoColor
+		atmosConfig.Settings.Terminal.Color = !options.NoColor
 	}
 
 	// Handle --pager global flag
@@ -161,6 +158,22 @@ func parseFlags() map[string]string {
 	return parseFlagsFromArgs(os.Args)
 }
 
+// rootBoolFlags lists the global boolean flags (without the leading dashes) that
+// parseFlagsFromArgs must not let consume the next argument unless it is an explicit
+// true/false literal.
+var rootBoolFlags = map[string]bool{
+	"ai":               true,
+	"force-color":      true,
+	"force-tty":        true,
+	"heatmap":          true,
+	"interactive":      true,
+	"logs-color":       true,
+	"mask":             true,
+	"no-color":         true,
+	"profiler-enabled": true,
+	"verbose":          true,
+}
+
 // parseFlagsFromArgs parses flags from the given args slice.
 // This function is exposed for testing purposes.
 func parseFlagsFromArgs(args []string) map[string]string {
@@ -178,6 +191,14 @@ func parseFlagsFromArgs(args []string) map[string]string {
 			// Case like --flag=value
 			parts := strings.SplitN(arg, "=", 2)
 			flags[parts[0]] = parts[1]
+		case rootBoolFlags[arg]:
+			// Boolean flag: only an explicit true/false literal is its value, so that
+			// "--verbose version" does not swallow the command name.
+			flags[arg] = "true"
+			if i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1]) {
+				flags[arg] = strings.ToLower(args[i+1])
+				i++ // Skip the next argument as it's the value.
+			}
 		case i+1 < len(args) && !strings.HasPrefix(args[i+1], "--"):
 			// Case like --flag value
 			flags[arg] = args[i+1]
@@ -234,6 +255,12 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 // Bare paths ("foo", "stacks") always go through git root search regardless of source.
 // See docs/prd/base-path-resolution-semantics.md for the full convention.
 func resolveAbsolutePath(path string, cliConfigPath string, source string) (string, error) {
+	return resolveAbsolutePathFrom("", path, cliConfigPath, source)
+}
+
+// resolveAbsolutePathFrom is resolveAbsolutePath anchored to wd instead of the process working
+// directory. An empty wd means the process working directory.
+func resolveAbsolutePathFrom(wd, path string, cliConfigPath string, source string) (string, error) {
 	// If already absolute, return as-is.
 	if filepath.IsAbs(path) {
 		return path, nil
@@ -253,17 +280,17 @@ func resolveAbsolutePath(path string, cliConfigPath string, source string) (stri
 
 	// For dot-prefixed paths: resolve based on source.
 	if isExplicitRelative {
-		return resolveDotPrefixPath(path, cliConfigPath, source)
+		return resolveDotPrefixPath(wd, path, cliConfigPath, source)
 	}
 
 	// For empty path or simple relative paths (like "stacks", "components/terraform"):
 	// Try git root first, passing source so fallback paths are source-aware.
-	return tryResolveWithGitRoot(path, cliConfigPath, source)
+	return tryResolveWithGitRoot(wd, path, cliConfigPath, source)
 }
 
 // absPathOrError resolves a path to absolute form, wrapping any error with ErrPathResolution.
-func absPathOrError(path, context string) (string, error) {
-	absPath, err := filepath.Abs(path)
+func absPathOrError(wd, path, context string) (string, error) {
+	absPath, err := absoluteFrom(wd, path)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrPathResolution).
 			WithCause(err).
@@ -275,30 +302,30 @@ func absPathOrError(path, context string) (string, error) {
 
 // resolveDotPrefixPath resolves dot-prefixed paths (".", "./foo", "..", "../foo").
 // The anchor depends on the source: runtime → CWD, config → config directory.
-func resolveDotPrefixPath(path, cliConfigPath, source string) (string, error) {
+func resolveDotPrefixPath(wd, path, cliConfigPath, source string) (string, error) {
 	if source == basePathSourceRuntime {
 		// Runtime source: dot means CWD (shell convention).
-		return absPathOrError(path, fmt.Sprintf(cwdResolutionErrFmt, path))
+		return absPathOrError(wd, path, fmt.Sprintf(cwdResolutionErrFmt, path))
 	}
 
 	// Config source: dot means config directory (config-file convention).
 	if cliConfigPath != "" {
-		return absPathOrError(filepath.Join(cliConfigPath, path),
+		return absPathOrError(wd, filepath.Join(cliConfigPath, path),
 			fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath))
 	}
 
 	// No config path: fall back to CWD (last resort).
-	return absPathOrError(path, fmt.Sprintf("Cannot resolve path %q", path))
+	return absPathOrError(wd, path, fmt.Sprintf("Cannot resolve path %q", path))
 }
 
 // tryResolveWithGitRoot attempts to resolve a path using git root as the base.
 // If git root is unavailable, falls back to tryResolveWithConfigPath (which is
 // source-aware). This function only handles empty and bare paths — dot-prefixed
 // paths are routed to resolveDotPrefixPath() before reaching here.
-func tryResolveWithGitRoot(path string, cliConfigPath string, source string) (string, error) {
-	gitRoot := getGitRootOrEmpty()
+func tryResolveWithGitRoot(wd, path string, cliConfigPath string, source string) (string, error) {
+	gitRoot := getGitRootOrEmptyFrom(wd)
 	if gitRoot == "" {
-		return tryResolveWithConfigPath(path, cliConfigPath, source)
+		return tryResolveWithConfigPath(wd, path, cliConfigPath, source)
 	}
 
 	// Git root available - resolve relative to it.
@@ -321,7 +348,7 @@ func tryResolveWithGitRoot(path string, cliConfigPath string, source string) (st
 	}
 
 	// Git root path doesn't exist — try CWD-relative.
-	cwdJoined, err := absPathOrError(path, fmt.Sprintf(cwdResolutionErrFmt, path))
+	cwdJoined, err := absPathOrError(wd, path, fmt.Sprintf(cwdResolutionErrFmt, path))
 	if err != nil {
 		return "", err
 	}
@@ -344,11 +371,11 @@ func tryResolveWithGitRoot(path string, cliConfigPath string, source string) (st
 // tryResolveWithConfigPath resolves a path using cliConfigPath as the base,
 // with os.Stat validation and CWD fallback. For runtime sources, CWD is tried
 // first (user expectation on CI). For config sources, config dir is tried first.
-func tryResolveWithConfigPath(path, cliConfigPath, source string) (string, error) {
+func tryResolveWithConfigPath(wd, path, cliConfigPath, source string) (string, error) {
 	// For runtime sources, try CWD first — the user set a relative path in a shell
 	// context (env var, CLI flag, provider param), so they expect CWD-relative.
 	if source == basePathSourceRuntime && path != "" {
-		if resolved, ok := tryCWDRelative(path); ok {
+		if resolved, ok := tryCWDRelative(wd, path); ok {
 			return resolved, nil
 		}
 	}
@@ -356,10 +383,10 @@ func tryResolveWithConfigPath(path, cliConfigPath, source string) (string, error
 	// Try config-dir-relative (atmos.yaml dir).
 	if cliConfigPath != "" {
 		if path == "" {
-			return absPathOrError(cliConfigPath, fmt.Sprintf("Cannot resolve config path %q", cliConfigPath))
+			return absPathOrError(wd, cliConfigPath, fmt.Sprintf("Cannot resolve config path %q", cliConfigPath))
 		}
 
-		configJoined, err := absPathOrError(filepath.Join(cliConfigPath, path),
+		configJoined, err := absPathOrError(wd, filepath.Join(cliConfigPath, path),
 			fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath))
 		if err != nil {
 			return "", err
@@ -371,7 +398,7 @@ func tryResolveWithConfigPath(path, cliConfigPath, source string) (string, error
 
 		// Config-dir path doesn't exist — try CWD-relative (if not already tried for runtime).
 		if source != basePathSourceRuntime {
-			if resolved, ok := tryCWDRelative(path); ok {
+			if resolved, ok := tryCWDRelative(wd, path); ok {
 				return resolved, nil
 			}
 		}
@@ -381,13 +408,13 @@ func tryResolveWithConfigPath(path, cliConfigPath, source string) (string, error
 	}
 
 	// No config path: resolve relative to CWD.
-	return absPathOrError(path, fmt.Sprintf("Cannot resolve path %q", path))
+	return absPathOrError(wd, path, fmt.Sprintf("Cannot resolve path %q", path))
 }
 
 // tryCWDRelative attempts to resolve a path relative to CWD and returns it if it exists on disk.
 // Permission/access errors are logged (matching tryResolveWithGitRoot behavior) rather than silently ignored.
-func tryCWDRelative(path string) (string, bool) {
-	cwdJoined, err := absPathOrError(path, fmt.Sprintf(cwdResolutionErrFmt, path))
+func tryCWDRelative(wd, path string) (string, bool) {
+	cwdJoined, err := absPathOrError(wd, path, fmt.Sprintf(cwdResolutionErrFmt, path))
 	if err != nil {
 		return "", false
 	}
@@ -403,13 +430,18 @@ func tryCWDRelative(path string) (string, bool) {
 // getGitRootOrEmpty returns the git repository root path, or empty string if not in a git repo.
 // This is used for base path resolution to anchor simple relative paths to the repo root.
 func getGitRootOrEmpty() string {
+	return getGitRootOrEmptyFrom("")
+}
+
+// getGitRootOrEmptyFrom is getGitRootOrEmpty anchored to wd; an empty wd means the process working directory.
+func getGitRootOrEmptyFrom(wd string) string {
 	// Check if git root discovery is disabled.
 	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
 	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
 		return ""
 	}
 
-	gitRoot, err := u.ProcessTagGitRoot("!repo-root")
+	gitRoot, err := processGitRoot(wd, "!repo-root")
 	if err != nil {
 		log.Trace("Git root detection failed", "error", err)
 		return ""
@@ -419,7 +451,7 @@ func getGitRootOrEmpty() string {
 	// We need to convert it to an absolute path.
 	if gitRoot == "" || gitRoot == "." {
 		// Get absolute path of current directory as fallback.
-		cwd, err := os.Getwd()
+		cwd, err := workingDirOrProcess(wd)
 		if err != nil {
 			return ""
 		}
@@ -431,6 +463,21 @@ func getGitRootOrEmpty() string {
 	}
 
 	return gitRoot
+}
+
+// ResolveBasePath resolves a base_path value to an absolute directory with the same convention
+// AtmosConfigAbsolutePaths applies to atmos.yaml's base_path, anchored to workingDir instead of the
+// process working directory (an empty workingDir means the process working directory). The configDir
+// argument is the directory of the configuration file that declared basePath, and source is "runtime"
+// when the value came from a flag or environment variable.
+func ResolveBasePath(workingDir, basePath, configDir, source string) (string, error) {
+	defer perf.Track(nil, "config.ResolveBasePath")()
+
+	resolved, err := resolveAbsolutePathFrom(workingDir, basePath, configDir, source)
+	if err != nil {
+		return "", err
+	}
+	return u.CleanDuplicatedPath(resolved), nil
 }
 
 func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
@@ -545,18 +592,35 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Container.BasePath = "components/container"
 	}
 	containerBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Container.BasePath)
-	containerDirAbsPath, err := absPathOrError(containerBasePath, "container base path")
+	containerDirAbsPath, err := absPathOrError("", containerBasePath, "container base path")
 	if err != nil {
 		return err
 	}
 	atmosConfig.ContainerDirAbsolutePath = containerDirAbsPath
+
+	// Convert aws/cloudformation dir to an absolute path. Mirrors the Container fix above:
+	// components."aws/cloudformation".base_path is a brand-new field, so existing atmos.yaml
+	// files never set it, and defaultCliConfig's own default only applies via
+	// mergeDefaultConfig when no config file is found at all. Default it defensively here so
+	// CloudFormationDirAbsolutePath (and any other reader of Components.CloudFormation.BasePath)
+	// always sees "components/cloudformation" instead of silently falling back to the bare
+	// project root.
+	if atmosConfig.Components.CloudFormation.BasePath == "" {
+		atmosConfig.Components.CloudFormation.BasePath = "components/cloudformation"
+	}
+	cloudFormationBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.CloudFormation.BasePath)
+	cloudFormationDirAbsPath, err := absPathOrError("", cloudFormationBasePath, "aws/cloudformation base path")
+	if err != nil {
+		return err
+	}
+	atmosConfig.CloudFormationDirAbsolutePath = cloudFormationDirAbsPath
 
 	// Convert Vendor base path to an absolute path. Consumers previously re-joined the raw
 	// (possibly still-relative) atmosConfig.BasePath at call time instead of using a
 	// precomputed absolute path -- the same bug shape #2864 fixed for the top-level
 	// base_path itself, just not yet applied here.
 	vendorBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Vendor.BasePath)
-	vendorDirAbsPath, err := absPathOrError(vendorBasePath, "vendor base path")
+	vendorDirAbsPath, err := absPathOrError("", vendorBasePath, "vendor base path")
 	if err != nil {
 		return err
 	}
@@ -564,7 +628,7 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 
 	// Convert Workflows base path to an absolute path (same rationale as Vendor above).
 	workflowsBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Workflows.BasePath)
-	workflowsDirAbsPath, err := absPathOrError(workflowsBasePath, "workflows base path")
+	workflowsDirAbsPath, err := absPathOrError("", workflowsBasePath, "workflows base path")
 	if err != nil {
 		return err
 	}

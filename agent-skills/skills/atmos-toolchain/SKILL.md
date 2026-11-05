@@ -97,7 +97,7 @@ falls back to `.tools` in the current project.
 Installed tools use this layout under the selected install path:
 
 ```text
-<install-path>/bin/{os}/{tool}/{version}/{binary}
+<install-path>/bin/{owner}/{tool}/{version}/{binary}
 ```
 
 Override the install path with `toolchain.install_path` in `atmos.yaml` or `ATMOS_TOOLCHAIN_PATH`

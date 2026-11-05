@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -604,4 +605,46 @@ func TestCustomCommandIntegration_RecordSuccessBadGlobIsNonFatal(t *testing.T) {
 
 	assert.False(t, exited, "a RecordSuccess-only glob failure must not fail an otherwise-successful step")
 	assert.FileExists(t, marker, "the step itself must have run and succeeded")
+}
+
+// TestCustomCommandIntegration_StepOutputModeValidation verifies that a custom-command step's
+// `output:` is validated whenever it is set, not only when it holds the configured opening
+// delimiter. A value that is not a known mode, such as the typo `raw2`, must fail the command
+// instead of silently running with the default mode, and a valid mode must keep running.
+func TestCustomCommandIntegration_StepOutputModeValidation(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	tests := []struct {
+		name       string
+		delimiters []string
+		output     string
+		wantExit   bool
+	}{
+		{name: "typo that is a plain word", output: "raw2", wantExit: true},
+		{name: "value that is not a plain word", output: "view-port", wantExit: true},
+		{name: "template rendering to an unknown mode", output: "{{ .Flags.nope }}", wantExit: true},
+		{name: "typo without the configured opening delimiter", delimiters: []string{"[[", "]]"}, output: "raw2", wantExit: true},
+		{name: "non-word without the configured opening delimiter", delimiters: []string{"[[", "]]"}, output: "view-port", wantExit: true},
+		{name: "valid raw mode", output: "raw"},
+		{name: "valid none mode", output: "none"},
+		{name: "valid mode with configured delimiters", delimiters: []string{"[[", "]]"}, output: "none"},
+	}
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+			atmosConfig := loadAuthMockAtmosConfig(t)
+			if tt.delimiters != nil {
+				atmosConfig.Templates.Settings.Delimiters = tt.delimiters
+			}
+
+			exited := registerAndRunCustomCommand(t, &atmosConfig, &schema.Command{
+				Name:  fmt.Sprintf("ep-step-output-mode-%d", i),
+				Steps: schema.Tasks{{Type: "shell", Command: ":", Output: tt.output}},
+			})
+
+			assert.Equal(t, tt.wantExit, exited)
+		})
+	}
 }

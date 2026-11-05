@@ -2,15 +2,24 @@ package oci
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/google/go-containerregistry/pkg/v1/random"
 	v1remote "github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/resolver"
@@ -127,5 +136,55 @@ func TestRepositoryDefaultsAndHostDetection(t *testing.T) {
 	}
 	if repo.RegistryStr() != "ghcr.io" {
 		t.Fatalf("expected ghcr.io, got %s", repo.RegistryStr())
+	}
+}
+
+func TestVersionResolverGHCRTokenPriority(t *testing.T) {
+	for _, tc := range []struct{ name, host, token, wantPassword string }{
+		{"Atmos token precedes Docker for GHCR", "ghcr.io", "atmos-token", "atmos-token"},
+		{"Docker remains fallback without token", "ghcr.io", "", "docker-token"},
+		{"Atmos token never reaches other hosts", "registry.example.com", "atmos-token", "docker-token"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := registry.New()
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				username, password, ok := r.BasicAuth()
+				if !ok || username != "user" || password != tc.wantPassword {
+					w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				handler.ServeHTTP(w, r)
+			}))
+			t.Cleanup(server.Close)
+			image, err := random.Image(256, 1)
+			require.NoError(t, err)
+			imageDigest, err := image.Digest()
+			require.NoError(t, err)
+			seed, err := name.NewTag(strings.TrimPrefix(server.URL, "https://") + "/acme/app:v1")
+			require.NoError(t, err)
+			require.NoError(t, v1remote.Write(seed, image, v1remote.WithTransport(server.Client().Transport), v1remote.WithAuth(&authn.Basic{Username: "user", Password: tc.wantPassword})))
+			directory := t.TempDir()
+			config, err := json.Marshal(map[string]any{"auths": map[string]any{tc.host: map[string]string{"auth": base64.StdEncoding.EncodeToString([]byte("user:docker-token"))}}})
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "config.json"), config, 0o600))
+			t.Setenv("DOCKER_CONFIG", directory)
+			// Route real registry requests to the local TLS server; no external registry is contacted.
+			transport := server.Client().Transport.(*http.Transport).Clone()
+			transport.TLSClientConfig.ServerName = "example.com"
+			transport.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+			}
+			previous := v1remote.DefaultTransport
+			v1remote.DefaultTransport = transport
+			t.Cleanup(func() { v1remote.DefaultTransport = previous; transport.CloseIdleConnections() })
+			request := &resolver.Request{Package: tc.host + "/acme/app", Config: &schema.AtmosConfiguration{Settings: schema.AtmosSettings{GithubUsername: "user", AtmosGithubToken: tc.token}}}
+			versions, err := (Resolver{}).Versions(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, []resolver.Candidate{{Version: "v1"}}, versions)
+			digest, err := (Resolver{}).Pin(t.Context(), request, "v1")
+			require.NoError(t, err)
+			require.Equal(t, imageDigest.String(), digest)
+		})
 	}
 }

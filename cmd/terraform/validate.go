@@ -29,4 +29,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(validateCmd)
+	internal.RegisterCommandMetadata(
+		validateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/validate"),
+	)
 }

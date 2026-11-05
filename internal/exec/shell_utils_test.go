@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -43,6 +44,11 @@ func TestShellHelperProcess(t *testing.T) {
 		_, _ = os.Stderr.Write([]byte("stderr"))
 	case "secret-output":
 		_, _ = os.Stdout.Write([]byte("token=demo-key-ABCD1234EFGH5678 literal=super-secret-demo-value"))
+	case "split-secret-output":
+		// Write a literal in two separate writes with a pause so the parent reads them separately.
+		_, _ = os.Stdout.Write([]byte("literal=super-secret-"))
+		time.Sleep(50 * time.Millisecond)
+		_, _ = os.Stdout.Write([]byte("demo-value done\n"))
 	case "exit":
 		os.Exit(2)
 	default:
@@ -351,6 +357,48 @@ func TestExecuteShellCommandAppliesAtmosMaskSettingsToSubprocessOutput(t *testin
 	assert.Equal(t, "token=[REDACTED] literal=[REDACTED]", terminalOut.String())
 	assert.NotContains(t, terminalOut.String(), "demo-key-ABCD1234EFGH5678")
 	assert.NotContains(t, terminalOut.String(), "super-secret-demo-value")
+}
+
+// TestExecuteShellCommandMasksSecretSplitAcrossPipeReads proves a registered literal that the
+// subprocess emits across two writes is masked rather than leaked in two unmasked halves.
+func TestExecuteShellCommandMasksSecretSplitAcrossPipeReads(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+	iolib.Reset()
+	viper.Reset()
+
+	var terminalOut bytes.Buffer
+	helper := shellHelperCommand(t, "split-secret-output")
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Mask: schema.MaskSettings{
+					Enabled:     true,
+					Replacement: "[REDACTED]",
+					Literals:    []string{"super-secret-demo-value"},
+				},
+			},
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "literal=[REDACTED] done\n", terminalOut.String())
 }
 
 // TestResolveMaskingDisabled covers resolveMaskingDisabled's precedence: an
@@ -1018,4 +1066,55 @@ func TestExecuteShell(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestExecuteShellMaskedMasksSecretSplitAcrossWrites proves a registered literal that a script
+// emits across two writes is masked on stdout and stderr, while the capture sees the raw output.
+func TestExecuteShellMaskedMasksSecretSplitAcrossWrites(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+	iolib.Reset()
+	viper.Reset()
+	require.NoError(t, iolib.Initialize())
+	const secret = "super-secret-demo-value"
+	iolib.RegisterSecret(secret)
+
+	var stdout, stderr, stdoutCapture bytes.Buffer
+	// The embedded interpreter emits each printf as its own write.
+	err := executeShellMasked(&ExecuteShellSpec{
+		Command: `printf 'literal=super-secret-'; printf 'demo-value done\n'; printf 'err=super-secret-' >&2; printf 'demo-value\n' >&2`,
+		Name:    "split-secret",
+		Dir:     t.TempDir(),
+	}, &stdout, &stderr, &stdoutCapture, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "literal="+iolib.MaskReplacement+" done\n", stdout.String())
+	assert.Equal(t, "err="+iolib.MaskReplacement+"\n", stderr.String())
+	assert.NotContains(t, stdout.String()+stderr.String(), secret)
+	assert.Contains(t, stdoutCapture.String(), secret, "captures receive the raw output")
+}
+
+// TestExecuteShellMaskedFlushesHeldTailOnFailure proves the held tail is released even when the
+// script fails, and the script error is returned unchanged.
+func TestExecuteShellMaskedFlushesHeldTailOnFailure(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+	iolib.Reset()
+	viper.Reset()
+	require.NoError(t, iolib.Initialize())
+	iolib.RegisterSecret("super-secret-demo-value")
+
+	var stdout bytes.Buffer
+	err := executeShellMasked(&ExecuteShellSpec{
+		Command: `printf 'tail=super-secret-'; exit 3`,
+		Name:    "failing",
+		Dir:     t.TempDir(),
+	}, &stdout, nil, nil, nil)
+
+	require.Error(t, err)
+	assert.Equal(t, "tail=super-secret-", stdout.String(), "a prefix that never completed a secret is released verbatim")
 }

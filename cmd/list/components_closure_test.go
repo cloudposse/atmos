@@ -104,6 +104,7 @@ func TestInitAndExtractComponents_ClosurePreviewPropagatesError(t *testing.T) {
 		Format:              "json",
 		ErrorMode:           "strict", // Force a hard failure instead of the default warn-mode degradation.
 		Tags:                []string{"broken-tag"},
+		Columns:             []string{"Value={{ .vars.upstream_value }}"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
 		ProcessFunctions:    false,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -120,7 +121,7 @@ func TestRender_FastPath(t *testing.T) {
 	}
 }
 
-func TestRender_GomplatePath(t *testing.T) {
+func TestRender_DatasourceFunctions(t *testing.T) {
 	cfg := writeFixture(t, "config.yaml", "name: atmos\ncount: 42\nnested:\n  key: value\n")
 
 	tests := []struct {
@@ -177,7 +178,7 @@ func TestRender_GomplatePath(t *testing.T) {
 			expected: "true/false",
 		},
 		{
-			name: "custom delimiters on the gomplate path",
+			name: "custom delimiters with datasources",
 			req: Request{
 				Name:        "t",
 				Text:        `<< (ds "cfg").name >> {{ untouched }}`,
@@ -188,7 +189,7 @@ func TestRender_GomplatePath(t *testing.T) {
 			expected: "atmos {{ untouched }}",
 		},
 		{
-			name: "missing key errors on the gomplate path with the user's template name",
+			name: "missing key errors with datasources with the user's template name",
 			req: Request{
 				Name:        "stack.yaml",
 				Text:        "{{ (ds \"cfg\").name }}\n{{ .missing }}",
@@ -198,7 +199,7 @@ func TestRender_GomplatePath(t *testing.T) {
 			wantErr: `template: stack.yaml:2:3: executing "stack.yaml" at <.missing>: map has no entry for key "missing"`,
 		},
 		{
-			name: "missing key default on the gomplate path",
+			name: "missing key default with datasources",
 			req: Request{
 				Name:        "t",
 				Text:        `{{ (ds "cfg").name }}[{{ .missing }}]`,
@@ -258,7 +259,7 @@ func TestRender_GomplatePath(t *testing.T) {
 	}
 }
 
-func TestRender_GomplatePath_TimeoutReachesDatasource(t *testing.T) {
+func TestRender_Datasource_TimeoutReachesDatasource(t *testing.T) {
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -285,7 +286,7 @@ func TestRender_GomplatePath_TimeoutReachesDatasource(t *testing.T) {
 	assert.Contains(t, err.Error(), "api")
 }
 
-func TestRender_GomplatePath_HTTPHeaders(t *testing.T) {
+func TestRender_Datasource_HTTPHeaders(t *testing.T) {
 	var mu sync.Mutex
 	var gotAccept string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -367,147 +368,95 @@ func TestRender_ContextSources(t *testing.T) {
 }
 
 // atmosNamespace mimics how internal/exec exposes atmos.GomplateDatasource:
-// a namespace object whose method delegates to the engine's DatasourceReader.
+// a namespace object whose method reads the render's datasources through a
+// cache.
 type atmosNamespace struct {
-	reader DatasourceReader
+	sources *Data
+	cache   *DatasourceCache
 }
 
 func (n atmosNamespace) GomplateDatasource(alias string, args ...string) (any, error) {
-	return n.reader.Datasource(alias, args...)
+	return n.cache.Read(n.sources, alias, args...)
 }
 
-func TestDatasource_ViaTemplateFunction(t *testing.T) {
+func TestDatasourceCache_ViaTemplateFunction(t *testing.T) {
 	cfg := writeFixture(t, "config.yaml", "name: atmos\nlist:\n  - a\n  - b\n")
 	dir := filepath.Dir(cfg)
 
-	newEngine := func(cache *DatasourceCache) (Engine, template.FuncMap) {
-		e := New(WithDatasourceCache(cache))
-		funcs := template.FuncMap{"atmos": func() any { return atmosNamespace{reader: e} }}
-		return e, funcs
+	render := func(t *testing.T, cache *DatasourceCache, text string, datasources map[string]Datasource) (string, *Data, error) {
+		t.Helper()
+		sources := &Data{}
+		out, err := New().Render(context.Background(), &Request{
+			Name:        "t",
+			Text:        text,
+			Funcs:       template.FuncMap{"atmos": func() any { return atmosNamespace{sources: sources, cache: cache} }},
+			Datasources: datasources,
+			Sources:     sources,
+		})
+		return out, sources, err
 	}
 
 	t.Run("reads a configured datasource and caches it", func(t *testing.T) {
 		cache := NewDatasourceCache()
-		e, funcs := newEngine(cache)
-		req := Request{
-			Name:        "t",
-			Text:        `{{ (atmos.GomplateDatasource "cfg").name }}-{{ index (atmos.GomplateDatasource "cfg").list 1 }}`,
-			Funcs:       funcs,
-			Datasources: map[string]Datasource{"cfg": {URL: cfg}},
-		}
-		out, err := e.Render(context.Background(), &req)
+		out, sources, err := render(t, cache, `{{ (atmos.GomplateDatasource "cfg").name }}-{{ index (atmos.GomplateDatasource "cfg").list 1 }}`,
+			map[string]Datasource{"cfg": {URL: cfg}})
 		require.NoError(t, err)
 		assert.Equal(t, "atmos-b", out)
 
-		cached, ok := cache.load(cacheKey("cfg", Datasource{URL: cfg}, nil))
+		cached, ok := cache.load(cacheKey("cfg", sources.Sources["cfg"], nil))
 		require.True(t, ok)
 		assert.Equal(t, "atmos", cached.(map[string]any)["name"])
 	})
 
-	t.Run("outside a render, Datasource errors with ErrGomplateDatasourceUnavailable even when cached", func(t *testing.T) {
-		cache := NewDatasourceCache()
-		e, funcs := newEngine(cache)
-		req := Request{
-			Name:        "t",
-			Text:        `{{ (atmos.GomplateDatasource "cfg").name }}`,
-			Funcs:       funcs,
-			Datasources: map[string]Datasource{"cfg": {URL: cfg}},
-		}
-		_, err := e.Render(context.Background(), &req)
-		require.NoError(t, err)
-		// The value is now cached, but Datasource still requires a live render:
-		// there is no render in progress here, so it must error rather than
-		// silently serve the cached value.
-		_, ok := cache.load(cacheKey("cfg", Datasource{URL: cfg}, nil))
-		require.True(t, ok)
-
-		_, err = e.Datasource("cfg")
-		require.ErrorIs(t, err, errUtils.ErrGomplateDatasourceUnavailable)
-	})
-
 	t.Run("args are part of the cache key", func(t *testing.T) {
 		cache := NewDatasourceCache()
-		e, funcs := newEngine(cache)
-		ds := Datasource{URL: filepath.ToSlash(dir) + "/"}
-		req := Request{
-			Name:        "t",
-			Text:        `{{ (atmos.GomplateDatasource "dir" "config.yaml").name }}`,
-			Funcs:       funcs,
-			Datasources: map[string]Datasource{"dir": ds},
-		}
-		out, err := e.Render(context.Background(), &req)
+		out, sources, err := render(t, cache, `{{ (atmos.GomplateDatasource "dir" "config.yaml").name }}`,
+			map[string]Datasource{"dir": {URL: filepath.ToSlash(dir) + "/"}})
 		require.NoError(t, err)
 		assert.Equal(t, "atmos", out)
 
-		_, okBare := cache.load(cacheKey("dir", ds, nil))
+		_, okBare := cache.load(cacheKey("dir", sources.Sources["dir"], nil))
 		assert.False(t, okBare)
-		_, okArgs := cache.load(cacheKey("dir", ds, []string{"config.yaml"}))
+		_, okArgs := cache.load(cacheKey("dir", sources.Sources["dir"], []string{"config.yaml"}))
 		assert.True(t, okArgs)
 	})
 
 	t.Run("unknown alias errors and is not cached", func(t *testing.T) {
 		cache := NewDatasourceCache()
-		e, funcs := newEngine(cache)
-		_, err := e.Render(context.Background(), &Request{
-			Name:  "t",
-			Text:  `{{ atmos.GomplateDatasource "nope" }}`,
-			Funcs: funcs,
-		})
+		_, _, err := render(t, cache, `{{ atmos.GomplateDatasource "nope" }}`, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "nope")
-		_, ok := cache.load(cacheKey("nope", Datasource{}, nil))
+		_, ok := cache.load(cacheKey("nope", nil, nil))
 		assert.False(t, ok)
 	})
 
-	t.Run("unavailable outside a render", func(t *testing.T) {
-		e := New(WithDatasourceCache(NewDatasourceCache()))
-		_, err := e.Datasource("cfg")
+	t.Run("nil datasources are unavailable", func(t *testing.T) {
+		_, err := NewDatasourceCache().Read(nil, "cfg")
 		require.ErrorIs(t, err, errUtils.ErrGomplateDatasourceUnavailable)
 	})
 
-	t.Run("gomplate disabled: atmos.GomplateDatasource is unavailable", func(t *testing.T) {
-		e := New(WithGomplate(false), WithDatasourceCache(NewDatasourceCache()))
-		funcs := template.FuncMap{"atmos": func() any { return atmosNamespace{reader: e} }}
-		_, err := e.Render(context.Background(), &Request{
-			Name:  "t",
-			Text:  `{{ atmos.GomplateDatasource "cfg" }}`,
-			Funcs: funcs,
-		})
-		require.ErrorIs(t, err, errUtils.ErrGomplateDatasourceUnavailable)
-	})
-
-	t.Run("two engines with the same alias but different URLs do not share a cached value", func(t *testing.T) {
+	t.Run("the same alias with different URLs does not share a cached value", func(t *testing.T) {
 		cache := NewDatasourceCache()
 		cfg1 := writeFixture(t, "config.yaml", "name: one\n")
 		cfg2 := writeFixture(t, "config.yaml", "name: two\n")
 		require.NotEqual(t, cfg1, cfg2)
 
-		e1, funcs1 := newEngine(cache)
-		out1, err := e1.Render(context.Background(), &Request{
-			Name:        "t",
-			Text:        `{{ (atmos.GomplateDatasource "cfg").name }}`,
-			Funcs:       funcs1,
-			Datasources: map[string]Datasource{"cfg": {URL: cfg1}},
-		})
+		out1, _, err := render(t, cache, `{{ (atmos.GomplateDatasource "cfg").name }}`, map[string]Datasource{"cfg": {URL: cfg1}})
 		require.NoError(t, err)
 		assert.Equal(t, "one", out1)
 
-		e2, funcs2 := newEngine(cache)
-		out2, err := e2.Render(context.Background(), &Request{
-			Name:        "t",
-			Text:        `{{ (atmos.GomplateDatasource "cfg").name }}`,
-			Funcs:       funcs2,
-			Datasources: map[string]Datasource{"cfg": {URL: cfg2}},
-		})
+		out2, _, err := render(t, cache, `{{ (atmos.GomplateDatasource "cfg").name }}`, map[string]Datasource{"cfg": {URL: cfg2}})
 		require.NoError(t, err)
 		assert.Equal(t, "two", out2)
 	})
 
 	t.Run("different headers produce different cache keys", func(t *testing.T) {
 		cache := NewDatasourceCache()
+		target, err := url.Parse("https://example.test/")
+		require.NoError(t, err)
 
-		keyA := cacheKey("api", Datasource{URL: "https://example.test/", Headers: map[string][]string{"Accept": {"application/json"}}}, nil)
-		keyB := cacheKey("api", Datasource{URL: "https://example.test/", Headers: map[string][]string{"Accept": {"application/xml"}}}, nil)
+		keyA := cacheKey("api", &Source{URL: target, Header: http.Header{"Accept": {"application/json"}}}, nil)
+		keyB := cacheKey("api", &Source{URL: target, Header: http.Header{"Accept": {"application/xml"}}}, nil)
 		assert.NotEqual(t, keyA, keyB)
 
 		cache.store(keyA, "json-value")
@@ -530,7 +479,7 @@ func TestRender_Parallel(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			e := New(WithDatasourceCache(NewDatasourceCache()))
+			e := New()
 			var req Request
 			if i%2 == 0 {
 				req = Request{Name: "fast", Text: `{{ .n }}`, Data: map[string]any{"n": i}}
@@ -616,6 +565,6 @@ func TestSprigFuncMap_IsCached(t *testing.T) {
 }
 
 func TestErrorsAreStatic(t *testing.T) {
-	_, err := New(WithDatasourceCache(NewDatasourceCache())).Datasource("x")
+	_, err := CachedDatasource(nil, "x")
 	assert.True(t, errors.Is(err, errUtils.ErrGomplateDatasourceUnavailable))
 }

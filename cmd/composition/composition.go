@@ -103,7 +103,11 @@ func init() {
 		commands = append(commands, newLifecycleCmd(verb))
 	}
 	compositionCmd.AddCommand(commands...)
-	internal.Register(&CompositionCommandProvider{})
+	internal.Register(
+		&CompositionCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/composition/usage"),
+		internal.WithExample("examples/compositions", "Compositions"),
+	)
 }
 
 // runLifecycle binds shared flags, asks for a missing stack in an interactive

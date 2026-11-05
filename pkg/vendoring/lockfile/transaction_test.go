@@ -120,7 +120,7 @@ func TestMutationProcessHelper(t *testing.T) {
 	if os.Getenv("ATMOS_TEST_MUTATION_MODE") == "clean" {
 		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 		defer cancel()
-		_, err := CleanSelectedContext(ctx, config, nil, true, false)
+		_, err := CleanSelectedContext(ctx, config, nil, CleanOptions{Force: true})
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		return
 	}

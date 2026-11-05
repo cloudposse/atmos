@@ -16,22 +16,57 @@ Use this skill **every time you open or update a PR**. It encodes three policies
 
 If you violate any of these, CI fails and the PR can't merge. Follow this skill across both phases: complete the **pre-push checklist** before `git push`, then immediately work through the **post-push / PR checklist** (open the PR, apply the label, monitor CI).
 
+## Stacked PRs
+
+Before creating or updating dependent PRs, read the [gh-stack skill](../gh-stack/SKILL.md).
+Discover the `gh stack` extension and inspect native membership before choosing propagation.
+When native registration is requested or otherwise authorized, use `gh stack link` or the appropriate
+submission workflow and verify GitHub's membership and order. Setting `--base` alone creates only
+a branch chain; preserve an ordinary chain's classification unless conversion is authorized.
+Stay below the 150-file review boundary against each PR's actual parent; the repository quality
+gate currently permits at most 149 files. Native stacks require linear history between branches;
+batch fixes before a necessary cascading rebase instead of merging parents as a general workaround
+or rebasing after every finding. Verify the current direct-parent chain before requesting reviews.
+GitHub can retain approvals for unchanged PR diffs, but do not promise retention; report affected
+approvals at risk before publication. Verify reviews separately from CI. For non-bot PRs, Atmos's
+Quality Gate requires exact-head CodeRabbit approval (bot-authored PRs are exempt); inspect the live review commit ID before requesting another
+review, because GitHub may associate a retained approval with the new head.
+Coordinate history repair and publication through that skill.
+For an explicitly independent PR, target trunk and leave it outside the existing stack.
+
 ## The label decision tree
 
 The Atmos repo has four mutually exclusive release labels (plus other category labels that don't affect release docs):
 
 | Label        | When                                                                                                  | CI requires blog + roadmap? |
 | ------------ | ----------------------------------------------------------------------------------------------------- | --------------------------- |
-| `no-release` | Internal refactor, new internal helper, dependency bump with zero user-visible behavior, docs fixes   | No                          |
+| `no-release` | Internal refactor, CI/release tooling, distribution-only changes, dependency bumps without application changes, docs fixes | No |
 | `patch`      | Bug fix, performance fix, error-message improvement, small UX polish — user-visible but not a feature | No                          |
 | `minor`      | New user-visible feature, new flag, new command, new config option, default flip that users see       | **YES**                     |
 | `major`      | Breaking change: removed/renamed flag, schema migration, CLI behavior reversal                        | **YES**                     |
 
 ### How to choose
 
+Classify the **public application contract**, not file extensions, dependency
+version numbers, or the presence of an announcement. CI, runner pinning, cache
+changes, release tooling (including Go code in Mage), and prebuilt distribution
+changes use `no-release` when they do not change Atmos's application behavior.
+Retiring prebuilt binaries or packages while retaining installation from source
+is a distribution-policy change; it does not by itself require Atmos 2.0.
+Communicate the affected platforms and installation alternatives in a changelog
+when requested, without inferring a `major` label from that announcement.
+
+Before applying `major`, identify the exact incompatible CLI/API/configuration
+contract and the migration it requires. A changed download matrix, a dependency's
+major version, a changelog tag, or the fact that users must change their installation
+method is insufficient on its own. If application compatibility is unchanged,
+use `no-release`; if the PR also changes application behavior, classify that
+behavior using the decision tree below. Never create or demand a major milestone
+solely for build or distribution changes.
+
 Ask, in order:
 
-1. **Would a user upgrading Atmos see ANY visible change?** Behavior, output, errors, performance, new flags, new commands, removed flags, changed defaults? If no, use `no-release`. This is the most common case for foundation/plumbing PRs.
+1. **Would a user upgrading Atmos see a change in the application's behavior?** Output, errors, performance, new flags, new commands, removed flags, changed defaults? If no, use `no-release`. This is the most common case for foundation/plumbing PRs; distribution availability is handled separately above.
 2. **Is this a breaking change?** Removed flags, renamed flags, changed semantics, schema bumps that require user action? Use `major`. Document the migration in the blog post.
 3. **Is this net-new functionality?** New command, new flag, new config option that users will adopt? Use `minor`. Write a blog post.
 4. **Anything else user-visible** (bug fix, UX polish, error-message rewrite, output formatting): use `patch`. No blog post required.
@@ -67,6 +102,26 @@ gh pr edit <pr-number> --remove-label patch --add-label minor
 ```
 
 `gh pr edit` accepts `--remove-label` and `--add-label` in the same invocation, so the relabel is atomic.
+
+## Release milestone — choose it when opening the PR
+
+Every PR except `no-release` must have a stable versioned milestone. Labels state
+minimum compatibility; the milestone's version is the release authority.
+
+Read current milestones and the highest published stable release. Use the tested
+policy in `magefiles/release/milestone/` to choose the lowest open milestone that
+can accommodate the PR's label (patch fits patch/minor/major, minor fits
+minor/major, major fits major). Assign it with `gh pr edit --milestone <title>`.
+Never infer a new version from labels or automatically create patch/major slots.
+If no suitable milestone exists, report that a maintainer must create one.
+
+Only PRs in the **lowest open release milestone** may merge. A PR assigned to a
+later compatible milestone is planned correctly but remains blocked until earlier
+milestones close. `no-release` bypasses milestone assignment and ordering.
+Preserve an existing manually assigned milestone; do not silently move it to make
+CI green. Explain an incompatible label/milestone and let the maintainer resolve
+intent. `atmos release milestones check` reconciles the current merge statuses.
+See [releases](../releases/SKILL.md) for the operator release process.
 
 ## Blog post (changelog) — when, where, and who owns it
 
@@ -114,15 +169,15 @@ Get this right the first time:
 
 3. **Never bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`** even temporarily. The CLAUDE.md rules forbid this, and the resulting commit cannot be merged.
 
-If you discover unsigned commits already on the branch:
+Repair unsigned commits before publishing. If they are already published, inspect the affected
+branches and reviews, verify the required repair, and confirm that existing authorization covers
+rewriting that history. For stacked PRs, coordinate through the gh-stack skill; do not automatically
+rebase every descendant. If a permitted history rewrite is necessary, use an explicit expected-SHA
+lease to protect against concurrent remote work, never an unconditional force push. A lease does
+not itself authorize the rewrite, and restricted invocations may prohibit it.
 
-```bash
-# For the last N commits (interactive rebase, sign each):
-git rebase --exec 'git commit --amend --no-edit -S' -i HEAD~N
-git push --force-with-lease
-```
-
-Always use `--force-with-lease` (not `--force`) to avoid clobbering work from other sessions on the same branch.
+Normal updates use ordinary fast-forward pushes. A rejected push requires inspecting remote
+changes, not automatically escalating to a force-push flag.
 
 ## Pre-push checklist
 

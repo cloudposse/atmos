@@ -4,7 +4,7 @@
 #
 # Detects GitHub's post-`git push` vulnerability notice ("GitHub found N
 # vulnerabilities ...") and, only when the live set of open Dependabot +
-# CodeQL alerts for this repo has actually changed since we last acted on
+# code-scanning alerts for this repo has actually changed since we last acted on
 # it, injects additionalContext telling the session to run the
 # security-remediate skill.
 #
@@ -27,40 +27,42 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # if present, otherwise falls back to a manual watchdog. Stock macOS ships
 # neither `timeout` nor `gtimeout`, so this cannot assume either exists.
 run_with_timeout() {
-  local secs="$1"
-  shift
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$secs" "$@"
-    return $?
-  fi
-  if command -v gtimeout >/dev/null 2>&1; then
-    gtimeout "$secs" "$@"
-    return $?
-  fi
-  local tmpfile
-  tmpfile="$(mktemp)"
-  ("$@" >"$tmpfile" 2>/dev/null) &
-  local pid=$!
-  local i=0
-  while kill -0 "$pid" 2>/dev/null; do
-    sleep 1
-    i=$((i + 1))
-    if [ "$i" -ge "$secs" ]; then
-      kill -TERM "$pid" 2>/dev/null
-      # Grace period for the child to exit on SIGTERM before forcing it, so an
-      # unresponsive process can't block this script (and the calling push) indefinitely.
-      local grace=0
-      while kill -0 "$pid" 2>/dev/null && [ "$grace" -lt 2 ]; do
-        sleep 1
-        grace=$((grace + 1))
-      done
-      kill -KILL "$pid" 2>/dev/null
-      break
-    fi
-  done
-  wait "$pid" 2>/dev/null
-  cat "$tmpfile"
-  rm -f "$tmpfile"
+	local secs="$1"
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$secs" "$@"
+		return $?
+	fi
+	if command -v gtimeout >/dev/null 2>&1; then
+		gtimeout "$secs" "$@"
+		return $?
+	fi
+	local tmpfile
+	tmpfile="$(mktemp)"
+	("$@" >"$tmpfile" 2>/dev/null) &
+	local pid=$!
+	local i=0
+	while kill -0 "$pid" 2>/dev/null; do
+		sleep 1
+		i=$((i + 1))
+		if [ "$i" -ge "$secs" ]; then
+			kill -TERM "$pid" 2>/dev/null
+			# Grace period for the child to exit on SIGTERM before forcing it, so an
+			# unresponsive process can't block this script (and the calling push) indefinitely.
+			local grace=0
+			while kill -0 "$pid" 2>/dev/null && [ "$grace" -lt 2 ]; do
+				sleep 1
+				grace=$((grace + 1))
+			done
+			kill -KILL "$pid" 2>/dev/null
+			break
+		fi
+	done
+	wait "$pid" 2>/dev/null
+	local status=$?
+	cat "$tmpfile"
+	rm -f "$tmpfile"
+	return "$status"
 }
 
 payload="$(cat)"
@@ -101,18 +103,21 @@ branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
 # (easy to mistake for a permission gap - it isn't one). A genuine 403/404
 # from lacking security_events access on a private repo yields empty output,
 # which is handled the same as "no open alerts" below.
-dependabot_ids="$(run_with_timeout 8 gh api "repos/${owner_repo}/dependabot/alerts" -X GET --paginate -f state=open --jq '.[] | "db:" + (.number | tostring)' 2>/dev/null)"
-codeql_ids="$(run_with_timeout 8 gh api "repos/${owner_repo}/code-scanning/alerts" -X GET --paginate -f state=open --jq '.[] | "cq:" + (.number | tostring)' 2>/dev/null)"
+dependabot_ids="$(run_with_timeout 8 gh api "repos/${owner_repo}/dependabot/alerts" -X GET --paginate -f state=open --jq '.[] | "db:" + (.number | tostring)' 2>/dev/null)" || exit 0
+code_scanning_alerts="$(run_with_timeout 8 gh api "repos/${owner_repo}/code-scanning/alerts" -X GET --paginate -f state=open --jq '.[] | {number, tool: (.tool.name // "Unknown scanner")}' 2>/dev/null)" || exit 0
+# This endpoint includes Semgrep, govulncheck, Trivy and other SARIF tools, not
+# only CodeQL. Keep the historical cq: ID prefix for state-file compatibility.
+code_scanning_ids="$(printf '%s\n' "$code_scanning_alerts" | jq -sr '.[] | "cq:" + (.number | tostring)' 2>/dev/null)" || exit 0
 
-all_ids="$(printf '%s\n%s\n' "$dependabot_ids" "$codeql_ids" | grep -E '^(db|cq):[0-9]+$' | sort -u)"
+all_ids="$(printf '%s\n%s\n' "$dependabot_ids" "$code_scanning_ids" | grep -E '^(db|cq):[0-9]+$' | sort -u)"
 [ -n "$all_ids" ] || exit 0
 
 hash_stdin() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum | awk '{print $1}'
-  else
-    shasum -a 256 | awk '{print $1}'
-  fi
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum | awk '{print $1}'
+	else
+		shasum -a 256 | awk '{print $1}'
+	fi
 }
 
 current_hash="$(printf '%s' "$all_ids" | hash_stdin)"
@@ -124,7 +129,7 @@ state_file="${state_dir}/${branch_slug}.json"
 
 last_hash=""
 if [ -f "$state_file" ]; then
-  last_hash="$(jq -r '.hash // ""' "$state_file" 2>/dev/null)"
+	last_hash="$(jq -r '.hash // ""' "$state_file" 2>/dev/null)"
 fi
 
 # Unchanged since we last surfaced this alert set on this branch: stay silent.
@@ -133,13 +138,18 @@ fi
 mkdir -p "$state_dir" 2>/dev/null || exit 0
 
 alert_count="$(printf '%s\n' "$all_ids" | grep -c .)"
+dependabot_count="$(printf '%s\n' "$all_ids" | grep -c '^db:')"
+code_scanning_count="$(printf '%s\n' "$all_ids" | grep -c '^cq:')"
+scanner_summary="$(printf '%s\n' "$code_scanning_alerts" | jq -sr 'unique_by(.number) | group_by(.tool) | map("\(.[0].tool): \(length)") | join(", ")' 2>/dev/null)" || exit 0
+breakdown="Dependabot: ${dependabot_count}; code scanning: ${code_scanning_count}"
+[ -z "$scanner_summary" ] || breakdown="${breakdown} (${scanner_summary})"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
 ids_json="$(printf '%s\n' "$all_ids" | jq -R . | jq -s .)"
 
 jq -n --arg hash "$current_hash" --arg ts "$ts" --argjson ids "$ids_json" \
-  '{hash: $hash, alert_ids: $ids, ts: $ts}' > "$state_file" 2>/dev/null || exit 0
+	'{hash: $hash, alert_ids: $ids, ts: $ts}' > "$state_file" 2>/dev/null || exit 0
 
-jq -n --arg ctx "GitHub reported open security alerts after this push (${alert_count} open Dependabot/CodeQL alerts on ${owner_repo}). Run the security-remediate skill now: query the live Dependabot and CodeQL alerts for this repository, fix high-confidence findings directly on the current branch (${branch}), run make lint and targeted go test on touched packages, commit the fixes to this branch (do not open a new PR or issue), and report a summary of what was fixed vs. not auto-fixable." \
-  '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'
+jq -n --arg ctx "GitHub's post-push notice triggered a check of the repository-wide security backlog on ${owner_repo}: ${alert_count} open alerts (${breakdown}). This is the existing open backlog, not a count of vulnerabilities introduced by this push or distinct confirmed vulnerabilities. Run the security-remediate skill now: query the live Dependabot and code-scanning alerts for this repository, group findings by scanner and rule, fix high-confidence findings directly on the current branch (${branch}), run atmos lint --changed and targeted tests for touched code, commit the fixes to this branch (do not open a new PR or issue), and report a summary of what was fixed vs. not auto-fixable." \
+	'{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'
 
 exit 0

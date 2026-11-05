@@ -208,29 +208,17 @@ func firstSARIFToolName(sarif []byte) string {
 }
 
 func ciEnabled(scan *Context) bool {
-	return scan != nil && scan.AtmosConfig != nil && scan.AtmosConfig.CI.Enabled
+	return scan != nil && ci.Enabled(scan.AtmosConfig)
 }
 
 func ciSummaryEnabled(scan *Context) bool {
-	if !ciEnabled(scan) {
-		return false
-	}
-	e := scan.AtmosConfig.CI.Summary.Enabled
-	return e == nil || *e
+	return scan != nil && ci.SummaryEnabled(scan.AtmosConfig)
 }
 
 func ciAnnotationsEnabled(scan *Context) bool {
-	if !ciEnabled(scan) {
-		return false
-	}
-	e := scan.AtmosConfig.CI.Annotations.Enabled
-	return e == nil || *e
+	return scan != nil && ci.AnnotationsEnabled(scan.AtmosConfig)
 }
 
 func ciResultsEnabled(scan *Context) bool {
-	if !ciEnabled(scan) {
-		return false
-	}
-	e := scan.AtmosConfig.CI.Results.Enabled
-	return e != nil && *e
+	return scan != nil && ci.ResultsEnabled(scan.AtmosConfig)
 }

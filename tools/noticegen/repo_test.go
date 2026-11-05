@@ -199,3 +199,26 @@ func TestGithubTokenEmptyWhenNeitherSet(t *testing.T) {
 
 	assert.Empty(t, githubToken())
 }
+
+func TestFetchRepoDescriptionUsesEventMetadataWithoutNetwork(t *testing.T) {
+	for _, tc := range []struct{ name, description, wantError string }{
+		{"valid", "Atmos infrastructure runtime", ""},
+		{"empty", "", "no description"},
+		{"newline", "line one\nline two", "line breaks"},
+		{"control", "tab\tvalue", "non-printable"},
+		{"unicode separator", "line\u2028two", "line breaks"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ATMOS_NOTICE_REPO_DESCRIPTION", tc.description)
+			// An invalid URL proves event metadata never reaches the network path.
+			got, err := fetchRepoDescription("unsupported-scheme://not-used")
+			if tc.wantError != "" {
+				require.ErrorContains(t, err, tc.wantError)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.description, got)
+		})
+	}
+}

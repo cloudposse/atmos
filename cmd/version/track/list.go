@@ -3,6 +3,7 @@ package track
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -78,4 +79,8 @@ func trackListParserOptions() []flags.Option {
 func init() {
 	flags.NewStandardParser(trackListParserOptions()...).RegisterFlags(trackListCmd)
 	trackCmd.AddCommand(trackListCmd)
+	internal.RegisterCommandMetadata(
+		trackListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/track/list"),
+	)
 }

@@ -87,10 +87,9 @@ func (a *ACRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 
 	log.Debug("Logging in to ACR registry", "registry", registryURL)
 
-	// Get authorization token from ACR.
-	result, err := acrGetAuthToken(ctx, creds, registryURL)
+	result, err := a.ExchangeCredentials(ctx, creds)
 	if err != nil {
-		return fmt.Errorf("%w: failed to get ACR token for %s: %w", errUtils.ErrACRAuthFailed, registryURL, err)
+		return err
 	}
 
 	// Write credentials to Docker config.
@@ -99,15 +98,34 @@ func (a *ACRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	}
 
 	// Log success with actual expiration time, when known.
-	if result.ExpiresAt.IsZero() {
+	if result.Expiration == nil {
 		ui.Success(fmt.Sprintf("ACR login: %s", registryURL))
 	} else {
-		expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
+		expiresIn := time.Until(*result.Expiration).Round(time.Minute)
 		ui.Success(fmt.Sprintf("ACR login: %s (expires in %s)", registryURL, expiresIn))
 	}
-	log.Debug("ACR login successful", "registry", registryURL, "expires_at", result.ExpiresAt)
+	log.Debug("ACR login successful", "registry", registryURL, "expires_at", result.Expiration)
 
 	return nil
+}
+
+// ExchangeCredentials mints credentials for this configured ACR registry without writing Docker state.
+func (a *ACRIntegration) ExchangeCredentials(ctx context.Context, creds types.ICredentials) (*types.OCICredentials, error) {
+	defer perf.Track(nil, "azure.ACRIntegration.ExchangeCredentials")()
+
+	registryURL := azureCloud.BuildRegistryURL(a.registry.Name)
+	result, err := acrGetAuthToken(ctx, creds, registryURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to get ACR token for %s: %w", errUtils.ErrACRAuthFailed, registryURL, err)
+	}
+	if result == nil {
+		return nil, errUtils.ErrIdentityCredentialsNone
+	}
+	credentials := &types.OCICredentials{Registry: registryURL, Username: result.Username, Password: result.Password}
+	if !result.ExpiresAt.IsZero() {
+		credentials.Expiration = &result.ExpiresAt
+	}
+	return credentials, nil
 }
 
 // Cleanup removes ACR Docker config entries for this integration's registry.

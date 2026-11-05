@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: schema
 description: Use this command to validate the schema of yaml files of the Atmos project against the rules defined in the schema/manifest file.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import ActionCard from '@site/src/components/ActionCard'
@@ -103,3 +105,15 @@ schemas:
   <dt>`--schemas-atmos-manifest` <em>(optional)</em></dt>
   <dd>Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-schemas">
+
+Validate the example's Atmos configuration against its schema; no cloud credentials are needed.
+
+```shell
+atmos validate schema
+```
+
+</TryExample>

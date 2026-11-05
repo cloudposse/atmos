@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"filippo.io/age"
@@ -41,6 +42,7 @@ func ageVaultConfig(t *testing.T) (schema.AtmosConfiguration, string) {
 
 	dir := t.TempDir()
 	keyFile := filepath.Join(dir, "keys.txt")
+	t.Setenv("SOPS_AGE_KEY_FILE", keyFile)
 	atmosConfig := schema.AtmosConfiguration{
 		BasePath: dir,
 		Secrets: schema.SecretsConfig{Providers: map[string]schema.SecretProviderConfig{
@@ -86,6 +88,11 @@ func TestRunSecretKeygen_AlreadyHasKeyNoForce(t *testing.T) {
 	after, err := os.ReadFile(keyFile)
 	require.NoError(t, err)
 	assert.Equal(t, before, after, "without --force an existing key must not be modified")
+	id, err := age.ParseX25519Identity(strings.TrimSpace(string(before)))
+	require.NoError(t, err)
+	recipients, err := os.ReadFile(filepath.Join(atmosConfig.BasePath, ".sops.yaml"))
+	require.NoError(t, err, "existing private key must restore its missing public recipient")
+	assert.Contains(t, string(recipients), id.Recipient().String())
 }
 
 func TestRunSecretKeygen_ForceRegenerates(t *testing.T) {

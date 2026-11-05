@@ -1,0 +1,141 @@
+commands:
+  - name: casts generate examples cloudformation-advanced lifecycle
+    description: Regenerate the build, publish, and deploy CloudFormation cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-emulator
+        working_directory: &fixture "../../.context/cast-fixtures/cloudformation-advanced"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: atmos --logs-level=Off emulator down aws -s advanced || true
+      - type: cast
+        name: lifecycle
+        working_directory: *fixture
+        title: Build, publish, and deploy a Lambda
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/cloudformation-advanced/lifecycle.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# start local AWS and create the artifact bucket"
+          - type: simulate
+            text: &emulator_up atmos emulator up aws -s advanced --ephemeral
+          - type: shell
+            name: emulator-up
+            command: *emulator_up
+          - type: simulate
+            text: &artifacts_deploy atmos aws cfn deploy artifacts -s advanced
+          - type: shell
+            name: artifacts-deploy
+            command: *artifacts_deploy
+          - type: simulate
+            text: "# one command builds, archives, publishes, deploys, and checks the Lambda"
+          - type: simulate
+            text: &app_deploy atmos aws cfn deploy app -s advanced
+          - type: shell
+            name: app-deploy
+            command: *app_deploy
+          - type: simulate
+            text: "# a repeat deploy keeps the unchanged S3 object"
+          - type: simulate
+            text: *app_deploy
+          - type: shell
+            name: app-deploy-unchanged
+            command: *app_deploy
+          - type: simulate
+            text: "# publish a new release and verify the updated HTTP response"
+          - type: simulate
+            text: &app_deploy_v2 ATMOS_DEMO_RELEASE=v2 atmos aws cfn deploy app -s advanced
+          - type: shell
+            name: app-deploy-v2
+            command: *app_deploy_v2
+      - type: shell
+        name: cleanup
+        working_directory: *fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        when: always
+        command: |
+          atmos --logs-level=Off aws cfn delete app -s advanced --auto-approve || true
+          atmos --logs-level=Off auth exec --identity local-aws -- aws s3 rm s3://atmos-cast-artifacts-local --recursive || true
+          atmos --logs-level=Off aws cfn delete artifacts -s advanced --auto-approve || true
+          atmos --logs-level=Off emulator down aws -s advanced || true
+      - type: shell
+        name: validate
+        command: atmos casts validate examples cloudformation-advanced lifecycle
+
+  - name: casts validate examples cloudformation-advanced lifecycle
+    description: Validate the CloudFormation publish demo cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, re, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/cloudformation-advanced/lifecycle.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
+          for needle in (
+              "atmos aws cfn deploy artifacts -s advanced",
+              "atmos aws cfn deploy app -s advanced",
+              "ATMOS_DEMO_RELEASE=v2 atmos aws cfn deploy app -s advanced",
+              "▶ Built Lambda app · release v1",
+              "▶ Built Lambda app · release v2",
+              "→ components/cloudformation/app/.build/package/",
+              "s3://atmos-cast-artifacts-local/lambda/v1/handler.zip",
+              "s3://atmos-cast-artifacts-local/lambda/v2/handler.zip",
+              "Publish artifacts (aws/s3): 1 uploaded, 0 unchanged",
+              "Publish artifacts (aws/s3): 0 uploaded, 1 unchanged",
+              "Created",
+              "Updated",
+              "HTTP 200",
+          ):
+              if needle not in plain:
+                  raise SystemExit(f"CloudFormation publish cast missing {needle!r}")
+          for bad in ("atmos test", "unittest", "# Error", "Incorrect Usage", "unknown flag", "panic"):
+              if bad in plain:
+                  raise SystemExit(f"CloudFormation publish cast contains {bad!r}")
+          if plain.count("Publish artifacts (aws/s3): 1 uploaded, 0 unchanged") != 2 or plain.count("Publish artifacts (aws/s3): 0 uploaded, 1 unchanged") != 1:
+              raise SystemExit("CloudFormation publish cast is missing the first, repeat, or v2 publish result")
+          for header in ("Action", "Resource", "Type", "Replacement", "Output", "Value"):
+              if header not in plain:
+                  raise SystemExit(f"CloudFormation publish cast missing table header {header!r}")
+          for action, stack, expected in (
+              ("Created", "atmos-cast-artifacts-local", 1),
+              ("Created", "atmos-cast-app-local", 1),
+              ("Updated", "atmos-cast-app-local", 2),
+          ):
+              count = len(re.findall(rf"✓ {action}\s+{stack}(?:\r?\n|$)", plain))
+              if count != expected:
+                  raise SystemExit(f"Expected {expected} {action} completion(s) for {stack}, got {count}")
+          if re.search(r"^http://127\.0\.0\.1", plain, re.MULTILINE):
+              raise SystemExit("CloudFormation publish cast leaked the endpoint helper output")
+          if "Built release " in plain:
+              raise SystemExit("Build status must use the shared UI and identify the Lambda component")
+          if plain.count("→ components/cloudformation/app/.build/package/") != 3:
+              raise SystemExit("Every build must show its package directory")
+          assert_colored(text, "Built Lambda")
+          assert_colored(text, "Created")
+          assert_colored(text, "Changes for")
+          if "▶ Changes for atmos-cast-artifacts-local · 1 resource" not in plain:
+              raise SystemExit("CloudFormation preview must use the shared UI info message")
+          if len({frame for frame in "⣽⣻⢿⡿⣟⣯⣷⣾" if frame in text}) < 2:
+              raise SystemExit("CloudFormation publish cast is missing animated spinner frames")
+          if not re.search(r"[⣽⣻⢿⡿⣟⣯⣷⣾].*(?:Creating|Updating).*Function", plain):
+              raise SystemExit("CloudFormation publish cast is missing the live resource spinner")

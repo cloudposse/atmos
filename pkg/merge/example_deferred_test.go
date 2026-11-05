@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,16 +25,16 @@ func ExampleMergeWithDeferred() {
 	inputs := []map[string]any{
 		{
 			// Base catalog with YAML function.
-			"template_config": "!template '{{ .settings.base }}'",
+			"template_config": (yamlsource.Source{Tag: "!template", Argument: "'{{ .settings.base }}'"}).Encode(),
 			"regular_value":   "from-base",
 			"nested": map[string]interface{}{
-				"yaml_func": "!terraform.output vpc.id",
+				"yaml_func": (yamlsource.Source{Tag: "!terraform.output", Argument: "vpc.id"}).Encode(),
 				"static":    "base-static",
 			},
 		},
 		{
 			// Dev environment override.
-			"template_config": "!template '{{ .settings.dev }}'",
+			"template_config": (yamlsource.Source{Tag: "!template", Argument: "'{{ .settings.dev }}'"}).Encode(),
 			"regular_value":   "from-dev",
 			"nested": map[string]interface{}{
 				"static": "dev-static",
@@ -66,16 +67,16 @@ func ExampleMergeWithDeferred() {
 		values := deferredValues[path]
 		fmt.Printf("  %s: %d values\n", path, len(values))
 		for i, v := range values {
-			fmt.Printf("    [%d] precedence=%d value=%v\n", i, v.Precedence, v.Value)
+			fmt.Printf("    [%d] precedence=%d value=%v\n", i, v.Precedence, yamlsource.Display(v.Value))
 		}
 	}
 
 	// Show merged result (with nil placeholders for YAML functions).
 	fmt.Println("\nMerged result (before applying deferred):")
-	fmt.Printf("  template_config: %v\n", result["template_config"])
+	fmt.Printf("  template_config: %v\n", yamlsource.Display(result["template_config"]))
 	fmt.Printf("  regular_value: %v\n", result["regular_value"])
 	if nested, ok := result["nested"].(map[string]interface{}); ok {
-		fmt.Printf("  nested.yaml_func: %v\n", nested["yaml_func"])
+		fmt.Printf("  nested.yaml_func: %v\n", yamlsource.Display(nested["yaml_func"]))
 		fmt.Printf("  nested.static: %v\n", nested["static"])
 	}
 
@@ -89,10 +90,10 @@ func ExampleMergeWithDeferred() {
 	}
 
 	fmt.Println("\nFinal result (after applying deferred):")
-	fmt.Printf("  template_config: %v\n", result["template_config"])
+	fmt.Printf("  template_config: %v\n", yamlsource.Display(result["template_config"]))
 	fmt.Printf("  regular_value: %v\n", result["regular_value"])
 	if nested, ok := result["nested"].(map[string]interface{}); ok {
-		fmt.Printf("  nested.yaml_func: %v\n", nested["yaml_func"])
+		fmt.Printf("  nested.yaml_func: %v\n", yamlsource.Display(nested["yaml_func"]))
 		fmt.Printf("  nested.static: %v\n", nested["static"])
 	}
 

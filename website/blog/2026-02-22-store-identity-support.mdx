@@ -14,6 +14,8 @@ Atmos stores now support identity-based authentication. You can configure stores
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 See it in action:
 
 <CastEmbed src="/casts/examples/auth-stores/identity-backed-stores.cast" title="atmos auth-backed stores" chrome controls scrubber />
@@ -80,6 +82,18 @@ stores:
 Stores without the `identity` field continue to work exactly as before -- this is a fully backward-compatible change.
 
 For usage and configuration, see [Stores Configuration](/cli/configuration/stores).
+
+## Try it out
+
+<TryExample example="auth-stores">
+
+Review the store configuration and replace the sample identities and resource names before accessing cloud stores.
+
+```shell
+atmos store list
+```
+
+</TryExample>
 
 ## Get Involved
 

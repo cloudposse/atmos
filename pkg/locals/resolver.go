@@ -19,6 +19,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
@@ -425,7 +426,8 @@ func (r *Resolver) resolveValue(value any, localName string) (any, error) {
 func (r *Resolver) resolveString(strVal, localName string) (any, error) {
 	// Check for YAML function tags (e.g., !terraform.state, !terraform.output).
 	// Process these first before Go template processing.
-	if r.yamlFunctionProcessor != nil && strings.HasPrefix(strVal, "!") {
+	_, tagged := yamlsource.Decode(strVal)
+	if r.yamlFunctionProcessor != nil && (tagged || strings.HasPrefix(strVal, "!")) {
 		result, err := r.yamlFunctionProcessor(strVal)
 		if err != nil {
 			return nil, fmt.Errorf("%w %q in %s: %w", errUtils.ErrLocalsYamlFunctionFailed, localName, r.filePath, err)

@@ -1,7 +1,6 @@
 package templating
 
 import (
-	"net/url"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -47,8 +46,8 @@ func lintDeprecatedUsage(parsed *template.Template, plan *renderPlan, reporter D
 // gomplate v5 no longer supports, independent of whether the template
 // actually reads them.
 func lintDatasourceSchemes(plan *renderPlan, reporter DeprecationReporter) {
-	for alias, ds := range plan.req.Datasources {
-		if schemeOf(ds.URL) != "boltdb" {
+	for alias, source := range planSources(plan) {
+		if source.URL.Scheme != "boltdb" {
 			continue
 		}
 		reporter.Deprecated(plan.req.Name, "boltdb:// datasource ("+alias+")", "a supported datasource scheme",
@@ -79,8 +78,8 @@ func lintDotValueOnSecretsManagerDatasource(chain *parse.ChainNode, plan *render
 	if !ok {
 		return
 	}
-	ds, ok := plan.req.Datasources[alias]
-	if !ok || schemeOf(ds.URL) != "aws+smp" {
+	source, ok := planSources(plan)[alias]
+	if !ok || source.URL.Scheme != "aws+smp" {
 		return
 	}
 	reporter.Deprecated(plan.req.Name, callName+" \""+alias+"\" .Value", "the parameter value directly",
@@ -124,26 +123,34 @@ func lintDatasourceSubPathURL(cmd *parse.CommandNode, extraArgs int, plan *rende
 	if !ok {
 		return
 	}
-	ds, ok := plan.req.Datasources[alias]
-	if !ok || isDatasourceDirectoryURL(ds.URL) {
+	source, ok := planSources(plan)[alias]
+	if !ok || strings.HasSuffix(source.URL.Path, "/") {
 		return
 	}
 	reporter.Deprecated(plan.req.Name, callName+" \""+alias+"\" <sub-path>", "a trailing slash on the datasource URL",
-		"sub-path arguments are resolved as relative URLs in gomplate v5; end the datasource URL with `/` so it is treated as a directory (currently: \""+ds.URL+"\").")
+		"sub-path arguments are resolved as relative URLs in gomplate v5; end the datasource URL with `/` so it is treated as a directory (currently: \""+source.URL.String()+"\").")
 }
 
-// isDatasourceDirectoryURL reports whether rawURL identifies a directory
-// datasource. It parses the URL and checks the path component, so a query
-// string (e.g. "file:///tmp/data/?type=json") doesn't hide a trailing slash
-// in the path, and a query string ending in "/" (e.g.
-// "file:///tmp/data?redirect=/") doesn't falsely look like one. If rawURL
-// can't be parsed, it falls back to checking the raw string.
-func isDatasourceDirectoryURL(rawURL string) bool {
-	parsed, err := parseDatasourceURL(rawURL)
-	if err != nil {
-		return strings.HasSuffix(rawURL, "/")
+// planSources returns the render's datasource definitions with a parsed URL.
+// A plan built without Data (lint tests) falls back to the request's
+// definitions; unparseable URLs are skipped, since defining them fails the
+// render anyway.
+func planSources(plan *renderPlan) map[string]*Source {
+	sources := map[string]*Source{}
+	if plan.sources != nil {
+		for alias, source := range plan.sources.Sources {
+			if source != nil && source.URL != nil {
+				sources[alias] = source
+			}
+		}
+		return sources
 	}
-	return strings.HasSuffix(parsed.Path, "/")
+	for alias, definition := range plan.req.Datasources {
+		if parsed, err := parseDatasourceURL(definition.URL); err == nil {
+			sources[alias] = &Source{Alias: alias, URL: parsed}
+		}
+	}
+	return sources
 }
 
 // datasourceCallName reports the datasource function name at the head of
@@ -179,13 +186,4 @@ func literalDatasourceAlias(cmd *parse.CommandNode) (string, bool) {
 		return "", false
 	}
 	return str.Text, true
-}
-
-// schemeOf returns rawURL's scheme, or "" if it can't be parsed.
-func schemeOf(rawURL string) string {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return parsed.Scheme
 }

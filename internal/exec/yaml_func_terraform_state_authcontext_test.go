@@ -67,7 +67,7 @@ func TestAuthContextReachesGetTerraformState(t *testing.T) {
 
 	// Create input with !terraform.state tag.
 	input := schema.AtmosSectionMapType{
-		"backend_config": "!terraform.state vpc test-stack bucket_name",
+		"backend_config": taggedFunctionForTest("!terraform.state vpc test-stack bucket_name"),
 	}
 
 	// Process the YAML tags - this should call our mock with authContext.
@@ -115,7 +115,7 @@ func TestAuthContextNilWhenStackInfoNil(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"backend_config": "!terraform.state vpc test-stack bucket_name",
+		"backend_config": taggedFunctionForTest("!terraform.state vpc test-stack bucket_name"),
 	}
 
 	// Process with nil stackInfo.
@@ -198,7 +198,7 @@ func TestAuthContextWithDifferentConfigurations(t *testing.T) {
 				Times(1)
 
 			input := schema.AtmosSectionMapType{
-				"value": "!terraform.state component stack output",
+				"value": taggedFunctionForTest("!terraform.state component stack output"),
 			}
 
 			result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, stackInfo)

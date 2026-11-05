@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	githubci "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	ghendpoints "github.com/cloudposse/atmos/pkg/github"
 )
 
 // TestPullRequestBodyBadge proves *Provider implements atmosgit.PullRequestBodyBadger (so
@@ -274,4 +275,106 @@ func TestReconcileWrapsGitHubMutationErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRepositoryFromURL verifies the GitHub provider claims only the host its API client targets
+// (github.com by default), over HTTPS and SSH, and nothing else.
+func TestRepositoryFromURL(t *testing.T) {
+	want := atmosgit.PullRequestRepository{Owner: "acme", Repository: "deployments"}
+	tests := []struct {
+		name      string
+		serverURL string
+		uri       string
+		ok        bool
+	}{
+		{"github.com https", "", "https://github.com/acme/deployments.git", true},
+		{"github.com ssh", "", "git@github.com:acme/deployments.git", true},
+		{"github.com without .git", "", "https://github.com/acme/deployments", true},
+		{"enterprise host is not claimed by default", "", "https://ghe.example.com/acme/deployments.git", false},
+		{"enterprise https", "https://ghe.example.com", "https://ghe.example.com/acme/deployments.git", true},
+		{"enterprise ssh", "https://ghe.example.com", "git@ghe.example.com:acme/deployments.git", true},
+		{"enterprise host is case-insensitive", "https://ghe.example.com", "https://GHE.example.com/acme/deployments", true},
+		{"github.com is not claimed under an enterprise server", "https://ghe.example.com", "https://github.com/acme/deployments.git", false},
+		{"other forge https", "", "https://gitlab.com/acme/deployments.git", false},
+		{"other forge ssh", "", "git@gitlab.com:acme/deployments.git", false},
+		{"azure devops", "", "https://dev.azure.com/acme/platform/_git/deployments", false},
+		{"nested path is not owner/repository", "", "https://github.com/acme/group/deployments.git", false},
+		{"local path", "", "/tmp/origin.git", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_SERVER_URL", tt.serverURL)
+			t.Setenv("GITHUB_API_URL", "")
+
+			got, ok := New().RepositoryFromURL(tt.uri)
+
+			assert.Equal(t, tt.ok, ok)
+			if tt.ok {
+				assert.Equal(t, want, got)
+			} else {
+				assert.Equal(t, atmosgit.PullRequestRepository{}, got)
+			}
+		})
+	}
+}
+
+// TestNewRepoEndpointsClient verifies the API client targets public GitHub by default and the
+// Enterprise Server API when GITHUB_SERVER_URL names one, so a resolved repository's pull request
+// requests go to the host that repository lives on.
+func TestNewRepoEndpointsClient(t *testing.T) {
+	t.Run("public GitHub by default", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "token")
+		t.Setenv("GITHUB_SERVER_URL", "")
+		t.Setenv("GITHUB_API_URL", "")
+
+		c, err := newRepoEndpointsClient()
+
+		require.NoError(t, err)
+		assert.Equal(t, "https://api.github.com/", c.GitHub().BaseURL.String())
+	})
+
+	t.Run("enterprise server", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "token")
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+		t.Setenv("GITHUB_API_URL", "")
+
+		c, err := newRepoEndpointsClient()
+
+		require.NoError(t, err)
+		assert.Equal(t, "ghe.example.com", c.GitHub().BaseURL.Host)
+		assert.Equal(t, "/api/v3/", c.GitHub().BaseURL.Path)
+	})
+
+	t.Run("enterprise server with an explicit API URL", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "token")
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+		t.Setenv("GITHUB_API_URL", "https://ghe.example.com/api/v3")
+
+		c, err := newRepoEndpointsClient()
+
+		require.NoError(t, err)
+		assert.Equal(t, "https://ghe.example.com/api/v3/", c.GitHub().BaseURL.String())
+	})
+
+	t.Run("missing token", func(t *testing.T) {
+		for _, name := range []string{"ATMOS_CI_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"} {
+			t.Setenv(name, "")
+		}
+
+		_, err := newRepoEndpointsClient()
+
+		assert.ErrorIs(t, err, errUtils.ErrGitHubTokenNotFound)
+	})
+}
+
+// TestClientForEndpointsRejectsInvalidEnterpriseURL verifies an Enterprise Server API URL the
+// GitHub client cannot parse is reported as an authorization configuration error.
+func TestClientForEndpointsRejectsInvalidEnterpriseURL(t *testing.T) {
+	_, err := clientForEndpoints(githubci.NewClientWithToken("token"), ghendpoints.Endpoints{
+		APIURL:    "https://ghe.example.com/%zz",
+		UploadURL: "https://ghe.example.com/api/uploads",
+	})
+
+	require.ErrorIs(t, err, errUtils.ErrGitHubAuthorization)
+	assert.Contains(t, err.Error(), "https://ghe.example.com/%zz")
 }

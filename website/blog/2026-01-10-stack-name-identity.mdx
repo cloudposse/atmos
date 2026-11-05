@@ -13,6 +13,8 @@ Atmos now enforces a single canonical identity per stack and supports zero-confi
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 ### Single Identity Rule
@@ -68,6 +70,18 @@ If you were using both the filename and a generated name to reference the same s
 - Stack has `name` field? Use that name.
 - `name_template` or `name_pattern` configured? Use the generated name.
 - Neither? Use the filename.
+
+## Try it out
+
+<TryExample example="stack-names">
+
+Compare filename-derived stack names with the explicit production name.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Related
 

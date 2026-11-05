@@ -1,0 +1,20 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform-require-owner-tag
+  description: "Require a known, nonempty Owner tag on planned EC2 instances."
+spec:
+  policies:
+    require-owner-tag:
+      on: terraform.plan
+      action: deny
+      reason: Managed EC2 instances require a known nonempty Owner tag
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.type == 'aws_instance' && r.change.after != null &&
+          (!has(r.change.after.tags) || r.change.after.tags == null ||
+            !has(r.change.after.tags.Owner) || r.change.after.tags.Owner == null ||
+            r.change.after.tags.Owner == '' ||
+            (has(r.change.after_unknown.tags) &&
+              (r.change.after_unknown.tags == true ||
+              (has(r.change.after_unknown.tags.Owner) && r.change.after_unknown.tags.Owner == true)))))

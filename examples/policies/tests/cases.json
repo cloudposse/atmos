@@ -1,0 +1,136 @@
+[
+  {
+    "name": "about permitted",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "about",
+        "path": [
+          "about"
+        ],
+        "destroy": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "destroy denied",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraform destroy",
+        "path": [
+          "terraform",
+          "destroy"
+        ],
+        "destroy": true
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "apply with destroy flag denied",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraform apply",
+        "path": [
+          "terraform",
+          "apply"
+        ],
+        "destroy": true
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "plan with destroy flag denied",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraform plan",
+        "path": [
+          "terraform",
+          "plan"
+        ],
+        "destroy": true
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "deploy with destroy flag denied",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraform deploy",
+        "path": [
+          "terraform",
+          "deploy"
+        ],
+        "destroy": true
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "apply without destroy flag permitted",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraform apply",
+        "path": [
+          "terraform",
+          "apply"
+        ],
+        "destroy": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "plan permitted",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraform plan",
+        "path": [
+          "terraform",
+          "plan"
+        ],
+        "destroy": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "helmfile destroy permitted",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "helmfile destroy",
+        "path": [
+          "helmfile",
+          "destroy"
+        ],
+        "destroy": true
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "similarly named command permitted",
+    "request": {
+      "kind": "command",
+      "input": {
+        "command": "terraformer destroy",
+        "path": [
+          "terraformer",
+          "destroy"
+        ],
+        "destroy": true
+      }
+    },
+    "status": "not_applicable"
+  }
+]

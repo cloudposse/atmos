@@ -209,3 +209,41 @@ commands:
 	_, ok := cm["command_list_env"]
 	assert.False(t, ok)
 }
+
+func TestCollectKeysRecursive(t *testing.T) {
+	raw := []byte(`
+steps:
+  - name: setenv
+    type: env
+    vars:
+      SHARED_VAR: a
+      Mixed_Case: b
+  - name: group
+    steps:
+      - name: nested
+        VARS:
+          Inner_Var: c
+  - name: scalar
+    vars: not-a-mapping
+  - name: list
+    vars: [Listed]
+  - name: other
+    outputs:
+      myOutput: d
+`)
+
+	vars, err := CollectKeysRecursive(raw, "vars")
+	require.NoError(t, err)
+	assert.Equal(t, CaseMap{"shared_var": "SHARED_VAR", "mixed_case": "Mixed_Case", "inner_var": "Inner_Var"}, vars)
+
+	outputs, err := CollectKeysRecursive(raw, "outputs")
+	require.NoError(t, err)
+	assert.Equal(t, CaseMap{"myoutput": "myOutput"}, outputs)
+
+	none, err := CollectKeysRecursive(raw, "missing")
+	require.NoError(t, err)
+	assert.Empty(t, none)
+
+	_, err = CollectKeysRecursive([]byte("[invalid"), "vars")
+	require.ErrorContains(t, err, "failed to parse YAML")
+}

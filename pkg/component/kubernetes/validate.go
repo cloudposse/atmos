@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -36,7 +37,7 @@ func resolveValidateOptions(flags map[string]any) validateOptions {
 // runValidate validates the rendered objects. Offline structural checks always
 // run; the cluster dry-run only runs when --server is set. All failures are
 // collected and reported together rather than stopping at the first.
-func runValidate(objects []*unstructured.Unstructured, options validateOptions) ([]objectResult, error) {
+func runValidate(ctx context.Context, objects []*unstructured.Unstructured, options validateOptions, runners ...*recovery.Runner) ([]objectResult, error) {
 	defer perf.Track(nil, "kubernetes.runValidate")()
 
 	if err := validateObjectsStructural(objects); err != nil {
@@ -44,7 +45,7 @@ func runValidate(objects []*unstructured.Unstructured, options validateOptions) 
 	}
 
 	if options.Server {
-		return runServerValidate(objects)
+		return runServerValidate(ctx, objects, runners...)
 	}
 
 	ui.Successf("validated %d Kubernetes object(s)", len(objects))
@@ -156,15 +157,18 @@ func objectRef(index int, obj *unstructured.Unstructured) string {
 
 // runServerValidate validates the objects against the live cluster using a
 // server-side dry-run apply.
-func runServerValidate(objects []*unstructured.Unstructured) ([]objectResult, error) {
+func runServerValidate(ctx context.Context, objects []*unstructured.Unstructured, runners ...*recovery.Runner) ([]objectResult, error) {
 	client, err := newKubernetesSDKClient()
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
+	if len(runners) > 0 {
+		client.recovery = runners[0]
+	}
 	results, err := client.Validate(ctx, objects)
 	if err != nil {
 		return results, fmt.Errorf("%w: %w", errUtils.ErrKubernetesValidationFailed, err)

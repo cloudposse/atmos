@@ -1,8 +1,6 @@
 
 👽 test linux/amd64
 
-[EXPERIMENTAL]
-
 Display detailed information about a tool from the registry.
 
 USAGE
@@ -29,3 +27,5 @@ FLAGS
 
 
 Use --help=usage for examples or --help=all for all flags and full help.
+
+  Documentation: https://atmos.tools/cli/commands/toolchain/info

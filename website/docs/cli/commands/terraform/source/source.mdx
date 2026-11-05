@@ -5,8 +5,9 @@ sidebar_class_name: command
 id: source
 description: Manage terraform component sources with JIT vendoring
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import ActionCard from '@site/src/components/ActionCard'
@@ -15,8 +16,6 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 <Intro>
 Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running terraform commands—just run `atmos terraform plan` and the source is downloaded on first use.
 </Intro>
-
-<Experimental />
 
 <ActionCard title="Source-Based Version Pinning">
     Learn how to use the source field for native per-environment version control directly in stack configuration.
@@ -375,7 +374,7 @@ source:
 
 ```yaml
 source:
-  uri: oci::registry.example.com/components/vpc:v1.0.0
+  uri: oci://registry.example.com/components/vpc:v1.0.0
 ```
 
 ## Error Handling
@@ -435,6 +434,18 @@ Use `component.yaml` when:
 - You need mixin support
 - You want pre-vendored components
 - You have complex vendoring requirements
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+Inspect the local and remote component sources without provisioning them.
+
+```shell
+atmos terraform source list
+```
+
+</TryExample>
 
 ## See Also
 

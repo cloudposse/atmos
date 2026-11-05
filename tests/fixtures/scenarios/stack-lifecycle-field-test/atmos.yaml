@@ -1,0 +1,80 @@
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  helmfile:
+    base_path: "components/helmfile"
+  packer:
+    base_path: "components/packer"
+  script:
+    base_path: "components/script"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+scaffold:
+  templates:
+    ignores-reserved:
+      description: Recipe that ignores the reserved stack inputs
+      source: ./scaffolds/ignores-reserved
+    hooked:
+      description: Recipe with scaffold generation hooks
+      source: ./scaffolds/hooked
+    matrix:
+      description: Recipe that renders extra stack files from a matrix
+      source: ./scaffolds/matrix
+
+commands:
+  - name: script
+    description: Run script components
+    component:
+      type: script
+    commands:
+      - name: deploy
+        description: Deploy a script component
+        arguments:
+          - name: component
+            description: Component name
+            provides: component
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack name
+            provides: stack
+            required: true
+        component:
+          type: script
+        steps:
+          - 'echo "script deploy {{ .Component.atmos_stack }}/{{ .Component.component }}" >> "$ORDER_LOG"'
+      - name: destroy
+        description: Destroy a script component
+        arguments:
+          - name: component
+            description: Component name
+            provides: component
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack name
+            provides: stack
+            required: true
+        component:
+          type: script
+        steps:
+          - 'echo "script destroy {{ .Component.atmos_stack }}/{{ .Component.component }}" >> "$ORDER_LOG"'
+
+logs:
+  file: "/dev/stderr"
+  level: Warning

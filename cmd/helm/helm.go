@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
@@ -24,6 +25,7 @@ const (
 	flagAll      = "all"
 	flagAffected = "affected"
 	flagWait     = "wait"
+	flagLabels   = "labels"
 	// The valueTrue const is the string representation of a set boolean flag.
 	valueTrue      = "true"
 	helmValuesName = "values"
@@ -55,15 +57,29 @@ var helmCmd = &cobra.Command{
 	},
 }
 
+const lifecycleComponentKind = "helm"
+
 func init() {
-	helmParser = flags.NewStandardParser(flags.WithCommonFlags())
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "plan")
+	planHandler.HookEvents = []string{"before.helm.diff", "after.helm.diff"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
+	deployHandler.HookEvents = []string{"before.helm.deploy", "after.helm.deploy"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
+	destroyHandler.HookEvents = []string{"before.helm.delete", "after.helm.delete"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
+
+	helmParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	helmParser.RegisterPersistentFlags(helmCmd)
 
 	if err := helmParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 
-	helmCmd.AddCommand(newOperationCommand("template", "Render Helm chart manifests"))
+	templateCmd := newOperationCommand("template", "Render Helm chart manifests")
+	templateCmd.Aliases = []string{"render"}
+	helmCmd.AddCommand(templateCmd)
 	helmCmd.AddCommand(newOperationCommand("diff", "Show changes a Helm apply would make"))
 	helmCmd.AddCommand(newOperationCommand("plan", "Preview changes a Helm apply would make"))
 	helmCmd.AddCommand(newOperationCommand(helmValuesName, "Show resolved Helm values as formatted YAML"))
@@ -72,13 +88,19 @@ func init() {
 	helmCmd.AddCommand(newOperationCommand("delete", "Uninstall a Helm release"))
 	helmCmd.AddCommand(newRepoCommand())
 
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helm/usage"),
+		internal.WithExample("examples/helm", "Helm"),
+	)
 }
 
 // CommandProvider registers the helm command with the command registry.
 type CommandProvider struct{}
 
-func (p *CommandProvider) GetCommand() *cobra.Command { return helmCmd }
+func (p *CommandProvider) GetCommand() *cobra.Command {
+	return helmCmd
+}
 
 func (p *CommandProvider) GetName() string { return "helm" }
 
@@ -109,6 +131,9 @@ func newOperationCommand(name, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(name)
+	if name == "delete" {
+		cmd.Aliases = append(cmd.Aliases, "destroy")
+	}
 	options = append(options, flags.WithConditionalPositionalArgPrompt(
 		"component",
 		"Choose a Helm component",
@@ -133,6 +158,10 @@ func newOperationCommand(name, short string) *cobra.Command {
 		cmd.Example = "  atmos helm values monitoring -s plat-ue2-dev --set image.tag=2026.09.09"
 	}
 
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helm/"+name),
+	)
 	return cmd
 }
 
@@ -152,7 +181,7 @@ func operationFlagOptions(name string) []flags.Option {
 		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
 		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithStringArrayFlag(flagLabels, "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox"),
 	}
 	if name == helmValuesName {
 		// Values produces one pipeable YAML document, so unlike lifecycle
@@ -199,6 +228,9 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithIntFlag("history-max", "", cfg.HelmDefaultMaxHistory, "Maximum release revisions to retain; 0 means unlimited."),
 			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
 			flags.WithBoolFlag("skip-crds", "", false, "Do not install chart CRDs on first install."),
+			flags.WithStringFlag("server-side-apply", "", "", "Apply method: auto, true, or false. A bare --server-side-apply selects true. Omit to use the Helm default."),
+			flags.WithNoOptDefVal("server-side-apply", valueTrue),
+			flags.WithBoolFlag("force-conflicts", "", false, "Resolve server-side apply field-ownership conflicts by overwriting the contested fields and becoming their sole manager (opt-in)."),
 		)
 	}
 	if name == "delete" {
@@ -240,11 +272,11 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 	}
 
 	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
-	labelsFlag, _ := cmd.Flags().GetString("labels")
+	labelsFlag, _ := cmd.Flags().GetStringArray(flagLabels)
 	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
 		return err
 	}
-	hasTagsOrLabels := len(tagsFlag) > 0 || labelsFlag != ""
+	hasTagsOrLabels := len(tagsFlag) > 0 || len(labelsFlag) > 0
 
 	if all || affected || hasTagsOrLabels {
 		return validateSelectionFlags(cmd, args)
@@ -259,8 +291,8 @@ func hasSelectionFlags(cmd *cobra.Command) bool {
 	all, _ := cmd.Flags().GetBool(flagAll)
 	affected, _ := cmd.Flags().GetBool(flagAffected)
 	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
-	labelsFlag, _ := cmd.Flags().GetString("labels")
-	return all || affected || len(tagsFlag) > 0 || labelsFlag != ""
+	labelsFlag, _ := cmd.Flags().GetStringArray(flagLabels)
+	return all || affected || len(tagsFlag) > 0 || len(labelsFlag) > 0
 }
 
 // componentArgCompletion returns names for native Helm components, optionally
@@ -364,6 +396,7 @@ func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 	boolFlags := map[string]string{
 		"wait-for-jobs":      cfg.HelmWaitJobsSectionName,
 		"cleanup-on-failure": cfg.HelmCleanupOnFailureSectionName,
+		"force-conflicts":    cfg.HelmForceConflictsSectionName,
 	}
 	if flag := cmd.Flag("on-failure"); flag != nil && flag.Changed {
 		result[cfg.HelmOnFailureSectionName] = flag.Value.String()
@@ -384,8 +417,9 @@ func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 		}
 	}
 	stringFlags := map[string]string{
-		flagWait:  cfg.HelmWaitStrategySectionName,
-		"timeout": cfg.HelmTimeoutSectionName,
+		flagWait:            cfg.HelmWaitStrategySectionName,
+		"timeout":           cfg.HelmTimeoutSectionName,
+		"server-side-apply": cfg.HelmServerSideApplySectionName,
 	}
 	for flagName, fieldName := range stringFlags {
 		if flag := cmd.Flag(flagName); flag != nil && flag.Changed {
@@ -428,9 +462,9 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
-	if labelsFlag := cmd.Flag("labels"); labelsFlag != nil {
+	if labelsSlice, err := cmd.Flags().GetStringArray(flagLabels); err == nil {
 		// Error ignored: validateOperationArgs already rejected malformed --labels before RunE.
-		info.Labels, _ = tags.ParseLabelsFlag(labelsFlag.Value.String())
+		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
 	}
 
 	return info

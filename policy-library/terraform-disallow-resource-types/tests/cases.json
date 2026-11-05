@@ -1,0 +1,118 @@
+[
+  {
+    "name": "allowed resource",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "forbidden create",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_iam_access_key.example",
+            "mode": "managed",
+            "type": "aws_iam_access_key",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "forbidden update",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_iam_user.example",
+            "mode": "managed",
+            "type": "aws_iam_user",
+            "name": "example",
+            "change": {
+              "actions": [
+                "update"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "deletion remediation",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_iam_user.example",
+            "mode": "managed",
+            "type": "aws_iam_user",
+            "name": "example",
+            "change": {
+              "actions": [
+                "delete"
+              ],
+              "before": null,
+              "after": null,
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {
+      "kind": "operation",
+      "input": {}
+    },
+    "status": "not_applicable"
+  }
+]

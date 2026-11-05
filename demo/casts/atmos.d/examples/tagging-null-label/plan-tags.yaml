@@ -1,0 +1,87 @@
+commands:
+  - name: casts generate examples tagging-null-label plan-tags
+    description: Regenerate the Pass inherited tags to Null Label example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: prepare-plan
+        working_directory: "../../.context/cast-fixtures/tagging-null-label"
+        output: none
+        command: |
+          atmos terraform init app -s dev
+          atmos terraform workspace app -s dev
+      - type: cast
+        name: plan-tags
+        working_directory: "../../.context/cast-fixtures/tagging-null-label"
+        title: "Pass inherited tags to Null Label"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/tagging-null-label/plan-tags.cast"
+        steps:
+          - type: simulate
+            text: "# shared tags and the dev context flow into the component"
+          - type: simulate
+            text: &vars_cmd atmos describe component app -s dev --query .vars
+          - type: shell
+            name: vars
+            duration: 550ms
+            interval: 900ms
+            command: *vars_cmd
+          - type: simulate
+            text: "# Null Label combines shared tags with generated context tags"
+          - type: simulate
+            text: &plan_cmd atmos terraform plan app -s dev
+          - type: shell
+            name: plan
+            env:
+              ATMOS_SETTINGS_METRICS_ENABLED: 'false'
+            duration: 550ms
+            interval: 900ms
+            command: *plan_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples tagging-null-label plan-tags
+  - name: casts validate examples tagging-null-label plan-tags
+    description: Validate the Pass inherited tags to Null Label example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: |
+          load("cast_checks.star", "load_text", "strip_ansi", "assert_colored", "assert_no_experimental", "assert_no_error_output", "assert_no_local_paths")
+
+          text = load_text("../../website/static/casts/examples/tagging-null-label/plan-tags.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
+          assert_colored(text, "owner")
+
+          for needle in [
+              'atmos describe component app -s dev --query .vars',
+              'atmos terraform plan app -s dev',
+              'namespace: acme',
+              'stage: dev',
+              'managed-by: atmos',
+              'owner: platform',
+              'acme-dev-app',
+              'Changes to Outputs:',
+              'Plan: 1 to add, 0 to change, 0 to destroy.',
+          ]:
+              if needle not in plain:
+                  fail("tagging-null-label cast missing " + repr(needle))
+
+          if "CPU:" in plain or "Peak memory" in plain:
+              fail("tagging-null-label cast contains machine-specific timing output")
+
+          ui.success("tagging-null-label plan-tags cast validated")

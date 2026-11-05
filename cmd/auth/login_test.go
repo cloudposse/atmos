@@ -103,8 +103,8 @@ func TestAuthenticateIdentity_TagsDispatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	viper.Set(tagsKey, "admin")
-	t.Cleanup(func() { viper.Set(tagsKey, "") })
+	viper.Set(authTagsViperKey, "admin")
+	t.Cleanup(func() { viper.Set(authTagsViperKey, "") })
 
 	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
 	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{

@@ -9,6 +9,7 @@ import (
 	"os"
 	osExec "os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -49,18 +50,27 @@ func appendTerraform(ctx context.Context, graph *Graph, config *schema.AtmosConf
 	if err != nil {
 		return err
 	}
+	directories, err := findTerraformConfigurations(base, locks)
+	if err != nil {
+		return err
+	}
 	providerComplete, moduleComplete := true, true
 	providerDetail, moduleDetail := "provider locks parsed", "module graphs parsed"
-	for _, lockPath := range locks {
-		directory := filepath.Dir(lockPath)
+	for _, directory := range directories {
+		lockPath := filepath.Join(directory, terraformlock.Name)
 		configurationID := "terraform:" + relativeID(base, directory)
 		componentPath := repositoryPath(config, directory)
-		graph.Components = append(graph.Components, Component{ID: configurationID, Name: relativeID(base, directory), Version: "NOASSERTION", Type: "application", Properties: map[string]string{"atmos:domain": "terraform-configuration", "atmos:lock-file": repositoryPath(config, lockPath), "atmos:component-path": componentPath}})
-		linkConfigurationSource(graph, configurationID, componentPath)
-		providers, parseErr := terraformlock.ParseFile(lockPath)
-		if parseErr != nil {
-			return parseErr
+		properties := map[string]string{"atmos:domain": "terraform-configuration", "atmos:component-path": componentPath}
+		var providers []terraformlock.Provider
+		if slices.Contains(locks, lockPath) {
+			properties["atmos:lock-file"] = repositoryPath(config, lockPath)
+			providers, err = terraformlock.ParseFile(lockPath)
+			if err != nil {
+				return err
+			}
 		}
+		graph.Components = append(graph.Components, Component{ID: configurationID, Name: relativeID(base, directory), Version: "NOASSERTION", Type: "application", Properties: properties})
+		linkConfigurationSource(graph, configurationID, componentPath)
 		for _, provider := range providers {
 			component := Component{ID: "terraform-provider:" + provider.Source + "@" + provider.Version, Name: provider.Source, Version: provider.Version, Type: "library", Source: "https://" + provider.Source, Properties: map[string]string{"atmos:domain": "terraform-provider", "atmos:lock-file": repositoryPath(config, lockPath), "atmos:constraints": provider.Constraints, "atmos:lock-hashes": strings.Join(provider.Hashes, ",")}}
 			for _, checksum := range provider.Hashes {
@@ -81,7 +91,10 @@ func appendTerraform(ctx context.Context, graph *Graph, config *schema.AtmosConf
 		}
 	}
 	if len(locks) == 0 {
-		providerDetail, moduleDetail = "no Terraform lock files discovered", "no initialized Terraform configurations discovered"
+		providerDetail = "no Terraform lock files discovered"
+	}
+	if len(directories) == 0 {
+		moduleDetail = "no initialized Terraform configurations discovered"
 	}
 	graph.Coverage = append(graph.Coverage, Coverage{Adapter: "terraform-providers", Status: coverageStatus(providerComplete), Detail: providerDetail}, Coverage{Adapter: "terraform-modules", Status: coverageStatus(moduleComplete), Detail: moduleDetail}, Coverage{Adapter: "oci-artifacts", Status: "complete", Detail: ociArtifactsDetail(graph)})
 	return nil

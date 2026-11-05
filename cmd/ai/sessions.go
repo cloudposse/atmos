@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -148,6 +149,10 @@ func init() {
 	if err := importParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		sessionsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ai/sessions"),
+	)
 }
 
 // initSessionManager initializes and validates session management.

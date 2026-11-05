@@ -44,7 +44,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	return ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 		atmosConfig, ref, sha, sshKeyPath, sshKeyPassword, includeSpaceliftAdminStacks, includeSettings,
-		stack, processTemplates, processYamlFunctions, skip, excludeLocked, authManager, authDisabled,
+		stack, processTemplates, processYamlFunctions, skip, AffectedFilter{ExcludeLocked: excludeLocked}, authManager, authDisabled,
 		DescribeStacksErrorOptions{},
 	)
 }
@@ -65,7 +65,7 @@ func ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
-	excludeLocked bool,
+	filter AffectedFilter,
 	authManager auth.AuthManager,
 	authDisabled bool,
 	errOptions DescribeStacksErrorOptions,
@@ -191,7 +191,7 @@ func ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 		processTemplates,
 		processYamlFunctions,
 		skip,
-		excludeLocked,
+		filter,
 		authManager,
 		authDisabled,
 		errOptions,
@@ -240,7 +240,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	return ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 		atmosConfig, ref, sha, targetBranch, includeSpaceliftAdminStacks, includeSettings,
-		stack, processTemplates, processYamlFunctions, skip, excludeLocked, authManager, authDisabled,
+		stack, processTemplates, processYamlFunctions, skip, AffectedFilter{ExcludeLocked: excludeLocked}, authManager, authDisabled,
 		DescribeStacksErrorOptions{},
 	)
 }
@@ -260,7 +260,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
-	excludeLocked bool,
+	filter AffectedFilter,
 	authManager auth.AuthManager,
 	authDisabled bool,
 	errOptions DescribeStacksErrorOptions,
@@ -326,7 +326,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 		processTemplates,
 		processYamlFunctions,
 		skip,
-		excludeLocked,
+		filter,
 		authManager,
 		authDisabled,
 		errOptions,
@@ -361,7 +361,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	return ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 		atmosConfig, targetRefPath, includeSpaceliftAdminStacks, includeSettings,
-		stack, processTemplates, processYamlFunctions, skip, excludeLocked, authManager, authDisabled,
+		stack, processTemplates, processYamlFunctions, skip, AffectedFilter{ExcludeLocked: excludeLocked}, authManager, authDisabled,
 		DescribeStacksErrorOptions{},
 	)
 }
@@ -379,7 +379,7 @@ func ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
-	excludeLocked bool,
+	filter AffectedFilter,
 	authManager auth.AuthManager,
 	authDisabled bool,
 	errOptions DescribeStacksErrorOptions,
@@ -426,7 +426,7 @@ func ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 		processTemplates,
 		processYamlFunctions,
 		skip,
-		excludeLocked,
+		filter,
 		authManager,
 		authDisabled,
 		errOptions,

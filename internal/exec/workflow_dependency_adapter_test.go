@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 )
@@ -60,7 +61,7 @@ workflows:
 	workflowPath := filepath.Join(tmpDir, "same-file.yaml")
 	require.NoError(t, os.WriteFile(workflowPath, []byte(manifest), 0o644))
 
-	workflowConfig, err := LoadWorkflowConfig(workflowPath)
+	workflowConfig, err := LoadWorkflowConfig(&schema.AtmosConfiguration{}, workflowPath)
 	require.NoError(t, err)
 	deployDef := workflowConfig["deploy"]
 
@@ -122,7 +123,7 @@ workflows:
 	deployPath := filepath.Join(tmpDir, "deploy.yaml")
 	require.NoError(t, os.WriteFile(deployPath, []byte(deployManifest), 0o644))
 
-	workflowConfig, err := LoadWorkflowConfig(deployPath)
+	workflowConfig, err := LoadWorkflowConfig(&schema.AtmosConfiguration{}, deployPath)
 	require.NoError(t, err)
 	deployDef := workflowConfig["deploy"]
 
@@ -188,7 +189,7 @@ workflows:
 	workflowPath := filepath.Join(tmpDir, "diamond.yaml")
 	require.NoError(t, os.WriteFile(workflowPath, []byte(manifest), 0o644))
 
-	workflowConfig, err := LoadWorkflowConfig(workflowPath)
+	workflowConfig, err := LoadWorkflowConfig(&schema.AtmosConfiguration{}, workflowPath)
 	require.NoError(t, err)
 	releaseDef := workflowConfig["release"]
 
@@ -426,4 +427,46 @@ func TestCommandRunnerViaSubprocess_InvokesRunningBinaryWithFormattedArgs(t *tes
 	assert.Equal(t, "mycommand", got[0], "first arg must be the dependency's command name")
 	assert.Equal(t, "--env=dev", got[1], "flags must be formatted as --name=value")
 	assert.Equal(t, "--foo", got[2], "positional args must be appended after flags")
+}
+
+// TestExecuteWorkflow_ShellStepMasksSecretSplitAcrossWrites proves a registered secret that a
+// workflow shell step emits across two writes never reaches stdout, in whole or in halves.
+func TestExecuteWorkflow_ShellStepMasksSecretSplitAcrossWrites(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	const secret = "workflow-split-secret"
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+	iolib.RegisterSecret(secret)
+
+	def := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{{
+			Name:    "emit",
+			Type:    "shell",
+			Command: `printf 'value=workflow-split-'; printf 'secret done\n'`,
+		}},
+	}
+
+	out, err := os.CreateTemp(t.TempDir(), "stdout")
+	require.NoError(t, err)
+	origStdout := os.Stdout
+	os.Stdout = out
+	t.Cleanup(func() { os.Stdout = origStdout })
+
+	runErr := ExecuteWorkflow(atmosConfig, "emit", "emit.yaml", def, false, "", "", "")
+	os.Stdout = origStdout
+	require.NoError(t, out.Close())
+	require.NoError(t, runErr)
+
+	got, err := os.ReadFile(out.Name())
+	require.NoError(t, err)
+	assert.NotContains(t, string(got), secret)
+	assert.NotContains(t, string(got), "workflow-split-")
+	assert.Contains(t, string(got), iolib.MaskReplacement)
 }

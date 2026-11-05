@@ -12,6 +12,27 @@
 
 Add native lock file support for the Atmos toolchain to provide deterministic, cryptographically verifiable tool installations. While `.tool-versions` (ASDF format) is useful for version tracking, a native lock file enables stronger guarantees around reproducibility, security, and multi-platform support.
 
+## Installation Policy and Migration (2026-09-24)
+
+Automatic installation preserves `.tool-versions`; intentional management commands own
+changes to declared dependencies. With lockfiles enabled, installation honors existing
+artifact checksums, preserves matching entries, and records missing version/platform
+entries after successful installation. `toolchain.frozen_lock_file` (or
+`ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE`) defaults to false. When enabled, it requires complete
+artifact URL/checksum entries even for cached binaries and prohibits lockfile writes.
+
+Relative `install_path`, `versions_file`, and `lock_file` values now resolve against the
+configured project base path instead of the invocation directory, including the default
+`.tool-versions` path when `versions_file` is omitted. Projects relying on
+the old interpretation must adjust those paths or use absolute paths. Project-driven
+Atmos bootstrap uses the project configuration and lockfile; outside a project,
+bootstrap metadata lives under XDG without creating project files in CWD.
+
+The path interpretation and automatic-install behavior changes apply independently of
+config edition pins. They cannot be represented by a value-default journal entry;
+`KindBehavior` gating is not yet implemented. The editions PRD records this candidate.
+No additional user-facing configuration or dependency file is introduced.
+
 ## Motivation
 
 ### Current Limitations of `.tool-versions`
@@ -57,8 +78,8 @@ Add native lock file support for the Atmos toolchain to provide deterministic, c
 ## Non-Goals
 
 1. Replacing `.tool-versions` - Both files serve different purposes and should coexist:
-   - `.tool-versions` - Simple version tracking, ASDF compatibility, human-edited
-   - `toolchain.lock.yaml` - Security, checksums, multi-platform, auto-managed
+    - `.tool-versions` - Simple version tracking, ASDF compatibility, human-edited
+    - `toolchain.lock.yaml` - Security, checksums, multi-platform, auto-managed
 2. Managing tool dependencies (tools remain independent)
 3. Supporting semver ranges in lock file (exact versions only)
 4. Network-based lock file sharing (file is committed to repo)
@@ -202,32 +223,32 @@ toolchain:
 1. User runs: atmos toolchain install terraform@1.13.4
 
 2. Resolve tool from registries
-   - Query registries by priority
-   - Find hashicorp/terraform@1.13.4
+    - Query registries by priority
+    - Find hashicorp/terraform@1.13.4
 
 3. Get platform-specific download URL
-   - Detect current platform (darwin_arm64, linux_amd64, etc.)
-   - Build download URL with platform variables
-   - Fetch checksums if available from registry/release
+    - Detect current platform (darwin_arm64, linux_amd64, etc.)
+    - Build download URL with platform variables
+    - Fetch checksums if available from registry/release
 
 4. Download and verify
-   - Download binary/archive
-   - Verify checksum if available
-   - Extract if needed
+    - Download binary/archive
+    - Verify checksum if available
+    - Extract if needed
 
 5. Update lock file
-   - Add/update tool entry
-   - Record version, URL, checksum, size
-   - Include all known platform variants (from registry metadata)
-   - Update metadata (generated_at, etc.)
+    - Add/update tool entry
+    - Record version, URL, checksum, size
+    - Include all known platform variants (from registry metadata)
+    - Update metadata (generated_at, etc.)
 
 6. Update .tool-versions (if enabled)
-   - Add/update tool version
-   - Maintain ASDF compatibility
+    - Add/update tool version
+    - Maintain ASDF compatibility
 
 7. Install binary
-   - Copy to install_path/bin/owner/repo/version/
-   - Make executable
+    - Copy to install_path/bin/owner/repo/version/
+    - Make executable
 ```
 
 ### Lock File Generation
@@ -256,18 +277,18 @@ atmos toolchain lock --regenerate
 1. User runs tool (e.g., via atmos terraform apply)
 
 2. Check lock file exists
-   - If missing and use_lock_file=true, warn or fail
+    - If missing and use_lock_file=true, warn or fail
 
 3. Load lock file entry for tool
-   - Find tool by owner/repo and version
-   - Get platform-specific entry for current platform
+    - Find tool by owner/repo and version
+    - Get platform-specific entry for current platform
 
 4. Verify binary checksum (if verify_checksums=true)
-   - Calculate checksum of installed binary
-   - Compare with lock file checksum
-   - If mismatch:
-     - strict_checksums=true: FAIL with error
-     - strict_checksums=false: WARN and continue
+    - Calculate checksum of installed binary
+    - Compare with lock file checksum
+    - If mismatch:
+      - strict_checksums=true: FAIL with error
+      - strict_checksums=false: WARN and continue
 
 5. Execute tool
 ```
@@ -384,35 +405,35 @@ toolchain:
 ### Checksum Verification
 
 1. **Always verify checksums when available**
-   - Default to SHA256 (most common)
-   - Support SHA512, SHA1 (deprecated but may be needed)
-   - Fail on mismatch unless `strict_checksums: false`
+    - Default to SHA256 (most common)
+    - Support SHA512, SHA1 (deprecated but may be needed)
+    - Fail on mismatch unless `strict_checksums: false`
 
 2. **Checksum sources priority**:
-   - Registry-provided checksums (preferred)
-   - Release artifact checksums (GitHub releases, etc.)
-   - Calculated on first install (fallback)
+    - Registry-provided checksums (preferred)
+    - Release artifact checksums (GitHub releases, etc.)
+    - Calculated on first install (fallback)
 
 3. **Checksum storage**:
-   - Format: `algorithm:hash` (e.g., `sha256:abc123...`)
-   - Store per-platform
-   - Update on explicit lock file regeneration
+    - Format: `algorithm:hash` (e.g., `sha256:abc123...`)
+    - Store per-platform
+    - Update on explicit lock file regeneration
 
 ### Lock File Integrity
 
 1. **Commit lock file to version control**
-   - Treat like `go.sum`, `package-lock.json`
-   - Review changes in PRs
+    - Treat like `go.sum`, `package-lock.json`
+    - Review changes in PRs
 
 2. **Detect tampering**:
-   - Validate YAML structure on load
-   - Check for required fields
-   - Verify checksums on tool execution
+    - Validate YAML structure on load
+    - Check for required fields
+    - Verify checksums on tool execution
 
 3. **Platform security**:
-   - Lock includes all platforms (darwin, linux, windows)
-   - Team members on different platforms use same lock file
-   - Each platform verifies its own entry
+    - Lock includes all platforms (darwin, linux, windows)
+    - Team members on different platforms use same lock file
+    - Each platform verifies its own entry
 
 ## Error Handling
 

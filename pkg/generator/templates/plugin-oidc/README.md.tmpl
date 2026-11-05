@@ -1,0 +1,184 @@
+# {{ .Config.plugin_name }}
+
+A native Go plugin for Atmos. It exports an OIDC provider, an AWS credential broker identity, and an `about` command. Atmos starts the compiled executable over mutually authenticated gRPC; consumers do not need Go.
+
+## Package metadata
+
+`plugin.yaml` uses `metadata.name` as the stable package ID. Configure
+`display_name`, `description`, `version`, `author`, and the optional `repository`
+URL there. The source repository is author-provided metadata, preserved in OCI
+releases; the consumer's lockfile separately records the OCI source and digest.
+Rebuild after changing the manifest because the executable embeds it.
+
+## Build and test
+
+```shell
+atmos build
+atmos test
+atmos plugin test . --run oidc-lifecycle --format json
+```
+
+The generated `atmos.yaml` provides custom commands: `atmos build` runs `atmos plugin build`, and `atmos test` validates the manifest before running the conformance suite. No Makefile or copied demo configuration is needed.
+
+The default suite uses local mock discovery, signing keys, authorization, token, refresh, revocation, and broker endpoints. It follows a real loopback browser callback, validates credentials, and restarts the plugin to check cached reuse. It never opens your browser or reads your login credentials. The `oidc-starter/v1` fixture understands this starter's private session layout; update your tests when you change that layout.
+
+`plugin.tests.yaml` also accepts ordinary Atmos `steps`, executed by Atmos's existing test scheduler. Add explicitly configured live checks under `integration`; they run only with `atmos plugin test . --integration`. An empty integration list fails rather than reporting success.
+
+## Build for multiple platforms
+
+Declare each supported `os/architecture[/variant]` under `spec.platforms` with a
+unique executable path. If the release includes Windows, set the common packaged
+`spec.runtime.executable` to a path ending in `.exe` (for example `bin/plugin.exe`);
+this filename works on Linux and macOS too. Build one target with
+`atmos plugin build . --platform linux/arm64`, or all declared targets with
+`atmos plugin build . --all-platforms`. Rebuild every binary after changing the
+embedded manifest. `atmos plugin test .` runs only the compatible local target;
+cross-compilation does not verify execution on other platforms.
+
+Copy the [multi-architecture release workflow](https://github.com/cloudposse/atmos/tree/main/examples/plugin-multiarch-release)
+to build and test Linux, macOS, and Windows on amd64 and arm64, restore one shared
+lockfile on all six native runners, and publish one signed OCI index. The example
+explains repository variables, native runner requirements, and explicit variants.
+
+## Try the plugin in a consumer project
+
+Create an `atmos.yaml` in a separate directory:
+
+```yaml
+auth:
+  providers:
+    corporate:
+      kind: {{ .Config.plugin_name }}
+      spec:
+        issuer: https://your-issuer.example.com
+        client_id: your-native-application-client-id
+        scopes: [openid, profile, offline_access]
+  identities:
+    broker:
+      kind: {{ .Config.plugin_name }}-broker
+      via:
+        provider: corporate
+      principal:
+        endpoint: https://your-broker.example.com/credentials
+```
+
+Run the plugin from your local build with a profile of your own. Create `profiles/<your-profile>/atmos.yaml`
+beside that `atmos.yaml` (and set `profiles.base_path: profiles` in it), then point the package at the build
+directory:
+
+```yaml
+plugins:
+  packages:
+    corporate:
+      path: /absolute/path/to/this/plugin
+```
+
+From that consumer directory, run, with the profile active (`--profile=<your-profile>` or `ATMOS_PROFILE`):
+
+```shell
+atmos plugin run corporate --
+atmos auth login --identity broker
+atmos auth login --identity broker
+atmos auth logout --provider corporate --keychain --force
+```
+
+A package with `path` runs the local build instead of any release: it is never fetched, locked or checked for a signature, and Atmos prints a warning each time it is activated. Because the profile deep-merges over the base configuration, the same package can also declare an OCI `source` and `version` that apply whenever the profile is not active. Rebuild with `atmos build`; the next command picks up the new executable without a reinstall. The [plugin development tutorial](https://atmos.tools/tutorials/plugin-development) walks through the whole loop, including `--frozen` behavior and policy for local builds. Commit consumer declarations and release locks after switching to an OCI release. Auth uses the consumer's configured keyring, and private session storage must be available. The second login reuses an unexpired session and broker credentials. Expired access tokens trigger refresh; rotated refresh tokens are persisted before downstream credentials are returned.
+
+Register a **public native application** with the issuer, enable authorization code with S256 PKCE, and permit `http://127.0.0.1:<ephemeral-port>/callback` loopback redirects. The starter does not use a client secret. The issuer must support the configured scopes and refresh policy. Provider-specific audience/resource parameters belong in the authorization/token request code when your issuer requires them.
+
+The broker receives `POST` with `Authorization: Bearer <access_token>`. It must validate that access token for its intended audience and return JSON:
+
+```json
+{
+  "access_key_id": "temporary-access-key",
+  "secret_access_key": "temporary-secret",
+  "session_token": "temporary-session-token",
+  "expiration": "2030-01-01T00:00:00Z",
+  "region": "us-east-1"
+}
+```
+
+These illustrative credentials are not usable credentials. The starter rejects incomplete or expired broker responses. It never sends an ID token or refresh token to the broker. Identity tokens are verified for signature, issuer, audience, expiration, nonce, authorized party, and access-token hash when present. Refresh may omit a new ID token; its previous expiry is preserved.
+
+An AWS identity can consume the broker result through `via.identity: broker`, for example an `aws/assume-role` identity. Atmos writes isolated AWS credential profiles and clears conflicting ambient credential variables when preparing the environment.
+
+Logout revokes the refresh token where the issuer advertises revocation, then removes local private sessions and dependent credentials. Failed revocation is reported even though local cleanup completes. Logout does not promise to terminate the issuer's browser session.
+
+## Package a release
+
+Update `metadata.version` and declare every prebuilt executable under `spec.platforms` in `plugin.yaml`. Build for each declared OS/architecture. The binary embeds the manifest, so rebuild after changing it.
+
+The generated project includes an anonymous local OCI registry, managed by Atmos's registry emulator. Docker must be running. No registry login or auth identity is needed for this local development service.
+
+```shell
+atmos dev registry up
+atmos push
+atmos plugin search oidc --registry local
+atmos plugin install local/{{ .Config.plugin_name }} --as corporate --version 0.1.0
+atmos plugin list
+atmos plugin info corporate
+atmos plugin run corporate
+atmos dev registry down
+```
+
+`atmos push` builds, validates, tests, packs, and publishes to `localhost:15557`. Search builds and caches a discovery index from the configured repository; publishing does not update a shared catalog. Each push keeps its OCI layout in a new numbered directory under `.atmos/release/`; generated binaries, release layouts, and local Go workspace files are gitignored. The registry is ephemeral: stopping it discards its artifacts. To change the port, update `stacks/local.yaml` and the matching references in `atmos.yaml`.
+
+After publishing another version, use `atmos plugin search oidc --registry local --refresh`
+to refresh discovery immediately. Normal searches reuse the cached index.
+
+`plugin run corporate` executes the starter's informational `about` command. Use `atmos auth login --identity broker` in a configured consumer to perform an actual login.
+
+For a remote registry, configure a publishing identity and bind it to the registry in this project's `atmos.yaml`:
+
+```yaml
+auth:
+  identities:
+    publisher:
+      kind: oci/user
+      spec:
+        registry: ghcr.io
+        username: company-bot
+        password_env: GHCR_TOKEN
+plugins:
+  registries:
+    corporate:
+      host: ghcr.io
+      repositories:
+        - oci://ghcr.io/company/oidc
+      identity: publisher
+```
+
+Merge these entries into the existing configuration, keeping the local registry if needed. Supply the token through your environment, then use the canonical auth commands:
+
+```shell
+atmos auth login --identity publisher
+atmos push --to oci://ghcr.io/company/oidc --sign --yes
+atmos auth logout --identity publisher
+```
+
+`--to` overrides the local destination. Publishing only writes the plugin release. Optional curated catalogs have their own explicitly coordinated publishing workflow. Omit `--sign` and `--yes` when signing is not required. Signing identity and registry authentication are separate concerns. The underlying `atmos plugin pack`, `publish`, and `sign` commands remain available for custom release workflows.
+
+To add a remote release to a consumer project:
+
+```shell
+atmos plugin install oci://ghcr.io/company/oidc --as corporate --version '^0.1'
+atmos plugin install --frozen
+```
+
+Alternatively, declare the OCI source and version constraint under `plugins.packages.corporate`; the first auth command installs the package and creates its lock entry automatically. Commit the package declaration and `.atmos.plugins.lock.yaml`. Subsequent use restores missing payloads at the locked digest without selecting upgrades. Cached packages work without registry access; offline policy rejects missing payloads. A package with `path` skips release installation. For offline transfer, copy the OCI layout and install with `--from-layout /path/to/plugin-release`; `install --frozen` prepopulates an environment without changing its existing lock.
+
+## Extend the implementation
+
+`provider.go` owns OIDC policy; `broker.go` owns your downstream exchange; `command.go` owns the command export. Use the SDK's `api.Client` for HTTP, browser callbacks, and private session storage. Never log codes, verifiers, tokens, or broker credentials. Native plugin code runs as the invoking user; only install packages you trust.
+
+The plugin author SDK is a separate module from Atmos's shared `pkg/api`. Released SDK versions follow Atmos versions. A generated local `go.work` is for development against an unreleased SDK; replace it with a released SDK requirement before publishing source for independent builds.
+
+## Signed releases
+
+`plugin publish --sign` creates a keyless Sigstore signature with a toolchain-managed
+Cosign release and attaches the bundle to the immutable OCI index. Use
+`atmos plugin sign oci://registry.example.com/team/oidc@sha256:<index-digest>` to
+sign an already published release. Consumer `plugins.policy.trusted_publishers`
+entries bind the package namespace to the release signer's identity and issuer.
+This signing identity is separate from the login issuer configured for this plugin.
+See https://atmos.tools/cli/commands/plugin/sign for CI setup.

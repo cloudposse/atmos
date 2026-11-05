@@ -228,25 +228,6 @@ func TestDisplayFinalSummary_GatingDoesNotPanic(t *testing.T) {
 	assert.NotPanics(t, func() { DisplayFinalSummary(nil) })
 }
 
-func TestFormatDuration(t *testing.T) {
-	tests := []struct {
-		name string
-		d    time.Duration
-		want string
-	}{
-		{name: "sub-second", d: 250 * time.Millisecond, want: "250ms"},
-		{name: "zero", d: 0, want: "0ms"},
-		{name: "whole seconds", d: 3 * time.Second, want: "3.0s"},
-		{name: "fractional seconds", d: 1500 * time.Millisecond, want: "1.5s"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, FormatDuration(tt.d))
-		})
-	}
-}
-
 func TestFormatBytes(t *testing.T) {
 	const (
 		kb = 1024

@@ -15,6 +15,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const matter = require('gray-matter');
+const { generateNavigationIndexes } = require('./navigation-index');
 
 // mdx-normalize.mjs is ESM (depends on unified/remark v11). Loaded lazily on
 // first call via dynamic import so the CJS plugin entry stays compatible with
@@ -155,26 +156,12 @@ async function generatePerPageMarkdown(documents, outDir) {
  * and "what does this site contain?" probes a discoverable Markdown overview
  * pointing to llms.txt, llms-full.txt, and the main docs sections.
  */
-async function generateRootIndexMarkdown(documents, outDir, siteConfig) {
+async function generateRootIndexMarkdown(documents, outDir, siteConfig, versions) {
   // Don't overwrite if a real doc claims the root.
   const rootAlreadyWritten = documents.some((d) => d.routePath === '/');
   if (rootAlreadyWritten) return;
 
-  // Group top-level sections from the documents list.
-  const sectionMap = new Map();
-  for (const doc of documents) {
-    if (!doc.routePath || doc.routePath === '/') continue;
-    const segments = doc.routePath.split('/').filter(Boolean);
-    if (segments.length === 0) continue;
-    const section = segments[0];
-    if (!sectionMap.has(section)) sectionMap.set(section, []);
-    sectionMap.get(section).push(doc);
-  }
-
-  const sectionOrder = ['intro', 'quick-start', 'install', 'learn', 'cli', 'stacks', 'components', 'design-patterns', 'ai', 'ci', 'best-practices', 'cheatsheet', 'reference', 'faq', 'changelog'];
-  const knownSections = sectionOrder.filter((s) => sectionMap.has(s));
-  const extraSections = [...sectionMap.keys()].filter((s) => !sectionOrder.includes(s)).sort();
-  const orderedSections = [...knownSections, ...extraSections];
+  const navigation = await generateNavigationIndexes(documents, versions, outDir, siteConfig);
 
   const lines = [];
   lines.push(`# ${siteConfig.title}`);
@@ -193,22 +180,7 @@ async function generateRootIndexMarkdown(documents, outDir, siteConfig) {
   lines.push('');
   lines.push('## Sections');
   lines.push('');
-  for (const section of orderedSections) {
-    const docs = sectionMap.get(section);
-    if (!docs || docs.length === 0) continue;
-    // Surface the section landing page (shortest route in the group) when one
-    // exists. Match either `/<section>` or `/<section>/` so trailing-slash
-    // routes from Docusaurus don't produce `/cli/.md` links.
-    const landing = docs.find((d) => d.routePath === `/${section}` || d.routePath === `/${section}/`);
-    let heading = section;
-    if (landing) {
-      const landingPath = landing.routePath.endsWith('/')
-        ? landing.routePath.slice(0, -1)
-        : landing.routePath;
-      heading = `[${landing.title}](${landingPath}.md)`;
-    }
-    lines.push(`- ${heading} — ${docs.length} page${docs.length === 1 ? '' : 's'}.`);
-  }
+  lines.push(...navigation);
   lines.push('');
   lines.push('## Site root');
   lines.push('');
@@ -403,8 +375,18 @@ module.exports = function docusaurusPluginLlmsTxt(context, options) {
     return map;
   }
 
+  let navigationVersions = [];
+
   return {
     name: 'docusaurus-plugin-llms-txt',
+
+    allContentLoaded({ allContent }) {
+      navigationVersions = Object.entries(allContent['docusaurus-plugin-content-docs'] || {}).flatMap(
+        ([instanceId, content]) => content.loadedVersions.map((version) => ({
+          instanceId, versionName: version.versionName, docs: version.docs, sidebars: version.sidebars,
+        })),
+      );
+    },
 
     async postBuild(props) {
       console.log('Generating LLM-friendly documentation using resolved routes...');
@@ -466,7 +448,7 @@ module.exports = function docusaurusPluginLlmsTxt(context, options) {
 
       if (enablePerPageMarkdown) {
         await generatePerPageMarkdown(documents, outDir);
-        await generateRootIndexMarkdown(documents, outDir, siteConfig);
+        await generateRootIndexMarkdown(documents, outDir, siteConfig, navigationVersions);
       }
     },
   };

@@ -369,10 +369,13 @@ func TestValidateBackendConfig(t *testing.T) {
 
 func TestGetComponentInfo(t *testing.T) {
 	result := GetComponentInfo("vpc", "dev-us-west-2")
-	assert.Equal(t, "component 'vpc' in stack 'dev-us-west-2'", result)
+	assert.Equal(t, `component "vpc" in stack "dev-us-west-2"`, result)
 
 	result = GetComponentInfo("database", "prod-eu-central-1")
-	assert.Equal(t, "component 'database' in stack 'prod-eu-central-1'", result)
+	assert.Equal(t, `component "database" in stack "prod-eu-central-1"`, result)
+
+	result = GetComponentInfo("db'\"\\\n", "prod\r\nforged")
+	assert.Equal(t, `component "db'\"\\\n" in stack "prod\r\nforged"`, result)
 }
 
 func TestExtractComponentPath_ContainmentGuard(t *testing.T) {

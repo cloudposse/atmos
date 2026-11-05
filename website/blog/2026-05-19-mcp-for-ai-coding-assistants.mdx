@@ -28,6 +28,8 @@ binaries so every assistant runs the same binary. See the example:
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ---
 
 ## Your AI knows your stacks and components. And your cloud. And your history.
@@ -428,6 +430,18 @@ MCP servers pass through.
 - **[Atmos AI (multi-provider)](/examples/ai)** — Multi-provider
 Atmos AI setup (Anthropic API, OpenAI API, Ollama, …). No external CLI; chat
 with your infra from `atmos ai ask`.
+
+## Try it out
+
+<TryExample example="mcp-for-ai-coding-assistants">
+
+Inspect the MCP configuration before exporting it to your coding assistant. The README covers server dependencies and client setup.
+
+```shell
+atmos mcp export
+```
+
+</TryExample>
 
 ## Related Reading
 

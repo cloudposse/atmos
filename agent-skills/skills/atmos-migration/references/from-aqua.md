@@ -179,9 +179,10 @@ Atmos to parse `aqua.yaml` as config.
 
 Aqua CLI uses `aqua-policy.yaml` and the `AQUA_POLICY_CONFIG` variable to control which configs
 and registries a user trusts, because some Aqua package types run arbitrary build steps or
-scripts. Atmos supports only the two safest package types, `github_release` and `http`. Atmos
-never runs an install script. This removes the need for a trust step. Do not look for a policy
-equivalent.
+scripts. Atmos supports download-based package types including `github_release`, `http`,
+`github_content`, and `github_archive`. Downloading a source archive does not build it.
+Atmos does not run Aqua install scripts or implement Aqua's policy file; review registry
+sources and configure toolchain verification for downloaded artifacts.
 
 ### No layered global config
 
@@ -216,8 +217,8 @@ that declares it runs, or when the user runs `atmos toolchain install` directly.
 
 ### Unsupported package types
 
-Atmos does not support these Aqua package types: `github_content`, `github_archive`, `go_build`,
-`cargo`, `go_install`. If a package in `aqua.yaml` uses one of these types, find another source
+Atmos supports `github_content` and `github_archive` downloads. It does not support the
+Aqua build/install package types `go_build`, `cargo`, or `go_install`. If a package in `aqua.yaml` uses one of these types, find another source
 for it, or define an inline `type: atmos` registry entry with a `github_release` or `http`
 package type instead. See the [atmos-toolchain](../../atmos-toolchain/SKILL.md) skill for the
 full list of supported and unsupported registry features.

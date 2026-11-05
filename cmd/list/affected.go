@@ -1,15 +1,19 @@
 package list
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 var affectedParser *flags.StandardParser
@@ -35,6 +39,8 @@ type AffectedOptions struct {
 	IncludeDependents bool
 	Stack             string
 	ExcludeLocked     bool
+	Tags              []string
+	Labels            string
 
 	// Processing flags.
 	ProcessTemplates bool
@@ -88,6 +94,8 @@ var affectedCmd = &cobra.Command{
 			IncludeDependents: v.GetBool("include-dependents"),
 			Stack:             v.GetString("stack"),
 			ExcludeLocked:     v.GetBool("exclude-locked"),
+			Tags:              tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+			Labels:            strings.Join(tags.ReadLabelsFlagKey(v, labelsViperKey), ","),
 			ProcessTemplates:  v.GetBool("process-templates"),
 			ProcessFunctions:  v.GetBool("process-functions"),
 			Skip:              v.GetStringSlice("skip"),
@@ -99,6 +107,7 @@ var affectedCmd = &cobra.Command{
 	},
 }
 
+// init registers the list affected flags through the list flag wrappers and binds them to Viper.
 func init() {
 	// Mark this subcommand as experimental.
 	affectedCmd.Annotations = map[string]string{"experimental": "true"}
@@ -118,6 +127,8 @@ func init() {
 		WithIncludeDependentsFlag,
 		WithStackFlag,
 		WithExcludeLockedFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithAffectedSkipFlag,
@@ -131,8 +142,13 @@ func init() {
 	if err := affectedParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		affectedCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/affected"),
+	)
 }
 
+// executeListAffectedCmd processes the command line arguments and runs list affected with the parsed options.
 func executeListAffectedCmd(cmd *cobra.Command, args []string, opts *AffectedOptions) error {
 	defer perf.Track(nil, "list.executeListAffectedCmd")()
 
@@ -164,6 +180,8 @@ func executeListAffectedCmd(cmd *cobra.Command, args []string, opts *AffectedOpt
 		ProcessFunctions:  opts.ProcessFunctions,
 		Skip:              opts.Skip,
 		ExcludeLocked:     opts.ExcludeLocked,
+		Tags:              opts.Tags,
+		LabelsRaw:         opts.Labels,
 		ErrorMode:         opts.ErrorMode,
 		IdentityName:      opts.IdentityName,
 	})

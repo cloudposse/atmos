@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"os"
 	osexec "os/exec"
@@ -16,7 +17,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/taskgraph"
+	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 )
 
 func requireCustomCommandOutputHelper(t *testing.T) {
@@ -301,5 +305,61 @@ func TestCustomCommandOutputEvaluationFailureDoesNotRetryCommand(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "1", strings.TrimSpace(string(attempts)))
 		})
+	}
+}
+
+// TestCustomCommandRetryConditionsMatchFailedOutput exercises real failing subprocesses.
+func TestCustomCommandRetryConditionsMatchFailedOutput(t *testing.T) {
+	for _, stepType := range []string{"shell", "atmos"} {
+		for _, name := range []string{"produce", ""} {
+			for _, tc := range []struct {
+				label    string
+				pattern  string
+				attempts string
+			}{
+				{"stdout", "^attempt-1$", "2"},
+				{"stderr", "^warning-1$", "2"},
+				{"unmatched", "^not-emitted$", "1"},
+			} {
+				t.Run(stepType+"/"+name+"/"+tc.label, func(t *testing.T) {
+					_ = NewTestKit(t)
+					attemptsFile := filepath.Join(t.TempDir(), "attempts.txt")
+					command := customCommandRetryHelperCommand(t, attemptsFile)
+					if stepType == "atmos" {
+						command = "-test.run=TestCustomCommandIntegrationRetryHelper -- " + base64.RawURLEncoding.EncodeToString([]byte(attemptsFile))
+					}
+					maxAttempts := 3
+					initialDelay := time.Millisecond
+					config := schema.Command{Name: "retry-output", Steps: schema.Tasks{{
+						Name: name, Type: stepType, Command: command,
+						Retry: &schema.RetryConfig{
+							MaxAttempts: &maxAttempts, InitialDelay: &initialDelay,
+							BackoffStrategy: "constant", Conditions: []string{tc.pattern},
+						},
+					}}}
+					parent := &cobra.Command{Use: "atmos"}
+					require.NoError(t, processCustomCommands(schema.AtmosConfiguration{BasePath: t.TempDir()}, []schema.Command{config}, parent))
+					// Dependency dispatch returns the real command error without terminating this test process.
+					runner := adapters.CustomCommandRunner(parent, func(*cobra.Command) bool { return true })
+					err := runner(t.Context(), taskgraph.Ref{Name: config.Name})
+					if tc.attempts == "2" {
+						require.NoError(t, err, "a matching failed attempt must retry and recover")
+					} else {
+						require.Error(t, err)
+						assert.Equal(t, 1, errUtils.GetExitCode(err))
+						var outputErr *stepPkg.StepOutputError
+						require.ErrorAs(t, err, &outputErr)
+						assert.Equal(t, "attempt-1", outputErr.Stdout)
+						assert.Equal(t, "warning-1", outputErr.Stderr)
+						var exitErr errUtils.ExitCodeError
+						require.ErrorAs(t, err, &exitErr, "the real subprocess exit error must survive wrapping")
+						assert.Equal(t, 1, exitErr.Code)
+					}
+					attempts, readErr := os.ReadFile(attemptsFile)
+					require.NoError(t, readErr)
+					assert.Equal(t, tc.attempts, string(attempts))
+				})
+			}
+		}
 	}
 }

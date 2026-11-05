@@ -1,0 +1,149 @@
+[
+  {
+    "name": "same repository",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": []
+      },
+      "ci": {
+        "provider": "github-actions",
+        "schema": "github-actions/v1",
+        "event": {
+          "status": "available",
+          "complete": true,
+          "data": {
+            "pull_request": {
+              "head": {
+                "repo": {
+                  "full_name": "acme/infra"
+                }
+              },
+              "base": {
+                "repo": {
+                  "full_name": "acme/infra"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "fork",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": []
+      },
+      "ci": {
+        "provider": "github-actions",
+        "schema": "github-actions/v1",
+        "event": {
+          "status": "available",
+          "complete": true,
+          "data": {
+            "pull_request": {
+              "head": {
+                "repo": {
+                  "full_name": "contributor/infra"
+                }
+              },
+              "base": {
+                "repo": {
+                  "full_name": "acme/infra"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "missing context",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": []
+      }
+    },
+    "status": "error",
+    "error": "input_unavailable"
+  },
+  {
+    "name": "incomplete event",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": []
+      },
+      "ci": {
+        "provider": "github-actions",
+        "schema": "github-actions/v1",
+        "event": {
+          "status": "available",
+          "complete": false,
+          "data": {
+            "pull_request": {
+              "head": {
+                "repo": {
+                  "full_name": "acme/infra"
+                }
+              },
+              "base": {
+                "repo": {
+                  "full_name": "acme/infra"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "status": "error",
+    "error": "input_unavailable"
+  },
+  {
+    "name": "non PR event",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": []
+      },
+      "ci": {
+        "provider": "github-actions",
+        "schema": "github-actions/v1",
+        "event": {
+          "status": "available",
+          "complete": true,
+          "data": {
+            "ref": "refs/heads/main"
+          }
+        }
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {
+      "kind": "operation",
+      "input": {}
+    },
+    "status": "not_applicable"
+  }
+]

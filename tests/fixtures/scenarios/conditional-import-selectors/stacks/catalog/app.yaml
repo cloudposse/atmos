@@ -1,0 +1,5 @@
+components:
+  terraform:
+    app:
+      vars:
+        audit_logging_enabled: false

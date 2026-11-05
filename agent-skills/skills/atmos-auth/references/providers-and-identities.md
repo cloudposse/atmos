@@ -54,7 +54,7 @@ auth:
       kind: github/oidc                     # Required
       region: us-east-1                     # Required: AWS region for STS endpoint
       spec:
-        audience: sts.us-east-1.amazonaws.com  # Optional: defaults to STS endpoint for region
+        audience: sts.amazonaws.com  # Required: match the cloud trust policy audience
 ```
 
 GitHub Actions workflow must have `id-token: write` permission and should select the CI profile with
@@ -69,13 +69,14 @@ auth:
   providers:
     <name>:
       kind: gcp/adc                         # Required
-      project_id: my-gcp-project            # Optional: override gcloud config default
-      region: us-central1                   # Optional: default region
-      scopes:                               # Optional: OAuth scopes
-        - https://www.googleapis.com/auth/cloud-platform
+      spec:
+        project_id: my-gcp-project            # Optional: override gcloud config default
+        region: us-central1                   # Optional: default region
+        scopes:                               # Optional: OAuth scopes
+          - https://www.googleapis.com/auth/cloud-platform
 ```
 
-Requires existing ADC. Run `gcloud auth application-default login` first.
+Requires existing ADC. For local user credentials, run `gcloud auth application-default login` first. Credential files selected by `GOOGLE_APPLICATION_CREDENTIALS` and attached service accounts do not require that interactive login.
 
 ### GCP Workload Identity Federation
 
@@ -84,22 +85,23 @@ auth:
   providers:
     <name>:
       kind: gcp/workload-identity-federation  # Required
-      project_id: my-gcp-project              # Optional: GCP project ID
-      project_number: "123456789012"          # Required: GCP project number (numeric)
-      workload_identity_pool_id: github-pool  # Required: WIF pool ID
-      workload_identity_provider_id: github-provider  # Required: WIF provider ID
-      service_account_email: ci-sa@my-project.iam.gserviceaccount.com  # Optional: SA to impersonate
-      scopes:                                 # Optional: OAuth scopes
-        - https://www.googleapis.com/auth/cloud-platform
-      token_source:                           # Auto-detected in GitHub Actions
-        type: url                             # url, file, or environment
-        url: https://my-oidc-provider.example.com/token
-        request_token: <bearer-token>         # For type: url
-        audience: //iam.googleapis.com/projects/...
-        allowed_hosts:
-          - my-oidc-provider.example.com
-        environment_variable: OIDC_TOKEN      # For type: environment
-        file_path: /path/to/token             # For type: file
+      spec:
+        project_id: my-gcp-project              # Optional: GCP project ID
+        project_number: "123456789012"          # Required: GCP project number (numeric)
+        workload_identity_pool_id: github-pool  # Required: WIF pool ID
+        workload_identity_provider_id: github-provider  # Required: WIF provider ID
+        service_account_email: ci-sa@my-project.iam.gserviceaccount.com  # Optional: SA to impersonate
+        scopes:                                 # Optional: OAuth scopes
+          - https://www.googleapis.com/auth/cloud-platform
+        token_source:                           # Auto-detected in GitHub Actions
+          type: url                             # url, file, or environment
+          url: https://my-oidc-provider.example.com/token
+          request_token: <bearer-token>         # For type: url
+          audience: //iam.googleapis.com/projects/...
+          allowed_hosts:
+            - my-oidc-provider.example.com
+          environment_variable: OIDC_TOKEN      # For type: environment
+          file_path: /path/to/token             # For type: file
 ```
 
 **GitHub Actions auto-detection:**
@@ -189,7 +191,76 @@ auth:
         duration: 1h                        # Optional: 15m-12h (no MFA) or 15m-36h (with MFA)
 ```
 
-Store credentials securely with `atmos auth user configure --identity <name>` instead of in config files.
+Store credentials securely with `atmos auth user configure --identity=<name>` instead of in config files.
+
+### AWS Ambient
+
+Uses credentials the environment already provides, resolved through the AWS SDK default credential
+chain: environment variables, shared config files, IRSA web identity tokens, EC2 instance metadata, and
+ECS task roles. Atmos does not clear credential environment variables or disable IMDS for this kind.
+
+```yaml
+auth:
+  identities:
+    <name>:
+      kind: aws/ambient                     # Required
+      principal:
+        region: us-east-1                   # Optional
+```
+
+Because it returns real AWS credentials, `aws/assume-role` identities can chain from it with
+`via.identity`. Use the generic `ambient` kind to leave the whole environment untouched.
+
+### AWS Credential Process
+
+Runs an external helper that follows the AWS `credential_process` protocol and uses the credentials it
+prints. Use it when an Okta CLI, aws-sso-cli, aws-vault, Granted, or corporate SAML tool already vends
+credentials.
+
+```yaml
+auth:
+  identities:
+    <name>:
+      kind: aws/credential-process          # Required
+      credentials:
+        credential_process: corp-credential-helper --account=prod   # Required: command to run
+        region: us-east-1                   # Optional: default region
+      spec:
+        endpoint_url: http://localhost:4566 # Optional: AWS-compatible endpoint for emulators
+```
+
+Behavior:
+
+- The identity is standalone. `via`, `session`, `principal`, `access_key_id`, `secret_access_key`, and
+  `mfa_arn` are rejected. Use `aws/user` for IAM user keys.
+- Credentials are used as returned. Atmos makes no STS call and does not prompt for MFA.
+- The command runs through the platform shell, like the AWS SDK for Go (`sh -c`, or
+  `%COMSPEC% /S /C "<command>"` on Windows), with stdin and stderr passed through, so the helper can
+  prompt for MFA when Atmos runs interactively. The AWS CLI does not use a shell.
+- Credentials are cached in Atmos-managed AWS files and reused while at least 15 minutes remain
+  before `Expiration`. Credentials without an `Expiration` make Atmos run the helper every time.
+- The helper must finish within 1 minute (not configurable). A helper that waits for a browser login
+  can time out.
+- Output is never stored in the keyring. `atmos auth logout` removes stale keyring entries.
+- `atmos auth console` works only when the helper returns a `SessionToken`.
+
+Chain a role from the helper's session:
+
+```yaml
+auth:
+  identities:
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        identity: <helper-identity-name>
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/Admin
+```
+
+Choose `aws/user` for IAM user keys, `aws/ambient` for credentials already in the environment, and
+`aws/credential-process` for a command that prints credentials. Helper examples, error meanings, and
+the reverse direction (`atmos aws credential-process` for `~/.aws/config` profiles) are in
+[aws-credential-process.md](aws-credential-process.md).
 
 ### Azure Subscription
 
@@ -343,6 +414,8 @@ auth:
     github-oidc:
       kind: github/oidc
       region: us-east-1
+      spec:
+        audience: sts.amazonaws.com
 
   identities:
     deploy:
@@ -366,9 +439,10 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_number: "123456789012"
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
+      spec:
+        project_number: "123456789012"
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
 
   identities:
     terraform:

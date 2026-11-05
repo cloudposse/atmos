@@ -1,0 +1,9 @@
+components:
+  terraform:
+    app:
+      vars:
+        namespace: acme
+        name: app
+        tags:
+          managed-by: atmos
+          owner: platform

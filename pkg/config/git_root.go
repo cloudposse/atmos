@@ -2,8 +2,8 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 
+	"github.com/cloudposse/atmos/pkg/config/projectroot"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -79,32 +79,8 @@ func applyGitRootBasePath(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-// hasLocalAtmosConfig checks if the current directory has any Atmos configuration.
-// This includes config files, config directories, and default import directories.
-//
-// Returns true if ANY of these exist in the given directory:
-// - atmos.yaml (main config file)
-// - .atmos.yaml (hidden config file)
-// - .atmos/ (config directory)
-// - .atmos.d/ (default imports directory)
-// - atmos.d/ (default imports directory - alternate).
+// hasLocalAtmosConfig checks if the given directory has any Atmos configuration.
+// The definition is shared with policy discovery through the projectroot package.
 func hasLocalAtmosConfig(dir string) bool {
-	configIndicators := []string{
-		AtmosConfigFileName,           // Main config file.
-		DotAtmosConfigFileName,        // Hidden config file.
-		AtmosConfigDirName,            // Config directory.
-		DotAtmosDefaultImportsDirName, // Default imports directory.
-		AtmosDefaultImportsDirName,    // Default imports directory (alternate).
-	}
-
-	for _, indicator := range configIndicators {
-		indicatorPath := filepath.Join(dir, indicator)
-		if _, err := os.Stat(indicatorPath); err == nil {
-			log.Trace("Found Atmos configuration in current directory, skipping git root discovery",
-				"indicator", indicator, "path", indicatorPath)
-			return true
-		}
-	}
-
-	return false
+	return projectroot.HasLocalConfig(dir)
 }

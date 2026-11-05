@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -66,13 +67,7 @@ This ensures that the changes defined in your Terraform configuration are applie
 		// When CI mode is enabled, capture terraform deploy stdout for CI hooks
 		// (summary, comments, outputs). The output is tee'd: terminal still
 		// receives it in real time, and the buffer collects a copy.
-		ciMode, _ := cmd.Flags().GetBool("ci")
-		if !ciMode {
-			ciMode = v.GetBool("ci")
-		}
-		if !ciMode {
-			ciMode = ci.IsCI()
-		}
+		ciMode := ci.ModeEnabled(cmd)
 
 		// component/stack for the exec-metadata Data payload (research.md
 		// Decision 21) — the multi-component --affected/--all path never
@@ -149,4 +144,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(deployCmd)
+	internal.RegisterCommandMetadata(
+		deployCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/deploy"),
+	)
 }

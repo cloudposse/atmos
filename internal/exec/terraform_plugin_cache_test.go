@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
 
 func TestConfigurePluginCache(t *testing.T) {
@@ -252,6 +253,17 @@ func TestDisableTerraformPluginCacheForExecutionNoopWithoutFlag(t *testing.T) {
 	assert.Contains(t, atmosConfig.Env, terraformPluginCacheDirEnv)
 	assert.True(t, envListContainsKey(info.ComponentEnvList, terraformPluginCacheDirEnv))
 	assert.True(t, envListContainsKey(info.SanitizedEnv, terraformPluginCacheDirEnv))
+}
+
+func TestStackWorkerDisablesConfiguredPluginCache(t *testing.T) {
+	t.Setenv(plugin.DisableCacheEnv, "true")
+	t.Setenv(terraformPluginCacheDirEnv, "/shared/cache")
+	atmosConfig := &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{PluginCache: true}}}
+	info := &schema.ConfigAndStacksInfo{}
+	disableTerraformPluginCacheForExecution(atmosConfig, info)
+	assert.True(t, info.DisablePluginCache)
+	assert.False(t, atmosConfig.Components.Terraform.PluginCache)
+	assert.False(t, envListContainsKey(info.SanitizedEnv, terraformPluginCacheDirEnv))
 }
 
 func envListContainsKey(env []string, key string) bool {

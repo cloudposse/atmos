@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -27,12 +28,16 @@ func init() {
 		flags.WithStringFlag("format", "", "env", "Input format: env or json"),
 	)
 	pushParser.RegisterFlags(pushCmd)
+	internal.RegisterCommandMetadata(
+		pushCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/push"),
+	)
 }
 
 func runSecretPush(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretPush")()
 
-	scope, err := parseScope(cmd, args)
+	scope, err := parseScopeForStack(cmd, args, "push")
 	if err != nil {
 		return err
 	}
@@ -54,7 +59,7 @@ func runSecretPush(cmd *cobra.Command, args []string) error {
 		if !svc.IsDeclared(key) {
 			return errUtils.Build(errUtils.ErrValidationFailed).
 				WithExplanation(fmt.Sprintf("key %q is not declared as a secret", key)).
-				WithHint("Declare it under the component's secrets.vars, or use `atmos secret import` to skip undeclared keys").
+				WithHint("Declare it under secrets.vars (stack-level for a stack-scoped secret), or use `atmos secret import` to skip undeclared keys").
 				Err()
 		}
 	}
@@ -67,6 +72,6 @@ func runSecretPush(cmd *cobra.Command, args []string) error {
 		count++
 	}
 
-	ui.Successf("Pushed %d secret(s) for component `%s` in stack `%s`", count, scope.Component, scope.Stack)
+	ui.Successf("Pushed %d secret(s) for %s", count, describeScope(scope))
 	return nil
 }

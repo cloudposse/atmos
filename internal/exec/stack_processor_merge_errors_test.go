@@ -328,6 +328,33 @@ func TestMergeComponentConfigurations_HelmMergeErrors(t *testing.T) {
 	}
 }
 
+// TestMergeComponentConfigurations_CloudFormationMergeError verifies the
+// aws/cloudformation-only native-fields merge surfaces structural-merge
+// failures, mirroring TestMergeComponentConfigurations_HelmMergeErrors for
+// the aws/cloudformation type.
+func TestMergeComponentConfigurations_CloudFormationMergeError(t *testing.T) {
+	t.Parallel()
+
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType:  cfg.CloudFormationComponentType,
+		Component:      "vpc",
+		GlobalVars:     map[string]any{},
+		GlobalSettings: map[string]any{},
+		GlobalEnv:      map[string]any{},
+		AtmosConfig:    atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentCloudFormation = collidingSection()
+
+	comp, deferredContexts, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeKeyCollision)
+	assert.Nil(t, comp)
+	assert.Nil(t, deferredContexts)
+}
+
 // TestMergeComponentConfigurations_SettingsIntegrationsGithubMergeError verifies that a colliding
 // `integrations.github` section in atmos.yaml itself (not the stack manifest's `settings:`, which
 // is merged earlier and independently) surfaces as a real error from
@@ -374,7 +401,7 @@ func TestMergeComponentConfigurations_DeferredWriteBackNavigationError(t *testin
 		{
 			name: "vars",
 			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
-				opts.GlobalVars = map[string]any{"nested": map[string]any{"leaf": "!env FOO"}}
+				opts.GlobalVars = map[string]any{"nested": map[string]any{"leaf": taggedFunctionForTest("!env FOO")}}
 				res.ComponentOverridesVars = map[string]any{"nested": "scalar-override"}
 			},
 			wantErr: errUtils.ErrCannotNavigatePath,
@@ -382,7 +409,7 @@ func TestMergeComponentConfigurations_DeferredWriteBackNavigationError(t *testin
 		{
 			name: "settings",
 			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
-				opts.GlobalSettings = map[string]any{"nested": map[string]any{"leaf": "!env FOO"}}
+				opts.GlobalSettings = map[string]any{"nested": map[string]any{"leaf": taggedFunctionForTest("!env FOO")}}
 				res.ComponentOverridesSettings = map[string]any{"nested": "scalar-override"}
 			},
 			wantErr: errUtils.ErrCannotNavigatePath,
@@ -390,7 +417,7 @@ func TestMergeComponentConfigurations_DeferredWriteBackNavigationError(t *testin
 		{
 			name: "env",
 			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
-				opts.GlobalEnv = map[string]any{"nested": map[string]any{"leaf": "!env FOO"}}
+				opts.GlobalEnv = map[string]any{"nested": map[string]any{"leaf": taggedFunctionForTest("!env FOO")}}
 				res.ComponentOverridesEnv = map[string]any{"nested": "scalar-override"}
 			},
 			wantErr: errUtils.ErrCannotNavigatePath,

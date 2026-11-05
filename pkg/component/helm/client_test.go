@@ -116,7 +116,9 @@ func TestConfigureReleaseLifecycleActions(t *testing.T) {
 	installPolicy := policy
 	installPolicy.OnFailure = failurePolicyUninstall
 	configureInstallLifecycle(install, installPolicy)
-	assert.True(t, install.RollbackOnFailure)
+	// Atmos owns the uninstall-on-failure (so it can capture pod diagnostics first,
+	// cloudposse/atmos#3271), so Helm's own RollbackOnFailure is left off.
+	assert.False(t, install.RollbackOnFailure)
 	assert.Equal(t, kube.LegacyStrategy, install.WaitStrategy)
 	assert.True(t, install.WaitForJobs)
 	assert.Equal(t, 12*time.Minute, install.Timeout)
@@ -125,7 +127,9 @@ func TestConfigureReleaseLifecycleActions(t *testing.T) {
 
 	upgrade := &action.Upgrade{}
 	configureUpgradeLifecycle(upgrade, policy)
-	assert.True(t, upgrade.RollbackOnFailure)
+	// Atmos owns the rollback-on-failure (so it can capture pod diagnostics first,
+	// cloudposse/atmos#3271), so Helm's own RollbackOnFailure is left off.
+	assert.False(t, upgrade.RollbackOnFailure)
 	assert.Equal(t, kube.LegacyStrategy, upgrade.WaitStrategy)
 	assert.True(t, upgrade.WaitForJobs)
 	assert.Equal(t, 12*time.Minute, upgrade.Timeout)

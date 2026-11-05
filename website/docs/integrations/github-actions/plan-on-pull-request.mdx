@@ -1,0 +1,43 @@
+---
+title: Plan on Pull Request
+slug: /integrations/github-actions/plan-on-pull-request
+description: Review infrastructure changes before merging a pull request. Run an Atmos plan in GitHub Actions and publish the results as job summaries, checks, and pull request comments.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Review infrastructure changes before merging a pull request. Run an Atmos plan in GitHub Actions and publish the results as job summaries, checks, and pull request comments.
+</Intro>
+
+Use [Setup Atmos](/integrations/github-actions/setup-atmos) to pin the Atmos container version, enable [native CI reporting](/ci#quick-start), and configure [authentication and permissions](/integrations/github-actions/authentication) for your repository.
+
+## Workflow
+
+<File title=".github/workflows/plan.yml">
+```yaml
+name: Plan
+on:
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: read
+  statuses: write
+  checks: write
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: atmos terraform plan vpc -s prod
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+</File>

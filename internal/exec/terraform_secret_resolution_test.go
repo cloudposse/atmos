@@ -15,6 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -116,7 +117,7 @@ func nativeSecretReferenceLoaders() map[string]func(*schema.AtmosConfiguration) 
 			return GetTerraformState(config, "!terraform.state", "dev", "producer", "credential", false, nil, nil)
 		},
 		"atmos.Component": func(config *schema.AtmosConfiguration) (any, error) {
-			sections, err := componentFunc(config, nil, "producer", "dev")
+			sections, err := componentFunc(context.Background(), config, nil, "producer", "dev")
 			if err != nil {
 				return nil, err
 			}
@@ -233,7 +234,7 @@ func TestOutputComponentDescriberSkippedSecrets(t *testing.T) {
 				ProcessYamlFunctions: processFunctions, Skip: []string{"secret"},
 			})
 			require.NoError(t, err)
-			assert.Equal(t, "!secret CREDENTIAL", sections["vars"].(map[string]any)["credential"])
+			assert.Equal(t, "!secret CREDENTIAL", yamlsource.Display(sections["vars"].(map[string]any)["credential"]))
 		})
 	}
 }

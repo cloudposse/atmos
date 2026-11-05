@@ -39,23 +39,20 @@ var testCmd = &cobra.Command{
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/test
   https://opentofu.org/docs/cli/commands/test`,
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		// Fire before.terraform.test. This runs both user-defined component hooks
-		// (e.g. a `kind: step` / `type: emulator` hook that starts a local sandbox)
-		// and any CI provider bindings.
-		return runBeforeHooks(h.BeforeTerraformTest, cmd, args)
-	},
+	// The executor fires before.terraform.test after preparing the workdir.
+	PreRunE: prepareBeforeHooks,
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset the captured output before any early return so the deferred hook and
 		// PostRunE read consistent state.
 		capturedTestOutput = ""
+		wasMultiComponentExecution = false
 
 		// On failure, run after hooks with error context. Cobra skips PostRunE on
 		// error, so this is the only place the after.terraform.test hook fires when a
 		// test run fails — which is exactly when emulator teardown (when: always) and
 		// the failing CI summary matter most.
 		defer func() {
-			if runErr != nil {
+			if runErr != nil && !wasMultiComponentExecution {
 				runHooksOnErrorWithOutput(h.AfterTerraformTest, cmd, args, runErr, capturedTestOutput)
 			}
 		}()
@@ -137,6 +134,10 @@ For complete Terraform/OpenTofu documentation, see:
 		return err
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
+		// Bulk execution already reported the outcome for each component.
+		if wasMultiComponentExecution {
+			return nil
+		}
 		// Fire after.terraform.test on the success path. This single call runs both
 		// user-defined component hooks (via hooks.RunAll — e.g. emulator teardown) and
 		// the CI plugin (via RunCIHooks — the pass/fail step summary).
@@ -265,4 +266,9 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(testCmd)
+	internal.RegisterCommandMetadata(
+		testCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/test"),
+		internal.WithExample("examples/terraform-tests", "Terraform Tests"),
+	)
 }

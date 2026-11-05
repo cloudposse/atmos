@@ -1,0 +1,41 @@
+---
+title: atmos stack list
+sidebar_label: list
+sidebar_class_name: command
+id: stack-list
+description: List stacks, optionally filtered by component.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+List stacks, optionally filtered by component. This is an alias for [`atmos list stacks`](/cli/commands/list/stacks), with the same flags and output.
+</Intro>
+
+<CastPlayer title="atmos stack list --help" src="/casts/screengrabs/atmos-stack-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack list [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--component` / `-c`</dt>
+  <dd>List stacks containing the named component.</dd>
+  <dt>`--format` / `-f`</dt>
+  <dd>Select the output format, such as table, JSON, YAML, or tree.</dd>
+</dl>
+
+See [`atmos list stacks`](/cli/commands/list/stacks) for the complete flag reference.
+
+## Examples
+
+```shell
+atmos stack list
+atmos stack list --component=vpc --format=json
+```
+
+To list editable configuration paths for a component, use [`atmos stack config list`](/cli/commands/stack/config/list).

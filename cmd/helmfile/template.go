@@ -1,6 +1,10 @@
 package helmfile
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
+)
 
 // Command: atmos helmfile template.
 var (
@@ -29,4 +33,8 @@ var helmfileTemplateCmd = &cobra.Command{
 
 func init() {
 	helmfileCmd.AddCommand(helmfileTemplateCmd)
+	internal.RegisterCommandMetadata(
+		helmfileTemplateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/template"),
+	)
 }

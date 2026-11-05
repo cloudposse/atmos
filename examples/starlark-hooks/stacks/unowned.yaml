@@ -1,0 +1,10 @@
+import: [dev]
+
+vars:
+  stage: unowned
+
+components:
+  terraform:
+    api:
+      vars:
+        owner: ""

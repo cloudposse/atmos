@@ -43,7 +43,12 @@ var stateSubcommands = []struct {
 func init() {
 	// Register sub-subcommands for state (e.g., "state list", "state mv").
 	for _, sub := range stateSubcommands {
-		stateCmd.AddCommand(newTerraformPassthroughSubcommand(stateCmd, sub.name, sub.short))
+		cmd := newTerraformPassthroughSubcommand(stateCmd, sub.name, sub.short)
+		internal.RegisterCommandMetadata(
+			cmd,
+			internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/state/"+sub.name),
+		)
+		stateCmd.AddCommand(cmd)
 		internal.RegisterCommandCompatFlags("terraform", "state-"+sub.name, sub.compatFunc())
 	}
 
@@ -55,4 +60,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(stateCmd)
+	internal.RegisterCommandMetadata(
+		stateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/state"),
+	)
 }

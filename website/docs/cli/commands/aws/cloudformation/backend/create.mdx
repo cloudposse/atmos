@@ -1,0 +1,79 @@
+---
+title: atmos aws cloudformation backend create
+sidebar_label: create
+sidebar_class_name: command
+id: create
+description: Provision the S3 bucket used by the component's template-packaging backend.
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Create the template-packaging bucket or reapply its settings. Atmos enables
+versioning, AES-256 encryption, and all public-access-block settings.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation backend create --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-create--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation backend create <component> --stack <stack> [options]
+```
+
+## Examples
+
+```shell
+atmos aws cloudformation backend create vpc -s plat-ue2-dev
+```
+
+Disambiguate when the component declares more than one `kind: aws/s3` target:
+
+```shell
+atmos aws cloudformation backend create vpc -s plat-ue2-dev --target artifacts
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the confirmation prompt shown when the bucket already exists, since re-applying the secure defaults overwrites its existing encryption, versioning, public-access settings, and tags. Required to reconcile an existing bucket in a non-interactive session. A bucket that does not exist yet never prompts.</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Resolve the component and its `kind: aws/s3` target from static configuration and print what would happen, for example `would create bucket <name> in region <region>`. It makes no AWS calls and does not authenticate. A component or stack that does not exist, or a component with no resolvable target, fails the same way the real run does.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>Atmos identity to authenticate with.</dd>
+</dl>
+
+## Behavior
+
+For an existing bucket, Atmos asks for confirmation before reapplying versioning,
+encryption, public-access blocking, and tags. Use `--auto-approve` in CI.
+A new bucket does not require confirmation.
+
+The existence check and provisioning use the same target identity. The command
+reports the settings being overwritten before printing the completion message.

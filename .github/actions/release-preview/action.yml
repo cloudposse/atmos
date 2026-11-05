@@ -1,0 +1,18 @@
+name: Update release previews
+description: Maintain informational issues for stable versioned milestones using tested Mage operations.
+inputs:
+  github-token:
+    description: GitHub Actions token with issues write and pull requests read
+    required: true
+  openai-api-key:
+    description: Optional API key for AI release preview summaries
+    required: false
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-go-cache
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+      run: go tool mage release:previews "$GITHUB_REPOSITORY"

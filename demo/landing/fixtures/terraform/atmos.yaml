@@ -1,5 +1,5 @@
 # Landing-page fixture for the "Run Terraform like a platform team" demo
-# (demo/landing/terraform.tape).
+# (casts generate demo landing terraform).
 #
 # It declares a small set of Terraform components wired together with
 # `dependencies.components` so `atmos list dependencies` renders a real dependency

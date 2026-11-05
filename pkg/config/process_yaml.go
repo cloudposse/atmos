@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -12,8 +13,11 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,7 +25,7 @@ import (
 const (
 	functionKey       = "function"
 	tagValueFormat    = "%s %s"
-	errorFormat       = "%w: %v %v error %v"
+	errorFormat       = "%w: %v %v error %w"
 	failedToProcess   = "failed to process"
 	emptyValueWarning = "execute returned empty value"
 )
@@ -152,6 +156,9 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node == nil {
 		return nil
 	}
+	if node.Tag == "!version" && node.Kind != yaml.ScalarNode {
+		return unsupportedAtmosYamlTagError(node.Tag, currentPath)
+	}
 
 	switch node.Kind {
 	case yaml.DocumentNode:
@@ -239,6 +246,12 @@ func sequenceNeedsProcessing(node *yaml.Node) bool {
 }
 
 func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	// Sequence decoding and !append resolution can bypass processNode, so validate
+	// version tags throughout the subtree before taking either path.
+	if err := rejectSequenceVersionTags(node, currentPath); err != nil {
+		return err
+	}
+
 	// Handle !append tag for list concatenation during merging.
 	if node.Tag == u.AtmosYamlFuncAppend {
 		return handleAppend(node, v, currentPath)
@@ -274,6 +287,15 @@ func processSequenceElement(child *yaml.Node, v *viper.Viper, elementPath string
 		value, err := processScalarNodeValue(child)
 		if err != nil {
 			return nil, err
+		}
+		if strings.HasPrefix(elementPath, "devcontainer.") && isIncludeTag(child.Tag) {
+			if err := child.Encode(value); err != nil {
+				return nil, err
+			}
+			encodeDevcontainerKeys(child, elementPath)
+			if err := child.Decode(&value); err != nil {
+				return nil, err
+			}
 		}
 		// Also set the individual element for path-based access.
 		v.Set(elementPath, value)
@@ -435,6 +457,11 @@ func processRandomTag(strFunc, nodeValue string) (any, error) {
 // during evaluation return an error wrapped with ErrExecuteYamlFunctions, and
 // unknown/unsupported custom tags return ErrUnsupportedYamlTag.
 func processScalarNodeValue(node *yaml.Node) (any, error) {
+	if strings.HasPrefix(node.Tag, "!") && !isStandardYAMLTag(node.Tag) {
+		if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+			return nil, err
+		}
+	}
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 
 	if isStandardYAMLTag(node.Tag) {
@@ -446,8 +473,13 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 	}
 
 	switch node.Tag {
+	case u.AtmosYamlFuncCEL:
+		return (yamlsource.Source{Tag: node.Tag, Argument: node.Value, Line: node.Line, Column: node.Column}).Encode(), nil
 	case u.AtmosYamlFuncUnset:
 		return nil, nil
+	case u.AtmosYamlFuncLiteral:
+		// !literal keeps the value exactly as written.
+		return node.Value, nil
 	case u.AtmosYamlFuncEnv:
 		return processEnvTag(strFunc, node.Value)
 	case u.AtmosYamlFuncExec:
@@ -486,7 +518,16 @@ func decodeNodeWithYamlFunctions(node *yaml.Node) (any, error) {
 	return decodeNodeWithYamlFunctionsForFile(node, "")
 }
 
+// decodeNodeWithYamlFunctionsForFile evaluates config YAML with source-relative includes
+// and a recursion guard shared by every include in this decoding operation.
 func decodeNodeWithYamlFunctionsForFile(node *yaml.Node, sourceFile string) (any, error) {
+	decoder := configYamlDecoder{includes: make(map[string]bool)}
+	return decoder.decode(node, sourceFile)
+}
+
+// decode dispatches each YAML node to its config evaluator while retaining the
+// source file and active include chain across nested mappings and sequences.
+func (d *configYamlDecoder) decode(node *yaml.Node, sourceFile string) (any, error) {
 	if node == nil {
 		return nil, nil
 	}
@@ -496,36 +537,42 @@ func decodeNodeWithYamlFunctionsForFile(node *yaml.Node, sourceFile string) (any
 		if len(node.Content) == 0 {
 			return nil, nil
 		}
-		return decodeNodeWithYamlFunctionsForFile(node.Content[0], sourceFile)
+		return d.decode(node.Content[0], sourceFile)
 	case yaml.MappingNode:
-		return decodeMappingNodeWithYamlFunctions(node, sourceFile)
+		return d.decodeMappingNodeWithYamlFunctions(node, sourceFile)
 	case yaml.SequenceNode:
-		return decodeSequenceNodeWithYamlFunctions(node, sourceFile)
+		return d.decodeSequenceNodeWithYamlFunctions(node, sourceFile)
 	case yaml.ScalarNode:
-		return decodeScalarNodeWithYamlFunctions(node, sourceFile)
+		return d.decodeScalarNodeWithYamlFunctions(node, sourceFile)
 	default:
 		return decodePlainYamlNode(node)
 	}
 }
 
-func decodeMappingNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+// decodeMappingNodeWithYamlFunctions evaluates mapping values while preserving key spelling.
+func (d *configYamlDecoder) decodeMappingNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
 	result := make(map[string]interface{}, len(node.Content)/2)
 	for i := 0; i < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
 		valueNode := node.Content[i+1]
-		value, err := decodeNodeWithYamlFunctionsForFile(valueNode, sourceFile)
+		value, err := d.decode(valueNode, sourceFile)
 		if err != nil {
 			return nil, err
 		}
 		result[keyNode.Value] = value
 	}
+	recordScriptSource(node, result, sourceFile)
+	if err := recordCommandFields(node, result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
-func decodeSequenceNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+// decodeSequenceNodeWithYamlFunctions evaluates sequence elements in their original order.
+func (d *configYamlDecoder) decodeSequenceNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
 	result := make([]interface{}, 0, len(node.Content))
 	for _, child := range node.Content {
-		value, err := decodeNodeWithYamlFunctionsForFile(child, sourceFile)
+		value, err := d.decode(child, sourceFile)
 		if err != nil {
 			return nil, err
 		}
@@ -534,9 +581,10 @@ func decodeSequenceNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (an
 	return result, nil
 }
 
-func decodeScalarNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+// decodeScalarNodeWithYamlFunctions evaluates custom tags and decodes ordinary YAML scalars.
+func (d *configYamlDecoder) decodeScalarNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
 	if hasCustomTag(node.Tag) {
-		return processScalarNodeValueForFile(node, sourceFile)
+		return d.processScalarNodeValueForFile(node, sourceFile)
 	}
 	return decodePlainYamlNode(node)
 }
@@ -549,51 +597,78 @@ func decodePlainYamlNode(node *yaml.Node) (any, error) {
 	return value, nil
 }
 
-func processScalarNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+// processScalarNodeValueForFile resolves includes against the source file when
+// available and delegates other scalar tags to the common config evaluator.
+func (d *configYamlDecoder) processScalarNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	if node.Tag == u.AtmosYamlFuncCEL {
+		return (yamlsource.Source{Tag: node.Tag, Argument: node.Value, File: sourceFile, Line: node.Line, Column: node.Column}).Encode(), nil
+	}
+	guard.RememberValue(node.Tag+" "+node.Value, guard.FileOrigin(sourceFile))
 	if sourceFile == "" || !isIncludeTag(node.Tag) {
 		return processScalarNodeValue(node)
 	}
 
-	return processIncludeNodeValueForFile(node, sourceFile)
+	return d.processIncludeNodeValueForFile(node, sourceFile)
 }
 
 func isIncludeTag(tag string) bool {
 	return tag == u.AtmosYamlFuncInclude || tag == u.AtmosYamlFuncIncludeRaw
 }
 
-func processIncludeNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+// processIncludeNodeValueForFile loads an include and evaluates opted-in YAML
+// before decoding, rejecting repeated or excessively deep active include chains.
+func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+		return nil, err
+	}
+	// Resolve the path against the config file and the project base path, never the working
+	// directory, so the result is the same wherever Atmos runs from.
+	scope := commandIncludeScope(sourceFile)
+	value := scope.Resolve(node.Value).Value
 	resolved := legacyyaml.Node{
 		Kind:  legacyyaml.ScalarNode,
 		Tag:   node.Tag,
-		Value: node.Value,
+		Value: value,
 	}
-	basePath := includeBasePathForSourceFile(sourceFile)
+	key := sourceFile + "\x00" + node.Value
+	if d.includes[key] || len(d.includes) >= maxConfigIncludeDepth {
+		return nil, fmt.Errorf("%w: recursive include: %s", ErrExecuteYamlFunctions, node.Value)
+	}
+	d.includes[key] = true
+	defer delete(d.includes, key)
 	atmosConfig := &schema.AtmosConfiguration{
-		BasePath:         basePath,
-		BasePathAbsolute: basePath,
+		BasePath:         scope.BasePath,
+		BasePathAbsolute: scope.BasePath,
 	}
 	var err error
 	if node.Tag == u.AtmosYamlFuncIncludeRaw {
-		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, node.Value, sourceFile)
+		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, value, sourceFile)
 	} else {
-		err = u.ProcessIncludeTag(atmosConfig, &resolved, node.Value, sourceFile)
+		_, err = u.ProcessIncludeTagWalked(atmosConfig, &resolved, value, sourceFile, d.evaluateInclude)
 	}
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
 	}
-	var value any
-	if err := resolved.Decode(&value); err != nil {
+	var decoded any
+	if err := resolved.Decode(&decoded); err != nil {
 		return nil, err
 	}
-	return value, nil
+	return decoded, nil
 }
 
+// includeBasePathForSourceFile returns the directory a config file's bare include paths anchor
+// to when it declares no base path: the config file's own directory, or the parent of the
+// nearest enclosing `atmos.d` or `.atmos.d` directory for files loaded from one (at any depth).
 func includeBasePathForSourceFile(sourceFile string) string {
-	dir := filepath.Dir(sourceFile)
-	if base := filepath.Base(dir); base == ".atmos.d" || base == "atmos.d" {
-		return filepath.Dir(dir)
+	configDir := filepath.Dir(sourceFile)
+	for dir := configDir; ; dir = filepath.Dir(dir) {
+		if base := filepath.Base(dir); base == ".atmos.d" || base == "atmos.d" {
+			return filepath.Dir(dir)
+		}
+		if parent := filepath.Dir(dir); parent == dir {
+			return configDir
+		}
 	}
-	return dir
 }
 
 // processScalarNode processes a YAML scalar node tagged with an Atmos custom function and stores the resolved value in v.
@@ -601,6 +676,11 @@ func includeBasePathForSourceFile(sourceFile string) string {
 // If the node has no tag or a native YAML tag, the function is a no-op.
 // It returns any error produced by the invoked handler.
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	if strings.HasPrefix(node.Tag, "!") && !isStandardYAMLTag(node.Tag) {
+		if err := admission.FunctionValue(context.Background(), node.Tag, node.Tag+" "+node.Value); err != nil {
+			return err
+		}
+	}
 	if node.Tag == "" {
 		return nil
 	}
@@ -610,6 +690,20 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	}
 
 	switch node.Tag {
+	case u.AtmosYamlFuncCEL:
+		node.Value = (yamlsource.Source{Tag: node.Tag, Argument: node.Value, File: v.ConfigFileUsed(), Line: node.Line, Column: node.Column}).Encode()
+		node.Tag = "!!str"
+		v.Set(currentPath, node.Value)
+		return nil
+	case "!version":
+		parts := strings.Split(currentPath, ".")
+		if len(parts) != 4 || parts[0] != "ai" || parts[1] != "skills" || parts[3] != "ref" || strings.TrimSpace(node.Value) == "" {
+			return unsupportedAtmosYamlTagError(node.Tag, currentPath)
+		}
+		node.Value = schema.SkillVersionMarker + node.Value
+		node.Tag = "!!str"
+		v.Set(currentPath, node.Value)
+		return nil
 	case u.AtmosYamlFuncUnset:
 		// The !unset tag is handled in processMappingNode by skipping the key.
 		// If we reach here, it means !unset was used in a context where it can't
@@ -617,6 +711,12 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		// In this case, we simply don't set any value and clear the tag.
 		log.Debug("Unsetting configuration key", "path", currentPath)
 		node.Tag = "" // Avoid re-processing.
+		return nil
+	case u.AtmosYamlFuncLiteral:
+		// !literal keeps the value exactly as written. Viper already holds that value, because it
+		// reads an explicitly tagged scalar as a plain string, so there is nothing to set. Pin the
+		// node to a string so a later decode of the node cannot re-type the value (for example 123).
+		node.Tag = "!!str"
 		return nil
 	case u.AtmosYamlFuncEnv:
 		return handleEnv(node, v, currentPath)
@@ -708,7 +808,13 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if includeValue != nil {
 		data, ok := includeValue["include_data"]
 		if ok {
-			// Set the value in Viper.
+			if err := node.Encode(data); err != nil {
+				return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+			}
+			encodeDevcontainerKeys(node, currentPath)
+			if err := node.Decode(&data); err != nil {
+				return err
+			}
 			v.Set(currentPath, data)
 			if err := node.Encode(data); err != nil {
 				return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)

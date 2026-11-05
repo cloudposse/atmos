@@ -36,6 +36,8 @@
     "deny": [
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
+      "Bash(gh stack push:*)",
+      "Bash(gh stack sync:*)",
       "Bash(git reset --hard:*)",
       "Bash(git clean:*)",
       "Bash(go clean:*)",

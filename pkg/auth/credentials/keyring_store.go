@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cloudposse/atmos/pkg/auth/providers/mock"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/keyring"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -128,56 +127,6 @@ func (s *keyringCredentialStore) SetAny(key string, value interface{}) error {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store data: %w", err))
 	}
 	return nil
-}
-
-// marshalCredential maps a concrete credential type to its envelope type tag and JSON payload.
-func marshalCredential(creds types.ICredentials) (string, []byte, error) {
-	var typ string
-	switch creds.(type) {
-	case *types.AWSCredentials:
-		typ = "aws"
-	case *types.GCPCredentials:
-		typ = "gcp"
-	case *types.OIDCCredentials:
-		typ = "oidc"
-	case *types.ProCredentials:
-		typ = "atmos-pro"
-	case *mock.Credentials:
-		typ = "mock"
-	default:
-		return "", nil, fmt.Errorf("%w: %T", errors.Join(ErrCredentialStore, ErrUnsupportedCredentialType), creds)
-	}
-	raw, err := json.Marshal(creds)
-	if err != nil {
-		return "", nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
-	}
-	return typ, raw, nil
-}
-
-// unmarshalCredential reconstructs the concrete credential type named by the envelope.
-func unmarshalCredential(env credentialEnvelope) (types.ICredentials, error) {
-	switch env.Type {
-	case "aws":
-		return decodeCredential(env.Data, &types.AWSCredentials{}, "AWS")
-	case "gcp":
-		return decodeCredential(env.Data, &types.GCPCredentials{}, "GCP")
-	case "oidc":
-		return decodeCredential(env.Data, &types.OIDCCredentials{}, "OIDC")
-	case "atmos-pro":
-		return decodeCredential(env.Data, &types.ProCredentials{}, "Atmos Pro")
-	case "mock":
-		return decodeCredential(env.Data, &mock.Credentials{}, "mock")
-	default:
-		return nil, fmt.Errorf("%w: %q", errors.Join(ErrCredentialStore, ErrUnknownCredentialType), env.Type)
-	}
-}
-
-// decodeCredential JSON-unmarshals the envelope payload into the given concrete credential.
-func decodeCredential[T types.ICredentials](data []byte, into T, name string) (types.ICredentials, error) {
-	if err := json.Unmarshal(data, into); err != nil {
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal %s credentials: %w", name, err))
-	}
-	return into, nil
 }
 
 // filterRealmKeys reduces a flat list of realm-scoped keyring keys to aliases. With a realm it

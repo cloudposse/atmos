@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -61,6 +62,10 @@ func init() {
 
 	// Add to parent command.
 	PlanfileCmd.AddCommand(deleteCmd)
+	internal.RegisterCommandMetadata(
+		deleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/planfile/delete"),
+	)
 }
 
 // parseDeleteOptions parses command flags into DeleteOptions.

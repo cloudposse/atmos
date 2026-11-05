@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import DemoVideo from '@site/src/components/landing/DemoVideo';
+import DemoCast from '@site/src/components/landing/DemoCast';
 
 const EXTENSIONS = [
   { title: 'Custom commands', desc: 'Your task runner, built in — wrap any script as a first-class atmos command, with flags, args, and identity.', to: '/cli/configuration/commands' },
@@ -10,7 +10,7 @@ const EXTENSIONS = [
   { title: 'Hooks & stores', desc: 'Run infracost, checkov, trivy, or any command on lifecycle events, and plug in SSM, Secrets Manager, Key Vault, Vault, Redis, and more for cross-component data.', to: '/stacks/hooks' },
   { title: 'MCP & skills', desc: 'Connect Atmos to any agent, or publish reusable skills your team can install.', to: '/ai/mcp-server' },
   { title: 'Scaffolding', desc: 'Generate new components, stacks, and entire landing zones from built-in or custom templates with atmos scaffold and atmos init.', to: '/cli/commands/scaffold/usage' },
-  { title: 'Validation', desc: 'Enforce your own guardrails with OPA/Rego policies and JSON Schema.', to: '/validation/validating' },
+  { title: 'Policies & Validation', desc: 'Gate commands, plans, and deployments with CEL or Starlark policies, and validate configuration with OPA/Rego and JSON Schema.', to: '/policies' },
   { title: 'Templates & data sources', desc: 'Pull live data into your config with Go templates and Gomplate datasources.', to: '/templates' },
 ];
 
@@ -29,7 +29,7 @@ function Extensibility() {
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
-        <DemoVideo title="Built for your agents" slug="extensibility" />
+        <DemoCast title="Built for your agents" slug="extensibility" />
       </motion.div>
       <div className="lp-extend-grid">
         {EXTENSIONS.map((ext, i) => (

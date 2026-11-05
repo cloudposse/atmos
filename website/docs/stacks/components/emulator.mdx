@@ -8,13 +8,10 @@ id: emulator
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Emulator components are stack-scoped, long-running containers that stand in for a cloud API (AWS, GCP, Azure), Kubernetes, or a backing service (Vault/OpenBao, 1Password Connect, an OCI/Terraform registry) during local development and testing. You declare them with the same stack-based configuration used for Terraform, Helmfile, Packer, and Ansible, and operate them with the [`atmos emulator`](/cli/commands/emulator/usage) command group — letting the rest of your stack run offline, with no cloud account.
 </Intro>
-
-<Experimental />
 
 An emulator container outlives the `atmos` process and is discovered by labels derived from the canonical component instance address, so `atmos emulator ps`, `logs`, `exec`, and `down` reattach to the already-running container.
 
@@ -65,6 +62,20 @@ With the configuration above, `atmos emulator up aws --stack=plat-ue2-dev` start
 ## Supported Drivers & Targets
 
 Each driver maps to one target and supplies a default image and port. The host port is auto-assigned unless you pin it with `container.ports`.
+
+A nonempty `container.ports` list **replaces** the driver's default port list. Include the
+API port alongside additional service ports. For `k3s`, Atmos validates that port `6443/tcp`
+is present before starting the container; a mapping for only port 80 is invalid.
+Omitting `host` lets the runtime assign a host port automatically:
+
+```yaml
+container:
+  ports:
+    - container: 6443
+    - container: 80
+      host: 8080
+```
+
 
 | Driver | Target | Default image | Container port |
 | --- | --- | --- | --- |

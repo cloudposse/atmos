@@ -37,7 +37,12 @@ and Podman runtimes with automatic detection.`,
 func init() {
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
-	internal.Register(&DevcontainerCommandProvider{})
+	internal.Register(
+		&DevcontainerCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/devcontainer"),
+		internal.WithExample("examples/devcontainer", "Devcontainers"),
+		internal.WithExample("examples/devcontainer-build", "Build a Devcontainer"),
+	)
 }
 
 // DevcontainerCommandProvider implements the CommandProvider interface.

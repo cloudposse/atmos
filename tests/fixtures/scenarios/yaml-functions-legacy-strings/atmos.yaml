@@ -1,0 +1,10 @@
+# Dedicated compatibility fixture: these quoted function strings are intentional.
+edition: "2026-10-19"
+base_path: ../..
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: scenarios/yaml-functions-legacy-strings/stacks
+  included_paths: ['**/*']
+  name_template: '{{ .vars.stage }}'

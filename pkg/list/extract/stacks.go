@@ -225,6 +225,7 @@ func StacksForComponent(componentName string, stacksMap map[string]any, tagsFilt
 				"stack":     stackName,
 				"component": componentName,
 			}
+			copyComponentStackSections(stack, stackData, componentName, componentTypes)
 			stacks = append(stacks, stack)
 		}
 	}
@@ -234,6 +235,26 @@ func StacksForComponent(componentName string, stacksMap map[string]any, tagsFilt
 	}
 
 	return stacks, nil
+}
+
+// Component-filtered rows expose the selected component's values to columns.
+func copyComponentStackSections(row map[string]any, stackData any, name string, types []string) {
+	stack, ok := stackData.(map[string]any)
+	if !ok {
+		return
+	}
+	components, _ := stack["components"].(map[string]any)
+	for _, kind := range types {
+		group, _ := components[kind].(map[string]any)
+		component, ok := group[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, section := range []string{config.VarsSectionName, config.SettingsSectionName, config.MetadataSectionName, config.EnvSectionName, config.BackendSectionName} {
+			row[section] = component[section]
+		}
+		return
+	}
 }
 
 // findComponentInStack reports whether componentName exists in the stack

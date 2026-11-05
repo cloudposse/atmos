@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -63,6 +64,10 @@ func init() {
 	describeWorkflowsCmd.PersistentFlags().StringP("output", "o", "list", "Specify the output type (`list` is default)")
 
 	describeCmd.AddCommand(describeWorkflowsCmd)
+	internal.RegisterCommandMetadata(
+		describeWorkflowsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/workflows"),
+	)
 }
 
 func flagsToDescribeWorkflowsArgs(flags *pflag.FlagSet, describe *exec.DescribeWorkflowsArgs) error {

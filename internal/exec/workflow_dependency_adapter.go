@@ -30,7 +30,7 @@ func WorkflowLookup(atmosConfig *schema.AtmosConfiguration, defaultFile string) 
 				WithHint("Add 'file: <workflow-file>.yaml' to this dependency entry").
 				Err()
 		}
-		workflowConfig, err := LoadWorkflowConfig(ResolveWorkflowFilePath(atmosConfig, file))
+		workflowConfig, err := LoadWorkflowConfig(atmosConfig, ResolveWorkflowFilePath(atmosConfig, file))
 		if err != nil {
 			return nil, false, err
 		}
@@ -58,7 +58,7 @@ func WorkflowRunner(atmosConfig *schema.AtmosConfiguration, defaultFile string, 
 			file = defaultFile
 		}
 		workflowPath := ResolveWorkflowFilePath(atmosConfig, file)
-		workflowConfig, err := LoadWorkflowConfig(workflowPath)
+		workflowConfig, err := LoadWorkflowConfig(atmosConfig, workflowPath)
 		if err != nil {
 			return err
 		}

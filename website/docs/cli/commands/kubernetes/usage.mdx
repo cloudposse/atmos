@@ -6,6 +6,8 @@ id: usage
 description: Render, validate, diff, plan, apply, deploy, and delete Kubernetes components in Atmos stacks.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
@@ -210,7 +212,7 @@ environment rollout or a CI job scoped to changed components:
 
 <dt>`--labels`</dt>
 <dd>
-  Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+  Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
 </dd>
 </dl>
 
@@ -230,7 +232,9 @@ components:
         notify:
           events:
             - after.kubernetes.apply
-          command: echo "applied argocd"
+          kind: command
+          command: echo
+          args: ["applied argocd"]
 ```
 
 Supported events include `before.kubernetes.render`, `after.kubernetes.render`,
@@ -239,3 +243,15 @@ Supported events include `before.kubernetes.render`, `after.kubernetes.render`,
 `after.kubernetes.diff`, `before.kubernetes.apply`, `after.kubernetes.apply`,
 `before.kubernetes.deploy`, `after.kubernetes.deploy`,
 `before.kubernetes.delete`, and `after.kubernetes.delete`.
+
+## Try it out
+
+<TryExample example="kubernetes">
+
+Render the included manifests without contacting a cluster.
+
+```shell
+atmos kubernetes render demo -s dev
+```
+
+</TryExample>

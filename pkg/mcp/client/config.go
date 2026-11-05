@@ -7,6 +7,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -31,6 +32,9 @@ type ParsedConfig struct {
 	AutoStart   bool
 	Timeout     time.Duration
 	Identity    string
+	// Optional marks a server that is skipped with a warning (instead of erroring) when its
+	// Identity cannot be resolved in the active auth context. See schema.MCPServerConfig.Optional.
+	Optional bool
 }
 
 // ParseConfig validates and converts an MCPServerConfig into a ParsedConfig.
@@ -52,7 +56,7 @@ func ParseConfig(name string, cfg schema.MCPServerConfig) (*ParsedConfig, error)
 	timeout := defaultTimeout
 	if cfg.Timeout != "" {
 		var err error
-		timeout, err = time.ParseDuration(cfg.Timeout)
+		timeout, err = duration.ParseDuration(cfg.Timeout)
 		if err != nil {
 			return nil, fmt.Errorf("%w: server %q: %w", errUtils.ErrMCPServerInvalidTimeout, name, err)
 		}
@@ -75,6 +79,7 @@ func ParseConfig(name string, cfg schema.MCPServerConfig) (*ParsedConfig, error)
 		AutoStart:   cfg.AutoStart,
 		Timeout:     timeout,
 		Identity:    cfg.Identity,
+		Optional:    cfg.Optional,
 	}, nil
 }
 

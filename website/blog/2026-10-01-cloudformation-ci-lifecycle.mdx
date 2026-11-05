@@ -1,0 +1,107 @@
+---
+slug: cloudformation-ci-lifecycle
+title: "CloudFormation CI summaries and safer stack lifecycles"
+authors: [osterman]
+tags: [feature, bugfix]
+---
+
+Reviewing a CloudFormation deployment in CI means finding the pending changes, the deployment result,
+and any drift in a stream of job output. Atmos now presents those results as native job summaries,
+alongside fixes for dependency ordering, sensitive outputs, and template delivery.
+
+<!--truncate-->
+
+import TryExample from '@site/src/components/TryExample';
+
+## The Problem
+
+A successful deployment command is only part of a dependable workflow. Reviewers need a readable
+changeset, drift counts must distinguish changed resources from clean ones, and teardown must remove
+consumers before the stacks they depend on. Previewing configuration should also be safe before
+credentials or external sources are available.
+
+## The Fix
+
+The [CloudFormation commands](/cli/commands/aws/cloudformation) integrate with
+[native CI job summaries](/ci#job-summaries). Diff summaries show pending changes; apply and delete
+summaries report the stack operation; drift summaries count only modified or deleted resources.
+Each summary includes a command to reproduce the operation.
+
+CloudFormation also supports [CI output variables](/ci#outputs). PR comments,
+commit statuses, and stored artifacts are not published.
+
+The same commands also handle these lifecycle cases:
+
+- Bulk deletion removes consumers before dependencies. Apply keeps dependency-first ordering.
+- [Named changeset execution](/cli/commands/aws/cloudformation/changeset/execute) enables configured
+  termination protection after a successful deployment, matching apply.
+- [Dry-run](/cli/commands/aws/cloudformation#execution-controls) validates static configuration
+  without evaluating YAML functions or templates, authenticating, downloading sources, running hooks,
+  or calling cloud services. Checks that need dynamic values are deferred.
+- [Template delivery](/stacks/components/aws-cloudformation#delivery-targets) applies an S3 prefix
+  once, so the uploaded object and its template URL agree. StackSet account IDs must be quoted
+  12-digit strings; malformed targets fail before creating or updating a StackSet.
+- [Source provisioning](/stacks/components/aws-cloudformation#source-provisioning) accepts a
+  source-only component when the provisioned result contains one unambiguous template file.
+- Configured [before/after hooks](/stacks/hooks) now match both drift commands correctly.
+
+### Output Masking
+
+The [output command](/cli/commands/aws/cloudformation/output#masking) uses deployed
+template metadata to mask outputs that depend on `NoEcho` parameters. This
+works even when the local template is absent or parameter values have changed.
+
+With masking enabled, presentation requires `cloudformation:GetTemplate` and
+`cloudformation:DescribeStacks`. Unreadable metadata stops presentation.
+Internal dependency lookups still receive real values. Keep secrets out of
+outputs: transformations without detectable references may evade masking.
+
+## How to Use It
+
+Enable [CI mode](/cli/configuration/ci) and summary output in `atmos.yaml`:
+
+```yaml
+ci:
+  enabled: true
+  summary:
+    enabled: true
+```
+
+Run the usual commands with `--ci`:
+
+```shell
+atmos aws cloudformation diff vpc -s plat-ue2-dev --ci
+atmos aws cloudformation drift detect vpc -s plat-ue2-dev --ci
+atmos aws cloudformation drift describe vpc -s plat-ue2-dev --ci
+```
+
+GitHub Actions writes summaries to `GITHUB_STEP_SUMMARY`. In a generic CI environment, set
+`ATMOS_CI_SUMMARY` to the destination file. Dry-run does not publish a summary.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Install Docker or Podman and Python 3. Configure the shortcut, start the local emulator, and deploy without an AWS account:
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos validate stacks
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft output demo -s local
+```
+
+When finished, delete the demo stack and stop the emulator:
+
+```shell
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>
+
+## Get Involved
+
+See [PR #3100](https://github.com/cloudposse/atmos/pull/3100) for the changes and share feedback in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

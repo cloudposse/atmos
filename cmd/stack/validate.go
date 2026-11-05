@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -100,6 +101,10 @@ func init() {
 	stackValidateCmd.PersistentFlags().Bool("affected", false, "Validate stack manifests affected since the Git merge-base")
 	stackValidateCmd.PersistentFlags().String("base", "", "Git base ref or SHA to compare against for affected validation")
 	stackValidateCmd.PersistentFlags().StringSlice("exclude", nil, "Exclude repository paths from validation (glob; can be repeated)")
+	internal.RegisterCommandMetadata(
+		stackValidateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-validate"),
+	)
 }
 
 func withExcludedStackPaths(atmosConfig *schema.AtmosConfiguration, excludes []string) *schema.AtmosConfiguration {

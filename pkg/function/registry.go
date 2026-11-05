@@ -90,13 +90,13 @@ func (r *Registry) Get(name string) (Function, error) {
 
 	// Check primary names first.
 	if fn, exists := r.functions[name]; exists {
-		return fn, nil
+		return admittedFunction{fn}, nil
 	}
 
 	// Check aliases.
 	if primaryName, exists := r.aliases[name]; exists {
 		if fn, exists := r.functions[primaryName]; exists {
-			return fn, nil
+			return admittedFunction{fn}, nil
 		}
 	}
 
@@ -131,7 +131,7 @@ func (r *Registry) GetByPhase(phase Phase) []Function {
 	var result []Function
 	for _, fn := range r.functions {
 		if fn.Phase() == phase {
-			result = append(result, fn)
+			result = append(result, admittedFunction{fn})
 		}
 	}
 	return result

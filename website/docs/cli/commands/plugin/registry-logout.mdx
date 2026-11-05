@@ -1,0 +1,41 @@
+---
+title: atmos plugin registry logout
+sidebar_label: registry logout
+sidebar_class_name: command
+id: registry-logout
+description: Log out the Atmos identity used by a plugin registry.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Log out the Atmos identity used by a plugin registry, including its stored credentials and linked integration cleanup.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin registry logout --help" src="/casts/screengrabs/atmos-plugin-registry-logout--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin registry logout <registry-or-alias>
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>registry-or-alias</code></dt>
+  <dd>Registry hostname or configured registry alias. When an identity is configured, this clears
+  that identity through Atmos auth. Other registries using the same identity share this logout.
+  Without an identity, only Atmos's explicit credentials for the host are removed; Docker helper
+  credentials are managed separately.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos auth logout --identity=registry-reader --keychain --force
+# Convenience for the identity configured on corporate:
+atmos plugin registry logout corporate
+```

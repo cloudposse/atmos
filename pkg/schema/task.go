@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"time"
+	"sort"
 
 	"github.com/go-viper/mapstructure/v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/duration"
 )
 
 // Task type constants.
@@ -31,6 +33,8 @@ const (
 	TaskTypeCast = "cast"
 	// TaskTypeSimulate records simulated terminal activity inside a cast step.
 	TaskTypeSimulate = "simulate"
+	// TaskTypeScreenshot captures a mid-recording still-image marker inside a cast step.
+	TaskTypeScreenshot = "screenshot"
 	// TaskTypeWorkdir provisions a mutable working directory from a source.
 	TaskTypeWorkdir = "workdir"
 	// TaskTypeWait is the action step that blocks until the background step(s)
@@ -55,6 +59,9 @@ var (
 	ErrTaskInvalidFormat = errors.New("invalid task format")
 	// ErrTaskUnexpectedNodeKind is returned when a task node has an unexpected kind.
 	ErrTaskUnexpectedNodeKind = errors.New("unexpected task node kind")
+	// ErrTaskUnknownField is recorded on a step that sets a field no step has, so a misspelling is
+	// reported instead of silently dropped.
+	ErrTaskUnknownField = errors.New("unknown field")
 )
 
 // Inputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:
@@ -102,14 +109,23 @@ type Task struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	// Command is the command to execute.
 	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	// Script is the inline script body for TaskTypeScript.
+	// Script is the inline script body for TaskTypeScript. Mutually exclusive with Source.
 	Script string `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`
-	// Interpreter is the executable used to run Script for TaskTypeScript.
+	// Interpreter is the executable used to run Script for TaskTypeScript. It is inferred from the extension of Source when omitted.
 	Interpreter string `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"`
+	// ScriptSource is the absolute path of the file Script was read from (a local !include or
+	// !include.raw in a custom command). Loaders set it; it has no YAML or JSON key.
+	ScriptSource string `yaml:"-" json:"-" mapstructure:"script_source"`
+	// LiteralFields lists the fields of this step that were written with the !literal tag, so the
+	// runner uses them exactly as written instead of rendering them as templates. Loaders set it;
+	// it has no YAML or JSON key. See WorkflowStep.LiteralFields.
+	LiteralFields []string `yaml:"-" json:"-" mapstructure:"literal_fields"`
 	// Type specifies the step type: shell, script, atmos, exec, cast, simulate, workdir, or another registered step kind. Defaults to shell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
-	// Timeout specifies the maximum duration for the task. Zero means no timeout.
-	Timeout time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
+	// Timeout specifies the maximum duration for the task as a Go duration string (for example
+	// "30s"). It may be a template; the step runner renders and parses it when the step starts, so
+	// a templated value does not fail config loading. Empty means no timeout.
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
 	// Stack specifies the stack to use for atmos commands.
 	Stack string `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	// WorkingDirectory specifies the working directory for the command.
@@ -128,6 +144,10 @@ type Task struct {
 	// (evaluated before, against the running status). Unset means no forgiveness (today's
 	// fail-stop behavior, unchanged).
 	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
+	// LoadError records a problem found while decoding this step from the merged configuration that
+	// must not fail the whole config load (for example an unknown `retry:` key). The registrar of the
+	// command and the step executor report it. It has no YAML, JSON, or mapstructure key.
+	LoadError error `yaml:"-" json:"-" mapstructure:"-"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -152,7 +172,7 @@ type Task struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only).
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps.
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
@@ -220,6 +240,7 @@ type Task struct {
 	// Cast step and session action fields.
 	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
 	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	ShellInit   string        `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`       // Session shell initialization: clean (default), user, or an rc file path.
 	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
 	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
 	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
@@ -228,7 +249,7 @@ type Task struct {
 	Text        string        `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
 	Regex       string        `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
 	Key         string        `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
-	Duration    string        `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
+	Duration    string        `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause actions and cast playback groups.
 	Interval    string        `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
 	Repeat      int           `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
 	Defaults    *CastDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty" mapstructure:"defaults"`             // Cast child defaults.
@@ -251,11 +272,14 @@ type Task struct {
 	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // auto, docker, podman, or empty for auto-detect.
 	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
+	// Target selects a named component target or an inline publishing target.
+	Target any `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target" jsonschema:"oneof_type=string;object"`
+
 	// Archive step fields (type: archive). Action reuses the container step's
 	// Action field (create | extract | update | replace); Source reuses the
 	// workdir step's Source field (archive requires it to be a string path).
 	Format      string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`                // zip | tar | tgz | tar.bz2 | tar.xz; inferred from destination/source extension when omitted.
-	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Pack: archive file to write. Extract: directory to extract into.
+	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Archive output/extraction path, or publish path relative to its target.
 	Subpath     string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`             // Pack: nest source content under this path inside the archive. Extract: only extract this path, prefix stripped.
 	Include     []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`             // Glob(s); keep only matching files.
 	Exclude     []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`             // Glob(s); drop matching files, evaluated before include.
@@ -325,6 +349,9 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 	// Decode into a zero-value temp first so a reused receiver does not retain
 	// fields omitted from this YAML node (Decode merges into the destination).
 	var fresh plain
+	if err := ValidateRetryNode(value); err != nil {
+		return err
+	}
 	nodes, sanitized := splitStepPolymorphicNodes(value)
 	if err := sanitized.Decode(&fresh); err != nil {
 		return err
@@ -408,18 +435,14 @@ func (t *Tasks) UnmarshalYAML(value *yaml.Node) error {
 //
 //nolint:funlen,revive // Compatibility conversion must remain an explicit field-by-field mapping.
 func (task *Task) ToWorkflowStep() WorkflowStep {
-	// Convert time.Duration to string for WorkflowStep.
-	var timeoutStr string
-	if task.Timeout > 0 {
-		timeoutStr = task.Timeout.String()
-	}
-
 	return WorkflowStep{
 		// Core fields.
 		Name:             task.Name,
 		Command:          task.Command,
 		Script:           task.Script,
 		Interpreter:      task.Interpreter,
+		ScriptSource:     task.ScriptSource,
+		LiteralFields:    task.LiteralFields,
 		Type:             task.Type,
 		Stack:            task.Stack,
 		WorkingDirectory: task.WorkingDirectory,
@@ -430,6 +453,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Continue:         task.Continue,
 		Interactive:      task.Interactive,
 		Tty:              task.Tty,
+		LoadError:        task.LoadError,
 
 		// Interactive step fields.
 		Prompt:         task.Prompt,
@@ -460,7 +484,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		ParallelOutput: task.ParallelOutput,
 		Height:         task.Height,
 		Viewport:       task.Viewport,
-		Timeout:        timeoutStr,
+		Timeout:        task.Timeout,
 		Count:          task.Count,
 
 		// Style step fields.
@@ -517,6 +541,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Cast step and session action fields.
 		Mode:        task.Mode,
 		Shell:       task.Shell,
+		ShellInit:   task.ShellInit,
 		WriteRate:   task.WriteRate,
 		KeyInterval: task.KeyInterval,
 		Jitter:      task.Jitter,
@@ -547,6 +572,9 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Include:     task.Include,
 		Exclude:     task.Exclude,
 		Mtime:       task.Mtime,
+
+		// S3 upload step fields.
+		Target: task.Target,
 
 		// Require step fields.
 		Tools: task.Tools,
@@ -579,20 +607,14 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 //
 //nolint:funlen,revive // Compatibility conversion must remain an explicit field-by-field mapping.
 func TaskFromWorkflowStep(step *WorkflowStep) Task {
-	// Parse timeout string to time.Duration.
-	var timeout time.Duration
-	if step.Timeout != "" {
-		if parsed, err := time.ParseDuration(step.Timeout); err == nil {
-			timeout = parsed
-		}
-	}
-
 	return Task{
 		// Core fields.
 		Name:             step.Name,
 		Command:          step.Command,
 		Script:           step.Script,
 		Interpreter:      step.Interpreter,
+		ScriptSource:     step.ScriptSource,
+		LiteralFields:    step.LiteralFields,
 		Type:             step.Type,
 		Stack:            step.Stack,
 		WorkingDirectory: step.WorkingDirectory,
@@ -603,7 +625,8 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Continue:         step.Continue,
 		Interactive:      step.Interactive,
 		Tty:              step.Tty,
-		Timeout:          timeout,
+		LoadError:        step.LoadError,
+		Timeout:          step.Timeout,
 
 		// Interactive step fields.
 		Prompt:         step.Prompt,
@@ -684,6 +707,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Cast step and session action fields.
 		Mode:        step.Mode,
 		Shell:       step.Shell,
+		ShellInit:   step.ShellInit,
 		WriteRate:   step.WriteRate,
 		KeyInterval: step.KeyInterval,
 		Jitter:      step.Jitter,
@@ -715,6 +739,9 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Exclude:     step.Exclude,
 		Mtime:       step.Mtime,
 
+		// S3 upload step fields.
+		Target: step.Target,
+
 		// Require step fields.
 		Tools: step.Tools,
 		Files: step.Files,
@@ -745,7 +772,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 // TasksDecodeHook is a mapstructure decode hook that handles flexible Tasks parsing.
 // It converts both string elements and map elements in a slice to Tasks.
 // This hook should be used when unmarshaling configuration that contains Tasks fields.
-func TasksDecodeHook() mapstructure.DecodeHookFunc {
+func TasksDecodeHook(strict ...bool) mapstructure.DecodeHookFunc {
 	return func(f reflect.Type, t reflect.Type, data any) (any, error) {
 		// Only handle conversion to Tasks type.
 		if t != reflect.TypeOf(Tasks{}) {
@@ -762,7 +789,7 @@ func TasksDecodeHook() mapstructure.DecodeHookFunc {
 			return data, nil
 		}
 
-		return decodeTasksFromSlice(slice)
+		return decodeTasksFromSlice(slice, strict...), nil
 	}
 }
 
@@ -811,48 +838,46 @@ func sliceToAny(data any) ([]any, bool) {
 
 // decodeTasksFromSlice converts a slice of interface{} values into Tasks.
 // Each element can be either a string (simple syntax) or a map (structured syntax).
-func decodeTasksFromSlice(slice []any) (Tasks, error) {
+func decodeTasksFromSlice(slice []any, strict ...bool) Tasks {
 	tasks := make(Tasks, 0, len(slice))
 	for i, item := range slice {
-		task, err := decodeTaskItem(item, i)
+		task, err := decodeTaskItem(item, i, strict...)
 		if err != nil {
-			return nil, err
+			// A step that cannot be decoded must not fail config loading for every command. Keep a
+			// placeholder that records the error; the command's registrar and the step executor
+			// report it when the command or step is used.
+			task = Task{Name: taskItemName(item), Type: TaskTypeShell, LoadError: err}
 		}
 		tasks = append(tasks, task)
 	}
-	return tasks, nil
+	return tasks
 }
 
 // decodeTaskItem converts a single item (string or map) into a Task.
-func decodeTaskItem(item any, index int) (Task, error) {
+func decodeTaskItem(item any, index int, strict ...bool) (Task, error) {
 	switch v := item.(type) {
 	case string:
 		// Simple string syntax: "echo hello" -> shell command.
 		return Task{Command: v, Type: TaskTypeShell}, nil
 	case map[string]any:
-		return decodeTaskFromMap(v, index)
+		return decodeTaskFromMap(v, index, strict...)
 	default:
 		if taskMap, ok := stringifyTaskMap(v); ok {
-			return decodeTaskFromMap(taskMap, index)
+			return decodeTaskFromMap(taskMap, index, strict...)
 		}
 		return Task{}, fmt.Errorf("%w at index %d: got %T (expected string or map)", ErrTaskUnexpectedNodeKind, index, item)
 	}
 }
 
 // decodeTaskFromMap decodes a map into a Task using mapstructure.
-func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
+func decodeTaskFromMap(m map[string]any, index int, strict ...bool) (Task, error) {
 	var task Task
-	m, err := normalizeTaskOutputMap(m, &task)
+	// An unknown retry key must not fail config loading, which would take down every command, so the
+	// error is kept on the task and reported when the command or step is registered or run.
+	retryErr := validateRetryMapValue(m["retry"])
+	m, err := normalizeTaskMap(m, &task, index)
 	if err != nil {
-		return Task{}, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
-	}
-	m, err = normalizeTaskPromptMap(m, &task)
-	if err != nil {
-		return Task{}, fmt.Errorf("failed to decode task prompt at index %d: %w", index, err)
-	}
-	m, err = normalizeTaskStepsMap(m)
-	if err != nil {
-		return Task{}, fmt.Errorf("failed to decode task steps at index %d: %w", index, err)
+		return Task{}, err
 	}
 
 	// `with:` is polymorphic -- decoded into Build/Run/Push/Inspect for
@@ -871,8 +896,8 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	// caller's own map (e.g. Viper's live merged config tree). delete(m, ...) here would
 	// then remove "with"/"container" from that shared map, losing the override for any
 	// later decode of the same configuration.
-	withValue, hasWith := m["with"]
-	if hasWith {
+	polymorphic := m
+	if _, hasWith := m["with"]; hasWith {
 		m = withoutTaskMapKey(m, "with")
 	}
 
@@ -888,51 +913,91 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	// names; it must go through the same typed decode as the workflow-file
 	// path so the two can't drift apart. Pull it out for the same reason
 	// `with:` is pulled out above.
-	containerValue, hasContainer := m["container"]
-	if hasContainer {
+	if _, hasContainer := m["container"]; hasContainer {
 		m = withoutTaskMapKey(m, "container")
 	}
 
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result:           &task,
-		TagName:          "mapstructure",
-		WeaklyTypedInput: true,
-		DecodeHook: mapstructure.ComposeDecodeHookFunc(
-			mapstructure.StringToTimeDurationHookFunc(),
-			ConditionDecodeHook(),
-			WorkflowStepDecodeHook(),
-		),
-	})
-	if err != nil {
-		return Task{}, fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)
-	}
-	if err := decoder.Decode(m); err != nil {
-		return Task{}, fmt.Errorf("failed to decode task at index %d: %w", index, err)
-	}
-	task.CursorSet = task.CursorSet || mapHasKey(m, "cursor")
-	// Default type to TaskTypeShell if not specified.
-	if task.Type == "" {
-		task.Type = TaskTypeShell
+	if err := decodeTaskFields(m, &task, index, retryErr, strict...); err != nil {
+		return Task{}, err
 	}
 
-	if hasWith {
+	if err := applyTaskPolymorphicMap(polymorphic, &task, index); err != nil {
+		return Task{}, err
+	}
+
+	return task, nil
+}
+
+// applyTaskPolymorphicMap decodes fields whose YAML forms need custom handling.
+func applyTaskPolymorphicMap(m map[string]any, task *Task, index int) error {
+	if withValue, hasWith := m["with"]; hasWith {
 		if err := decodeStepWithFromMapValue(withValue, task.Type, task.Action, &stepPolyTargets{
 			generic:   &task.With,
 			container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
 		}); err != nil {
-			return Task{}, fmt.Errorf("%w: failed to decode task with-block at index %d: %w", ErrWorkflowControlStepInvalid, index, err)
+			return fmt.Errorf("%w: failed to decode task with-block at index %d: %w", ErrWorkflowControlStepInvalid, index, err)
 		}
 	}
 
-	if hasContainer {
+	if containerValue, hasContainer := m["container"]; hasContainer {
 		container, err := decodeTaskContainerFromMapValue(containerValue)
 		if err != nil {
-			return Task{}, fmt.Errorf("%w: failed to decode task container-block at index %d: %w", ErrInvalidWorkflowContainer, index, err)
+			return fmt.Errorf("%w: failed to decode task container-block at index %d: %w", ErrInvalidWorkflowContainer, index, err)
 		}
 		task.Container = container
 	}
+	return nil
+}
 
-	return task, nil
+// normalizeTaskMap prepares structured output, prompts, and nested steps.
+func normalizeTaskMap(m map[string]any, task *Task, index int) (map[string]any, error) {
+	m, err := normalizeTaskOutputMap(m, task)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
+	}
+	m, err = normalizeTaskPromptMap(m, task)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode task prompt at index %d: %w", index, err)
+	}
+	m, err = normalizeTaskStepsMap(m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode task steps at index %d: %w", index, err)
+	}
+	return m, nil
+}
+
+// decodeTaskFields decodes ordinary fields and keeps validation failures local to the task.
+func decodeTaskFields(m map[string]any, task *Task, index int, retryErr error, strict ...bool) error {
+	var decodeMetadata mapstructure.Metadata
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           task,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+		Metadata:         &decodeMetadata,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			duration.DecodeHook(),
+			ConditionDecodeHook(strict...),
+			WorkflowStepDecodeHook(),
+		),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)
+	}
+	if err := decoder.Decode(m); err != nil {
+		return fmt.Errorf("failed to decode task at index %d: %w", index, err)
+	}
+	task.CursorSet = task.CursorSet || mapHasKey(m, "cursor")
+	if retryErr != nil {
+		task.LoadError = fmt.Errorf("step at index %d: %w", index, retryErr)
+	} else if unknown := unknownTaskKeys(decodeMetadata.Unused); len(unknown) > 0 {
+		// A misspelled field (for example `scritp:`) would otherwise be dropped silently.
+		task.LoadError = fmt.Errorf("step at index %d: %w %q (check the spelling against the step fields)", index, ErrTaskUnknownField, unknown[0])
+	}
+	// Default type to TaskTypeShell if not specified.
+	if task.Type == "" {
+		task.Type = TaskTypeShell
+	}
+	return nil
 }
 
 // decodeStepWithFromMapValue applies the same `with:` polymorphic decode as
@@ -1182,4 +1247,54 @@ func withoutTaskMapKey(m map[string]any, key string) map[string]any {
 		}
 	}
 	return copied
+}
+
+// LoadError returns the first problem recorded while decoding the tasks from the merged
+// configuration, or nil when every task decoded cleanly.
+func (t Tasks) LoadError() error {
+	for i := range t {
+		if t[i].LoadError != nil {
+			return t[i].LoadError
+		}
+		if err := WorkflowSteps(t[i].Steps).LoadError(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WorkflowSteps is a list of workflow steps, for helpers that apply to a whole list.
+type WorkflowSteps []WorkflowStep
+
+// LoadError returns the first problem recorded while decoding the steps, or nil.
+func (s WorkflowSteps) LoadError() error {
+	for i := range s {
+		if s[i].LoadError != nil {
+			return s[i].LoadError
+		}
+		if err := WorkflowSteps(s[i].Steps).LoadError(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// taskItemName returns the `name` of a raw task item when it has one, so a placeholder for a task
+// that failed to decode still identifies it.
+func taskItemName(item any) string {
+	m, ok := stringifyTaskMap(item)
+	if !ok {
+		return ""
+	}
+	name, _ := m["name"].(string)
+	return name
+}
+
+// unknownTaskKeys returns the keys mapstructure did not map onto Task, sorted. Keys that are
+// handled outside the struct decode (the polymorphic `with` and `container` blocks) are removed
+// from the map before decoding, so anything left is a field the step does not have.
+func unknownTaskKeys(unused []string) []string {
+	keys := append([]string(nil), unused...)
+	sort.Strings(keys)
+	return keys
 }

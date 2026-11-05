@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package atmos.plugin.v1;
+
+option go_package = "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1;pluginv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// Invocation identifies the live call authorized to use the Atmos API broker.
+message Invocation {
+  string id = 1;
+  uint32 attempt = 2;
+  google.protobuf.Timestamp deadline = 3;
+  string working_directory = 4;
+  map<string, string> environment = 5;
+  string stack = 6;
+  string component = 7;
+  string component_type = 8;
+  bool interactive = 9;
+}
+
+message Credentials {
+  string type = 1;
+  google.protobuf.Timestamp expires_at = 2;
+  google.protobuf.Struct data = 3;
+  repeated string sensitive_keys = 4;
+}
+
+message ServiceVersionRange { string service = 1; uint32 min = 2; uint32 max = 3; }
+message Export { string service = 1; string kind = 2; }
+message DescribeRequest { string atmos_version = 1; repeated ServiceVersionRange host_supported = 2; }
+message DescribeResponse {
+  string plugin_name = 1;
+  string plugin_version = 2;
+  string manifest_digest = 3;
+  repeated ServiceVersionRange services = 4;
+  repeated Export exports = 5;
+  repeated string features = 6;
+}
+message ConfigureRequest {
+  map<string, uint32> broker_ids = 1;
+  google.protobuf.Struct settings = 2;
+  string package_dir = 3;
+}
+
+service Info {
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+  rpc Configure(ConfigureRequest) returns (google.protobuf.Empty);
+}
+
+message ProviderRequest {
+  Invocation invocation = 1;
+  string name = 2;
+  string kind = 3;
+  google.protobuf.Struct spec = 4;
+  string realm = 5;
+}
+message IdentityRequest {
+  Invocation invocation = 1;
+  string name = 2;
+  string kind = 3;
+  google.protobuf.Struct spec = 4;
+  google.protobuf.Struct principal = 5;
+  string realm = 6;
+}
+message Progress { string message = 1; float fraction = 2; }
+message Interaction { string kind = 1; string title = 2; map<string, string> fields = 3; }
+message AuthenticateEvent {
+  oneof event {
+    Progress progress = 1;
+    Interaction interaction = 2;
+    Credentials result = 3;
+  }
+}
+message Diagnostic { string field = 1; string message = 2; }
+message ValidateResponse { repeated Diagnostic diagnostics = 1; }
+message Unsupported { string operation = 1; string reason = 2; }
+message RefreshRequest { ProviderRequest provider = 1; Credentials current = 2; }
+message RefreshResponse { oneof result { Credentials credentials = 1; Unsupported unsupported = 2; } }
+message EnvironmentResponse { map<string, string> environment = 1; }
+message PrepareEnvironmentRequest { ProviderRequest provider = 1; map<string, string> environment = 2; }
+message CredentialPath { string location = 1; string type = 2; bool required = 3; string purpose = 4; }
+message PathsResponse { repeated CredentialPath paths = 1; }
+message IdentityAuthenticateRequest { IdentityRequest identity = 1; Credentials upstream = 2; }
+message IdentityPrepareRequest { IdentityRequest identity = 1; map<string, string> environment = 2; }
+
+service AuthProvider {
+  rpc Validate(ProviderRequest) returns (ValidateResponse);
+  rpc Authenticate(ProviderRequest) returns (stream AuthenticateEvent);
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+  rpc Logout(ProviderRequest) returns (google.protobuf.Empty);
+  rpc Environment(ProviderRequest) returns (EnvironmentResponse);
+  rpc Paths(ProviderRequest) returns (PathsResponse);
+  rpc PrepareEnvironment(PrepareEnvironmentRequest) returns (EnvironmentResponse);
+}
+
+service AuthIdentity {
+  rpc Validate(IdentityRequest) returns (ValidateResponse);
+  rpc Authenticate(IdentityAuthenticateRequest) returns (stream AuthenticateEvent);
+  rpc Logout(IdentityRequest) returns (google.protobuf.Empty);
+  rpc Environment(IdentityRequest) returns (EnvironmentResponse);
+  rpc Paths(IdentityRequest) returns (PathsResponse);
+  rpc PrepareEnvironment(IdentityPrepareRequest) returns (EnvironmentResponse);
+}
+
+// Command output is streamed; exactly one exit event must terminate the stream.
+message CommandRequest {
+  Invocation invocation = 1;
+  string name = 2;
+  repeated string arguments = 3;
+  google.protobuf.Struct settings = 4;
+}
+message CommandExit { uint32 code = 1; }
+message CommandEvent {
+  oneof event {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    CommandExit exit = 3;
+  }
+}
+service Commands {
+  rpc Run(CommandRequest) returns (stream CommandEvent);
+}

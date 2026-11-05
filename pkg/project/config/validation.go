@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/perf"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // isMissingValue reports whether value is considered absent for required-field
@@ -98,6 +99,12 @@ func ValidateFieldValues(scaffoldConfig *ScaffoldConfig, values map[string]inter
 	var invalid []string
 	for i := range scaffoldConfig.Spec.Fields {
 		field := &scaffoldConfig.Spec.Fields[i]
+		if field.Type == fieldTypeComputed {
+			// Computed fields are never user-supplied (ValidateFieldValues
+			// runs before ComputeFields derives them), so there's nothing of
+			// the user's to validate here.
+			continue
+		}
 		if !field.When.Evaluate(condition.Context{Answers: values}) {
 			continue
 		}
@@ -153,6 +160,67 @@ func validateFieldDefinitions(scaffoldConfig *ScaffoldConfig) error {
 		if err := validateFieldOptionsList(field); err != nil {
 			return err
 		}
+		if err := validateComputedFieldDefinition(field); err != nil {
+			return err
+		}
+	}
+	if err := validateComputedFieldOrdering(scaffoldConfig.Spec.Fields, delimiters); err != nil {
+		return err
+	}
+	if err := validateOptionsNotComputed(scaffoldConfig.Spec.Fields); err != nil {
+		return err
+	}
+	if err := validateWhenNotComputed(scaffoldConfig.Spec.Fields); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateComputedFieldDefinition statically validates a `type: computed`
+// field's shape at scaffold-load time: it must declare a non-nil `value:`
+// (a template expression string, or a literal of any other type) and must
+// not declare `required:` (meaningless for a field that's always
+// self-supplied, never prompted or --set) or `default:` (redundant with
+// `value:`, and ambiguous about which wins). Conversely, a non-computed
+// field must not declare `value:` -- it's silently ignored by every other
+// field type today, which would be confusing rather than an error surfaced
+// only much later.
+func validateComputedFieldDefinition(field *FieldDefinition) error {
+	if field.Type != fieldTypeComputed {
+		if field.Value != nil {
+			return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+				WithExplanationf("Field %q declares `value:` but its type is %q, not `computed`", field.Name, field.Type).
+				WithHint("Either set `type: computed`, or remove `value:` and use `default:` instead").
+				WithContext("field_name", field.Name).
+				WithExitCode(2).
+				Err()
+		}
+		return nil
+	}
+
+	if field.Value == nil {
+		return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+			WithExplanationf("Field %q has `type: computed` but no `value:` expression", field.Name).
+			WithHint("Add a `value:` Go-template expression computing this field from answers.*").
+			WithContext("field_name", field.Name).
+			WithExitCode(2).
+			Err()
+	}
+	if field.Required {
+		return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+			WithExplanationf("Field %q is `type: computed` and cannot also be `required:`", field.Name).
+			WithHint("A computed field is always self-supplied; remove `required:`").
+			WithContext("field_name", field.Name).
+			WithExitCode(2).
+			Err()
+	}
+	if field.Default != nil {
+		return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+			WithExplanationf("Field %q is `type: computed` and cannot also declare `default:`", field.Name).
+			WithHint("Remove `default:`; `value:` already determines the field's value").
+			WithContext("field_name", field.Name).
+			WithExitCode(2).
+			Err()
 	}
 	return nil
 }
@@ -482,6 +550,57 @@ func defaultDelimiters(delimiters []string) []string {
 	return delimiters
 }
 
+// validateFilePathPatterns statically confirms every spec.files[] entry's
+// path is a syntactically valid glob pattern (doublestar syntax), regardless
+// of whether it also declares matrix:. A malformed pattern (an unclosed `[`
+// character class or `{` brace-expansion group, for example) is otherwise
+// indistinguishable from "no discovered file happens to match it" at
+// generation time -- pkg/generator/ui's FileSpecByPath treats a match error
+// identically to a plain non-match, so without this check a typo silently
+// and permanently disables that entry's when:/matrix:/target: with zero
+// signal, even though `atmos scaffold validate` would otherwise report the
+// manifest as valid.
+func validateFilePathPatterns(scaffoldConfig *ScaffoldConfig) error {
+	for i := range scaffoldConfig.Spec.Files {
+		file := &scaffoldConfig.Spec.Files[i]
+		if _, err := u.PathMatch(u.NormalizeGlobPattern(file.Path), ""); err != nil {
+			return errUtils.Build(errUtils.ErrScaffoldFilePathPatternInvalid).
+				WithCause(err).
+				WithExplanationf("Invalid glob pattern in spec.files[].path: `%s`", file.Path).
+				WithHint("Check for an unclosed `[` character class or `{` brace-expansion group").
+				WithContext("file_path", file.Path).
+				WithExitCode(2).
+				Err()
+		}
+	}
+	return nil
+}
+
+// validateFileDelimiters statically confirms every spec.files[] entry that
+// declares delimiters declares exactly two non-empty strings. The JSON Schema
+// (minItems/maxItems) already enforces the count; this adds the non-empty
+// check the schema can't express, because FileSpec.ResolveDelimiters would
+// otherwise silently ignore a pair with an empty side and fall back to the
+// scaffold-wide delimiters.
+func validateFileDelimiters(scaffoldConfig *ScaffoldConfig) error {
+	for i := range scaffoldConfig.Spec.Files {
+		file := &scaffoldConfig.Spec.Files[i]
+		if file.Delimiters == nil {
+			continue
+		}
+		if len(file.Delimiters) == 2 && file.Delimiters[0] != "" && file.Delimiters[1] != "" {
+			continue
+		}
+		return errUtils.Build(errUtils.ErrScaffoldFileDelimitersInvalid).
+			WithExplanationf("Invalid delimiters for spec.files[] entry `%s`", file.Path).
+			WithHint("Use exactly two non-empty strings, for example `[\"[[\", \"]]\"]`").
+			WithContext("file_path", file.Path).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
+}
+
 // validateFileMatrix statically validates each spec.files[] entry's matrix
 // configuration: target is required when matrix is set, and every axis is
 // either a non-empty literal list or an `answers.`-prefixed dot-path
@@ -491,12 +610,14 @@ func defaultDelimiters(delimiters []string) []string {
 // plus the one constraint schema can't express: the `answers.` prefix
 // requirement.
 func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
-	delimiters := defaultDelimiters(scaffoldConfig.Spec.Delimiters)
+	specDelimiters := defaultDelimiters(scaffoldConfig.Spec.Delimiters)
 	for i := range scaffoldConfig.Spec.Files {
 		file := &scaffoldConfig.Spec.Files[i]
 		if len(file.Matrix) == 0 {
 			continue
 		}
+		// An entry's own delimiters (if any) govern its matrix axis expressions.
+		delimiters := file.ResolveDelimiters(specDelimiters)
 		if file.Target == "" {
 			return fmt.Errorf("%w: file %q", errUtils.ErrScaffoldMatrixTargetRequired, file.Path)
 		}

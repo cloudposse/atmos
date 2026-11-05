@@ -3,6 +3,7 @@ package generate
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/generate/required_providers"
 )
 
@@ -29,4 +30,9 @@ This command supports the following subcommands:
 func init() {
 	// Add required-providers command (DEV-3124).
 	GenerateCmd.AddCommand(required_providers.NewRequiredProvidersCommand())
+	internal.RegisterCommandMetadata(
+		GenerateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/generate"),
+		internal.WithExample("examples/generate-files", "Generate Files"),
+	)
 }

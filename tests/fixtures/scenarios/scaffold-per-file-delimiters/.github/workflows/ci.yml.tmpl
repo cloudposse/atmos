@@ -1,0 +1,11 @@
+name: CI for << .Config.name >>
+on:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build << .Config.name >>
+        run: echo "building ${{ github.sha }} for ${{ github.ref_name }}"

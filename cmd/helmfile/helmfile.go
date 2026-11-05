@@ -18,6 +18,7 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 )
 
 // doubleDashHint is displayed in help output.
@@ -33,12 +34,31 @@ var helmfileCmd = &cobra.Command{
 	Args:               cobra.NoArgs,
 }
 
+const lifecycleComponentKind = "helmfile"
+
 func init() {
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "diff")
+	planHandler.HookEvents = []string{string(h.BeforeHelmfileDiff), string(h.AfterHelmfileDiff)}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
+	// Helmfile has no deploy subcommand; stack deploy maps to `helmfile apply`
+	// and therefore fires the apply hook events (see helmfileBeforeEvent/helmfileAfterEvent).
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "apply")
+	deployHandler.HookEvents = []string{string(h.BeforeHelmfileApply), string(h.AfterHelmfileApply)}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
+	destroyHandler.HookEvents = []string{string(h.BeforeHelmfileDestroy), string(h.AfterHelmfileDestroy)}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
+
 	// Note: We use FParseErrWhitelist.UnknownFlags=true (set in command definition)
 	// instead of DisableFlagParsing=true to allow unknown flags through to helmfile
 	// while still enabling Cobra to parse known Atmos flags and display proper help.
 	helmfileCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	helmfileCmd.PersistentFlags().Bool("ci", false, "Enable CI mode for automated pipelines (writes job summary).")
+	flags.RegisterComponentCommandFlags(helmfileCmd, "helmfile")
+	flags.NewStandardParser(
+		flags.WithBoolFlag("dry-run", "", false, "Preview the invocation without executing Helmfile"),
+		flags.WithStringFlag("global-options", "", "", "Space-separated global options passed before the Helmfile subcommand"),
+	).RegisterPersistentFlags(helmfileCmd)
 	addStackCompletion(helmfileCmd)
 
 	// Add generate subcommand from the generate subpackage.
@@ -48,11 +68,16 @@ func init() {
 	helmfileCmd.AddCommand(source.GetSourceCommand())
 
 	// Register this command with the registry.
-	internal.Register(&HelmfileCommandProvider{})
+	internal.Register(
+		&HelmfileCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/usage"),
+		internal.WithExample("examples/demo-helmfile", "Helmfile"),
+	)
 }
 
 // helmfileRun is the shared execution function for all helmfile subcommands.
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
+	args, nativeArgs := flags.SplitArgsAtDash(cmd, args)
 	argsCI, args := stripCIFlag(args)
 	// Check if help was requested and display it.
 	if handleHelpRequest(cmd, args) {
@@ -63,6 +88,10 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	enableHeatmapIfRequested()
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
+	if len(nativeArgs) > 0 {
+		diffArgs = append(diffArgs, "--")
+		diffArgs = append(diffArgs, nativeArgs...)
+	}
 	info, err := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
 	if err != nil {
 		return err
@@ -80,7 +109,7 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	info.NodeHooks = nodeHooks
 
 	err = e.ExecuteHelmfile(info)
-	if err != nil && !nodeHooks.called {
+	if err != nil && !info.DryRun && !nodeHooks.called {
 		_ = nodeHooks.After(context.Background(), &info, "", err)
 	}
 	return err

@@ -1,0 +1,7 @@
+# atmos:template
+apiVersion: v2
+name: [[ .Config.name ]]
+description: Helm chart for [[ .Config.name ]]
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

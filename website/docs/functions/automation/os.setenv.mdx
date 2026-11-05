@@ -1,0 +1,49 @@
+---
+title: "os.setenv"
+sidebar_position: 18
+sidebar_label: "os.setenv"
+sidebar_class_name: command
+description: Set an environment variable for subsequent calls in this script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `os.setenv` function sets a string environment variable for subsequent execution in the current script. It does not modify the host Atmos process or other script invocations.
+</Intro>
+
+## Usage
+
+```python
+os.setenv(name, value)
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt><dd>Required. A nonempty string without `=` or null bytes. Names are case-insensitive on Windows.</dd>
+  <dt>`value`</dt><dd>Required. A string without null bytes. `""` sets an empty value; it does not remove the variable.</dd>
+</dl>
+
+Returns `None`. Subsequent `os.getenv()` and `os.environ()` calls see the change. It also reaches `exec.run`,
+`atmos.*`, `component.exec` (including previously resolved handles), and `steps.*` calls. It overrides inherited,
+component, and declared step values; an explicit per-call `env=` override takes precedence. Pinned tool directories
+remain prepended to `PATH`. The declared [`env`](/functions/automation/env) dictionary is unchanged.
+
+Call this function only in the script's main thread. Parallel tasks inherit the changes already made by their parent;
+calling `os.setenv` inside a parallel task raises an error, even with `max_concurrency=1`.
+Use per-call `env=` for different values in different branches. Changes last until the script invocation ends.
+
+## Examples
+
+```python
+os.setenv("REGION", "us-east-1")
+exec.run(["my-tool", "deploy"])
+exec.run(["my-tool", "inspect"], env={"REGION": "us-west-2"})
+print(os.getenv("REGION"))  # us-east-1
+```
+
+## Related
+
+- [`os.getenv`](/functions/automation/os.getenv) reads a variable.
+- [`os.environ`](/functions/automation/os.environ) takes a frozen snapshot.

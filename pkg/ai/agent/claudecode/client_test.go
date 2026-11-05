@@ -2,13 +2,14 @@ package claudecode
 
 import (
 	"context"
-	"os"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/approval"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -275,10 +276,55 @@ func TestParseResponse_WhitespaceOnly(t *testing.T) {
 }
 
 func TestParseResponse_EmptyResult(t *testing.T) {
+	// An empty answer is an error, not a silent success.
 	input := `{"type": "result", "result": "", "is_error": false}`
 	result, err := parseResponse([]byte(input))
-	require.NoError(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCLIProviderEmptyResponse)
 	assert.Empty(t, result)
+}
+
+func TestParseResponse_ResultClassification(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr error
+	}{
+		{"success", `{"type":"result","subtype":"success","result":"ok","is_error":false}`, "ok", nil},
+		{"null result", `{"type":"result","subtype":"success","result":null,"is_error":false}`, "", errUtils.ErrCLIProviderEmptyResponse},
+		{"whitespace result", `{"type":"result","subtype":"success","result":"  \n","is_error":false}`, "", errUtils.ErrCLIProviderEmptyResponse},
+		{"max turns", `{"type":"result","subtype":"error_max_turns","result":null,"is_error":true,"num_turns":6}`, "", errUtils.ErrCLIProviderMaxTurns},
+		{"error during execution uses errors list", `{"type":"result","subtype":"error_during_execution","result":null,"is_error":true,"errors":["bad thing"]}`, "", errUtils.ErrCLIProviderExecFailed},
+		{"permission denials win over prose", `{"type":"result","subtype":"success","result":"needs approval","is_error":false,"permission_denials":[{"tool_name":"Bash","tool_use_id":"t","tool_input":{"command":"rm x"}}]}`, "", errUtils.ErrCLIProviderToolDenied},
+		{"empty denials list is fine", `{"type":"result","subtype":"success","result":"ok","is_error":false,"permission_denials":[]}`, "ok", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseResponse([]byte(tt.input))
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParseResponse_ErrorsListIncluded(t *testing.T) {
+	_, err := parseResponse([]byte(`{"type":"result","is_error":true,"result":null,"errors":["bad thing"]}`))
+	require.ErrorIs(t, err, errUtils.ErrCLIProviderExecFailed)
+	assert.Contains(t, err.Error(), "bad thing")
+}
+
+func TestParseResponse_ToolDeniedContext(t *testing.T) {
+	_, err := parseResponse([]byte(`{"type":"result","result":"x","permission_denials":[{"tool_name":"Bash","tool_input":{"command":"rm -rf x"}}]}`))
+	require.ErrorIs(t, err, errUtils.ErrCLIProviderToolDenied)
+	tool, ok := errUtils.GetContext(err, "tool")
+	assert.True(t, ok)
+	assert.Equal(t, "Bash", tool)
+	assert.Contains(t, cockroachErrors.GetAllDetails(err), "Claude Code needed approval to run: rm -rf x")
 }
 
 func TestNewClient_MCPConfigPath_SetWhenServersConfigured(t *testing.T) {
@@ -297,12 +343,8 @@ func TestNewClient_MCPConfigPath_SetWhenServersConfigured(t *testing.T) {
 	}
 	client, err := NewClient(atmosConfig)
 	require.NoError(t, err)
-	assert.NotEmpty(t, client.mcpConfigPath)
-
-	// Clean up temp file.
-	if client.mcpConfigPath != "" {
-		_ = os.Remove(client.mcpConfigPath)
-	}
+	assert.Len(t, client.mcpServers, 1)
+	assert.Empty(t, client.mcpConfigPath, "the config file is written per invocation, not at construction")
 }
 
 func TestBuildArgs_Basic(t *testing.T) {
@@ -310,6 +352,11 @@ func TestBuildArgs_Basic(t *testing.T) {
 	args := client.buildArgs("")
 	assert.Contains(t, args, "-p")
 	assert.Contains(t, args, "--output-format")
+	assert.Equal(t, "stream-json", args[indexOf(args, "--output-format")+1])
+	assert.Contains(t, args, "--verbose")
+	assert.NotContains(t, args, "--input-format")
+	assert.NotContains(t, args, "--permission-prompt-tool")
+	assert.NotContains(t, args, "--dangerously-skip-permissions")
 	assert.Contains(t, args, "--max-turns")
 	assert.Contains(t, args, "5")
 	assert.NotContains(t, args, "--max-budget-usd")
@@ -352,6 +399,42 @@ func TestBuildArgs_WithMCPConfig(t *testing.T) {
 	assert.Contains(t, args, "--mcp-config")
 	assert.Contains(t, args, "/tmp/mcp.json")
 	assert.Contains(t, args, "--dangerously-skip-permissions")
+}
+
+func TestBuildArgs_WithApprover(t *testing.T) {
+	tests := []struct {
+		name          string
+		mcpConfigPath string
+		wantSkipPerms bool
+	}{
+		{"without MCP", "", false},
+		{"with MCP drops skip-permissions", "/tmp/mcp.json", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &Client{maxTurns: 5, mcpConfigPath: tt.mcpConfigPath}
+			client.SetApprover(decide(approval.Decision{}))
+			args := client.buildArgs("")
+
+			assert.Equal(t, "stream-json", args[indexOf(args, "--input-format")+1])
+			assert.Equal(t, "stdio", args[indexOf(args, "--permission-prompt-tool")+1])
+			assert.Equal(t, "stream-json", args[indexOf(args, "--output-format")+1])
+			assert.Contains(t, args, "--verbose")
+			assert.Equal(t, tt.wantSkipPerms, indexOf(args, "--dangerously-skip-permissions") >= 0)
+			assert.Equal(t, tt.mcpConfigPath != "", indexOf(args, "--mcp-config") >= 0)
+		})
+	}
+}
+
+func TestBuildArgs_SkipPermissionsOnlyWithMCPAndNoApprover(t *testing.T) {
+	client := &Client{maxTurns: 5, mcpConfigPath: "/tmp/mcp.json"}
+	assert.Contains(t, client.buildArgs(""), "--dangerously-skip-permissions")
+
+	client.SetApprover(decide(approval.Decision{}))
+	assert.NotContains(t, client.buildArgs(""), "--dangerously-skip-permissions")
+
+	client.SetApprover(nil)
+	assert.Contains(t, client.buildArgs(""), "--dangerously-skip-permissions")
 }
 
 func TestBuildArgs_AllOptions(t *testing.T) {

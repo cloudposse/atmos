@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
@@ -44,7 +45,7 @@ type ComponentsOptions struct {
 	Skip             []string
 	ErrorMode        string
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 	// IncludeDependencies/IncludeDependents preview the dependency closure
 	// (0 = off, -1 = unlimited, N>0 = N levels): the listed components are
 	// exactly the ones a terraform bulk run with the same selection flags
@@ -117,8 +118,8 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		ErrorMode:        v.GetString("error-mode"),
-		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+		LabelsRaw:        tags.ReadLabelsFlagKey(v, labelsViperKey),
 	}
 }
 
@@ -183,6 +184,10 @@ func init() {
 	if err := componentsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		componentsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/components"),
+	)
 }
 
 func listComponentsWithOptions(cmd *cobra.Command, args []string, opts *ComponentsOptions) error {
@@ -243,7 +248,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	if err != nil {
 		return componentsExtractResult{}, err
 	}
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	skip := opts.Skip
 
 	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
 	if err != nil {
@@ -255,6 +260,10 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// shared scoped closure engine: only the stacks (and components) the
 	// closure touches are ever evaluated, matching the terraform bulk paths.
 	if opts.IncludeDependencies != 0 || opts.IncludeDependents != 0 {
+		atmosConfig.ListEvaluationPaths = column.RequiredPaths(getComponentColumns(&atmosConfig, opts.Columns))
+		if atmosConfig.ListEvaluationPaths != nil {
+			atmosConfig.ListEvaluationPaths = append(atmosConfig.ListEvaluationPaths, []string{"metadata"}, []string{"dependencies"}, []string{"settings", "depends_on"})
+		}
 		components, closureErr := extractComponentsViaScopedClosure(&atmosConfig, opts, labels, &scopedDescribeDeps{authManager: authManager, skip: skip, errOpts: errOpts})
 		if closureErr != nil {
 			return componentsExtractResult{}, closureErr
@@ -270,6 +279,10 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// which extract.UniqueComponents and buildComponentFilters always need for
 	// enabled/locked/tags/labels/type/status) actually reads — see resolveComponentsEvalSections.
 	evalSections := resolveComponentsEvalSections(&atmosConfig, opts)
+	errOpts.EvaluationPaths = column.RequiredPaths(getComponentColumns(&atmosConfig, opts.Columns))
+	if errOpts.EvaluationPaths != nil {
+		errOpts.EvaluationPaths = append(errOpts.EvaluationPaths, []string{"metadata"})
+	}
 	stacksMap, err := e.ExecuteDescribeStacksWithEvalSections(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
@@ -278,7 +291,6 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		authManager == nil,
 		opts.Tags,
 		labels,
 		errOpts,

@@ -3,6 +3,11 @@ commands:
     description: Regenerate casts sourced from demo/casts/fixtures
     env: !include cast-defaults.yaml .env.command
     steps:
+      - type: script
+        name: starlark
+        interpreter: starlark
+        script: |
+          atmos.run(["casts", "generate", "demo", "fixtures", "starlark", "release-plan"])
       - type: shell
         name: casts-fixtures-native-terraform-plan
         command: atmos casts generate demo fixtures native-terraform plan
@@ -28,6 +33,11 @@ commands:
     description: Validate casts sourced from demo/casts/fixtures
     env: !include cast-defaults.yaml .env.command
     steps:
+      - type: script
+        name: starlark
+        interpreter: starlark
+        script: |
+          atmos.run(["casts", "validate", "demo", "fixtures", "starlark", "release-plan"])
       - type: shell
         name: casts-fixtures-native-terraform-plan
         command: atmos casts validate demo fixtures native-terraform plan

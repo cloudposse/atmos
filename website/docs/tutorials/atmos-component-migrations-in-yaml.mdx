@@ -1,8 +1,71 @@
 ---
 title: Atmos component migration in YAML config
 sidebar_label: Component Migration
-description: "Learn how to migrate an Atmos component to a new name or to use the `metadata.inheritance`."
+description: "Rename Terraform stacks and components while preserving state identity, or plan an intentional state migration."
 ---
+
+## Rename a Terraform Stack Without Moving State
+
+An Atmos stack name is a configuration identifier. For Terraform/OpenTofu, it can also contribute to the generated workspace and backend path. Renaming it without preserving those values can make the next plan target a different state.
+
+This example changes the Atmos stack name from `dev-old` to `dev` while retaining the same Terraform state. It assumes `vpc` already uses the non-default Terraform workspace `dev-old` and the S3 backend values shown below. Substitute the values from your own resolved component; do not adopt these example values for existing infrastructure.
+
+### Record and Pin the Existing Identity
+
+Inspect the current component before changing its name:
+
+```shell
+atmos describe component vpc -s dev-old --query '{"backend": .backend, "workspace": .workspace}'
+```
+
+For this example, the existing backend is bucket `example-tfstate`, region `us-east-1`, `workspace_key_prefix: vpc`, and `key: terraform.tfstate`; the resolved workspace is `dev-old`. For a non-default S3 workspace, that identifies `s3://example-tfstate/vpc/dev-old/terraform.tfstate`.
+
+Use a setting for the Atmos stack name so changing it does not also change a Terraform resource input:
+
+```yaml title="atmos.yaml (relevant setting)"
+stacks:
+  name_template: "{{ .settings.deployment_name }}"
+```
+
+Before renaming, explicitly retain the existing backend and workspace in the stack:
+
+```yaml title="stacks/deploy/dev.yaml"
+settings:
+  deployment_name: dev-old
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        terraform_workspace: dev-old
+      backend_type: s3
+      backend:
+        s3:
+          bucket: example-tfstate
+          region: us-east-1
+          workspace_key_prefix: vpc
+          key: terraform.tfstate
+      # Keep the existing component inputs, auth, imports, and other settings.
+```
+
+If inherited metadata sets `terraform_workspace_template` or `terraform_workspace_pattern`, update or remove that higher-priority override first: it takes precedence over `terraform_workspace`. Preserve any additional backend options such as role assumption or encryption. Check the resolved identity again and review a plan before renaming; pinning should not itself change infrastructure.
+
+### Change the Atmos Name and Compare
+
+Change only `settings.deployment_name` to `dev`. Keep `metadata.terraform_workspace: dev-old` and the backend settings unchanged. Update cross-stack references that use the old Atmos name.
+
+```shell
+atmos describe component vpc -s dev --query '{"backend": .backend, "workspace": .workspace}'
+atmos terraform plan vpc -s dev
+```
+
+Both descriptions must resolve to the same backend and `workspace: dev-old`. The plan must show no unintended infrastructure changes. Repeat this check for every component in the renamed stack. Also inspect names or tags templated from `.atmos_stack`: preserving state does not prevent a resource replacement caused by a changed Terraform input.
+
+If you want to change the workspace or state path too, treat that as a separate state migration with a backup and the backend-specific procedure. `init -reconfigure` does not copy state; see [backend troubleshooting](/troubleshoot/errors) and [Terraform backend initialization](https://developer.hashicorp.com/terraform/cli/commands/init#backend-initialization).
+
+### Other Component Types
+
+The workspace and backend guidance above is specific to Terraform/OpenTofu. For other tools, preserve their deployed identity when reorganizing Atmos configuration. For example, a native CloudFormation component uses [`stack_name`](/stacks/components/aws-cloudformation), and Helmfile identifies releases through its own configuration. Review changes to any deployment names derived from Atmos stack or component names with the tool's plan or diff.
 
 ## Migrate component from using deprecated key `component` to use `metadata.inherits`
 

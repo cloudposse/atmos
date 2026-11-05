@@ -12,9 +12,11 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -72,6 +74,7 @@ type describeStacksProcessor struct {
 	components           []string
 	sections             []string
 	componentTypes       []string
+	staticOnly           bool
 	processTemplates     bool
 	processYamlFunctions bool
 	authDisabled         bool
@@ -120,16 +123,23 @@ type describeStacksProcessor struct {
 	// processor does not go through processStacks (utils.go), so it must resolve deferred
 	// YAML functions itself instead of silently losing their contribution (#2888).
 	deferredContexts AllStacksDeferredContexts
+	// rawStackConfigs holds each stack manifest's own (pre-merge) configuration, keyed by stack
+	// file name. Stack-level locals survive only there; they feed the Starlark ctx.locals scope.
+	rawStackConfigs map[string]map[string]any
 	// evalSections is the opt-in evaluation-scope filter set by
 	// ExecuteDescribeStacksWithEvalSections: when non-nil, template rendering and YAML-function
 	// resolution (Stages 2/3, plus Go-template rendering) only run for these top-level component
-	// sections -- see isSectionRequired. This is DELIBERATELY separate from `sections` (which
+	// sections -- see deferred.IsSectionRequired. This is DELIBERATELY separate from `sections` (which
 	// only trims the OUTPUT after full evaluation and is unaffected by this field): the two solve
 	// different problems and reusing `sections` for both would silently change the long-standing
 	// behavior of `atmos describe stacks --sections=X` (today a pure output filter that never
 	// skips evaluation). Only the `list` commands ever set evalSections; every other caller
 	// leaves it nil and gets exactly the eager-evaluation behavior that predates this field.
 	evalSections []string
+	evalPaths    [][]string
+	// extraComponentTypes are opt-in component kinds processed after the built-in kinds
+	// (see DescribeStacksErrorOptions.ExtraComponentTypes).
+	extraComponentTypes []string
 }
 
 // withDegradation switches the processor to lenient YAML-function processing: recoverable
@@ -236,6 +246,9 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	componentName, stackName string,
 ) (auth.AuthManager, error) {
 	componentAuthManager := p.authManager
+	if authdeferred.IsDeferred(p.atmosConfig.AuthManager) {
+		return componentAuthManager, nil
+	}
 	if p.authDisabled || !shouldResolvePerComponentAuth(p.processTemplates, p.processYamlFunctions) {
 		return componentAuthManager, nil
 	}
@@ -323,6 +336,10 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	canResolveNameEarly := stackManifestName != "" ||
 		(p.atmosConfig.Stacks.NameTemplate == "" && GetStackNamePattern(p.atmosConfig) == "")
 
+	if p.staticOnly && p.includeEmptyStacks && !canResolveNameEarly && !p.hasRequestedComponents(stackMap) {
+		return p.includeStaticEmptyStack(stackFileName, stackMap)
+	}
+
 	if p.includeEmptyStacks && canResolveNameEarly {
 		initialName := stackFileName
 		if stackManifestName != "" {
@@ -344,39 +361,48 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		return nil
 	}
 
-	type typeEntry struct {
-		name string
-		opts processComponentTypeOpts
-	}
-	typeEntries := []typeEntry{
-		{cfg.TerraformSectionName, processComponentTypeOpts{
-			buildWorkspace:           true,
-			applyMetadataInheritance: true,
-			checkIncludeEmpty:        true,
-		}},
-		{cfg.HelmfileSectionName, processComponentTypeOpts{}},
-		{cfg.PackerSectionName, processComponentTypeOpts{}},
-		{cfg.AnsibleSectionName, processComponentTypeOpts{}},
-		{cfg.KubernetesSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
-		{cfg.HelmSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
-		{cfg.ContainerSectionName, processComponentTypeOpts{}},
-		{cfg.EmulatorSectionName, processComponentTypeOpts{}},
-	}
-
-	for _, te := range typeEntries {
-		if len(p.componentTypes) > 0 && !slices.Contains(p.componentTypes, te.name) {
+	types, extra := p.componentTypeOrder()
+	for _, typeName := range types {
+		if len(p.componentTypes) > 0 && !slices.Contains(p.componentTypes, typeName) {
 			continue
 		}
-		typeSection, ok := componentsSection[te.name].(map[string]any)
+		typeSection, ok := componentsSection[typeName].(map[string]any)
 		if !ok {
 			continue
 		}
-		if err := p.processComponentTypeSection(stackFileName, stackManifestName, te.name, typeSection, te.opts); err != nil {
+		opts := processComponentTypeOpts{}
+		switch typeName {
+		case cfg.TerraformSectionName:
+			opts = processComponentTypeOpts{buildWorkspace: true, applyMetadataInheritance: true, checkIncludeEmpty: true}
+		case cfg.KubernetesSectionName, cfg.HelmSectionName, cfg.CloudFormationSectionName:
+			opts.applyMetadataInheritance = true
+		default:
+			opts.applyMetadataInheritance = slices.Contains(extra, typeName)
+		}
+		if err := p.processComponentTypeSection(stackFileName, stackManifestName, typeName, typeSection, opts); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// componentTypeOrder returns the component types to describe: every registered type, then any
+// requested extra kind that is not registered. The second result lists the requested kinds that are
+// not canonical (see deletableComponentTypes); they resolve inherited metadata like the other
+// registry-driven kinds.
+func (p *describeStacksProcessor) componentTypeOrder() (types, extra []string) {
+	types = componentSectionSearchOrder()
+	for _, name := range p.extraComponentTypes {
+		if name == "" || slices.Contains(deletableComponentTypes, name) || slices.Contains(extra, name) {
+			continue
+		}
+		extra = append(extra, name)
+		if !slices.Contains(types, name) {
+			types = append(types, name)
+		}
+	}
+	return types, extra
 }
 
 // processComponentTypeSection iterates over every component within a component type section
@@ -459,17 +485,27 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
+	// Match the identity a single-component command (describe component, terraform plan) reports.
+	info.ComponentType = typeName
+	info.StackFile = stackFileName
+	info.StackLocalsSection = stackLocalsForComponent(p.rawStackConfigs, stackFileName, typeName)
+	info.EvaluationPaths = deferred.ExpandEvaluationPaths(componentSection, p.evalPaths, p.atmosConfig.Templates.Settings.Delimiters...)
 
 	// Ensure the component key is present in the info's ComponentSection.
 	if comp, ok := info.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 		info.ComponentSection[cfg.ComponentSectionName] = componentName
 	}
 
-	// Resolve the logical stack name.  When the name_pattern path is taken, resolveStackName
+	// Resolve the logical stack name.  When the name_pattern path is taken, ResolveStackName
 	// also returns the populated Context so that BuildTerraformWorkspace and template functions
 	// that read info.Context see non-zero values (matching the original monolith's behaviour).
-	stackName, resolvedContext, err := resolveStackName(p.atmosConfig, stackFileName, stackManifestName, info, secs.vars)
+	stackName, resolvedContext, err := p.resolveStackName(stackFileName, stackManifestName, info, secs.vars)
 	if err != nil {
+		return err
+	}
+	// A name built from a !starlark value is not computable; fail before the stack filter so the
+	// encoded program text never becomes a stack key.
+	if err := ensureLiteralStackIdentity(stackFileName, stackName, info.ComponentSection); err != nil {
 		return err
 	}
 	info.Context = resolvedContext
@@ -525,7 +561,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	ensureComponentEntryInMap(p.finalStacksMap, stackName, typeName, componentName)
 
 	// Terraform-only: build and attach the Terraform workspace.
-	if opts.buildWorkspace {
+	if opts.buildWorkspace && !p.staticOnly {
 		workspace, wsErr := BuildTerraformWorkspace(p.atmosConfig, info)
 		if wsErr != nil {
 			return wsErr
@@ -558,7 +594,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 
 	// Process Go templates.
 	if p.processTemplates {
-		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings, p.evalSections)
+		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings, p.evaluationSections(&info), p.onWarning)
 		if err != nil {
 			return err
 		}
@@ -577,14 +613,15 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if !isComponentEnabled(secs.metadata, componentName) {
 			skip = disabledComponentTerraformSkip(p.skip)
 		}
+		yamlSkip, finishValues := prepareConfigurationValues(p.atmosConfig, &info, skip, p.evaluationSections(&info))
 		componentSection, err = processComponentSectionYAMLFunctions(
 			p.atmosConfig,
 			&info,
 			componentSection,
-			skip,
+			yamlSkip,
 			p.onWarning,
 			!p.resolveSecrets && iolib.MaskingEnabled(),
-			p.evalSections,
+			p.evaluationSections(&info),
 		)
 		if err != nil {
 			return err
@@ -595,6 +632,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if err != nil {
 			return err
 		}
+		if err := finishValues(); err != nil {
+			return err
+		}
+		componentSection = info.ComponentSection
 	}
 	if hasLiteralMocks {
 		componentSection[cfg.MocksSectionName] = literalMocks
@@ -604,6 +645,12 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		componentSection[sourcesSectionName] = sources
 		info.ComponentSection[sourcesSectionName] = sources
 	}
+
+	componentSection = literalsource.RestoreMap(componentSection)
+	if hasSources {
+		componentSection[sourcesSectionName] = restoreConfigSourceLiterals(sources)
+	}
+	info.ComponentSection = componentSection
 
 	// Write the (optionally filtered) sections into the result map.
 	includeEmpty := resolveIncludeEmpty(p.atmosConfig, opts.checkIncludeEmpty)
@@ -641,11 +688,17 @@ func (p *describeStacksProcessor) resolveDeferredForComponent(
 		return nil, fmt.Errorf("component %q in stack manifest %q: decoding settings for deferred YAML function resolution: %w", componentName, stackFileName, err)
 	}
 
-	componentTemplateContext := make(map[string]any, len(info.ComponentSection))
-	for k, v := range info.ComponentSection {
-		componentTemplateContext[k] = v
+	// Leave the context nil when template processing is off, as processStacks does: the
+	// whole-document template pass was skipped, so the deferred resolver must not render inherited
+	// strings that merely contain template delimiters.
+	var componentTemplateContext map[string]any
+	if p.processTemplates {
+		componentTemplateContext = make(map[string]any, len(info.ComponentSection))
+		for k, v := range info.ComponentSection {
+			componentTemplateContext[k] = v
+		}
 	}
-	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip, p.evalSections); err != nil {
+	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip, p.evaluationSections(info), p.onWarning); err != nil {
 		return nil, err
 	}
 
@@ -783,43 +836,20 @@ func buildConfigAndStacksInfo(
 	}
 }
 
-// resolveStackName determines the final logical stack name to use when writing to the result map.
+// ResolveStackName determines the final logical stack name to use when writing to the result map.
 // Precedence: manifest name > name_template > name_pattern > filename.
 // It also returns the schema.Context populated when a name_pattern is used; callers should
 // set info.Context from the returned value so that BuildTerraformWorkspace and template
 // functions have access to the correct context fields.
-func resolveStackName(
+func ResolveStackName(
 	atmosConfig *schema.AtmosConfiguration,
 	stackFileName, stackManifestName string,
 	info schema.ConfigAndStacksInfo, //nolint:gocritic // hugeParam: read-only, passed by value intentionally.
 	varsSection map[string]any,
 ) (string, schema.Context, error) {
-	switch {
-	case stackManifestName != "":
-		return stackManifestName, schema.Context{}, nil
+	defer perf.Track(atmosConfig, "exec.ResolveStackName")()
 
-	case atmosConfig.Stacks.NameTemplate != "":
-		name, err := ProcessTmpl(atmosConfig, "describe-stacks-name-template",
-			atmosConfig.Stacks.NameTemplate, info.ComponentSection, false)
-		if err != nil {
-			return "", schema.Context{}, err
-		}
-		return name, schema.Context{}, nil
-
-	case GetStackNamePattern(atmosConfig) != "":
-		context := cfg.GetContextFromVars(varsSection)
-		name, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
-		if err != nil {
-			// Fall back to filename when pattern validation fails.
-			log.Debug("Pattern validation failed, using filename as stack name",
-				logFieldStack, stackFileName, "error", err)
-			return stackFileName, context, nil
-		}
-		return name, context, nil
-
-	default:
-		return stackFileName, schema.Context{}, nil
-	}
+	return NamingResolver().ResolveStackName(atmosConfig, stackFileName, stackManifestName, info, varsSection)
 }
 
 // Metadata subsection keys read by the tags/labels scope gate and the
@@ -1061,7 +1091,7 @@ func addSectionsToComponentEntry(
 // processComponentSectionTemplates applies Go template processing to a component section
 // and returns the rendered section as a map.
 //
-// The evalSections parameter is the opt-in evaluation-scope filter (see isSectionRequired): when
+// The evalSections parameter is the opt-in evaluation-scope filter (see deferred.IsSectionRequired): when
 // non-nil, only the top-level sections it names are serialized into the template SOURCE that
 // text/template actually parses and executes -- any atmos.Component/atmos.GomplateDatasource/etc.
 // call embedded in a skipped section's raw text is never invoked, which is the actual fix for
@@ -1069,15 +1099,17 @@ func addSectionsToComponentEntry(
 // to {{ }} expressions) is still built from the full, unfiltered componentSection below, so a
 // required section's template can still plain-field-access into a skipped section's raw (merged
 // but unrendered) value -- see the accepted cross-section limitation documented on
-// isSectionRequired's callers.
+// deferred.IsSectionRequired's callers.
 func processComponentSectionTemplates(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentSection map[string]any,
 	settingsSection map[string]any,
 	evalSections []string,
+	warnings ...func(DegradationWarning),
 ) (map[string]any, error) {
-	evalInput, evalExcluded := splitSectionsByRequirement(componentSection, evalSections)
+	evalInput, evalExcluded := deferred.SplitSectionsByRequirement(componentSection, evalSections)
+	evalInput, fieldExcluded := deferred.SplitEvaluationFields(evalInput, info.EvaluationPaths)
 
 	// Sections computed from Terraform source code (`component_info`) are not Atmos
 	// configuration and must not be rendered as `Go` templates. They stay in the template
@@ -1095,19 +1127,19 @@ func processComponentSectionTemplates(
 		result := make(map[string]any, len(nonTemplatedSections))
 		restoreNonTemplatedSections(result, nonTemplatedSections)
 		restoreNonTemplatedSections(result, evalExcluded)
+		deferred.RestoreEvaluationFields(result, fieldExcluded)
 		return result, nil
 	}
 
-	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-		templateInput,
-		atmosConfig.Templates.Settings.Delimiters,
-	)
-	if err != nil {
+	var settingsSectionStruct schema.Settings
+	if err := mapstructure.Decode(settingsSection, &settingsSectionStruct); err != nil {
 		return nil, err
 	}
-
-	var settingsSectionStruct schema.Settings
-	if err = mapstructure.Decode(settingsSection, &settingsSectionStruct); err != nil {
+	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+		templateInput,
+		effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1140,6 +1172,19 @@ func processComponentSectionTemplates(
 		true,
 	)
 	if err != nil {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) && canDegradeValue(atmosConfig, err) && len(warnings) > 0 && warnings[0] != nil {
+			converted, renderErr := renderDeferredTemplateValues(templateInput, &deferredTemplateOptions{
+				config: atmosConfig, info: info, settings: &settingsSectionStruct,
+				templateContext: componentTemplateContext, onWarning: warnings[0],
+			})
+			if renderErr != nil {
+				return nil, renderErr
+			}
+			restoreNonTemplatedSections(converted, nonTemplatedSections)
+			restoreNonTemplatedSections(converted, evalExcluded)
+			deferred.RestoreEvaluationFields(converted, fieldExcluded)
+			return converted, nil
+		}
 		return nil, err
 	}
 
@@ -1159,6 +1204,7 @@ func processComponentSectionTemplates(
 
 	restoreNonTemplatedSections(converted, nonTemplatedSections)
 	restoreNonTemplatedSections(converted, evalExcluded)
+	deferred.RestoreEvaluationFields(converted, fieldExcluded)
 
 	return converted, nil
 }
@@ -1168,13 +1214,13 @@ func processComponentSectionTemplates(
 // ProcessCustomYamlTagsLenient. For example, a Terraform backend might not yet be provisioned.
 // The secretsMaskOnly parameter selects the inspection behavior that replaces !secret values without a backend lookup.
 //
-// The evalSections parameter is the opt-in evaluation-scope filter (see isSectionRequired): when
+// The evalSections parameter is the opt-in evaluation-scope filter (see deferred.IsSectionRequired): when
 // non-nil, only the top-level sections it names are walked for
 // `!terraform.state`/`!terraform.output`/`!store`/etc. YAML functions. Skipped sections are
-// restored untouched afterward. Stage 2's YAML-function resolution has no cross-section
-// dependency -- each tag resolves independently of its siblings (only a shared ResolutionContext
-// exists, for cycle detection) -- so narrowing its input map is safe without needing a separate
-// "context" the way Go-template rendering does.
+// restored untouched afterward. Starlark values can read dependencies outside the
+// selected sections through info.ComponentSection; the configuration resolver
+// overlays the rendered evaluation input onto that context without changing the
+// excluded fields in the returned component.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
@@ -1186,7 +1232,8 @@ func processComponentSectionYAMLFunctions(
 ) (map[string]any, error) {
 	info.SecretsMaskOnly = secretsMaskOnly
 
-	evalInput, evalExcluded := splitSectionsByRequirement(componentSection, evalSections)
+	evalInput, evalExcluded := deferred.SplitSectionsByRequirement(componentSection, evalSections)
+	evalInput, fieldExcluded := deferred.SplitEvaluationFields(evalInput, info.EvaluationPaths)
 
 	var converted map[string]any
 	var err error
@@ -1211,6 +1258,7 @@ func processComponentSectionYAMLFunctions(
 	if err != nil {
 		return nil, err
 	}
+	deferred.RestoreEvaluationFields(converted, fieldExcluded)
 	restoreNonTemplatedSections(converted, evalExcluded)
 	return converted, nil
 }
@@ -1296,8 +1344,7 @@ func applyTerraformMetadataInheritance(
 }
 
 // hasStackExplicitComponents reports whether a stack section contains any component
-// entries under components.terraform, components.helmfile, components.packer, or
-// components.ansible.
+// entries under built-in or dynamically registered component types.
 func hasStackExplicitComponents(stackSection map[string]any) bool {
 	componentsSection, ok := stackSection[cfg.ComponentsSectionName]
 	if !ok || componentsSection == nil {
@@ -1307,16 +1354,7 @@ func hasStackExplicitComponents(stackSection map[string]any) bool {
 	if !ok {
 		return false
 	}
-	for _, typeName := range []string{
-		cfg.TerraformSectionName,
-		cfg.HelmfileSectionName,
-		cfg.PackerSectionName,
-		cfg.AnsibleSectionName,
-		cfg.KubernetesSectionName,
-		cfg.HelmSectionName,
-		cfg.ContainerSectionName,
-		cfg.EmulatorSectionName,
-	} {
+	for _, typeName := range componentSectionSearchOrder() {
 		if typeMap, ok := comps[typeName].(map[string]any); ok && len(typeMap) > 0 {
 			return true
 		}
@@ -1381,4 +1419,20 @@ func stackHasNonEmptyComponents(componentsSection map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func (p *describeStacksProcessor) evaluationSections(info *schema.ConfigAndStacksInfo) []string {
+	if p.evalPaths == nil {
+		return p.evalSections
+	}
+	if info.EvaluationPaths == nil {
+		return nil
+	}
+	sections := make([]string, 0)
+	for _, path := range info.EvaluationPaths {
+		if len(path) > 0 && !slices.Contains(sections, path[0]) {
+			sections = append(sections, path[0])
+		}
+	}
+	return sections
 }

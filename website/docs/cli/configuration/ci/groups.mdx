@@ -8,7 +8,6 @@ description: Fold Atmos output into collapsible, named CI log groups — by step
 
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 The `ci.groups` section of `atmos.yaml` controls collapsible CI log groups. When Atmos runs
@@ -16,8 +15,6 @@ inside a CI provider that supports log grouping (GitHub Actions today), it folds
 named, expandable sections — on GitHub Actions, the `::group::<name>` / `::endgroup::` workflow
 commands. A single `mode` selects the grouping granularity.
 </Intro>
-
-<Experimental />
 
 ## Quick Start
 

@@ -67,6 +67,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authShellCmd)
+	internal.RegisterCommandMetadata(
+		authShellCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/shell"),
+	)
 }
 
 // executeAuthShellCommand is the main execution function for auth shell command.
@@ -170,7 +174,7 @@ func prepareShellEnvironment(authManager auth.AuthManager, identityName string, 
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return nil, "", errUtils.ErrUserAborted
 			}
-			return nil, "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
+			return nil, "", errUtils.EnsureAuthenticationFailed(err)
 		}
 	}
 

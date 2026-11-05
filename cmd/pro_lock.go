@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -30,4 +31,8 @@ func init() {
 	proLockCmd.PersistentFlags().Int32P("ttl", "t", 0, "The amount of time in seconds to lock the stack for. Defaults to 30")
 
 	proCmd.AddCommand(proLockCmd)
+	internal.RegisterCommandMetadata(
+		proLockCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/pro/lock"),
+	)
 }

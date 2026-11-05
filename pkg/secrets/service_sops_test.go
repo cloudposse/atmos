@@ -81,9 +81,9 @@ func TestService_DeleteAll(t *testing.T) {
 	require.ErrorIs(t, err, ErrSecretMissing)
 }
 
-// TestService_DeleteAll_StopsOnError proves DeleteAll aborts (returns 0) on the first error. A
-// SOPS file that does not decrypt with the available key makes Delete fail.
-func TestService_DeleteAll_StopsOnError(t *testing.T) {
+// TestService_DeleteAll_ReportsErrors proves DeleteAll returns the error (and a zero count when
+// every deletion fails). A SOPS file that does not decrypt with the available key makes Delete fail.
+func TestService_DeleteAll_ReportsErrors(t *testing.T) {
 	cfg, section, file := newSopsServiceConfig(t, true)
 	svc := NewService(cfg, "dev", "api", section)
 

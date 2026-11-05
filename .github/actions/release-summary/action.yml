@@ -1,0 +1,50 @@
+name: Release stage summary
+description: Report release identity, stage outcomes, and artifact links, including failed jobs.
+inputs:
+  stage:
+    description: Pipeline stage
+    required: true
+  status:
+    description: Job status before this summary
+    required: true
+  mode:
+    description: Release mode
+    required: true
+  version:
+    description: Requested version before tag reservation
+    default: ''
+  tag:
+    description: Actual reserved tag, never reconstructed from the run ID
+    default: ''
+  commit:
+    description: Exact source commit
+    default: ''
+  milestone:
+    description: Release milestone number
+    default: ''
+  artifact:
+    description: Uploaded artifact ID
+    default: ''
+  checks:
+    description: JSON array of checkpoint names and outcomes (no step outputs or secrets)
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      if: always()
+      env:
+        RELEASE_ACTION_PATH: ${{ github.action_path }}
+        RELEASE_STAGE: ${{ inputs.stage }}
+        RELEASE_STATUS: ${{ inputs.status }}
+        RELEASE_MODE: ${{ inputs.mode }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_MILESTONE: ${{ inputs.milestone }}
+        RELEASE_ARTIFACT: ${{ inputs.artifact }}
+        RELEASE_CHECKS: ${{ inputs.checks }}
+      with:
+        script: |
+          const { render } = require(require('node:path').join(process.env.RELEASE_ACTION_PATH, 'summary.cjs'));
+          await core.summary.addRaw(render(process.env)).write();

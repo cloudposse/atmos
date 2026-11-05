@@ -4,6 +4,15 @@ tags: [Components]
 cast:
   file: /casts/demo/fixtures/demo-vendoring/pull.cast
   title: atmos vendor pull
+related_docs:
+  - label: "Vendor commands"
+    url: /cli/commands/vendor/usage
+  - label: "Vendor manifest"
+    url: /vendor/vendor-config
+  - label: "Vendoring"
+    url: /vendor/
+  - label: "CLI Configuration"
+    url: /cli/configuration/vendor
 ---
 
 # Example: Demo Vendoring

@@ -9,6 +9,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -16,13 +17,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// Package-level seams so the Go SDK orchestration here (config load, auth-manager
+// creation) can be unit-tested without a live AWS account. Overridden in tests;
+// the same function-var pattern used in cmd/azure/aks/update_kubeconfig_sdk.go.
+var (
+	initCliConfig  = cfg.InitCliConfig
+	newAuthManager = auth.NewAuthManager
+)
+
 // executeEKSUpdateKubeconfigViaIntegration runs EKS kubeconfig update using a named integration.
 // This authenticates via the auth manager and uses the Go SDK instead of shelling out to AWS CLI.
-func executeEKSUpdateKubeconfigViaIntegration(integrationName string) error {
+// kubeconfigPath and alias are optional CLI overrides (empty means "use the integration's
+// configured value") forwarded so --kubeconfig/--alias work on the integration path.
+func executeEKSUpdateKubeconfigViaIntegration(integrationName, kubeconfigPath, alias string) error {
 	defer perf.Track(nil, "eks.executeEKSUpdateKubeconfigViaIntegration")()
 
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := initCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
@@ -34,14 +45,17 @@ func executeEKSUpdateKubeconfigViaIntegration(integrationName string) error {
 	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
 
-	mgr, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
+	mgr, err := newAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Execute the integration (handles authentication, EKS describe, kubeconfig write).
+	// The CLI overrides are no-ops when empty, so the integration's configured values win.
 	ctx := context.Background()
-	return mgr.ExecuteIntegration(ctx, integrationName)
+	return mgr.ExecuteIntegration(ctx, integrationName,
+		types.WithKubeconfigPath(kubeconfigPath),
+		types.WithAlias(alias))
 }
 
 // executeEKSUpdateKubeconfigDirect runs EKS kubeconfig update using Go SDK with explicit parameters.
@@ -50,7 +64,7 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 	defer perf.Track(nil, "eks.executeEKSUpdateKubeconfigDirect")()
 
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := initCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
@@ -62,7 +76,7 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
 
-	mgr, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
+	mgr, err := newAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -70,10 +84,13 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 	ctx := context.Background()
 	whoami, err := mgr.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrIdentityAuthFailed, err)
+		return errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 
-	if whoami.Credentials == nil {
+	// mgr is an AuthManager interface; guard against a nil whoami (a (nil, nil)
+	// return) before dereferencing Credentials, in addition to the by-design
+	// nil-credentials case. Mirrors the AKS direct path.
+	if whoami == nil || whoami.Credentials == nil {
 		return fmt.Errorf("%w: no credentials available", errUtils.ErrIdentityAuthFailed)
 	}
 

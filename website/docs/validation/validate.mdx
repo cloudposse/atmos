@@ -17,6 +17,9 @@ Atmos enhances this validation process in three significant ways with [JSON Sche
 
 ## Types of Validation
 
+For saved-plan checks and required lifecycle hooks, see [Policies](/policies).
+The validation mechanisms below use their own configuration and execution paths.
+
 Atmos supports three types of native validation.
 
 ### JSON Schema
@@ -110,10 +113,15 @@ The command checks and validates the following:
 
 Atmos uses the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to validate Atmos manifests, and has a default (embedded) JSON Schema.
 
+The recommended setup uses this bundled schema, with no local copy to maintain.
+Run `atmos doctor --only=local-atmos-schema` to find overrides left by older setups.
+
 If you don't configure the path to a JSON Schema in `atmos.yaml` and don't provide it on the command line using the `--schemas-atmos-manifest` flag,
 the default (embedded) JSON Schema will be used when executing the command `atmos validate stacks`.
 
 To override the default behavior, configure JSON Schema in `atmos.yaml`:
+
+For an intentional custom schema override only (not the default setup):
 
 - Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
 in  [`stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -62,13 +63,16 @@ may still be active. Works with all cloud providers (AWS, Azure, GCP, etc.).`,
 	RunE:               executeAuthLogoutCommand,
 }
 
+// init registers the auth logout flags and the namespaced --tags Viper key, then attaches the command to the auth parent.
 func init() {
 	defer perf.Track(nil, "auth.logout.init")()
 
 	// Create parser with logout-specific flags.
 	logoutParser = flags.NewStandardParser(
 		flags.WithStringFlag("provider", "", "", "Logout from specific provider"),
-		flags.WithStringFlag("tags", "", "", "Logout from providers matching tags (comma-separated, matches any): --tags=production"),
+		flags.WithStringFlag(tagsFlagName, "", "", "Logout from providers matching tags (comma-separated, matches any): --tags=production"),
+		flags.WithEnvVars(tagsFlagName, envAuthTags),
+		flags.WithViperKey(tagsFlagName, authTagsViperKey),
 		flags.WithBoolFlag("all", "", false, "Logout from all identities and providers"),
 		flags.WithBoolFlag("all-realms", "", false, "Logout from all realms across all repositories (clears file-based credentials; keychain cleanup limited to current config)"),
 		flags.WithBoolFlag("dry-run", "", false, "Preview what would be removed without deleting"),
@@ -86,8 +90,13 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authLogoutCmd)
+	internal.RegisterCommandMetadata(
+		authLogoutCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/logout"),
+	)
 }
 
+// executeAuthLogoutCommand parses the logout flags and selects what to log out of (identity, provider, tags, or everything) before performing the logout.
 func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
@@ -116,7 +125,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	// Get flags.
 	providerFlag := v.GetString("provider")
-	tagsFlag := parseCommaSeparatedNames(v.GetString(tagsKey))
+	tagsFlag := parseCommaSeparatedNames(v.GetString(authTagsViperKey))
 	allFlag := v.GetBool("all")
 	allRealmsFlag := v.GetBool("all-realms")
 	dryRun := v.GetBool("dry-run")
@@ -136,7 +145,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		return errUtils.ErrMutuallyExclusiveFlags
 	}
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Handle --all-realms flag - logout from all realms across all repositories.
 	if allRealmsFlag {

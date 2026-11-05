@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -192,4 +193,8 @@ func init() {
 	if err := commitParser.BindToViper(viper.GetViper()); err != nil {
 		panic(fmt.Sprintf("git commit: BindToViper: %v", err))
 	}
+	internal.RegisterCommandMetadata(
+		commitCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/commit"),
+	)
 }

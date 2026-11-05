@@ -1,0 +1,118 @@
+---
+slug: git-hooks-shared-checks
+title: "Git hooks you own, checks you can trust"
+authors: [osterman]
+tags: [feature, dx]
+cast: "/casts/demo/repository/git-hooks.cast"
+castTitle: "Atmos runs its own Git hooks"
+---
+
+A third-party Git hook runs code on your machine and in CI, where it can access your source, credentials, and environment. For something as simple as trimming whitespace or validating YAML, that trust can be a bigger liability than the convenience is worth. Atmos lets you keep those checks in your own repository, customize them with your LLM, and run them before commits and in CI with the same test UI. For infrastructure repositories, the biggest payoff is checking your own policies before a change becomes a commit. We also use this approach for Atmos itself.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<CastEmbed src="/casts/demo/repository/git-hooks.cast" title="Atmos runs its own Git hooks" chrome controls scrubber />
+
+This recording runs the Atmos repository's configured pre-commit hook against real YAML, Starlark, and documentation changes. Checks without matching files, including the Go checks in this run, appear as skipped. Recording preparation uses a temporary index to preserve the developer's staging.
+
+## The Problem
+
+Hook collections are convenient, but each one extends the code you trust to execute in your development environment. Even a simple check can bring another repository, runtime, or dependency chain whose code receives that access. Pinning versions helps control updates, but you still need to decide whether the code is worth trusting. Teams also need exceptions for their own fixtures, generated files, and conventions.
+
+Many of these checks are small enough to understand, review, and maintain alongside the project. With LLM assistance, producing a check tailored to your repository takes little effort. Keeping that code in the repository makes its behavior and changes visible in the same review process as the rest of your work.
+
+A commit hook needs to check the contents being committed. Reading a partially staged file directly from the working tree also reads edits that are outside the commit. A formatter can then change those edits, or leave you unsure which version was checked.
+
+For infrastructure, valid YAML is only the beginning. A configuration can parse correctly while violating your rules for production networking, required tags, or allowed resource sizes. Finding that out during deployment is late feedback.
+
+Running the same checks before a commit and in CI also requires consistent file selection, exclusions, and tool versions. Copying that configuration between runners makes it harder to keep the behavior aligned.
+
+## The Fix
+
+[Atmos Git hooks](/cli/configuration/git#local-git-hooks) let you keep check logic with the project, review changes alongside your code, and reuse the same checks locally and in CI. The [test UI](/steps/type/test) shows named checks, progress, skips, and failures; terminals get a live view, while CI gets static results.
+
+For Atmos users, **policy checks are one of the most valuable hooks**. Run [`atmos validate component`](/cli/commands/validate/component) against your configured [OPA policies](/validation/opa) or [JSON Schemas](/validation/json-schema) to catch infrastructure configuration violations before committing. For example, a production VPC policy can reject public IP assignment while allowing different settings in development. The policy stays with your infrastructure code, and the hook gives the author feedback before CI or deployment.
+
+If your project also uses Atmos's policy bundles, [`atmos policy check`](/cli/commands/policy#check) validates their definitions, and [`atmos policy test`](/cli/commands/policy#test) checks expected decisions against your fixtures. Those commands test the policies themselves; component validation checks your infrastructure configuration against its configured rules. Keep the same validation in CI, since local Git hooks can be bypassed.
+
+We are initially **not distributing a library of reusable pre-commit hooks**. You can adapt [the catalog we use](https://github.com/cloudposse/atmos/blob/main/.atmos-git-hooks.yaml) and [our checks](https://github.com/cloudposse/atmos/blob/main/scripts/checks/checks.star), or write your own. Small checks are straightforward to maintain, and an LLM can help draft or customize them from your requirements. Review and test that code as you would any other change to your repository.
+
+Checks can run against an [isolated copy of the staged files](/functions/automation/git.sandbox), so a formatter does not accidentally include edits you left out of a commit. Formatter changes return as unstaged edits and block the commit for review and restaging. Conflicting or concurrent edits preserve your original file and save a recovery patch. Canceling discards incomplete fixes.
+
+That file isolation is not a security boundary: hooks and the tools they invoke still run with your permissions. Specialized linters and secret scanners remain dependencies to select, pin, and review.
+
+Our checks use [Starlark](/functions/automation), a small Python-like scripting language built into Atmos. There is no separate Python runtime to install. Atmos supplies file operations, YAML validation, command execution, Git isolation, and test reporting, so your scripts can concentrate on the rules specific to your project. Give your LLM those function references along with the check you want to implement.
+
+The same suite runs sequentially because formatters and module cleanup can modify the same files. Independent checks continue after a failure, so you see all the problems from one run.
+
+For the Atmos repository, the check catalog is now `.atmos-git-hooks.yaml`. It lists each check's handler, file selection, exclusions, and whether it participates in formatting. The repository keeps its Go, YAML, whitespace, symlink, file-size, EditorConfig, and secret checks while replacing the pre-commit framework with [Atmos Git hooks](/cli/configuration/git#local-git-hooks).
+
+## How to Use It
+
+Use a released version of Atmos from the [installation guide](/install). Define checks under [`git.hooks.pre-commit`](/cli/configuration/git#inline-script-steps) in your project's `atmos.yaml`. This hook runs [`atmos validate stacks`](/cli/commands/validate/stacks) against all stacks in the staged checkout and reports the result through the test UI:
+
+```yaml
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - type: script
+          interpreter: starlark
+          script: |
+            # Validate all stacks in an isolated staged checkout.
+            def check(box):
+                steps.test(
+                    name = "Validate all stacks",
+                    output = "failures",
+                    fail = {"mode": "wait_all"},
+                    steps = [{
+                        "name": "all-stacks",
+                        "type": "atmos",
+                        "command": "validate stacks",
+                    }],
+                )
+            git.sandbox(run = check, scope = "staged")
+```
+
+This validates every stack, including imports and Atmos manifest schemas. Add `validate component` checks for your component-specific OPA policies or JSON Schemas; `validate stacks` does not run those policies. Then install the Git hook:
+
+```shell
+atmos git hooks install pre-commit
+```
+
+If you already use the pre-commit framework, replace its installed Git hook with [`--force`](/cli/commands/git/hooks/install#flags):
+
+```shell
+atmos git hooks install pre-commit --force
+```
+
+Atmos backs up a recognized pre-commit-generated launcher as `pre-commit.before-atmos-<timestamp>` in the hooks directory before replacing it. The installed launcher is not tracked by Git. This does **not** convert `.pre-commit-config.yaml` or install its checks; define your replacement checks under `git.hooks` first. The `--force` flag also permits replacing custom hooks, so inspect an existing hook before using it.
+
+To run the configured checks without creating a commit, use [`atmos git hooks run`](/cli/commands/git/hooks/run):
+
+```shell
+atmos git hooks run pre-commit
+```
+
+To verify that Git invokes the installed hook, run the following without a commit message. If checks pass, the deliberately failing editor aborts before Git creates a commit. Formatter fixes may still appear as unstaged edits:
+
+```shell
+GIT_EDITOR=false git commit
+```
+
+**The following commands are custom commands defined by the Atmos repository.** They are examples of what you can build; installing Atmos does not add them to your project:
+
+```shell
+atmos check staged
+atmos check pr --base-ref origin/main
+atmos format staged
+atmos check pr --only trailing-whitespace,end-of-file-fixer,check-yaml
+```
+
+In our repository, `check` leaves files unchanged and `format` applies fixes. The `staged` scope uses the index; `pr` selects committed branch changes relative to the chosen base and checks their current working-tree contents; `all` selects all tracked files. Our `.atmos-git-hooks.yaml` catalog and command names are repository conventions you can adapt.
+
+## Get Involved
+
+Try the repository hooks and share feedback in [GitHub discussions](https://github.com/cloudposse/atmos/discussions). Start with the [Git sandbox reference](/functions/automation/git.sandbox) to reuse the same isolation and fix handling in your own check suite.

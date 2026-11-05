@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -31,4 +32,11 @@ shown by 'atmos terraform cache list'.`,
 		ui.Success(fmt.Sprintf("Deleted %s", key))
 		return nil
 	},
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		deleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache/delete"),
+	)
 }

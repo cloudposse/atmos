@@ -17,8 +17,9 @@ components:
             store: app-secrets
             description: Database password injected only at runtime.
   # Same stack, four workload types — Atmos ships them all.
-  helmfile:
+  helm:
     ingress:
+      chart: .
       vars:
         stage: dev
   packer:

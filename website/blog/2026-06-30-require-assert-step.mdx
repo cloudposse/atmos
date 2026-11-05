@@ -10,6 +10,8 @@ Workflows often depend on tools, files, and directories being present before the
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Shell checks work until they have to be portable, readable, and friendly. A workflow might need `vhs`, `ffmpeg`, a generated config file, and a local output directory before the real work starts. Encoding that as inline shell makes the workflow harder to scan and usually produces a poor error when something is missing.
@@ -40,6 +42,18 @@ The step checks that tools are executable on `PATH`, files exist, and directorie
 - **Errors are actionable.** Missing tools and paths are reported together with a hint.
 - **It is read-only.** `require` never installs tools and never mutates `PATH`; use `dependencies.tools` when you want Atmos to manage tool installation.
 
+## Try it out
+
+<TryExample example="tests">
+
+Run the passing local checks. The README also includes an intentionally failing demonstration.
+
+```shell
+atmos test
+```
+
+</TryExample>
+
 ## Get Involved
 
-See the [`require` step reference](/workflows/steps/type/require) for all supported fields and examples.
+See the [`require` step reference](/steps/type/require) for all supported fields and examples.

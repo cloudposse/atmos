@@ -1,0 +1,8 @@
+vars:
+  stage: legacy-abc
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: legacy-abc
+      timeout_in_minutes: abc

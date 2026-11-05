@@ -52,6 +52,9 @@ components:
             path: "clusters/{{ .vars.stage }}/echo-server"
 ```
 
+To route each delivery through review, add `pull_request: { enabled: true }` to the
+git target. See [Publishing through a pull request](/stacks/components/kubernetes#publishing-through-a-pull-request).
+
 ## Flags
 
 <dl>

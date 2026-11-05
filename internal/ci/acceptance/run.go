@@ -202,7 +202,7 @@ func runWindowsTests(ctx context.Context, runner commandRunner, options *RunOpti
 	}
 	assigned := windowsTestsForShard(tests, options.Shard)
 	args := []string{"-test.run=" + testRunPattern(assigned), "-test.parallel=" + options.testParallel(), "-test.timeout=" + defaultValue(options.GoTestTimeout, defaultTestTimeout)}
-	return runner.run(ctx, runOptions{dir: dir}, binary, args...)
+	return runner.run(ctx, runOptions{dir: dir, env: goCommandEnvironment()}, binary, args...)
 }
 
 func runWindowsExecTests(ctx context.Context, runner commandRunner, options *RunOptions) error {
@@ -220,7 +220,7 @@ func runWindowsExecTests(ctx context.Context, runner commandRunner, options *Run
 		return nil
 	}
 	args := []string{"-test.run=" + testRunPattern(assigned), "-test.parallel=" + options.testParallel(), "-test.timeout=" + defaultValue(options.GoTestTimeout, defaultTestTimeout)}
-	return runner.run(ctx, runOptions{dir: dir}, binary, args...)
+	return runner.run(ctx, runOptions{dir: dir, env: goCommandEnvironment()}, binary, args...)
 }
 
 func runCmdTests(ctx context.Context, runner commandRunner, options *RunOptions) (string, error) {
@@ -255,7 +255,7 @@ func runCmdTests(ctx context.Context, runner commandRunner, options *RunOptions)
 		coverDir = temporary
 	}
 	absCoverDir := absoluteFromRoot(options.RepoRoot, coverDir)
-	if err := runner.run(ctx, runOptions{dir: dir, env: []string{"GOCOVERDIR=" + absCoverDir}}, binary, args...); err != nil {
+	if err := runner.run(ctx, runOptions{dir: dir, env: goCommandEnvironment("GOCOVERDIR=" + absCoverDir)}, binary, args...); err != nil {
 		return "", err
 	}
 	if options.Mode == ModeCoverage {

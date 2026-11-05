@@ -1,0 +1,10 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    drift:
+      vars:
+        db_name: primary
+        report: "hello"
+        child_name: child

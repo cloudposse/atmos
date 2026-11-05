@@ -549,6 +549,10 @@ func (m *mockTerminal) ColorProfile() terminal.ColorProfile {
 	return m.profile
 }
 
+func (m *mockTerminal) ColorProfileFor(stream terminal.Stream) terminal.ColorProfile {
+	return m.profile
+}
+
 func (m *mockTerminal) Width(stream terminal.Stream) int {
 	return m.width
 }
@@ -1028,7 +1032,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "special characters in message",
 			icon:     "⚠",
 			message:  "Warning: special chars\n\t- Tab character\n  - Spaces",
-			expected: "⚠ Warning: special chars\n  - Tab character\n  \n  Spaces\n", // Glamour normalizes whitespace, adds paragraph break
+			expected: "⚠ Warning: special chars\n  - Tab character\n  \n    • Spaces\n", // Keep the list marker and indent after the paragraph break.
 		},
 		{
 			name:     "unicode in message",
@@ -2579,5 +2583,26 @@ func TestFormatter_PlainMarkdownMargins(t *testing.T) {
 		if want := "# Heading\n\n**Details**\n\n command"; strings.Trim(got, "\n") != want {
 			t.Errorf("plain markdown margins changed: got %q, want %q", got, want)
 		}
+	}
+}
+
+func TestFormatter_Markdown_PreservesTrailingStyledText(t *testing.T) {
+	f := NewFormatter(createTestIOContext(), createMockTerminal(terminal.ColorTrue))
+	for _, tc := range []struct{ name, source, visible string }{
+		{"masked text", "the value is <MASKED>", "the value is"},
+		{"trailing space", "visible text ", "visible text"},
+		{"inline HTML", "keep this <span></span>", "keep this"},
+		{"code span", "the value is `<MASKED>`", "the value is <MASKED>"},
+		{"code block", "```\n<MASKED>\n```", "<MASKED>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rendered, err := f.Markdown(tc.source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if visible := ansi.Strip(rendered); !strings.Contains(visible, tc.visible) {
+				t.Errorf("Markdown(%q) = %q, want text %q", tc.source, visible, tc.visible)
+			}
+		})
 	}
 }

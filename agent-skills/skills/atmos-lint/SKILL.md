@@ -112,9 +112,11 @@ hooks:
     events:
       - before.terraform.plan
     kind: command
-    command: tflint --chdir=$ATMOS_COMPONENT_PATH --init
+    command: tflint
+    args: [--init]
 ```
 
+Command hooks run in the component directory, so `--init` uses that component’s TFLint configuration.
 Keep initialization and lint separate so its network/plugin behavior is clear.
 Load [atmos-hooks](../atmos-hooks/SKILL.md) for hook inheritance, conditions,
 and failure handling; load [atmos-ci](../atmos-ci/SKILL.md) for CI integration.

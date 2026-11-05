@@ -1,0 +1,11 @@
+node_modules/
+cdktn.out/
+cdk.tf.json
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.d/
+*.planfile
+*.tfvars.json
+providers_override.tf.json
+backend.tf.json

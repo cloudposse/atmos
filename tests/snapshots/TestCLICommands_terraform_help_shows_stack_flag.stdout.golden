@@ -61,7 +61,7 @@ BUILT-IN COMMANDS
       untaint                           Remove the 'tainted' state from a resource instance
       validate                          Check whether the configuration is valid
       version                           Show the current Terraform version
-      workdir [command] [EXPERIMENTAL]  Manage component working directories
+      workdir [command]                 Manage component working directories
       workspace [command]               Manage Terraform workspaces
 
 CUSTOM COMMANDS
@@ -74,6 +74,8 @@ FLAGS
                                      TF_APPEND_USER_AGENT)
 
       --clone-target-ref             Clone the target reference with which to compare the current branch
+
+      --command string               Executable name or path for this component invocation
 
       --components strings           Filter by specific components
 
@@ -94,8 +96,10 @@ FLAGS
       --init-pass-vars               Pass the generated varfile to terraform init using --var-file flag (OpenTofu
                                      feature)
 
-      --labels string                Filter by labels (comma-separated key=value or key:value pairs, matches all): --
-                                     labels=cost-center=platform,compliance=sox
+      --labels stringArray           Filter by labels (comma-separated key=value or key:value pairs within an
+                                     occurrence, and/or repeated, matches all): --labels=cost-
+                                     center=platform,compliance=sox or --labels cost-center=platform --labels
+                                     compliance=sox
 
       --process-functions            Enable/disable YAML functions processing in Atmos stack manifests (default
                                      true)
@@ -127,12 +131,16 @@ FLAGS
 
       --tags strings                 Filter by tags (comma-separated, matches any): --tags=production,tier-1
 
+      --terraform-command string     Compatibility alias for --command
+
       --ui                           Enable streaming UI mode for real-time resource status display
 
       --upload-status                Upload plan status to Atmos Pro
 
-      --use-mocks                    Resolve Terraform state/output YAML functions from component mocks instead of
-                                     remote state. Supported only by plan and describe commands
+      --use-mocks string             Resolve Terraform state/output YAML functions from component mocks. Set a mode
+                                     with =fallback (real state first, mocks only when missing) or =always (mocks
+                                     only); a bare flag uses components.terraform.mocks.mode. Supported only by plan
+                                     and describe commands
 
 
 GLOBAL FLAGS
@@ -152,7 +160,14 @@ GLOBAL FLAGS
 
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
+      --docs string                          Open command documentation (--docs=md renders it in the terminal)
+
       --edition string                       Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)
+
+      --example                              Select and initialize a related example (prints install commands without
+                                             a terminal)
+
+      --explain                              Explain policy decisions on stderr without changing execution
 
       --force-color                          Force color output even when not a TTY (useful for screenshots)
 
@@ -168,6 +183,12 @@ GLOBAL FLAGS
       --interactive                          Enable interactive prompts for missing required flags, optional value
                                              flags using the sentinel pattern, and missing positional arguments
                                              (requires TTY, disabled in CI) (default true)
+
+      --justification string                 Reason recorded for privileged auth actions such as PIM role activation (--
+                                             justification=REASON)
+
+      --logs-color                           Enable log color when available; --no-color and NO_COLOR always override
+                                             (default true)
 
       --logs-file string                     The file to write Atmos logs to. Logs can be written to any file or any
                                              standard file descriptor, including '/dev/stdout', '/dev/stderr' and
@@ -223,3 +244,5 @@ COMPATIBILITY FLAGS
 
 
 Use atmos terraform [command] --help for more information about a command.
+
+  Documentation: https://atmos.tools/cli/commands/terraform/usage

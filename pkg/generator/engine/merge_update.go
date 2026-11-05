@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -19,9 +20,11 @@ import (
 // used when regenerating files that already exist on disk.
 
 // SetMaxChanges sets the maximum percentage of changes allowed for 3-way merge operations.
-// The thresholdPercent parameter controls how aggressive the merge behavior is:
-// a lower value (e.g., 30) is more conservative, while a higher value (e.g., 80)
-// allows more extensive changes during merges.
+// A thresholdPercent of 0 disables the check entirely: the merge is never rejected for
+// having too many changes, regardless of size. Any positive value is compared against a
+// computed change percentage that has no upper bound (see TextMerger/YAMLMerger's
+// calculateChangePercentage), so no positive thresholdPercent is a guaranteed bypass the way
+// 0 is -- raising it only makes rejection less likely, never impossible.
 func (p *Processor) SetMaxChanges(thresholdPercent int) {
 	defer perf.Track(nil, "engine.Processor.SetMaxChanges")()
 
@@ -45,6 +48,24 @@ func (p *Processor) SetMergeDriver(driver merge.Driver) {
 	p.merger.SetDriver(driver)
 }
 
+// SetRecreateDeleted controls whether --update recreates a file the user
+// deleted but the template still generates. False (the default) leaves the
+// deletion in place (see Processor.deletedByUser). True restores the
+// pre-deletion-handling behavior of always recreating it.
+//
+// This is deliberately independent of --force/--merge-strategy rather than
+// reusing --force: --force combined with --update already means "on
+// conflict, the template's version wins" (ResolveConflictStrategy rejects
+// --force with an explicit non-theirs --merge-strategy as contradictory), so
+// tying recreation to it would make "manual conflict resolution" and
+// "recreate what I deleted" mutually exclusive, even though a user may
+// reasonably want both at once.
+func (p *Processor) SetRecreateDeleted(recreate bool) {
+	defer perf.Track(nil, "engine.Processor.SetRecreateDeleted")()
+
+	p.recreateDeleted = recreate
+}
+
 // SetDryRun toggles dry-run mode. When enabled, ProcessFile still renders
 // templates, loads the git merge base, performs the 3-way merge, and runs
 // conflict/threshold checks — every step that can fail — but skips the final
@@ -66,7 +87,7 @@ func (p *Processor) SetDryRun(dryRun bool) {
 func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 	defer perf.Track(nil, "engine.Processor.SetupGitStorage")()
 
-	// Validate everything into locals first; only mutate p.targetPath/p.gitStorage
+	// Validate everything into locals first; only mutate p.targetPath/p.baseStorage
 	// once every validation step has succeeded. A failed call must leave the
 	// Processor's existing state untouched rather than half-updated.
 	repo, err := git.PlainOpenWithOptions(targetPath, &git.PlainOpenOptions{
@@ -104,9 +125,29 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 	}
 
 	p.targetPath = targetPath
-	p.gitStorage = gitStorage
+	p.baseStorage = gitStorage
 
 	return nil
+}
+
+// SetupRenderedBaseStorage points the 3-way merge base at a pristine
+// re-render of the template (UpdateStrategyRendered) instead of the target's
+// own git history.
+//
+// Note: oldRenderRoot is the root of an already-fully-rendered copy of the
+// template at the ref that produced what's currently on disk (see
+// pkg/generator/ui's renderPristineBase) -- unlike SetupGitStorage, there is
+// no repository to open or ref to validate here, since the caller already
+// did the rendering.
+//
+// Note: targetPath is still required: determineBaseContent uses it (via
+// p.targetPath) to compute each file's base-storage-relative path
+// regardless of which base storage backs it.
+func (p *Processor) SetupRenderedBaseStorage(targetPath, oldRenderRoot string) {
+	defer perf.Track(nil, "engine.Processor.SetupRenderedBaseStorage")()
+
+	p.targetPath = targetPath
+	p.baseStorage = storage.NewRenderedBaseStorage(oldRenderRoot)
 }
 
 // Merge performs a 3-way merge using the internal merger.
@@ -123,8 +164,12 @@ func (p *Processor) Merge(base, ours, theirs, fileName string) (*merge.MergeResu
 
 // mergeFile attempts a 3-way merge for existing files.
 //
+// The caller must pass already-rendered content in the file's Content field: it is used as-is
+// as the "theirs" side of the merge. The sole caller (handleExistingFile) renders the template
+// with the scaffold's delimiters, config, and user values first, so mergeFile never re-renders.
+//
 //nolint:revive,funlen // function-length: merge logic requires detailed error handling
-func (p *Processor) mergeFile(existingPath string, file File, targetPath string) error {
+func (p *Processor) mergeFile(existingPath string, file *File) error {
 	// Read existing file content (user's version - "ours")
 	existingContent, err := os.ReadFile(existingPath)
 	if err != nil {
@@ -156,7 +201,7 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	}
 
 	// Determine base content for 3-way merge
-	baseContent, shouldSkip, err := p.determineBaseContent(file, existingPath)
+	baseContent, shouldSkip, err := p.determineBaseContent(*file, existingPath)
 	if err != nil {
 		return err
 	}
@@ -164,27 +209,11 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 		return nil
 	}
 
-	// Process new template content to get "theirs" version
-	newContent := file.Content
-	if file.IsTemplate {
-		processedContent, err := p.ProcessTemplateWithDelimiters(newContent, targetPath, nil, nil, []string{defaultLeftDelimiter, defaultRightDelimiter})
-		if err != nil {
-			return errUtils.Build(errUtils.ErrTemplateExecution).
-				WithExplanationf("Failed to process template during merge: `%s`", file.Path).
-				WithHint("Check template syntax").
-				WithHint("Verify all variables are defined").
-				WithContext("file_path", file.Path).
-				WithExitCode(1).
-				Err()
-		}
-		newContent = processedContent
-	}
-
 	// Perform 3-way merge
 	// - base: original version from git (or template if no git)
 	// - ours: user's current version (existingContent)
-	// - theirs: new template version (newContent after processing)
-	result, err := p.merger.Merge(baseContent, string(existingContent), newContent, file.Path)
+	// - theirs: new template version (file.Content, already rendered by the caller)
+	result, err := p.merger.Merge(baseContent, string(existingContent), file.Content, file.Path)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithExplanationf("Failed to perform 3-way merge for file: `%s`", file.Path).
@@ -272,8 +301,24 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 // rendered) template content as base would make base identical to "theirs",
 // silently turning the merge into a no-op that keeps the user's file and
 // drops template updates. Such cases return an error instead.
+//
+// Migration-aware fallback: "no history at the current rendered path" is
+// genuinely ambiguous -- it means either a real user-added file, or a
+// spec.files[] entry whose target: changed since the file was last
+// generated (e.g. adopting a glob+.file.RelPath-based target on an entry
+// that previously rendered verbatim to its own discovered path -- see
+// File.OriginalSourcePath's doc comment for the full scenario). There is no
+// principled way to *know* which case this is without new bookkeeping (a
+// persisted rename record in the project record, keyed per spec entry) that
+// is out of scope here. Instead, when OriginalSourcePath differs from the
+// current path, this also tries the base lookup there -- the one concrete,
+// recoverable signal already available without new bookkeeping, and exactly
+// right for the common "previously no target:, verbatim passthrough" case.
+// If that also finds nothing, the file is still treated as user-added (never
+// silently mutated), but a warning is logged instead of staying silent, so a
+// real migration doesn't look identical to an intentional user-added file.
 func (p *Processor) determineBaseContent(file File, existingPath string) (string, bool, error) {
-	if p.gitStorage == nil {
+	if p.baseStorage == nil {
 		// Callers guard against this, but never silently degrade.
 		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithExplanationf("Cannot determine the merge base for `%s` without a git repository", file.Path).
@@ -284,30 +329,91 @@ func (p *Processor) determineBaseContent(file File, existingPath string) (string
 			Err()
 	}
 
-	// Try to load base content from git.
+	// Try to load base content. relativePath is relative to the merge
+	// target's own root -- for GitBaseStorage that's the target's git
+	// working tree, for RenderedBaseStorage it's the pristine re-render's
+	// root -- both are file-tree-relative, so the same computation applies.
 	relativePath, err := filepath.Rel(p.targetPath, existingPath)
 	if err != nil {
 		relativePath = file.Path // Fallback to template path.
 	}
 
-	gitBase, found, err := p.gitStorage.LoadBase(relativePath)
+	base, found, err := p.baseStorage.LoadBase(relativePath)
 	switch {
 	case err != nil:
 		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithCause(err).
-			WithExplanationf("Failed to load the merge base for `%s` from git", file.Path).
-			WithHint("Verify the base ref exists: `git show <base-ref>`").
+			WithExplanationf("Failed to load the merge base for `%s`", file.Path).
+			// p.baseStorage can be either *storage.GitBaseStorage
+			// (--update-strategy=tracked) or *storage.RenderedBaseStorage
+			// (--update-strategy=rendered, see SetupRenderedBaseStorage) --
+			// this hint stays strategy-neutral rather than always pointing at
+			// `git show`, which cannot diagnose a rendered base's own
+			// pristine-re-render failure.
+			WithHint("Verify the merge base is available: for `--update-strategy=tracked`, check the base ref exists (`git show <base-ref>`); for `--update-strategy=rendered`, check the pristine re-render of the recorded ref succeeded").
 			WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 			WithContext("file_path", file.Path).
 			WithContext("relative_path", relativePath).
 			WithExitCode(2).
 			Err()
 	case found:
-		// Use git version as base.
-		return gitBase, false, nil
+		// Use the loaded version as base.
+		return base, false, nil
 	default:
-		// File doesn't exist in base ref.
-		// This is a user-added file - skip merge, don't touch it.
+		return p.determineBaseContentMigrationFallback(file, relativePath)
+	}
+}
+
+// determineBaseContentMigrationFallback is determineBaseContent's "not found
+// at the current rendered path" branch, split out to stay within this repo's
+// function-length limit. See determineBaseContent's own doc comment for the
+// migration-aware fallback this implements.
+func (p *Processor) determineBaseContentMigrationFallback(file File, relativePath string) (string, bool, error) {
+	if file.OriginalSourcePath == "" || file.OriginalSourcePath == relativePath {
+		// No original-source-path signal to fall back to (a caller that
+		// never populates it, e.g. direct engine tests), or it's identical
+		// to the current path (target: never changed this file's output
+		// path in the first place) -- either way, there's no alternate
+		// candidate to try, so this is today's plain "user-added" case.
+		return "", true, nil
+	}
+
+	migratedBase, migratedFound, migErr := p.baseStorage.LoadBase(file.OriginalSourcePath)
+	switch {
+	case migErr != nil:
+		// The fallback lookup itself failed (e.g. a real git/storage read
+		// error) -- this is not "no base exists at the original path", so it
+		// must not be folded into the "treat as user-added" case below.
+		// Propagate a proper contextual error, mirroring how the primary
+		// current-path lookup above handles its own LoadBase error.
+		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithCause(migErr).
+			WithExplanationf("Failed to load the merge base for `%s` at its original path", file.Path).
+			WithHint("Verify the merge base is available: for `--update-strategy=tracked`, check the base ref exists (`git show <base-ref>`); for `--update-strategy=rendered`, check the pristine re-render of the recorded ref succeeded").
+			WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
+			WithContext("file_path", file.Path).
+			WithContext("relative_path", relativePath).
+			WithContext("original_path", file.OriginalSourcePath).
+			WithExitCode(2).
+			Err()
+	case migratedFound:
+		log.Warn(
+			"scaffold --update: recovered merge base from the file's original path; target: appears to have changed since this file was last generated",
+			"current_path", relativePath,
+			"original_path", file.OriginalSourcePath,
+		)
+		return migratedBase, false, nil
+	default:
+		// Nothing found under either the current or the original path. Still
+		// treated as user-added (never silently mutated), but this is now an
+		// ambiguous case -- possibly a genuine migration with no git history
+		// under either path yet (e.g. the first `--update` after target:
+		// changed hasn't been committed) -- so warn instead of staying silent.
+		log.Warn(
+			"scaffold --update: no merge base found at this file's current or original path; treating it as user-added and leaving it untouched -- if target: changed recently, future template updates will not be applied to this file automatically",
+			"current_path", relativePath,
+			"original_path", file.OriginalSourcePath,
+		)
 		return "", true, nil
 	}
 }

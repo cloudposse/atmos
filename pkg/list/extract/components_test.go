@@ -66,6 +66,35 @@ func TestComponents(t *testing.T) {
 	}
 }
 
+// TestComponents_HelmAndKubernetes guards against helm/kubernetes components
+// silently disappearing from `atmos list components` output (they were
+// previously omitted from this function's per-type calls).
+func TestComponents_HelmAndKubernetes(t *testing.T) {
+	stacksMap := map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"helm": map[string]any{
+					"nginx-ingress": map[string]any{},
+				},
+				"kubernetes": map[string]any{
+					"cert-manager": map[string]any{},
+				},
+			},
+		},
+	}
+
+	components, err := Components(stacksMap)
+	require.NoError(t, err)
+	require.Len(t, components, 2)
+
+	types := make(map[string]string, len(components))
+	for _, comp := range components {
+		types[comp["component"].(string)] = comp["type"].(string)
+	}
+	assert.Equal(t, "helm", types["nginx-ingress"])
+	assert.Equal(t, "kubernetes", types["cert-manager"])
+}
+
 func TestComponents_Nil(t *testing.T) {
 	_, err := Components(nil)
 	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
@@ -199,6 +228,34 @@ func TestComponentsForStack(t *testing.T) {
 	for _, comp := range components {
 		assert.Equal(t, "plat-ue2-dev", comp["stack"])
 	}
+}
+
+// TestComponentsForStack_HelmAndKubernetes guards against helm/kubernetes
+// components being silently omitted for a single-stack listing.
+func TestComponentsForStack_HelmAndKubernetes(t *testing.T) {
+	stacksMap := map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"helm": map[string]any{
+					"nginx-ingress": map[string]any{},
+				},
+				"kubernetes": map[string]any{
+					"cert-manager": map[string]any{},
+				},
+			},
+		},
+	}
+
+	components, err := ComponentsForStack("plat-ue2-dev", stacksMap)
+	require.NoError(t, err)
+	require.Len(t, components, 2)
+
+	types := make(map[string]string, len(components))
+	for _, comp := range components {
+		types[comp["component"].(string)] = comp["type"].(string)
+	}
+	assert.Equal(t, "helm", types["nginx-ingress"])
+	assert.Equal(t, "kubernetes", types["cert-manager"])
 }
 
 func TestComponentsForStack_NotFound(t *testing.T) {
@@ -343,6 +400,34 @@ func TestUniqueComponents(t *testing.T) {
 			assert.Equal(t, 2, comp["stack_count"], "vpc should appear in 2 stacks")
 		}
 	}
+}
+
+// TestUniqueComponents_HelmAndKubernetes guards against helm/kubernetes
+// components being silently omitted from the deduplicated listing.
+func TestUniqueComponents_HelmAndKubernetes(t *testing.T) {
+	stacksMap := map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"helm": map[string]any{
+					"nginx-ingress": map[string]any{},
+				},
+				"kubernetes": map[string]any{
+					"cert-manager": map[string]any{},
+				},
+			},
+		},
+	}
+
+	components, err := UniqueComponents(stacksMap, "")
+	require.NoError(t, err)
+	require.Len(t, components, 2)
+
+	types := make(map[string]string, len(components))
+	for _, comp := range components {
+		types[comp["component"].(string)] = comp["type"].(string)
+	}
+	assert.Equal(t, "helm", types["nginx-ingress"])
+	assert.Equal(t, "kubernetes", types["cert-manager"])
 }
 
 func TestUniqueComponents_Nil(t *testing.T) {
@@ -776,9 +861,9 @@ func TestGetLabelsFromMetadata(t *testing.T) {
 			want:     map[string]string{},
 		},
 		{
-			name:     "non_string_values_are_dropped",
-			metadata: map[string]any{"labels": map[string]any{"team": "platform", "count": 3, "flag": true}},
-			want:     map[string]string{"team": "platform"},
+			name:     "booleans_become_selector_strings_and_other_non_strings_are_dropped",
+			metadata: map[string]any{"labels": map[string]any{"team": "platform", "count": 3, "on": true, "off": false}},
+			want:     map[string]string{"team": "platform", "on": "true", "off": "false"},
 		},
 	}
 

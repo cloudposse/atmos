@@ -1,0 +1,17 @@
+name: Runner network diagnostics
+description: Probe host and container connectivity, verify blocking, and record safe diagnostic evidence.
+inputs:
+  operation:
+    description: Operation to run (prepare, probe, capture, report)
+    required: true
+  phase:
+    description: Probe phase (hardened or repaired)
+  expect-repair:
+    description: Require repaired-phase success when reporting
+    default: 'false'
+  repair-first:
+    description: Require both phases to pass when repair preceded all probes
+    default: 'false'
+runs:
+  using: node24
+  main: index.cjs

@@ -138,6 +138,8 @@ components:
       backend_type: s3
       vars:
         name: test-vpc
+        tags_copy: !starlark |
+          return ctx.vars["tags"]
         tags:
           team: platform
 `
@@ -179,4 +181,5 @@ components:
 		"region": "us-east-1",
 		"team":   "platform",
 	}, tags, "deferred !labels output must deep-merge with the component's own vars.tags override, not be silently dropped")
+	assert.Equal(t, tags, written["tags_copy"], "Starlark must see the final merged tags")
 }

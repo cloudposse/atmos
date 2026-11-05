@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -199,6 +200,35 @@ func TestMatchesTag(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, matchesTag(tt.input, tt.prefix))
 		})
+	}
+}
+
+// The runtime delegates its tag boundary rule to pkg/function/tag, which atmos doctor uses to decide
+// whether an untagged string is a function call. Keep both views of the boundary rule identical.
+func TestMatchesTagDelegatesToFunctionTagPackage(t *testing.T) {
+	for _, input := range []string{"!template [\"one\"]", "!template[\"one\"]", "!templateExtra v", "!templatetrue", "!aws.account_id", "!env.x", "!env-x", "!env_x", "!env\tx", "!env"} {
+		for _, prefix := range fntag.AllYAML() {
+			assert.Equal(t, fntag.MatchesTag(input, prefix), matchesTag(input, prefix), "%q vs %q", input, prefix)
+		}
+	}
+}
+
+// Functions outside fntag.StringFormYAML are consumed from the YAML node tag, so the string processor
+// must leave a string that merely starts with them untouched. Doctor relies on this to call
+// such quoted strings plain text.
+func TestStringProcessorIgnoresFunctionsOutsideStringForm(t *testing.T) {
+	stringForm := map[string]bool{}
+	for _, tag := range fntag.StringFormYAML() {
+		stringForm[tag] = true
+	}
+	for _, tag := range fntag.AllYAML() {
+		if stringForm[tag] {
+			continue
+		}
+		input := tag + " argument"
+		got, err := processCustomTags(&schema.AtmosConfiguration{}, input, "", nil, nil)
+		assert.NoError(t, err, tag)
+		assert.Equal(t, input, got, "%s is not a string-form function and must be left as text", tag)
 	}
 }
 
@@ -532,7 +562,7 @@ func TestProcessCustomYamlTagsStackInfoThreading(t *testing.T) {
 	// The real test: Verify that when we process nodes, the stackInfo
 	// is available for YAML function processing.
 	// This is a white-box test that ensures the parameter flows through.
-	processedNodes, err := processNodes(atmosConfig, input, "test-stack", nil, stackInfo)
+	processedNodes, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, stackInfo)
 	assert.NoError(t, err)
 	assert.NotNil(t, processedNodes)
 }

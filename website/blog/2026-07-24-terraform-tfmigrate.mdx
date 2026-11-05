@@ -21,6 +21,8 @@ atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 <CastEmbed src="/casts/examples/hooks-tfmigrate/tfmigrate-example.cast" title="atmos terraform migrate" chrome controls scrubber />
 
 ## What Changed
@@ -157,6 +159,18 @@ instead. When the component's backend is S3 or GCS, the generated default
 gives you durable storage automatically. With a purely local backend, make
 sure the local history file survives between runs — for example, have your CI
 workflow persist it.
+
+## Try it out
+
+<TryExample example="hooks-tfmigrate">
+
+Install Terraform and tfmigrate, then follow the README to create local state and migrate it.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Learn More
 

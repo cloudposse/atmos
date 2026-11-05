@@ -1,0 +1,54 @@
+---
+title: atmos toolchain aliases
+sidebar_label: aliases
+sidebar_class_name: command
+id: aliases
+description: List effective built-in and configured tool aliases.
+---
+
+import Intro from '@site/src/components/Intro';
+
+<Intro>
+List effective built-in and configured tool aliases, with table, JSON, or YAML output.
+</Intro>
+
+## Usage
+
+```shell
+atmos toolchain aliases [--format table|json|yaml]
+```
+
+List the effective tool aliases from built-in defaults and the merged Atmos configuration. Configured aliases override built-in aliases with the same name. The default table is sorted by alias name.
+
+The command displays each alias target as defined. It does not resolve alias chains, search registries, install tools, or modify toolchain files.
+
+## Examples
+
+Configure aliases in `atmos.yaml`:
+
+```yaml
+toolchain:
+  aliases:
+    tf: hashicorp/terraform
+    infra: opentofu/opentofu
+```
+
+Inspect the effective aliases:
+
+```shell
+atmos toolchain aliases
+atmos toolchain aliases --format=json
+atmos toolchain aliases --format=yaml
+```
+
+JSON and YAML output are mappings from alias names to their targets, including built-in aliases. For example, the configuration above adds `infra` and sets `tf` in that mapping.
+
+## Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--format`, `-f` | Output format: `table`, `json`, or `yaml` | `table` |
+
+Set `ATMOS_TOOLCHAIN_ALIASES_FORMAT` to select the default output format. An explicit flag takes precedence over the environment variable.
+
+See [Toolchain aliases configuration](/cli/configuration/toolchain/aliases) for configuration examples and resolution behavior.

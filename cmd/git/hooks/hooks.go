@@ -5,6 +5,7 @@ package hooks
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -46,7 +47,7 @@ var Command = &cobra.Command{
 Subcommands:
   install    Write shim scripts into .git/hooks for configured hooks.
   uninstall  Remove Atmos-generated shims from .git/hooks.
-  run        Execute the configured command for a named hook.`,
+  run        Execute the configured command or steps for a named hook.`,
 }
 
 func init() {
@@ -55,4 +56,8 @@ func init() {
 	Command.AddCommand(installCmd)
 	Command.AddCommand(uninstallCmd)
 	Command.AddCommand(runCmd)
+	internal.RegisterCommandMetadata(
+		Command,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/hooks"),
+	)
 }

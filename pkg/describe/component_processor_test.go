@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -406,10 +407,10 @@ func TestProcessComponentInStackYamlFunctionsDisabledOnly(t *testing.T) {
 
 	// With YAML functions disabled, !template tags should NOT be resolved —
 	// the raw tag + value should be preserved as a string
-	assert.Equal(t, "!template hello-world", vars["simple_string"],
+	assert.Equal(t, "!template hello-world", yamlsource.Display(vars["simple_string"]),
 		"with WithProcessYamlFunctions(false), !template should NOT decode the value")
 	// json_number: !template '42' — when not processed, should remain as raw "!template 42"
-	assert.Equal(t, "!template 42", vars["json_number"],
+	assert.Equal(t, "!template 42", yamlsource.Display(vars["json_number"]),
 		"with WithProcessYamlFunctions(false), !template '42' should remain as raw string")
 }
 

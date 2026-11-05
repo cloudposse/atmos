@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -124,4 +125,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(cleanCmd)
+	internal.RegisterCommandMetadata(
+		cleanCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/clean"),
+	)
 }

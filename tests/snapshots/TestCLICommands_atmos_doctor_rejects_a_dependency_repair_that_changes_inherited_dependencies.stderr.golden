@@ -1,0 +1,38 @@
+Atmos Doctor · Dry run
+
+Discover · 1 completed
+Check · 2 completed · 1 with findings
+Stage fixes · 1 completed
+Verify · 2 completed · 1 verification failed
+
+warning[component-dependencies]: Legacy component dependency declaration
+  --> stacks/deploy/dev.yaml:16:11
+   |
+15 |         depends_on:
+16 |           - component: vpc
+   |           ^
+17 |     # Concrete component inherits base but declares its own legacy map for…
+   |
+   = repair: Verification failed
+   = help: Move settings.depends_on to dependencies.components and resolve any
+           required-dependency errors
+   = note: doctor semantic verification failed: changes the effective
+           dependencies of app in dev: db → vpc
+
+warning[deprecated-field]: components.terraform.app.settings.depends_on is deprecated
+  --> stacks/deploy/dev.yaml:24:11
+   |
+23 |         depends_on:
+24 |           1:
+   |           ^
+25 |             component: db
+   |
+   = repair: Manual action required
+   = help: Use dependencies.components
+   = note: Automatic migration supports component-level Terraform lists
+           containing literal component and optional stack names; review legacy
+           context selectors and other dependency shapes manually
+
+Summary
+0 repairs verified. 2 findings remain.
+Dry run: project files and backups were not written.

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -290,4 +291,39 @@ func TestCustomCommandIntegration_PreconditionsRunsWhenToolMissing(t *testing.T)
 	installCmd.Run(installCmd, []string{})
 
 	assert.FileExists(t, runLog, "step must run when the preconditions tool is not on PATH")
+}
+
+// An int flag reads base-10 digits only, like standalone scripts: pflag's own integer flags would
+// read 010 as octal 8 and 0x10 as 16.
+func TestCustomCommandIntFlagParsesBaseTen(t *testing.T) {
+	newCommand := func(defaultValue any) *cobra.Command {
+		command := &cobra.Command{Use: "demo"}
+		registerFlag(command, &schema.CommandFlag{Name: "count", Shorthand: "c", Type: "int", Default: defaultValue})
+		return command
+	}
+	for _, tc := range []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"leading zeros are decimal", []string{"--count", "010"}, 10},
+		{"plain digits", []string{"--count=42"}, 42},
+		{"negative", []string{"-c", "-3"}, -3},
+		{"default applies", nil, 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			command := newCommand(7)
+			require.NoError(t, command.ParseFlags(tc.args))
+			got, err := command.PersistentFlags().GetInt("count")
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+	for _, bad := range []string{"0x10", "0b11", "0o7", "1_000", "1.5", "many", ""} {
+		t.Run("rejects "+bad, func(t *testing.T) {
+			err := newCommand(nil).ParseFlags([]string{"--count=" + bad})
+			require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+			assert.ErrorContains(t, err, "base-10")
+		})
+	}
 }

@@ -20,14 +20,26 @@ import (
 // mode; it is only needed when host input is forwarded to the PTY.
 // Returns a cleanup function that must be called when done.
 func setupTerminal(ptmx *os.File, rawMode bool) (func(), error) {
-	// Handle terminal resize signals.
+	// Handle terminal resize signals. The goroutine uses the stdin captured here rather than
+	// reading the os.Stdin global, which callers (notably tests) may reassign, and signals on
+	// done when it exits so stopResize can wait for it.
+	stdin := os.Stdin
 	ch := make(chan os.Signal, 1)
+	done := make(chan struct{})
 	signal.Notify(ch, syscall.SIGWINCH)
 	go func() {
+		defer close(done)
 		for range ch {
-			_ = pty.InheritSize(os.Stdin, ptmx)
+			_ = pty.InheritSize(stdin, ptmx)
 		}
 	}()
+	// stopResize stops signal delivery and waits for the resize goroutine to exit, so it can
+	// no longer touch stdin or ptmx after the caller releases them.
+	stopResize := func() {
+		signal.Stop(ch)
+		close(ch)
+		<-done
+	}
 	ch <- syscall.SIGWINCH // Initial resize.
 
 	// Set terminal to raw mode (only if requested and stdin is a TTY).
@@ -36,8 +48,7 @@ func setupTerminal(ptmx *os.File, rawMode bool) (func(), error) {
 	if rawMode && term.IsTerminal(int(os.Stdin.Fd())) { //nolint:gosec // Stdin fd fits in int on all supported platforms.
 		oldState, err = term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
-			signal.Stop(ch)
-			close(ch)
+			stopResize()
 			return nil, fmt.Errorf("failed to set terminal to raw mode: %w", err)
 		}
 	}
@@ -55,8 +66,7 @@ func setupTerminal(ptmx *os.File, rawMode bool) (func(), error) {
 	// Return cleanup function.
 	cleanup := func() {
 		deregister()
-		signal.Stop(ch)
-		close(ch)
+		stopResize()
 		if oldState != nil {
 			_ = term.Restore(int(os.Stdin.Fd()), oldState)
 		}

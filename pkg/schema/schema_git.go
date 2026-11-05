@@ -90,7 +90,9 @@ type GitPushConfig struct {
 
 // GitHookEntry configures a local Git hook executed via `atmos git hooks run`.
 type GitHookEntry struct {
-	Command string `yaml:"command" json:"command" mapstructure:"command"`
+	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
+	// Steps runs registered steps in order, as an alternative to Command.
+	Steps Tasks `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
 }
 
 // GitListConfig configures `atmos git list` output.

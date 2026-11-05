@@ -188,14 +188,12 @@ No new schema fields are needed. The existing `Identity` struct supports:
 - `principal.region`: Optional region override (used by `aws/ambient`)
 - `via`: Not required for ambient identities (standalone)
 
-### Factory Registration
+### Registry Registration
 
-Both kinds are registered in `pkg/auth/factory/factory.go`:
+Both kinds are registered in `builtinIdentities()` in `pkg/auth/registry/builtins.go`:
 ```go
-case "ambient":
-    return ambientIdentities.NewAmbientIdentity(name, config)
-case "aws/ambient":
-    return awsIdentities.NewAWSAmbientIdentity(name, config)
+"ambient":     identityConstructor(ambientIdentities.NewAmbientIdentity),
+"aws/ambient": identityConstructor(awsIdentities.NewAWSAmbientIdentity),
 ```
 
 ## Security Considerations
@@ -304,7 +302,7 @@ auth:
 - `examples/config-profiles/profiles/eks/auth.yaml` — EKS/IRSA example config.
 
 ### Modified Files
-- `pkg/auth/factory/factory.go` — Register both identity kinds.
+- `pkg/auth/registry/builtins.go` — Register both identity kinds in `builtinIdentities()`.
 - `pkg/auth/manager_chain.go` — Standalone chain detection and authentication.
 - `website/docs/stacks/auth.mdx` — Documentation for ambient identities.
 - `website/src/data/roadmap.js` — Roadmap milestone.

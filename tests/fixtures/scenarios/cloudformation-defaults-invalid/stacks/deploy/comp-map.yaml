@@ -1,0 +1,8 @@
+vars:
+  stage: comp-map
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: comp-map
+      timeout: {minutes: 1}

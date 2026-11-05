@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -38,6 +39,10 @@ func init() {
 	configValidateCmd.Flags().Bool("affected", false, "Validate only configuration files affected since the Git merge-base")
 	configValidateCmd.Flags().String("base", "", "Git base ref or SHA to compare against for affected validation")
 	configValidateCmd.Flags().StringSlice("exclude", nil, "Exclude repository paths from validation (glob; can be repeated)")
+	internal.RegisterCommandMetadata(
+		configValidateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-validate"),
+	)
 }
 
 func runConfigValidateCommand(cmd *cobra.Command) error {

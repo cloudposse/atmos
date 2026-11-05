@@ -1,0 +1,43 @@
+---
+title: atmos stack describe
+sidebar_label: describe
+sidebar_class_name: command
+id: stack-describe
+description: Show the fully merged configuration for stacks and their components.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Show the fully merged configuration for stacks and their components. This is an alias for [`atmos describe stacks`](/cli/commands/describe/stacks), with the same flags and output.
+</Intro>
+
+<CastPlayer title="atmos stack describe --help" src="/casts/screengrabs/atmos-stack-describe--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack describe [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Select a stack to describe.</dd>
+  <dt>`--components`</dt>
+  <dd>Filter by component names, separated by commas.</dd>
+  <dt>`--sections`</dt>
+  <dd>Include only the named configuration sections.</dd>
+  <dt>`--format`</dt>
+  <dd>Select YAML or JSON output.</dd>
+</dl>
+
+See [`atmos describe stacks`](/cli/commands/describe/stacks) for the complete flag reference.
+
+## Examples
+
+```shell
+atmos stack describe --stack=dev
+atmos stack describe --components=vpc --sections=vars --format=json
+```

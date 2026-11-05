@@ -56,7 +56,7 @@ var registry = &kindRegistry{
 // Schema is generated immediately so schema errors surface at startup
 // rather than at first load.
 //
-// Re-registering an existing kind replaces it (last registration wins).
+// Identical registrations are idempotent; a different contract cannot replace a kind.
 func Register(kind, apiVersion string, specPrototype any) error {
 	defer perf.Track(nil, "manifest.Register")()
 
@@ -82,23 +82,33 @@ func Register(kind, apiVersion string, specPrototype any) error {
 		return err
 	}
 
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-
 	// Capture the element type of the prototype so Load[S] can verify the caller
 	// uses the correct spec type for this kind.
 	specType := reflect.TypeOf(specPrototype)
-	if specType != nil && specType.Kind() == reflect.Ptr {
+	if specType != nil && specType.Kind() == reflect.Pointer {
 		specType = specType.Elem()
 	}
 
-	registry.definitions[kind] = &Definition{
+	return registerDefinition(&Definition{
 		Kind:       kind,
 		APIVersion: apiVersion,
 		schemaJSON: schemaJSON,
 		compiled:   compiled,
 		specType:   specType,
+	})
+}
+
+func registerDefinition(definition *Definition) error {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	if existing, found := registry.definitions[definition.Kind]; found {
+		if existing.APIVersion == definition.APIVersion && existing.specType == definition.specType && existing.schemaJSON == definition.schemaJSON {
+			return nil
+		}
+		return errUtils.ErrDuplicateManifestRegistration
 	}
+	registry.definitions[definition.Kind] = definition
 	return nil
 }
 

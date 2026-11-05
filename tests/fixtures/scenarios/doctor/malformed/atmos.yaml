@@ -1,0 +1,8 @@
+# Malformed doctor fixture: atmos.yaml has a YAML syntax error (an unclosed flow sequence).
+# Doctor exists to diagnose this case, so root flags such as --cast and --pager that precede
+# the command must still reach doctor, which reports the syntax error as a finding.
+base_path: "./"
+
+stacks:
+  base_path: [unclosed
+  included_paths: ["deploy/**/*"]

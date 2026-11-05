@@ -12,15 +12,20 @@
 
 To play with these demos locally, start by [installing `atmos`](https://atmos.tools/install).
 
-Then, clone this repo and [try out the demos](https://github.com/cloudposse/atmos/tree/main/examples).
+Initialize an example directly from GitHub, then follow its README:
 
 ```shell
-# Clone this repo
-git clone git@github.com:cloudposse/atmos.git
-
-# Try the examples: https://github.com/cloudposse/atmos/tree/main/examples
-cd examples/
+atmos init github.com/cloudposse/atmos//examples/quick-start-simple
+cd quick-start-simple
+atmos list stacks
 ```
+
+Replace `quick-start-simple` with another [example directory](https://github.com/cloudposse/atmos/tree/main/examples).
+The `//` separates the repository from the directory. No scaffold configuration is required.
+`atmos init examples/quick-start-simple` uses `init.repository`, which defaults to the official repository at `main`;
+use `--ref` to select another revision or a second positional argument to choose the target directory.
+Atmos displays the example's README after copying. Some examples require additional tools or
+credentials, as described in their README.
 
 ## Demos
 
@@ -32,8 +37,8 @@ Think of each demo folder as representing an example of a standalone repository.
 1.  ├── demo-stacks/              # Kickstart your journey by exploring stack configurations and their structure.
 2.  ├── demo-library/             # Explore a reusable component library designed for seamless vendoring.
 3.  ├── demo-vendoring/           # Learn how to use vendoring to download and integrate remote dependencies from the `demo-library`.
-4.  ├── demo-validation/          # Validate your configurations to ensure correctness and compliance.
-5.  ├── demo-floci/               # Leverage Floci (LocalStack-compatible AWS emulator) to provision an S3 bucket using Atmos and Terraform.
+4.  ├── demo-opa/                 # Validate stack configurations with OPA policies.
+5.  ├── emulator-aws/             # Provision AWS resources against a local AWS emulator using Atmos and Terraform.
 6.  ├── helm/                     # Deploy a local chart with native Helm components.
 7.  ├── demo-helmfile/            # Deploy NGINX on a local lightweight Kubernetes cluster (k3s, via the native emulator) using Helm.
 8.  ├── custom-commands/          # Learn how to extend Atmos with your own custom CLI commands.
@@ -57,7 +62,7 @@ The [`quick-start-simple`](quick-start-simple/) contains code for the [simple qu
 
 ## Quick Start (Advanced)
 
-The [`quick-start-advanced`](quick-start-advanced/) contains code for the [advanced quick start](https://atmos.tools/quick-start/advanced). Please note that it requires an AWS organization with administrative credentials.
+The [`quick-start-advanced`](quick-start-advanced/) contains code for the [advanced quick start](https://atmos.tools/quick-start/advanced). It runs against a local AWS emulator and requires Atmos and a container runtime (Docker or Podman), without an AWS account or credentials.
 
 ## Tests
 

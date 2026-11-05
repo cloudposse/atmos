@@ -34,6 +34,13 @@ func StartLogGroup(title string) func() {
 		atomic.AddInt32(&logGroupDepth, -1)
 		return func() {}
 	}
+	// The provider may require grouping to be disabled for this run so stdout
+	// stays free of CI workflow-command metadata (see LogGroupingSuppressor),
+	// e.g. a legacy GitHub Action whose stdout is parsed as JSON.
+	if groupingSuppressed(p) {
+		atomic.AddInt32(&logGroupDepth, -1)
+		return func() {}
+	}
 	g, ok := p.(provider.LogGrouper)
 	if !ok {
 		atomic.AddInt32(&logGroupDepth, -1)

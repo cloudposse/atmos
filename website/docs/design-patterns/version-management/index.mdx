@@ -68,12 +68,12 @@ This contrasts with **Git Flow**, which uses:
 
 ### Component Sourcing Philosophy
 
-Atmos takes a different approach to component sourcing than conventional tools. Instead of pinning to remote sources dynamically, we advocate **explicit vendoring**—creating local immutable copies of upstream components.
+Atmos supports both [just-in-time source provisioning](/design-patterns/version-management/source-based-versioning) and **explicit vendoring**. Choose remote source references for versions declared directly in stacks, or commit local copies when code review, customization, and offline access are priorities.
 
-**The Atmos Approach:**
+**The Explicit Vendoring Approach:**
 - **Vendor root modules**: Create local copies and commit them to your repository
 - **Pin components to folders**: Reference vendored folders in your component configurations
-- **Make explicit what other tools do implicitly**: Other tools clone sources just-in-time to temporary folders; we make this explicit and permanent
+- **Keep code available locally**: Committed component copies can be inspected without fetching remote sources
 
 :::tip AI Coding Tools Love This
 AI assistants like Claude Code and Cursor work significantly better with vendored code. When components are local, AI tools have full context of your codebase—they can navigate between files, understand dependencies, and provide accurate suggestions without needing to fetch external repositories.

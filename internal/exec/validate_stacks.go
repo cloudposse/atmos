@@ -412,7 +412,7 @@ func createComponentStackMap(
 						configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 					}
 					var resolvedContext schema.Context
-					stackName, resolvedContext, err = resolveStackName(atmosConfig, stackManifest, getStackManifestName(stackSection), configAndStacksInfo, varsSection)
+					stackName, resolvedContext, err = ResolveStackName(atmosConfig, stackManifest, getStackManifestName(stackSection), configAndStacksInfo, varsSection)
 					if err != nil {
 						return nil, err
 					}

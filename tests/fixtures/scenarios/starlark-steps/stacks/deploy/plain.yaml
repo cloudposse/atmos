@@ -1,0 +1,9 @@
+vars:
+  stage: plain
+components:
+  terraform:
+    mock:
+      vars:
+        message: plain-no-starlark
+        tmpl: !template '{{ .stack }}'
+        home: !env HOME

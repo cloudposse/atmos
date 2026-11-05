@@ -1,0 +1,24 @@
+# Fixture for inherited CloudFormation `region` and `timeout` defaults across every scope
+# (stack root, `aws/cloudformation` type defaults, abstract base, component, overrides) and the
+# deprecated `settings.aws_cloudformation.region` / `timeout_in_minutes` aliases.
+base_path: "./"
+
+components:
+  "aws/cloudformation":
+    base_path: "components/cloudformation"
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths: []
+  name_template: "{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true
+
+logs:
+  level: Info

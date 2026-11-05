@@ -1,0 +1,70 @@
+---
+title: Official Plugins
+sidebar_label: Official Plugins
+slug: /plugins/official
+description: Discover native Atmos plugin packages maintained by Cloud Posse, including secret-store authentication with auth-secrets.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Official plugins are native Atmos packages maintained by Cloud Posse. Each package has its own
+version and release lifecycle, so plugin updates are independent of Atmos releases.
+</Intro>
+
+<Experimental />
+
+Use the built-in `cloudposse` registry to discover published releases:
+
+```shell
+atmos plugin search --registry=cloudposse --refresh
+```
+
+This directory describes the maintained packages. A package's source manifest does not establish
+that a release has been published; registry discovery reports available releases.
+See the [Plugins overview](/plugins) for installation, configuration, development, and policy guides.
+
+## Secret-store authentication
+
+The **`cloudposse/auth-secrets`** package reads declared Atmos secret references and maps selected
+values into the environment of a command. Use it when a tool needs an API token or another secret
+from an Atmos store.
+
+It exports two capabilities in one package:
+
+| Kind | Capability | Purpose |
+|---|---|---|
+| `secrets/store` | Authentication provider | Read the secret references declared in the provider's configuration. |
+| `secrets/env` | Credential-exchange identity | Map selected provider fields to named environment variables for a command. |
+
+Only explicitly mapped fields enter the command's environment. The secret store must be marked
+secret, and referenced values must be text. For example, a provider can read a service token from
+AWS Systems Manager Parameter Store and an identity can expose it as `SERVICE_TOKEN`.
+
+### Install
+
+OCI source:
+
+```text
+oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
+```
+
+From your Atmos project, install an available release:
+
+```shell
+atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets --as=secrets
+```
+
+Commit the resulting package declaration in `atmos.yaml` and `.atmos.plugins.lock.yaml`.
+The lockfile records the selected release; you do not need Go to install the compiled package.
+
+### Configure and use
+
+Follow the [complete configuration example](/cli/configuration/plugins#official-secret-store-authentication)
+to configure a secret store, a `secrets/store` provider, and a `secrets/env` identity. Select that
+identity when running an Atmos command that supports identities.
+
+See the [package README](https://github.com/cloudposse/atmos/tree/main/plugins/auth-secrets)
+for credential validation and lifecycle details, or the
+[official release guide](https://github.com/cloudposse/atmos/tree/main/plugins) for maintainer instructions.

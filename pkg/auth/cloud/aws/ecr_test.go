@@ -2,9 +2,15 @@ package aws
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -127,17 +133,48 @@ func TestParseRegistryURL(t *testing.T) {
 	}
 }
 
+// TestLoadDefaultAWSCredentials_RetrieveFailureHasIdentityHint verifies ambient
+// retrieval failures preserve the SDK cause and explain how to use an identity.
 func TestLoadDefaultAWSCredentials_RetrieveFailureHasIdentityHint(t *testing.T) {
-	// A pre-canceled context makes credential retrieval fail immediately
-	// (no real network/IMDS calls), exercising the same failure branch
-	// hit when no Atmos identity is configured for ambient ECR login.
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	// Isolate the SDK's credential chain from developer and CI credentials.
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(name, "AWS_") {
+			t.Setenv(name, "")
+		}
+	}
+	dir := t.TempDir()
+	for _, config := range []struct{ env, file string }{
+		{"AWS_CONFIG_FILE", "config"},
+		{"AWS_SHARED_CREDENTIALS_FILE", "credentials"},
+	} {
+		path := filepath.Join(dir, config.file)
+		require.NoError(t, os.WriteFile(path, nil, 0o600))
+		t.Setenv(config.env, path)
+	}
 
-	_, err := LoadDefaultAWSCredentials(ctx)
+	// A pre-canceled context does not reliably stop the SDK credential cache
+	// from consulting IMDS. A local endpoint supplies a deterministic cause.
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Equal(t, "/latest/api/token", r.URL.Path)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+	t.Setenv("AWS_EC2_METADATA_SERVICE_ENDPOINT", server.URL)
+	t.Setenv("AWS_EC2_METADATA_V1_DISABLED", "true")
+	t.Setenv("AWS_MAX_ATTEMPTS", "1")
+
+	credentials, err := LoadDefaultAWSCredentials(context.Background())
 	require.Error(t, err)
+	assert.Nil(t, credentials)
 	assert.ErrorIs(t, err, errUtils.ErrECRAuthFailed)
-	assert.ErrorIs(t, err, context.Canceled, "WithCause must preserve the original cancellation error in the chain")
+	var responseErr *smithyhttp.ResponseError
+	require.ErrorAs(t, err, &responseErr, "WithCause must preserve the original SDK response error")
+	assert.Equal(t, http.StatusBadRequest, responseErr.HTTPStatusCode())
+	assert.EqualValues(t, 1, requests.Load(), "credential retrieval must use only the local IMDS endpoint")
 
 	hints := strings.Join(errors.GetAllHints(err), "\n")
 	assert.Contains(t, hints, "atmos aws ecr login --identity")

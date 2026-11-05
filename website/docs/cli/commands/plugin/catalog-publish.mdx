@@ -1,0 +1,46 @@
+---
+title: atmos plugin catalog publish
+sidebar_label: catalog publish
+sidebar_class_name: command
+id: catalog-publish
+description: Publish a catalog with revision and digest conflict checks.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Publish a catalog with revision and digest conflict checks.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin catalog publish --help" src="/casts/screengrabs/atmos-plugin-catalog-publish--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin catalog publish <file> --to=<catalog>
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>file</code></dt>
+  <dd>Catalog YAML document. Its revision must match the current remote revision, or zero for a new catalog.</dd>
+  <dt><code>--to</code></dt>
+  <dd>A <code>plugins.registries</code> alias that configures a <code>catalog</code>, or an
+  <code>oci://</code> catalog reference. A bare reference such as <code>registry.example.com/team/catalog:stable</code>
+  is rejected with a hint listing the usable aliases, and an alias without a <code>catalog</code> is an error.</dd>
+</dl>
+
+## Publisher coordination
+
+Run catalog mutations through one externally serialized maintainer workflow per catalog. The lock must cover reading the latest inputs, updating the snapshot, and publishing it. Revision and digest rechecks detect an already-stale update; they do not provide atomic compare-and-swap or prevent simultaneous writers from overwriting one another.
+
+Plugin release jobs should publish artifacts independently. Use direct repository discovery when a collection does not need a curated catalog; see [plugin search](search.mdx).
+
+## Examples
+
+```shell
+atmos plugin catalog publish catalog.yaml --to=oci://registry.example.com/team/catalog:stable
+```

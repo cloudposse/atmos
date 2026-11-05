@@ -98,6 +98,10 @@ func newWorkspacePassthroughSubcommand(name, short string) *cobra.Command {
 		},
 	}
 	RegisterTerraformCompletions(cmd)
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workspace/"+name),
+	)
 	return cmd
 }
 
@@ -129,4 +133,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(workspaceCmd)
+	internal.RegisterCommandMetadata(
+		workspaceCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workspace"),
+	)
 }

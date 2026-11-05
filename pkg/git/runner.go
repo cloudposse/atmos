@@ -24,8 +24,13 @@ const stderrTailLimit = 4096
 type RunOptions struct {
 	// Dir is the working directory for the subprocess.
 	Dir string
+	// DiscoverRepository permits Git to search above Dir when locating the source root.
+	// Other operations retain the repository ceiling to avoid touching a parent checkout.
+	DiscoverRepository bool
 	// Env is the full subprocess environment; nil inherits the process env.
 	Env []string
+	// Stdin supplies optional input (for index plumbing and patches).
+	Stdin io.Reader
 	// Stderr receives the subprocess stderr stream as it is produced.
 	// Production callers pass a masked writer; nil discards.
 	Stderr io.Writer
@@ -78,7 +83,11 @@ func (r *ExecRunner) Run(ctx context.Context, command string, args []string, opt
 
 	cmd := r.executor.CommandContext(ctx, command, args...)
 	cmd.Dir = opts.Dir
-	cmd.Env = envWithGitCeiling(opts.Env, opts.Dir)
+	cmd.Env = opts.Env
+	if !opts.DiscoverRepository {
+		cmd.Env = envWithGitCeiling(opts.Env, opts.Dir)
+	}
+	cmd.Stdin = opts.Stdin
 	cmd.Stdout = &stdout
 	if opts.Stderr != nil {
 		cmd.Stderr = io.MultiWriter(opts.Stderr, tail)

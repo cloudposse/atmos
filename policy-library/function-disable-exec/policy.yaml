@@ -1,0 +1,15 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: function-disable-exec
+  description: Reject !exec before configuration can start a shell.
+spec:
+  policies:
+    guard:
+      on: function
+      action: deny
+      reason: |-
+        **`!exec` is disabled** because stack configuration must not run shell commands.
+
+        **Instead:** Pass precomputed values through environment variables and read them with `!env`.
+      rule: input.name == 'exec'

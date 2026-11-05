@@ -15,6 +15,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
@@ -74,6 +75,13 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 	)
 
 	return creds, nil
+}
+
+// LoadCredentialsFromEnvironment reuses Atmos's isolated profile loader for credential materializers.
+func LoadCredentialsFromEnvironment(ctx context.Context, environment map[string]string) (*types.AWSCredentials, error) {
+	defer perf.Track(nil, "aws.LoadCredentialsFromEnvironment")()
+
+	return loadAWSCredentialsFromEnvironment(ctx, environment)
 }
 
 // awsEnvVars holds AWS environment variable values.

@@ -63,6 +63,12 @@ type MCPServerConfig struct {
 	Timeout     string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
 	// Identity is the Atmos Auth identity (from the auth section) for credential injection.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Optional marks a server that may be absent in some consumer contexts. When true and the
+	// server's Identity cannot be resolved in the active auth context, the server is skipped
+	// with a warning instead of failing. This is meant for shared `mcp.servers` config consumed
+	// across repositories, where a server's identity is not defined in every consumer's profiles.
+	// Defaults to false (a server whose identity cannot be resolved is an error).
+	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty" mapstructure:"optional"`
 	// Cwd is the working directory a stdio server subprocess should be launched from.
 	// Used for user-scoped (global) client installs, where the client config isn't
 	// colocated with the Atmos project, so the server needs an explicit cwd.

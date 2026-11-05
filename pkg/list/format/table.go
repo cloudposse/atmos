@@ -788,11 +788,14 @@ func shrinkIfNeeded(widths []int, availableWidth, descriptionColIndex int) []int
 // distributeProportionally distributes width proportionally when no Description column exists.
 func distributeProportionally(params columnWidthParams) []int {
 	widths := make([]int, params.numColumns)
-	totalMinWidth := calculateTotalMinWidth(params.minWidths, params.descriptionColIndex)
+	totalMinWidth := calculateTotalMinWidth(params.minWidths)
 
 	if totalMinWidth <= params.availableWidth {
 		copy(widths, params.minWidths)
 		return widths
+	}
+	if compact := distributeWithCompactMinimums(params); compact != nil {
+		return compact
 	}
 
 	scaleFactor := float64(params.availableWidth) / float64(totalMinWidth)
@@ -803,16 +806,38 @@ func distributeProportionally(params columnWidthParams) []int {
 		}
 	}
 
+	// Applying the minimum width can exceed the proportional budget. Reclaim
+	// that excess from wider columns before wrapping their content.
+	return shrinkIfNeeded(widths, params.availableWidth, -1)
+}
+
+// distributeWithCompactMinimums preserves short labels when their natural widths
+// fit alongside compact wide columns, assigning the remaining space to long cells.
+func distributeWithCompactMinimums(params columnWidthParams) []int {
+	widths := make([]int, params.numColumns)
+	used, excess := 0, 0
+	for i, natural := range params.minWidths {
+		widths[i] = min(natural, CompactColumnMaxWidth)
+		used += widths[i]
+		excess += natural - widths[i]
+	}
+	if used > params.availableWidth {
+		return nil
+	}
+	if excess == 0 {
+		return widths
+	}
+	remaining := params.availableWidth - used
+	for i, natural := range params.minWidths {
+		widths[i] += remaining * (natural - widths[i]) / excess
+	}
 	return widths
 }
 
-// calculateTotalMinWidth calculates total minimum width with capping for non-Description columns.
-func calculateTotalMinWidth(minWidths []int, descriptionColIndex int) int {
+// calculateTotalMinWidth sums the natural widths used for proportional allocation.
+func calculateTotalMinWidth(minWidths []int) int {
 	totalMinWidth := 0
-	for i, minWidth := range minWidths {
-		if i != descriptionColIndex && minWidth > CompactColumnMaxWidth {
-			minWidth = CompactColumnMaxWidth
-		}
+	for _, minWidth := range minWidths {
 		totalMinWidth += minWidth
 	}
 	return totalMinWidth
@@ -871,6 +896,10 @@ const (
 
 // TableOptions controls optional styled-table behaviors.
 type TableOptions struct {
+	// Width overrides stdout terminal detection for tables rendered to another
+	// stream or inside a constrained viewport. Nonpositive values auto-detect.
+	Width int
+
 	// SemanticCellStyling colors cells by detected content type (booleans
 	// green/red, numbers, placeholders). Disable it for tables whose values are
 	// plain data rather than statuses, where the coloring reads as noise.
@@ -912,7 +941,10 @@ func CreateStyledTableWithOptions(header []string, rows [][]string, options Tabl
 	defer perf.Track(nil, "format.CreateStyledTableWithOptions")()
 
 	// Get terminal width - use exactly what's detected.
-	detectedWidth := templates.GetTerminalWidth()
+	detectedWidth := options.Width
+	if detectedWidth <= 0 {
+		detectedWidth = templates.GetTerminalWidth()
+	}
 
 	// Apply markdown rendering to Description column cells.
 	processedRows := renderDescriptionCells(header, rows)
@@ -965,12 +997,12 @@ func renderDescriptionCells(header []string, rows [][]string) [][]string {
 	return processedRows
 }
 
-// padHeadersToWidths pads headers to their computed column widths.
+// padHeadersToWidths wraps and pads headers to their computed column widths.
 func padHeadersToWidths(header []string, columnWidths []int) []string {
 	paddedHeaders := make([]string, len(header))
 	for i, h := range header {
 		if i < len(columnWidths) {
-			paddedHeaders[i] = padToWidth(h, columnWidths[i])
+			paddedHeaders[i] = padToWidth(wrapCellToWidth(h, columnWidths[i]), columnWidths[i])
 		} else {
 			paddedHeaders[i] = h
 		}

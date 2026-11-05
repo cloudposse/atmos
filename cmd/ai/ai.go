@@ -38,7 +38,12 @@ func errAINotEnabled() error {
 func init() {
 	// Register this built-in command with the registry.
 	// This happens during package initialization via blank import.
-	internal.Register(&AICommandProvider{})
+	internal.Register(
+		&AICommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ai/usage"),
+		internal.WithExample("examples/ai", "Atmos AI"),
+		internal.WithExample("examples/ai-claude-code", "Claude Code"),
+	)
 }
 
 // AICommandProvider implements the CommandProvider interface.

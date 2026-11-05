@@ -23,10 +23,6 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}"
-logs:
-  file: "/dev/stderr"
-  level: Info
-
 # Toolchain: Atmos installs the CLIs this example needs (no manual setup). Helmfile
 # orchestrates Helm, and the nginx release's hooks shell out to kubectl, so all three
 # are declared as component dependencies (see stacks/catalog/demo.yaml) and resolved

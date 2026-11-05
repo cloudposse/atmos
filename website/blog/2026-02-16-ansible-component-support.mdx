@@ -14,6 +14,8 @@ Atmos now supports Ansible as a first-class component type, enabling unified orc
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 See it in action:
 
 <CastEmbed src="/casts/examples/demo-ansible/playbook.cast" title="atmos Ansible playbook" chrome controls scrubber />
@@ -94,6 +96,18 @@ atmos ansible playbook webserver -s prod -- --check --verbose
 # Use aliases
 atmos an pb webserver -s prod
 ```
+
+## Try it out
+
+<TryExample example="demo-ansible">
+
+Inspect the example stacks. Install Ansible before running the playbooks in the README.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

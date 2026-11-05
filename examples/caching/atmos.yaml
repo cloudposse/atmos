@@ -19,9 +19,7 @@ components:
     # Use OpenTofu. Atmos invokes the `tofu` binary the toolchain installs.
     command: tofu
     base_path: "components/terraform"
-    apply_auto_approve: true
     deploy_run_init: true
-    init_run_reconfigure: true
     auto_generate_backend_file: false
 
     # Disable Terraform's own provider plugin cache so the registry cache below is
@@ -60,10 +58,6 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}"
-logs:
-  level: Info
-  file: "/dev/stderr"
-
 # `atmos test` runs this in CI. These steps need no terraform binary or network:
 # they prove the cache.mirror configuration resolves and the cache is reachable.
 commands:

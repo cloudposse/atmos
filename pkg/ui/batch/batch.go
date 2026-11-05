@@ -30,6 +30,11 @@ const (
 
 // Event describes a job's current state. IDs, unlike labels, must be unique within a run.
 type Event struct {
+	// Diagnostic enables phase progress without changing vendor presentation.
+	Diagnostic bool
+	Elapsed    time.Duration
+	Severity   string
+	started    time.Time
 	// Warning is a permanent diagnostic and does not count as a job.
 	Warning string
 	// Reset starts a new phase, clearing counts and active jobs.
@@ -64,6 +69,13 @@ type Renderer struct {
 	completed, total, lines int
 	live                    bool
 	toolchainStyle          bool
+	deferErrors             bool
+	phaseSummaries          bool
+	hold                    bool
+	holdNotice              string
+	held                    []Event
+	phase                   string
+	outcomes                map[string]int
 	size                    func() (int, int, error)
 }
 
@@ -73,6 +85,11 @@ type Option func(*Renderer)
 // WithToolchainStyle preserves the toolchain running-count footer.
 func WithToolchainStyle() Option {
 	return func(r *Renderer) { r.toolchainStyle = true }
+}
+
+// WithDeferredErrors leaves error presentation to the caller after live progress clears.
+func WithDeferredErrors() Option {
+	return func(r *Renderer) { r.deferErrors = true }
 }
 
 // New creates a renderer using the existing Atmos terminal theme.
@@ -96,9 +113,9 @@ func supportsLiveProgress() bool {
 }
 
 // Run owns rendering while work emits progress. It drains events before returning.
-func Run(total int, work func(Observer) error) error {
+func Run(total int, work func(Observer) error, options ...Option) error {
 	defer perf.Track(nil, "batch.Run")()
-	r := New(total, supportsLiveProgress())
+	r := New(total, supportsLiveProgress(), options...)
 	defer r.Clear()
 	events := make(chan Event, eventBufferSize)
 	finished := make(chan error, 1)
@@ -122,7 +139,9 @@ func Run(total int, work func(Observer) error) error {
 		select {
 		case e, ok := <-events:
 			if !ok {
-				return <-finished
+				err := <-finished
+				r.Finish(err)
+				return err
 			}
 			r.Update(&e)
 		case <-ticker.C:
@@ -137,16 +156,28 @@ func (r *Renderer) Update(event *Event) {
 	e := *event
 	if e.Warning != "" {
 		r.Clear()
-		ui.Warning(e.Warning)
+		if e.Severity == "error" {
+			ui.Error(e.Warning)
+		} else {
+			ui.Warning(e.Warning)
+		}
 		r.render()
 		return
 	}
 	if e.Reset {
+		r.flushPhase(nil)
 		r.Clear()
 		r.active = make(map[int]Event)
 		r.order = nil
 		r.completed, r.total = 0, e.Count
 		return
+	}
+	if r.phaseSummaries && e.Diagnostic {
+		r.phase = e.Phase
+	}
+	// An untotaled diagnostic event clears the total only before the phase starts work.
+	if e.Diagnostic && e.Count < 0 && r.completed == 0 && len(r.active) == 0 {
+		r.total = 0
 	}
 	if e.Count > 0 {
 		r.total = e.Count
@@ -160,24 +191,58 @@ func (r *Renderer) Update(event *Event) {
 		return
 	}
 	if e.Done {
-		r.Complete(e.ID, e.printResult)
+		r.finishEvent(&e)
 		return
 	}
 	r.Clear()
 	if old, ok := r.active[e.ID]; ok {
 		e.Fraction = max(old.Fraction, e.Fraction)
+		e.started = old.started
 	} else {
 		r.order = append(r.order, e.ID)
+		e.started = time.Now()
+		if e.Diagnostic && !r.live && !r.phaseSummaries {
+			ui.Writef("%s: %s\n", e.Phase, e.Label)
+		}
 	}
 	e.Fraction = min(1, max(0, e.Fraction))
 	r.active[e.ID] = e
 	r.render()
 }
 
+// finishEvent removes completed work and optionally leaves error rendering to the caller.
+func (r *Renderer) finishEvent(e *Event) {
+	if r.phaseSummaries && e.Diagnostic {
+		if r.outcomes == nil {
+			r.outcomes = make(map[string]int)
+		}
+		outcome := e.Outcome
+		if e.Err != nil {
+			outcome = "failed"
+		}
+		r.outcomes[outcome]++
+		r.Complete(e.ID, func() {})
+		return
+	}
+	if r.hold {
+		r.holdResult(e)
+		return
+	}
+	r.Complete(e.ID, func() {
+		if !r.deferErrors || e.Err == nil {
+			e.printResult()
+		}
+	})
+}
+
 func (e *Event) printResult() {
 	// Append styled suffixes after markdown rendering so ANSI escapes remain intact.
 	suffix := e.versionSuffix()
 	switch {
+	case e.Diagnostic && (e.Outcome == "findings" || e.Outcome == "manual" || e.Outcome == "verification-failed" || e.Outcome == "verification-incomplete"):
+		ui.Warning(e.Label + " (" + e.Outcome + ")")
+	case e.Diagnostic && e.Outcome == "failed":
+		ui.Error(e.Label + " (failed)")
 	case e.Err != nil:
 		ui.Writef("%s%s: %s\n", ui.FormatError(e.Label), suffix, ui.FormatInline(e.Err.Error()))
 	case e.Outcome == "unchanged", e.Outcome == "skipped", e.Outcome == "canceled":
@@ -218,6 +283,13 @@ func (r *Renderer) activeLabel(e *Event) string {
 
 func (e *Event) stageLabel() string {
 	stage := strings.ToLower(e.Phase)
+	if e.Diagnostic {
+		elapsed := e.Elapsed
+		if !e.started.IsZero() {
+			elapsed = time.Since(e.started)
+		}
+		return fmt.Sprintf("%s · %s", e.Phase, elapsed.Round(time.Second))
+	}
 	if stage == "pulling" {
 		stage = "downloading"
 	}
@@ -291,6 +363,9 @@ func (r *Renderer) render() {
 		progress += r.active[id].Fraction
 	}
 	summary := fmt.Sprintf("%s %d/%d complete, %d active, %d queued", r.bar.ViewAs(progress/float64(max(1, r.total))), r.completed, r.total, len(r.active), max(0, r.total-r.completed-len(r.active)))
+	if r.total == 0 {
+		summary = fmt.Sprintf("%d complete, %d active", r.completed, len(r.active))
+	}
 	if r.toolchainStyle {
 		summary = fmt.Sprintf("%s %d/%d complete, %d running", r.bar.ViewAs(float64(r.completed)/float64(max(1, r.total))), r.completed, r.total, len(r.active))
 	}

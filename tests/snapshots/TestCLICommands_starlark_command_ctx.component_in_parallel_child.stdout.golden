@@ -1,0 +1,2 @@
+child ctx.component: component(name = "api", stack = "dev", type = "app")
+child ctx.component.vars: {"image":"nginx:1.25","replicas":2,"stage":"dev"} child components.get vars: {"image":"nginx:1.25","replicas":2,"stage":"dev"}

@@ -114,10 +114,15 @@ var (
 	// Used as a fallback when per-run lines were not captured.
 	testSummaryRe = regexp.MustCompile(`(?m)^(?:Success|Failure)!\s*(\d+)\s+passed,\s*(\d+)\s+failed`)
 
-	// Matches the file/line locator inside a terraform "Error:" diagnostic block, e.g.:
+	// Matches the file/line locator inside a terraform "Error:"/"Warning:"
+	// diagnostic block. Terraform renders this locator a few ways depending on
+	// context, so the trailing punctuation is intentionally left unanchored:
 	//   on tests/app.tftest.hcl line 30:
-	// Used to recover assertion location for the summary-line fallback.
-	errorLocationRe = regexp.MustCompile(`(?m)^\s*on\s+(\S+)\s+line\s+(\d+):`)
+	//   on main.tf line 20, in data "validation_warning" "warn":
+	//   on main.tf line 1
+	// Used to recover assertion location for the summary-line fallback, and to
+	// anchor plan/apply warning annotations at their source line.
+	errorLocationRe = regexp.MustCompile(`(?m)^\s*on\s+(\S+)\s+line\s+(\d+)`)
 )
 
 // ParsePlanJSON parses terraform plan JSON from `terraform show -json <planfile>`.

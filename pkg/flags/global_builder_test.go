@@ -54,6 +54,7 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 
 		// Authentication flags.
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("identity"), "identity flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("justification"), "justification flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("profile"), "profile flag should be registered")
 
 		// Profiling flags.
@@ -323,5 +324,42 @@ func TestGlobalOptionsBuilder_FlagPrecedence(t *testing.T) {
 
 		flags := ParseGlobalFlags(cmd, v)
 		assert.Equal(t, "Trace", flags.LogsLevel)
+	})
+}
+
+// TestGlobalOptionsBuilder_Justification verifies the --justification global flag and the
+// ATMOS_AUTH_JUSTIFICATION environment variable both resolve to the "justification" viper
+// key, with the flag taking precedence over the env var. This is what lets the per-invocation
+// justification reach the auth chain (e.g. the azure/pim-role identity reads viper key
+// "justification").
+func TestGlobalOptionsBuilder_Justification(t *testing.T) {
+	newCmdAndViper := func() (*cobra.Command, *viper.Viper) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterPersistentFlags(cmd)
+		require.NoError(t, parser.BindToViper(v))
+		return cmd, v
+	}
+
+	t.Run("--justification=REASON resolves to the justification viper key", func(t *testing.T) {
+		cmd, v := newCmdAndViper()
+		require.NoError(t, cmd.ParseFlags([]string{"--justification", "planned change"}))
+		require.NoError(t, v.BindPFlag("justification", cmd.PersistentFlags().Lookup("justification")))
+		assert.Equal(t, "planned change", v.GetString("justification"))
+	})
+
+	t.Run("ATMOS_AUTH_JUSTIFICATION resolves to the justification viper key", func(t *testing.T) {
+		t.Setenv("ATMOS_AUTH_JUSTIFICATION", "env change window")
+		_, v := newCmdAndViper()
+		assert.Equal(t, "env change window", v.GetString("justification"))
+	})
+
+	t.Run("flag overrides env", func(t *testing.T) {
+		t.Setenv("ATMOS_AUTH_JUSTIFICATION", "env reason")
+		cmd, v := newCmdAndViper()
+		require.NoError(t, cmd.ParseFlags([]string{"--justification", "flag reason"}))
+		require.NoError(t, v.BindPFlag("justification", cmd.PersistentFlags().Lookup("justification")))
+		assert.Equal(t, "flag reason", v.GetString("justification"))
 	})
 }

@@ -1,0 +1,33 @@
+---
+title: atmos aws cloudformation drift
+sidebar_label: drift
+sidebar_class_name: command
+id: drift
+description: Detect and describe drift against a deployed stack.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Detect and describe drift between a deployed CloudFormation stack's actual
+resource configuration and its stack template — CloudFormation's own
+[stack drift detection](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-stack-drift.html),
+wired into the same stack-based workflow as every other `aws/cloudformation` verb.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation drift --help" src="/casts/screengrabs/atmos-aws-cloudformation-drift--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation drift detect <component> --stack <stack>
+atmos aws cloudformation drift describe <component> --stack <stack>
+```
+
+## Subcommands
+
+<DocCardList/>

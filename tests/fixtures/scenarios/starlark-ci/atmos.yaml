@@ -1,0 +1,70 @@
+# Fixture for the Starlark `ci` module. Every reporting surface is enabled, so a script that runs
+# under a detected CI provider posts for real, and a script that runs locally renders through the
+# generic provider. Report templates live under templates/ (ci.templates.base_path); there is no
+# configured default template, so scripts always pass template=.
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.stage}}"
+
+logs:
+  file: "/dev/stderr"
+  level: Warning
+
+ci:
+  enabled: true
+  summary:
+    enabled: true
+  output:
+    enabled: true
+  comments:
+    enabled: true
+  checks:
+    enabled: true
+  results:
+    enabled: true
+  templates:
+    base_path: "templates"
+
+commands:
+  # The same script as a direct step, a parallel child, and a matrix child. The A1 regression guard
+  # runs the parallel and matrix variants under a detected provider and asserts the CI switches are
+  # honored (the child used to get a reporter with no configuration, so every gate read as off).
+  - name: ft-ci-direct
+    description: ci.* from a direct script step
+    steps:
+      - name: report
+        type: script
+        interpreter: starlark
+        script: !include scripts/ci-child.star
+
+  - name: ft-ci-parallel
+    description: ci.* from a parallel script child
+    steps:
+      - name: group
+        type: parallel
+        steps:
+          - name: report
+            type: script
+            interpreter: starlark
+            script: !include scripts/ci-child.star
+
+  - name: ft-ci-matrix
+    description: ci.* from a matrix script child
+    steps:
+      - name: group
+        type: matrix
+        matrix:
+          env: [dev]
+        steps:
+          - name: report
+            type: script
+            interpreter: starlark
+            script: !include scripts/ci-child.star

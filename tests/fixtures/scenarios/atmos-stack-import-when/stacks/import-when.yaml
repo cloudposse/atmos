@@ -1,0 +1,20 @@
+import:
+  # An import without `when` is always processed.
+  - mixins/always
+  - path: mixins/never
+    when: never
+  - path: mixins/ci-only
+    when: ci
+  - path: mixins/local-only
+    when: local
+  - path: mixins/env-prod
+    when: !cel env.ATMOS_TEST_IMPORT_ENV == "prod"
+
+vars:
+  stage: import-when
+
+components:
+  terraform:
+    probe:
+      metadata:
+        component: yaml-function-test

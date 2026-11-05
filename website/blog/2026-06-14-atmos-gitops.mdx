@@ -14,6 +14,8 @@ Atmos now treats Git as a foundational platform capability — on par with Toolc
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 A new top-level `git` section in `atmos.yaml` declares managed repositories by logical name:
@@ -131,6 +133,19 @@ atmos git init flux-prod --from=https://github.com/acme/old-flux.git --keep-hist
 ```
 
 Same declarative model as the rest of `atmos git`: the repository, its identity, and its conventions are defined once in `atmos.yaml`, and `init` brings it into existence.
+
+## Try it out
+
+<TryExample example="gitops">
+
+Git and network access are required to clone the configured repository. Follow the README for publishing and pull requests.
+
+```shell
+atmos git clone deploy
+atmos git status deploy
+```
+
+</TryExample>
 
 ## Get Involved
 

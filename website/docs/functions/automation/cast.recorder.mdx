@@ -1,0 +1,108 @@
+---
+title: "Cast recorder"
+sidebar_label: "cast.recorder — Terminal recordings"
+sidebar_class_name: command
+description: Declare terminal demos with command assertions, interactive PTY sessions, and read-only recording validation.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Write a terminal demo as a Starlark script. Type and execute each command with one call,
+drive interactive programs through `rec.terminal`, and validate the saved recording using the same declaration.
+</Intro>
+
+## Usage
+
+```python
+rec = cast.recorder(title="Inspect a project", output="demo.cast")
+rec.comment("List available stacks")
+rec.run("atmos list stacks", expect="dev", reject=cast.regex(r"panic:"))
+rec.generate()
+```
+
+Use this code in a custom command or workflow with `type: script` and
+`interpreter: starlark`, or in a standalone `.star` script. No new command registration is needed.
+Declarations do not execute commands. `generate()` executes them and validates the staged recording before replacing the output.
+
+## Interactive programs
+
+```python
+rec = cast.recorder(output="interactive.cast", shell="/bin/sh")
+rec.comment("Create a project")
+rec.terminal.send("atmos init basic ./my-project")
+rec.terminal.wait("Project name", timeout="10s")
+rec.terminal.key("enter")
+rec.terminal.wait("Which environments do you need?")
+rec.terminal.key("enter")
+rec.terminal.wait(cast.regex(r"Generated [0-9]+ files"))
+rec.terminal.close()
+rec.cd("my-project")
+rec.run("atmos list stacks")
+rec.generate()
+```
+
+The first terminal action opens a declared PTY block. Its actions share a shell, directory,
+and environment until `close()`. Close it before ordinary recorder actions. A final terminal
+block closes automatically on generation. `send` types and presses Enter; `write` types without Enter.
+`wait` searches fresh output since the previous successful wait, with ANSI formatting removed.
+It never matches the echo of a line the script typed and submitted with Enter, so a wait for a command's output is not satisfied by the terminal echoing the command itself.
+It does not infer a command's exit status. Keys include `enter`, `tab`, arrow keys, and `ctrl+c`;
+`key("down", repeat=2, interval="200ms")` sends repeated keys.
+
+## Recorder options
+
+<dl>
+<dt><code>output</code></dt><dd>A cast path, or a mapping with <code>cast</code> and optional <code>gif</code>, <code>mp4</code>, <code>html</code>, <code>ascii</code>, <code>png</code>, and <code>jpg</code> paths. A cast path is required.</dd>
+<dt><code>working_directory</code>, <code>env</code>, <code>shell</code></dt><dd>Execution settings inherited by actions. Relative working directories resolve from the script invocation's working directory. Output paths also resolve from that invocation, independently of <code>rec.cd</code>.</dd>
+<dt><code>defaults</code>, <code>width</code>, <code>height</code>, <code>rate</code>, <code>write_rate</code>, <code>key_interval</code></dt><dd>The existing cast recording and simulated typing settings. Ordinary recorded step output defaults to raw output without step labels.</dd>
+<dt><code>policy</code></dt><dd>An optional function receiving raw recorded text, including ANSI color sequences. Call <code>fail()</code> to reject it. Keep policies read-only.</dd>
+<dt><code>replacements</code></dt><dd>Literal output substitutions, for example an absolute checkout path mapped to <code>/absolute/path/to/repo</code>. Substitutions handle text split across events and run before saved-recording assertions and policy checks. Source paths do not affect the portable declaration fingerprint.</dd>
+</dl>
+
+## Actions
+
+<dl>
+<dt><code>run(command, expect=..., reject=..., exit_code=0)</code></dt><dd>Types and executes the same command. Assertions accept a string, <code>cast.regex(pattern)</code>, or a list of either. All expectations must match and no rejection may match. Assertions inspect ANSI-normalized command output, excluding typed input. Optional <code>display</code> overrides the displayed text; step fields and timing overrides are accepted.</dd>
+<dt><code>comment(text)</code>, <code>simulate(text)</code>, <code>prompt()</code>, <code>pause(duration)</code></dt><dd>Present narration, simulated text, an idle prompt, or a delay. Comments receive a <code># </code> prefix automatically. Simulated text does not execute.</dd>
+<dt><code>cd(path)</code></dt><dd>Displays a directory transition and changes subsequent actions' working directory. Ordinary <code>run</code> calls are separate processes; use a terminal block for persistent shell state.</dd>
+<dt><code>screenshot(path)</code></dt><dd>Records a screenshot checkpoint. PNG rendering occurs after successful recording validation.</dd>
+<dt><code>step(type, **fields)</code></dt><dd>Declares a registered step using its documented fields, including container operations. Workflow-only scheduling fields remain unsupported. Background services belong to the enclosing workflow.</dd>
+<dt><code>terminal.hide()</code>, <code>terminal.show()</code></dt><dd>Exclude terminal output from the recording while retaining it for live waits. Hidden waits cannot be rechecked from saved output.</dd>
+</dl>
+
+## Setup and cleanup
+
+```python
+def prepare(c):
+    c.step("workdir", source="./fixtures/demo", path="./work", reset=True)
+
+def cleanup(c):
+    c.run("atmos emulator down aws")
+
+rec = cast.recorder(output="demo.cast")
+rec.setup(prepare)
+rec.cleanup(cleanup)
+rec.run("atmos version", expect="Atmos")
+rec.generate()
+```
+
+Callbacks receive another declaration builder. They must declare actions rather than call
+`exec.run`, `steps.*`, or other effectful functions directly. `setup` runs before recording;
+`hidden` inserts an unrecorded group in the sequence. Cleanup runs even after partial setup
+failure, failed assertions, or cancellation, with a 30-second grace period. Cleanup failures
+prevent publication and are reported alongside the original failure.
+
+## Validate saved recordings
+
+Replace the final `rec.generate()` with `rec.validate()`, or select between them using your
+custom command's existing flags or explicit step environment. Use the same declaration for both.
+Validation reads metadata, checks the declaration fingerprint, checks output assertions and
+visible terminal waits, and runs the policy. It executes no declared actions and writes no artifacts.
+Ordinary Starlark code outside the builder still executes normally.
+
+Old recordings without declaration metadata, interrupted recordings, and recordings whose
+actions changed must be regenerated. Failed execution, cleanup, or validation preserves the previous cast.
+Artifact rendering runs after the valid cast is committed; a rendering failure does not roll it back.
+Generation is unavailable inside parallel script tasks because it owns the terminal and recorder.
+The host's dry-run mode parses the script without executing it.

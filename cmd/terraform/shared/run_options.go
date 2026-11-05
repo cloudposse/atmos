@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -26,7 +27,10 @@ type RunOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	UseMocks         bool
-	Skip             []string
+	// MocksMode overrides components.terraform.mocks.mode (fallback, always) when
+	// --use-mocks carries an explicit mode; empty means use the configured mode.
+	MocksMode string
+	Skip      []string
 
 	// Execution flags.
 	DryRun       bool
@@ -48,6 +52,7 @@ type RunOptions struct {
 	// distinguish `--verify-plan=false` from the flag being unset, so the
 	// tri-state resolution reads the Cobra flag directly via
 	// resolveVerifyPlanMode (cmd/terraform/utils.go).
+	FromPlan         bool
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
@@ -90,10 +95,10 @@ type RunOptions struct {
 func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 	defer perf.Track(nil, "terraform.shared.ParseRunOptions")()
 
+	fromPlan := v.GetString("from-plan")
 	opts := &RunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
-		UseMocks:                v.GetBool("use-mocks"),
 		Skip:                    v.GetStringSlice("skip"),
 		DryRun:                  v.GetBool("dry-run"),
 		SkipInit:                v.GetBool("skip-init"),
@@ -103,12 +108,13 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		InitMode:                v.GetString("init-mode"),
 		InitReconfigure:         v.GetString("init-reconfigure"),
 		InitUpgrade:             v.GetString("init-upgrade"),
+		FromPlan:                fromPlan != "" && fromPlan != "false",
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
-		Tags:                    v.GetStringSlice("tags"),
+		Tags:                    tags.ParseTagsFlag(strings.Join(v.GetStringSlice("tags"), ",")),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
@@ -121,11 +127,21 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		UI:                      v.GetBool("ui"),
 	}
 
-	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
+	labels, err := tags.ParseLabelsFlagFrom(strings.Join(tags.ReadLabelsFlag(v), ","), "--labels (or ATMOS_LABELS)")
 	if err != nil {
 		return nil, err
 	}
 	opts.Labels = labels
+	// Cobra consumes --from-plan before the legacy argument parser sees it.
+	// Its true sentinel selects the canonical plan, false disables selection,
+	// and any other nonempty value selects a path. An explicit planfile wins.
+	if opts.FromPlan && fromPlan != "true" && opts.PlanFile == "" {
+		opts.PlanFile = fromPlan
+	}
+
+	if opts.UseMocks, opts.MocksMode, err = cfg.ParseUseMocksValue(v.GetString("use-mocks"), cfg.UseMocksFlagAndEnvSource); err != nil {
+		return nil, err
+	}
 
 	if opts.IncludeDependencies, err = flags.ParseClosureDepth("include-dependencies", v.GetString("include-dependencies")); err != nil {
 		return nil, err
@@ -181,6 +197,7 @@ func ApplyRunOptions(info *schema.ConfigAndStacksInfo, opts *RunOptions) {
 	info.ProcessTemplates = opts.ProcessTemplates
 	info.ProcessFunctions = opts.ProcessFunctions
 	info.UseMocks = opts.UseMocks
+	info.MocksMode = opts.MocksMode
 	info.Skip = opts.Skip
 	info.Components = opts.Components
 	info.Tags = opts.Tags
@@ -226,6 +243,9 @@ func ApplyRunOptions(info *schema.ConfigAndStacksInfo, opts *RunOptions) {
 		info.InitUpgrade = opts.InitUpgrade
 	}
 
+	if opts.FromPlan {
+		info.UseTerraformPlan = true
+	}
 	if opts.PlanFile != "" {
 		info.PlanFile = opts.PlanFile
 		info.UseTerraformPlan = true

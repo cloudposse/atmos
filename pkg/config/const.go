@@ -1,5 +1,7 @@
 package config
 
+import "github.com/cloudposse/atmos/pkg/config/projectroot"
+
 const (
 	AtmosCommand         = "atmos"
 	CliConfigFileName    = "atmos"
@@ -25,13 +27,13 @@ const (
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
 	// Config file names for local configuration detection.
-	AtmosConfigFileName    = "atmos.yaml"
-	DotAtmosConfigFileName = ".atmos.yaml"
+	AtmosConfigFileName    = projectroot.AtmosConfigFileName
+	DotAtmosConfigFileName = projectroot.DotAtmosConfigFileName
 
 	// Config directory names for local configuration detection.
-	AtmosConfigDirName            = ".atmos"
-	AtmosDefaultImportsDirName    = "atmos.d"
-	DotAtmosDefaultImportsDirName = ".atmos.d"
+	AtmosConfigDirName            = projectroot.AtmosConfigDirName
+	AtmosDefaultImportsDirName    = projectroot.AtmosDefaultImportsDirName
+	DotAtmosDefaultImportsDirName = projectroot.DotAtmosDefaultImportsDirName
 
 	// GlobalOptionsFlag is a custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference
@@ -62,6 +64,7 @@ const (
 	InitRunReconfigure          = "--init-run-reconfigure"
 	InitPassVars                = "--init-pass-vars"
 	InitModeFlag                = "--init-mode"
+	UseMocksFlag                = "--use-mocks"
 	InitReconfigureFlag         = "--init-reconfigure"
 	InitUpgradeFlag             = "--init-upgrade"
 	PlanSkipPlanfile            = "--skip-planfile"
@@ -75,14 +78,15 @@ const (
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
 
-	TerraformComponentType  = "terraform"
-	HelmfileComponentType   = "helmfile"
-	PackerComponentType     = "packer"
-	AnsibleComponentType    = "ansible"
-	ContainerComponentType  = "container"
-	EmulatorComponentType   = "emulator"
-	KubernetesComponentType = "kubernetes"
-	HelmComponentType       = "helm"
+	TerraformComponentType      = "terraform"
+	HelmfileComponentType       = "helmfile"
+	PackerComponentType         = "packer"
+	AnsibleComponentType        = "ansible"
+	ContainerComponentType      = "container"
+	EmulatorComponentType       = "emulator"
+	KubernetesComponentType     = "kubernetes"
+	HelmComponentType           = "helm"
+	CloudFormationComponentType = "aws/cloudformation"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
@@ -150,6 +154,8 @@ const (
 	HelmHistoryMaxSectionName         = "max"
 	HelmChartHooksSectionName         = "chart_hooks"
 	HelmCRDsSectionName               = "crds"
+	HelmServerSideApplySectionName    = "server_side_apply"
+	HelmForceConflictsSectionName     = "force_conflicts"
 	HelmDependencyUpdateSectionName   = "dependency_update"
 	HelmCreateNamespaceSectionName    = "create_namespace"
 	HelmDefaultMaxHistory             = 10
@@ -176,8 +182,26 @@ const (
 	InheritsSectionName               = "inherits"
 	AbstractSectionName               = "abstract"
 
+	// Native aws/cloudformation component sections.
+	CloudFormationSectionName        = "aws/cloudformation"
+	RegionSectionName                = "region"
+	CloudFormationTimeoutSectionName = "timeout"
+	TemplateSectionName              = "template"
+	TemplatePathSectionName          = "path"
+	StackNameSectionName             = "stack_name"
+	ParametersSectionName            = "parameters"
+	CapabilitiesSectionName          = "capabilities"
+	TagsSectionName                  = "tags"
+	StackPolicySectionName           = "stack_policy"
+	RoleArnSectionName               = "role_arn"
+	NotificationArnsSectionName      = "notification_arns"
+	DisableRollbackSectionName       = "disable_rollback"
+	TerminationProtectionSectionName = "termination_protection"
+	TimeoutInMinutesSectionName      = "timeout_in_minutes"
+
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
+	LogsColorFlag = "--logs-color"
 
 	QueryFlag    = "--query"
 	AffectedFlag = "--affected"
@@ -218,6 +242,7 @@ const (
 
 	// Cast recording flag.
 	CastFlagName      = "cast"
+	CastFlagViperKey  = "cast.target" // Viper key for --cast; nested so the bare "cast" key cannot shadow cast.* config.
 	CastFlag          = "--cast"
 	CastFlagAutoValue = "__AUTO__"
 	CastEnvVarName    = "ATMOS_CAST"

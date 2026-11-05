@@ -2,6 +2,7 @@ package asciicast
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,12 @@ const (
 	asciicastHelperEnv        = "_ATMOS_ASCIICAST_HELPER"
 	asciicastSessionHelperEnv = "_ATMOS_ASCIICAST_SESSION_HELPER"
 	asciicastExecHelperEnv    = "_ATMOS_ASCIICAST_EXEC_HELPER"
+	// Env var that makes the session helper print sessionHelperBanner once it starts reading input.
+	asciicastSessionBannerEnv = "_ATMOS_ASCIICAST_SESSION_BANNER"
+	sessionHelperBanner       = "helper-up"
+
+	// Delay the session helper "shell" takes to run a delay-print command.
+	sessionHelperDelay = 1500 * time.Millisecond
 )
 
 func TestMain(m *testing.M) {
@@ -69,6 +76,12 @@ func runAsciicastToolHelper() {
 }
 
 func runAsciicastSessionHelper() {
+	// The test binary can emit terminal queries during startup that swallow
+	// input typed before the helper starts reading. Tests that need their typed
+	// line to reach the helper wait for this banner before typing.
+	if os.Getenv(asciicastSessionBannerEnv) == "1" {
+		_, _ = os.Stdout.WriteString(sessionHelperBanner + "\n")
+	}
 	reader := bufio.NewReader(os.Stdin)
 	var line strings.Builder
 	for {
@@ -91,9 +104,24 @@ func runAsciicastSessionHelper() {
 		case 4:
 			return
 		case '\r', '\n':
-			switch strings.TrimSpace(line.String()) {
+			command := strings.TrimSpace(line.String())
+			// "delay-print <word>..." prints "out:<word>" per word after a delay,
+			// so tests can tell a command's output apart from the terminal's
+			// echo of the typed command (which contains the bare words).
+			if rest, ok := strings.CutPrefix(command, "delay-print "); ok {
+				time.Sleep(sessionHelperDelay)
+				for _, word := range strings.Fields(rest) {
+					_, _ = os.Stdout.WriteString("out:" + word + "\n")
+				}
+				line.Reset()
+				continue
+			}
+			switch command {
 			case "printf ready":
 				_, _ = os.Stdout.WriteString("ready\n")
+			case "print shellinit":
+				env, envSet := os.LookupEnv("ENV")
+				_, _ = fmt.Fprintf(os.Stdout, "shellinit env_set=%t env=%q silence=%q args=%q\n", envSet, env, os.Getenv("BASH_SILENCE_DEPRECATION_WARNING"), os.Args[1:])
 			case "print context":
 				cwd, _ := os.Getwd()
 				_, _ = os.Stdout.WriteString("cwd=" + cwd + "\n")

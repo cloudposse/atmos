@@ -8,9 +8,7 @@ components:
   terraform:
     command: [[ .Config.terraform_command ]]
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     auto_generate_backend_file: false
 
 stacks:
@@ -47,10 +45,6 @@ ci:
     enabled: true
   annotations:
     enabled: true
-
-logs:
-  file: "/dev/stderr"
-  level: Info
 
 commands:
   - name: test

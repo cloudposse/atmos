@@ -49,7 +49,7 @@ func TestAuthDisabledPropagatesWrapperToOutputGetter(t *testing.T) {
 				Times(1)
 
 			input := schema.AtmosSectionMapType{
-				"backend_config": "!terraform.output vpc test-stack bucket_name",
+				"backend_config": taggedFunctionForTest("!terraform.output vpc test-stack bucket_name"),
 			}
 
 			result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, stackInfo)
@@ -129,7 +129,7 @@ func TestAuthContextReachesGetTerraformOutput(t *testing.T) {
 
 	// Create input with !terraform.output tag.
 	input := schema.AtmosSectionMapType{
-		"backend_config": "!terraform.output vpc test-stack bucket_name",
+		"backend_config": taggedFunctionForTest("!terraform.output vpc test-stack bucket_name"),
 	}
 
 	// Process the YAML tags - this should call our mock with authContext.
@@ -176,7 +176,7 @@ func TestAuthContextNilWhenStackInfoNilForOutput(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"backend_config": "!terraform.output vpc test-stack bucket_name",
+		"backend_config": taggedFunctionForTest("!terraform.output vpc test-stack bucket_name"),
 	}
 
 	// Process with nil stackInfo.
@@ -263,7 +263,7 @@ func TestAuthContextWithDifferentAWSConfigurations(t *testing.T) {
 				Times(1)
 
 			input := schema.AtmosSectionMapType{
-				"value": "!terraform.output component stack output",
+				"value": taggedFunctionForTest("!terraform.output component stack output"),
 			}
 
 			result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, stackInfo)
@@ -316,7 +316,7 @@ func TestAuthContextWithOutputNotExists(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"value": "!terraform.output component test-stack missing_output",
+		"value": taggedFunctionForTest("!terraform.output component test-stack missing_output"),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, stackInfo)

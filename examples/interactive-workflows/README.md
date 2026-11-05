@@ -4,11 +4,18 @@ tags: [Automation]
 cast:
   file: /casts/examples/interactive-workflows/table-and-build.cast
   title: atmos interactive workflow steps
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Workflow configuration"
+    url: /workflows
+  - label: "CLI Configuration"
+    url: /cli/configuration/workflows
 ---
 
 # Interactive Workflows Demo
 
-This example demonstrates Atmos's powerful interactive workflow step types. These step types enable building sophisticated CLI wizards and interactive deployment pipelines.
+This example demonstrates Atmos's powerful [interactive workflow step types](https://atmos.tools/steps/interactive). These step types enable building sophisticated CLI wizards and interactive deployment pipelines.
 
 ## Prerequisites
 

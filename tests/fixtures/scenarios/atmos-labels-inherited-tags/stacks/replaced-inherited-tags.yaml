@@ -1,0 +1,20 @@
+vars:
+  stage: replaced-inherited-tags
+  tags:
+    owner: "{{ .vars.missing }}"
+    stack: "{{ .atmos_stack }}"
+  members:
+    - "{{ .vars.missing }}"
+
+components:
+  terraform:
+    probe:
+      metadata:
+        component: yaml-function-test
+        labels:
+          owner: platform
+        tags:
+          - current
+      vars:
+        tags: !labels
+        members: !tags

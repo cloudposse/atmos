@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -75,7 +76,7 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 	// Only fall back to WorkspaceNew if the select error indicates a missing
 	// workspace. Other errors (auth, backend, permission) should fail fast —
 	// creating a new empty workspace would mask the real problem.
-	if !isWorkspaceMissingError(err) {
+	if guard.IsPolicyError(err) || !isWorkspaceMissingError(err) {
 		log.Debug("Workspace select failed with non-missing error", "workspace", workspace, "error", err)
 		return wrapErrorWithStderr(
 			errUtils.Build(errUtils.ErrTerraformWorkspaceOp).

@@ -10,6 +10,8 @@ New query syntax for [`atmos list components`](/cli/commands/list/components) an
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 ### Simplified Query Syntax for List Commands
@@ -79,5 +81,17 @@ atmos list aliases
 # Install your toolchain in one command
 atmos toolchain install opentofu terraform-docs tflint
 ```
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Install the example's pinned tools. Downloads require network access.
+
+```shell
+atmos toolchain install
+```
+
+</TryExample>
 
 For usage and configuration, see [List Command Configuration](/cli/configuration/list).

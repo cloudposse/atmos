@@ -1,0 +1,10 @@
+#!/usr/bin/env atmos
+(errors.build("Deployment blocked")
+    .with_title("Release error")
+    .with_explanation("The api component has no owner.")
+    .with_hint("Set vars.owner before deploying.")
+    .with_hint("Or run with --force.")
+    .with_example("vars:\n  owner: platform")
+    .with_context("component", "api")
+    .with_exit_code(3)
+    .fail())

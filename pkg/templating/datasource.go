@@ -1,7 +1,5 @@
 package templating
 
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
-
 import (
 	"fmt"
 	"net/http"
@@ -18,12 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// DatasourceReader reads a named gomplate datasource, optionally with
-// datasource-specific arguments (for example a sub-path).
-type DatasourceReader interface {
-	Datasource(alias string, args ...string) (any, error)
-}
-
 // DatasourceCache memoizes datasource reads by alias and arguments so that a
 // datasource referenced many times across a stack is fetched once.
 type DatasourceCache struct {
@@ -37,8 +29,8 @@ func NewDatasourceCache() *DatasourceCache {
 	return &DatasourceCache{}
 }
 
-// defaultDatasourceCache is shared by every Engine that does not set its own,
-// preserving the process-wide caching users rely on.
+// defaultDatasourceCache backs CachedDatasource, preserving the process-wide
+// caching users rely on.
 var defaultDatasourceCache = NewDatasourceCache()
 
 // cacheKeySep separates the fields folded into a datasource cache key. It is
@@ -52,8 +44,16 @@ const cacheKeySep = "\x00"
 // (settings.templates.settings.gomplate.datasources): two stacks can define
 // the same alias with different URLs or headers, and without the definition
 // in the key one stack's cached value would leak into the other's render.
-func cacheKey(alias string, ds Datasource, args []string) string {
-	return alias + cacheKeySep + ds.URL + cacheKeySep + headerKey(ds.Headers) + cacheKeySep + strings.Join(args, cacheKeySep)
+func cacheKey(alias string, source *Source, args []string) string {
+	var target string
+	var headers map[string][]string
+	if source != nil {
+		if source.URL != nil {
+			target = source.URL.String()
+		}
+		headers = source.Header
+	}
+	return alias + cacheKeySep + target + cacheKeySep + headerKey(headers) + cacheKeySep + strings.Join(args, cacheKeySep)
 }
 
 // headerKey deterministically renders headers (sorted keys, sorted values per
@@ -91,46 +91,42 @@ func (c *DatasourceCache) store(key string, value any) {
 	c.entries.Store(key, value)
 }
 
-// Datasource returns the parsed value of the datasource registered under alias
-// for the render in progress. It can only be called from a template function
-// while Render is executing that template through gomplate's renderer; Render
-// routes any template that references atmos.GomplateDatasource there. A live
-// render is required before the cache is even consulted, both because a
-// value can only be produced by rendering and because the cache key itself is
-// built from the live render's datasource definitions.
-func (e *engine) Datasource(alias string, args ...string) (any, error) {
-	defer perf.Track(nil, "templating.Engine.Datasource")()
+// Read returns the parsed value of the datasource registered under alias in
+// sources, reading it through sources only on a cache miss. The cache key
+// includes the alias's effective definition, so two stacks that define the
+// same alias differently never see each other's values. Nil values are not
+// cached.
+func (c *DatasourceCache) Read(sources *Data, alias string, args ...string) (any, error) {
+	defer perf.Track(nil, "templating.DatasourceCache.Read")()
 
-	state := e.live.get()
-	if state == nil || state.tmpl == nil {
+	if sources == nil {
 		return nil, errUtils.ErrGomplateDatasourceUnavailable
 	}
 
-	// An alias not present in the render's datasource map is one defined
-	// inline via defineDatasource; key on alias+args with an empty definition.
-	ds := state.datasources[alias]
-	key := cacheKey(alias, ds, args)
-	if value, ok := e.cache.load(key); ok && value != nil {
+	// An alias not present in the render's datasources is an absolute URL or
+	// one defined inline via defineDatasource; key on alias+args alone.
+	key := cacheKey(alias, sources.Sources[alias], args)
+	if value, ok := c.load(key); ok && value != nil {
 		return value, nil
 	}
 
-	call := make([]string, 0, len(args)+1)
-	call = append(call, fmt.Sprintf("%q", alias))
-	for _, arg := range args {
-		call = append(call, fmt.Sprintf("%q", arg))
-	}
-	text := state.left + " " + captureFuncName + " (ds " + strings.Join(call, " ") + ") " + state.right
-
-	state.captured = nil
-	if _, err := state.tmpl.Inline("__atmos_datasource", text, nil); err != nil {
+	value, err := sources.Datasource(alias, args...)
+	if err != nil {
 		return nil, err
 	}
-
-	value := state.captured
 	if value != nil {
-		e.cache.store(key, value)
+		c.store(key, value)
 	}
 	return value, nil
+}
+
+// CachedDatasource reads a datasource through the process-wide cache that
+// backs `atmos.GomplateDatasource`, so a datasource referenced from many
+// stacks and components is fetched once.
+func CachedDatasource(sources *Data, alias string, args ...string) (any, error) {
+	defer perf.Track(nil, "templating.CachedDatasource")()
+
+	return defaultDatasourceCache.Read(sources, alias, args...)
 }
 
 // toDataSources converts datasource definitions to gomplate's representation.

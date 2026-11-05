@@ -2,9 +2,11 @@
 package github
 
 import (
-	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/google/go-github/v59/github"
 	"golang.org/x/oauth2"
@@ -15,7 +17,8 @@ import (
 
 // Client wraps the GitHub API client.
 type Client struct {
-	client *github.Client
+	client         *github.Client
+	tokenTransport *httpsTokenTransport
 }
 
 // NewClient creates a new GitHub API client.
@@ -27,6 +30,12 @@ type Client struct {
 // unlike GITHUB_TOKEN, pushes/PRs authenticated with it trigger downstream
 // GitHub Actions workflows, since it isn't subject to GitHub's anti-recursion
 // restriction on the default Actions token.
+//
+// API base URL precedence: ATMOS_CI_GITHUB_API_URL (explicit override) >
+// GITHUB_API_URL (exported natively by GitHub Actions, and set to the
+// enterprise API URL on GitHub Enterprise Server runners) > the public
+// https://api.github.com default. An unparsable value returns an error wrapping
+// ErrInvalidURL rather than silently sending the token to the wrong host.
 func NewClient() (*Client, error) {
 	defer perf.Track(nil, "github.NewClient")()
 
@@ -45,7 +54,79 @@ func NewClient() (*Client, error) {
 		return nil, errUtils.ErrGitHubTokenNotFound
 	}
 
-	return NewClientWithToken(token), nil
+	client := NewClientWithToken(token)
+	if err := client.applyAPIURLFromEnv(); err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+// ValidateAPIURL checks the API base URL from ATMOS_CI_GITHUB_API_URL or GITHUB_API_URL
+// without needing a token, so a misconfigured runner fails before any request is built.
+// It returns nil when neither variable is set.
+func ValidateAPIURL() error {
+	defer perf.Track(nil, "github.ValidateAPIURL")()
+
+	envName, raw := lookupAPIURLEnv()
+	if raw == "" {
+		return nil
+	}
+	if _, err := parseAPIBaseURL(raw); err != nil {
+		return fmt.Errorf("%w: %s=%q: %w", errUtils.ErrInvalidURL, envName, raw, err)
+	}
+	return nil
+}
+
+// applyAPIURLFromEnv points the underlying go-github client at the API base URL
+// from ATMOS_CI_GITHUB_API_URL or GITHUB_API_URL. It is a no-op when neither is set.
+func (c *Client) applyAPIURLFromEnv() error {
+	envName, raw := lookupAPIURLEnv()
+	if raw == "" {
+		return nil
+	}
+
+	baseURL, err := parseAPIBaseURL(raw)
+	if err != nil {
+		return fmt.Errorf("%w: %s=%q: %w", errUtils.ErrInvalidURL, envName, raw, err)
+	}
+
+	c.client.BaseURL = baseURL
+	c.client.UploadURL = baseURL
+	c.tokenTransport.apiURL = baseURL
+
+	return nil
+}
+
+// lookupAPIURLEnv returns the name and value of the first non-empty API URL variable.
+func lookupAPIURLEnv() (string, string) {
+	// ATMOS_CI_GITHUB_API_URL and GITHUB_API_URL are external CI environment
+	// variables (GITHUB_API_URL is exported by the Actions runner), not Atmos
+	// configuration keys, so os.Getenv is appropriate here.
+	for _, name := range []string{"ATMOS_CI_GITHUB_API_URL", "GITHUB_API_URL"} {
+		if value := os.Getenv(name); value != "" {
+			return name, value
+		}
+	}
+
+	return "", ""
+}
+
+// parseAPIBaseURL parses raw as an absolute http(s) URL and ensures the trailing
+// slash that go-github requires on BaseURL.
+func parseAPIBaseURL(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return nil, fmt.Errorf("%w: must be an absolute http(s) URL", errUtils.ErrInvalidURL)
+	}
+	if !strings.HasSuffix(parsed.Path, "/") {
+		parsed.Path += "/"
+	}
+
+	return parsed, nil
 }
 
 // NewClientWithToken creates a new GitHub API client with the given token.
@@ -55,11 +136,34 @@ func NewClientWithToken(token string) *Client {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
-	tc := oauth2.NewClient(context.Background(), ts)
+	transport := &httpsTokenTransport{Transport: oauth2.Transport{Source: ts}}
+	client := github.NewClient(&http.Client{Transport: transport})
+	transport.apiURL = client.BaseURL
+	return &Client{client: client, tokenTransport: transport}
+}
 
-	return &Client{
-		client: github.NewClient(tc),
+// httpsTokenTransport applies the token policy to every request, including redirects.
+// Only the configured HTTPS API host and port receive authentication headers.
+// Local HTTP endpoints remain usable, but must never receive authentication headers.
+type httpsTokenTransport struct {
+	oauth2.Transport
+	apiURL *url.URL
+}
+
+func (t *httpsTokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	defer perf.Track(nil, "github.httpsTokenTransport.RoundTrip")()
+
+	if req.URL.Scheme == "https" && t.apiURL.Scheme == "https" && strings.EqualFold(req.URL.Host, t.apiURL.Host) {
+		return t.Transport.RoundTrip(req)
 	}
+	// Redirects may copy credentials from a previous request; strip them on a clone.
+	unauthenticated := req.Clone(req.Context())
+	unauthenticated.Header.Del("Authorization")
+	base := t.Base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(unauthenticated)
 }
 
 // NewClientWithHTTPClient creates a new GitHub API client with a custom HTTP client.

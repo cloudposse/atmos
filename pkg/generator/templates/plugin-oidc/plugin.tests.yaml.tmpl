@@ -1,0 +1,19 @@
+version: 1
+# Default conformance uses local mock endpoints and no developer credentials.
+oidc:
+  provider: {{ .Config.plugin_name }}
+  identity: {{ .Config.plugin_name }}-broker
+  session: oidc-starter/v1
+commands:
+  - name: about
+    stdout: |
+      {{ .Config.plugin_name }}: OIDC PKCE login and AWS credential exchange
+      This is the plugin's about command. No authentication was performed.
+      To sign in, configure an auth identity using this plugin and run:
+        atmos auth login --identity <identity>
+    stderr: ""
+    exit_code: 0
+# Add ordinary Atmos test steps here; they use the shared test scheduler.
+steps: []
+# Live integration steps run only with `atmos plugin test . --integration`.
+integration: []

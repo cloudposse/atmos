@@ -19,10 +19,11 @@ type ToolVersionsFileManager struct {
 func NewToolVersionsFileManager(config *schema.AtmosConfiguration) *ToolVersionsFileManager {
 	defer perf.Track(nil, "filemanager.NewToolVersionsFileManager")()
 
-	// Prefer VersionsFile (new), fall back to FilePath (legacy compatibility)
-	filePath := config.Toolchain.VersionsFile
+	// Prefer FilePath (primary name), fall back to VersionsFile (alternative name).
+	// Keep this precedence in sync with toolchain.resolveVersionsFilePath.
+	filePath := config.Toolchain.FilePath
 	if filePath == "" {
-		filePath = config.Toolchain.FilePath
+		filePath = config.Toolchain.VersionsFile
 	}
 	if filePath == "" {
 		filePath = ".tool-versions"

@@ -3,6 +3,8 @@ package secret
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -24,25 +26,42 @@ func init() {
 		flags.WithBoolFlag("all", "", false, "Delete all declared secrets for the scope (resets a SOPS file to a clean state)"),
 	)
 	deleteParser.RegisterFlags(deleteCmd)
+	internal.RegisterCommandMetadata(
+		deleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/delete"),
+	)
 }
 
 func runSecretDelete(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretDelete")()
 
-	scope, err := parseScope(cmd, args)
-	if err != nil {
-		return err
-	}
-
 	all, _ := cmd.Flags().GetBool("all")
 	if all {
+		// --all never reads NAME, so a stray NAME (possibly with --force) would delete far more than asked.
+		if len(args) > 0 {
+			return errUtils.Build(errUtils.ErrMutuallyExclusiveFlags).
+				WithExplanation("--all cannot be combined with a secret NAME").
+				WithHint("Omit NAME to delete every declared secret for the scope, or omit --all to delete one secret").
+				Err()
+		}
+		scope, err := parseScopeForStack(cmd, args, "delete")
+		if err != nil {
+			return err
+		}
 		return runSecretDeleteAll(cmd, scope)
 	}
 
+	name := ""
+	if len(args) > 0 {
+		name = args[0]
+	}
+	scope, err := parseScopeForName(cmd, args, name, "delete")
+	if err != nil {
+		return err
+	}
 	if len(args) != 1 {
 		return ErrSecretNameRequired
 	}
-	name := args[0]
 
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
@@ -65,7 +84,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ui.Successf("Deleted secret `%s` for component `%s` in stack `%s`", name, scope.Component, scope.Stack)
+	ui.Successf("Deleted secret `%s` for %s", name, describeScope(scope))
 	return nil
 }
 
@@ -73,7 +92,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 func runSecretDeleteAll(cmd *cobra.Command, scope secretScope) error {
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		confirmed, confErr := confirmActionFn("Delete ALL declared secrets for component `" + scope.Component + "` in stack `" + scope.Stack + "`?")
+		confirmed, confErr := confirmActionFn("Delete ALL declared secrets for " + describeScope(scope) + "?")
 		if confErr != nil {
 			return confErr
 		}
@@ -93,6 +112,6 @@ func runSecretDeleteAll(cmd *cobra.Command, scope secretScope) error {
 		return err
 	}
 
-	ui.Successf("Deleted %d declared secret(s) for component `%s` in stack `%s`", count, scope.Component, scope.Stack)
+	ui.Successf("Deleted %d declared secret(s) for %s", count, describeScope(scope))
 	return nil
 }

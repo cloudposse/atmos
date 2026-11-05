@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -36,12 +37,16 @@ func init() {
 		flags.WithBoolFlag("force", "f", false, "Overwrite an existing value without confirmation"),
 	)
 	setParser.RegisterFlags(setCmd)
+	internal.RegisterCommandMetadata(
+		setCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/set"),
+	)
 }
 
 func runSecretSet(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretSet")()
 
-	scope, err := parseSetScope(cmd, args)
+	scope, err := parseScopeForName(cmd, args, setNameFromArgs(args), "set")
 	if err != nil {
 		return err
 	}
@@ -93,82 +98,6 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// parseSetScope permits --component to be omitted only when a positional name resolves to one
-// consistent global declaration in the selected stack. A component is still used internally to
-// load the inherited declaration, but it cannot affect the resulting global backend coordinate.
-func parseSetScope(cmd *cobra.Command, args []string) (secretScope, error) {
-	scope, err := parseScopeStack(cmd, args)
-	if err != nil {
-		return scope, err
-	}
-	if scope.Component != "" || len(args) == 0 {
-		return requireScopeComponent(scope, cmd, args)
-	}
-	target, err := setTargetFromArg(args[0])
-	if err != nil {
-		return scope, err
-	}
-	component, componentType, err := findGlobalSetContext(scope, target.name)
-	if err != nil {
-		return scope, err
-	}
-	scope.Component = component
-	if scope.ComponentType == "" {
-		scope.ComponentType = componentType
-	}
-	return scope, nil
-}
-
-func findGlobalSetContext(scope secretScope, name string) (string, string, error) {
-	entries, _, err := enumerateScopesFn(secretScope{Stack: scope.Stack, ComponentType: scope.ComponentType})
-	if err != nil {
-		return "", "", errors.Join(
-			componentRequiredForSet(name, fmt.Sprintf("the global declaration could not be verified: %v", err)),
-			err,
-		)
-	}
-	var selected *secrets.Declaration
-	var component, componentType string
-	for _, entry := range entries {
-		if entry.Stack != "" && entry.Stack != scope.Stack {
-			continue
-		}
-		if scope.ComponentType != "" && entry.ComponentType != "" && entry.ComponentType != scope.ComponentType {
-			continue
-		}
-		decl, ok := secrets.ExtractDeclarations(entry.Section)[name]
-		if !ok {
-			continue
-		}
-		if decl.Scope != secrets.ScopeGlobal {
-			return "", "", componentRequiredForSet(name, "the declaration is not global")
-		}
-		// Enumeration renders declarations in each component context using the configured Atmos
-		// template delimiters. Compare those resolved declarations directly so component-less writes
-		// never select one component's backend address arbitrarily and the guard remains independent
-		// of template syntax.
-		if selected != nil && decl != *selected {
-			return "", "", componentRequiredForSet(name, "global declarations differ between components")
-		}
-		selectedDecl := decl
-		selected = &selectedDecl
-		if component == "" {
-			component, componentType = entry.Component, entry.ComponentType
-		}
-	}
-	if selected == nil {
-		return "", "", componentRequiredForSet(name, "no global declaration was found in the stack")
-	}
-	return component, componentType, nil
-}
-
-func componentRequiredForSet(name, reason string) error {
-	return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-		WithExplanationf("--component is required to set secret %q: %s", name, reason).
-		WithHint("Omit --component only for a secret declared with `scope: global`; otherwise specify --component or -c").
-		Err()
-}
-
 // setSuccessMessage describes where the value was written: shared scopes (stack, global) name the
 // shared location so the user knows every consumer sees the new value.
 func setSuccessMessage(svc secretService, scope secretScope, name string) string {
@@ -181,6 +110,16 @@ func setSuccessMessage(svc secretService, scope secretScope, name string) string
 	default:
 		return fmt.Sprintf("Set secret `%s` for component `%s` in stack `%s`", name, scope.Component, scope.Stack)
 	}
+}
+
+// setNameFromArgs returns the secret name of a positional NAME[=VALUE] argument, or an empty string
+// when there is none (or it is malformed, which resolveSetName reports after the scope is known).
+func setNameFromArgs(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	name, _, _ := strings.Cut(args[0], "=")
+	return strings.TrimSpace(name)
 }
 
 // setTarget is the resolved secret name and any inline value parsed for `secret set`.

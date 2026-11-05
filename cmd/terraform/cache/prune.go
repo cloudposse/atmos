@@ -8,7 +8,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
@@ -36,7 +38,7 @@ artifacts (provider zips, module archives) are kept unless --all is given.`,
 			return err
 		}
 
-		olderThan, err := time.ParseDuration(v.GetString("older-than"))
+		olderThan, err := duration.ParseNonNegative(v.GetString("older-than"))
 		if err != nil {
 			return fmt.Errorf("%w: invalid --older-than value %q: %w", errUtils.ErrInvalidConfig, v.GetString("older-than"), err)
 		}
@@ -77,4 +79,8 @@ func init() {
 	if err := pruneParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		pruneCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache/prune"),
+	)
 }

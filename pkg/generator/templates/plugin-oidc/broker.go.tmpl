@@ -1,0 +1,59 @@
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "io"
+    "net/http"
+    "time"
+
+    "google.golang.org/grpc"
+    "google.golang.org/protobuf/types/known/structpb"
+    "google.golang.org/protobuf/types/known/timestamppb"
+
+    "github.com/cloudposse/atmos/sdk/api"
+    pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
+)
+
+type broker struct { pluginv1.UnimplementedAuthIdentityServer; api *api.Client }
+
+type awsCredentials struct {
+    AccessKeyID string `json:"access_key_id"`
+    SecretAccessKey string `json:"secret_access_key"`
+    SessionToken string `json:"session_token"`
+    Expiration string `json:"expiration"`
+    Region string `json:"region"`
+}
+
+func (b *broker) Authenticate(request *pluginv1.IdentityAuthenticateRequest, stream grpc.ServerStreamingServer[pluginv1.AuthenticateEvent]) error {
+    ctx := api.WithInvocation(stream.Context(), request.GetIdentity().GetInvocation().GetId())
+    credentials, err := b.cachedExchange(ctx, request)
+    if err != nil { return err }
+    return stream.Send(&pluginv1.AuthenticateEvent{Event: &pluginv1.AuthenticateEvent_Result{Result: credentials}})
+}
+
+func (b *broker) exchange(ctx context.Context, request *pluginv1.IdentityAuthenticateRequest) (*pluginv1.Credentials, error) {
+    upstream := request.GetUpstream()
+    endpoint := request.GetIdentity().GetPrincipal().GetFields()["endpoint"].GetStringValue()
+    if !safeEndpoint(endpoint) || upstream.GetType() != "oidc/v1" || upstream.GetExpiresAt() == nil || !time.Now().Before(upstream.GetExpiresAt().AsTime()) { return nil, invalidConfig() }
+    accessToken := upstream.GetData().GetFields()["access_token"].GetStringValue()
+    if accessToken == "" { return nil, denied() }
+    // Broker contract: POST with a bearer ACCESS token, returning temporary AWS credentials.
+    // An ID token is never substituted here; a real corporate broker must validate audience.
+    input, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+    if err != nil { return nil, invalidConfig() }
+    input.Header.Set("Authorization", "Bearer " + accessToken)
+    response, err := b.api.HTTPClient().Do(input)
+    if err != nil { return nil, unavailable() }
+    defer response.Body.Close()
+    if response.StatusCode != http.StatusOK { return nil, denied() }
+    raw, err := io.ReadAll(io.LimitReader(response.Body, 65537))
+    if err != nil || len(raw) > 65536 { return nil, denied() }
+    var value awsCredentials
+    if err := json.Unmarshal(raw, &value); err != nil { return nil, denied() }
+    expiry, err := time.Parse(time.RFC3339, value.Expiration)
+    if err != nil || !time.Now().Before(expiry) || value.AccessKeyID == "" || value.SecretAccessKey == "" || value.SessionToken == "" { return nil, denied() }
+    data, err := structpb.NewStruct(map[string]any{"access_key_id": value.AccessKeyID, "secret_access_key": value.SecretAccessKey, "session_token": value.SessionToken, "expiration": value.Expiration, "region": value.Region})
+    if err != nil { return nil, unavailable() }
+    return &pluginv1.Credentials{Type: "aws/v1", ExpiresAt: timestamppb.New(expiry), Data: data, SensitiveKeys: []string{"access_key_id", "secret_access_key", "session_token"}}, nil
+}

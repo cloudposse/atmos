@@ -3,10 +3,18 @@ title: atmos version track get
 sidebar_position: 30
 sidebar_label: get
 sidebar_class_name: command
-description: Get the effective value of a dependency entry, or a single field of it.
+description: "Read a dependency's locked version or another effective setting after defaults and group policies are applied."
 ---
 
-Get a single value from a dependency entry after defaults and groups are applied. By default this prints the entry's locked version; use `--show` to print any other field instead.
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Read a dependency's locked version or another effective setting after defaults and group policies
+are applied. Use the result in scripts or to check how a particular dependency is configured.
+</Intro>
+
+By default, this command prints the entry's locked version. Use `--show` to select a different field.
 
 ## Usage
 
@@ -44,3 +52,15 @@ atmos version track get checkout --show=desired
 # Get a different field, from a specific track, as JSON
 atmos version track get checkout --track=prod --show=ecosystem --format=json
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Read the locked redis version from the dev track. No cloud credentials are needed.
+
+```shell
+atmos version track get redis --track dev
+```
+
+</TryExample>

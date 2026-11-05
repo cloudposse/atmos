@@ -1,0 +1,72 @@
+---
+title: atmos plugin sign
+sidebar_label: sign
+sidebar_class_name: command
+id: sign
+description: Sign an immutable plugin release with Sigstore and publish its signature to OCI.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Sign an immutable plugin release with Sigstore and publish its signature to OCI.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin sign --help" src="/casts/screengrabs/atmos-plugin-sign--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin sign <repository@sha256:digest> [--yes]
+```
+
+Atmos validates the published plugin index, signs its exact bytes with a managed Cosign executable,
+and attaches the standard Sigstore bundle to that index as an OCI referrer. Registry access uses
+the same credentials as other plugin commands. The release digest and version tag remain unchanged.
+Tags are not accepted: use the `digest` returned by `atmos plugin publish`.
+
+Signing uses public Sigstore keyless authentication. Locally, Cosign opens its identity-provider login
+flow. In supported CI environments, Cosign can obtain the workload identity from the environment;
+for GitHub Actions, grant the signing job `id-token: write`. The signer identity and signing event
+are recorded in the public transparency log. Signing does not add that identity to consumers'
+`trusted_publishers`; consumers configure their own trust policy.
+
+Atmos resolves Cosign through its toolchain and installs it when automatic installation is enabled.
+Otherwise, install the selected version first:
+
+```shell
+atmos toolchain install sigstore/cosign@3.1.3
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>repository@sha256:digest</code></dt>
+  <dd>Published plugin release index to sign. An optional <code>oci://</code> prefix is accepted.</dd>
+  <dt><code>--cosign-version</code></dt>
+  <dd>Exact Cosign 3 version managed by the Atmos toolchain. Defaults to <code>3.1.3</code>.</dd>
+  <dt><code>--yes</code>, <code>-y</code></dt>
+  <dd>Accept publication to the Sigstore transparency log without its confirmation prompt. This does not skip identity authentication.</dd>
+  <dt><code>--format</code></dt>
+  <dd>Output format: table (default), json, yaml, csv, or tsv. Also configurable with <code>ATMOS_PLUGIN_FORMAT</code>.</dd>
+</dl>
+
+## Examples
+
+Publish and sign in one command:
+
+```shell
+atmos plugin publish ./oidc-release --to=oci://ghcr.io/acme/oidc --sign
+```
+
+Sign an already published release, or retry after an interrupted signing operation:
+
+```shell
+atmos plugin sign ghcr.io/acme/oidc@sha256:<digest> --yes
+```
+
+The default output confirms signing and displays the release metadata and immutable
+reference. Use `--format json` for structured signed release metadata. If signing or uploading its evidence fails,
+the command returns an error. Signing requires network access to Sigstore and the registry.

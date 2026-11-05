@@ -1,0 +1,111 @@
+---
+slug: deploy-cdk-with-hooks
+title: "Deploy AWS CDK and CDK Terrain with Atmos Hooks"
+authors: [osterman]
+tags: [documentation, dx]
+cast: "/casts/examples/cdk-cloudformation/lifecycle.cast"
+castTitle: "atmos aws cloudformation lifecycle with AWS CDK"
+---
+import CastEmbed from '@site/src/components/CastEmbed'
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
+Infrastructure written with AWS CDK or CDK Terrain needs a synthesis step before it can be
+deployed. Keeping that step connected to the right environment, inputs, and deployment command
+is part of managing the application. Our new [CDK tutorial](/tutorials/deploy-cdk-with-hooks)
+shows how Atmos hooks run synthesis while Atmos stacks supply deployment configuration.
+
+<!--truncate-->
+
+<CastEmbed src="/casts/examples/cdk-cloudformation/lifecycle.cast" title="atmos aws cloudformation lifecycle with AWS CDK" chrome controls scrubber />
+
+## The Problem
+
+AWS CDK produces CloudFormation templates; CDK Terrain, the community fork of CDK for Terraform,
+produces Terraform configuration in JSON syntax (`.tf.json`). Both need their generated files
+refreshed when application code changes.
+Running synthesis separately leaves another step to remember before reviewing and deploying changes.
+
+## The Fix
+
+The tutorial uses [lifecycle hooks](/stacks/hooks) to run synthesis before Atmos consumes the
+generated configuration. You keep the application code as source and use Atmos to manage inputs
+and deployment across environments.
+
+Choose between two complete setup tracks:
+
+- **With CloudFormation:** Synthesize an AWS CDK application and deploy its template through
+  [native CloudFormation components](/stacks/components/aws-cloudformation). Review changes with
+  a diff or a CloudFormation changeset before applying them.
+- **With Terraform:** Deploy the same kind of AWS CDK template with a direct
+  Terraform `aws_cloudformation_stack` resource. This track also shows how to deploy CDK Terrain's
+  generated Terraform JSON directly with Terraform or OpenTofu, without CloudFormation.
+
+<CastEmbed src="/casts/examples/cdk-terraform/lifecycle.cast" title="atmos terraform lifecycle with CDK Terrain" chrome controls scrubber />
+
+Both tracks ship as runnable examples: [`cdk-cloudformation`](/examples/cdk-cloudformation)
+and [`cdk-terraform`](/examples/cdk-terraform) run against a local
+[AWS emulator](/cli/commands/emulator/usage), so you can try the whole lifecycle without an
+AWS account.
+
+Each track explains the approach first, then lists the requirements for its demo. In the tutorial,
+the AWS CDK demo creates an SSM parameter and the Terrain demo uses a local `terraform_data`
+resource that needs no cloud credentials. The runnable `cdk-terraform` example instead creates the
+same SSM parameter as the CloudFormation example, through the emulator. No Cloud Posse module is
+required.
+
+## How to Use It
+
+Open the [tutorial](/tutorials/deploy-cdk-with-hooks) and select a deployment track. Each includes
+the project layout, application code, Atmos configuration, synthesis hook, and commands to
+preview, deploy, and clean up.
+
+For an existing application, review the guidance on
+[assets, multiple stacks, and existing deployments](/tutorials/deploy-cdk-with-hooks#assets-multiple-stacks-and-existing-deployments).
+Applications with file or container assets need asset publishing in addition to synthesis.
+The tutorial also explains how to preserve generated artifacts when applying a reviewed plan.
+
+## CloudFormation Configuration
+
+The native example uses `region` directly on the component. It follows
+[region inheritance](/cli/configuration/components/aws-cloudformation#region-inheritance) through
+stack defaults, component-type defaults, base components, and component overrides. The older
+`settings.aws_cloudformation.region` spelling remains compatible but emits a deprecation warning;
+move it to `region` at the same scope with
+[`atmos doctor --only=cloudformation-region --fix`](/cli/commands/doctor).
+
+You can also set an [operation timeout](/stacks/components/aws-cloudformation#operation-timeout),
+such as `timeout: 30m`, using Atmos duration syntax. It bounds remote requests and waiting;
+AWS may continue processing after Atmos stops. The old `timeout_in_minutes` field now enforces
+the same deadline and can be migrated with the `cloudformation-timeout` doctor rule.
+
+## Try it out
+
+<TryExamples>
+  <TryExample example="cdk-cloudformation" label="AWS CDK with CloudFormation">
+
+Install Node.js 22 or later and Docker or Podman, then deploy the synthesized template against a
+local AWS emulator.
+
+```shell
+atmos emulator up aws -s local
+atmos aws cloudformation deploy greeting -s local
+```
+
+  </TryExample>
+  <TryExample example="cdk-terraform" label="CDK Terrain with Terraform">
+
+Install Node.js 22 or later, Terraform or OpenTofu, and Docker or Podman, then apply the generated
+Terraform configuration against a local AWS emulator.
+
+```shell
+atmos emulator up aws -s local
+atmos terraform apply greeting -s local
+```
+
+  </TryExample>
+</TryExamples>
+
+## Get Involved
+
+Share your CDK deployment patterns and suggestions for future tutorials in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

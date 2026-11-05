@@ -1,0 +1,15 @@
+base_path: "./"
+
+components:
+  "aws/cloudformation":
+    base_path: "components/cloudformation"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  level: Info

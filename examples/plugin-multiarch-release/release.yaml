@@ -1,0 +1,214 @@
+# Copy to .github/workflows/release.yaml in a generated plugin repository.
+# Set ATMOS_VERSION and PLUGIN_REPOSITORY repository variables; see README.md.
+name: Plugin release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish and sign the complete release (requires a tag)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ATMOS_VERSION: ${{ vars.ATMOS_VERSION }}
+  CGO_ENABLED: "0"
+  GOWORK: "off"
+
+jobs:
+  build-test:
+    name: Build and verify (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: linux/amd64, os: linux, arch: amd64, runner: ubuntu-24.04, artifact: linux-amd64}
+          - {platform: linux/arm64, os: linux, arch: arm64, runner: ubuntu-24.04-arm, artifact: linux-arm64}
+          - {platform: darwin/amd64, os: darwin, arch: amd64, runner: macos-15-intel, artifact: darwin-amd64}
+          - {platform: darwin/arm64, os: darwin, arch: arm64, runner: macos-15, artifact: darwin-arm64}
+          - {platform: windows/amd64, os: windows, arch: amd64, runner: windows-2022, artifact: windows-amd64}
+          - {platform: windows/arm64, os: windows, arch: arm64, runner: windows-11-arm, artifact: windows-arm64}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+      - name: Install the native Atmos binary
+        shell: pwsh
+        env:
+          TARGET_OS: ${{ matrix.os }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:ATMOS_VERSION -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') { throw 'Set ATMOS_VERSION to an exact release tag' }
+          $version = $env:ATMOS_VERSION.Substring(1)
+          $extension = if ($env:TARGET_OS -eq 'windows') { '.exe' } else { '' }
+          $asset = "atmos_${version}_$($env:TARGET_OS)_$($env:TARGET_ARCH)$extension"
+          $base = "https://github.com/cloudposse/atmos/releases/download/$env:ATMOS_VERSION"
+          $directory = Join-Path $env:RUNNER_TEMP 'atmos-cli'
+          New-Item -ItemType Directory -Force $directory | Out-Null
+          $binary = Join-Path $directory "atmos$extension"
+          Invoke-WebRequest "$base/$asset" -OutFile $binary
+          $checksums = (Invoke-WebRequest "$base/atmos_${version}_SHA256SUMS").Content
+          $expected = @($checksums -split "`n" | Where-Object { ($_ -split '\s+')[-1] -eq $asset } | ForEach-Object { ($_ -split '\s+')[0] })
+          if ($expected.Count -ne 1 -or (Get-FileHash $binary -Algorithm SHA256).Hash -ne $expected[0]) { throw 'Atmos checksum mismatch' }
+          if ($env:TARGET_OS -ne 'windows') { chmod +x $binary }
+          $directory >> $env:GITHUB_PATH
+      - name: Build and run native conformance
+        shell: bash
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: |
+          test "$(go env GOHOSTOS)/$(go env GOHOSTARCH)" = "$TARGET_PLATFORM"
+          go test ./...
+          atmos plugin validate .
+          atmos plugin build . --platform "$TARGET_PLATFORM"
+          atmos plugin test .
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plugin-${{ matrix.artifact }}
+          path: bin/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atmos-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/atmos-cli/atmos*
+          if-no-files-found: error
+
+  pack:
+    needs: build-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: plugin-*
+          path: bin
+          merge-multiple: true
+      - name: Install Atmos and pack the complete release
+        shell: bash
+        run: |
+          [[ "$ATMOS_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          version="${ATMOS_VERSION#v}"
+          asset="atmos_${version}_linux_amd64"
+          directory="$RUNNER_TEMP/atmos-cli"
+          mkdir -p "$directory"
+          base="https://github.com/cloudposse/atmos/releases/download/$ATMOS_VERSION"
+          curl --fail --location --retry 3 "$base/$asset" --output "$directory/$asset"
+          curl --fail --location --retry 3 "$base/atmos_${version}_SHA256SUMS" --output "$directory/checksums"
+          (cd "$directory" && sha256sum --check --ignore-missing checksums)
+          mv "$directory/$asset" "$directory/atmos"
+          chmod +x "$directory/atmos" bin/linux-*/plugin bin/darwin-*/plugin
+          "$directory/atmos" plugin pack . --output dist/plugin
+          mkdir -p .atmos/release-consumer
+          printf 'base_path: .\nplugins:\n  policy:\n    offline: true\n' > .atmos/release-consumer/atmos.yaml
+          "$directory/atmos" --chdir .atmos/release-consumer plugin install oci://example.invalid/plugins/release --as release --from-layout "$PWD/dist/plugin"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-layout
+          path: dist/plugin/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-atmos
+          path: ${{ runner.temp }}/atmos-cli/atmos
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-consumer
+          path: |
+            .atmos/release-consumer/atmos.yaml
+            .atmos/release-consumer/.atmos.plugins.lock.yaml
+          include-hidden-files: true
+          if-no-files-found: error
+
+  install-test:
+    name: Restore shared lock and execute (${{ matrix.platform }})
+    needs: pack
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: linux/amd64, runner: ubuntu-24.04, artifact: linux-amd64, executable: atmos}
+          - {platform: linux/arm64, runner: ubuntu-24.04-arm, artifact: linux-arm64, executable: atmos}
+          - {platform: darwin/amd64, runner: macos-15-intel, artifact: darwin-amd64, executable: atmos}
+          - {platform: darwin/arm64, runner: macos-15, artifact: darwin-arm64, executable: atmos}
+          - {platform: windows/amd64, runner: windows-2022, artifact: windows-amd64, executable: atmos.exe}
+          - {platform: windows/arm64, runner: windows-11-arm, artifact: windows-arm64, executable: atmos.exe}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-layout
+          path: release-layout
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-consumer
+          path: consumer
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: atmos-${{ matrix.artifact }}
+          path: release-tools
+      - name: Restore and execute the actual packaged binary without changing the lock
+        shell: pwsh
+        env:
+          ATMOS_EXECUTABLE: ${{ matrix.executable }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $atmos = Join-Path $PWD "release-tools/$env:ATMOS_EXECUTABLE"
+          if ($env:RUNNER_OS -ne 'Windows') { chmod +x $atmos }
+          $layout = Join-Path $PWD 'release-layout'
+          $lock = Join-Path $PWD 'consumer/.atmos.plugins.lock.yaml'
+          $before = (Get-FileHash $lock -Algorithm SHA256).Hash
+          & $atmos --chdir consumer plugin install --frozen --from-layout $layout
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen restoration failed' }
+          & $atmos --chdir consumer plugin run release
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged plugin execution failed' }
+          if ((Get-FileHash $lock -Algorithm SHA256).Hash -ne $before) { throw 'Frozen restoration changed the shared lockfile' }
+
+  publish:
+    needs: install-test
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.publish)
+    runs-on: ubuntu-24.04
+    environment: plugin-release
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-layout
+          path: dist/plugin
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-atmos
+          path: .atmos/release-tools
+      - name: Publish and sign the complete index
+        env:
+          PLUGIN_REPOSITORY: ${{ vars.PLUGIN_REPOSITORY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_GITHUB_USERNAME: ${{ github.actor }}
+        run: |
+          test -n "$PLUGIN_REPOSITORY"
+          chmod +x .atmos/release-tools/atmos
+          .atmos/release-tools/atmos plugin publish dist/plugin --to "$PLUGIN_REPOSITORY" --sign --yes

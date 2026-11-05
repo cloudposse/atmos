@@ -33,6 +33,8 @@ func conditionCELEnv() (*cel.Env, error) {
 			cel.Variable("step", cel.StringType),
 			cel.Variable("hook", cel.StringType),
 			cel.Variable("event", cel.StringType),
+			cel.Variable("tags", cel.ListType(cel.StringType)),
+			cel.Variable("labels", cel.MapType(cel.StringType, cel.DynType)),
 			cel.Variable("env", cel.MapType(cel.StringType, cel.StringType)),
 			cel.Variable("answers", cel.MapType(cel.StringType, cel.DynType)),
 			cel.Variable("os", cel.StringType),
@@ -56,6 +58,14 @@ func conditionCELEnv() (*cel.Env, error) {
 
 //nolint:gocritic // Public compatibility API keeps Context by value.
 func (ctx Context) activation() map[string]any {
+	tags := ctx.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	labels := ctx.Labels
+	if labels == nil {
+		labels = map[string]any{}
+	}
 	env := ctx.Env
 	if env == nil {
 		env = map[string]string{}
@@ -76,7 +86,7 @@ func (ctx Context) activation() map[string]any {
 	if arguments == nil {
 		arguments = map[string]string{}
 	}
-	return map[string]any{
+	activation := map[string]any{
 		"ci":            ctx.CI,
 		"status":        ctx.Status,
 		"stack":         ctx.Stack,
@@ -86,6 +96,8 @@ func (ctx Context) activation() map[string]any {
 		"hook":          ctx.Hook,
 		"event":         ctx.Event,
 		"env":           env,
+		"labels":        labels,
+		"tags":          tags,
 		"answers":       answers,
 		"os":            ctx.OS,
 		"arch":          ctx.Arch,
@@ -99,6 +111,11 @@ func (ctx Context) activation() map[string]any {
 		"flags":         flags,
 		"arguments":     arguments,
 	}
+	if ctx.TagsUnavailable {
+		// Missing activation data raises a CEL evaluation error, including for negative membership.
+		delete(activation, "tags")
+	}
+	return activation
 }
 
 // fileFactsOrEmpty converts FileFacts to the []map[string]any shape CEL's list-of-maps adapter
@@ -119,16 +136,79 @@ func celMentionsIdentifier(expr, ident string) bool {
 	// "checksum" in "checksum.changed"), since freshness facts are exposed as small maps
 	// (checksum.changed, timestamp.changed, preconditions.success) rather than flat scalars.
 	prefix := ident + "."
-	for _, token := range strings.FieldsFunc(expr, func(r rune) bool {
-		return r != '_' &&
-			r != '.' &&
-			(r < '0' || r > '9') &&
-			(r < 'A' || r > 'Z') &&
-			(r < 'a' || r > 'z')
-	}) {
+	for _, token := range strings.FieldsFunc(expr, isNotCELIdentifierRune) {
 		if token == ident || strings.HasPrefix(token, prefix) {
 			return true
 		}
 	}
+	// The token scan above can't see CEL's bracket/index syntax: a map access like
+	// answers["derived"] sits between a `[` and a quote character, both of which split it
+	// into separate "answers" and "derived" tokens rather than one "answers.derived" token,
+	// so it never matches the dotted-chain form above. Only meaningful when ident itself is
+	// a dotted chain (e.g. "answers.derived") -- a bare ident (e.g. "status") has no map
+	// access to look for.
+	if root, member, ok := strings.Cut(ident, "."); ok {
+		return celMentionsBracketAccess(expr, root, member)
+	}
 	return false
+}
+
+func isNotCELIdentifierRune(r rune) bool {
+	return r != '_' &&
+		r != '.' &&
+		(r < '0' || r > '9') &&
+		(r < 'A' || r > 'Z') &&
+		(r < 'a' || r > 'z')
+}
+
+// celMentionsBracketAccess reports whether expr contains root[<quote>member<quote>] --
+// CEL's bracket/index syntax for the same map access celMentionsIdentifier's token scan
+// already recognizes in dotted form (root.member). Deliberately a textual scan, not a CEL
+// AST walk, mirroring this package's existing token-based approach -- expr is already known
+// to be valid, compiled CEL by the time this runs (Condition.UnmarshalYAML compiles it via
+// compileCEL), so a well-formed string literal is guaranteed once a quote character is found.
+func celMentionsBracketAccess(expr, root, member string) bool {
+	search := expr
+	for {
+		idx := strings.Index(search, root)
+		if idx < 0 {
+			return false
+		}
+		before := search[:idx]
+		after := search[idx+len(root):]
+		// root must be a standalone identifier token, not a substring of a longer one
+		// (e.g. "myanswers" must not match root "answers").
+		if len(before) == 0 || isNotCELIdentifierRune(rune(before[len(before)-1])) {
+			if matchesBracketMember(after, member) {
+				return true
+			}
+		}
+		search = after
+	}
+}
+
+// matchesBracketMember reports whether rest starts with a bracket-index access of member
+// as a quoted string literal (e.g. `["derived"]` or `['derived']`), allowing whitespace
+// around the brackets and quotes the way CEL itself does.
+func matchesBracketMember(rest, member string) bool {
+	rest = strings.TrimLeft(rest, " \t")
+	rest, ok := strings.CutPrefix(rest, "[")
+	if !ok {
+		return false
+	}
+	rest = strings.TrimLeft(rest, " \t")
+	if rest == "" {
+		return false
+	}
+	quote := rest[0]
+	if quote != '"' && quote != '\'' {
+		return false
+	}
+	rest = rest[1:]
+	closeIdx := strings.IndexByte(rest, quote)
+	if closeIdx < 0 || rest[:closeIdx] != member {
+		return false
+	}
+	rest = strings.TrimLeft(rest[closeIdx+1:], " \t")
+	return strings.HasPrefix(rest, "]")
 }

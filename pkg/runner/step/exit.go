@@ -7,7 +7,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ExitHandler exits the workflow with a specific exit code.
@@ -41,7 +40,7 @@ func (h *ExitHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		if err != nil {
 			return nil, err
 		}
-		ui.Writeln(content)
+		vars.UI().Writeln(content)
 	}
 
 	// Return an error with the exit code attached.

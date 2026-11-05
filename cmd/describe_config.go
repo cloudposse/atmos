@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -45,4 +46,8 @@ func init() {
 	describeConfigCmd.PersistentFlags().StringP("format", "f", "json", "The output format")
 
 	describeCmd.AddCommand(describeConfigCmd)
+	internal.RegisterCommandMetadata(
+		describeConfigCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/config"),
+	)
 }

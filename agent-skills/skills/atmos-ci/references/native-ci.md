@@ -60,8 +60,10 @@ as `output_<name>` — those bypass the allowlist and are always included.
 | Job summaries | `ci.summary.enabled` | none |
 | Output variables | `ci.output.enabled` | none |
 | Log groups | `ci.groups.mode` | none |
-| Commit statuses/checks | `ci.checks.enabled` | `statuses: write` or `checks: write` |
+| Commit statuses (current GitHub implementation) | `ci.checks.enabled` | `statuses: write` |
 | PR comments | `ci.comments.enabled` | `pull-requests: write` |
+| Inline scanner annotations | `ci.annotations.enabled` | none |
+| SARIF uploads to Code Scanning | `ci.results.enabled` (opt-in) | `security-events: write` |
 
 Set `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` when checks or comments are enabled.
 
@@ -122,7 +124,9 @@ or custom command that invokes the tool.
 
 ## Minimal Permissions
 
-Start with the minimum permissions for the workflow:
+When migrating a workflow, inventory its API operations and set permissions on the jobs that
+perform them. Load [atmos-auth](../../atmos-auth/SKILL.md) for OIDC and GitHub STS. Start with
+`contents: read` for checkout; add `id-token: write` only for OIDC authentication:
 
 ```yaml
 permissions:
@@ -130,14 +134,47 @@ permissions:
   id-token: write
 ```
 
-Add reporting permissions only when needed:
+Add reporting permissions only for enabled features, retaining `contents: read` and any required
+OIDC permission in the same job block. Explicit permission blocks set omitted permissions to
+`none`; reusable workflows cannot elevate permissions beyond their caller.
 
 ```yaml
 permissions:
-  statuses: write       # commit statuses
-  checks: write         # check runs
-  pull-requests: write  # PR comments
+  contents: read
+  statuses: write        # ci.checks uses the Commit Status API today
+  pull-requests: write   # ci.comments
+  security-events: write # Only when enabling SARIF Code Scanning uploads
+env:
+  GITHUB_TOKEN: ${{ github.token }}
 ```
+
+`checks: write` is required by integrations that create/update GitHub Check Runs through the
+Checks API; it is not a substitute for `statuses: write`. Despite the `ci.checks` name, the current
+Atmos GitHub provider writes commit statuses. Keep `checks: write` only if another retained step
+needs it. Job summaries, `$GITHUB_OUTPUT`, log groups, and workflow-command annotations do not
+require these write permissions.
+
+For native SARIF uploads, enable `ci.enabled: true` and `ci.results.enabled: true`, verify that
+Code Scanning is available/enabled for the repository, and supply the API token. Upload failures
+are best-effort reporting failures, so explicitly confirm receipt in Code Scanning; a green scan
+step alone does not prove publication succeeded. Preserve separate artifact retention/upload
+steps when downstream consumers need the raw report. Cross-run GitHub planfile reads also need
+`actions: read`; runtime artifact credentials are separate from these API token permissions.
+
+Atmos CI token precedence is `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, then
+`GH_TOKEN`. If Terraform needs a different `GITHUB_TOKEN`, set `ATMOS_CI_GITHUB_TOKEN` to the
+workflow token for reporting. Workflow `permissions` only controls the default token, not a
+separately supplied App/PAT token; verify that token's repository access and grants separately.
+
+Fork PRs normally receive a read-only token and no repository secrets. Preserve the workflow's
+trust boundary: run permitted scans and local summaries, withhold unavailable privileged reporting,
+and report the limitation. Do not switch to `pull_request_target` or execute untrusted fork code
+with write tokens/secrets just to make reporting work. Check organization policy and caller-job
+permissions when diagnosing 403/404 responses. Preserve required status/check names or coordinate
+their branch-protection changes during cutover.
+
+See GitHub's [workflow permissions reference](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions)
+and [pull_request_target security guidance](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target).
 
 ## Pull Request Plan
 
@@ -156,13 +193,13 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
+      count: ${{ steps.affected.outputs.count }}
     steps:
       - uses: actions/checkout@v6
       - id: affected
@@ -170,7 +207,7 @@ jobs:
 
   plan:
     needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
+    if: ${{ needs.affected.outputs.count != '0' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
@@ -181,7 +218,6 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github
@@ -199,6 +235,67 @@ jobs:
 
 Use `deploy` in automation when you want a fresh plan followed by apply with auto-approve. Use
 manual gates or GitHub environments for production.
+
+## Keeping Privileged Components Out of CI
+
+Label every component `ci: auto` in the stack defaults, override with `ci: manual` on privileged
+instances (`iam`, `aws-teams`, `tfstate-backend`), and filter the matrix. Labels match positively
+only, so a default plus an override replaces a negation.
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --labels=ci=auto
+```
+
+`--labels` (match ALL `key=value`/`key:value` pairs, env `ATMOS_LABELS`) and `--tags` (match ANY tag,
+env `ATMOS_TAGS`) filter every output format. Matching is case-sensitive, duplicate label keys are last-wins,
+and a component without `metadata` never matches. On the command line they are rejected with `--upload`; a
+selector that only comes from a job-level `ATMOS_TAGS`/`ATMOS_LABELS` is ignored with a warning instead.
+
+`atmos terraform plan --affected --labels=ci=auto` selects the same components, also with
+`--include-dependents`: non-matching dependents are skipped and their matching dependents still run in order.
+With `--include-dependents`, `describe affected` removes a non-matching affected component and reports its
+matching dependents as top-level entries with `affected: dependent`. Add `--flatten` (env
+`ATMOS_DESCRIBE_AFFECTED_FLATTEN`, requires `--include-dependents`, not with `--upload`) to lift every remaining
+dependent into the top-level list, which is how a matrix runs dependents too:
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --include-dependents --flatten --labels=ci=auto
+```
+
+A job-level `ATMOS_TAGS`/`ATMOS_LABELS` applies to every `describe affected` and multi-component
+`atmos terraform` step in the job, so set them per step when a job mixes those commands. An empty matrix is
+`{"include":[]}`, never an empty string: guard downstream jobs with the `count` output
+(`needs.affected.outputs.count != '0'`). Add an OPA policy through
+`settings.validation` as a backstop; it fails the job instead of skipping it:
+
+```rego
+package atmos
+
+errors[message] {
+  input.process_env.GITHUB_ACTIONS == "true"
+  input.metadata.labels.ci == "manual"
+  message := sprintf("%s is a privileged component and can't run in CI", [input.atmos_component])
+}
+```
+
+The policy's `schema_path` (for example `ci/privileged-component.rego`) is resolved relative to
+`schemas.opa.base_path`, which must be set in `atmos.yaml`. Without it Atmos fails with
+`the file '...' does not exist for schema type 'opa'`:
+
+```yaml
+schemas:
+  opa:
+    base_path: "stacks/schemas/opa"
+```
+
+An empty `--labels=` or `--tags=` (or an empty `ATMOS_LABELS`/`ATMOS_TAGS`) applies no filter and
+selects everything, so fail fast on an empty workflow variable: `--labels="ci=${CI_LABEL:?}"`.
+Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before selection by default. With
+templates disabled, or with `--process-templates=false`, the raw `'{{ ... }}'` text is compared and matches
+neither `ci=auto` nor `ci=manual`. Deleted components are filtered the same way, using their `metadata` from
+the base ref, and `--exclude-locked` also drops deleted components that were locked in the base ref.
 
 ## Deploy All Instances
 
@@ -287,3 +384,59 @@ Replace deprecated wrapper actions with direct commands:
 | Deprecated `cloudposse/github-action-setup-atmos` | `container: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}` |
 
 Deprecated: do not use `integrations.github.gitops`; model CI behavior directly in workflows and stack settings.
+
+## Reporting From Scripts
+
+The `ci` module is available in standalone scripts and in script steps of custom commands, workflows,
+and hooks, including parallel and matrix children.
+
+```python
+build = ci.check("build", state = "in_progress", description = "Building")
+result = ci.group("Test", lambda: exec.run(["go", "test", "./..."], check = False))
+ci.summary(template = "deploy.md", data = {"stack": "prod", "count": 2})
+ci.comment("Built " + ci.context.sha[:7], key = "build-report")   # target = "auto"
+build.update("success", description = "Done")
+```
+
+- **Gates.** Every write needs `ci.enabled: true` plus the feature flag. A gated call warns, renders
+  locally, and the script continues. The warning names `ci.enabled` when the master switch is off, and
+  the per-feature key only when the master is on. Atmos never turns `ci.enabled` on inside a CI run.
+- **Local rendering.** With no recognized provider the `generic` provider prints every call on stderr:
+  annotations as `path:line: level: message (title)`, multiline outputs in heredoc form, comments as a
+  preview that is never posted. `ATMOS_CI_OUTPUT`/`ATMOS_CI_SUMMARY`/`ATMOS_CI_ENV`/`ATMOS_CI_PATH`
+  redirect outputs to files, and `ATMOS_CI_PR`/`ATMOS_CI_REPOSITORY`/`ATMOS_CI_SHA` supply context.
+- **Forced CI mode.** `--ci`, `ATMOS_CI=true`, or `CI=true` on an unrecognized platform makes the
+  generic provider the detected one: gates apply, `ci.context.local` is `False`, and the `ATMOS_CI_*`
+  files are written.
+- **GHES.** `GITHUB_API_URL` or `ATMOS_CI_GITHUB_API_URL` (which wins) sets the API base; an invalid URL
+  fails the command.
+- **Fork posting gate.** Under `pull_request_target`/`workflow_run`, comments, commit statuses,
+  environment and `PATH` exports, and SARIF uploads are held for a fork pull request (head and base
+  `full_name` differ; a deleted fork or unreadable payload counts as a fork). Summaries, outputs,
+  annotations, groups, and masks are never held. `ci.allow_unsafe_fork_execution` or
+  `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` releases this gate and the clone gate. Native Terraform plan
+  comments and statuses use the same gate. The pull request number comes from the event payload.
+- **Comment targets.** `ci.comment(target="auto"|"pr"|"commit")`; `auto` posts to the pull request
+  when known and otherwise to a commit comment on the SHA (needs `contents: write`). `behavior="update"`
+  requires `key`.
+- **Templates.** Scripts have no configured default template: `data=` requires `template=` on
+  `ci.summary` and `ci.comment`. `ci.summary.template` applies only to native commands. A relative
+  `ci.templates.base_path` resolves against the Atmos `base_path`. A missing key in `data` fails and
+  names the key.
+
+Reference points:
+
+- `ci.comment(target = "auto" | "pr" | "commit")`: default `auto`. `pr` with no pull request fails with the hint
+  to pass the pull request number or run in a pull request context. A commit comment needs `contents: write`;
+  a pull request comment needs `pull-requests: write`; `ci.check` needs `statuses: write`.
+- GitHub maps check states onto commit statuses: `in_progress` becomes pending and `cancelled` becomes error.
+  `check.update()` sends the id, and `check.url` is the details URL (the request URL, else the run URL).
+- Local rendering of an `update` with no earlier comment fails the way GitHub does. Local previews read
+  `commit comment preview (...)` when no pull request is known.
+- Annotations and `::add-mask::` commands go to stderr. Log-group markers go to stdout so they bracket
+  command output; legacy GitHub Actions that parse stdout disable grouping. `::add-mask::` is emitted only
+  when `ci.enabled` is true. Repeated `ci.base()` calls do not duplicate `safe.directory` entries.
+- Forced CI mode (`--ci`, `ATMOS_CI=true`, `CI=true` without a recognized provider) makes the generic provider the
+  detected provider. `ATMOS_CI_PR_FORK` only fills `ci.context.pr.fork`; it never gates anything there.
+- Container image comments (`atmos container build/push`): one comment per `registry/repository`, truncated at
+  65,000 characters, attempted only when `ci.comments.enabled` is on, failures logged as warnings.

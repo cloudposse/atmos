@@ -62,7 +62,18 @@ ai:
       max_turns: 10
   tools:
     enabled: true
+    mode: require_confirmation   # require_confirmation (default) | allow | yolo
 ```
+
+`ai.tools.mode` controls tool approval. `require_confirmation` prompts, `allow` never prompts
+(`ai.tools.blocked` still applies), and `yolo` bypasses blocked/restricted checks. The older
+`yolo_mode` and `require_confirmation` booleans are deprecated aliases; `mode` wins when set.
+With `claude-code`, `atmos ai chat`, `ask`, and `exec` show an approval prompt in the terminal and continue in the
+same run. Claude-native and provider-preapproved requests follow Claude’s own policy and do
+not reach Atmos’s checker. `--no-tools` and `ai.tools.enabled` only control Atmos tools.
+Always choices display the command/path/tool scope being cached; a bare MCP tool name covers
+all arguments. In CI without a terminal, set `ai.tools.mode: allow` or add the tool to
+`ai.providers.claude-code.allowed_tools`.
 
 ## AI Uses Atmos: MCP and Skills
 
@@ -127,6 +138,23 @@ flags. Use `--client`/`--all-clients` to target specific clients, `--scope user`
 install into each client's user-level directory instead of the project one, or `--path` to take
 full manual control of the install location (this skips auto-distribution to clients). See
 [`atmos ai skill`](https://atmos.tools/cli/commands/ai/skill) for the full flag reference.
+
+### Declarative skill sources and version tracks
+
+Declare external skill sources under `ai.skills.<label>` with `source`, `ref`, `kind`, `subpath`,
+`plugins`, `include`, `exclude`, `clients`, and `scope`. Keep source declarations separate from inline
+prompt/tool entries. Use `ref: !version dependency` to select a locked version track dependency.
+
+- `atmos ai skill add <source> --name <label>`, `set`, and `remove` edit configuration only.
+- `atmos ai skill sync` reconciles declarations with `skills.lock.yaml` and installed copies.
+- `sync --frozen` requires matching locks; `sync --check` is an offline, read-only drift check.
+- Ordinary sync retains obsolete copies. Use `sync --prune` for explicit removal.
+- Use `--source <label>` to disambiguate installation/update/uninstall targets.
+- Advance managed refs with `atmos version track update`, then synchronize skills. Skill updates do
+  not advance managed dependencies independently.
+- Commit resolution locks; ignore `.atmos/skills/`, which stores project content and ownership.
+- Modified owned files require `--force`; unowned destinations and symlink escapes are refused.
+- Recover interrupted transactions with `atmos ai skill sync --recover` from the owning project.
 
 ### Installing Skills: Claude Code Plugin (Claude Code only)
 
@@ -289,7 +317,7 @@ the command runs.
 ## Multi-CLI MCP Export
 
 `atmos mcp export` generates MCP client config from `mcp.servers`. The format adapts to the
-client based on the output path or `--format` flag.
+client based on the output filename: `.toml` selects Codex TOML; other extensions use JSON.
 
 | Client       | Native config path                  | Format | Export command                                       |
 |--------------|-------------------------------------|--------|------------------------------------------------------|
@@ -350,8 +378,9 @@ not describe it as creating a long-running background service for stdio servers.
 - Pin MCP package versions when repeatability matters; avoid unreviewed `@latest` in production workflows.
 - Use `atmos toolchain` for binaries that MCP servers need, then rely on export/toolchain PATH injection.
 - Use `--identity=false`, `off`, `0`, or `no` only when deliberately disabling Atmos Auth for a command.
-- The exported `.mcp.json` is safe to commit -- it contains no secrets (worst case: IAM role
-  names). Credentials resolve at runtime via `atmos auth exec`.
+- Export preserves explicitly configured server `env` values. Review those values before
+  committing client configuration. Credentials supplied by an Atmos Auth identity resolve at
+  runtime through the exported `atmos auth exec` wrapper.
 - For `awslabs/*` MCP servers, prefer a single `readonly` identity by default and switch only
   for servers that genuinely need elevated access.
 

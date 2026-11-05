@@ -274,6 +274,15 @@ components:
 
 When enabled, Atmos generates files from the `generate` section before executing any terraform command (`plan`, `apply`, etc.).
 
+### Supported Component Types
+
+The `generate` section supports Terraform, native Kubernetes, and Helm components.
+
+CloudFormation components use [inline templates](/stacks/components/aws-cloudformation#inline-templates-and-templating)
+for stack-specific template values. A `generate` key on a CloudFormation component,
+its type-level section, or its overrides is a stack-processing error. The root
+stack `generate` section applies to Terraform only.
+
 ## Examples
 
 ### Generate Locals from Variables

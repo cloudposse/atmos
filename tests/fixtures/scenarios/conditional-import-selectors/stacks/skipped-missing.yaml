@@ -1,0 +1,6 @@
+name: skipped-missing
+metadata: {tags: []}
+import:
+  - catalog/app
+  - path: missing
+    when: !cel "'pci' in tags"

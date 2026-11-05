@@ -237,6 +237,84 @@ func TestUserIdentity_Authenticate_GeneratesNewWhenExpired(t *testing.T) {
 	assert.Error(t, err, "Should attempt to generate new session token for expired credentials")
 }
 
+// TestSessionStillValid verifies the reuse rule: any unexpired session by default, and a session
+// that outlasts the caller-requested minimum validity when the context carries one.
+func TestSessionStillValid(t *testing.T) {
+	in := func(d time.Duration) *types.AWSCredentials {
+		return &types.AWSCredentials{Expiration: time.Now().Add(d).UTC().Format(time.RFC3339)}
+	}
+
+	tests := []struct {
+		name  string
+		creds types.ICredentials
+		ctx   context.Context
+		want  bool
+	}{
+		{name: "default reuses an unexpired session", creds: in(time.Minute), ctx: context.Background(), want: true},
+		{name: "default rejects an expired session", creds: in(-time.Minute), ctx: context.Background(), want: false},
+		{name: "minimum below remaining lifetime reuses", creds: in(20 * time.Minute), ctx: types.WithMinCredentialValidity(context.Background(), 5*time.Minute), want: true},
+		{name: "minimum above remaining lifetime refreshes", creds: in(20 * time.Minute), ctx: types.WithMinCredentialValidity(context.Background(), 30*time.Minute), want: false},
+		{name: "zero minimum reuses any unexpired session", creds: in(time.Minute), ctx: types.WithMinCredentialValidity(context.Background(), 0), want: true},
+		{name: "unparseable expiration refreshes", creds: &types.AWSCredentials{Expiration: "soon"}, ctx: context.Background(), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sessionStillValid(tt.ctx, tt.creds))
+		})
+	}
+}
+
+// TestUserIdentity_Authenticate_HonorsMinValidityFromContext verifies that a caller-requested minimum
+// validity (atmos aws credential-process --min-validity) makes aws/user refresh a session that is
+// valid but too short-lived, instead of returning its own cache.
+func TestUserIdentity_Authenticate_HonorsMinValidityFromContext(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	originalPromptFunc := promptMfaTokenFunc
+	defer func() { promptMfaTokenFunc = originalPromptFunc }()
+	promptMfaTokenFunc = func(_ *types.AWSCredentials) (string, error) {
+		return "", errors.New("mock: should not call MFA prompt in this test")
+	}
+	originalCredPromptFunc := PromptCredentialsFunc
+	defer func() { PromptCredentialsFunc = originalCredPromptFunc }()
+	PromptCredentialsFunc = nil
+
+	identity, err := NewUserIdentity("test-user", &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"access_key_id":     "AKIA_LONG_LIVED",
+			"secret_access_key": "SECRET_LONG_LIVED",
+			"region":            "us-east-1",
+		},
+	})
+	require.NoError(t, err)
+	userIdent := identity.(*userIdentity)
+
+	require.NoError(t, userIdent.writeAWSFiles(&types.AWSCredentials{
+		AccessKeyID:     "AKIA_SESSION",
+		SecretAccessKey: "SECRET_SESSION",
+		SessionToken:    "SESSION_TOKEN_123",
+		Region:          "us-east-1",
+		Expiration:      time.Now().Add(20 * time.Minute).Format(time.RFC3339),
+	}, "us-east-1"))
+
+	// A minimum the session satisfies reuses it.
+	got, err := userIdent.Authenticate(types.WithMinCredentialValidity(context.Background(), 5*time.Minute), nil)
+	require.NoError(t, err)
+	awsCreds, ok := got.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "AKIA_SESSION", awsCreds.AccessKeyID)
+
+	// A minimum it does not satisfy must not return the cached session: a canceled context makes the
+	// refresh fail fast, so an error proves the refresh path was taken instead of the cache.
+	ctx, cancel := context.WithCancel(types.WithMinCredentialValidity(context.Background(), 30*time.Minute))
+	cancel()
+	got, err = userIdent.Authenticate(ctx, nil)
+	require.Error(t, err, "a session shorter than the requested minimum validity must be refreshed")
+	assert.Nil(t, got)
+}
+
 func TestUser_credentialsFromConfig(t *testing.T) {
 	// Missing secret when access_key_id present -> error.
 	id, err := NewUserIdentity("me", &schema.Identity{Kind: "aws/user", Credentials: map[string]any{
@@ -2684,4 +2762,38 @@ func TestUserIdentity_credentialStore_FallsBackWhenNotInjected(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, "AKIAFALLBACK", got.AccessKeyID)
+}
+
+// TestUser_generateSessionToken_PromptUnavailableMessage reproduces a chained login in a session that
+// cannot show the MFA prompt. The message must read as one sentinel plus the real cause, not as
+// "authentication failed" glued onto "interactive authentication prompt unavailable".
+func TestUser_generateSessionToken_PromptUnavailableMessage(t *testing.T) {
+	id, err := NewUserIdentity("ft-user", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+	ui := id.(*userIdentity)
+
+	old := promptMfaTokenFunc
+	defer func() { promptMfaTokenFunc = old }()
+	promptMfaTokenFunc = func(_ *types.AWSCredentials) (string, error) { return "", errUtils.ErrAuthPromptUnavailable }
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAFAKEFAKEFAKEFAKE",
+		SecretAccessKey: "fake-secret",
+		MfaArn:          "arn:aws:iam::111111111111:mfa/me",
+	}
+	_, err = ui.generateSessionToken(context.Background(), creds, "us-east-1")
+	require.Error(t, err)
+
+	wrapped := errUtils.WrapAuthenticationFailed(
+		errUtils.WrapAuthenticationFailed(err, "identity %q", "ft-user"), "identity %q", "ft-role",
+	)
+
+	assert.Equal(t,
+		`authentication failed for identity "ft-role" via identity "ft-user": interactive authentication prompt unavailable: requires a TTY`,
+		wrapped.Error())
+	assert.NotContains(t, err.Error(), "\n")
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.ErrorIs(t, wrapped, errUtils.ErrAuthenticationFailed)
+	assert.ErrorIs(t, wrapped, errUtils.ErrAuthPromptUnavailable)
+	assert.ErrorIs(t, wrapped, errUtils.ErrTTYRequired)
 }

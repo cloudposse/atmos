@@ -10,6 +10,8 @@ Atmos now includes a `source list` command to display components with source con
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 Two new commands are available with flexible filtering:
@@ -104,6 +106,18 @@ atmos list sources --format csv
 # TSV (for tab-separated pipelines)
 atmos list sources --format tsv
 ```
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+Inspect the stacks, then follow the README to try the remote `ipinfo` component with Terraform. The `weather` variant uses a sibling example directory.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Documentation
 

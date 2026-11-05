@@ -706,12 +706,12 @@ func TestInjectProvisionedIdentityImports_NoProviders(t *testing.T) {
 		Auth: schema.AuthConfig{
 			Providers: map[string]schema.Provider{},
 		},
-		Import: []string{"existing-import.yaml"},
+		Import: schema.ConfigImportsFromPaths([]string{"existing-import.yaml"}),
 	}
 
 	err := injectProvisionedIdentityImports(src)
 	assert.NoError(t, err)
-	assert.Equal(t, []string{"existing-import.yaml"}, src.Import)
+	assert.Equal(t, []string{"existing-import.yaml"}, src.Import.Paths())
 }
 
 func TestInjectProvisionedIdentityImports_WithProviders(t *testing.T) {
@@ -736,7 +736,7 @@ func TestInjectProvisionedIdentityImports_WithProviders(t *testing.T) {
 				},
 			},
 		},
-		Import: []string{"existing-import.yaml"},
+		Import: schema.ConfigImportsFromPaths([]string{"existing-import.yaml"}),
 	}
 
 	err = injectProvisionedIdentityImports(src)
@@ -744,9 +744,9 @@ func TestInjectProvisionedIdentityImports_WithProviders(t *testing.T) {
 
 	// Should have provisioned import prepended.
 	assert.Len(t, src.Import, 2)
-	assert.Contains(t, src.Import[0], "test-provider")
-	assert.Contains(t, src.Import[0], "provisioned-identities.yaml")
-	assert.Equal(t, "existing-import.yaml", src.Import[1])
+	assert.Contains(t, src.Import.Paths()[0], "test-provider")
+	assert.Contains(t, src.Import.Paths()[0], "provisioned-identities.yaml")
+	assert.Equal(t, "existing-import.yaml", src.Import.Paths()[1])
 }
 
 func TestInjectProvisionedIdentityImports_NoProvisionedFiles(t *testing.T) {
@@ -762,14 +762,14 @@ func TestInjectProvisionedIdentityImports_NoProvisionedFiles(t *testing.T) {
 				},
 			},
 		},
-		Import: []string{"existing-import.yaml"},
+		Import: schema.ConfigImportsFromPaths([]string{"existing-import.yaml"}),
 	}
 
 	err := injectProvisionedIdentityImports(src)
 	assert.NoError(t, err)
 
 	// Should not modify imports when no provisioned files exist.
-	assert.Equal(t, []string{"existing-import.yaml"}, src.Import)
+	assert.Equal(t, []string{"existing-import.yaml"}, src.Import.Paths())
 }
 
 func TestInjectProvisionedIdentityImports_MultipleProviders(t *testing.T) {
@@ -795,7 +795,7 @@ func TestInjectProvisionedIdentityImports_MultipleProviders(t *testing.T) {
 				"provider2": {Kind: "aws/iam-identity-center"},
 			},
 		},
-		Import: []string{"existing-import.yaml"},
+		Import: schema.ConfigImportsFromPaths([]string{"existing-import.yaml"}),
 	}
 
 	err := injectProvisionedIdentityImports(src)
@@ -803,10 +803,10 @@ func TestInjectProvisionedIdentityImports_MultipleProviders(t *testing.T) {
 
 	// Should have both provisioned imports prepended.
 	assert.Len(t, src.Import, 3)
-	assert.Equal(t, "existing-import.yaml", src.Import[2])
+	assert.Equal(t, "existing-import.yaml", src.Import.Paths()[2])
 
 	// Check that both provider imports are present.
-	importPaths := strings.Join(src.Import, " ")
+	importPaths := strings.Join(src.Import.Paths(), " ")
 	assert.Contains(t, importPaths, "provider1")
 	assert.Contains(t, importPaths, "provider2")
 }
@@ -833,7 +833,7 @@ func TestInjectProvisionedIdentityImports_EmptyImportList(t *testing.T) {
 				},
 			},
 		},
-		Import: []string{},
+		Import: schema.ConfigImportsFromPaths([]string{}),
 	}
 
 	err = injectProvisionedIdentityImports(src)
@@ -841,8 +841,8 @@ func TestInjectProvisionedIdentityImports_EmptyImportList(t *testing.T) {
 
 	// Should have only the provisioned import.
 	assert.Len(t, src.Import, 1)
-	assert.Contains(t, src.Import[0], "test-provider")
-	assert.Contains(t, src.Import[0], "provisioned-identities.yaml")
+	assert.Contains(t, src.Import.Paths()[0], "test-provider")
+	assert.Contains(t, src.Import.Paths()[0], "provisioned-identities.yaml")
 }
 
 func TestFindAtmosConfigInParentDirs(t *testing.T) {

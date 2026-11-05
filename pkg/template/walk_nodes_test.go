@@ -10,8 +10,8 @@ import (
 )
 
 // TestWalkNodes verifies the exported traversal helper visits every node in
-// the main template and in templates declared with `define`, matching the
-// coverage UsesFunctions relies on internally.
+// the main template, in templates declared with `define`, and inside chained
+// expressions.
 func TestWalkNodes(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -36,6 +36,11 @@ func TestWalkNodes(t *testing.T) {
 		{
 			name:         "call inside define is visited",
 			text:         `{{ define "sub" }}{{ ds "cfg" }}{{ end }}{{ template "sub" . }}`,
+			wantCommands: []string{"ds"},
+		},
+		{
+			name:         "call inside a chain is visited",
+			text:         `{{ (ds "cfg").name }}`,
 			wantCommands: []string{"ds"},
 		},
 	}

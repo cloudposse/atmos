@@ -25,6 +25,7 @@ func TestApplyDeferredMerges(t *testing.T) {
 
 	t.Run("applies deferred values to result", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
+			Edition: "2026-10-19",
 			Settings: schema.AtmosSettings{
 				ListMergeStrategy: ListMergeStrategyReplace,
 			},
@@ -47,6 +48,7 @@ func TestApplyDeferredMerges(t *testing.T) {
 
 	t.Run("sorts by precedence before merging", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
+			Edition: "2026-10-19",
 			Settings: schema.AtmosSettings{
 				ListMergeStrategy: ListMergeStrategyReplace,
 			},
@@ -72,6 +74,7 @@ func TestApplyDeferredMerges(t *testing.T) {
 
 	t.Run("handles nested paths", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
+			Edition: "2026-10-19",
 			Settings: schema.AtmosSettings{
 				ListMergeStrategy: ListMergeStrategyReplace,
 			},
@@ -117,6 +120,7 @@ func TestApplyDeferredMerges(t *testing.T) {
 		// the DeferredValue.Value/IsFunction fields of the dctx it was given when a processor
 		// resolves them — it must operate on a clone internally.
 		cfg := &schema.AtmosConfiguration{
+			Edition: "2026-10-19",
 			Settings: schema.AtmosSettings{
 				ListMergeStrategy: ListMergeStrategyReplace,
 			},
@@ -168,6 +172,7 @@ func TestApplyDeferredMerges(t *testing.T) {
 	// by chance depending on that random map order.
 	t.Run("resolves deterministically when a parent path and a child path both defer functions", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
+			Edition: "2026-10-19",
 			Settings: schema.AtmosSettings{
 				ListMergeStrategy: ListMergeStrategyReplace,
 			},
@@ -246,6 +251,7 @@ func (m *mockYAMLProcessor) ProcessYAMLFunctionString(value string) (any, error)
 // invoke the processor again — otherwise uncached side-effecting functions like !exec run twice.
 func TestApplyDeferredMerges_SingleContributionReuse(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{
+		Edition:  "2026-10-19",
 		Settings: schema.AtmosSettings{ListMergeStrategy: ListMergeStrategyReplace},
 	}
 

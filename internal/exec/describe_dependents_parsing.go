@@ -3,8 +3,6 @@ package exec
 import (
 	"fmt"
 
-	"github.com/go-viper/mapstructure/v2"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -70,30 +68,17 @@ func getComponentDependenciesWithError(componentMap map[string]any, leftDelims .
 }
 
 func getLegacyComponentDependencies(componentMap, settingsSection map[string]any) ([]schema.ComponentDependency, dependencySource, bool) {
+	// The list and map forms are both executed by the scheduler, so both are honored here.
 	if settingsSection != nil {
-		var settings schema.Settings
-		if err := mapstructure.Decode(settingsSection, &settings); err == nil && len(settings.DependsOn) > 0 {
+		if deps := schema.ParseLegacyDependsOn(settingsSection["depends_on"]); len(deps) > 0 {
 			log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
-			deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
-			for key := range settings.DependsOn {
-				ctx := settings.DependsOn[key]
-				deps = append(deps, contextToComponentDependency(&ctx))
-			}
 			return deps, dependencySourceSettingsDependsOn, true
 		}
 	}
 
-	if directDependsOn, ok := componentMap["depends_on"]; ok {
-		var settings schema.Settings
-		if err := mapstructure.Decode(map[string]any{"depends_on": directDependsOn}, &settings); err == nil && len(settings.DependsOn) > 0 {
-			log.Debug("component depends_on is deprecated, use dependencies.components instead")
-			deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
-			for key := range settings.DependsOn {
-				ctx := settings.DependsOn[key]
-				deps = append(deps, contextToComponentDependency(&ctx))
-			}
-			return deps, dependencySourceSettingsDependsOn, true
-		}
+	if deps := schema.ParseLegacyDependsOn(componentMap["depends_on"]); len(deps) > 0 {
+		log.Debug("component depends_on is deprecated, use dependencies.components instead")
+		return deps, dependencySourceSettingsDependsOn, true
 	}
 
 	return nil, dependencySourceNone, false

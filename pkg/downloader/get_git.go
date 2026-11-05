@@ -55,7 +55,6 @@ package downloader
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
@@ -72,6 +71,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -110,6 +110,9 @@ type gitOperationParams struct {
 var gitCommitIDRegex = regexp.MustCompile("^[0-9a-fA-F]{7,40}$")
 
 func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
+	if err := guard.Source(context.Background(), "download", u.String(), ""); err != nil {
+		return err
+	}
 	ctx := g.Context()
 
 	if g.Timeout > 0 {
@@ -156,48 +159,14 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 		u.RawQuery = q.Encode()
 	}
 
-	var sshKeyFile string
-	if sshKey != "" {
-		// Check that the git version is sufficiently new.
-		if err := checkGitVersion(ctx, "2.3"); err != nil {
-			return fmt.Errorf("%w: %v", errUtils.ErrSSHKeyUsage, err)
-		}
-
-		// We have an SSH key - decode it.
-		raw, err := base64.StdEncoding.DecodeString(sshKey)
-		if err != nil {
-			return fmt.Errorf("%w: failed to decode SSH key: %v", errUtils.ErrSSHKeyUsage, err)
-		}
-
-		// Create a temp file for the key and ensure it is removed.
-		fh, err := os.CreateTemp("", "go-getter")
-		if err != nil {
-			return fmt.Errorf("%w: failed to create temp file for SSH key: %v", errUtils.ErrSSHKeyUsage, err)
-		}
-		sshKeyFile = fh.Name()
-		defer func() {
-			if err := os.Remove(sshKeyFile); err != nil && !os.IsNotExist(err) {
-				log.Trace("Failed to remove temporary SSH key file", "error", err, "file", sshKeyFile)
-			}
-		}()
-
-		// Set the permissions prior to writing the key material.
-		if err := os.Chmod(sshKeyFile, sshKeyFileMode); err != nil {
-			return fmt.Errorf("%w: failed to set SSH key file permissions: %v", errUtils.ErrSSHKeyUsage, err)
-		}
-
-		// Write the raw key into the temp file.
-		_, err = fh.Write(raw)
-		if closeErr := fh.Close(); closeErr != nil {
-			log.Trace("Failed to close temporary SSH key file", "error", closeErr, "file", sshKeyFile)
-		}
-		if err != nil {
-			return fmt.Errorf("%w: failed to write SSH key to temp file: %v", errUtils.ErrSSHKeyUsage, err)
-		}
+	sshKeyFile, cleanupKey, err := prepareGitSSHKey(ctx, sshKey)
+	if err != nil {
+		return err
 	}
+	defer cleanupKey()
 
 	// Clone or update the repository
-	_, err := os.Stat(dst)
+	_, err = os.Stat(dst)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -271,10 +240,17 @@ func setupGitEnv(cmd *exec.Cmd, sshKeyFile string) {
 
 // In the case an error happens.
 func getRunCommand(cmd *exec.Cmd) error {
+	restricted, err := guard.Enabled("source")
+	if err != nil {
+		return err
+	}
+	if restricted {
+		cmd.Args = append([]string{cmd.Args[0], "-c", "http.followRedirects=false", "-c", "protocol.ext.allow=never"}, cmd.Args[1:]...)
+	}
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
-	err := cmd.Run()
+	err = cmd.Run()
 	if err == nil {
 		return nil
 	}
@@ -760,6 +736,16 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 
 // fetchSubmodules downloads any configured submodules recursively.
 func (g *CustomGitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile string, depth int) error {
+	restricted, err := guard.Enabled("source")
+	if err != nil {
+		return err
+	}
+	if restricted {
+		if _, err := os.Stat(filepath.Join(dst, ".gitmodules")); err == nil {
+			return fmt.Errorf("%w: recursive submodule sources require explicit vendoring under source policies", errUtils.ErrPolicyInputUnavailable)
+		}
+		return nil
+	}
 	args := []string{"submodule", "update", "--init", "--recursive"}
 	if depth > 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))

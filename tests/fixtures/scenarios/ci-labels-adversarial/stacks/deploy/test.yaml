@@ -1,0 +1,27 @@
+import:
+  - catalog/preview
+
+vars:
+  stage: test
+
+metadata:
+  labels:
+    ci_preview: !ci.labels [preview]
+
+components:
+  terraform:
+    preview:
+      metadata:
+        component: mock
+        inherits:
+          - preview-defaults
+    disabled:
+      metadata:
+        component: mock
+        inherits:
+          - preview-defaults
+        labels:
+          preview: false
+      settings:
+        pro:
+          enabled: false

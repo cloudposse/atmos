@@ -19,6 +19,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/ui"
 	markdown "github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -618,7 +619,7 @@ func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, f
 //
 // Color detection is the single shared pipeline: init() runs setupColorProfileFromEnv()
 // and ui.InitFormatter() from process-level facts (env vars, os.Args, fd TTY state) with
-// no atmos.yaml required; configureEarlyColorProfile() refines from the parsed flags; the
+// no atmos.yaml required; startup.ConfigureEarlyColorProfile() refines from the parsed flags; the
 // renderer then inherits the resulting global profile via ui.NewRenderer(). Help must
 // render correctly even when the Atmos configuration is missing or invalid.
 func applyColoredHelpTemplate(cmd *cobra.Command) {
@@ -629,7 +630,7 @@ func applyColoredHelpTemplateForTopic(cmd *cobra.Command, topic helpTopicRequest
 	defer perf.Track(nil, "cmd.applyColoredHelpTemplateForTopic")()
 
 	// Refine the global color profile from the parsed --no-color/--force-color flags.
-	configureEarlyColorProfile(cmd)
+	startup.ConfigureEarlyColorProfile(cmd)
 
 	// Bind a renderer to the help writer using the globally detected profile.
 	// The root help function starts explicit cast recording before help renders;

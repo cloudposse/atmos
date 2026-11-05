@@ -12,6 +12,8 @@ func TestCatalog(t *testing.T) {
 	require.NotEmpty(t, tags)
 
 	expectedTags := []string{
+		CILabels,
+		Starlark,
 		Exec,
 		Secret,
 		Store,
@@ -43,6 +45,7 @@ func TestCatalog(t *testing.T) {
 		AwsCallerIdentityUserID,
 		AwsRegion,
 		AwsOrganizationID,
+		AwsCloudFormationOutput,
 		Emulator,
 		Version,
 		Tags,
@@ -81,6 +84,7 @@ func TestAtmosConfigYAML(t *testing.T) {
 	require.NotEmpty(t, configTags)
 
 	expected := []string{
+		"!cel",
 		"!env",
 		"!exec",
 		"!include",
@@ -98,6 +102,7 @@ func TestAtmosConfigYAML(t *testing.T) {
 		"!cwd",
 		"!random",
 		"!unset",
+		"!literal",
 	}
 
 	assert.Equal(t, expected, configTags)
@@ -110,4 +115,48 @@ func TestAtmosConfigYAML(t *testing.T) {
 	assert.False(t, IsAtmosConfigYAML("!terraform.output"))
 	assert.False(t, IsAtmosConfigYAML("!envv"))
 	assert.False(t, IsAtmosConfigYAML("!!str"))
+}
+
+func TestScaffoldYAML(t *testing.T) {
+	scaffoldTags := ScaffoldYAML()
+	require.NotEmpty(t, scaffoldTags)
+
+	expected := []string{
+		"!include",
+		"!include.raw",
+		"!env",
+		"!random",
+		"!cwd",
+		"!repo-root",
+		"!git.root",
+		"!git.sha",
+		"!git.branch",
+		"!git.ref",
+		"!git.repository",
+		"!git.owner",
+		"!git.name",
+		"!git.host",
+		"!git.url",
+		"!literal",
+	}
+
+	assert.Equal(t, expected, scaffoldTags)
+	for _, tag := range expected {
+		assert.True(t, IsValidYAML(tag), "expected %s to be in the full YAML catalog", tag)
+		assert.True(t, IsScaffoldYAML(tag), "expected %s to be valid in scaffold.yaml", tag)
+	}
+
+	// !exec is deliberately excluded (unlike AtmosConfigYAML, which includes
+	// it) -- see ScaffoldYAML's own doc comment: scaffold.yaml is resolved
+	// for every configured template just to populate `atmos scaffold list`,
+	// so allowing shell execution here would let any configured template run
+	// code merely by being listed.
+	assert.False(t, IsScaffoldYAML("!exec"))
+	// !unset is excluded too -- scaffold.yaml has no stack-inheritance chain
+	// for it to override.
+	assert.False(t, IsScaffoldYAML("!unset"))
+	assert.False(t, IsScaffoldYAML("!store"))
+	assert.False(t, IsScaffoldYAML("!terraform.output"))
+	assert.False(t, IsScaffoldYAML("!envv"))
+	assert.False(t, IsScaffoldYAML("!!str"))
 }

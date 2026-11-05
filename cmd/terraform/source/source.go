@@ -5,6 +5,7 @@ package source
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	sourcecmd "github.com/cloudposse/atmos/pkg/provisioner/source/cmd"
 )
 
@@ -33,10 +34,35 @@ Commands:
 
 func init() {
 	// Add subcommands from shared package.
-	sourceCmd.AddCommand(sourcecmd.PullCommand(terraformConfig))
-	sourceCmd.AddCommand(sourcecmd.ListCommand(terraformConfig))
-	sourceCmd.AddCommand(sourcecmd.DescribeCommand(terraformConfig))
-	sourceCmd.AddCommand(sourcecmd.DeleteCommand(terraformConfig))
+	pullCmd := sourcecmd.PullCommand(terraformConfig)
+	internal.RegisterCommandMetadata(
+		pullCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/source/pull"),
+	)
+	sourceCmd.AddCommand(pullCmd)
+	listCmd := sourcecmd.ListCommand(terraformConfig)
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/source/list"),
+	)
+	sourceCmd.AddCommand(listCmd)
+	describeCmd := sourcecmd.DescribeCommand(terraformConfig)
+	internal.RegisterCommandMetadata(
+		describeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/source/describe"),
+	)
+	sourceCmd.AddCommand(describeCmd)
+	deleteCmd := sourcecmd.DeleteCommand(terraformConfig)
+	internal.RegisterCommandMetadata(
+		deleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/source/delete"),
+	)
+	sourceCmd.AddCommand(deleteCmd)
+	internal.RegisterCommandMetadata(
+		sourceCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/source"),
+		internal.WithExample("examples/source-provisioning", "Source Provisioning"),
+	)
 }
 
 // GetSourceCommand returns the source command for parent registration.

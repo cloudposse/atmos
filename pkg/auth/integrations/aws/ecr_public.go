@@ -83,18 +83,9 @@ func (e *ECRPublicIntegration) Execute(ctx context.Context, creds types.ICredent
 
 	log.Debug("Logging in to ECR Public registry", "registry", awsCloud.ECRPublicRegistryURL)
 
-	// Use injected auth function or real one.
-	getToken := e.getAuthToken
-	if getToken == nil {
-		getToken = func(ctx context.Context, creds types.ICredentials) (*awsCloud.ECRPublicAuthResult, error) {
-			return awsCloud.GetPublicAuthorizationToken(ctx, creds)
-		}
-	}
-
-	// Get authorization token from ECR Public (always uses us-east-1).
-	result, err := getToken(ctx, creds)
+	result, err := e.ExchangeCredentials(ctx, creds)
 	if err != nil {
-		return fmt.Errorf("%w: failed to get ECR Public token: %w", errUtils.ErrECRPublicAuthFailed, err)
+		return err
 	}
 
 	// Write credentials to Docker config.
@@ -103,11 +94,38 @@ func (e *ECRPublicIntegration) Execute(ctx context.Context, creds types.ICredent
 	}
 
 	// Log success with actual expiration time.
-	expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
-	ui.Success(fmt.Sprintf("ECR Public login: %s (expires in %s)", awsCloud.ECRPublicRegistryURL, expiresIn))
-	log.Debug("ECR Public login successful", "registry", awsCloud.ECRPublicRegistryURL, "expires_at", result.ExpiresAt)
+	message := fmt.Sprintf("ECR Public login: %s", awsCloud.ECRPublicRegistryURL)
+	if result.Expiration != nil {
+		message += fmt.Sprintf(" (expires in %s)", time.Until(*result.Expiration).Round(time.Minute))
+	}
+	ui.Success(message)
+	log.Debug("ECR Public login successful", "registry", awsCloud.ECRPublicRegistryURL, "expires_at", result.Expiration)
 
 	return nil
+}
+
+// ExchangeCredentials mints ECR Public credentials without writing Docker state.
+func (e *ECRPublicIntegration) ExchangeCredentials(ctx context.Context, creds types.ICredentials) (*types.OCICredentials, error) {
+	defer perf.Track(nil, "aws.ECRPublicIntegration.ExchangeCredentials")()
+
+	getToken := e.getAuthToken
+	if getToken == nil {
+		getToken = func(ctx context.Context, creds types.ICredentials) (*awsCloud.ECRPublicAuthResult, error) {
+			return awsCloud.GetPublicAuthorizationToken(ctx, creds)
+		}
+	}
+	result, err := getToken(ctx, creds)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to get ECR Public token: %w", errUtils.ErrECRPublicAuthFailed, err)
+	}
+	if result == nil {
+		return nil, errUtils.ErrIdentityCredentialsNone
+	}
+	credentials := &types.OCICredentials{Registry: awsCloud.ECRPublicRegistryURL, Username: result.Username, Password: result.Password}
+	if !result.ExpiresAt.IsZero() {
+		credentials.Expiration = &result.ExpiresAt
+	}
+	return credentials, nil
 }
 
 // Cleanup removes the Docker auth entry written by Execute for the ECR Public registry.

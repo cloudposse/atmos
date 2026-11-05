@@ -413,6 +413,19 @@ func TestProcessArgsAndFlags_AllStringFlagsDefs(t *testing.T) {
 			inputArgsAndFlags: []string{"plan", "vpc", "--redirect-stderr=/tmp/stderr.log"},
 			want:              schema.ArgsAndFlagsInfo{SubCommand: "plan", ComponentFromArg: "vpc", RedirectStdErr: "/tmp/stderr.log"},
 		},
+		// Logging color is an Atmos option and must not reach Terraform.
+		{
+			name:              "logs-color equals form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--logs-color=false"},
+			want:              schema.ArgsAndFlagsInfo{SubCommand: "plan", ComponentFromArg: "vpc", LogsColor: "false"},
+		},
+		{
+			name:              "logs-color bare boolean",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--logs-color"},
+			want:              schema.ArgsAndFlagsInfo{SubCommand: "plan", ComponentFromArg: "vpc", LogsColor: "true"},
+		},
 		// LogsFileFlag.
 		{
 			name:              "logs-file equals form",

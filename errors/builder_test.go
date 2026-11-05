@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -592,4 +593,39 @@ func TestErrorBuilder_WithCausef(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuilderWithLocation(t *testing.T) {
+	err := Build(ErrInvalidStack).
+		WithTitle("Stack Error").
+		WithLocation("stacks/deploy/ue2-dev.yaml", 42).
+		WithExitCode(3).
+		Err()
+
+	location, ok := GetLocation(fmt.Errorf("outer: %w", err))
+	require.True(t, ok, "wrapping must not hide the location")
+	assert.Equal(t, Location{File: "stacks/deploy/ue2-dev.yaml", Line: 42}, location)
+
+	// The location is metadata: message, sentinel, title, and exit code are unchanged.
+	assert.Equal(t, "invalid stack", err.Error())
+	assert.True(t, errors.Is(err, ErrInvalidStack))
+	assert.Equal(t, "Stack Error", GetTitle(err))
+	assert.Equal(t, 3, GetExitCode(err))
+	assert.NotContains(t, Format(err, DefaultFormatterConfig()), "ue2-dev.yaml", "formatting does not print the location")
+}
+
+func TestBuilderWithLocationEdgeCases(t *testing.T) {
+	_, ok := GetLocation(Build(ErrInvalidStack).Err())
+	assert.False(t, ok, "no location unless one is recorded")
+
+	_, ok = GetLocation(Build(ErrInvalidStack).WithLocation("", 9).Err())
+	assert.False(t, ok, "a location needs a file")
+
+	location, ok := GetLocation(Build(ErrInvalidStack).WithLocation("atmos.yaml", -4).Err())
+	require.True(t, ok)
+	assert.Equal(t, Location{File: "atmos.yaml"}, location, "an unknown line is recorded as 0")
+
+	_, ok = GetLocation(nil)
+	assert.False(t, ok)
+	assert.Empty(t, GetTitle(Build(ErrInvalidStack).Err()), "the default title is empty")
 }

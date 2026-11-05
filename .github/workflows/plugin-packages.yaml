@@ -1,0 +1,69 @@
+name: Official plugin packages
+on:
+  workflow_call:
+permissions:
+  contents: read
+env:
+  ATMOS_CI: 'true'
+  CGO_ENABLED: '0'
+  GOWORK: 'off'
+  GOFLAGS: '-trimpath -buildvcs=false'
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+          path: ${{ runner.temp }}/release-tools
+          add-to-path: 'true'
+      - uses: ./.github/actions/setup-go-cache
+        with:
+          cache: 'false'
+      - name: Check plugin releases
+        env:
+          GOCACHE: ${{ runner.temp }}/plugin-go-build
+          GOMODCACHE: ${{ runner.temp }}/plugin-go-mod
+        run: atmos plugin release --inventory plugins/releases.yaml --check
+
+  release:
+    needs: check
+    if: github.repository == 'cloudposse/atmos' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: plugin-release
+    concurrency:
+      group: official-plugin-releases
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+          path: ${{ runner.temp }}/release-tools
+          add-to-path: 'true'
+      - uses: ./.github/actions/setup-go-cache
+        with:
+          cache: 'false'
+      - name: Publish plugin releases and reconcile the catalog
+        env:
+          GOCACHE: ${{ runner.temp }}/plugin-go-build
+          GOMODCACHE: ${{ runner.temp }}/plugin-go-mod
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_GITHUB_USERNAME: ${{ github.actor }}
+        run: >-
+          atmos plugin release --inventory plugins/releases.yaml
+          --sign --yes --verify-public --catalog cloudposse

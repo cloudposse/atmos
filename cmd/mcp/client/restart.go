@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
@@ -66,5 +67,9 @@ var restartCmd = &cobra.Command{
 }
 
 func init() {
+	internal.RegisterCommandMetadata(
+		restartCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/mcp/restart"),
+	)
 	mcpcmd.McpCmd.AddCommand(restartCmd)
 }

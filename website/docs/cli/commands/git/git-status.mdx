@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: status
 description: Show the working tree status of a managed Git repository or a local path.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -82,3 +84,16 @@ atmos git status flux-deploy | grep '^ M'
 - [`atmos git diff`](/cli/commands/git/diff) — show the actual content changes
 - [`atmos git list`](/cli/commands/git/list) — list configured repositories (`--check-status` shares this status probe)
 - [Git Configuration](/cli/configuration/git) — repository fields and defaults
+
+## Try it out
+
+<TryExample example="gitops">
+
+Requires Git and network access. Clone the public demo repository, then inspect its managed checkout. A fresh, unchanged checkout has no diff. These commands do not commit or push.
+
+```shell
+atmos git clone deploy
+atmos git status deploy
+```
+
+</TryExample>

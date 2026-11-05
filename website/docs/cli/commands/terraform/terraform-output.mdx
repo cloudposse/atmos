@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: output
 description: Read Terraform output values for an Atmos component from the state file
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -345,6 +347,21 @@ Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error
         ```
     </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Requires Terraform and network access for provider downloads and the public weather API. The example writes a local weather cache file; no cloud credentials are needed. Apply and destroy prompt for confirmation.
+
+```shell
+atmos terraform init station -s dev
+atmos terraform apply station -s dev
+atmos terraform output station -s dev
+atmos terraform destroy station -s dev
+```
+
+</TryExample>
 
 ## Related Commands
 

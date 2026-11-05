@@ -1,0 +1,33 @@
+---
+title: YAML Function Settings
+sidebar_label: functions
+sidebar_class_name: command
+description: Configure evaluation of YAML functions in stack manifests.
+id: settings-functions
+slug: /cli/configuration/settings/functions
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+The `settings.functions` section configures how Atmos evaluates YAML functions in stack manifests.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  functions:
+    exec:
+      max_concurrency: 1
+```
+</File>
+
+## Sections
+
+<dl>
+  <dt>[`exec`](/cli/configuration/settings/functions/exec)</dt>
+  <dd>Set the maximum number of ordinary `!exec` expressions that can run concurrently during a document evaluation.</dd>
+</dl>

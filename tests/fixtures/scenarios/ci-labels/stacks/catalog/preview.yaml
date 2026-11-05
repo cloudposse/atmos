@@ -1,0 +1,13 @@
+components:
+  terraform:
+    preview-defaults:
+      metadata:
+        type: abstract
+        component: mock
+        labels:
+          preview: !ci.labels [preview]
+      settings:
+        pro:
+          enabled: !ci.labels [preview]
+      vars:
+        ci_labels: !ci.labels

@@ -1,0 +1,74 @@
+# The Fogg migration guide's configuration, assembled verbatim from website/docs/migration/fogg.mdx.
+base_path: .
+components:
+  terraform:
+    base_path: terraform
+    auto_generate_backend_file: false
+    auto_generate_files: false
+    apply_auto_approve: false
+stacks:
+  base_path: stacks
+  included_paths:
+    - deploy/**/*
+
+commands:
+  - name: check-webserver
+    description: Check the development webserver without applying changes
+    steps:
+      - name: backend-identity
+        type: shell
+        command: aws --profile acme-state sts get-caller-identity
+      - name: provider-identity
+        type: shell
+        command: aws --profile acme-deploy sts get-caller-identity
+      - name: format
+        type: atmos
+        command: terraform fmt webserver -s development -check -diff
+      - name: initialize
+        type: atmos
+        command: terraform init webserver -s development
+      - name: lint
+        type: shell
+        working_directory: terraform/envs/development/webserver
+        command: tflint
+      - name: validate
+        type: atmos
+        command: terraform validate webserver -s development
+      - name: plan
+        type: shell
+        command: |
+          status=0
+          atmos terraform plan webserver -s development -detailed-exitcode || status=$?
+          case "$status" in
+            0|2) exit 0 ;;
+            *) exit "$status" ;;
+          esac
+
+auth:
+  integrations:
+    development-eks:
+      kind: aws/eks
+      via:
+        identity: dev-admin
+      spec:
+        cluster:
+          name: acme-development
+          region: us-west-2
+          alias: acme-development
+
+toolchain:
+  registries:
+    - name: internal-tools
+      type: atmos
+      priority: 150
+      tools:
+        acme/infra-check:
+          type: http
+          url: "https://artifacts.example.com/infra-check/{{.Version}}/{{.OS}}/{{.Arch}}/infra-check"
+
+stores:
+  outputs:
+    kind: aws/ssm
+    options:
+      region: us-east-1
+      prefix: /infra

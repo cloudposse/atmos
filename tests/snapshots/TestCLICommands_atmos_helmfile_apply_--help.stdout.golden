@@ -15,6 +15,10 @@ USAGE
     $ atmos helmfile apply [flags]
 
 
+ALIASES
+
+  apply, deploy
+
 FLAGS
 
   -h, --help  help for apply
@@ -22,3 +26,5 @@ FLAGS
 
 
 Use --help=usage for examples or --help=all for all flags and full help.
+
+  Documentation: https://atmos.tools/cli/commands/helmfile/usage

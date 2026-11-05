@@ -50,3 +50,39 @@ func TestContextWriteRecordsMaskedOutput(t *testing.T) {
 		t.Fatalf("recorder did not receive mask replacement: %q", rec.data)
 	}
 }
+
+func TestRecordMarker(t *testing.T) {
+	tests := []struct {
+		name       string
+		install    bool
+		label      string
+		wantStream string
+		wantData   string
+	}{
+		{name: "records label on marker stream", install: true, label: "checkpoint-1", wantStream: "m", wantData: "checkpoint-1"},
+		{name: "empty label is ignored", install: true, label: "", wantStream: "", wantData: ""},
+		{name: "no recorder installed is a no-op", install: false, label: "checkpoint-1", wantStream: "", wantData: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &testRecorder{}
+			if tt.install {
+				restore := SetRecorder(rec)
+				defer restore()
+			} else {
+				restore := SetRecorder(nil)
+				defer restore()
+			}
+
+			RecordMarker(tt.label)
+
+			if rec.stream != tt.wantStream {
+				t.Errorf("stream = %q, want %q", rec.stream, tt.wantStream)
+			}
+			if rec.data != tt.wantData {
+				t.Errorf("data = %q, want %q", rec.data, tt.wantData)
+			}
+		})
+	}
+}

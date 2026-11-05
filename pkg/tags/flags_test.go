@@ -1,6 +1,18 @@
 package tags
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	cockroachErrors "github.com/cockroachdb/errors"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
 
 func TestParseTagsFlag(t *testing.T) {
 	tests := []struct {
@@ -29,16 +41,28 @@ func TestParseTagsFlag(t *testing.T) {
 	}
 }
 
+// TestParseLabelsFlag exercises ParseLabelsFlag with input shaped the way pflag's
+// StringSlice flag type hands it over: comma-separated pairs within one --labels
+// occurrence and pairs from repeated occurrences arrive as separate slice elements.
 func TestParseLabelsFlag(t *testing.T) {
-	t.Run("empty string returns nil", func(t *testing.T) {
-		got, err := ParseLabelsFlag("")
+	t.Run("nil input returns nil", func(t *testing.T) {
+		got, err := ParseLabelsFlag(nil)
 		if err != nil || got != nil {
-			t.Fatalf("ParseLabelsFlag(\"\") = %v, %v; want nil, nil", got, err)
+			t.Fatalf("ParseLabelsFlag(nil) = %v, %v; want nil, nil", got, err)
 		}
 	})
 
-	t.Run("multiple pairs are split and trimmed", func(t *testing.T) {
-		got, err := ParseLabelsFlag("cost-center=platform, compliance = sox")
+	t.Run("empty slice returns nil", func(t *testing.T) {
+		got, err := ParseLabelsFlag([]string{})
+		if err != nil || got != nil {
+			t.Fatalf("ParseLabelsFlag([]string{}) = %v, %v; want nil, nil", got, err)
+		}
+	})
+
+	t.Run("multiple pairs within one occurrence are split and trimmed", func(t *testing.T) {
+		// ParseLabelsFlag receives two separate pairs and trims whitespace
+		// around the second pair's key and value.
+		got, err := ParseLabelsFlag([]string{"cost-center=platform", " compliance = sox"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -53,8 +77,8 @@ func TestParseLabelsFlag(t *testing.T) {
 		}
 	})
 
-	t.Run("blank segments between commas are skipped", func(t *testing.T) {
-		got, err := ParseLabelsFlag("cost-center=platform,,compliance=sox")
+	t.Run("blank elements are skipped", func(t *testing.T) {
+		got, err := ParseLabelsFlag([]string{"cost-center=platform", "", "compliance=sox"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -70,7 +94,7 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 
 	t.Run("value containing an additional equals sign", func(t *testing.T) {
-		got, err := ParseLabelsFlag("key=val=ue")
+		got, err := ParseLabelsFlag([]string{"key=val=ue"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -86,7 +110,7 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 
 	t.Run("colon separator pairs", func(t *testing.T) {
-		got, err := ParseLabelsFlag("cost-center:platform, compliance : sox")
+		got, err := ParseLabelsFlag([]string{"cost-center:platform", " compliance : sox"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -102,7 +126,7 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 
 	t.Run("mixed equals and colon separators", func(t *testing.T) {
-		got, err := ParseLabelsFlag("cost-center:platform,compliance=sox")
+		got, err := ParseLabelsFlag([]string{"cost-center:platform", "compliance=sox"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -118,7 +142,7 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 
 	t.Run("colon first splits on colon", func(t *testing.T) {
-		got, err := ParseLabelsFlag("key:val=ue")
+		got, err := ParseLabelsFlag([]string{"key:val=ue"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -128,7 +152,7 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 
 	t.Run("equals first splits on equals", func(t *testing.T) {
-		got, err := ParseLabelsFlag("key=val:ue")
+		got, err := ParseLabelsFlag([]string{"key=val:ue"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -138,25 +162,25 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 
 	t.Run("missing separator errors", func(t *testing.T) {
-		if _, err := ParseLabelsFlag("cost-center"); err == nil {
+		if _, err := ParseLabelsFlag([]string{"cost-center"}); err == nil {
 			t.Fatal("expected error for missing separator")
 		}
 	})
 
 	t.Run("empty key errors", func(t *testing.T) {
-		if _, err := ParseLabelsFlag("=platform"); err == nil {
+		if _, err := ParseLabelsFlag([]string{"=platform"}); err == nil {
 			t.Fatal("expected error for empty key")
 		}
 	})
 
 	t.Run("empty key via colon errors", func(t *testing.T) {
-		if _, err := ParseLabelsFlag(":platform"); err == nil {
+		if _, err := ParseLabelsFlag([]string{":platform"}); err == nil {
 			t.Fatal("expected error for empty key")
 		}
 	})
 
-	t.Run("duplicate keys: last value wins", func(t *testing.T) {
-		got, err := ParseLabelsFlag("tier=foundational,tier=edge")
+	t.Run("duplicate keys across repeated occurrences: last value wins", func(t *testing.T) {
+		got, err := ParseLabelsFlag([]string{"tier=foundational", "tier=edge"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -166,8 +190,8 @@ func TestParseLabelsFlag(t *testing.T) {
 		}
 	})
 
-	t.Run("whitespace-only segment is skipped like an empty one", func(t *testing.T) {
-		got, err := ParseLabelsFlag("  ,tier=edge")
+	t.Run("whitespace-only element is skipped like an empty one", func(t *testing.T) {
+		got, err := ParseLabelsFlag([]string{"  ", "tier=edge"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -176,4 +200,204 @@ func TestParseLabelsFlag(t *testing.T) {
 			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
 		}
 	})
+
+	t.Run("malformed pair error names the pair, the default source, and carries a hint", func(t *testing.T) {
+		for _, input := range []string{"ci=auto,cost-center", "=platform", ":platform"} {
+			_, err := ParseLabelsFlag([]string{input})
+			if err == nil {
+				t.Fatalf("ParseLabelsFlag(%q): expected error", input)
+			}
+			if !errors.Is(err, errUtils.ErrInvalidFlag) {
+				t.Fatalf("ParseLabelsFlag(%q) error %v does not wrap ErrInvalidFlag", input, err)
+			}
+			if !strings.Contains(err.Error(), "for --labels") {
+				t.Fatalf("ParseLabelsFlag(%q) error %q does not name the --labels source", input, err)
+			}
+			if hints := cockroachErrors.GetAllHints(err); len(hints) != 1 || !strings.Contains(hints[0], "key=value") {
+				t.Fatalf("ParseLabelsFlag(%q) hints = %v, want one key=value hint", input, hints)
+			}
+		}
+	})
+
+	// A scalar Viper value (e.g. ATMOS_LABELS="a=1,b=2", or a plain string set via
+	// viper.Set) reaches ParseRunOptions through ReadLabelsFlag, which wraps
+	// the whole comma-separated string in a single slice element -- unlike pflag's
+	// own StringSlice.Set, which comma-splits before ParseLabelsFlag ever sees it.
+	// Regression test for both pairs being dropped/mangled into one bad entry.
+	t.Run("single element with embedded comma from a scalar Viper value is split", func(t *testing.T) {
+		got, err := ParseLabelsFlag([]string{"a=1,b=2"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"a": "1", "b": "2"}
+		if len(got) != len(want) {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", k, got[k], v)
+			}
+		}
+	})
+}
+
+// TestParseLabelsFlagFrom verifies that labels parse like ParseLabelsFlag and that errors name the given source.
+func TestParseLabelsFlagFrom(t *testing.T) {
+	const source = "--labels (or ATMOS_LABELS)"
+
+	t.Run("valid input parses like ParseLabelsFlag", func(t *testing.T) {
+		got, err := ParseLabelsFlagFrom("ci=auto, team:platform,ci=manual", source)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"ci": "manual", "team": "platform"}
+		if len(got) != len(want) || got["ci"] != want["ci"] || got["team"] != want["team"] {
+			t.Fatalf("ParseLabelsFlagFrom() = %v, want %v (duplicate keys are last-wins)", got, want)
+		}
+	})
+
+	t.Run("empty input returns nil", func(t *testing.T) {
+		got, err := ParseLabelsFlagFrom("", source)
+		if err != nil || got != nil {
+			t.Fatalf("ParseLabelsFlagFrom(\"\") = %v, %v; want nil, nil", got, err)
+		}
+	})
+
+	t.Run("error contains the caller-supplied source and the offending pair", func(t *testing.T) {
+		_, err := ParseLabelsFlagFrom("ci=auto,oops", source)
+		if err == nil {
+			t.Fatal("expected error for missing separator")
+		}
+		if !errors.Is(err, errUtils.ErrInvalidFlag) {
+			t.Fatalf("error %v does not wrap ErrInvalidFlag", err)
+		}
+		for _, want := range []string{source, `"oops"`, "expected key=value or key:value"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("error %q does not contain %q", err, want)
+			}
+		}
+		hints := cockroachErrors.GetAllHints(err)
+		if len(hints) != 1 || !strings.Contains(hints[0], "--labels=ci=auto,team=platform") {
+			t.Fatalf("hints = %v, want one hint with an example", hints)
+		}
+	})
+
+	t.Run("empty key error names the pair and source", func(t *testing.T) {
+		_, err := ParseLabelsFlagFrom("=platform", source)
+		if err == nil {
+			t.Fatal("expected error for empty key")
+		}
+		if !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), `"=platform"`) {
+			t.Fatalf("error %q should contain the source and the pair", err)
+		}
+	})
+}
+
+// TestParseLabelsFlag_PflagStringSliceRepeatAccumulates proves the end-to-end contract that
+// motivated switching --labels from a plain string flag to a pflag StringSlice flag: repeating
+// --labels on the command line now ACCUMULATES pairs from every occurrence (matching --tags'
+// existing behavior) instead of the last occurrence silently overwriting all previous ones, while
+// a single occurrence still accepts a comma-separated list of pairs exactly as before.
+func TestParseLabelsFlag_PflagStringSliceRepeatAccumulates(t *testing.T) {
+	t.Run("repeated --labels occurrences accumulate rather than overwrite", func(t *testing.T) {
+		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		fs.StringSlice("labels", nil, "")
+
+		err := fs.Parse([]string{"--labels", "a=1", "--labels", "b=2"})
+		if err != nil {
+			t.Fatalf("unexpected parse error: %v", err)
+		}
+
+		raw, err := fs.GetStringSlice("labels")
+		if err != nil {
+			t.Fatalf("unexpected error reading flag: %v", err)
+		}
+
+		got, err := ParseLabelsFlag(raw)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"a": "1", "b": "2"}
+		if len(got) != len(want) || got["a"] != want["a"] || got["b"] != want["b"] {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v (both occurrences must survive, not just the last)", got, want)
+		}
+	})
+
+	t.Run("single occurrence still accepts a comma-separated list", func(t *testing.T) {
+		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		fs.StringSlice("labels", nil, "")
+
+		err := fs.Parse([]string{"--labels=a=1,b=2"})
+		if err != nil {
+			t.Fatalf("unexpected parse error: %v", err)
+		}
+
+		raw, err := fs.GetStringSlice("labels")
+		if err != nil {
+			t.Fatalf("unexpected error reading flag: %v", err)
+		}
+
+		got, err := ParseLabelsFlag(raw)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"a": "1", "b": "2"}
+		if len(got) != len(want) || got["a"] != want["a"] || got["b"] != want["b"] {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("mixing repeated occurrences and comma-separated pairs within an occurrence both accumulate", func(t *testing.T) {
+		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		fs.StringSlice("labels", nil, "")
+
+		err := fs.Parse([]string{"--labels=a=1,b=2", "--labels", "c=3"})
+		if err != nil {
+			t.Fatalf("unexpected parse error: %v", err)
+		}
+
+		raw, err := fs.GetStringSlice("labels")
+		if err != nil {
+			t.Fatalf("unexpected error reading flag: %v", err)
+		}
+
+		got, err := ParseLabelsFlag(raw)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"a": "1", "b": "2", "c": "3"}
+		if len(got) != len(want) {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", k, got[k], v)
+			}
+		}
+	})
+}
+
+func TestReadLabelsFlag(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input any
+		want  []string
+	}{
+		{name: "absent"},
+		{name: "scalar spaces", input: "team = platform,owner=platform engineering", want: []string{"team = platform,owner=platform engineering"}},
+		{name: "string slice", input: []string{"team = platform", "owner=platform engineering"}, want: []string{"team = platform", "owner=platform engineering"}},
+		{name: "config list", input: []any{"team = platform", "owner=platform engineering"}, want: []string{"team = platform", "owner=platform engineering"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := viper.New()
+			v.Set("labels", tc.input)
+			got := ReadLabelsFlag(v)
+			assert.Equal(t, tc.want, got)
+			labels, err := ParseLabelsFlag(got)
+			require.NoError(t, err)
+			if tc.input != nil {
+				assert.Equal(t, map[string]string{"team": "platform", "owner": "platform engineering"}, labels)
+			}
+		})
+	}
 }

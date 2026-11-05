@@ -14,6 +14,8 @@ entire job is exposing tools?
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 `ai.tools.enabled` was designed for [`atmos ai chat`](/cli/commands/ai/chat)/`ask`/`exec` — Atmos's own assistant deciding
@@ -78,6 +80,18 @@ these under `ai.tools`, rename them before upgrading. If you were relying on `al
 skip confirmation for a subset of tools *while still allowing everything else to run with a
 prompt*, note the semantics changed: an unlisted tool is no longer registered at all. Move it to
 an empty `allowed` (or drop the list) and lean on `restricted`/`blocked` instead.
+
+## Try it out
+
+<TryExample example="mcp-for-ai-coding-assistants">
+
+Inspect the MCP configuration before exporting it to your coding assistant. The README covers server dependencies and client setup.
+
+```shell
+atmos mcp export
+```
+
+</TryExample>
 
 See [AI Tools Configuration](/cli/configuration/ai/tools) for the full reference.
 

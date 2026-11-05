@@ -45,7 +45,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
-				Model:     "gemini-2.5-flash",
+				Model:     DefaultModel,
 				APIKey:    "",
 				MaxTokens: 8192,
 			},
@@ -104,7 +104,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   true,
-				Model:     "gemini-2.5-flash",
+				Model:     DefaultModel,
 				APIKey:    "my-gemini-api-key-value",
 				MaxTokens: 8192,
 			},
@@ -123,7 +123,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   true,
-				Model:     "gemini-2.5-flash",
+				Model:     DefaultModel,
 				APIKey:    "",
 				MaxTokens: 32768,
 			},
@@ -192,7 +192,7 @@ func TestClientGetters(t *testing.T) {
 func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "gemini", ProviderName)
 	assert.Equal(t, 8192, DefaultMaxTokens)
-	assert.Equal(t, "gemini-2.5-flash", DefaultModel)
+	assert.Equal(t, "gemini-3.8-flash", DefaultModel)
 	assert.Equal(t, "GEMINI_API_KEY", DefaultAPIKeyEnvVar)
 }
 
@@ -802,4 +802,29 @@ func TestGeminiMaxTokensVariations(t *testing.T) {
 			assert.Equal(t, tt.expected, client.GetMaxTokens())
 		})
 	}
+}
+
+func TestParseGeminiResponse_CountsThoughtsTokensAsOutput(t *testing.T) {
+	response := &genai.GenerateContentResponse{
+		Candidates: []*genai.Candidate{
+			{
+				Content:      &genai.Content{Parts: []*genai.Part{{Text: "Answer"}}},
+				FinishReason: genai.FinishReasonStop,
+			},
+		},
+		UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
+			PromptTokenCount:     10,
+			CandidatesTokenCount: 5,
+			ThoughtsTokenCount:   20,
+			TotalTokenCount:      35,
+		},
+	}
+
+	result, err := parseGeminiResponse(response)
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(10), result.Usage.InputTokens)
+	assert.Equal(t, int64(25), result.Usage.OutputTokens)
+	assert.Equal(t, int64(35), result.Usage.TotalTokens)
 }

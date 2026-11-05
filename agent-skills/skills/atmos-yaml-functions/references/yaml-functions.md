@@ -4,8 +4,40 @@ YAML functions are the recommended way to add dynamic behavior to Atmos stack co
 They use YAML explicit tags (the `!` prefix) and execute after YAML parsing, making them
 type-safe, predictable, and unable to break YAML syntax.
 
-All YAML functions support Go template expressions in their arguments. Atmos processes
-templates first, then executes the YAML functions.
+Post-merge stack value functions can use component template results in their arguments.
+Load-time functions and merge directives run earlier; function names alone do not imply support
+in every file or field.
+
+## Scope and evaluation
+
+| Context | Functions and timing |
+| --- | --- |
+| `atmos.yaml`, `atmos.d`, profiles | Native `!env`, `!exec`, `!include`, `!include.raw`, `!git.*`, `!repo-root`, `!cwd`, `!random`, `!literal`, `!unset` during loading; sequence `!append` during merging |
+| `ai.skills.<name>.ref` | Also supports scalar `!version`, deferred to skill source resolution |
+| Resolved stack values | Stack functions run after merging/templates, except load-time include/literal handling and merge-time `!append` |
+| Stack import paths | Consumed before final component context exists; post-merge value functions cannot compute import paths |
+| Workflow manifests | Load-time `!include`, `!include.raw`, `!literal`; other functions require a specific runtime field |
+| Workflow interactive `default`, `prompt`, `placeholder`, `options` | `!env` and `!exec` before execution |
+| CEL-capable workflow/stack step conditions | Native `!cel` or a CEL string at condition evaluation; not a general stack-value function |
+| CLI configuration/custom command conditions | Native `!cel` at condition evaluation; plain CEL strings remain supported. Quoted `!cel` prefixes require an edition before 2026-10-20 |
+| Custom commands / hooks | Their host config/stack loader runs first, then typed step handling; do not assume all workflow field behavior applies |
+| Vendor/component vendoring manifests | No Atmos YAML-function evaluation; vendor templates are separate |
+| Scaffold manifests | Load-time include/literal/env/git/cwd/random functions; no `!exec` |
+
+Native tags and quoted strings are not interchangeable. With edition `2026-10-20` or later,
+including an unpinned project, automatic stack function evaluation requires native YAML tags.
+Quoted function-looking strings remain data. Earlier editions retain selected stack string
+forms, including `!env`, `!terraform.state`, `!cwd`, and `!random`. CLI configuration functions
+and load-time directives require native tags; condition fields have their own CEL handling.
+Use `!literal` for stack scalar text that must bypass evaluation.
+
+`--process-functions=false` skips deferred evaluation, not includes or merge directives already
+processed while loading. Plain `!include` treats nested content as data; use its documented
+`| eval` option explicitly when evaluation is intended. Imported stack manifests instead
+participate in the stack pipeline.
+
+Run `atmos doctor --only yaml-functions` for static name/scope diagnostics. It does not execute
+functions, validate external resources, or prove that dynamic inputs will resolve.
 
 ## `!labels` — Component metadata lookup
 
@@ -330,6 +362,11 @@ output: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -
 - Complex types (lists, maps) must be returned as JSON strings
 - Atmos automatically decodes JSON output into YAML types
 - Prefer `!terraform.output` or `!terraform.state` over `!exec atmos terraform output`
+- Configure `settings.functions.exec.max_concurrency` in `atmos.yaml`: a positive integer, default `1`.
+  A value above `1` allows ordinary `!exec` expressions within a document evaluation to overlap up to the limit.
+  Results retain their original location and decoded type. No new YAML tag or group is needed.
+- Users own shell side effects and dependencies between commands; Atmos does not detect them.
+  Cancellation stops outstanding execution, failures identify the YAML location, and `--skip=exec` still skips execution.
 
 ## `!include`
 
@@ -458,6 +495,34 @@ users: [!literal "{{external.email}}", !literal "{{external.admin}}"]
 # Regex patterns
 pattern: !literal "^[a-z]+\\d{3}$"
 ```
+
+### Step fields
+
+In `atmos.yaml` custom commands, workflows, and hooks, `!literal` also works on the step fields `script`, `command`,
+`interpreter`, `working_directory`, `timeout`, and individual `env` values (plain-string steps, command-level `env`, and
+`env` on `parallel`/`matrix` parents included). On any other step field it fails config load, naming the field and
+step (checked for custom-command steps). `script: !include.raw file.star` is used exactly as written; `!include` is
+still rendered as a template.
+
+## `!starlark`
+
+Compute typed values with the Atmos Automation Language (Starlark) from the component's effective configuration.
+
+```yaml
+vars:
+  label: !starlark |
+    return "%s/%s" % (ctx.vars["stage"], ctx.settings.get("owner", "platform"))
+```
+
+- Works in stack manifests only. Atmos rejects it in `atmos.yaml`, profiles, and imported config, naming the file and key.
+- `ctx` sections: `vars`, `metadata`, `settings`, `env`, `locals`; plus `ctx.stack`, `ctx.component`,
+  `ctx.component_type`. Attribute access works on `ctx` itself; inside a section use `["key"]` or `.get("key")`.
+- Selective commands (`list ... --columns`, `describe stacks --sections/--query`, `describe component --query`)
+  evaluate only the fields a value reads through bounded forms: `ctx.<section>["key"]`, `.get("literal"[, default])`,
+  nested chains, and the identity fields. A bare section (`dict(ctx.vars)`, `json.encode(ctx.vars)`, iteration,
+  aliasing), a computed key, `get` with a non-literal key, `items()/keys()/values()`, `ctx` passed to a function,
+  unknown fields, or unparsable source falls back to full evaluation. A full `describe component` evaluates everything.
+- `describe stacks` rejects a computed stack identity; `terraform generate varfiles` and `generate backends` accept it.
 
 ## `!random`
 

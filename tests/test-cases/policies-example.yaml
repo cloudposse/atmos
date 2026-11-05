@@ -1,0 +1,139 @@
+# yaml-language-server: $schema=schema.json
+# Exercise the distributed example, including denial before any component or tool exists.
+tests:
+  - name: policies example check
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["policy", "check"]
+    expect:
+      stderr:
+        - "Policy bundle is valid"
+        - "Rules: 1"
+        - "Hooks: 0"
+      exit_code: 0
+
+  - name: policies example check json
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["policy", "check", "--format", "json"]
+    expect:
+      stdout:
+        - "\"valid\": true"
+        - "\"rules\": 1"
+      exit_code: 0
+
+  - name: policies example list
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["policy", "list"]
+    expect:
+      stdout:
+        - "local-safety/deny-destroy"
+      exit_code: 0
+
+  - name: policies example fixtures
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["policy", "test", "tests/cases.json"]
+    expect:
+      stdout:
+        - "about permitted"
+        - "destroy denied"
+        - "helmfile destroy permitted"
+        - "similarly named command permitted"
+      exit_code: 0
+
+  - name: policies example allowed
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["about", "--explain"]
+    expect:
+      stderr:
+        - "local-safety/deny-destroy"
+        - "not_applicable"
+      exit_code: 0
+
+  - name: policies example destroy
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["terraform", "destroy", "demo", "-s", "local", "--explain"]
+    expect:
+      stderr:
+        - "local-safety/deny-destroy"
+        - "Destructive Terraform operations are disabled in this example"
+      exit_code: 77
+
+  - name: policies example plan
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["terraform", "plan", "demo", "-s", "local", "-destroy", "--explain"]
+    expect:
+      stderr:
+        - "local-safety/deny-destroy"
+        - "Destructive Terraform operations are disabled in this example"
+      exit_code: 77
+
+  - name: policies example apply
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["terraform", "apply", "demo", "-s", "local", "-destroy", "--explain"]
+    expect:
+      stderr:
+        - "local-safety/deny-destroy"
+        - "Destructive Terraform operations are disabled in this example"
+      exit_code: 77
+
+  - name: policies example deploy
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["terraform", "deploy", "demo", "-s", "local", "-destroy", "--explain"]
+    expect:
+      stderr:
+        - "local-safety/deny-destroy"
+        - "Destructive Terraform operations are disabled in this example"
+      exit_code: 77

@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -423,78 +422,6 @@ func createArtifactZip(data io.Reader, metadata *artifact.Metadata) ([]byte, err
 	return buf.Bytes(), nil
 }
 
-// listArtifacts calls GET /repos/{owner}/{repo}/actions/artifacts with pagination params.
-func (s *Store) listArtifacts(ctx context.Context, perPage, page int) (*listArtifactsResponse, int, error) {
-	var lastErr error
-	for attempt := 1; attempt <= listArtifactsMaxAttempts; attempt++ {
-		result, err := s.listArtifactsOnce(ctx, perPage, page)
-		if err == nil {
-			return result.response, result.nextPage, nil
-		}
-		lastErr = err
-		if result == nil || !result.retryable || attempt == listArtifactsMaxAttempts {
-			break
-		}
-		if err := sleepBeforeListRetry(ctx, attempt); err != nil {
-			return nil, 0, err
-		}
-	}
-
-	return nil, 0, lastErr
-}
-
-func sleepBeforeListRetry(ctx context.Context, attempt int) error {
-	delay := listArtifactsRetryBaseDelay * time.Duration(1<<(attempt-1))
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-func isRetryableListArtifactsStatus(statusCode int) bool {
-	return statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
-}
-
-func (s *Store) listArtifactsOnce(ctx context.Context, perPage, page int) (*listArtifactsAttemptResult, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/actions/artifacts?per_page=%d&page=%d", s.baseURL, s.owner, s.repo, perPage, page)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return &listArtifactsAttemptResult{retryable: false}, fmt.Errorf("failed to create list artifacts request: %w", err)
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return &listArtifactsAttemptResult{retryable: false}, fmt.Errorf("failed to list artifacts: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return &listArtifactsAttemptResult{
-			retryable: isRetryableListArtifactsStatus(resp.StatusCode),
-		}, fmt.Errorf("%w: status %d: %s", errUtils.ErrArtifactListFailed, resp.StatusCode, string(body))
-	}
-
-	var result listArtifactsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return &listArtifactsAttemptResult{retryable: false}, fmt.Errorf("failed to decode list artifacts response: %w", err)
-	}
-
-	nextPage := parseNextPage(resp.Header.Get("Link"))
-
-	return &listArtifactsAttemptResult{
-		response: &result,
-		nextPage: nextPage,
-	}, nil
-}
-
 // downloadArtifactURL calls GET /repos/{owner}/{repo}/actions/artifacts/{id}/zip
 // with redirect-following disabled and returns the Location header URL.
 func (s *Store) downloadArtifactURL(ctx context.Context, artifactID int64) (string, error) {
@@ -716,15 +643,13 @@ func (s *Store) fetchBlob(ctx context.Context, url string) ([]byte, error) {
 func (s *Store) findArtifact(ctx context.Context, key string) (*githubArtifact, error) {
 	artifactName := s.artifactName(key)
 
-	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
+	matches, err := s.findArtifactsByName(ctx, artifactName)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to list artifacts for download: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
-	for i := range resp.Artifacts {
-		if resp.Artifacts[i].Name == artifactName {
-			return &resp.Artifacts[i], nil
-		}
+	if len(matches) > 0 {
+		return &matches[0], nil
 	}
 
 	return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
@@ -812,19 +737,17 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 
 	artifactName := s.artifactName(key)
 
-	// List artifacts to find the one matching our key.
-	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
+	// Look up the artifact matching our key by exact name.
+	matches, err := s.findArtifactsByName(ctx, artifactName)
 	if err != nil {
 		return fmt.Errorf("%w: failed to list artifacts for deletion: %w", errUtils.ErrArtifactDeleteFailed, err)
 	}
 
-	for _, a := range resp.Artifacts {
-		if a.Name == artifactName {
-			if err := s.deleteArtifact(ctx, a.ID); err != nil {
-				return fmt.Errorf("%w: failed to delete artifact: %w", errUtils.ErrArtifactDeleteFailed, err)
-			}
-			return nil
+	if len(matches) > 0 {
+		if err := s.deleteArtifact(ctx, matches[0].ID); err != nil {
+			return fmt.Errorf("%w: failed to delete artifact: %w", errUtils.ErrArtifactDeleteFailed, err)
 		}
+		return nil
 	}
 
 	return nil // Already deleted or never existed.
@@ -837,47 +760,10 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 	// Convert query to a prefix for filtering.
 	prefix := s.queryToPrefix(query)
 
-	var files []artifact.ArtifactInfo
-	page := 1
-
-	for {
-		resp, nextPage, err := s.listArtifacts(ctx, githubPaginationLimit, page)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrArtifactListFailed, err)
-		}
-
-		for _, a := range resp.Artifacts {
-			name := a.Name
-
-			// If a prefix is configured, only include matching artifacts and strip it.
-			key := s.stripArtifactPrefix(name)
-			if key == "" {
-				continue
-			}
-			key = desanitizeKey(key)
-
-			// Check prefix match.
-			if prefix != "" && !hasPrefix(key, prefix) {
-				continue
-			}
-
-			files = append(files, artifact.ArtifactInfo{
-				Name:         key,
-				Size:         a.SizeInBytes,
-				LastModified: a.CreatedAt,
-			})
-		}
-
-		if nextPage == 0 {
-			break
-		}
-		page = nextPage
+	files, err := s.listWithRunFallback(ctx, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrArtifactListFailed, err)
 	}
-
-	// Sort by last modified (newest first).
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].LastModified.After(files[j].LastModified)
-	})
 
 	return files, nil
 }
@@ -905,18 +791,12 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 
 	artifactName := s.artifactName(key)
 
-	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
+	matches, err := s.findArtifactsByName(ctx, artifactName)
 	if err != nil {
 		return false, fmt.Errorf("%w: failed to check artifact existence: %w", errUtils.ErrArtifactListFailed, err)
 	}
 
-	for _, a := range resp.Artifacts {
-		if a.Name == artifactName {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return len(matches) > 0, nil
 }
 
 // GetMetadata retrieves metadata for an artifact.
@@ -925,23 +805,20 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*artifact.Metadata
 
 	artifactName := s.artifactName(key)
 
-	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
+	matches, err := s.findArtifactsByName(ctx, artifactName)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get artifact metadata: %w", errUtils.ErrArtifactListFailed, err)
 	}
 
-	for _, a := range resp.Artifacts {
-		if a.Name == artifactName {
-			// Return basic metadata from artifact info.
-			// Full metadata would require downloading the artifact.
-			meta := &artifact.Metadata{}
-			meta.CreatedAt = a.CreatedAt
-			meta.ExpiresAt = func() *time.Time {
-				t := a.ExpiresAt
-				return &t
-			}()
-			return meta, nil
-		}
+	if len(matches) > 0 {
+		a := matches[0]
+		// Return basic metadata from artifact info.
+		// Full metadata would require downloading the artifact.
+		meta := &artifact.Metadata{}
+		meta.CreatedAt = a.CreatedAt
+		expiresAt := a.ExpiresAt
+		meta.ExpiresAt = &expiresAt
+		return meta, nil
 	}
 
 	return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)

@@ -13,6 +13,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -112,7 +113,7 @@ func resolveGlobCacheTTL() time.Duration {
 	if v == "" {
 		return ttl
 	}
-	d, err := time.ParseDuration(v)
+	d, err := duration.ParseString(v)
 	if err != nil || d <= 0 {
 		return ttl
 	}

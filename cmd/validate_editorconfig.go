@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
@@ -16,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -210,29 +210,12 @@ func applyEditorConfigColorOverride(cmd *cobra.Command, atmosConfig *schema.Atmo
 	}
 }
 
-// editorConfigDisableOverride pairs a --disable-* flag name with the
-// atmos.yaml source field and vendored-checker target field it feeds when the
-// flag was not set explicitly.
-type editorConfigDisableOverride struct {
-	flagName string
-	source   *bool
-	target   *bool
-}
-
 // applyEditorConfigDisableOverrides applies atmos.yaml fallbacks for each
 // --disable-* flag whenever the corresponding flag was not set explicitly.
 func applyEditorConfigDisableOverrides(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) {
-	overrides := []editorConfigDisableOverride{
-		{"disable-trim-trailing-whitespace", &atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace, &cliConfig.Disable.TrimTrailingWhitespace},
-		{"disable-end-of-line", &atmosConfig.Validate.EditorConfig.DisableEndOfLine, &cliConfig.Disable.EndOfLine},
-		{"disable-insert-final-newline", &atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline, &cliConfig.Disable.InsertFinalNewline},
-		{"disable-indentation", &atmosConfig.Validate.EditorConfig.DisableIndentation, &cliConfig.Disable.Indentation},
-		{"disable-indent-size", &atmosConfig.Validate.EditorConfig.DisableIndentSize, &cliConfig.Disable.IndentSize},
-		{"disable-max-line-length", &atmosConfig.Validate.EditorConfig.DisableMaxLineLength, &cliConfig.Disable.MaxLineLength},
-	}
-	for _, override := range overrides {
-		if !cmd.Flags().Changed(override.flagName) && *override.source {
-			*override.target = *override.source
+	for _, override := range validateReport.EditorConfigDisableOverrides(&atmosConfig.Validate.EditorConfig, &cliConfig) {
+		if !cmd.Flags().Changed(override.FlagName) && *override.Source {
+			*override.Target = *override.Source
 		}
 	}
 }
@@ -334,11 +317,7 @@ func runEditorConfigForFiles(cmd *cobra.Command, selectedFiles []string, exclude
 
 	// Dry-run mode - just list files without spinner.
 	if config.DryRun {
-		filePaths, err := files.GetFiles(config)
-		if err != nil {
-			return err
-		}
-		filePaths, err = filterEditorConfigFiles(filePaths, selectedFiles, excludes)
+		filePaths, err := editorConfigFilePaths(&config, selectedFiles, excludes)
 		if err != nil {
 			return err
 		}
@@ -360,11 +339,7 @@ func runEditorConfigForFiles(cmd *cobra.Command, selectedFiles []string, exclude
 		"EditorConfig validation passed",
 		func() error {
 			var validationErr error
-			filePaths, validationErr = files.GetFiles(config)
-			if validationErr != nil {
-				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, validationErr)
-			}
-			filePaths, validationErr = filterEditorConfigFiles(filePaths, selectedFiles, excludes)
+			filePaths, validationErr = editorConfigFilePaths(&config, selectedFiles, excludes)
 			if validationErr != nil {
 				return validationErr
 			}
@@ -451,11 +426,7 @@ func writeEditorConfigSARIFOutput(cmd *cobra.Command, report validateReport.Repo
 }
 
 func validateEditorConfigForFiles(config *config.Config, selectedFiles []string, excludes []string) ([]er.ValidationErrors, error) {
-	filePaths, err := files.GetFiles(*config)
-	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, err)
-	}
-	filePaths, err = filterEditorConfigFiles(filePaths, selectedFiles, excludes)
+	filePaths, err := editorConfigFilePaths(config, selectedFiles, excludes)
 	if err != nil {
 		return nil, err
 	}
@@ -467,35 +438,15 @@ func validateEditorConfigForFiles(config *config.Config, selectedFiles []string,
 	return validationErrors, nil
 }
 
-func filterEditorConfigFiles(filePaths []string, selectedFiles []string, excludes []string) ([]string, error) {
-	selected := make(map[string]struct{}, len(selectedFiles))
-	for _, file := range selectedFiles {
-		absolute, err := filepath.Abs(filepath.FromSlash(file))
-		if err == nil {
-			selected[filepath.Clean(absolute)] = struct{}{}
-		}
+// editorConfigFilePaths lists the files to validate under the working directory: the shared
+// Git-aware selection with the atmos.yaml exclude globs applied, narrowed to selectedFiles
+// when a selection is given.
+func editorConfigFilePaths(config *config.Config, selectedFiles, excludes []string) ([]string, error) {
+	filePaths, err := validateReport.EditorConfigFiles(".", config, excludes)
+	if err != nil {
+		return nil, err
 	}
-	filtered := make([]string, 0, len(filePaths))
-	for _, file := range filePaths {
-		remaining, err := validateReport.ExcludePaths([]string{file}, excludes)
-		if err != nil {
-			return nil, err
-		}
-		if len(remaining) == 0 {
-			continue
-		}
-		if selectedFiles == nil {
-			filtered = append(filtered, file)
-			continue
-		}
-		absolute, err := filepath.Abs(file)
-		if err == nil {
-			if _, ok := selected[filepath.Clean(absolute)]; ok {
-				filtered = append(filtered, file)
-			}
-		}
-	}
-	return filtered, nil
+	return validateReport.SelectEditorConfigFiles(filePaths, selectedFiles), nil
 }
 
 func editorConfigDiagnostics(validationErrors []er.ValidationErrors) validateReport.Report {
@@ -584,4 +535,8 @@ func init() {
 	}
 	// Add command
 	validateCmd.AddCommand(editorConfigCmd)
+	internal.RegisterCommandMetadata(
+		editorConfigCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/validate/editorconfig"),
+	)
 }

@@ -37,6 +37,7 @@ import (
 // lookup rather than a central switch. New already matches providers.Constructor.
 func init() {
 	providers.Register(providers.TrackSops, New)
+	providers.RegisterLocations(providers.TrackSops, possibleLocations)
 }
 
 const (
@@ -515,7 +516,8 @@ func (p *sopsProvider) keyGroups(file string) ([]sops.KeyGroup, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSopsRecipients, err)
 	}
-	confPath, err := sopsconfig.FindConfigFile(filepath.Dir(abs))
+	// SOPS discovery uses path.Dir (slash paths); rule matching uses native filepath paths.
+	confPath, err := sopsconfig.FindConfigFile(filepath.ToSlash(abs))
 	if err != nil {
 		return nil, fmt.Errorf("%w: no `spec.age_recipients` and no .sops.yaml found for %q: %w", ErrSopsRecipients, file, err)
 	}

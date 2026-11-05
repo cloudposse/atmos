@@ -1,12 +1,15 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -41,7 +44,7 @@ func TestUnmarshalYAMLFromFile(t *testing.T) {
 	mock := httpmock.NewGitHubMockServer(t)
 
 	// Register the remote file content that the fixture expects.
-	// The fixture uses: !include https://raw.githubusercontent.com/.../stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings.
+	// The fixture includes the remote component settings through the local mock URL.
 	mock.RegisterFile("stack-templates-2/stacks/deploy/nonprod.yaml", `
 components:
   terraform:
@@ -61,10 +64,17 @@ components:
 	t.Cleanup(func() { TestHTTPClient = oldClient })
 
 	stacksPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-include-yaml-function")
-	file := filepath.Join(stacksPath, "stacks", "deploy", "nonprod.yaml")
+	file := filepath.Join(stacksPath, "stacks", "deploy", "nonprod.yaml.tmpl")
 
 	yamlFileContent, err := os.ReadFile(file)
-	assert.Nil(t, err)
+	require.NoError(t, err)
+
+	// Unmarshalling starts after stack templates have been rendered.
+	t.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", mock.URL())
+	stackTemplate, err := template.New(filepath.Base(file)).Funcs(template.FuncMap{"env": os.Getenv}).Parse(string(yamlFileContent))
+	require.NoError(t, err)
+	var rendered bytes.Buffer
+	require.NoError(t, stackTemplate.Execute(&rendered, nil))
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: stacksPath,
@@ -73,7 +83,7 @@ components:
 		},
 	}
 
-	manifest, err := UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, string(yamlFileContent), file)
+	manifest, err := UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, rendered.String(), file)
 	assert.Nil(t, err)
 
 	expected := `components:

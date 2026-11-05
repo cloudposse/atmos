@@ -36,7 +36,7 @@ docs:
         source: .
         enabled: true
         format: "markdown"
-        show_providers: false
+        show_providers: true
         show_inputs: true
         show_outputs: true
         sort_by: "name"

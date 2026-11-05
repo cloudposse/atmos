@@ -1,0 +1,4 @@
+# Imported as a required object entry (fail closed) from atmos.yaml. If this file were missing or
+# malformed, configuration loading would abort instead of silently continuing.
+logs:
+  level: Info

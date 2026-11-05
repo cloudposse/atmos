@@ -1,0 +1,369 @@
+[
+  {
+    "name": "at threshold",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "over threshold",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          },
+          {
+            "address": "terraform_data.example",
+            "mode": "managed",
+            "type": "terraform_data",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "empty",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": []
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "no-op",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "no-op"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {
+      "kind": "operation",
+      "input": {}
+    },
+    "status": "not_applicable"
+  }
+]

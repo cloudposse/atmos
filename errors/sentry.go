@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -51,6 +52,12 @@ func InitializeSentry(config *schema.SentryConfig) error {
 
 // CloseSentry flushes any pending Sentry events and closes the client.
 func CloseSentry() {
+	if reporter := currentReporter(); reporter != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), CloseSentryTimeout)
+		defer cancel()
+		reporter.Flush(ctx)
+		return
+	}
 	sentry.Flush(CloseSentryTimeout)
 }
 
@@ -58,6 +65,10 @@ func CloseSentry() {
 // This uses BuildSentryReport which automatically handles PII-free reporting, stack traces, and safe details.
 func CaptureError(err error) {
 	if err == nil {
+		return
+	}
+	if reporter := currentReporter(); reporter != nil {
+		reporter.Capture(err, nil)
 		return
 	}
 
@@ -77,7 +88,7 @@ func CaptureError(err error) {
 		}
 
 		// Extract and set hints as breadcrumbs.
-		hints := errors.GetAllHints(err)
+		hints := AllHints(err)
 		for _, hint := range hints {
 			scope.AddBreadcrumb(&sentry.Breadcrumb{
 				Type:     "info",
@@ -104,6 +115,10 @@ func CaptureErrorWithContext(err error, context map[string]string) {
 	if err == nil {
 		return
 	}
+	if reporter := currentReporter(); reporter != nil {
+		reporter.Capture(err, context)
+		return
+	}
 
 	// Build Sentry report using cockroachdb/errors native support.
 	event, extraDetails := errors.BuildSentryReport(err)
@@ -124,7 +139,7 @@ func CaptureErrorWithContext(err error, context map[string]string) {
 		}
 
 		// Extract and set hints as breadcrumbs.
-		hints := errors.GetAllHints(err)
+		hints := AllHints(err)
 		for _, hint := range hints {
 			scope.AddBreadcrumb(&sentry.Breadcrumb{
 				Type:     "info",

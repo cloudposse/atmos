@@ -310,7 +310,7 @@ func TestProcessFileEntry_DryRunMatrixExpansion(t *testing.T) {
 		IsTemplate:  true,
 		Permissions: 0o644,
 	}
-	spec := FileSpecByPath(scaffoldConfig)["deploy.yaml"]
+	spec := FileSpecByPath(scaffoldConfig, []templates.File{file})["deploy.yaml"]
 
 	mergedValues := map[string]interface{}{
 		"regions_by_env": map[string]interface{}{
@@ -321,7 +321,7 @@ func TestProcessFileEntry_DryRunMatrixExpansion(t *testing.T) {
 	}
 
 	successCount, errorCount, failedPaths, err := ui.processFileEntry(
-		file, spec, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string),
+		file, spec, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string), make(map[string]matrixExpansionResult),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 4, successCount, "all four surviving matrix rows must be counted, matching the real run")
@@ -380,7 +380,7 @@ func TestProcessFileEntry_DryRunMatrixExpansion(t *testing.T) {
 // and resets ui.output before returning).
 func TestGenerationSummaryLine(t *testing.T) {
 	assert.Equal(t, "Generated 3 files.\n", generationSummaryLine(false, 3, 0))
-	assert.Equal(t, "Generated 3 files. Failed to generate 1 files.\n", generationSummaryLine(false, 3, 1))
+	assert.Equal(t, "Generated 3 files. Failed to generate 1 file.\n", generationSummaryLine(false, 3, 1))
 	assert.Equal(t, "Would generate 3 files.\n", generationSummaryLine(true, 3, 0))
 	assert.Equal(t, "Would generate 3 files. 1 would fail.\n", generationSummaryLine(true, 3, 1))
 }
@@ -389,7 +389,7 @@ func TestGenerationSummaryLine(t *testing.T) {
 // combinations executeWithCommandValues's post-run summary line can print.
 func TestInitializationSummaryLine(t *testing.T) {
 	assert.Equal(t, "Initialized 3 files.\n", initializationSummaryLine(false, 3, 0))
-	assert.Equal(t, "Initialized 3 files. Failed to initialize 1 files.\n", initializationSummaryLine(false, 3, 1))
+	assert.Equal(t, "Initialized 3 files. Failed to initialize 1 file.\n", initializationSummaryLine(false, 3, 1))
 	assert.Equal(t, "Would initialize 3 files.\n", initializationSummaryLine(true, 3, 0))
 	assert.Equal(t, "Would initialize 3 files. 1 would fail.\n", initializationSummaryLine(true, 3, 1))
 }
@@ -413,7 +413,7 @@ func TestProcessMatrixedFileEntry_ZeroRowsWritesSkipLine(t *testing.T) {
 	scaffoldConfig := &config.ScaffoldConfig{}
 
 	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
-		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string),
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string), make(map[string]matrixExpansionResult),
 	)
 
 	assert.Equal(t, 0, successCount)
@@ -447,7 +447,7 @@ func TestProcessMatrixedFileEntry_DedupesFailedPathPerEntry(t *testing.T) {
 	scaffoldConfig := &config.ScaffoldConfig{}
 
 	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
-		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string), make(map[string]matrixExpansionResult),
 	)
 
 	assert.Equal(t, 1, successCount)
@@ -525,7 +525,7 @@ func TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath(t *testing.T) 
 	scaffoldConfig := &config.ScaffoldConfig{}
 
 	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
-		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string), make(map[string]matrixExpansionResult),
 	)
 
 	assert.Equal(t, 0, successCount)

@@ -1,0 +1,13 @@
+import:
+  - catalog/vpc
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    app:
+      vars: {}
+      settings:
+        depends_on:
+          - component: vpc

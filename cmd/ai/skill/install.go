@@ -55,6 +55,10 @@ var installCmd = &cobra.Command{
 		skipConfirm := v.GetBool("yes")
 		path := v.GetString("path")
 
+		if handled, err := runDeclared(cmd, args, v); handled {
+			return err
+		}
+
 		// Create installer.
 		installer, err := marketplace.NewInstaller(version.Version)
 		if err != nil {
@@ -134,7 +138,7 @@ func init() {
 		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
 		flags.WithEnvVars("yes", "ATMOS_AI_SKILL_YES"),
-		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: ~/.atmos/skills). Relative paths resolve against CWD, e.g. --path .github/skills for VS Code/Copilot auto-discovery."),
+		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: .atmos/skills/content; --scope user: ~/.atmos/skills/content). Relative paths resolve against CWD, e.g. --path .github/skills for VS Code/Copilot auto-discovery."),
 		flags.WithEnvVars("path", "ATMOS_AI_SKILL_PATH"),
 		flags.WithStringSliceFlag(clientFlag, "c", nil, "AI client to distribute the skill to (repeatable): claude-code, vscode, gemini"),
 		flags.WithEnvVars(clientFlag, "ATMOS_AI_SKILL_CLIENT"),
@@ -150,6 +154,7 @@ func init() {
 
 	// Register flags on the command.
 	installParser.RegisterFlags(installCmd)
+	sourceFlags().RegisterFlags(installCmd)
 
 	// Bind flags to Viper for environment variable support.
 	if err := installParser.BindToViper(viper.GetViper()); err != nil {

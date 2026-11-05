@@ -4,6 +4,7 @@ package devcontainer
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -68,4 +69,8 @@ func init() {
 
 	initCommandWithFlags(attachCmd, attachParser)
 	devcontainerCmd.AddCommand(attachCmd)
+	internal.RegisterCommandMetadata(
+		attachCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/devcontainer/attach"),
+	)
 }

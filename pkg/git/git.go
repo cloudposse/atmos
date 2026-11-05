@@ -76,7 +76,13 @@ func ParseGenericGitURL(repoUrl string) (GitURLParts, bool) {
 }
 
 func GetLocalRepo() (*git.Repository, error) {
-	localPath := "."
+	return GetLocalRepoAt(".")
+}
+
+// GetLocalRepoAt opens the repository containing dir, searching parent directories for the
+// repository root, without depending on the process working directory.
+func GetLocalRepoAt(dir string) (*git.Repository, error) {
+	localPath := dir
 
 	localRepo, err := git.PlainOpenWithOptions(localPath, &git.PlainOpenOptions{
 		DetectDotGit:          true,
@@ -289,7 +295,12 @@ func GetCurrentBranch() (string, error) {
 
 // GetRoot returns the absolute root path of the current Git worktree.
 func GetRoot() (string, error) {
-	repo, err := GetLocalRepo()
+	return GetRootAt(".")
+}
+
+// GetRootAt returns the absolute root path of the Git worktree containing dir.
+func GetRootAt(dir string) (string, error) {
+	repo, err := GetLocalRepoAt(dir)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrLocalRepoFetch, err)
 	}

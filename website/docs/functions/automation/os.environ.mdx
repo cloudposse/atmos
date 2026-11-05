@@ -1,0 +1,44 @@
+---
+title: "os.environ"
+sidebar_position: 17
+sidebar_label: "os.environ"
+sidebar_class_name: command
+description: Take a read-only snapshot of the effective execution environment.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `os.environ` function returns a frozen dictionary containing a snapshot of the environment used by the script's child processes.
+</Intro>
+
+## Usage
+
+```python
+os.environ()
+```
+
+Keys and values are strings. The snapshot includes inherited configuration, declared environment overrides,
+changes made with [`os.setenv`](/functions/automation/os.setenv), and tool directories added to `PATH` by
+[`dependencies.tools`](/functions/automation/dependencies.tools). It preserves explicitly empty values.
+If a variable appears more than once, its last value wins. On Windows, names are normalized to uppercase.
+
+Each call creates an independent, read-only snapshot. Later environment changes do not update an earlier snapshot.
+Per-call `env=` overrides apply only to that process and do not affect this snapshot.
+The [`env`](/functions/automation/env) global continues to contain only explicitly declared step inputs.
+
+## Examples
+
+```python
+before = os.environ()
+os.setenv("REGION", "us-east-1")
+after = os.environ()
+print(after["REGION"])
+```
+
+Avoid printing the entire environment, which can contain credentials.
+
+## Related
+
+- [`os.getenv`](/functions/automation/os.getenv) reads a single variable with an optional fallback.
+- [`os.setenv`](/functions/automation/os.setenv) changes a variable for subsequent calls.

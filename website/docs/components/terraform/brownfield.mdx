@@ -1,49 +1,37 @@
 ---
 title: Brownfield Considerations
-sidebar_position: 6
+sidebar_position: 7
 sidebar_label: Brownfield
 id: brownfield
+sidebar_group: component-library
+sidebar_parent: components/terraform/terraform
 ---
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-There are some considerations you should be aware of when adopting Atmos in a brownfield environment. Atmos works best when you adopt the [Atmos mindset](/learn/mindset).
+You can adopt Atmos with your existing Terraform root modules. Start with your current code, backend, and workspace, then introduce [architectural design patterns](/design-patterns) incrementally when they help your team.
 </Intro>
 
-The term "brownfield" comes from urban planning and refers to the redevelopment of land that was previously used and may need cleaning or modification. As it relates to infrastructure, [Brownfield development](https://en.wikipedia.org/wiki/Brownfield_(software_development)) describes the development and deployment of new software systems in the presence of existing (legacy) software applications/systems. Anytime this happens, new software architectures must take into account and coexist with the existing software.
-
-Atmos is not just a tool; it is a framework that provides a set of opinionated conventions, methodologies, design patterns, and best practices to ensure teams succeed with Terraform from the start. It can be hard to shoehorn existing systems that are not designed according to the [Atmos mindset](/learn/mindset).
-
-- **Decomposition**: Not only do you have challenges around how to decompose your architecture, but also the difficulty of making changes to live systems.
-- **Technical Debt:** You may have significant technical debt that needs to be addressed
-- **Knowledge Gaps**: There may be gaps in knowledge within the team regarding Atmos conventions and methodologies.
-
-By understanding these challenges, teams can better prepare for a smooth transition to using Atmos effectively.
+A brownfield environment contains existing infrastructure and workflows. Adding Atmos does not require rewriting Terraform, recreating resources, or decomposing a root module first. Follow the [native Terraform migration guide](/migration/native-terraform) to configure Atmos around what you already have.
 
 ## Brownfield Development in Atmos
 
-Atmos is easier for new organizations or "greenfield" environments because you need to architect Terraform according to
-our [best practices](/best-practices/components) to get all the benefits of Atmos. For example, when using our [Terraform components](https://github.com/cloudposse/terraform-aws-components), we frequently use [Terraform Remote State](/stacks/remote-state) to retrieve the outputs from other components.
+Begin with one root module and one environment:
 
-This works well when you use our components but less so when you operate in a "brownfield" environment, for example,
-with an existing VPC, S3 bucket, or IAM role.
+1. Point `components.terraform.base_path` in `atmos.yaml` at the directory containing your existing root modules. Moving them into `components/terraform` is optional.
+2. Define a stack and its component inputs. You can [include existing `.tfvars` files](/migration/native-terraform#step-4-create-your-first-stack).
+3. Preserve the existing backend type, state location, and Terraform workspace. Use component `metadata.terraform_workspace` when you need to select an existing workspace explicitly. If the module already declares its backend, disable `components.terraform.auto_generate_backend_file` to avoid a duplicate backend declaration.
+4. Compare the Atmos plan with your existing Terraform plan before switching execution.
 
-When you approach brownfield development with Atmos, begin by designing what your architecture could look like if you break it down into various pieces. Then devise a plan to decompose those pieces into components you implement as Terraform "root modules".
-
-The process of configuring Atmos components and stacks for the existing, already provisioned resources, will depend on how easy or hard this decomposition will be. Working on and updating existing infrastructure rather than creating a new one from scratch, known as "greenfield" development, will always be more difficult.
-
-The process needs to respect the existing systems' constraints while progressively introducing improvements and modern practices. This will ultimately lead to more robust, flexible, and efficient systems.
+Reusable, independently deployable components and shared stack configuration can provide more benefits over time. Treat decomposition as a separate architectural improvement: changes to resource addresses or state boundaries need their own migration plan. Our [component best practices](/best-practices/components) and [Atmos mindset](/learn/mindset) explain the recommended patterns; they are not prerequisites for adoption.
 
 ## Remote State in Brownfield Development
 
-So what happens when infrastructure wasn't provisioned by Atmos or predates your infrastructure? Then there's no way to retrieve that state in Terraform.
+Terraform can read existing remote state regardless of whether Atmos originally orchestrated the deployment, provided you configure the correct backend and have access. You can also pass existing resource identifiers through variables or retrieve them with provider data sources.
 
-For this reason, we support something we refer to as the `static` remote state backend. Using the static remote state backend, you can
-populate a virtual state backend with the outputs as though it had been provisioned with Terraform. You can use this
-technique anytime you want to use the remote state functionality in Atmos, but when the remote state was provisioned
-elsewhere.
+When there is no accessible Terraform state containing the outputs you need, the Cloud Posse remote-state module supports a `static` backend. It supplies configured values through the same output interface used by components that consume that module. This is an optional integration pattern, not a requirement for adopting Atmos.
 
-### Hacking Remote State with `static` Backends
+### Providing Outputs with a `static` Backend {#hacking-remote-state-with-static-backends}
 
 
 Atmos supports brownfield configuration by using the remote state of type `static`.

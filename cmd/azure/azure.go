@@ -32,7 +32,10 @@ func init() {
 	azureCmd.AddCommand(aks.AksCmd)
 
 	// Register this command with the registry.
-	internal.Register(&AzureCommandProvider{})
+	internal.Register(
+		&AzureCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/azure/usage"),
+	)
 }
 
 // AzureCommandProvider implements the CommandProvider interface.

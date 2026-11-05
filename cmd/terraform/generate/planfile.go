@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -123,4 +124,8 @@ func init() {
 	planfileCmd.ValidArgsFunction = shared.ComponentsArgCompletion
 
 	GenerateCmd.AddCommand(planfileCmd)
+	internal.RegisterCommandMetadata(
+		planfileCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/generate/planfile"),
+	)
 }

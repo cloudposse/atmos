@@ -1,0 +1,63 @@
+---
+title: atmos plugin registry add
+sidebar_label: registry add
+sidebar_class_name: command
+id: registry-add
+description: Configure a registry host, repository discovery, or an optional catalog.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Configure a registry host, repository discovery, or an optional catalog.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin registry add --help" src="/casts/screengrabs/atmos-plugin-registry-add--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin registry add <name> [catalog] [--host=<host>] [--repository=<repository>] [--identity=<auth-identity>]
+```
+
+The command writes `plugins.registries.<name>` in the project's root `atmos.yaml`. It edits only that
+entry, so comments, blank lines, and the rest of the file are preserved.
+
+Adding a name that already exists **replaces the whole entry**. Keys you do not pass again, such as an
+earlier `identity` or `repositories` list, are removed, and Atmos prints a warning that names what was
+replaced. Use `atmos plugin registry list` before you overwrite an entry.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>name</code></dt>
+  <dd>Local registry alias. Lowercase letters, digits, hyphens, and underscores, starting with a letter.</dd>
+  <dt><code>catalog</code></dt>
+  <dd>Optional OCI reference for a published discovery snapshot. Alternatively, use <code>--catalog</code>.</dd>
+  <dt><code>--catalog</code></dt>
+  <dd>Optional catalog reference, equivalent to the positional catalog argument. Do not supply both.</dd>
+  <dt><code>--host</code></dt>
+  <dd>Registry authority, such as <code>registry.example.com</code> or <code>localhost:15557</code>. When omitted, it is inferred from the discovery inputs. All inputs must use the same host. A host-only entry can configure authentication without discovery.</dd>
+  <dt><code>--repository</code></dt>
+  <dd>OCI repository without a tag or digest. Repeat to index multiple repositories locally. Can coexist with a catalog; no shared catalog maintenance is required.</dd>
+  <dt><code>--identity</code>, <code>-i</code></dt>
+  <dd>Name of an identity in <code>auth.identities</code> used to authenticate to the registry host. This is the
+  global Atmos <code>--identity</code> flag, so the <code>ATMOS_IDENTITY</code> environment variable also
+  selects it; an explicit flag takes precedence. The identity must exist, and a value-less
+  <code>-i</code> (interactive selection) is rejected because a registry binds to one named identity.
+  <code>--identity=false</code> or <code>ATMOS_IDENTITY=false</code> means no identity. The binding applies to plugin
+  releases, discovery, publishing, and signatures on that host. Without an identity, Atmos records
+  <code>auth: docker</code> and uses the shared Docker and stored-credential chain (see
+  <a href="/cli/commands/plugin/registry-login#credential-precedence">credential precedence</a>).</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin registry add team --host=registry.example.com --repository=oci://registry.example.com/team/oidc --repository=oci://registry.example.com/team/credentials --identity=registry-reader
+atmos plugin registry add corporate oci://registry.example.com/team/catalog:stable --identity=registry-reader
+atmos plugin registry add publisher --host=publishing.example.com --identity=publisher
+ATMOS_IDENTITY=registry-reader atmos plugin registry add corporate oci://registry.example.com/team/catalog:stable
+```

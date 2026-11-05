@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -44,6 +45,20 @@ func initTestUI(t *testing.T) *bytes.Buffer {
 	ui.InitFormatter(ioCtx)
 
 	return stderr
+}
+
+// initTestDataWriter wires the data channel (stdout) to a captured buffer,
+// so GitHub Actions annotations written via pkg/data can be asserted on.
+func initTestDataWriter(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	stdout := &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: stdout, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
+	return stdout
 }
 
 // fakeProvider is a minimal ci provider.Provider whose Detect() result is
@@ -100,7 +115,11 @@ func TestPrintStartupStatus_NoOpWhenAlreadyShown(t *testing.T) {
 	assert.Empty(t, stderr.String())
 }
 
+// TestPrintStartupStatus_NoOpOutsideCI isolates provider detection from the inherited notice sentinel
+// and requires silence outside CI.
 func TestPrintStartupStatus_NoOpOutsideCI(t *testing.T) {
+	// Atmos custom commands pass this process-tree sentinel to test binaries.
+	t.Setenv(noticesShownEnvVar, "")
 	restore := ci.SwapRegistryForTest()
 	defer restore()
 	ci.Register(&fakeProvider{detected: false})
@@ -112,7 +131,11 @@ func TestPrintStartupStatus_NoOpOutsideCI(t *testing.T) {
 	assert.Empty(t, stderr.String())
 }
 
+// TestPrintStartupStatus_PrintsWhenInCI requires the version banner after isolating the inherited
+// process-tree notice sentinel.
 func TestPrintStartupStatus_PrintsWhenInCI(t *testing.T) {
+	// Atmos custom commands pass this process-tree sentinel to test binaries.
+	t.Setenv(noticesShownEnvVar, "")
 	restore := ci.SwapRegistryForTest()
 	defer restore()
 	ci.Register(&fakeProvider{detected: true})
@@ -188,11 +211,40 @@ func TestPrintStatusLines(t *testing.T) {
 func TestPrintStatusLines_LegacyActionWarning(t *testing.T) {
 	t.Setenv("GITHUB_ACTION_REPOSITORY", "cloudposse/github-action-atmos-terraform-plan")
 	stderr := initTestUI(t)
+	stdout := initTestDataWriter(t)
 
 	printStatusLines(&schema.AtmosConfiguration{})
 
 	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-atmos-terraform-plan")
-	assert.Contains(t, stderr.String(), "https://atmos.tools/ci")
+	assert.Contains(t, stderr.String(), "migrate to Native CI for better performance — learn more at https://atmos.tools/ci")
+
+	// The same warning is also emitted as a real GitHub Actions annotation so it
+	// shows up in the PR Checks/Files UI. It MUST land on stderr (the UI
+	// channel), never stdout (the data channel): legacy actions capture the
+	// stdout of `atmos describe ...` and parse it as JSON, so a stray
+	// `::warning ...` line there breaks them. Regression guard for #3309.
+	assert.Contains(t, stderr.String(), "::warning")
+	assert.Contains(t, stderr.String(), "title=Deprecated GitHub Action")
+	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-atmos-terraform-plan")
+
+	// Nothing in the startup banner may touch the data channel (stdout).
+	assert.Empty(t, stdout.String(), "startup banner must not write to stdout (the data channel)")
+}
+
+// TestPrintStatusLines_LegacyActionWarning_PlanStorage covers the companion
+// action that doesn't match the old "github-action-atmos-*" prefix, to guard
+// against regressing back to prefix-based detection.
+func TestPrintStatusLines_LegacyActionWarning_PlanStorage(t *testing.T) {
+	t.Setenv("GITHUB_ACTION_REPOSITORY", "cloudposse/github-action-terraform-plan-storage")
+	stderr := initTestUI(t)
+	stdout := initTestDataWriter(t)
+
+	printStatusLines(&schema.AtmosConfiguration{})
+
+	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
+	assert.Contains(t, stderr.String(), "::warning")
+	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
+	assert.Empty(t, stdout.String(), "startup banner must not write to stdout (the data channel)")
 }
 
 func TestPrintStatusLines_NoLegacyActionWarningWhenUnset(t *testing.T) {

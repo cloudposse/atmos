@@ -226,6 +226,38 @@ func replaceVersionSegmentInURL(rawURL, version, effectiveVersion string) string
 	return parsed.String()
 }
 
+// replaceVersionSegmentInPath applies the same version-segment correction as
+// replaceVersionSegmentInURL, but to a non-URL, slash-delimited value - e.g. a cosign
+// `--certificate-github-workflow-ref` value such as `refs/tags/0.64.0`.
+//
+// Template rendering yields the v-stripped version for `{{.Version}}` when the tool has no version
+// prefix, while the tool's actual GitHub release tag is `v`-prefixed. The URL-only corrector
+// rewrites URL-shaped values (those with a host) only, so a bare ref arg keeps the v-stripped
+// version and cosign then fails the certificate workflow-ref match ("expected GitHub Workflow Ref
+// not found in certificate"). This corrects such non-URL args using the effective release tag.
+func replaceVersionSegmentInPath(raw, version, effectiveVersion string) string {
+	if effectiveVersion == "" || effectiveVersion == version {
+		return raw
+	}
+	// URL-shaped values are handled by replaceVersionSegmentInURL; leave them untouched here.
+	if parsed, err := url.Parse(raw); err == nil && parsed.Host != "" {
+		return raw
+	}
+	target := strings.TrimPrefix(version, versionPrefixV)
+	parts := strings.Split(raw, "/")
+	changed := false
+	for i, part := range parts {
+		if strings.TrimPrefix(part, versionPrefixV) == target {
+			parts[i] = effectiveVersion
+			changed = true
+		}
+	}
+	if !changed {
+		return raw
+	}
+	return strings.Join(parts, "/")
+}
+
 func alignSidecarURLWithAssetURL(rawURL, assetURL, version string) string {
 	effectiveVersion := effectiveReleaseVersionFromAssetURL(assetURL, version)
 	aligned := replaceVersionSegmentInURL(rawURL, version, effectiveVersion)

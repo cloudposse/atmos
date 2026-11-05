@@ -154,7 +154,7 @@ func TestNetParseIP_InvalidInputErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "unable to parse IP")
 }
 
-// TestNetParseIP_LegacyIPMethods verifies the legacyIP adapter net.ParseIP
+// TestNetParseIP_LegacyIPMethods verifies the LegacyIP adapter net.ParseIP
 // returns keeps the v3 netaddr.IP method surface working: IsZero, Is4in6 and
 // IPAddr under their v3 names/signatures (netip.Addr spells the first two
 // IsValid/Is4In6 and has no equivalent of the third), Prior (netip.Addr:
@@ -346,12 +346,10 @@ func TestDefaultDeprecationReporter_LogsOncePerTemplate(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(buf.String(), "deprecated=conv.Bool"))
 }
 
-// TestNamespaceShims_ApplyOnGomplateRendererPath verifies a template that
-// mixes a namespace shim with a call gomplate can only serve through its
-// renderer (here, `ds`) still gets the shim: engine.baseFuncs assembles one
-// function map shared by both paths, and gomplate.RenderOptions.Funcs
-// overrides whatever gomplate itself would have registered for "conv".
-func TestNamespaceShims_ApplyOnGomplateRendererPath(t *testing.T) {
+// TestNamespaceShims_ApplyAlongsideDatasources verifies a template that
+// mixes a namespace shim with a datasource read (here, `ds`) still gets the
+// shim: engine.baseFuncs assembles one function map that serves both.
+func TestNamespaceShims_ApplyAlongsideDatasources(t *testing.T) {
 	cfg := writeFixture(t, "cfg.yaml", "name: atmos\n")
 	fake := &fakeReporter{}
 
@@ -374,7 +372,7 @@ func TestNamespaceShims_ApplyOnGomplateRendererPath(t *testing.T) {
 // package hasn't accounted for, instead of that method silently
 // disappearing from (or never appearing in) Atmos templates.
 func TestNamespaceWrappersCoverUpstreamMethods(t *testing.T) {
-	gomplateFuncs := GomplateFuncs(context.Background())
+	gomplateFuncs := GomplateFuncs(context.Background(), nil)
 
 	cases := []struct {
 		key        string

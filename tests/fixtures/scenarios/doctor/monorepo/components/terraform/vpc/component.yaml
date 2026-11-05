@@ -1,0 +1,11 @@
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: vpc-vendor-config
+spec:
+  source:
+    # Pinned monorepo tag; the move keeps it.
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{ .Version }} # keep this note
+    version: 1.495.0
+    included_paths:
+      - "**/**"

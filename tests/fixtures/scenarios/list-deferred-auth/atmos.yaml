@@ -1,0 +1,17 @@
+base_path: .
+stacks:
+  base_path: stacks
+  included_paths: ["*"]
+  name_template: "{{ .vars.stage }}"
+components:
+  terraform:
+    base_path: components
+templates:
+  settings:
+    enabled: true
+auth:
+  identities:
+    local:
+      kind: aws/emulator
+      emulator: offline
+      default: true

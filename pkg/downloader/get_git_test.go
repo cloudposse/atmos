@@ -19,6 +19,8 @@ import (
 	"github.com/hashicorp/go-getter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // parseEnv builds a map from "KEY=VAL" entries.
@@ -1118,4 +1120,177 @@ func TestCloneFlagArgs(t *testing.T) {
 			require.Equal(t, tt.want, cloneFlagArgs(tt.ref, tt.depth))
 		})
 	}
+}
+
+func TestPrepareGitSSHKey(t *testing.T) {
+	const keyMaterial = "-----BEGIN FAKE KEY-----\nline\n"
+	encoded := base64.StdEncoding.EncodeToString([]byte(keyMaterial))
+
+	t.Run("empty key is a no-op without requiring git", func(t *testing.T) {
+		t.Setenv("PATH", "")
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), "")
+		require.NoError(t, err)
+		assert.Empty(t, path)
+		require.NotNil(t, cleanup)
+		cleanup()
+	})
+
+	t.Run("old git version is rejected", func(t *testing.T) {
+		writeFakeGit(t, "git version 2.2.0", 0)
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), encoded)
+		require.ErrorIs(t, err, errUtils.ErrSSHKeyUsage)
+		assert.Empty(t, path)
+		cleanup()
+	})
+
+	t.Run("invalid base64 is rejected", func(t *testing.T) {
+		writeFakeGit(t, "git version 2.30.0", 0)
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), "not-valid-base64!")
+		require.ErrorIs(t, err, errUtils.ErrSSHKeyUsage)
+		assert.Contains(t, err.Error(), "decode SSH key")
+		assert.Empty(t, path)
+		cleanup()
+	})
+
+	t.Run("unwritable temp directory is rejected", func(t *testing.T) {
+		writeFakeGit(t, "git version 2.30.0", 0)
+		missing := filepath.Join(t.TempDir(), "does", "not", "exist")
+		for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+			t.Setenv(name, missing)
+		}
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), encoded)
+		require.ErrorIs(t, err, errUtils.ErrSSHKeyUsage)
+		assert.Contains(t, err.Error(), "create SSH key file")
+		assert.Empty(t, path)
+		cleanup()
+	})
+
+	t.Run("key is written with restricted mode and removed by cleanup", func(t *testing.T) {
+		writeFakeGit(t, "git version 2.30.0", 0)
+		tempDir := t.TempDir()
+		for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+			t.Setenv(name, tempDir)
+		}
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), encoded)
+		require.NoError(t, err)
+		require.NotEmpty(t, path)
+		assert.Equal(t, tempDir, filepath.Dir(path))
+
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, keyMaterial, string(content))
+		if runtime.GOOS != "windows" {
+			info, statErr := os.Stat(path)
+			require.NoError(t, statErr)
+			assert.Equal(t, os.FileMode(sshKeyFileMode), info.Mode().Perm())
+		}
+
+		cleanup()
+		assert.NoFileExists(t, path)
+		// A second cleanup must stay harmless.
+		cleanup()
+	})
+}
+
+func TestGetCustom_SourcePolicy(t *testing.T) {
+	t.Run("denied source fails before git is needed", func(t *testing.T) {
+		enableSourcePolicy(t)
+		// An empty PATH proves the denial happens before any git lookup.
+		t.Setenv("PATH", "")
+
+		err := newGetter().GetCustom(t.TempDir(), mustURL(t, "https://localhost/repo.git"))
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+
+	t.Run("allowed source proceeds to git", func(t *testing.T) {
+		enableSourcePolicy(t)
+		writeFakeGit(t, "", 0)
+		dst := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dst, ".git"), 0o755))
+
+		err := newGetter().GetCustom(dst, mustURL(t, "https://example.com/repo.git?ref=main"))
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid policy directory fails closed", func(t *testing.T) {
+		enableInvalidPolicy(t)
+		t.Setenv("PATH", "")
+
+		err := newGetter().GetCustom(t.TempDir(), mustURL(t, "https://example.com/repo.git"))
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	})
+}
+
+func TestGetRunCommand_SourcePolicyHardening(t *testing.T) {
+	const missingBinary = "atmos-test-nonexistent-git-binary"
+
+	t.Run("source rules disable redirects and ext transport", func(t *testing.T) {
+		enableSourcePolicy(t)
+		cmd := exec.Command(missingBinary, "clone", "origin")
+
+		err := getRunCommand(cmd)
+		require.Error(t, err)
+		assert.Equal(t, []string{missingBinary, "-c", "http.followRedirects=false", "-c", "protocol.ext.allow=never", "clone", "origin"}, cmd.Args)
+	})
+
+	t.Run("no source rules leave arguments untouched", func(t *testing.T) {
+		enableNonSourcePolicy(t)
+		cmd := exec.Command(missingBinary, "clone", "origin")
+
+		err := getRunCommand(cmd)
+		require.Error(t, err)
+		assert.Equal(t, []string{missingBinary, "clone", "origin"}, cmd.Args)
+	})
+
+	t.Run("capability lookup failure aborts before running the command", func(t *testing.T) {
+		enableInvalidPolicy(t)
+		cmd := exec.Command(missingBinary, "clone", "origin")
+
+		err := getRunCommand(cmd)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		assert.NotContains(t, err.Error(), "failed to execute git command")
+		assert.Equal(t, []string{missingBinary, "clone", "origin"}, cmd.Args)
+		assert.Nil(t, cmd.Stdout)
+	})
+}
+
+func TestFetchSubmodules_SourcePolicy(t *testing.T) {
+	t.Run("submodules are refused under source rules", func(t *testing.T) {
+		enableSourcePolicy(t)
+		// An empty PATH proves git is never invoked.
+		t.Setenv("PATH", "")
+		dst := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dst, ".gitmodules"), []byte("[submodule \"x\"]\n"), 0o600))
+
+		err := newGetter().fetchSubmodules(context.Background(), dst, "", 0)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+	})
+
+	t.Run("repositories without submodules are skipped under source rules", func(t *testing.T) {
+		enableSourcePolicy(t)
+		t.Setenv("PATH", "")
+
+		require.NoError(t, newGetter().fetchSubmodules(context.Background(), t.TempDir(), "", 0))
+	})
+
+	t.Run("capability lookup failure is returned", func(t *testing.T) {
+		enableInvalidPolicy(t)
+		t.Setenv("PATH", "")
+
+		require.ErrorIs(t, newGetter().fetchSubmodules(context.Background(), t.TempDir(), "", 0), errUtils.ErrPolicyInvalid)
+	})
+
+	t.Run("submodules are fetched when no source rules apply", func(t *testing.T) {
+		enableNonSourcePolicy(t)
+		writeFakeGit(t, "", 0)
+		dst := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dst, ".gitmodules"), []byte("[submodule \"x\"]\n"), 0o600))
+
+		require.NoError(t, newGetter().fetchSubmodules(context.Background(), dst, "", 0))
+	})
 }

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: set
 description: Set a raw value in vendor.yaml by dot-notation path, preserving comments, anchors, and templates.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -56,3 +58,16 @@ atmos vendor config set --type=yaml 'spec.sources[0].tags' '["a", "b"]'
 ## Related
 
 - Alias (by component name): [`atmos vendor set`](/cli/commands/vendor/vendor-set)
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Update the description in your local vendor manifest, then read it back. No downloads or cloud credentials are needed.
+
+```shell
+atmos vendor config set metadata.description "My vendoring demo"
+atmos vendor config get metadata.description
+```
+
+</TryExample>

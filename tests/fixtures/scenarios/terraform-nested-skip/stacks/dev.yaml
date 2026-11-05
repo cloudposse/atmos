@@ -1,0 +1,26 @@
+components:
+  terraform:
+    producer:
+      secrets:
+        vars:
+          CREDENTIAL:
+            store: test-secrets
+            required: true
+      vars:
+        credential: !secret CREDENTIAL
+      env:
+        AWS_SECRET_ACCESS_KEY: !secret CREDENTIAL
+      backend_type: s3
+      backend:
+        s3:
+          bucket: test-state
+          region: us-east-1
+          access_key: !secret CREDENTIAL
+          secret_key: !secret CREDENTIAL
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          credential: !secret CREDENTIAL
+    consumer:
+      vars:
+        credential: !terraform.output producer credential

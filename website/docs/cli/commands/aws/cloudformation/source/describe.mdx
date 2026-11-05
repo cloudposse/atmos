@@ -1,0 +1,120 @@
+---
+title: atmos aws cloudformation source describe
+sidebar_label: source describe
+sidebar_class_name: command
+id: describe
+description: Show source configuration for a component
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to display the `source` configuration for an `aws/cloudformation` component. This shows the source URI, version, and any path filters configured for vendoring.
+</Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Configure source locations, version pins, and authentication.
+    <div>
+      <PrimaryCTA to="/stacks/components/aws-cloudformation#source-provisioning">Source Configuration</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation source describe --help" src="/casts/screengrabs/atmos-aws-cloudformation-source-describe--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation source describe <component> --stack <stack>
+```
+
+## Examples
+
+### View Source Configuration
+
+Display the source configuration for a component:
+
+```shell
+atmos aws cloudformation source describe vpc --stack dev
+```
+
+Output:
+```yaml
+components:
+  aws/cloudformation:
+    vpc:
+      source:
+        uri: github.com/cloudposse/cloudformation-aws-components//modules/vpc
+        version: 1.0.0
+        included_paths:
+          - "*.yaml"
+          - "modules/**"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
+```
+
+### String Format Source
+
+When source is configured as a simple string:
+
+```shell
+atmos aws cloudformation source describe vpc --stack dev
+```
+
+Output:
+```yaml
+components:
+  aws/cloudformation:
+    vpc:
+      source:
+        uri: github.com/cloudposse/cloudformation-aws-components//modules/vpc?ref=1.0.0
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The name of the Atmos component to describe. Required for unattended use; when omitted, interactive mode offers component selection if candidates are available.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>The Atmos stack name, also settable via `ATMOS_STACK`. Required for unattended use; when unset, interactive mode offers stack selection if candidates are available.</dd>
+</dl>
+
+## Description
+
+Inspect the source URI, version, and path filters before downloading. The result
+uses the stack manifest's YAML structure.
+
+## Output Format
+
+The command outputs YAML matching the stack manifest schema:
+
+<dl>
+  <dt>`components."aws/cloudformation".<component>.source`</dt>
+  <dd>The parsed source specification for the component.</dd>
+
+  <dt>`source.uri`</dt>
+  <dd>The go-getter-compatible source URI.</dd>
+
+  <dt>`source.version`</dt>
+  <dd>The version tag, branch, or commit (if specified separately).</dd>
+
+  <dt>`source.included_paths`</dt>
+  <dd>List of glob patterns for files to include.</dd>
+
+  <dt>`source.excluded_paths`</dt>
+  <dd>List of glob patterns for files to exclude.</dd>
+</dl>
+
+## See Also
+
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
+- [`atmos aws cloudformation source`](/cli/commands/aws/cloudformation/source) — Parent command overview
+- [`atmos aws cloudformation source pull`](/cli/commands/aws/cloudformation/source/pull) — Vendor component source
+- [`atmos aws cloudformation source list`](/cli/commands/aws/cloudformation/source/list) — List components with sources

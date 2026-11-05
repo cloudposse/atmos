@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/autherrors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -195,7 +196,7 @@ func GetCallerIdentity(
 	stsClient := sts.NewFromConfig(cfg)
 	output, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsGetCallerIdentity, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsGetCallerIdentity, autherrors.Normalize(err))
 	}
 
 	result := &CallerIdentity{
@@ -281,7 +282,7 @@ func LoadConfigWithAuthAndEnv(
 
 	var cfgOpts []func(*config.LoadOptions) error
 
-	// If auth context is provided, use Atmos-managed credentials.
+	// If auth context is provided, apply its credential overrides.
 	if authContext != nil {
 		log.Debug(
 			"Using Atmos auth context for AWS SDK",
@@ -290,14 +291,17 @@ func LoadConfigWithAuthAndEnv(
 			"config", authContext.ConfigFile,
 		)
 
-		// Set custom credential and config file paths.
-		// This overrides the default ~/.aws/credentials and ~/.aws/config.
-		cfgOpts = append(
-			cfgOpts,
-			config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}),
-			config.WithSharedConfigFiles([]string{authContext.ConfigFile}),
-			config.WithSharedConfigProfile(authContext.Profile),
-		)
+		// Set custom paths only when supplied. Ambient auth contexts leave these
+		// empty so the SDK retains its default files and AWS_PROFILE selection.
+		if authContext.CredentialsFile != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}))
+		}
+		if authContext.ConfigFile != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedConfigFiles([]string{authContext.ConfigFile}))
+		}
+		if authContext.Profile != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedConfigProfile(authContext.Profile))
+		}
 
 		// Use region from auth context if not explicitly provided.
 		if region == "" && authContext.Region != "" {

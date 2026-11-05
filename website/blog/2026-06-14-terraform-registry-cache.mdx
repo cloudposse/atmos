@@ -14,6 +14,8 @@ Atmos can now transparently **cache Terraform and OpenTofu providers and modules
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 See it in action:
 
 <CastEmbed src="/casts/examples/caching/registry-cache.cast" title="atmos terraform registry cache" chrome controls scrubber />
@@ -99,6 +101,18 @@ atmos terraform cache delete <key>
 ```
 
 `stats` reports what the filesystem can tell us — size, counts, breakdown — and intentionally not a hit rate: a hit is a per-run event, surfaced by the savings report, not stored state.
+
+## Try it out
+
+<TryExample example="caching">
+
+Install Terraform, then follow the README to initialize the sample component and inspect provider caching.
+
+```shell
+atmos terraform cache list
+```
+
+</TryExample>
 
 ## Get involved
 

@@ -3,6 +3,7 @@ package generate
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
@@ -25,4 +26,8 @@ func init() {
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
 	GenerateCmd.AddCommand(varfileCmd)
+	internal.RegisterCommandMetadata(
+		varfileCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/generate-varfile"),
+	)
 }

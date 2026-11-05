@@ -11,6 +11,11 @@ import (
 // These are the canonical function names used across all formats.
 // In YAML they appear as !tag, in HCL as tag(), etc.
 const (
+	// CILabels returns current CI review labels or matches a requested list.
+	CILabels = "ci.labels"
+
+	// Starlark evaluates a configuration function body after merging.
+	Starlark = "starlark"
 	// Exec executes a shell command and returns the output.
 	Exec = "exec"
 
@@ -104,6 +109,9 @@ const (
 	// AwsOrganizationID returns the AWS Organization ID.
 	AwsOrganizationID = "aws.organization_id"
 
+	// AwsCloudFormationOutput retrieves an aws/cloudformation stack Output value.
+	AwsCloudFormationOutput = "aws.cloudformation.output"
+
 	// Emulator resolves a value from a local emulator.
 	Emulator = "emulator"
 
@@ -131,6 +139,8 @@ func All() []string {
 	defer perf.Track(nil, "tag.All")()
 
 	return []string{
+		CILabels,
+		Starlark,
 		Exec,
 		Secret,
 		Store,
@@ -162,6 +172,7 @@ func All() []string {
 		AwsCallerIdentityUserID,
 		AwsRegion,
 		AwsOrganizationID,
+		AwsCloudFormationOutput,
 		Emulator,
 		Version,
 		Tags,
@@ -173,6 +184,8 @@ func All() []string {
 
 // tagsMap provides O(1) lookup for tag names.
 var tagsMap = map[string]bool{
+	CILabels:                true,
+	Starlark:                true,
 	Exec:                    true,
 	Secret:                  true,
 	Store:                   true,
@@ -204,6 +217,7 @@ var tagsMap = map[string]bool{
 	AwsCallerIdentityUserID: true,
 	AwsRegion:               true,
 	AwsOrganizationID:       true,
+	AwsCloudFormationOutput: true,
 	Emulator:                true,
 	Version:                 true,
 	Tags:                    true,
@@ -263,6 +277,7 @@ func AtmosConfigYAML() []string {
 	defer perf.Track(nil, "tag.AtmosConfigYAML")()
 
 	return []string{
+		ToYAML(CEL),
 		ToYAML(Env),
 		ToYAML(Exec),
 		ToYAML(Include),
@@ -280,6 +295,7 @@ func AtmosConfigYAML() []string {
 		ToYAML(Cwd),
 		ToYAML(Random),
 		ToYAML(Unset),
+		ToYAML(Literal),
 	}
 }
 
@@ -288,6 +304,57 @@ func IsAtmosConfigYAML(yamlTag string) bool {
 	defer perf.Track(nil, "tag.IsAtmosConfigYAML")()
 
 	for _, tag := range AtmosConfigYAML() {
+		if yamlTag == tag {
+			return true
+		}
+	}
+	return false
+}
+
+// ScaffoldYAML returns the YAML tags supported while resolving scaffold.yaml
+// manifests. Mirrors AtmosConfigYAML's "no stack context available" set,
+// since scaffold.yaml -- like atmos.yaml -- is fully resolved once with no
+// later evaluation phase, but swaps Unset (a stack-inheritance override
+// concept scaffold.yaml's field/answer merge has no equivalent for) for
+// Literal (bypassing scaffold's own Go-template evaluation of a field
+// value, a real need atmos.yaml has no equivalent concern for).
+//
+// Exec is deliberately excluded, unlike AtmosConfigYAML (which does include
+// it): scaffold.yaml's metadata (name/description/version) is resolved for
+// EVERY configured template just to populate `atmos scaffold list` and the
+// interactive template picker -- not only the one a user actually selects
+// or generates -- so allowing arbitrary shell execution here would let any
+// configured template (including a shared/vendored one from a catalog) run
+// code merely by being listed, not just generated. AtmosConfigYAML has no
+// equivalent "resolved just to list" trigger for atmos.yaml itself.
+func ScaffoldYAML() []string {
+	defer perf.Track(nil, "tag.ScaffoldYAML")()
+
+	return []string{
+		ToYAML(Include),
+		ToYAML(IncludeRaw),
+		ToYAML(Env),
+		ToYAML(Random),
+		ToYAML(Cwd),
+		ToYAML(RepoRoot),
+		ToYAML(GitRoot),
+		ToYAML(GitSha),
+		ToYAML(GitBranch),
+		ToYAML(GitRef),
+		ToYAML(GitRepository),
+		ToYAML(GitOwner),
+		ToYAML(GitName),
+		ToYAML(GitHost),
+		ToYAML(GitURL),
+		ToYAML(Literal),
+	}
+}
+
+// IsScaffoldYAML checks if a YAML tag is supported by scaffold.yaml resolution.
+func IsScaffoldYAML(yamlTag string) bool {
+	defer perf.Track(nil, "tag.IsScaffoldYAML")()
+
+	for _, tag := range ScaffoldYAML() {
 		if yamlTag == tag {
 			return true
 		}

@@ -13,17 +13,15 @@ permissions:
 
 jobs:
   cleanup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-
+          policies: >-
+            github-api
       - name: Cleanup
         run: |
           echo "Fetching list of cache keys"

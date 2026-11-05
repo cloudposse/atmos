@@ -1,0 +1,12 @@
+components:
+  terraform:
+    ctx-base:
+      metadata:
+        type: abstract
+        component: mock
+      vars:
+        ci_labels: !ci.labels
+        has_preview: !ci.labels [preview]
+        has_both: !ci.labels [preview, deploy]
+        has_spaced: !ci.labels ["Needs Review", "true"]
+        has_case: !ci.labels [Preview]

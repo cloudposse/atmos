@@ -1,0 +1,8 @@
+vars:
+  stage: region-number
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: region-number
+      region: 42

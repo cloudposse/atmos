@@ -16,6 +16,8 @@ Atmos custom commands can now define their own component types beyond `terraform
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Challenge
 
 Atmos has always excelled at managing Terraform, Helmfile, and Packer components through its powerful stack configuration system. But what if you want to manage other tools the same way?
@@ -198,6 +200,18 @@ The legacy `component_config` continues to work for backward compatibility.
 3. Add typed arguments/flags with `type: component` and `semantic_type: stack`
 4. Create component configurations under `components.<your-type>` in stack manifests
 5. Access configuration via `{{ .Component.* }}` in your command steps
+
+## Try it out
+
+<TryExample example="custom-components">
+
+Run the local custom component command.
+
+```shell
+atmos example deploy-app --stack dev
+```
+
+</TryExample>
 
 See the [Custom Component Types documentation](/cli/configuration/commands/component#custom-component-types) for complete details.
 

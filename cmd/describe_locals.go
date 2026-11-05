@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -154,7 +155,8 @@ func setCliArgsForDescribeLocalsCli(flags *pflag.FlagSet, args *exec.DescribeLoc
 
 func init() {
 	// Use Flags() instead of PersistentFlags() since this command has no subcommands.
-	describeLocalsCmd.Flags().StringP(stackFlagName, "s", "",
+	describeLocalsCmd.Flags().StringP(
+		stackFlagName, "s", "",
 		"Stack to display locals for (required)\n"+
 			"Supports top-level stack manifest names (including subfolder paths) and logical stack names (derived from context vars)\n"+
 			"Parse errors in the matched stack are reported; errors in other stacks are skipped during the search",
@@ -168,4 +170,9 @@ func init() {
 	describeLocalsCmd.Flags().StringP("query", "q", "", "Query the result using `yq` expression")
 
 	describeCmd.AddCommand(describeLocalsCmd)
+	internal.RegisterCommandMetadata(
+		describeLocalsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/locals"),
+		internal.WithExample("examples/locals", "Locals"),
+	)
 }

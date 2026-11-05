@@ -210,7 +210,7 @@ func TestRunValidate(t *testing.T) {
 				newKubernetesSDKClient = tt.clientFunc(t)
 			}
 
-			results, err := runValidate(tt.objects, tt.options)
+			results, err := runValidate(context.Background(), tt.objects, tt.options)
 			tt.assertErr(t, err)
 			if tt.assertOK != nil {
 				tt.assertOK(t, results)
@@ -232,7 +232,7 @@ func TestRunValidateServerAggregatesDryRunErrors(t *testing.T) {
 	objects := []*unstructured.Unstructured{
 		kubernetesObject("v1", "ConfigMap", "settings", "default"),
 	}
-	_, err := runValidate(objects, validateOptions{Server: true})
+	_, err := runValidate(context.Background(), objects, validateOptions{Server: true})
 	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
 }
 

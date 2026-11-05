@@ -50,8 +50,9 @@ type PackerFlags struct {
 func ExecutePacker(
 	info *schema.ConfigAndStacksInfo,
 	packerFlags *PackerFlags,
-) error {
+) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecutePacker")()
+	defer attachComponentReporting(&resultErr, info, "packer", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -64,6 +65,9 @@ func ExecutePacker(
 	}
 
 	// Add the `command` from `components.packer.command` from `atmos.yaml`.
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+	}
 	if info.Command == "" {
 		if atmosConfig.Components.Packer.Command != "" {
 			info.Command = atmosConfig.Components.Packer.Command

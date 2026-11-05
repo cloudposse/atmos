@@ -2,12 +2,13 @@
 // function sets. It is the only package that imports gomplate, so the rest of
 // the codebase is insulated from gomplate's library API.
 //
-// Two execution paths exist. The fast path parses and executes the template
-// with text/template directly and is lock-free, which matters because stack
-// files are rendered concurrently. The gomplate renderer path is used only when
-// a template references functions that gomplate provides exclusively through
-// its renderer (datasources and the `tmpl` namespace); gomplate's renderer
-// updates package-global metrics, so that path is serialized.
+// Templates are parsed and executed with text/template directly, lock-free,
+// which matters because stack files are rendered concurrently. Gomplate's
+// renderer-only functions are provided without its renderer: Data reads
+// datasources lazily and the `tmpl` namespace is bound to the parsed template.
+// Gomplate's renderer is used only to read datasources and to render
+// templates whose context comes from datasources (Request.ContextSources); it
+// updates package-global metrics, so those uses are serialized.
 package templating
 
 import (
@@ -57,24 +58,40 @@ type Request struct {
 	// MissingKey is the text/template "missingkey" option; empty means MissingKeyError.
 	MissingKey string
 	// Datasources are read lazily when the template calls `datasource`/`ds`/`include`.
+	// They are added to Sources (or to a fresh Data when Sources is nil).
 	Datasources map[string]Datasource
+	// Sources serves the template's datasource functions. Pass the same Data to
+	// functions that read datasources themselves (such as the `atmos`
+	// namespace) so they share its definitions. Nil means a fresh Data.
+	Sources *Data
 	// ContextSources are read eagerly before execution and exposed on `.`; the
 	// alias "." replaces the whole context. When set, Data is ignored and the
-	// template is rendered by gomplate's renderer directly.
+	// template is rendered by gomplate's renderer directly. They are also
+	// readable as datasources (for example `ds "config"`).
 	ContextSources map[string]Datasource
+	// WrapFuncs, when set, receives the fully assembled function map (Gomplate,
+	// Sprig, compatibility shims and Funcs) and the render's datasources, and
+	// returns the map the template is parsed with. Policy admission uses it to
+	// guard every function call.
+	WrapFuncs FuncsWrapper
+	// Prepare, when set, runs on the parsed template before it executes, for
+	// callers that rewrite or guard the parse tree. Gomplate's `tmpl`/`tpl`
+	// functions are unavailable when it is set, so run-time templates can't
+	// escape it. It does not apply to ContextSources renders.
+	Prepare func(*template.Template)
 }
+
+// FuncsWrapper transforms the assembled function map for one render.
+type FuncsWrapper func(funcs template.FuncMap, sources *Data) (template.FuncMap, error)
 
 // Renderer renders templates.
 type Renderer interface {
 	Render(ctx context.Context, req *Request) (string, error)
 }
 
-// Engine is a Renderer that can also read the datasources of the render in
-// progress, which is how the `atmos.GomplateDatasource` template function is
-// served.
+// Engine is the Renderer that serves Gomplate, Sprig and caller functions.
 type Engine interface {
 	Renderer
-	DatasourceReader
 }
 
 // Option configures an Engine.
@@ -94,28 +111,18 @@ func WithSprig(enabled bool) Option {
 	return func(e *engine) { e.sprig = enabled }
 }
 
-// WithDatasourceCache sets the cache used by Datasource. The default is a
-// process-wide cache, matching the historical `atmos.GomplateDatasource` behavior.
-func WithDatasourceCache(cache *DatasourceCache) Option {
-	defer perf.Track(nil, "templating.WithDatasourceCache")()
-
-	return func(e *engine) { e.cache = cache }
-}
-
 // engine is the concrete Engine.
 type engine struct {
 	gomplate bool
 	sprig    bool
-	cache    *DatasourceCache
 	reporter DeprecationReporter
-	live     liveRenderHolder
 }
 
 // New creates an Engine with Gomplate and Sprig enabled by default.
 func New(opts ...Option) Engine {
 	defer perf.Track(nil, "templating.New")()
 
-	e := &engine{gomplate: true, sprig: true, cache: defaultDatasourceCache, reporter: defaultDeprecationReporter}
+	e := &engine{gomplate: true, sprig: true, reporter: defaultDeprecationReporter}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -126,6 +133,7 @@ func New(opts ...Option) Engine {
 // assembled, shared by both execution paths.
 type renderPlan struct {
 	req        *Request
+	sources    *Data
 	funcs      template.FuncMap
 	left       string
 	right      string
@@ -154,24 +162,42 @@ func (e *engine) Render(ctx context.Context, req *Request) (string, error) {
 		lintDeprecatedUsage(parsed, plan, e.reporter)
 	}
 
-	if !e.gomplate || !needsGomplateRenderer(parsed) {
-		return executePlain(parsed, req.Data)
+	if req.Prepare != nil {
+		req.Prepare(parsed)
 	}
-
-	return e.renderWithGomplate(ctx, plan)
+	return executePlain(parsed, req.Data)
 }
 
-// plan resolves delimiters and the missingkey option and assembles the base
-// function map for the request.
+// plan resolves delimiters, the missingkey option and the render's
+// datasources, and assembles the function map for the request.
 func (e *engine) plan(ctx context.Context, req *Request) (*renderPlan, error) {
 	missingKey, err := missingKeyOption(req.MissingKey)
 	if err != nil {
 		return nil, err
 	}
 
+	sources := req.Sources
+	if sources == nil {
+		sources = &Data{}
+	}
+	if err := sources.defineAll(req.Datasources); err != nil {
+		return nil, err
+	}
+	if err := sources.defineAll(req.ContextSources); err != nil {
+		return nil, err
+	}
+
+	funcs := e.baseFuncs(ctx, req.Name, req.Funcs, sources)
+	if req.WrapFuncs != nil {
+		if funcs, err = req.WrapFuncs(funcs, sources); err != nil {
+			return nil, err
+		}
+	}
+
 	plan := &renderPlan{
 		req:        req,
-		funcs:      e.baseFuncs(ctx, req.Name, req.Funcs),
+		sources:    sources,
+		funcs:      funcs,
 		left:       req.LeftDelim,
 		right:      req.RightDelim,
 		missingKey: missingKey,

@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // versionCmd represents the terraform version command.
@@ -24,4 +26,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(versionCmd_)
+	internal.RegisterCommandMetadata(
+		versionCmd_,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/terraform-version"),
+	)
 }

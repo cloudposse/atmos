@@ -16,6 +16,8 @@ import (
 	ctr "github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -71,16 +73,27 @@ func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
+	runner, err := recovery.New(info, "container", "list")
+	if err != nil {
+		return err
+	}
+
 	// Detect the runtime once (non-fatal) and annotate each row's running state.
 	// A cached runtime that no longer responds is invalidated, re-discovered, and
 	// retried once because listing is read-only.
 	resolution, rtErr := resolveRuntimeForContainerCommand(ctx, atmosConfig.Container.Runtime.Provider, atmosConfig.Container.Runtime.AutoStart)
 	if rtErr == nil {
-		listErr := annotateRunningState(ctx, resolution.runtime, rows)
+		listErr := recovery.Do(ctx, runner, "List", func() error { return annotateRunningState(ctx, resolution.runtime, rows) })
+		if listErr != nil && (guard.IsPolicyError(listErr) || ctx.Err() != nil) {
+			return listErr
+		}
 		if listErr != nil && resolution.cached {
 			resolution, rtErr = rediscoverRuntime(ctx, resolution)
 			if rtErr == nil {
-				_ = annotateRunningState(ctx, resolution.runtime, rows)
+				listErr = recovery.Do(ctx, runner, "List", func() error { return annotateRunningState(ctx, resolution.runtime, rows) })
+				if listErr != nil && (guard.IsPolicyError(listErr) || ctx.Err() != nil) {
+					return listErr
+				}
 			}
 		}
 	}
@@ -278,7 +291,7 @@ func healthCell(health string) string {
 func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecutePs")()
 
-	r, runtime, err := r2(ctx, info)
+	r, runtime, err := r2(ctx, info, "ps")
 	if err != nil {
 		return err
 	}

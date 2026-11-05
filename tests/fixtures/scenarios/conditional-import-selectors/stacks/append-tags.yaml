@@ -1,0 +1,8 @@
+name: append-tags
+metadata:
+  tags: !append [payments]
+import:
+  - catalog/app
+  - mixins/tag-defaults
+  - path: mixins/pci
+    when: !cel "size(tags) == 2 && 'pci' in tags && 'payments' in tags"

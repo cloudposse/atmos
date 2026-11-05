@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // skeletonBody is what release-drafter writes with .github/auto-release.yml.
@@ -32,6 +34,8 @@ func testParams() *SummarizeParams {
 type apiScript struct {
 	t            *testing.T
 	releaseBody  string
+	releaseTag   string
+	patchedTag   string
 	prBodies     map[string]string
 	openAIReply  string
 	openAIPrompt string
@@ -43,6 +47,7 @@ func newAPIScript(t *testing.T, releaseBody string) *apiScript {
 	return &apiScript{
 		t:           t,
 		releaseBody: releaseBody,
+		releaseTag:  "v1.230.1",
 		prBodies:    map[string]string{"101": widgetPRBody, "102": "Fixes the gizmo."},
 		openAIReply: `[{"number":101,"summary":"Adds a widget."},{"number":102,"summary":"Fixes the gizmo."}]`,
 		calls:       map[string]int{},
@@ -54,7 +59,7 @@ func (s *apiScript) do(req *http.Request) (*http.Response, error) {
 	switch {
 	case req.Method == http.MethodGet && strings.Contains(url, "/releases/"):
 		s.calls["get-release"]++
-		return jsonResponse(http.StatusOK, `{"body":`+jsonString(s.releaseBody)+`}`), nil
+		return jsonResponse(http.StatusOK, `{"body":`+jsonString(s.releaseBody)+`,"tag_name":`+jsonString(s.releaseTag)+`}`), nil
 	case req.Method == http.MethodGet && strings.Contains(url, "/pulls/"):
 		s.calls["get-pr"]++
 		n := url[strings.LastIndex(url, "/")+1:]
@@ -72,11 +77,13 @@ func (s *apiScript) do(req *http.Request) (*http.Response, error) {
 	case req.Method == http.MethodPatch && strings.Contains(url, "/releases/"):
 		s.calls["patch"]++
 		var payload struct {
-			Body string `json:"body"`
+			Body    string `json:"body"`
+			TagName string `json:"tag_name"`
 		}
 		require.NoError(s.t, json.NewDecoder(req.Body).Decode(&payload))
 		s.patched = payload.Body
-		return jsonResponse(http.StatusOK, `{}`), nil
+		s.patchedTag = payload.TagName
+		return jsonResponse(http.StatusOK, `{"tag_name":`+jsonString(s.patchedTag)+`}`), nil
 	}
 	s.t.Fatalf("unexpected request %s %s", req.Method, url)
 	return nil, nil
@@ -133,6 +140,20 @@ func TestSummarizeRelease_SkeletonFetchesPRBodiesAndRewritesAsDetails(t *testing
 	assert.Positive(t, res.Chars)
 }
 
+func TestSummarizeRelease_PreservesReleaseTag(t *testing.T) {
+	for _, tag := range []string{"v1.230.1", "v1.230.1-rc.4"} {
+		t.Run(tag, func(t *testing.T) {
+			s := newAPIScript(t, skeletonBody)
+			s.releaseTag = tag
+
+			_, err := SummarizeRelease(context.Background(), scriptedClient(t, s), testParams())
+			require.NoError(t, err)
+			assert.Equal(t, tag, s.patchedTag)
+			assert.Equal(t, 1, s.calls["patch"])
+		})
+	}
+}
+
 func TestSummarizeRelease_WithoutKeyUsesCodeRabbitOrTruncatedDescription(t *testing.T) {
 	s := newAPIScript(t, skeletonBody)
 	p := testParams()
@@ -149,6 +170,29 @@ func TestSummarizeRelease_WithoutKeyUsesCodeRabbitOrTruncatedDescription(t *test
 	assert.NotContains(t, s.patched, "Summary by CodeRabbit")
 	// #102 has none: its (short) description is used as-is.
 	assert.Contains(t, s.patched, "<summary>fix: correct gizmo @bob (#102)</summary>\n\n- Fixes the gizmo.\n\n</details>")
+}
+
+func TestSummarizeRelease_MissingTagDoesNotUpdate(t *testing.T) {
+	s := newAPIScript(t, skeletonBody)
+	s.releaseTag = ""
+
+	_, err := SummarizeRelease(context.Background(), scriptedClient(t, s), testParams())
+	require.ErrorIs(t, err, errUtils.ErrReleaseTagMissing)
+	assert.Zero(t, s.calls["patch"])
+}
+
+func TestSummarizeRelease_PropagatesTagMismatch(t *testing.T) {
+	s := newAPIScript(t, skeletonBody)
+	client := NewMockHTTPClient(gomock.NewController(t))
+	client.EXPECT().Do(gomock.Any()).AnyTimes().DoAndReturn(func(req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodPatch {
+			return jsonResponse(http.StatusOK, `{"tag_name":"untagged-ce54d2b635a2ba2ebf07"}`), nil
+		}
+		return s.do(req)
+	})
+
+	_, err := SummarizeRelease(context.Background(), client, testParams())
+	require.ErrorIs(t, err, errUtils.ErrReleaseTagMismatch)
 }
 
 func TestSummarizeRelease_OrgTemplateBodyNeedsNoPRFetch(t *testing.T) {

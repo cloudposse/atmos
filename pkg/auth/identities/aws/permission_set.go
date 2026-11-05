@@ -383,13 +383,23 @@ func (i *permissionSetIdentity) resolveAccountID(ctx context.Context, ssoClient 
 		return accountID, nil
 	}
 
-	accountsResp, err := ssoClient.ListAccounts(ctx, &sso.ListAccountsInput{AccessToken: awssdk.String(accessToken)})
-	if err != nil {
-		return "", fmt.Errorf("%w: failed to list accounts: %w", errUtils.ErrAwsAuth, err)
+	cachePath := i.accountCachePath(ssoClient, accountName)
+	if cachedID := loadPermissionSetAccountID(cachePath, accessToken); cachedID != "" {
+		return cachedID, nil
 	}
-	for _, account := range accountsResp.AccountList {
-		if awssdk.ToString(account.AccountName) == accountName {
-			return awssdk.ToString(account.AccountId), nil
+
+	paginator := sso.NewListAccountsPaginator(ssoClient, &sso.ListAccountsInput{AccessToken: awssdk.String(accessToken)})
+	for paginator.HasMorePages() {
+		accountsResp, err := paginator.NextPage(ctx)
+		if err != nil {
+			return "", fmt.Errorf("%w: failed to list accounts: %w", errUtils.ErrAwsAuth, err)
+		}
+		for _, account := range accountsResp.AccountList {
+			if awssdk.ToString(account.AccountName) == accountName {
+				accountID = awssdk.ToString(account.AccountId)
+				savePermissionSetAccountID(cachePath, accessToken, accountID)
+				return accountID, nil
+			}
 		}
 	}
 	return "", fmt.Errorf("%w: account %q not found", errUtils.ErrAwsAuth, accountName)

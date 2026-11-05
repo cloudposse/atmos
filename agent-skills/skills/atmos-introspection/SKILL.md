@@ -1,6 +1,6 @@
 ---
 name: atmos-introspection
-description: "Introspection & Querying: describe/list commands, config filtering, workspace introspection, dependency graphs, YQ integration, --help=<topic> scoped CLI help"
+description: "Introspection & Querying: describe/list commands, config filtering, workspace introspection, dependency graphs, YQ integration, --help=<topic> scoped CLI help, --docs=md command documentation"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -165,7 +165,7 @@ atmos list components
 atmos list components -s 'plat-*-prod'
 atmos list components --type abstract
 atmos list components --enabled true
-atmos list components --format tree
+atmos list components --format json
 ```
 
 Key flags:
@@ -235,7 +235,9 @@ atmos list metadata                 # Metadata information
 | Command Type | Formats |
 |-------------|---------|
 | Describe commands | yaml, json |
-| List commands | table (default), json, yaml, csv, tsv, tree |
+| `list components`, `list workflows` | table (default), json, yaml, csv, tsv |
+| `list stacks` | table (default), json, yaml, csv, tsv, tree |
+| `list instances` | table (default), json, yaml, csv, tsv, tree, matrix |
 
 ### Column Customization (List Commands)
 
@@ -298,6 +300,30 @@ atmos describe component vpc -s prod -i prod-admin
 atmos describe component vpc -s prod -i
 ```
 
+## Command Documentation: `--docs=md`
+
+Retrieve current documentation before reasoning about an unfamiliar command or configuration option:
+
+```bash
+atmos terraform plan --docs=md
+atmos describe component --docs=md --no-color
+```
+
+Atmos prints the source `.md` URL, fetches the page, and renders it using its shared terminal
+Markdown renderer. Use `--no-color` for plain output in agent tool calls. `--docs=markdown` is an
+alias; use equals syntax for either format. Bare `--docs` opens a browser, so prefer `--docs=md`
+for agent retrieval.
+
+Built-in documentation discovery works without a valid Atmos project, required component/stack
+arguments, credentials, or the underlying executable. It exits before command execution and hooks.
+Commands inherit their nearest ancestor's documentation when they have no dedicated page; custom
+commands also use fallback documentation. Explicit `--help` takes precedence, so request help and
+documentation in separate calls.
+
+Documentation retrieval needs network access. On a fetch failure, the source URL remains visible;
+report the failure and use local `--help=usage` or `--help=all` for the installed version's syntax.
+If an older Atmos version rejects `--docs=md`, use local help and the official documentation URL.
+
 ## CLI Help: `--help=<topic>`
 
 Every `atmos` command supports a scoped `--help=<topic>` flag so help output doesn't bury the one
@@ -325,11 +351,12 @@ that never shows up in `--help` -- it is almost certainly an `internal: true` cu
 
 When assisting a user with Atmos configuration, follow this sequence:
 
-1. **Understand the project**: `atmos describe config` to see atmos.yaml settings
-2. **List what exists**: `atmos list stacks` and `atmos list components`
-3. **Inspect specific configs**: `atmos describe component <name> -s <stack>`
-4. **Check dependencies**: `atmos describe dependents <name> -s <stack>`
-5. **Trace configuration origins**: Add `--provenance` to any describe command
-6. **Validate changes**: `atmos describe affected` to see impact of modifications
+1. **Retrieve command documentation when needed**: `atmos <command> --docs=md --no-color`
+2. **Understand the project**: `atmos describe config` to see atmos.yaml settings
+3. **List what exists**: `atmos list stacks` and `atmos list components`
+4. **Inspect specific configs**: `atmos describe component <name> -s <stack>`
+5. **Check dependencies**: `atmos describe dependents <name> -s <stack>`
+6. **Trace configuration origins**: Add `--provenance` to any describe command
+7. **Validate changes**: `atmos describe affected` to see impact of modifications
 
 Never guess at stack names, component names, or configuration values. Always query first.

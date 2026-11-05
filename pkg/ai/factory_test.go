@@ -14,12 +14,15 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/claudecode"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/codexcli"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/copilotcli"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/deepseek"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/gemini"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/geminicli"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/github"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/grok"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openai"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/openrouter"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/zai"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -141,6 +144,45 @@ func TestNewClient(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "OpenRouter provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "openrouter",
+					Providers: map[string]*schema.AIProviderConfig{
+						"openrouter": {ApiKey: "test-key"},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "DeepSeek provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "deepseek",
+					Providers: map[string]*schema.AIProviderConfig{
+						"deepseek": {ApiKey: "test-key"},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Z.AI provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "zai",
+					Providers: map[string]*schema.AIProviderConfig{
+						"zai": {ApiKey: "test-key"},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "Disabled AI",
 			atmosConfig: &schema.AtmosConfiguration{
 				AI: schema.AISettings{
@@ -228,6 +270,16 @@ func TestDetectCLIProvider(t *testing.T) {
 			expected: "copilot-cli",
 		},
 		{
+			name: "opencode found returns opencode",
+			lookup: func(bin string) (string, error) {
+				if bin == "opencode" {
+					return "/usr/local/bin/opencode", nil
+				}
+				return "", errNotFound
+			},
+			expected: "opencode",
+		},
+		{
 			name: "gemini found returns gemini-cli",
 			lookup: func(bin string) (string, error) {
 				if bin == "gemini" {
@@ -306,6 +358,7 @@ func TestIsCLIProvider(t *testing.T) {
 		{"claude-code is CLI", "claude-code", true},
 		{"codex-cli is CLI", "codex-cli", true},
 		{"copilot-cli is CLI", "copilot-cli", true},
+		{"opencode is CLI", "opencode", true},
 		{"gemini-cli is CLI", "gemini-cli", true},
 		{"anthropic is not CLI", "anthropic", false},
 		{"openai is not CLI", "openai", false},

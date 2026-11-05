@@ -246,7 +246,7 @@ source: "https://git.company.com/team/repository.git?ref=v1.0.0"
 
   <TabItem value="oci" label="OCI Registries">
 
-Atmos supports pulling artifacts from OCI-compatible registries like GitHub Container Registry (ghcr.io), AWS ECR, Google Artifact Registry, and more.
+Atmos can extract files from any OCI image hosted in registries such as GitHub Container Registry (ghcr.io), AWS ECR, Docker Hub, or Google Artifact Registry. No Atmos-specific image format, repository layout, or publisher is required.
 
 ### OCI Syntax
 ```yaml
@@ -254,16 +254,24 @@ source: "oci://<registry>/<namespace>/<image>:<tag>"
 ```
 
 ### GitHub Container Registry
+
+Replace the example organization, repository, and tag with an image containing the files you need.
+
 ```yaml
-source: "oci://ghcr.io/cloudposse/components/vpc:v1.0.0"
+source: "oci://ghcr.io/YOUR_ORG/components/vpc:v1.0.0"
 ```
 
 ### AWS ECR Public
+
+Replace `YOUR_PUBLIC_ALIAS`, the repository, and the tag with an existing image reference.
 ```yaml
-source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest"
+# Example image reference: replace with the OCI image containing the files you need.
+source: "oci://public.ecr.aws/YOUR_PUBLIC_ALIAS/example:latest"
 ```
 
 ### Docker Hub
+
+This example extracts files from the nginx image. A target such as `vendor-assets/nginx` keeps those files together:
 ```yaml
 source: "oci://docker.io/library/nginx:alpine"
 ```

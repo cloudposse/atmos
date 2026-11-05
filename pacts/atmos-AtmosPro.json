@@ -2124,6 +2124,38 @@
         },
         "status": 200
       }
+    },
+    {
+      "description": "an enriched CLI exception",
+      "providerState": "repository 123 accepts exception envelopes",
+      "request": {
+        "body": "{\"event_id\":\"0123456789abcdef0123456789abcdef\"}\n{\"type\":\"event\",\"length\":471}\n{\"contexts\":{\"atmos_execution\":{\"command\":\"terraform plan\",\"execution_id\":\"12345678-1234-4234-8234-123456789abc\"}},\"event_id\":\"0123456789abcdef0123456789abcdef\",\"fingerprint\":[\"terraform\",\"plan\",\"invalid configuration\"],\"level\":\"error\",\"message\":\"component failed\",\"sdk\":{},\"tags\":{\"atmos.component\":\"vpc\",\"atmos.execution_id\":\"12345678-1234-4234-8234-123456789abc\",\"atmos.stack\":\"prod\",\"production\":\"true\",\"team\":\"platform\"},\"timestamp\":\"2026-09-25T12:00:00Z\",\"user\":{}}\n",
+        "headers": {
+          "Content-Type": "application/x-sentry-envelope",
+          "X-Sentry-Auth": "Sentry sentry_version=7, sentry_client=atmos-cli/test, sentry_key=pact-accepted-oidc-token"
+        },
+        "method": "POST",
+        "path": "/api/v1/events/123/exceptions"
+      },
+      "response": {
+        "status": 200
+      }
+    },
+    {
+      "description": "an exception with rejected authentication",
+      "providerState": "repository 123 rejects exception authentication",
+      "request": {
+        "body": "{\"event_id\":\"0123456789abcdef0123456789abcdef\"}\n{\"type\":\"event\",\"length\":471}\n{\"contexts\":{\"atmos_execution\":{\"command\":\"terraform plan\",\"execution_id\":\"12345678-1234-4234-8234-123456789abc\"}},\"event_id\":\"0123456789abcdef0123456789abcdef\",\"fingerprint\":[\"terraform\",\"plan\",\"invalid configuration\"],\"level\":\"error\",\"message\":\"component failed\",\"sdk\":{},\"tags\":{\"atmos.component\":\"vpc\",\"atmos.execution_id\":\"12345678-1234-4234-8234-123456789abc\",\"atmos.stack\":\"prod\",\"production\":\"true\",\"team\":\"platform\"},\"timestamp\":\"2026-09-25T12:00:00Z\",\"user\":{}}\n",
+        "headers": {
+          "Content-Type": "application/x-sentry-envelope",
+          "X-Sentry-Auth": "Sentry sentry_version=7, sentry_client=atmos-cli/test, sentry_key=pact-rejected-oidc-token"
+        },
+        "method": "POST",
+        "path": "/api/v1/events/123/exceptions"
+      },
+      "response": {
+        "status": 401
+      }
     }
   ],
   "metadata": {

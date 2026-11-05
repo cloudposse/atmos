@@ -3,24 +3,25 @@ title: atmos toolchain
 sidebar_label: toolchain
 sidebar_class_name: command
 id: usage
-description: Manage toolchain dependencies for your Atmos components with native version control and Aqua registry integration.
+description: "Keep developer machines and CI using the same versions of Terraform, kubectl, and other CLI tools."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Manage toolchain dependencies for your Atmos components, commands, and workflows with native version control and seamless Aqua registry integration.
+Keep developer machines and CI using the same versions of Terraform, kubectl, and other CLI tools.
+Atmos installs and runs the versions declared by your project, making the tools part of your project
+setup.
 </Intro>
-
-<Experimental />
 
 <ActionCard title="Configure Toolchain">
     Learn how to configure tool versions, registries, aliases, and package verification in your atmos.yaml.
@@ -449,7 +450,7 @@ The token provides:
   <dd>Display configuration information for a tool from the registry</dd>
 
   <dt>`aliases`</dt>
-  <dd>List all configured tool aliases</dd>
+  <dd>List effective built-in and configured tool aliases</dd>
 
   <dt>`get [tool]`</dt>
   <dd>Get version information for a tool from .tool-versions file</dd>
@@ -740,8 +741,13 @@ atmos toolchain info terraform
 # Use canonical org/repo format
 atmos toolchain install opentofu/opentofu@1.10.3
 
-# Check aliases configuration
+```
+
+Use [`atmos toolchain aliases`](/cli/commands/toolchain/aliases) to inspect the effective aliases, including overrides from `toolchain.aliases` in `atmos.yaml`:
+
+```shell
 atmos toolchain aliases
+atmos toolchain aliases --format=json
 ```
 
 ### Permission Issues
@@ -755,6 +761,18 @@ ls -l .tools/bin/*/terraform/*/terraform
 # Manually fix permissions if needed
 chmod +x .tools/bin/*/terraform/*/terraform
 ```
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Inspect the project's pinned tools. Follow the README to install them and run its workflows; installation downloads require network access.
+
+```shell
+atmos toolchain list
+```
+
+</TryExample>
 
 ## Related Documentation
 

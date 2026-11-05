@@ -8,7 +8,12 @@ interface InstallMethod {
   language: string;
 }
 
-export default function InstallWidget() {
+interface InstallWidgetProps {
+  /** Compact layout for documentation and changelog quick starts. */
+  variant?: 'default' | 'docs';
+}
+
+export default function InstallWidget({ variant = 'default' }: InstallWidgetProps) {
   const globalData = useGlobalData();
   const latestRelease = globalData['fetch-latest-release']?.default?.latestRelease || 'latest';
   // Remove 'v' prefix for Docker tag (e.g., v1.197.0 -> 1.197.0)
@@ -53,12 +58,15 @@ export default function InstallWidget() {
   };
 
   return (
-    <div className="install-widget">
+    <div className={`install-widget${variant === 'docs' ? ' install-widget--docs' : ''}`}>
       <div className="install-widget__content">
         <div className="install-widget__select-wrapper">
-          <span className="install-widget__label">Terminal</span>
+          <span className="install-widget__label">
+            {variant === 'docs' ? installMethods[selectedMethod].label : 'Terminal'}
+          </span>
           <select
             className="install-widget__select"
+            aria-label="Installation method"
             value={selectedMethod}
             onChange={(e) => setSelectedMethod(Number(e.target.value))}
           >
@@ -79,7 +87,9 @@ export default function InstallWidget() {
         </div>
         <button
           className="install-widget__copy"
+          type="button"
           onClick={handleCopy}
+          aria-label={copied ? 'Copied!' : 'Copy installation command'}
           title={copied ? 'Copied!' : 'Copy to clipboard'}
         >
           {copied ? (

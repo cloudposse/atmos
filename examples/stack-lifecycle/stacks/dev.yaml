@@ -1,0 +1,32 @@
+vars:
+  stage: dev
+components:
+  terraform:
+    namespace:
+      vars:
+        namespace: stack-lifecycle-demo
+        kubeconfig: ~/.kube/config
+  helm:
+    app:
+      chart: .
+      namespace: stack-lifecycle-demo
+      dependencies:
+        components:
+          - kind: terraform
+            component: namespace
+      hooks:
+        build-image:
+          kind: command
+          events:
+            - before.helm.deploy
+          command: docker
+          args: [build, -t, stack-lifecycle-demo:local, .]
+          when: '"BUILD_DEMO_IMAGE" in env && env.BUILD_DEMO_IMAGE == "true"'
+      values:
+        image: nginx:1.27
+  kubernetes:
+    policy:
+      dependencies:
+        components:
+          - kind: helm
+            component: app

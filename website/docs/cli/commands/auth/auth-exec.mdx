@@ -28,6 +28,10 @@ Use `exec` for single commands or automation. Use [`shell`](/cli/commands/auth/s
 atmos auth exec [--identity <name>] -- <command> [args...]
 ```
 
+:::note Justification for privileged identities
+Authenticating an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity activates the role and requires a justification. Supply it with the [`--justification`](/cli/global-flags#authentication-flags) global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable (resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt). In a non-interactive context with none supplied, the command fails fast.
+:::
+
 ## Arguments
 
 <dl>

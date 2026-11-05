@@ -12,6 +12,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// strImports wraps plain string paths as optional (fail-open) ConfigImports, matching the legacy
+// string-form import behavior. Shared across package-config tests that exercise processImports /
+// ProcessImportsFromAdapter with string paths.
+func strImports(paths ...string) []schema.ConfigImport {
+	return schema.ConfigImportsFromPaths(paths)
+}
+
 // testLocalAdapter is a minimal local adapter for testing.
 // It implements the same logic as adapters.LocalAdapter but without
 // importing the adapters package to avoid circular imports.
@@ -84,7 +91,7 @@ func (l *testLocalAdapter) Resolve(
 
 		// Recursively process nested imports.
 		if len(imports) > 0 {
-			nestedPaths, err := ProcessImportsFromAdapter(nil, importBasePath, imports, tempDir, currentDepth+1, maxDepth)
+			nestedPaths, err := ProcessImportsFromAdapter(nil, importBasePath, strImports(imports...), tempDir, currentDepth+1, maxDepth)
 			if err != nil {
 				log.Debug("failed to process nested imports from", "path", path, "error", err)
 				continue

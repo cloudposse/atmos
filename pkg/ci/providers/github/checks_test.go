@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/providers/github/ghtest"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 )
 
@@ -423,4 +424,25 @@ func TestUpdateCheckRun_ErrorHints(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProvider_CheckRunCarriesDetailsURL verifies the returned CheckRun reports where the status
+// links to, so callers see the same URL the status was created with.
+func TestProvider_CheckRunCarriesDetailsURL(t *testing.T) {
+	s := ghtest.NewServer(t)
+	p := newTestProvider(t, s)
+	const details = "https://github.com/owner/repo/actions/runs/1"
+
+	created, err := p.CreateCheckRun(context.Background(), &provider.CreateCheckRunOptions{
+		Owner: "owner", Repo: "repo", SHA: "abc", Name: "atmos/plan", Status: provider.CheckRunStateInProgress, DetailsURL: details,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, details, created.DetailsURL)
+
+	updated, err := p.UpdateCheckRun(context.Background(), &provider.UpdateCheckRunOptions{
+		Owner: "owner", Repo: "repo", SHA: "abc", Name: "atmos/plan", Status: provider.CheckRunStateSuccess, DetailsURL: details,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, details, updated.DetailsURL)
+	assert.Equal(t, provider.CheckRunStateSuccess, updated.Status)
 }

@@ -18,6 +18,9 @@ import (
 //	                         wrapping-contract test in
 //	                         utils_exit_wrapping_test.go.
 func TestMain(m *testing.M) {
+	if os.Getenv("_ATMOS_TEST_LIFECYCLE_LOG") != "" {
+		os.Exit(runLifecycleTestProcess())
+	}
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
 	}

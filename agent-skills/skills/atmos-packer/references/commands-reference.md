@@ -641,7 +641,7 @@ source:
 | Git (SSH) | `git::ssh://git@github.com/org/repo.git//path` |
 | S3 | `s3::https://s3-us-east-1.amazonaws.com/bucket/path.tar.gz` |
 | HTTP/HTTPS | `https://releases.example.com/templates/component.tar.gz` |
-| OCI | `oci::registry.example.com/templates/component:v1.0.0` |
+| OCI | `oci://registry.example.com/templates/component:v1.0.0` |
 
 ---
 

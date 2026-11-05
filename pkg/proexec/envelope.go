@@ -29,11 +29,13 @@ const atmosProRunIDEnvVar = "ATMOS_PRO_RUN_ID"
 // only positional arguments and flags MUST hold only CLI flags — the two are
 // kept in separate fields, never combined (FR-003b).
 type ExecRecordInput struct {
-	Command  string
-	Args     []string
-	Flags    []string
-	ExitCode int
-	Data     any
+	// ExecutionID correlates the upload with errors from the same invocation.
+	ExecutionID string
+	Command     string
+	Args        []string
+	Flags       []string
+	ExitCode    int
+	Data        any
 	// Metrics, when set, overrides buildRecord's default of
 	// process.SelfUsageSoFar() (atmos's own resource usage). Callers that
 	// shell out to a subprocess (e.g. executeMainTerraformCommand) set this
@@ -83,8 +85,12 @@ func buildRecord(in *ExecRecordInput, gitRepo git.GitRepoInterface) (*dtos.ExecU
 		return nil, errUtils.Build(errUtils.ErrFailedToUploadExecMetadata).WithCause(err).Err()
 	}
 
+	executionID := in.ExecutionID
+	if executionID == "" {
+		executionID = uuid.NewString()
+	}
 	req := &dtos.ExecUploadRequest{
-		ExecutionID:   uuid.New().String(),
+		ExecutionID:   executionID,
 		AtmosProRunID: atmosProRunID,
 		AtmosVersion:  pkgversion.Version,
 		AtmosOS:       runtime.GOOS,

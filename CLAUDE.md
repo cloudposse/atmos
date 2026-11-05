@@ -203,7 +203,7 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - Use interfaces + dependency injection for testability
 - Generate mocks with `go.uber.org/mock/mockgen`
 - Table-driven tests for comprehensive coverage
-- Target >85% coverage
+- Target 90% patch coverage on new and changed lines
 
 ### Test Isolation (MANDATORY)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args).
@@ -227,7 +227,9 @@ ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, 
 - **Include negative-path tests for recovery logic:** whenever a test verifies that a recovery/fallback triggers under condition X, add a corresponding test that verifies the recovery does NOT trigger when condition X is absent (e.g., mismatched workspace name).
 
 ### Follow-up Tracking (MANDATORY)
-When a PR defers work to a follow-up (e.g., migration, cleanup, refactor), **open a GitHub issue and link it by number** in the blog post, roadmap, and/or PR description before merging. Blog posts with "a follow-up issue will..." with no `#number` are incomplete — the work will never be tracked.
+**NEVER create GitHub issues for features or implementations that have not merged into `main`.** Fix bugs, incomplete behavior, and review findings in the active PR or PR stack. Keep remaining implementation work in its PRD or task list; do not turn it into public follow-up issues or declare the feature complete while required work remains.
+
+For features already merged into `main`, track genuinely deferred work in a GitHub issue and link it from the relevant documentation. This requirement does not apply to unmerged implementations.
 
 ### Mock Generation (MANDATORY)
 Use `go.uber.org/mock/mockgen` with `//go:generate` directives. Never manual mocks.
@@ -286,7 +288,7 @@ All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` 
 CLI command docs MUST include:
 1. **Frontmatter** - title, sidebar_label, sidebar_class_name, id, description
 2. **Intro component** - `import Intro from '@site/src/components/Intro'` then `<Intro>Brief description</Intro>`
-3. **Screengrab** - `import Screengrab from '@site/src/components/Screengrab'` then `<Screengrab title="..." slug="..." />`
+3. **Help recording** - `import CastPlayer from '@site/src/components/CastPlayer'` then `<CastPlayer title="..." src="/casts/screengrabs/<slug>.cast" static chrome />`. Use the committed terminal cast; the legacy `Screengrab` component only supports older HTML captures.
 4. **Usage section** - Shell code block with command syntax
 5. **Arguments/Flags** - Use `<dl><dt>` for each argument/flag with `<dd>` description
 6. **Examples section** - Practical usage examples
@@ -363,7 +365,7 @@ Don't commit: todos, research, scratch files. Do commit: code, tests, requested 
 Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 
 ### Test Coverage (MANDATORY)
-85% minimum (CodeCov enforced). All features need tests. `atmos test --coverage` for reports.
+90% patch coverage target on new and changed lines (reported by Codecov, currently informational rather than a blocking check). All features need tests. `atmos test --coverage` for reports.
 
 ### Cyclomatic Complexity (MANDATORY)
 golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.
@@ -443,7 +445,7 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 ALWAYS compile after changes: `go build ./... && atmos test`. Fix errors immediately. `atmos test` runs short-mode tests only; use `atmos test --full` before opening a PR or when a change touches slow/integration-style tests.
 
 ### Pre-commit (MANDATORY)
-NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Atmos Git hooks run the shared Starlark test suite (including gofumpt, golangci-lint, and module tidy). Run `atmos dev checks-build` after changing native check APIs; never build Atmos inside a commit hook. Fixes remain unstaged for review.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,

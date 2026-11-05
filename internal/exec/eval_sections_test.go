@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/deferred"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -27,7 +29,7 @@ func TestIsSectionRequired(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, isSectionRequired(tt.sections, tt.sectionName))
+			assert.Equal(t, tt.want, deferred.IsSectionRequired(tt.sections, tt.sectionName))
 		})
 	}
 }
@@ -40,19 +42,19 @@ func TestSplitSectionsByRequirement(t *testing.T) {
 	}
 
 	t.Run("nil filter returns the input unchanged and a nil excluded map", func(t *testing.T) {
-		filtered, excluded := splitSectionsByRequirement(componentSection, nil)
+		filtered, excluded := deferred.SplitSectionsByRequirement(componentSection, nil)
 		assert.Equal(t, componentSection, filtered)
 		assert.Nil(t, excluded)
 	})
 
 	t.Run("empty filter excludes everything", func(t *testing.T) {
-		filtered, excluded := splitSectionsByRequirement(componentSection, []string{})
+		filtered, excluded := deferred.SplitSectionsByRequirement(componentSection, []string{})
 		assert.Empty(t, filtered)
 		assert.Equal(t, componentSection, excluded)
 	})
 
 	t.Run("filter splits required from excluded", func(t *testing.T) {
-		filtered, excluded := splitSectionsByRequirement(componentSection, []string{"vars"})
+		filtered, excluded := deferred.SplitSectionsByRequirement(componentSection, []string{"vars"})
 		assert.Equal(t, map[string]any{"vars": componentSection["vars"]}, filtered)
 		assert.Equal(t, map[string]any{
 			"settings": componentSection["settings"],
@@ -190,7 +192,7 @@ func TestExecuteDescribeStacksWithEvalSections_SkipsUnrequiredSection(t *testing
 			false, // processTemplates
 			true,  // processYamlFunctions
 			false, // includeEmptyStacks
-			nil, nil, false, nil, nil,
+			nil, nil, nil, nil,
 			DescribeStacksErrorOptions{
 				OnError:   OnErrorWarn,
 				OnWarning: func(w DegradationWarning) { warnings = append(warnings, w) },
@@ -220,7 +222,7 @@ func TestExecuteDescribeStacksWithEvalSections_SkipsUnrequiredSection(t *testing
 		var warnings []DegradationWarning
 		_, err := ExecuteDescribeStacksWithEvalSections(
 			&atmosConfig, "", nil, nil, nil, false,
-			false, true, false, nil, nil, false, nil, nil,
+			false, true, false, nil, nil, nil, nil,
 			DescribeStacksErrorOptions{
 				OnError:   OnErrorWarn,
 				OnWarning: func(w DegradationWarning) { warnings = append(warnings, w) },
@@ -254,7 +256,7 @@ func TestExecuteDescribeStacksWithEvalSections_SkipsUnrequiredSection(t *testing
 		var warnings []DegradationWarning
 		_, err := ExecuteDescribeStacksWithEvalSections(
 			&atmosConfig, "", nil, nil, nil, false,
-			false, true, false, nil, nil, false, nil, nil,
+			false, true, false, nil, nil, nil, nil,
 			DescribeStacksErrorOptions{
 				OnError:   OnErrorWarn,
 				OnWarning: func(w DegradationWarning) { warnings = append(warnings, w) },

@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/reflow/truncate"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -66,6 +67,16 @@ func clipToWidth(line string, width int) string {
 		return line
 	}
 	return truncate.StringWithTail(line, uint(effectiveWidth), ellipsis)
+}
+
+// formatProgressMessage renders Markdown labels but preserves already-rendered UI
+// components, such as ui.NewProgress bars. Parsing their ANSI sequences as Markdown
+// corrupts the escape codes and prints color parameters as visible text.
+func formatProgressMessage(message string) string {
+	if ansi.Strip(message) != message {
+		return message
+	}
+	return ui.FormatInline(message)
 }
 
 // newDotSpinner builds the shared Dot spinner used by every spinner variant here.
@@ -163,15 +174,20 @@ type spinnerModel struct {
 	width        int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
+// opCompleteMsg reports that the spinner's operation finished, with its error if it failed.
 type opCompleteMsg struct {
 	err error
 }
 
+// Init starts the spinner ticking.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+// Update handles ticks, window resizes, ctrl+c, and the operation's completion.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -200,6 +216,8 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the spinner line while running, or the final status line when done.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) View() string {
 	if m.done {
@@ -213,11 +231,12 @@ func (m spinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(m.completedMsg) + newline
 	}
 	// Show progress message with spinner.
-	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
 	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
 
+// newSpinnerModel builds the model for ExecWithSpinner.
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
 	s := newDotSpinner()
 	return spinnerModel{
@@ -325,16 +344,21 @@ type dynamicSpinnerModel struct {
 	width        int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
+// opCompleteDynamicMsg reports that the operation finished, with its completion message and error.
 type opCompleteDynamicMsg struct {
 	completedMsg string
 	err          error
 }
 
+// Init starts the spinner ticking.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m dynamicSpinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+// Update handles ticks, window resizes, ctrl+c, and the operation's completion.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m dynamicSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -364,6 +388,8 @@ func (m dynamicSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the spinner line while running, or the final status line when done.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m dynamicSpinnerModel) View() string {
 	if m.done {
@@ -381,11 +407,12 @@ func (m dynamicSpinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(displayMsg) + newline
 	}
 	// Show progress message with spinner.
-	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
 	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
 
+// newDynamicSpinnerModel builds the model for ExecWithSpinnerDynamic.
 func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
 	s := newDotSpinner()
 	return dynamicSpinnerModel{
@@ -415,6 +442,7 @@ type Spinner struct {
 	program     *tea.Program
 	done        chan struct{}
 	isTTY       bool
+	onInterrupt func()
 }
 
 // New creates a new Spinner with the given progress message.
@@ -444,13 +472,33 @@ func (s *Spinner) Start() {
 		// but don't let bubbletea open /dev/tty for input — there isn't one.
 		opts = append(opts, tea.WithInput(nil))
 	}
-	s.program = tea.NewProgram(model, opts...)
-	s.done = make(chan struct{})
+	program := tea.NewProgram(model, opts...)
+	done := make(chan struct{})
+	onInterrupt := s.onInterrupt
+	s.program = program
+	s.done = done
 
 	go func() {
-		defer close(s.done)
-		_, _ = s.program.Run()
+		defer close(done)
+		final, _ := program.Run()
+		notifyIfInterrupted(final, onInterrupt)
 	}()
+}
+
+// notifyIfInterrupted calls handler when the finished spinner model records a ctrl+c press.
+// It does nothing for a normal stop, for a model of another type, or when no handler is set.
+func notifyIfInterrupted(final tea.Model, handler func()) {
+	if m, ok := final.(manualSpinnerModel); ok && m.interrupted && handler != nil {
+		handler()
+	}
+}
+
+// SetInterruptHandler registers a function that is called when the user presses ctrl+c
+// while the spinner is showing. The terminal is in raw mode then, so the keypress never
+// becomes a signal; without a handler the spinner would disappear while the work continues.
+// Set it before Start. The handler runs on the spinner's goroutine.
+func (s *Spinner) SetInterruptHandler(handler func()) {
+	s.onInterrupt = handler
 }
 
 // Update replaces the in-progress message. In non-interactive output it emits
@@ -469,6 +517,20 @@ func (s *Spinner) Update(message string) {
 	}
 
 	s.program.Send(manualUpdateMsg{message: message})
+}
+
+// Println prints a line above the live spinner line, permanently, without
+// interrupting the spinner. In non-interactive output it's just ui.Writeln.
+func (s *Spinner) Println(line string) {
+	if !s.isTTY || s.program == nil {
+		ui.Writeln(line)
+		return
+	}
+	// Construct the native print message synchronously so the event loop receives
+	// it before a subsequent stop. Returning tea.Println from Update would run
+	// another asynchronous command that could be reordered or overtaken by quit.
+	// Send also handles an already-exited program; Program.Println blocks there.
+	s.program.Send(tea.Println(line)())
 }
 
 // Stop stops the spinner without displaying a completion message.
@@ -522,18 +584,22 @@ type manualSpinnerModel struct {
 	finalMsg    string
 	success     bool
 	done        bool
-	width       int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
+	interrupted bool // Set when the user pressed ctrl+c; the line is cleared and the owner is told.
+	width       int  // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
+// manualStopMsg stops a manual spinner, optionally replacing it with a success or error line.
 type manualStopMsg struct {
 	message string
 	success bool
 }
 
+// manualUpdateMsg replaces the progress message of a manual spinner.
 type manualUpdateMsg struct {
 	message string
 }
 
+// newManualSpinnerModel builds the model for the start/stop Spinner.
 func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
 	s := newDotSpinner()
 	return manualSpinnerModel{
@@ -543,16 +609,22 @@ func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
 	}
 }
 
+// Init starts the spinner ticking.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m manualSpinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+// Update handles ticks, window resizes, ctrl+c, message updates, and stop requests.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			m.done = true
+			m.interrupted = true
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
@@ -580,6 +652,8 @@ func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the spinner line while running, or the final status line (or a cleared line) when done.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m manualSpinnerModel) View() string {
 	if m.done {
@@ -593,7 +667,7 @@ func (m manualSpinnerModel) View() string {
 		}
 		return terminal.EscResetLine + ui.FormatError(m.finalMsg) + newline
 	}
-	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
 	return terminal.EscResetLine + clipToWidth(line, m.width)
 }

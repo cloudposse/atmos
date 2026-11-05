@@ -14,6 +14,7 @@ commands again (see the !include env regression), these assertions fail the
 recording instead of committing a broken cast.
 """
 
+import glob
 import json
 import os
 import re
@@ -31,6 +32,29 @@ def load_text(path):
     return "".join(
         json.loads(line)[2] for line in lines[1:] if json.loads(line)[1] in ("o", "e")
     )
+
+
+def assert_recorded_command(path, command):
+    """The cast header must record the command as typed, program name included.
+
+    The docs player types the header's ``command`` after the prompt, so a
+    header that omits the leading ``atmos`` renders "> --help" instead of
+    "> atmos --help". ``command`` is the full manifest command. The recorder
+    may widen a trailing ``--help`` to ``--help=all`` (see the source
+    commands in the screengrab manifest), so that one substitution is allowed.
+    """
+    header = json.loads(Path(path).read_text().splitlines()[0])
+    recorded = header.get("command")
+    if not isinstance(recorded, str):
+        raise SystemExit(f"cast header has no recorded command: {Path(path).name}")
+    expected = command.split()
+    actual = recorded.split()
+    if actual and expected and expected[-1] == "--help" and actual[-1] == "--help=all":
+        actual = actual[:-1] + ["--help"]
+    if actual != expected:
+        raise SystemExit(
+            f"cast header command {recorded!r} must be {command!r}: {Path(path).name}"
+        )
 
 
 def assert_no_experimental(text):
@@ -166,14 +190,20 @@ def assert_no_dumb_term_recordings(
     source_glob="atmos.d/examples/**/*.yaml",
     cast_glob="../../website/static/casts/examples/**/*.cast",
 ):
-    """Example casts must record with an interactive terminal type."""
+    """Casts must record with an interactive terminal type.
+
+    A dumb terminal disables color and interactive rendering, so a cast recorded
+    from a non-TTY shell (for example, re-recorded by hand outside the pipeline)
+    silently loses its styling. The glob module handles ``..`` patterns on every
+    supported Python version.
+    """
     offenders = []
-    for path in sorted(Path(".").glob(source_glob)):
+    for path in sorted(Path(p) for p in glob.glob(source_glob, recursive=True)):
         text = path.read_text()
         if re.search(r"(?m)^\s*TERM:\s*dumb\s*$", text):
             offenders.append(str(path))
 
-    for path in sorted(Path(".").glob(cast_glob)):
+    for path in sorted(Path(p) for p in glob.glob(cast_glob, recursive=True)):
         first_line = path.read_text().splitlines()[0]
         try:
             header = json.loads(first_line)
@@ -184,8 +214,57 @@ def assert_no_dumb_term_recordings(
 
     if offenders:
         raise SystemExit(
-            "example casts must not use TERM=dumb or record dumb terminal headers:\n"
+            "casts must not use TERM=dumb or record dumb terminal headers:\n"
             + "\n".join(f"  - {path}" for path in offenders)
+        )
+
+
+_COMMAND_NAME = re.compile(r"(?m)^  - name: (casts validate [a-z0-9 -]+?)\s*$")
+_VALIDATE_CALL = re.compile(r"atmos (?:--\S+ )*casts (validate [a-z0-9 -]+)")
+_VALIDATE_RUN = re.compile(r'\["casts", "validate", ([^\]]+)\]')
+
+
+def _validator_calls(body):
+    """Return the validators a command body invokes, by full command name."""
+    calls = {"casts " + " ".join(m.split()) for m in _VALIDATE_CALL.findall(body)}
+    for args in _VALIDATE_RUN.findall(body):
+        words = [part.strip().strip('"') for part in args.split(",")]
+        calls.add("casts validate " + " ".join(words))
+    return calls
+
+
+def assert_all_validators_reachable(root, source_glob="atmos.d/**/*.yaml"):
+    """Every leaf ``casts validate`` command must run from ``root``.
+
+    Aggregate validators list their children by hand, so a validator added for a
+    new cast is easy to leave out; it then never runs in CI and its cast can rot.
+    Leaves are validators that invoke no other validator, so an aggregate that is
+    only a convenience entry point does not itself need to be reachable.
+    """
+    calls = {}
+    for path in sorted(glob.glob(source_glob, recursive=True)):
+        text = Path(path).read_text()
+        starts = [(m.start(), m.group(1)) for m in _COMMAND_NAME.finditer(text)]
+        for index, (start, name) in enumerate(starts):
+            end = starts[index + 1][0] if index + 1 < len(starts) else len(text)
+            # Bodies end at the next top-level command, validator or not.
+            following = re.search(r"(?m)^  - name: ", text[start + 1 : end])
+            body_end = start + 1 + following.start() if following else end
+            calls[name] = _validator_calls(text[start:body_end])
+    if root not in calls:
+        raise SystemExit(f"validator {root!r} is not defined")
+    seen, pending = set(), [root]
+    while pending:
+        name = pending.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        pending.extend(calls.get(name, ()))
+    unreachable = sorted(name for name, called in calls.items() if not called and name not in seen)
+    if unreachable:
+        raise SystemExit(
+            f"cast validators never run from {root!r}; add them to an aggregate:\n"
+            + "\n".join(f"  - {name}" for name in unreachable)
         )
 
 

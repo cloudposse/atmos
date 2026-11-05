@@ -52,8 +52,16 @@ func isGitHubTransientError(err error) bool {
 		return true
 	}
 
-	// Fallback for API calls that don't use handleGitHubAPIError.
+	// net/http can return its unexported HTTP/2 stream error while decoding a
+	// response body, after the request succeeded. Match only remote cancellation;
+	// protocol errors and application decoding failures must still fail the test.
 	errMsg := err.Error()
+	if strings.HasPrefix(errMsg, "stream error: stream ID ") &&
+		strings.HasSuffix(errMsg, "; CANCEL; received from peer") {
+		return true
+	}
+
+	// Fallback for API calls that don't use handleGitHubAPIError.
 	return strings.Contains(errMsg, "rate limit exceeded") ||
 		strings.Contains(errMsg, "API rate limit")
 }
@@ -97,6 +105,27 @@ func TestIsGitHubTransientError_TransportFailure(t *testing.T) {
 	}))
 }
 
+// HTTP/2 response-body cancellations escape net/http without a *url.Error.
+func TestIsGitHubTransientError_ResponseStreamCancellation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"peer cancelled response", errors.New("stream error: stream ID 25; CANCEL; received from peer"), true},
+		{"different stream", errors.New("stream error: stream ID 1; CANCEL; received from peer"), true},
+		{"protocol failure", errors.New("stream error: stream ID 25; PROTOCOL_ERROR; received from peer"), false},
+		{"local cancellation", context.Canceled, false},
+		{"application cancellation", errors.New("request CANCEL; received from peer"), false},
+		{"decoding failure", errors.New("invalid character 'x' looking for beginning of value"), false},
+		{"no error", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isGitHubTransientError(tc.err))
+		})
+	}
+}
+
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.
 func TestNewGitHubClientUnauthenticated(t *testing.T) {
 	t.Run("creates unauthenticated client when no token present", func(t *testing.T) {
@@ -121,106 +150,6 @@ func TestNewGitHubClientAuthenticated(t *testing.T) {
 		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
-	})
-}
-
-// TestGetLatestRelease tests fetching the latest release from GitHub.
-func TestGetLatestRelease(t *testing.T) {
-	t.Run("fetches latest release from public repo", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		// Test with a known public repo that has releases
-		owner := "cloudposse"
-		repo := "atmos"
-
-		tag, err := GetLatestRelease(owner, repo)
-		if isGitHubTransientError(err) {
-			t.Skipf("Skipping due to transient GitHub API error: %v", err)
-		}
-
-		require.NoError(t, err)
-		assert.NotEmpty(t, tag, "Expected a release tag to be returned")
-		assert.Contains(t, tag, "v", "Expected tag to contain 'v' prefix")
-	})
-
-	t.Run("handles repo without releases", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		// Test with a repo that might not have releases.
-		// Using a valid owner but potentially a repo without releases.
-		owner := "cloudposse"
-		repo := "test-harness-this-repo-should-not-exist"
-
-		tag, err := GetLatestRelease(owner, repo)
-		// Should get an error for non-existent repo.
-		require.Error(t, err)
-		assert.Empty(t, tag)
-	})
-
-	t.Run("handles invalid owner", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		owner := "this-owner-definitely-does-not-exist-12345"
-		repo := "test-repo"
-
-		tag, err := GetLatestRelease(owner, repo)
-
-		// Should return error for invalid owner
-		assert.Error(t, err)
-		assert.Empty(t, tag)
-	})
-
-	t.Run("handles invalid repo", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		owner := "cloudposse"
-		repo := "this-repo-definitely-does-not-exist-12345"
-
-		tag, err := GetLatestRelease(owner, repo)
-
-		// Should return error for invalid repo
-		assert.Error(t, err)
-		assert.Empty(t, tag)
-	})
-}
-
-// TestGetLatestReleaseWithAuthentication tests authenticated GitHub API access.
-func TestGetLatestReleaseWithAuthentication(t *testing.T) {
-	t.Run("uses authentication when token available", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		// If GITHUB_TOKEN is set, the client should be authenticated
-		// and have higher rate limits
-		owner := "cloudposse"
-		repo := "atmos"
-
-		tag, err := GetLatestRelease(owner, repo)
-		if isGitHubTransientError(err) {
-			t.Skipf("Skipping due to transient GitHub API error: %v", err)
-		}
-
-		require.NoError(t, err)
-		assert.NotEmpty(t, tag)
 	})
 }
 
@@ -525,25 +454,6 @@ func TestGetReleaseByTag(t *testing.T) {
 
 		_, err := GetReleaseByTag("cloudposse", "atmos", "v999.999.999")
 		assert.Error(t, err)
-	})
-}
-
-// TestGetLatestReleaseInfo tests fetching the latest stable release.
-func TestGetLatestReleaseInfo(t *testing.T) {
-	t.Run("fetches latest stable release", func(t *testing.T) {
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		release, err := GetLatestReleaseInfo("cloudposse", "atmos")
-		if isGitHubTransientError(err) {
-			t.Skipf("Skipping due to transient GitHub API error: %v", err)
-		}
-		require.NoError(t, err)
-		assert.NotNil(t, release)
-		assert.NotEmpty(t, release.GetTagName())
-		assert.False(t, release.GetPrerelease(), "Latest release should not be a prerelease")
 	})
 }
 

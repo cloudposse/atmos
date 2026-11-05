@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -284,26 +285,24 @@ func TestExecuteMCPExport_OverwritesExistingFile(t *testing.T) {
 		"expected JSON content; got %q", string(data))
 }
 
-// TestExecuteMCPExport_WriteFailure_NonExistentDir verifies the
-// os.WriteFile error path is reached and wrapped with the right
-// sentinel. Without this, an export pointing at a missing directory
-// would surface a bare os.PathError that callers can't programmatically
-// match against errUtils.ErrMCPConfigWriteFailed.
-func TestExecuteMCPExport_WriteFailure_NonExistentDir(t *testing.T) {
+func TestExecuteMCPExportCreatesParentDirectories(t *testing.T) {
 	writeMinimalAtmosYAMLForExport(t, `    atmos:
       command: atmos
       args: ["mcp", "start"]
 `)
+	outputPath := filepath.Join(t.TempDir(), "nested", "client", "mcp.json")
+	require.NoError(t, executeMCPExport(newExportTestCmd(t, outputPath), nil))
+	content, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	require.True(t, json.Valid(content))
+}
 
-	// /does-not-exist/.../out.mcp.json — WriteFile fails because the
-	// parent directory doesn't exist.
-	outputPath := filepath.Join(t.TempDir(), "does", "not", "exist", "out.mcp.json")
-	cmd := newExportTestCmd(t, outputPath)
-
-	err := executeMCPExport(cmd, nil)
-	require.Error(t, err, "writing to a non-existent directory must return an error")
-	// Normalize separators so the assertion works on Windows (where
-	// filepath.Join uses `\`) as well as Unix.
-	assert.Contains(t, filepath.ToSlash(err.Error()), "does/not/exist",
-		"error must include the offending path for actionable diagnostics; got: %v", err)
+func TestExecuteMCPExportWriteFailureParentIsFile(t *testing.T) {
+	writeMinimalAtmosYAMLForExport(t, `    atmos:
+      command: atmos
+`)
+	parent := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(parent, []byte("unchanged"), 0o600))
+	err := executeMCPExport(newExportTestCmd(t, filepath.Join(parent, "config.json")), nil)
+	require.ErrorIs(t, err, errUtils.ErrMCPConfigWriteFailed)
 }

@@ -142,6 +142,15 @@ settings:
         - 'tkn_(live|test)_[a-zA-Z0-9]{24}'
 ```
 
+Patterns that can match `\r` or `\n` must have a finite maximum match length, such as
+`secret\n[A-Za-z0-9]{32}`. Atmos retains enough output to mask these matches across writes.
+Patterns confined to one line, such as `token-[a-z]+`, can use unbounded repetition.
+
+Atmos rejects unbounded cross-line patterns, including `(?s).*` and `secret\s+value`,
+and logs a warning when they appear in `atmos.yaml`. Use `[ \t]` for horizontal whitespace
+or `[^\r\n]` for any character within a line. Register known multiline secrets with
+`literals` instead.
+
 ### Literal Values
 
 Use the `literals` option for exact string matches:

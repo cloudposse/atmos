@@ -24,9 +24,7 @@ Note: Atmos will automatically call init for you when running plan and apply com
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/init
   https://opentofu.org/docs/cli/commands/init`,
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformInit, cmd, args)
-	},
+	PreRunE: prepareBeforeHooks,
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset the shared multi-component marker so PostRunE and the
 		// deferred error hook read consistent state even on an early return.
@@ -102,4 +100,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(initCmd)
+	internal.RegisterCommandMetadata(
+		initCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/init"),
+	)
 }

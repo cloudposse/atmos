@@ -10,6 +10,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/resolver"
 )
@@ -68,7 +69,7 @@ func parseCooldown(value string) (time.Duration, error) {
 		}
 		return time.Duration(weeks) * daysPerWeek * hoursPerDay * time.Hour, nil
 	}
-	duration, err := time.ParseDuration(value)
+	duration, err := durationpkg.ParseDuration(value)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %q", ErrInvalidCooldown, value)
 	}

@@ -27,10 +27,23 @@ logs:
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Warning
+  # Enable log color when available (default: true)
+  # Can also use ATMOS_LOGS_COLOR or --logs-color
+  color: true
 ```
 </File>
 
 <dl>
+  <dt>`logs.color`</dt>
+  <dd>
+    Controls color in Atmos logs independently of UI output. `true` (default) uses
+    color when available, preserving terminal and CI detection, including GitHub Actions.
+    `false` removes ANSI escapes from logs. Use `--force-color` or `ATMOS_FORCE_COLOR=true`
+    to force color when log color is enabled. Override this boolean with
+    `ATMOS_LOGS_COLOR` or `--logs-color=false`, with CLI flags taking precedence over
+    the environment and config. `--no-color` and nonempty `NO_COLOR` always disable
+    color, including startup logs, even with `logs.color: true` or `--force-color`.
+  </dd>
   <dt>`logs.file`</dt>
   <dd>
     The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`. If omitted, `/dev/stderr` will be used so logs never contaminate pipeable command output on stdout. Can also be set using `ATMOS_LOGS_FILE` environment variable.
@@ -48,6 +61,21 @@ To prevent Atmos from logging any messages (except for the outputs of the execut
 
 - Set `logs.file` or the ENV variable `ATMOS_LOGS_FILE` to `/dev/null`
 - Set `logs.level` or the ENV variable `ATMOS_LOGS_LEVEL` to `Off`
+
+## Plain Log Files
+
+To keep terminal UI colors while producing a plain log file:
+
+```shell
+atmos --logs-level=debug --logs-file=/tmp/atmos.log --logs-color=false version
+```
+
+To disable colors in both logs and UI output, use `--no-color` or set `NO_COLOR=1`.
+`CLICOLOR=0` also disables automatic color, but can be overridden by forced color.
+`CLICOLOR=1` permits automatic color without forcing it into pipes or files. If
+`CLICOLOR=1` and nonempty `NO_COLOR` are both set, `NO_COLOR` wins and logs stay plain.
+See [color precedence](/cli/configuration/settings/terminal#color-configuration-precedence).
+Logging color controls apply to Atmos's own logs, not output from child processes.
 
 ## Logs in CI/CD Pipelines
 

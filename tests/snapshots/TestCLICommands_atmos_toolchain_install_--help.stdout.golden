@@ -1,8 +1,6 @@
 
 👽 test linux/amd64
 
-[EXPERIMENTAL]
-
 Install one or more CLI binaries using metadata from the registry.
 
 The tool(s) should be specified in the format: owner/repo@version
@@ -39,3 +37,5 @@ FLAGS
 
 
 Use --help=usage for examples or --help=all for all flags and full help.
+
+  Documentation: https://atmos.tools/cli/commands/toolchain/install

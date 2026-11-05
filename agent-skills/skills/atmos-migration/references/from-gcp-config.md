@@ -14,7 +14,7 @@ standalone prose tutorial for this migration yet -- for the full auth configurat
 | CI/CD already configured for Workload Identity Federation              | [CI / Workload Identity Federation](#ci--workload-identity-federation--gcpworkload-identity-federation) |
 | `gcloud config set auth/impersonate_service_account`, or scripts that pass `--impersonate-service-account` | [Service Account Impersonation](#service-account-impersonation--gcpservice-account) |
 | `gcloud config set project` / `gcloud config configurations`           | [Project/Region Defaults](#projectregion-defaults--gcpproject) |
-| A downloaded service-account JSON key file (`GOOGLE_APPLICATION_CREDENTIALS=key.json`) | [No Direct Equivalent: Static Key Files](#no-direct-equivalent-static-service-account-key-files) |
+| A downloaded service-account JSON key file (`GOOGLE_APPLICATION_CREDENTIALS=key.json`) | [`gcp/adc` with an existing key file](#existing-service-account-key-files) |
 
 ## Command Equivalence
 
@@ -29,8 +29,10 @@ standalone prose tutorial for this migration yet -- for the full auth configurat
 
 ## Shells, `exec`, and Your Default gcloud Config
 
-**By default, Atmos does not read or write your system's default gcloud config**
-(`~/.config/gcloud/`). Same two recommended patterns as everywhere else in Atmos Auth:
+**Atmos writes its managed GCP credentials to an isolated location.** The `gcp/adc`
+provider can read existing Application Default Credentials, including the default
+gcloud ADC file; it does not overwrite that source file. Use either of these
+patterns to expose the selected Atmos credentials to child processes:
 
 - **`atmos auth shell -i <identity>`** -- subshell with that identity's credentials active.
 - **`atmos auth exec -i <identity> -- <command>`** -- one-off command with credentials injected.
@@ -57,10 +59,11 @@ auth:
   providers:
     gcp-adc:
       kind: gcp/adc
-      project_id: my-gcp-project   # optional: overrides gcloud config default
-      region: us-central1          # optional
-      scopes:                      # optional
-        - https://www.googleapis.com/auth/cloud-platform
+      spec:
+        project_id: my-gcp-project   # optional: overrides gcloud config default
+        region: us-central1          # optional
+        scopes:                      # optional
+          - https://www.googleapis.com/auth/cloud-platform
 ```
 
 **Gotcha:** plain `gcloud auth login` (no `application-default`) only populates gcloud's own
@@ -79,10 +82,11 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_number: "123456789012"          # required, numeric
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
-      service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+      spec:
+        project_number: "123456789012"          # required, numeric
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
+        service_account_email: ci-sa@my-project.iam.gserviceaccount.com
 ```
 
 In GitHub Actions, Atmos auto-detects the OIDC token source (`ACTIONS_ID_TOKEN_REQUEST_URL`/
@@ -144,15 +148,17 @@ Multiple `gcloud config configurations` (`gcloud config configurations create <n
 multiple `gcp/project` or `gcp/service-account` identities under one shared provider -- mark
 whichever the user activates most often as `default: true`.
 
-## No Direct Equivalent: Static Service-Account Key Files
+## Existing Service-Account Key Files
 
-There is no provider or identity kind that loads a downloaded service-account JSON key
-(`GOOGLE_APPLICATION_CREDENTIALS` pointing at a file with a `private_key` field). This is
-deliberate, not a gap to apologize for: frame it to the user as a security improvement. Recommend
-`gcp/adc` (interactive) or `gcp/workload-identity-federation` (CI) as the base identity, plus
-`gcp/service-account` impersonation for the target service account, and retiring the downloaded
-key from GCP IAM once the migration is verified -- impersonation avoids ever holding exportable
-long-lived key material.
+`gcp/adc` can read a downloaded service-account JSON key through
+`GOOGLE_APPLICATION_CREDENTIALS`, including its `private_key`, and use it to obtain
+an access token. A `gcp/project` identity can use that provider without adding
+service-account impersonation. This preserves an existing key-based setup during
+migration; the provider is not limited to interactive gcloud ADC.
+
+For a migration away from long-lived keys, use workload identity federation in CI
+or user ADC locally, optionally followed by `gcp/service-account` impersonation.
+Retire the old key only after the replacement authentication path is verified.
 
 ## Common Gotchas
 

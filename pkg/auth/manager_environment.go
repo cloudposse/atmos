@@ -14,9 +14,12 @@ import (
 )
 
 // GetEnvironmentVariables returns the environment variables for an identity
-// without performing authentication or validation.
+// without performing authentication. Authentication admission still applies.
 func (m *manager) GetEnvironmentVariables(identityName string) (map[string]string, error) {
 	defer perf.Track(nil, "auth.Manager.GetEnvironmentVariables")()
+	if err := m.enforceAuthPolicy(context.Background(), identityName, nil); err != nil {
+		return nil, err
+	}
 
 	// Verify identity exists.
 	identity, exists := m.identities[identityName]
@@ -47,6 +50,9 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 // This calls identity.PrepareEnvironment() internally to configure file-based credentials.
 func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
 	defer perf.Track(nil, "auth.Manager.PrepareShellEnvironment")()
+	if err := m.enforceAuthPolicy(ctx, identityName, nil); err != nil {
+		return nil, err
+	}
 
 	// Verify identity exists.
 	identity, exists := m.identities[identityName]

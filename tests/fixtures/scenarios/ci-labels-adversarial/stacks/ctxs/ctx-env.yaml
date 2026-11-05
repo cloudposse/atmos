@@ -1,0 +1,3 @@
+import: [catalog/contexts]
+vars: {stage: ctx-env}
+components: {terraform: {ctx-env: {metadata: {component: mock, inherits: [ctx-base]}, env: {PREVIEW: !ci.labels [preview]}}}}

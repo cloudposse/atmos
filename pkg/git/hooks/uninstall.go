@@ -12,9 +12,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// Uninstall removes Atmos-generated shims from .git/hooks for the named hooks
-// (all configured hooks when names is empty). User-authored hooks are never
-// deleted; a warning is emitted instead.
+// Uninstall removes Atmos-generated shims from .git/hooks. With names, only those hooks are
+// removed; without names, every Atmos shim in the hooks directory is removed, including orphans
+// whose hook is no longer configured (they would otherwise fail every Git operation with
+// "git hook not configured"). User-authored hooks are never deleted; a warning is emitted instead.
 func Uninstall(ctx context.Context, cfg *schema.GitConfig, names []string) error {
 	defer perf.Track(nil, "hooks.Uninstall")()
 
@@ -23,19 +24,77 @@ func Uninstall(ctx context.Context, cfg *schema.GitConfig, names []string) error
 		return err
 	}
 
-	hookNames := hookNamesOrConfigured(names, cfg)
-	if len(hookNames) == 0 {
-		ui.Info("No hooks configured under git.hooks in atmos.yaml.")
-		return nil
+	if len(names) == 0 {
+		return uninstallAll(hooksDir)
 	}
 
-	for _, name := range hookNames {
+	for _, name := range names {
+		if err := checkUninstallTarget(hooksDir, name, cfg); err != nil {
+			return err
+		}
+	}
+	for _, name := range names {
 		if err := uninstallHook(hooksDir, name); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// checkUninstallTarget rejects a name that is neither configured nor an existing Atmos shim.
+// An orphan shim for an unconfigured hook stays removable by name.
+func checkUninstallTarget(hooksDir, name string, cfg *schema.GitConfig) error {
+	if err := ValidateShimName(name); err != nil {
+		return err
+	}
+	if cfg != nil {
+		if _, ok := cfg.Hooks[name]; ok {
+			return nil
+		}
+	}
+	if isAtmosShim(filepath.Join(hooksDir, name)) {
+		return nil
+	}
+	var configured map[string]schema.GitHookEntry
+	if cfg != nil {
+		configured = cfg.Hooks
+	}
+	return NotConfiguredError(name, configured)
+}
+
+// uninstallAll removes every Atmos-generated shim found in hooksDir.
+func uninstallAll(hooksDir string) error {
+	entries, err := os.ReadDir(hooksDir)
+	if os.IsNotExist(err) {
+		ui.Info("No Atmos-managed Git hook shims found.")
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("reading hooks directory %q: %w", hooksDir, err)
+	}
+
+	removed := 0
+	for _, entry := range entries {
+		if entry.IsDir() || ValidateShimName(entry.Name()) != nil || !isAtmosShim(filepath.Join(hooksDir, entry.Name())) {
+			continue
+		}
+		if err := uninstallHook(hooksDir, entry.Name()); err != nil {
+			return err
+		}
+		removed++
+	}
+	if removed == 0 {
+		ui.Info("No Atmos-managed Git hook shims found.")
+	}
+
+	return nil
+}
+
+// isAtmosShim reports whether path is a regular file carrying the Atmos shim marker.
+func isAtmosShim(path string) bool {
+	content, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(content), ShimMarker)
 }
 
 // uninstallHook removes the shim for hookName from hooksDir, only if it is

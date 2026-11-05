@@ -1,7 +1,7 @@
 ---
 title: Migrate Legacy settings.depends_on
 sidebar_position: 2
-sidebar_label: Legacy depends_on
+sidebar_label: depends_on
 sidebar_class_name: command
 id: depends_on
 description: Migrate legacy component dependency declarations to dependencies.components.
@@ -54,6 +54,25 @@ components:
             stack: tenant1-ue2-prod
 ```
 </File>
+
+## List Form
+
+`settings.depends_on` is also accepted as a list, which is the older legacy shape. Each entry is a component name, or an object with `component` and an optional `stack`. Context fields such as `tenant` or `stage` are accepted only in the map form:
+
+<File title="List form (legacy)">
+```yaml
+components:
+  terraform:
+    app:
+      settings:
+        depends_on:
+          - component: vpc
+          - component: rds
+            stack: tenant1-ue2-prod
+```
+</File>
+
+`atmos doctor --fix` migrates the list form to `dependencies.components` when every entry names a literal `component` and an optional `stack`; the map form is reported for a manual change. It rejects the repair when the migration would change which components any component depends on, for example when an inherited base declares a list and the inheriting component declares its own. The migration intentionally adopts the required semantics of `dependencies.components`: a missing or disabled target, which the list form only warns about, is reported as an error after the migration instead of blocking it, so you can fix the reference. See [`atmos doctor`](/cli/commands/doctor).
 
 ## Field Mapping
 

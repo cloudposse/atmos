@@ -3,6 +3,7 @@ package emulator
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
@@ -44,6 +45,10 @@ func newVerbCmd(name, short, long string) *cobra.Command {
 	parser.RegisterFlags(cmd)
 	componentPromptParsers[cmd] = parser
 
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/emulator/"+name),
+	)
 	return cmd
 }
 
@@ -90,4 +95,12 @@ func init() {
 	for _, cmd := range []*cobra.Command{listCmd, psCmd} {
 		cmd.Flags().Bool(flagRuntime, false, "Inspect raw emulator containers instead of configured emulator components")
 	}
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/emulator/list"),
+	)
+	internal.RegisterCommandMetadata(
+		psCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/emulator/ps"),
+	)
 }

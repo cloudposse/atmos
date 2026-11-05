@@ -552,6 +552,24 @@ func TestBuildIdentityRow_AWSUser(t *testing.T) {
 	assert.Equal(t, "-", row["via_identity"])        // Via Identity.
 }
 
+func TestBuildIdentityRow_AWSCredentialProcess(t *testing.T) {
+	identity := schema.Identity{
+		Kind: "aws/credential-process",
+	}
+
+	row := buildIdentityRow(nil, &identity, "corp-base")
+
+	assert.Equal(t, "aws/credential-process", row["kind"])
+	assert.Equal(t, "aws-credential-process", row["via_provider"])
+	assert.Equal(t, "-", row["via_identity"])
+}
+
+func TestBuildIdentityRow_StandaloneWithoutSyntheticProvider(t *testing.T) {
+	row := buildIdentityRow(nil, &schema.Identity{Kind: "aws/ambient"}, "ambient")
+
+	assert.Equal(t, "-", row["via_provider"], "standalone kinds without a synthetic provider keep the empty marker")
+}
+
 func TestBuildIdentityRow_WithAlias(t *testing.T) {
 	identity := schema.Identity{
 		Kind:  "aws/assume-role",

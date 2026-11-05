@@ -1,0 +1,11 @@
+vars:
+  stage: dev
+components:
+  terraform:
+    app:
+      source: "github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+      vars:
+        source: "github.com/cloudposse/this-is-just-data.git"
+    app2:
+      source:
+        uri: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.0.0"

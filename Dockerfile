@@ -2,7 +2,7 @@
 # trixie (glibc 2.41) is required so PyInstaller-bundled tools installed via the
 # Atmos toolchain — notably Checkov, which needs GLIBC_2.38+ — can load their
 # frozen Python runtime. bookworm (glibc 2.36) fails with a missing-version error.
-FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
+FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 # Define the arguments for the Atmos version and target platform.
 ARG TARGETPLATFORM
@@ -30,7 +30,7 @@ RUN set -ex; \
     # Update the package list
     apt-get update; \
     # Install runtime dependencies required by Atmos-managed tools.
-    apt-get -y install  --no-install-recommends curl git gnupg ca-certificates docker.io python3; \
+    apt-get -y install  --no-install-recommends curl git gnupg ca-certificates docker.io docker-cli python3; \
     # Install the Cloud Posse Debian repository (inlined from cfg/setup/bash.deb.sh
     # instead of piping a downloaded script into bash, per Scorecard Pinned-Dependencies).
     curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/gpg.7333C6FDEFA717CC.key' | gpg --dearmor -o /usr/share/keyrings/cloudposse-packages-archive-keyring.gpg; \

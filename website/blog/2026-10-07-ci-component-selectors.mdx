@@ -1,0 +1,57 @@
+---
+slug: ci-component-selectors
+title: "Choose Which Components Run in CI with Tags and Labels"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+`atmos describe affected` now supports `--tags` and `--labels`, so you can choose which affected components enter your CI job matrix directly from stack metadata.
+
+Some components need privileged credentials or manual approval. Others need network access that the CI runner lacks: a private VPC, a peering connection, or access to an internal service. Selectors let you leave those components out of a workflow and run them where the required access is available.
+
+<!--truncate-->
+
+## Select Components from Stack Metadata
+
+Give components a default label in your shared stack defaults, then override it for components that need a different execution environment:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+metadata:
+  labels:
+    ci: auto
+```
+
+```yaml title="stacks/catalog/private-service.yaml"
+components:
+  terraform:
+    private-service:
+      metadata:
+        labels:
+          ci: manual
+```
+
+Build the matrix using that label:
+
+```shell
+atmos describe affected --format=matrix --labels=ci:auto
+```
+
+`--labels=ci=auto` is equivalent. The command includes affected components labeled `ci: auto` and leaves out `private-service`. The names `ci`, `auto`, and `manual` are user-defined; `manual` means excluded from this automated workflow, not a built-in execution mode. Run excluded components manually or through a separate workflow with the appropriate credentials and network connectivity.
+
+Labels match all supplied pairs; tags match any supplied tag, such as `--tags=production,tier-1`. When you combine them, components must satisfy both filters. Components missing the requested metadata do not match, so the shared default makes the selection explicit across your stacks. Selectors work with every output format, including JSON, YAML, and CI matrices. You can also plan the selected components directly with `atmos terraform plan --affected --labels=ci:auto`, using the same labels in local and automated runs.
+
+The legacy Atmos GitHub Actions used `settings.github.actions_enabled` for component opt-outs. Native CI does not read that setting. Labels provide an explicit selection pattern when [migrating to native CI](/ci/migrate-legacy-actions#opting-components-out-of-ci), without post-processing the matrix in workflow YAML.
+
+## Include Matching Dependents
+
+With `--include-dependents`, matching dependents remain in the result even when their parent is filtered out. Add `--flatten` to make each remaining dependent a separate matrix entry. Terraform also honors tags and labels when including dependents; prerequisites added with `--include-dependencies` still run regardless of those selectors. See the [selector reference](/cli/commands/describe/affected#filtering-by-tags-and-labels) for details.
+
+## Configure Your Workflow
+
+Labels express workflow selection; they do not detect connectivity or enforce access. The [native CI guide](/ci#keeping-privileged-components-out-of-ci) covers setup and an optional OPA policy for components prohibited from running in GitHub Actions. Components that only need a different runner can use a separate workflow instead.
+
+For workflow configuration, see the [Deploy Affected example](/integrations/github-actions/deploy-affected), including its empty-matrix guard, and the command reference for [environment variables and uploads](/cli/commands/describe/affected#selector-environment-and-uploads).
+
+## Get Involved
+
+Have a workflow this pattern does not cover? [Open an issue](https://github.com/cloudposse/atmos/issues) and share your use case.

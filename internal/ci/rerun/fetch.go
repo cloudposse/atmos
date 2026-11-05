@@ -33,15 +33,43 @@ type RESTClient interface {
 // `<https://api.github.com/...&page=2>; rel="next", <...>; rel="last"`.
 var nextLinkPattern = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
 
-// FetchJobs pages through repos/{repo}/actions/runs/{runID}/attempts/{runAttempt}/jobs
-// (per_page=100), following the Link header until it stops offering a "next"
-// page - the same request `gh api ... --paginate` makes. It is the only
+// jobsPageSizes are the page sizes FetchJobs tries, largest first: GitHub's
+// default size, then smaller pages. A server error restarts the listing with the
+// next size instead of failing the whole poll.
+var jobsPageSizes = []int{30, 15, 10}
+
+// FetchJobs pages through repos/{repo}/actions/runs/{runID}/attempts/{runAttempt}/jobs,
+// following the Link header until it stops offering a "next" page - the same
+// request `gh api ... --paginate` makes. It starts at per_page=30; when GitHub
+// answers a page with a 5xx, it restarts the listing from the first page with
+// the next smaller size (page boundaries shift with the size, so a restart
+// avoids duplicated or skipped jobs). The last server error is returned only
+// when every size fails; other errors are returned immediately. It is the only
 // exported function in this package that talks to the network on the read
 // path; classify.go's Classify/Verdict/etc. remain pure.
+//
+// Keep pages at GitHub's default size: a 98-job rerun repeatedly returned
+// HTTP 502 with 100-job pages, while 30-job pages returned every job.
+// Following every Link header preserves complete shard validation.
 func FetchJobs(ctx context.Context, client RESTClient, repo, runID, runAttempt string) ([]Job, error) {
 	defer perf.Track(nil, "rerun.FetchJobs")()
 
-	path := fmt.Sprintf("repos/%s/actions/runs/%s/attempts/%s/jobs?per_page=100", repo, runID, runAttempt)
+	listing := fmt.Sprintf("repos/%s/actions/runs/%s/attempts/%s/jobs", repo, runID, runAttempt)
+	var err error
+	for _, size := range jobsPageSizes {
+		var jobs []Job
+		jobs, err = fetchJobsPaged(ctx, client, listing, size)
+		if err == nil || !isServerError(err) {
+			return jobs, err
+		}
+	}
+	return nil, err
+}
+
+// fetchJobsPaged lists every job of one run attempt, given its jobs listing path,
+// using a fixed page size.
+func fetchJobsPaged(ctx context.Context, client RESTClient, listing string, perPage int) ([]Job, error) {
+	path := fmt.Sprintf("%s?per_page=%d", listing, perPage)
 	var jobs []Job
 	for path != "" {
 		resp, err := client.RequestWithContext(ctx, http.MethodGet, path, nil)
@@ -56,6 +84,12 @@ func FetchJobs(ctx context.Context, client RESTClient, repo, runID, runAttempt s
 		path = nextLink(resp.Header.Get("Link"))
 	}
 	return jobs, nil
+}
+
+// isServerError reports whether err carries a 5xx response from the GitHub API.
+func isServerError(err error) bool {
+	var httpErr *api.HTTPError
+	return errors.As(err, &httpErr) && httpErr.StatusCode >= http.StatusInternalServerError
 }
 
 // IsTransient reports whether an error from a RESTClient request is worth

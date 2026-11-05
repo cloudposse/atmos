@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -19,18 +20,28 @@ type SopsPlacement struct {
 }
 
 // SopsPlacements returns the resolved SOPS file placement for each SOPS-backed declared secret in
-// this service's scope. Non-SOPS (store-backed) secrets and unresolvable providers are skipped.
-func (s *Service) SopsPlacements() []SopsPlacement {
+// this service's scope. Non-SOPS (store-backed) secrets are skipped.
+//
+// A SOPS declaration whose backend is a selector that cannot be resolved (no evaluator, or the
+// producer is not deployed) is never skipped silently: its file is unknown, so a collision with
+// another instance cannot be ruled out. The returned error wraps ErrSelectorUnresolved and names
+// every such declaration with its component and stack; the placements that did resolve are still
+// returned so callers can report collisions among them as well.
+func (s *Service) SopsPlacements() ([]SopsPlacement, error) {
 	defer perf.Track(s.atmosConfig, "secrets.Service.SopsPlacements")()
 
 	var out []SopsPlacement
+	var unresolved []error
 	for _, decl := range s.Declarations() {
 		d := decl
 		if d.BackendType != BackendSops {
 			continue
 		}
-		provider, err := providerFor(s.atmosConfig, &d, s.componentSection)
+		provider, err := s.provider(&d)
 		if err != nil {
+			if errors.Is(err, ErrSelectorUnresolved) {
+				unresolved = append(unresolved, err)
+			}
 			continue
 		}
 		fp, ok := provider.(providers.FilePathProvider)
@@ -54,7 +65,7 @@ func (s *Service) SopsPlacements() []SopsPlacement {
 			File:      file,
 		})
 	}
-	return out
+	return out, errors.Join(unresolved...)
 }
 
 // DetectSopsCollisions returns an error if the placements violate the scope-vs-file invariants that

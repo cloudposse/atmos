@@ -1,0 +1,23 @@
+---
+title: Naming a workflow
+description: Choose the free-form name that replaces <name> in a workflow manifest.
+id: name
+slug: /workflows/workflow/name
+---
+
+`<name>` in `workflows.<name>` means **the name you choose for a workflow**.
+It is a free-form placeholder, not a literal YAML key. For example, `deploy`
+replaces `<name>` here:
+
+```yaml
+workflows:
+  deploy:
+    steps:
+      - name: plan
+        command: terraform plan vpc
+```
+
+The full configuration path is `workflows.deploy`. Run that workflow with
+`atmos workflow deploy`; use `--file` when needed to select a workflow file.
+See the [workflow fields](/workflows/workflow#fields) for the options beneath
+`<name>`.

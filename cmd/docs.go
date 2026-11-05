@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/browser"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -146,4 +147,8 @@ var docsCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(docsCmd)
+	internal.RegisterCommandMetadata(
+		docsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/docs/usage"),
+	)
 }

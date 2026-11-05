@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -59,6 +60,10 @@ func init() {
 
 	// Add to parent command.
 	PlanfileCmd.AddCommand(listCmd)
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/planfile/list"),
+	)
 }
 
 // parseListOptions parses command flags into ListOptions.
@@ -197,7 +202,8 @@ func renderWithRenderer(data []map[string]any, outputFormat, owner, repo string)
 
 	// Add OWNER and REPO columns when they are available from context.
 	if owner != "" || repo != "" {
-		columns = append(columns,
+		columns = append(
+			columns,
 			column.Config{Name: "OWNER", Value: "{{ .owner }}"},
 			column.Config{Name: "REPO", Value: "{{ .repo }}"},
 		)

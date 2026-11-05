@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor-get
 description: Read the pinned version of a vendored component from vendor.yaml.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -47,3 +49,15 @@ atmos vendor get vpc --file ./vendor.yaml
   <dt>`--file` (string, default `./vendor.yaml`)</dt>
   <dd>The vendor manifest file to read.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Read the version pinned for the included `weather` component. This works offline and prints `main` in a fresh copy.
+
+```shell
+atmos vendor get weather
+```
+
+</TryExample>

@@ -426,7 +426,7 @@ func TestProcessNodes_TypePreservation(t *testing.T) {
 		},
 	}
 
-	result, _ := processNodes(atmosConfig, input, "test-stack", []string{}, nil)
+	result, _ := processNodes(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", []string{}, nil)
 
 	// Check type preservation
 	assert.IsType(t, "", result["string"])

@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# The `local` stack declares the Floci emulator (catalog/emulator/aws) and one
+# native CloudFormation component whose template is synthesized by AWS CDK in a
+# before-hook. Remove the emulator import and the `local-aws` identity in
+# atmos.yaml to deploy the same component to a real AWS account.
+import:
+  - catalog/emulator/aws
+
+name: local
+
+components:
+  aws/cloudformation:
+    greeting:
+      # The synth hook writes this file before Atmos reads it.
+      path: cdk.out/Demo.template.json
+      stack_name: greeting-local
+      parameters:
+        Message: Hello from AWS CDK and Atmos
+      region: us-east-1
+      hooks:
+        synth:
+          events:
+            - before.aws/cloudformation.diff
+            - before.aws/cloudformation.apply
+            - before.aws/cloudformation.changeset-create
+          kind: steps
+          on_failure: fail
+          with:
+            - name: install
+              type: shell
+              command: npm ci --no-audit --no-fund
+              inputs:
+                sources: [package-lock.json]
+              artifacts:
+                paths: [node_modules/.bin/cdk]
+            - name: synth
+              type: shell
+              command: npm run synth

@@ -1,0 +1,10 @@
+# !literal on a step field that cannot honor it fails when the configuration loads.
+base_path: "./"
+
+commands:
+  - name: ft-literal-when
+    description: when is evaluated as a condition, never rendered as text
+    steps:
+      - name: guarded
+        command: echo hi
+        when: !literal "{{ .Flags.go }}"

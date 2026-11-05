@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -81,7 +82,7 @@ func TestRenderOptionsFromFlags(t *testing.T) {
 			if len(remainingArgs) != 1 || remainingArgs[0] != "input.cast" {
 				t.Fatalf("remaining args = %#v, want input.cast", remainingArgs)
 			}
-			if opts != tt.want {
+			if !reflect.DeepEqual(opts, tt.want) {
 				t.Fatalf("options = %#v, want %#v", opts, tt.want)
 			}
 		})
@@ -152,7 +153,7 @@ func TestRenderOptionsFromBoundFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts != (asciicast.RenderOptions{PNG: output}) {
+	if !reflect.DeepEqual(opts, asciicast.RenderOptions{PNG: output}) {
 		t.Fatalf("options = %#v, want PNG output", opts)
 	}
 }
@@ -293,7 +294,7 @@ func TestRenderCmdRunEReturnsRenderError(t *testing.T) {
 
 func TestRenderOptionsForFormatDefaultReturnsEmptyOptions(t *testing.T) {
 	opts := renderOptionsForFormat("out.bin", "unknown-format")
-	if opts != (asciicast.RenderOptions{}) {
+	if !reflect.DeepEqual(opts, asciicast.RenderOptions{}) {
 		t.Fatalf("options = %#v, want zero value", opts)
 	}
 }
@@ -301,7 +302,7 @@ func TestRenderOptionsForFormatDefaultReturnsEmptyOptions(t *testing.T) {
 func TestRenderOptionsForFormatMP4(t *testing.T) {
 	output := "out.mp4"
 	opts := renderOptionsForFormat(output, renderFormatMP4)
-	if opts != (asciicast.RenderOptions{MP4: output}) {
+	if !reflect.DeepEqual(opts, asciicast.RenderOptions{MP4: output}) {
 		t.Fatalf("options = %#v, want MP4 output", opts)
 	}
 }

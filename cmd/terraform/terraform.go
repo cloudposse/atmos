@@ -56,6 +56,7 @@ func init() {
 
 	// Register as persistent flags (inherited by subcommands).
 	terraformParser.RegisterPersistentFlags(terraformCmd)
+	flags.RegisterComponentCommandFlags(terraformCmd, "terraform")
 
 	// Bind flags to Viper for environment variable support.
 	if err := terraformParser.BindToViper(viper.GetViper()); err != nil {
@@ -97,7 +98,12 @@ func init() {
 	internal.RegisterCommandFlagRegistry("terraform", terraformParser.Registry())
 
 	// Register this command with the registry.
-	internal.Register(&TerraformCommandProvider{})
+	internal.Register(
+		&TerraformCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/usage"),
+		internal.WithExample("examples/quick-start-simple", "Quick Start (Simple)"),
+		internal.WithExample("examples/quick-start-advanced", "Quick Start (Advanced)"),
+	)
 }
 
 // TerraformCommandProvider implements the CommandProvider interface.
@@ -193,6 +199,13 @@ func terraformGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
 
 			// Get the terraform command, with fallback to default.
 			command := atmosConfig.Components.Terraform.Command
+			override, err := flags.ComponentCommand(cmd, "terraform")
+			if err != nil {
+				return err
+			}
+			if override != "" {
+				command = override
+			}
 			if command == "" {
 				command = cfg.TerraformComponentType // Default to "terraform".
 			}

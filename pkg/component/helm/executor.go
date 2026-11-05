@@ -22,6 +22,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -132,6 +133,11 @@ func executeSingle(
 		}
 	}
 
+	// Snapshot governing policies and Native CI before component environment overrides.
+	hookSet, err := getHooks(atmosConfig, info)
+	if err != nil {
+		return err
+	}
 	tenv, err := dependenciesForComponent(atmosConfig, cfg.HelmComponentType, info.StackSection, info.ComponentSection)
 	if err != nil {
 		return err
@@ -142,7 +148,7 @@ func executeSingle(
 	}
 	defer restoreEnvironment()
 
-	return runWithHooks(ctx, atmosConfig, info, operation, componentPath)
+	return runWithPreparedHooks(ctx, atmosConfig, info, operation, componentPath, hookSet)
 }
 
 // setupExecutionEnvironment composes component, toolchain, auth, and endpoint-guard
@@ -197,6 +203,13 @@ func runWithHooks(
 	operation Operation,
 	componentPath string,
 ) error {
+	return runWithPreparedHooks(ctx, atmosConfig, info, operation, componentPath, nil)
+}
+
+//nolint:revive // argument-limit: existing executor arguments plus a pre-environment hook snapshot.
+func runWithPreparedHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo, operation Operation, componentPath string, hookSet *hooks.Hooks,
+) error {
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}
@@ -205,15 +218,72 @@ func runWithHooks(
 	// before running any before-hooks. Hooks can have side effects (git
 	// operations, external commands), so a malformed --set/--values must abort
 	// the operation before those side effects run, not after.
-	spec, err := buildChartSpec(atmosConfig, info, componentPath)
+	spec, err := prepareChartSpec(ctx, atmosConfig, info, operation, componentPath)
 	if err != nil {
 		return err
 	}
-	if spec.Values, err = applyValueOverrides(spec.Values, ctx.Flags); err != nil {
+	// Callers without a pre-environment snapshot resolve hooks only after validation.
+	if hookSet == nil {
+		hookSet, err = getHooks(atmosConfig, info)
+		if err != nil {
+			return err
+		}
+	}
+
+	before, after := eventsFor(info.SubCommand, operation)
+	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
 		return err
 	}
+
+	if err := ctx.GoContext().Err(); err != nil {
+		return err
+	}
+	if operationUsesRenderedChart(operation) && (spec.RepoURL == "" || spec.DependencyUpdate) {
+		spec.recovery, err = recovery.New(info, "helm", string(operation))
+		if err != nil {
+			return err
+		}
+		if err := setupRepositoriesWithRecovery(ctx.GoContext(), spec.Repositories, spec.recovery); err != nil {
+			return err
+		}
+	}
+
+	summary, opErr := runOperation(ctx, atmosConfig, info, operation, spec)
+	if opErr != nil {
+		hookSet.SetOutcome(hooks.Outcome{Status: hooks.RunFailure, Err: opErr, ExitCode: errUtils.GetExitCode(opErr)})
+	}
+	// Report the overall gate only after mandatory hooks finish. The operation's
+	// summary remains intact: a post-apply failure does not undo the completed apply.
+	gateErr := errors.Join(opErr, hookSet.RunAll(after, atmosConfig, info, nil, nil))
+	if collector := helmBulkCollector(ctx); collector != nil {
+		collector.setSummary(info, summary, gateErr)
+	} else {
+		runHelmCIHook(helmCIHookParams{
+			ctx:         ctx,
+			atmosConfig: atmosConfig,
+			info:        info,
+			event:       after,
+			summary:     summary,
+			commandErr:  gateErr,
+		})
+	}
+	return gateErr
+}
+
+// prepareChartSpec applies and validates operation-specific flags before hooks run.
+func prepareChartSpec(
+	ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo, operation Operation, componentPath string,
+) (*chartSpec, error) {
+	spec, err := buildChartSpec(atmosConfig, info, componentPath)
+	if err != nil {
+		return nil, err
+	}
+	if spec.Values, err = applyValueOverrides(spec.Values, ctx.Flags); err != nil {
+		return nil, err
+	}
 	if spec.ReleaseName == "" {
-		return errUtils.ErrHelmReleaseNameRequired
+		return nil, errUtils.ErrHelmReleaseNameRequired
 	}
 	if namespace, ok := ctx.Flags["namespace"].(string); ok && namespace != "" {
 		spec.Namespace = namespace
@@ -227,51 +297,11 @@ func runWithHooks(
 	if operation == OperationDelete {
 		spec.Lifecycle, err = resolveReleaseLifecycleWithFlags(spec.Release, releaseOperationDelete, ctx.Flags)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		reportResolvedLifecycle(spec.Lifecycle)
 	}
-
-	hookSet, err := getHooks(atmosConfig, info)
-	if err != nil {
-		return err
-	}
-	before, after := eventsFor(info.SubCommand, operation)
-	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
-		return err
-	}
-
-	if err := ctx.GoContext().Err(); err != nil {
-		return err
-	}
-	if operationUsesRenderedChart(operation) {
-		if err := setupRepositories(spec.Repositories); err != nil {
-			return err
-		}
-	}
-
-	summary, opErr := runOperation(ctx, atmosConfig, info, operation, spec)
-	if collector := helmBulkCollector(ctx); collector != nil {
-		collector.setSummary(info, summary, opErr)
-	} else {
-		runHelmCIHook(helmCIHookParams{
-			ctx:         ctx,
-			atmosConfig: atmosConfig,
-			info:        info,
-			event:       after,
-			summary:     summary,
-			commandErr:  opErr,
-		})
-	}
-	if opErr != nil {
-		return opErr
-	}
-
-	if err := hookSet.RunAll(after, atmosConfig, info, nil, nil); err != nil {
-		return err
-	}
-
-	return nil
+	return spec, nil
 }
 
 // runOperation dispatches to the requested Helm operation.
@@ -282,6 +312,11 @@ func runOperation(
 	operation Operation,
 	spec *chartSpec,
 ) (map[string]any, error) {
+	runner, err := recovery.New(info, "helm", string(operation))
+	if err != nil {
+		return nil, err
+	}
+	spec.recovery = runner
 	summary := helmSummary(info, spec, ctx.Flags)
 	switch operation {
 	case OperationTemplate:
@@ -430,7 +465,7 @@ func resolveDiffBaseline(
 		return fetchTargetBaseline(ctx, atmosConfig, info, against)
 	}
 
-	return getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	return getDeployedManifest(spec.ReleaseName, spec.Namespace, spec.recovery)
 }
 
 // fetchTargetBaseline reads the current manifests from a non-cluster provision

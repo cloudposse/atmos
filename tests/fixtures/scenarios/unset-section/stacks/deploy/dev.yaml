@@ -1,0 +1,27 @@
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    # No inheritance: the global vars and retry are dropped.
+    vpc:
+      vars: !unset
+      retry: !unset
+
+    # Inherited case: vpc-base vars and retry are dropped together with the global layer.
+    vpc-child:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-base
+      vars: !unset
+      retry: !unset
+
+    # The concrete component retry merges on top of a base that unset retry.
+    vpc-grandchild:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-base-no-retry
+      retry:
+        max_attempts: 5

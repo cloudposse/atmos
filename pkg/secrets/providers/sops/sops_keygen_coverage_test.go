@@ -201,7 +201,7 @@ func TestWriteRecipient_ReadError(t *testing.T) {
 	dir := t.TempDir() // an existing directory; ReadFile on it is not a NotExist error.
 	p := &sopsProvider{name: "sops", kind: "sops/age", file: "secrets/x.enc.yaml"}
 
-	err := p.writeRecipient(dir, "age1aaa")
+	err := p.writeRecipient(filepath.Dir(dir), dir, "age1aaa")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrSopsRecipients)
 }
@@ -213,7 +213,7 @@ func TestWriteRecipient_UpsertError(t *testing.T) {
 	require.NoError(t, os.WriteFile(sink, []byte("creation_rules: not-a-list\n"), 0o644))
 	p := &sopsProvider{name: "sops", kind: "sops/age", file: "secrets/x.enc.yaml"}
 
-	err := p.writeRecipient(sink, "age1aaa")
+	err := p.writeRecipient(filepath.Dir(sink), sink, "age1aaa")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrSopsRecipients)
 }
@@ -229,7 +229,7 @@ func TestWriteRecipient_MkdirError(t *testing.T) {
 	sink := filepath.Join(blocker, "sub", ".sops.yaml")
 	p := &sopsProvider{name: "sops", kind: "sops/age", file: "secrets/x.enc.yaml"}
 
-	err := p.writeRecipient(sink, "age1aaa")
+	err := p.writeRecipient(filepath.Dir(sink), sink, "age1aaa")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrSopsRecipients)
 }
@@ -249,7 +249,7 @@ func TestWriteRecipient_WriteError(t *testing.T) {
 	sink := filepath.Join(dir, ".sops.yaml")
 	p := &sopsProvider{name: "sops", kind: "sops/age", file: "secrets/x.enc.yaml"}
 
-	err := p.writeRecipient(sink, "age1aaa")
+	err := p.writeRecipient(filepath.Dir(sink), sink, "age1aaa")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrSopsRecipients)
 }
@@ -260,13 +260,13 @@ func TestWriteRecipient_Success(t *testing.T) {
 	sink := filepath.Join(t.TempDir(), "nested", ".sops.yaml")
 	p := &sopsProvider{name: "sops", kind: "sops/age", file: filepath.Join("secrets", "{{ .atmos_stack }}.enc.yaml")}
 
-	require.NoError(t, p.writeRecipient(sink, "age1aaa"))
+	require.NoError(t, p.writeRecipient(filepath.Dir(sink), sink, "age1aaa"))
 	data, err := os.ReadFile(sink)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "age1aaa")
 	assert.Contains(t, string(data), "creation_rules:")
 
-	require.NoError(t, p.writeRecipient(sink, "age1aaa"))
+	require.NoError(t, p.writeRecipient(filepath.Dir(sink), sink, "age1aaa"))
 	data2, err := os.ReadFile(sink)
 	require.NoError(t, err)
 	assert.Equal(t, string(data), string(data2), "re-adding the same recipient is idempotent")

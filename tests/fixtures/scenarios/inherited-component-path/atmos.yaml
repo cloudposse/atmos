@@ -1,0 +1,16 @@
+base_path: .
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - test.yaml
+  name_template: "{{ .vars.stage }}"
+
+components:
+  terraform:
+    base_path: components/terraform
+
+templates:
+  settings:
+    enabled: true
+    evaluations: 1

@@ -10,6 +10,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 
 	pkgdata "github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -116,7 +117,7 @@ func ConvertToJSON(data any) (string, error) {
 	// depth, under-indenting that inner array's elements and closing bracket while the
 	// surrounding structure stays correctly indented. encoding/json.Indent re-indents an
 	// already-valid compact document from scratch, so it isn't subject to that bug.
-	compact, err := jc.Froze().Marshal(data)
+	compact, err := jc.Froze().Marshal(yamlsource.Display(data))
 	if err != nil {
 		return "", err
 	}

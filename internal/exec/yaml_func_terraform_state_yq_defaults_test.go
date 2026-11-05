@@ -323,7 +323,7 @@ func TestTerraformState_LegacyCSVCompatibility(t *testing.T) {
 		"bucket": `!terraform.state vpc test-stack ".bucket_name // ""default-bucket"""`,
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -368,7 +368,7 @@ func TestTerraformState_APIErrorReturnsError(t *testing.T) {
 		"bucket": `!terraform.state vpc test-stack .bucket_name // "default-bucket"`,
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	// API errors should propagate as errors, not use defaults.
 	assert.Error(t, err)
@@ -412,7 +412,7 @@ func TestTerraformState_YqDefaultWithListFallback(t *testing.T) {
 		"subnets": `!terraform.state vpc test-stack .subnets // ["subnet-1", "subnet-2"]`,
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -455,7 +455,7 @@ func TestTerraformState_NoDefaultExpressionReturnsError(t *testing.T) {
 		"bucket": "!terraform.state vpc test-stack .bucket_name",
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	// Without a default, the error should propagate.
 	assert.Error(t, err)
@@ -500,7 +500,7 @@ func TestTerraformState_OutputNotFoundWithDefaultUsesDefault(t *testing.T) {
 		"value": `!terraform.state vpc test-stack .missing_output // "fallback-value"`,
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	// With a YQ default and ErrTerraformOutputNotFound, the default should be used.
 	assert.NoError(t, err)
@@ -544,7 +544,7 @@ func TestTerraformState_YqDefaultWithMapFallback(t *testing.T) {
 		"tags": `!terraform.state config test-stack .tags // {"env": "dev", "team": "platform"}`,
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -589,7 +589,7 @@ func TestTerraformState_YqDefaultWithNumericFallback(t *testing.T) {
 		"replicas": `!terraform.state app test-stack .replicas // 3`,
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -633,7 +633,7 @@ func TestTerraformState_YqDefaultWithEmptyListFallback(t *testing.T) {
 		"security_groups": `!terraform.state vpc test-stack .security_groups // []`,
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)

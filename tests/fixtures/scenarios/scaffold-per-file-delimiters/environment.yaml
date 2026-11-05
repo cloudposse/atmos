@@ -1,0 +1,4 @@
+# atmos:template
+# Stack configuration for the "[[ .matrix.environment ]]" environment of [[ .Config.name ]].
+vars:
+  environment: "[[ .matrix.environment ]]"

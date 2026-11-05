@@ -1,0 +1,8 @@
+vars:
+  stage: bad13
+components:
+  terraform:
+    bad:
+      metadata: {component: mock}
+      vars:
+        v: !ci.labels ["üñí", "a,b", "it's"]

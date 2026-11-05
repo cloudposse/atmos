@@ -1,0 +1,23 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: "Test fixture exercising a glob spec.files[].path + when: skipping a whole directory recursively."
+spec:
+  fields:
+    - name: include_legacy_docs
+      label: Include legacy docs
+      description: >-
+        When set, every file under docs/legacy/ (at any depth) is generated
+        via a single glob spec.files[].path entry. Defaults to false, which
+        skips the entire directory recursively via when:.
+      type: confirm
+      default: false
+
+  files:
+    # "docs/legacy/**" matches every file discovered under docs/legacy/,
+    # recursively, as a single spec.files[] entry -- when: is evaluated
+    # once per matched file, so a false result skips the whole directory at
+    # once instead of needing one when:-gated entry per file.
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs == true"

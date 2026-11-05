@@ -88,6 +88,8 @@ export interface ExamplesTree {
  * Plugin options passed to components.
  */
 export interface FileBrowserOptions {
+  id: string;
+  docsSidebar?: string;
   routeBasePath: string;
   title: string;
   description: string;

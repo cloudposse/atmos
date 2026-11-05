@@ -342,29 +342,29 @@ type netWrapper struct {
 	reporter DeprecationReporter
 }
 
-// legacyIP adapts net.ParseAddr's netip.Addr result so a handful of methods
+// LegacyIP adapts net.ParseAddr's netip.Addr result so a handful of methods
 // gomplate v3's net.ParseIP result (inet.af/netaddr.IP) exposed under
 // different names or signatures keep working: IsZero (netip.Addr spells this
 // the inverse way, IsValid), Is4in6 (netip: Is4In6), IPAddr (netip.Addr has
 // no equivalent; built from AsSlice and Zone) and Prior (netip: Prev).
 // Embedding netip.Addr promotes every other method unchanged, including
 // String, so `{{ net.ParseIP .x }}` still prints the address exactly as v3 did.
-type legacyIP struct {
+type LegacyIP struct {
 	netip.Addr
 }
 
 // IsZero reports whether ip is the zero value, matching v3's
 // netaddr.IP.IsZero (netip.Addr's equivalent, IsValid, is inverted).
-func (ip legacyIP) IsZero() bool {
-	defer perf.Track(nil, "templating.legacyIP.IsZero")()
+func (ip LegacyIP) IsZero() bool {
+	defer perf.Track(nil, "templating.LegacyIP.IsZero")()
 
 	return !ip.IsValid()
 }
 
 // Is4in6 reports whether ip is an IPv4-mapped IPv6 address, matching v3's
 // netaddr.IP.Is4in6 (netip.Addr spells this Is4In6).
-func (ip legacyIP) Is4in6() bool {
-	defer perf.Track(nil, "templating.legacyIP.Is4in6")()
+func (ip LegacyIP) Is4in6() bool {
+	defer perf.Track(nil, "templating.LegacyIP.Is4in6")()
 
 	return ip.Is4In6()
 }
@@ -372,31 +372,31 @@ func (ip legacyIP) Is4in6() bool {
 // IPAddr converts ip to a *net.IPAddr, matching v3's netaddr.IP.IPAddr;
 // netip.Addr has no direct equivalent, so the result is built from the
 // address bytes and zone.
-func (ip legacyIP) IPAddr() *stdnet.IPAddr {
-	defer perf.Track(nil, "templating.legacyIP.IPAddr")()
+func (ip LegacyIP) IPAddr() *stdnet.IPAddr {
+	defer perf.Track(nil, "templating.LegacyIP.IPAddr")()
 
 	return &stdnet.IPAddr{IP: stdnet.IP(ip.AsSlice()), Zone: ip.Zone()}
 }
 
 // Prior returns the IP address immediately before ip, matching v3's
 // netaddr.IP.Prior (netip.Addr spells this Prev).
-func (ip legacyIP) Prior() netip.Addr {
-	defer perf.Track(nil, "templating.legacyIP.Prior")()
+func (ip LegacyIP) Prior() netip.Addr {
+	defer perf.Track(nil, "templating.LegacyIP.Prior")()
 
 	return ip.Prev()
 }
 
 // ParseIP is gomplate v3's net.ParseIP, removed in v5 in favor of
 // net.ParseAddr. V3 returned an inet.af/netaddr IP; delegating to ParseAddr
-// and wrapping the result in legacyIP keeps existing templates working,
+// and wrapping the result in LegacyIP keeps existing templates working,
 // including ones that call Is4, Is6, String, IsPrivate, IsZero, Is4in6,
 // IPAddr or Prior, and invalid input errors exactly as v3 did.
-func (w *netWrapper) ParseIP(ip any) (legacyIP, error) {
+func (w *netWrapper) ParseIP(ip any) (LegacyIP, error) {
 	defer perf.Track(nil, "templating.netWrapper.ParseIP")()
 
 	w.reporter.Deprecated(w.name, "net.ParseIP", "net.ParseAddr", deprecationHint("net.ParseIP", "net.ParseAddr"))
 	addr, err := w.ParseAddr(ip)
-	return legacyIP{Addr: addr}, err
+	return LegacyIP{Addr: addr}, err
 }
 
 // ParseIPPrefix is gomplate v3's net.ParseIPPrefix, removed in v5 in favor of

@@ -29,4 +29,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(getCmd)
+	internal.RegisterCommandMetadata(
+		getCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/get"),
+	)
 }

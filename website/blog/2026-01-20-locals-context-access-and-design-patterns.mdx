@@ -16,6 +16,8 @@ Locals can access `{{ .settings }}`, `{{ .vars }}`, and `{{ .env }}` from the sa
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Enhancement
 
 Previously, locals could only reference other locals via `{{ .locals.* }}`. Now they can also access:
@@ -59,6 +61,18 @@ If you need values from imported files, use `vars` or `settings` (which inherit 
 ## Upgrade
 
 Upgrade Atmos to get this enhancement. Existing locals configurations will continue to work.
+
+## Try it out
+
+<TryExample example="locals">
+
+Inspect the file-scoped locals resolved for the development stack.
+
+```shell
+atmos describe locals -s dev
+```
+
+</TryExample>
 
 ## References
 

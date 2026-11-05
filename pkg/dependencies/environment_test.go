@@ -224,7 +224,8 @@ func TestForWorkflow_WithToolVersions(t *testing.T) {
 	expectedPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
 
 	mockProv.EXPECT().EnsureTools(map[string]string{"terraform": "1.11.4"}).Return(nil)
-	mockProv.EXPECT().ResolveToolName("terraform").Return("hashicorp", "terraform", nil)
+	// Resolved once to group the manifest entry and once to locate its binary.
+	mockProv.EXPECT().ResolveToolName("terraform").Return("hashicorp", "terraform", nil).Times(2)
 	mockProv.EXPECT().FindBinaryPath("hashicorp", "terraform", "1.11.4").Return(expectedBinPath, nil)
 	mockProv.EXPECT().BuildPATH(atmosConfig, map[string]string{"terraform": "1.11.4"}).Return(expectedPATH, nil)
 
@@ -475,14 +476,14 @@ func TestForWorkflow_LoadToolVersionsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to load .tool-versions")
 }
 
-// TestForWorkflow_MergeConflict tests ForWorkflow when workflow deps conflict with .tool-versions.
-func TestForWorkflow_MergeConflict(t *testing.T) {
+// TestForWorkflow_OverridesDefaults verifies that manifest defaults never constrain explicit dependencies.
+func TestForWorkflow_OverridesDefaults(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir)
 
 	// Create .tool-versions with a constraint.
-	err := os.WriteFile(filepath.Join(tempDir, ".tool-versions"), []byte("terraform ~> 1.10.0\n"), 0o644)
+	err := os.WriteFile(filepath.Join(tempDir, ".tool-versions"), []byte("terraform ~>1.10.0\n"), 0o644)
 	require.NoError(t, err)
 
 	origConfig := toolchain.GetAtmosConfig()
@@ -506,10 +507,17 @@ func TestForWorkflow_MergeConflict(t *testing.T) {
 		},
 	}
 
-	tenv, err := ForWorkflow(atmosConfig, workflowDef)
-	require.Error(t, err)
-	assert.Nil(t, tenv)
-	assert.Contains(t, err.Error(), "failed to merge dependencies")
+	ctrl := gomock.NewController(t)
+	mockProv := NewMockToolProvisioner(ctrl)
+	expected := map[string]string{"terraform": "1.9.0"}
+	binary := filepath.Join(tempDir, "bin", "terraform")
+	mockProv.EXPECT().EnsureTools(expected).Return(nil)
+	mockProv.EXPECT().ResolveToolName("terraform").Return("hashicorp", "terraform", nil)
+	mockProv.EXPECT().FindBinaryPath("hashicorp", "terraform", "1.9.0").Return(binary, nil)
+	mockProv.EXPECT().BuildPATH(atmosConfig, expected).Return(filepath.Dir(binary), nil)
+	tenv, err := ForWorkflow(atmosConfig, workflowDef, withProvisioner(mockProv))
+	require.NoError(t, err)
+	assert.Equal(t, binary, tenv.Resolve("terraform"))
 }
 
 // TestToolchainEnvironment_PrependToPath tests the PrependToPath method.

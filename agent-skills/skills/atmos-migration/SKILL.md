@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain, and migrating AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, and okta-aws-cli into atmos auth."
+description: "Migrate to Atmos from native Terraform, Terraform Workspaces, Fogg, Terramate, Terragrunt, Make, Just, or Task; migrate Rain or raw CloudFormation stacks to the aws/cloudformation component; migrate tool versions from mise or Aqua CLI; migrate AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, or okta-aws-cli to atmos auth; and replace GitHub Actions CI (dflook, tfcmt, cloud OIDC, component updater, TFLint, Checkov, Trivy, KICS, Infracost, tfsec) with Atmos Native CI. Use for incremental adoption that preserves layout, state, task behavior, and CI enforcement."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -9,6 +9,7 @@ references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
+  - references/from-fogg.md
   - references/from-terramate.md
   - references/from-makefile.md
   - references/from-justfile.md
@@ -24,6 +25,9 @@ references:
   - references/from-granted.md
   - references/from-aws2saml.md
   - references/from-okta-cli.md
+  - references/to-native-ci.md
+  - references/to-native-ci-scanners.md
+  - references/from-rain.md
 ---
 
 # Migrating to Atmos
@@ -42,21 +46,24 @@ and let Atmos call the existing task runner while individual tasks are migrated.
 For Terraform repositories, Atmos can adopt the existing file layout. Start with the smallest
 change that gives value and add structure as needed.
 
-This skill also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos
-toolchain -- see [from-mise.md](references/from-mise.md) and
-[from-aqua.md](references/from-aqua.md) in the routing table below.
+For Fogg, read [from-fogg.md](references/from-fogg.md) before applying generic Terraform advice:
+keep generated files for adoption, then take ownership of configuration generation and checks
+so future changes no longer require Fogg.
 
 For full tutorials for end users, see:
 
 - [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
 - [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
 - [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) -- see
-  [from-terragrunt.md](references/from-terragrunt.md) for the agent-actionable recipes
-- Migrating from Terramate -- covered by this skill via
-  [references/from-terramate.md](references/from-terramate.md) (no atmos.tools tutorial yet)
+  [from-terragrunt.md](references/from-terragrunt.md) for agent recipes
+- [Migrating from Fogg](https://atmos.tools/migration/fogg) -- see
+  [from-fogg.md](references/from-fogg.md) for adoption and behavioral parity
+- Migrating from Terramate -- see [from-terramate.md](references/from-terramate.md)
+  (no atmos.tools tutorial yet)
 - [Migrating from Makefiles](https://atmos.tools/migration/makefile)
 - [Migrating from Justfiles](https://atmos.tools/migration/justfile)
 - [Migrating from Taskfile.yml](https://atmos.tools/migration/taskfile)
+- [Migrating from Rain / Raw CloudFormation](https://atmos.tools/migration/rain)
 
 ## Terraform or OpenTofu
 
@@ -104,20 +111,24 @@ user's repository.
 Find the user's source pattern before you propose any change. Each pattern points to a different
 reference file:
 
-| User has...                                                          | Use reference                                    |
-|----------------------------------------------------------------------|--------------------------------------------------|
-| One TF root module, env config via `.tfvars` or env vars             | [from-native-terraform.md](references/from-native-terraform.md) |
-| Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
-| `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| User has... | Use reference |
+| --- | --- |
+| One TF root module, env config via `.tfvars` or env vars | [from-native-terraform.md](references/from-native-terraform.md) |
+| Multiple TF root modules in scattered dirs | [from-native-terraform.md](references/from-native-terraform.md) |
+| `terraform.workspace`-driven environments with shared state backend | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| `fogg.yml`, Fogg-generated Terraform and Make/CI tasks | [from-fogg.md](references/from-fogg.md) |
 | `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
-| Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
-| User has a Makefile driving builds/tests/deploys                     | [from-makefile.md](references/from-makefile.md) |
-| User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
-| User has a Taskfile.yml (go-task)                                    | [from-taskfile.md](references/from-taskfile.md) |
-| `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
-| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
+| Need to read outputs from un-migrated TF (legacy or another repo) | [remote-state-bridge.md](references/remote-state-bridge.md) |
+| User has a Makefile driving builds/tests/deploys | [from-makefile.md](references/from-makefile.md) |
+| User has a Justfile (`just` command runner) | [from-justfile.md](references/from-justfile.md) |
+| User has a Taskfile.yml (go-task) | [from-taskfile.md](references/from-taskfile.md) |
+| `cloudposse/github-action-atmos-component-updater` | [from-component-updater.md](references/from-component-updater.md) |
+| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`) | [from-terragrunt.md](references/from-terragrunt.md) |
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
-| `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
+| `aqua.yaml` (Aqua CLI) for tool versions | [from-aqua.md](references/from-aqua.md) |
+| CI on GitHub Actions (setup-terraform, configure-aws-credentials, dflook, tfcmt) | [to-native-ci.md](references/to-native-ci.md) |
+| Scanner actions (TFLint, Checkov, Trivy, KICS, Infracost, tfsec) | [to-native-ci-scanners.md](references/to-native-ci-scanners.md) |
+| User is migrating off Rain / raw CloudFormation | [from-rain.md](references/from-rain.md) |
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
@@ -154,15 +165,15 @@ Authentication is an orthogonal migration axis from IaC -- a user may migrate th
 their auth setup, both, or neither in a given session. Don't conflate the two. Identify which
 credential tooling the user has today and route to the matching reference:
 
-| User has...                                            | Use reference                                    |
-|------------------------------------------------------------|----------------------------------------------------|
-| `~/.aws/config`/`~/.aws/credentials` profiles               | [from-aws-config.md](references/from-aws-config.md) |
-| `gcloud` CLI config, ADC, or service-account keys            | [from-gcp-config.md](references/from-gcp-config.md) |
-| `az` CLI config, service principals, or Managed Identity     | [from-azure-config.md](references/from-azure-config.md) |
-| Leapp (desktop credential manager)                           | [from-leapp.md](references/from-leapp.md)           |
-| Granted (the `assume` CLI)                                   | [from-granted.md](references/from-granted.md)       |
-| saml2aws                                                      | [from-aws2saml.md](references/from-aws2saml.md)     |
-| okta-aws-cli                                                   | [from-okta-cli.md](references/from-okta-cli.md) -- **partial support only, read the gap callouts** |
+| User has... | Use reference |
+| --- | --- |
+| `~/.aws/config`/`~/.aws/credentials` profiles | [from-aws-config.md](references/from-aws-config.md) |
+| `gcloud` CLI config, ADC, or service-account keys | [from-gcp-config.md](references/from-gcp-config.md) |
+| `az` CLI config, service principals, or Managed Identity | [from-azure-config.md](references/from-azure-config.md) |
+| Leapp (desktop credential manager) | [from-leapp.md](references/from-leapp.md) |
+| Granted (the `assume` CLI) | [from-granted.md](references/from-granted.md) |
+| saml2aws | [from-aws2saml.md](references/from-aws2saml.md) |
+| okta-aws-cli | [from-okta-cli.md](references/from-okta-cli.md) -- **partial support only, read the gap callouts** |
 
 All are pure config-translation guides -- there is no `atmos auth import`/`migrate` command.
 None of them require touching the user's IaC migration path; they can run before, after, or
@@ -212,10 +223,10 @@ Pick the layout that matches the user's goals. Atmos recommends the `components/
 layout, especially for a new repository or a multi-tool project. You can keep an existing layout
 when the user wants less disruption.
 
-| `base_path`                              | Use when                                                                |
-|------------------------------------------|-------------------------------------------------------------------------|
-| `base_path: "."`                         | TF root modules live at the repo root; user wants zero file moves       |
-| `base_path: "terraform"`                 | TF-only repo with code already in `terraform/`; preserve dir name       |
+| `base_path` | Use when |
+| --- | --- |
+| `base_path: "."` | TF root modules live at the repo root; user wants zero file moves |
+| `base_path: "terraform"` | TF-only repo with code already in `terraform/`; preserve dir name |
 | `base_path: "."` + `components.terraform.base_path: "components/terraform"` | Multi-toolchain or new repo; canonical Atmos layout |
 
 For more organization patterns, such as multi-region, multi-account, and organization
@@ -226,14 +237,14 @@ hierarchies, see the skill [atmos-design-patterns](../atmos-design-patterns/SKIL
 This is a common mistake: an agent chooses a Gomplate datasource when a YAML function is safer
 and clearer. Use the option in the right column:
 
-| Goal                          | Reach for (NOT this)                              | Use instead                              |
-|-------------------------------|---------------------------------------------------|------------------------------------------|
-| Include a file's contents     | `gomplate.datasources` with file URL              | `!include path/to/file`                  |
-| Read an environment variable  | `gomplate getenv "FOO"`                           | `!env FOO`                               |
-| Run a shell command           | Template + `gomplate exec`                        | `!exec "command"`                        |
-| Read a store value            | Custom datasource URL                             | `!store store_name component stack key`  |
-| Read Terraform output         | Templated remote-state datasource                 | `!terraform.state component output`      |
-| Get current AWS account ID    | `gomplate.datasources` AWS plugin                 | `!aws.account_id`                        |
+| Goal | Reach for (NOT this) | Use instead |
+| --- | --- | --- |
+| Include a file's contents | `gomplate.datasources` with file URL | `!include path/to/file` |
+| Read an environment variable | `gomplate getenv "FOO"` | `!env FOO` |
+| Run a shell command | Template + `gomplate exec` | `!exec "command"` |
+| Read a store value | Custom datasource URL | `!store store_name component stack key` |
+| Read Terraform output | Templated remote-state datasource | `!terraform.state component output` |
+| Get current AWS account ID | `gomplate.datasources` AWS plugin | `!aws.account_id` |
 
 A YAML function checks its own types. It gives a clear error message. It works without Gomplate
 turned on. It does not require the template text to stay valid YAML. Use a Go template only for
@@ -267,13 +278,14 @@ to the correct skill:
   [atmos-components](../atmos-components/SKILL.md).
 - **Use deep merging, imports, or overrides.** Use [atmos-stacks](../atmos-stacks/SKILL.md).
 - **Vendor third-party components.** Use [atmos-vendoring](../atmos-vendoring/SKILL.md).
-- **Migrate an existing AWS/GCP/Azure CLI config, Leapp, Granted, saml2aws, or okta-aws-cli
-  setup.** Start with the matching reference in
-  [Migrating Authentication](#migrating-authentication) above. For authoring new auth config
-  beyond a migration, go straight to [atmos-auth](../atmos-auth/SKILL.md).
+- **Migrate an AWS/GCP/Azure CLI, Leapp, Granted, saml2aws, or okta-aws-cli setup.** Start with
+  the matching reference in [Migrating Authentication](#migrating-authentication) above. For
+  authoring new auth config beyond a migration, go straight to [atmos-auth](../atmos-auth/SKILL.md).
 - **Add validation policies, such as OPA or JSON Schema.** Use
   [atmos-validation](../atmos-validation/SKILL.md).
 - **Set up CI/CD with affected-component detection.** Use [atmos-ci](../atmos-ci/SKILL.md).
+- **Migrate third-party GitHub Actions CI** (dflook, tfcmt, etc.) to Native CI. Use
+  [to-native-ci.md](references/to-native-ci.md).
 - **Share data between components through a store.** Use
   [atmos-stores](../atmos-stores/SKILL.md).
 

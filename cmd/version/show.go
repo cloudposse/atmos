@@ -12,6 +12,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -174,4 +175,8 @@ var showCmd = &cobra.Command{
 func init() {
 	showCmd.Flags().StringVar(&showFormat, "format", "table", "Output format: table, json, yaml")
 	versionCmd.AddCommand(showCmd)
+	internal.RegisterCommandMetadata(
+		showCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/show"),
+	)
 }

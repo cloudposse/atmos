@@ -108,30 +108,40 @@ func writeRichDiagnosticHeader(out *strings.Builder, diagnostic *Diagnostic, opt
 // must never fail a validation run that already succeeded at collecting the
 // diagnostic itself.
 func writeRichDiagnosticSource(out *strings.Builder, diagnostic *Diagnostic, options RichOptions, width int) {
-	contents, err := os.ReadFile(richPath(options.Root, diagnostic.File))
-	if err != nil {
+	lines, start, endLine := SourceExcerpt(diagnostic, options.Root)
+	if len(lines) == 0 {
 		return
 	}
-	lines := strings.Split(strings.ReplaceAll(string(contents), "\r\n", "\n"), "\n")
-	if diagnostic.Line > len(lines) {
-		return
-	}
-	endLine := diagnostic.EndLine
-	if endLine < diagnostic.Line {
-		endLine = diagnostic.Line
-	}
-	if endLine > len(lines) {
-		endLine = len(lines)
-	}
-	start := max(1, diagnostic.Line-1)
-	end := min(len(lines), endLine+1)
+	end := start + len(lines) - 1
 	ctx := richLineContext{
 		out: out, diagnostic: diagnostic, options: options,
 		endLine: endLine, width: width, gutterWidth: len(strconv.Itoa(end)),
 	}
-	for lineNumber := start; lineNumber <= end; lineNumber++ {
-		writeRichDiagnosticLine(ctx, lines[lineNumber-1], lineNumber)
+	for index, line := range lines {
+		writeRichDiagnosticLine(ctx, line, start+index)
 	}
+}
+
+// SourceExcerpt reads a diagnostic's source with one surrounding line on either
+// side. It returns the lines, their first line number, and the last affected line.
+// Missing sources and invalid locations return no excerpt, never a rendering error.
+func SourceExcerpt(diagnostic *Diagnostic, root string) ([]string, int, int) {
+	defer perf.Track(nil, "validation.SourceExcerpt")()
+	if diagnostic.File == "" || diagnostic.Line <= 0 {
+		return nil, 0, 0
+	}
+	contents, err := os.ReadFile(richPath(root, diagnostic.File))
+	if err != nil {
+		return nil, 0, 0
+	}
+	lines := strings.Split(strings.ReplaceAll(string(contents), "\r\n", "\n"), "\n")
+	if diagnostic.Line > len(lines) {
+		return nil, 0, 0
+	}
+	endLine := min(len(lines), max(diagnostic.Line, diagnostic.EndLine))
+	start := max(1, diagnostic.Line-1)
+	end := min(len(lines), endLine+1)
+	return lines[start-1 : end], start, endLine
 }
 
 // richLineContext bundles the parameters that stay constant across every

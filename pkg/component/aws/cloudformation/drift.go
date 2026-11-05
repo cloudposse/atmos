@@ -1,0 +1,247 @@
+package cloudformation
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// driftPollInterval is how often DescribeStackDriftDetectionStatus is polled
+// while a drift-detection operation is in progress. A var (not const) so
+// tests can shrink it and exercise the polling loop without a real 3s sleep.
+var driftPollInterval = 3 * time.Second
+
+// driftDetectionTimeout bounds how long a single drift detection may run before
+// this command gives up watching it. A var (not const) so tests can shrink it
+// to exercise the timeout branch without waiting 15 real minutes.
+var driftDetectionTimeout = 15 * time.Minute
+
+// driftDetectionResult is the outcome of running (or re-fetching the status of)
+// a drift detection operation.
+type driftDetectionResult struct {
+	DetectionID   string
+	StackStatus   cfntypes.StackDriftStatus
+	DriftedCount  int32
+	StatusReason  string
+	DetectionDone bool
+}
+
+// detectDrift starts a new drift detection operation and polls until it
+// completes (or fails), returning the overall stack drift status. The
+// configured operation deadline, or the default driftDetectionTimeout budget,
+// bounds both the initial DetectStackDrift call and pollDriftDetection. The
+// original ctx is preserved so caller cancellation remains distinct from
+// deadline expiry during either a stalled request or the polling loop.
+func detectDrift(ctx context.Context, client CloudFormationClient, stackName string) (*driftDetectionResult, error) {
+	defer perf.Track(nil, "cloudformation.detectDrift")()
+
+	timeoutCtx, cancel := withDefaultTimeout(ctx, driftDetectionTimeout)
+	defer cancel()
+
+	out, err := client.DetectStackDrift(timeoutCtx, &cloudformation.DetectStackDriftInput{StackName: awsString(stackName)})
+	if err != nil {
+		return nil, classifyDriftPollError(ctx, timeoutCtx, err)
+	}
+
+	detectionID := stringValue(out.StackDriftDetectionId)
+	return pollDriftDetection(ctx, timeoutCtx, client, detectionID)
+}
+
+// errDriftDetectionTimedOut wraps ErrAwsCloudFormationAPICallFailed for both places
+// pollDriftDetection can discover the per-detection timeout: a stalled AWS request unblocked by
+// timeoutCtx's deadline, and the between-poll wait's own timeoutCtx.Done() case.
+func errDriftDetectionTimedOut() error {
+	return fmt.Errorf("%w: timed out waiting for drift detection", errUtils.ErrAwsCloudFormationAPICallFailed)
+}
+
+// classifyDriftPollError maps a DescribeStackDriftDetectionStatus failure to the right error:
+// caller cancellation takes priority; configured and default deadlines both preserve the drift
+// timeout classification and the underlying context error. Other AWS errors are wrapped generically.
+func classifyDriftPollError(ctx, timeoutCtx context.Context, err error) error {
+	if parentErr := ctx.Err(); parentErr != nil {
+		if errors.Is(parentErr, context.DeadlineExceeded) {
+			return fmt.Errorf("%w: %w", errDriftDetectionTimedOut(), parentErr)
+		}
+		return parentErr
+	}
+	if timeoutErr := timeoutCtx.Err(); timeoutErr != nil {
+		return fmt.Errorf("%w: %w", errDriftDetectionTimedOut(), timeoutErr)
+	}
+	return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
+}
+
+// waitForNextDriftPoll blocks until the next poll is due, returning nil to continue looping.
+// The caller's own context (ctx) is checked first, with priority: once both ctx and the derived
+// timeoutCtx are done (timeoutCtx is cancelled whenever its parent ctx is), a select between
+// them could otherwise pick either case at random, sometimes misreporting a caller cancellation
+// as a drift-detection timeout.
+func waitForNextDriftPoll(ctx, timeoutCtx context.Context) error {
+	if ctx.Err() != nil {
+		return classifyDriftPollError(ctx, timeoutCtx, ctx.Err())
+	}
+	select {
+	case <-ctx.Done():
+		return classifyDriftPollError(ctx, timeoutCtx, ctx.Err())
+	case <-timeoutCtx.Done():
+		return classifyDriftPollError(ctx, timeoutCtx, timeoutCtx.Err())
+	case <-time.After(driftPollInterval):
+		return nil
+	}
+}
+
+// pollDriftDetection polls DescribeStackDriftDetectionStatus until the detection operation
+// reaches DETECTION_COMPLETE or DETECTION_FAILED. The timeoutCtx (created by detectDrift, before
+// the initial DetectStackDrift call) bounds every AWS request in this loop too, so a stalled
+// DescribeStackDriftDetectionStatus call can't keep the command blocked past the shared
+// operation deadline or default driftDetectionTimeout budget. Caller cancellation is preserved;
+// either deadline maps to ErrAwsCloudFormationAPICallFailed while retaining context.DeadlineExceeded.
+func pollDriftDetection(ctx, timeoutCtx context.Context, client CloudFormationClient, detectionID string) (*driftDetectionResult, error) {
+	for {
+		out, err := client.DescribeStackDriftDetectionStatus(timeoutCtx, &cloudformation.DescribeStackDriftDetectionStatusInput{
+			StackDriftDetectionId: awsString(detectionID),
+		})
+		if err != nil {
+			return nil, classifyDriftPollError(ctx, timeoutCtx, err)
+		}
+
+		result := &driftDetectionResult{
+			DetectionID:  detectionID,
+			StackStatus:  out.StackDriftStatus,
+			StatusReason: stringValue(out.DetectionStatusReason),
+		}
+		if out.DriftedStackResourceCount != nil {
+			result.DriftedCount = *out.DriftedStackResourceCount
+		}
+
+		switch out.DetectionStatus {
+		case cfntypes.StackDriftDetectionStatusDetectionComplete:
+			result.DetectionDone = true
+			return result, nil
+		case cfntypes.StackDriftDetectionStatusDetectionFailed:
+			return result, fmt.Errorf("%w: %s", errUtils.ErrAwsCloudFormationAPICallFailed, result.StatusReason)
+		}
+
+		if err := waitForNextDriftPoll(ctx, timeoutCtx); err != nil {
+			return result, err
+		}
+	}
+}
+
+// describeResourceDrifts fetches the per-resource drift details from the most
+// recently completed drift detection for the stack (does not trigger a new
+// detection — pair with detectDrift/runDriftDetect first for a fresh check).
+func describeResourceDrifts(ctx context.Context, client CloudFormationClient, stackName string) ([]cfntypes.StackResourceDrift, error) {
+	defer perf.Track(nil, "cloudformation.describeResourceDrifts")()
+
+	var drifts []cfntypes.StackResourceDrift
+	var nextToken *string
+	for {
+		out, err := client.DescribeStackResourceDrifts(ctx, &cloudformation.DescribeStackResourceDriftsInput{
+			StackName: awsString(stackName),
+			NextToken: nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
+		}
+		drifts = append(drifts, out.StackResourceDrifts...)
+		if out.NextToken == nil {
+			return drifts, nil
+		}
+		nextToken = out.NextToken
+	}
+}
+
+// runDriftDetect triggers a fresh drift detection and renders the summary result.
+// Returns ErrAwsCloudFormationDriftDetected when drift is found and failOnDrift is
+// set, so callers can wire it to a non-zero exit code (e.g. `--fail-on-drift` in CI).
+func runDriftDetect(ctx context.Context, client CloudFormationClient, stackName string, failOnDrift bool, summary map[string]any) (map[string]any, error) {
+	result, err := detectDrift(ctx, client, stackName)
+	if err != nil {
+		return summary, err
+	}
+	summary["drift_status"] = string(result.StackStatus)
+	summary["drifted_resource_count"] = result.DriftedCount
+
+	_ = data.Writeln(fmt.Sprintf("%s: %s (%d resource(s) drifted)", stackName, result.StackStatus, result.DriftedCount))
+
+	if failOnDrift && result.StackStatus == cfntypes.StackDriftStatusDrifted {
+		return summary, fmt.Errorf("%w: %s", errUtils.ErrAwsCloudFormationDriftDetected, stackName)
+	}
+	return summary, nil
+}
+
+// runDriftDescribe renders the per-resource results of the most recent drift
+// detection without triggering a new one.
+func runDriftDescribe(ctx context.Context, client CloudFormationClient, stackName string, summary map[string]any) (map[string]any, error) {
+	drifts, err := describeResourceDrifts(ctx, client, stackName)
+	if err != nil {
+		return summary, err
+	}
+	summary["drifts"] = drifts
+	status, driftedCount := summarizeResourceDrifts(drifts)
+	summary["drift_status"] = string(status)
+	summary["drifted_resource_count"] = driftedCount
+
+	if len(drifts) == 0 {
+		_ = data.Writeln(fmt.Sprintf("%s: no drift results (run drift detect first)", stackName))
+		return summary, nil
+	}
+	for _, line := range driftLines(drifts) {
+		_ = data.Writeln(line)
+	}
+	return summary, nil
+}
+
+// driftLines renders every drifted (not IN_SYNC) resource as one status line, followed by one
+// indented line per property difference (path, expected value, actual value, difference type) so
+// a MODIFIED resource shows what changed rather than only that it did. Shared by `drift describe`
+// and the CI summary so both show the same detail.
+func driftLines(drifts []cfntypes.StackResourceDrift) []string {
+	var lines []string
+	for i := range drifts {
+		d := &drifts[i]
+		if d.StackResourceDriftStatus == cfntypes.StackResourceDriftStatusInSync {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("  %-10s %-28s %s", d.StackResourceDriftStatus, stringValue(d.ResourceType), stringValue(d.LogicalResourceId)))
+		for j := range d.PropertyDifferences {
+			diff := &d.PropertyDifferences[j]
+			lines = append(lines, fmt.Sprintf("    %s: expected %s, actual %s (%s)",
+				stringValue(diff.PropertyPath), stringValue(diff.ExpectedValue), stringValue(diff.ActualValue), diff.DifferenceType))
+		}
+	}
+	return lines
+}
+
+// summarizeResourceDrifts derives the aggregate status from the returned
+// resource results. Known drift takes precedence over incomplete detection;
+// unchecked or unrecognized results must never make a stack appear clean.
+func summarizeResourceDrifts(drifts []cfntypes.StackResourceDrift) (cfntypes.StackDriftStatus, int32) {
+	if len(drifts) == 0 {
+		return "", 0
+	}
+	status := cfntypes.StackDriftStatusInSync
+	var driftedCount int32
+	for i := range drifts {
+		switch drifts[i].StackResourceDriftStatus {
+		case cfntypes.StackResourceDriftStatusModified, cfntypes.StackResourceDriftStatusDeleted:
+			driftedCount++
+		case cfntypes.StackResourceDriftStatusInSync:
+			// This resource was checked and is unchanged.
+		default:
+			status = cfntypes.StackDriftStatusNotChecked
+		}
+	}
+	if driftedCount > 0 {
+		status = cfntypes.StackDriftStatusDrifted
+	}
+	return status, driftedCount
+}

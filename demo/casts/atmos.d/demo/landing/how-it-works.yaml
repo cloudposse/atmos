@@ -1,0 +1,65 @@
+commands:
+- name: casts generate demo landing how-it-works
+  description: Record Config in, infrastructure out using the dedicated landing fixture.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/how-it-works
+    path: ../../.context/cast-fixtures/landing/how-it-works
+    reset: true
+  - type: shell
+    command: atmos terraform workspace new app -s dev
+    working_directory: ../../.context/cast-fixtures/landing/how-it-works
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: cast
+    name: how-it-works
+    working_directory: ../../.context/cast-fixtures/landing/how-it-works
+    title: Config in, infrastructure out
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/how-it-works.cast
+    steps:
+    - type: simulate
+      text: atmos list stacks --format tree
+    - type: shell
+      command: atmos list stacks --format tree
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos list components -s dev
+    - type: shell
+      command: atmos list components -s dev
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos auth list
+    - type: shell
+      command: atmos auth list
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos terraform plan app -s dev --ci
+    - type: shell
+      command: atmos terraform plan app -s dev --ci
+      duration: 650ms
+      interval: 1s
+  - type: shell
+    command: python3 landing_checks.py sanitize how-it-works
+  - type: shell
+    command: atmos casts validate demo landing how-it-works
+- name: casts validate demo landing how-it-works
+  description: Validate the how-it-works homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate how-it-works

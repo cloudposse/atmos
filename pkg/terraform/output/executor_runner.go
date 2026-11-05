@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filelock"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
@@ -81,12 +82,15 @@ func (e *Executor) runInitOnce(
 	// it must not see leftover stderr from an earlier, already-handled command (e.g. a prior
 	// successful init/workspace-select, or a prior failed `output` this init is recovering from).
 	stderrCapture.Reset()
-	err := runner.Init(ctx, buildInitOptions(reconfigure, upgrade)...)
+	err := runTerraformInit(ctx, runner, reconfigure, upgrade)
 	if err == nil {
 		log.Debug("Completed terraform init", "component", component, "stack", stack)
 		return nil
 	}
 
+	if guard.IsPolicyError(err) {
+		return err
+	}
 	diag := autoinit.Classify(diagnosticText(err, stderrCapture))
 	if !diag.UpgradeRequired && !diag.ReconfigureRequired {
 		return wrapErrorWithStderr(errUtils.Build(errUtils.ErrTerraformInit).WithCause(err).Err(), stderrCapture)
@@ -104,7 +108,7 @@ func (e *Executor) runInitOnce(
 		"component", component, "stack", stack, "matched", diag.Matched,
 		"reconfigure", reconfigure || rec.WithReconfigure, "upgrade", upgrade || rec.WithUpgrade)
 
-	retryErr := runner.Init(ctx, buildInitOptions(reconfigure || rec.WithReconfigure, upgrade || rec.WithUpgrade)...)
+	retryErr := runTerraformInit(ctx, runner, reconfigure || rec.WithReconfigure, upgrade || rec.WithUpgrade)
 	if retryErr != nil {
 		return wrapErrorWithStderr(errUtils.Build(errUtils.ErrTerraformInit).WithCause(retryErr).Err(), stderrCapture)
 	}
@@ -138,11 +142,17 @@ func (e *Executor) runOutput(ctx context.Context, runner TerraformRunner, compon
 	stderrCapture.Reset()
 
 	var outputMeta map[string]tfexec.OutputMeta
-	err := retryOnWindows(func() error {
+	run := func() error {
 		var outputErr error
 		outputMeta, outputErr = runner.Output(ctx)
 		return outputErr
-	})
+	}
+	var err error
+	if managed, ok := runner.(*policyRunner); ok && managed.policies["output"] != nil {
+		err = run()
+	} else {
+		err = retryOnWindows(run)
+	}
 	if err != nil {
 		return nil, wrapErrorWithStderr(err, stderrCapture)
 	}

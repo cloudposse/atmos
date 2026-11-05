@@ -10,15 +10,16 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/creack/pty"
+	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/terminal/query"
 )
 
 // Options represents configuration for PTY execution.
@@ -101,13 +102,34 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 	if opts.DisableStdinForward {
 		stdin = nil
 	}
-	return runWithIO(ctx, &ioRunConfig{
+	runErr := runWithIO(ctx, &ioRunConfig{
 		cmd:                      cmd,
 		ptmx:                     ptmx,
 		stdin:                    stdin,
 		stdout:                   outputWriter,
-		emulateTerminalResponses: opts.DisableStdinForward,
+		emulateTerminalResponses: shouldEmulateTerminalResponses(opts),
 	})
+
+	// The output copier has finished, so release any tail the masker held back.
+	if flushErr := outputWriter.Flush(); flushErr != nil && runErr == nil {
+		return fmt.Errorf("failed to flush masked PTY output: %w", flushErr)
+	}
+	return runErr
+}
+
+// shouldEmulateTerminalResponses reports whether Atmos must answer terminal queries
+// (OSC 10/11, CSI 6n) itself. A real host terminal reached through forwarded stdin
+// answers them; without one (no forwarded input, or stdin that is not a terminal)
+// children such as bubbletea/termenv programs would wait seconds for each reply.
+func shouldEmulateTerminalResponses(opts *Options) bool {
+	if opts.DisableStdinForward {
+		return true
+	}
+	f, ok := opts.Stdin.(*os.File)
+	if !ok {
+		return true
+	}
+	return !term.IsTerminal(int(f.Fd()))
 }
 
 // applyDefaults applies default values to Options if not set.
@@ -128,12 +150,17 @@ func applyDefaults(opts *Options) *Options {
 }
 
 // createOutputWriter creates an output writer with optional masking.
-func createOutputWriter(opts *Options) io.Writer {
+func createOutputWriter(opts *Options) *recordingWriter {
 	if opts.EnableMasking && opts.Masker != nil && opts.Masker.Enabled() {
-		return &recordingWriter{
+		w := &recordingWriter{
 			underlying: opts.Stdout,
 			masker:     opts.Masker,
 		}
+		if !opts.DisableStdinForward {
+			// A forwarded interactive terminal must see prompts without a trailing newline promptly.
+			w.streamOpts = iolib.MaskOptionsForStdin(opts.Stdin)
+		}
+		return w
 	}
 	return &recordingWriter{underlying: opts.Stdout}
 }
@@ -186,60 +213,7 @@ func newOutputReader(ptmx *os.File, emulateTerminalResponses bool) io.Reader {
 	if !emulateTerminalResponses {
 		return ptmx
 	}
-	return &terminalResponseReader{src: ptmx, responder: ptmx}
-}
-
-type terminalResponseReader struct {
-	src       io.Reader
-	responder io.Writer
-	tail      string
-}
-
-const terminalResponseTailLen = 64
-
-func (r *terminalResponseReader) Read(p []byte) (int, error) {
-	n, err := r.src.Read(p)
-	if n > 0 {
-		previousTailLen := len(r.tail)
-		output := r.tail + string(p[:n])
-		r.respond(output, previousTailLen)
-		r.tail = lastN(output, terminalResponseTailLen)
-	}
-	return n, err
-}
-
-func (r *terminalResponseReader) respond(output string, previousTailLen int) {
-	if containsNewSequence(output, "\x1b]10;?\x1b\\", previousTailLen) {
-		_, _ = r.responder.Write([]byte("\x1b]10;rgb:ffff/ffff/ffff\x1b\\"))
-	}
-	if containsNewSequence(output, "\x1b]11;?\x1b\\", previousTailLen) {
-		_, _ = r.responder.Write([]byte("\x1b]11;rgb:0000/0000/0000\x1b\\"))
-	}
-	if containsNewSequence(output, "\x1b[6n", previousTailLen) {
-		_, _ = r.responder.Write([]byte("\x1b[1;1R"))
-	}
-}
-
-func containsNewSequence(output, sequence string, previousTailLen int) bool {
-	for index := strings.Index(output, sequence); index >= 0; {
-		if index+len(sequence) > previousTailLen {
-			return true
-		}
-		nextOffset := index + 1
-		next := strings.Index(output[nextOffset:], sequence)
-		if next < 0 {
-			return false
-		}
-		index = nextOffset + next
-	}
-	return false
-}
-
-func lastN(input string, n int) string {
-	if len(input) <= n {
-		return input
-	}
-	return input[len(input)-n:]
+	return query.NewReader(ptmx, ptmx)
 }
 
 // outputDrainTimeout bounds how long completion waits for the output copier
@@ -331,27 +305,57 @@ func IsSupported() bool {
 // recordingWriter wraps PTY output so terminal-attached steps are both masked
 // and visible to the asciicast recorder. PTY output is terminal-like, so it is
 // recorded as stdout even though the PTY merges stdout and stderr.
+//
+// PTY reads split output at arbitrary byte boundaries, so masking is stream-aware: a possible
+// secret prefix at the end of one read is held back and masked together with the next read.
+// Call Flush once the PTY output has been drained.
 type recordingWriter struct {
 	underlying io.Writer
 	masker     iolib.Masker
+	streamOpts []iolib.StreamingMaskOption
+
+	once   sync.Once
+	stream *iolib.StreamingMaskWriter
 }
 
 // Write implements io.Writer by masking data before writing to underlying writer.
 func (w *recordingWriter) Write(p []byte) (n int, err error) {
 	defer perf.Track(nil, "pty.recordingWriter.Write")()
 
-	output := string(p)
-	if w.masker != nil && w.masker.Enabled() {
-		output = w.masker.Mask(output)
+	if w.masker == nil {
+		return recordedSink{w: w.underlying}.Write(p)
 	}
 
-	_, err = w.underlying.Write([]byte(output))
-	if err != nil {
+	w.once.Do(func() {
+		opts := append([]iolib.StreamingMaskOption{iolib.WithStreamMasker(w.masker)}, w.streamOpts...)
+		w.stream = iolib.NewStreamingMaskWriter(recordedSink{w: w.underlying}, opts...)
+	})
+	return w.stream.Write(p)
+}
+
+// Flush writes any output the masker is still holding back. It is a no-op when masking is off.
+func (w *recordingWriter) Flush() error {
+	defer perf.Track(nil, "pty.recordingWriter.Flush")()
+
+	if w.stream == nil {
+		return nil
+	}
+	return w.stream.Flush()
+}
+
+// recordedSink writes already-masked PTY output to the underlying writer and the cast recorder.
+type recordedSink struct {
+	w io.Writer
+}
+
+// Write implements io.Writer.
+func (s recordedSink) Write(p []byte) (int, error) {
+	if _, err := s.w.Write(p); err != nil {
 		return 0, err
 	}
 
-	iolib.RecordMaskedOutput(iolib.DataStream, output)
+	iolib.RecordMaskedOutput(iolib.DataStream, string(p))
 
-	// Return original byte count (not masked length) to maintain io.Writer contract.
+	// Return the byte count of p to keep the io.Writer contract.
 	return len(p), nil
 }

@@ -4,10 +4,13 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -48,12 +51,32 @@ to inspect one file's own declared value instead.`,
 			return err
 		}
 
-		value, err := atmosyaml.Get([]byte(effectiveYAML), args[0])
+		v := viper.GetViper()
+		if err := configGetParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+		value, err := atmosyaml.GetFormatted([]byte(effectiveYAML), args[0], v.GetString("config_get.format"))
 		if err != nil {
 			return err
 		}
 		return data.Writeln(value)
 	},
+}
+
+// configGetParser registers --format (flag > ATMOS_CONFIG_GET_FORMAT > "raw"). The Viper prefix keeps
+// the key apart from the other commands' format flags, which would otherwise share one environment
+// binding.
+var configGetParser = flags.NewStandardParser(
+	flags.WithViperPrefix("config_get"),
+	flags.WithStringFlag("format", "f", "raw", "Output format: raw or json"),
+	flags.WithEnvVars("format", "ATMOS_CONFIG_GET_FORMAT"),
+)
+
+func init() {
+	configGetParser.RegisterFlags(configGetCmd)
+	if err := configGetParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }
 
 var configSetCmd = &cobra.Command{
@@ -231,6 +254,22 @@ func init() {
 		"Value type: auto, string, int, bool, float, null, or yaml (raw literal). "+
 			"auto infers from the Atmos config schema, then from the existing value at the path, "+
 			"then from the new value's own shape, falling back to string.")
+	internal.RegisterCommandMetadata(
+		configDeleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-delete"),
+	)
+	internal.RegisterCommandMetadata(
+		configFormatCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-format"),
+	)
+	internal.RegisterCommandMetadata(
+		configGetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-get"),
+	)
+	internal.RegisterCommandMetadata(
+		configSetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-set"),
+	)
 }
 
 // resolveConfigFile picks the atmos.yaml to edit. The inherited persistent

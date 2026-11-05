@@ -37,6 +37,8 @@ run page.
 
 <!--truncate-->
 
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
 ## What's new
 
 ### Built-in kinds for the common cases
@@ -192,8 +194,7 @@ This feature is **experimental** — the YAML shape is stable for v1
 but may grow new fields as we add Pro integration. Pin your Atmos
 version if you don't want to track changes.
 
-## Try it
-
+## Try it out
 ```bash
 git clone https://github.com/cloudposse/atmos
 cd atmos/examples/hooks-trivy
@@ -213,3 +214,47 @@ all without any cloud credentials.
 >
   Full reference for hook kinds, override semantics, lifecycle events, tool auto-install, and the `--all` / `--skip-hooks` flags.
 </ActionCard>
+
+<TryExamples>
+
+<TryExample example="hooks-checkov" label="Checkov">
+
+Install Terraform and Checkov, then follow the README to run the scanner on the sample plan.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
+<TryExample example="hooks-infracost" label="Infracost">
+
+Install Terraform and Infracost and configure an Infracost API key before running the cost hook.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
+<TryExample example="hooks-kics" label="KICS">
+
+Install Terraform and KICS before running the scanner walkthrough.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
+<TryExample example="hooks-trivy" label="Trivy">
+
+Install Terraform and Trivy before running the scanner walkthrough.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
+</TryExamples>

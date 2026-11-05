@@ -2,9 +2,9 @@ package github
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,6 +15,8 @@ import (
 	execpkg "github.com/cloudposse/atmos/pkg/exec"
 )
 
+// TestGitHubTokenContextCancelsRunningCLI cancels after process startup without
+// depending on how quickly the child test binary initializes on a busy runner.
 func TestGitHubTokenContextCancelsRunningCLI(t *testing.T) {
 	t.Setenv("ATMOS_GITHUB_TOKEN", "")
 	t.Setenv("GITHUB_TOKEN", "")
@@ -22,7 +24,7 @@ func TestGitHubTokenContextCancelsRunningCLI(t *testing.T) {
 	t.Setenv("ATMOS_GITHUB_CLI", "gh")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	marker := filepath.Join(t.TempDir(), "ready")
+	started := make(chan struct{})
 	executable, err := os.Executable()
 	require.NoError(t, err)
 	ctrl := gomock.NewController(t)
@@ -30,14 +32,35 @@ func TestGitHubTokenContextCancelsRunningCLI(t *testing.T) {
 	executor.EXPECT().CommandContext(gomock.Any(), "gh", "auth", "token").DoAndReturn(
 		func(commandCtx context.Context, _ string, _ ...string) *exec.Cmd {
 			cmd := exec.CommandContext(commandCtx, executable, "-test.run=^TestHelperProcess$")
-			cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1", "HELPER_READY_FILE="+marker)
+			cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1", "HELPER_WAIT_FOR_STDIN=1")
+			// os/exec starts copying stdin only after the process starts, so the
+			// reader signals readiness without waiting for child initialization.
+			cmd.Stdin = &cliStartupReader{started: started, done: commandCtx.Done()}
 			return cmd
 		},
 	)
 	withCommander(t, executor)
 	finished := make(chan string, 1)
-	go func() { finished <- GetGitHubTokenContext(ctx) }()
-	require.Eventually(t, func() bool { _, err := os.Stat(marker); return err == nil }, 2*time.Second, 10*time.Millisecond, "helper must be running before cancellation")
+	exited := make(chan struct{})
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-exited:
+		case <-time.After(ghCLITimeout):
+			t.Error("CLI lookup did not exit during cleanup")
+		}
+	})
+	go func() {
+		defer close(exited)
+		finished <- GetGitHubTokenContext(ctx)
+	}()
+	select {
+	case <-started:
+	case <-finished:
+		t.Fatal("CLI exited before process startup")
+	case <-time.After(ghCLITimeout):
+		t.Fatal("CLI process did not start within its timeout")
+	}
 	cancel()
 	select {
 	case token := <-finished:
@@ -45,6 +68,20 @@ func TestGitHubTokenContextCancelsRunningCLI(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("CLI ignored caller cancellation")
 	}
+}
+
+// cliStartupReader signals that os/exec launched the child and holds its stdin
+// open until cancellation, keeping startup independent of child initialization.
+type cliStartupReader struct {
+	started chan struct{}
+	done    <-chan struct{}
+}
+
+// Read signals startup once and ends the stdin copy when the command is canceled.
+func (r *cliStartupReader) Read(_ []byte) (int, error) {
+	close(r.started)
+	<-r.done
+	return 0, io.EOF
 }
 
 func TestGitHubTokenContextPreservesEarlierDeadline(t *testing.T) {

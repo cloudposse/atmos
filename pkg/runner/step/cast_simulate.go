@@ -82,7 +82,7 @@ func cloneSimulatePrompt(prompt *schema.SimulatePrompt) *schema.SimulatePrompt {
 func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables, skipPrompt bool) error {
 	switch castSimulateMode(child) {
 	case "typed":
-		text, err := vars.Resolve(strings.TrimRight(child.Text, "\n"))
+		text, err := vars.ResolveStepField(child, "text", strings.TrimRight(child.Text, "\n"))
 		if err != nil {
 			return err
 		}
@@ -345,6 +345,9 @@ func castStepHasVisibleCursor(step *schema.WorkflowStep) bool {
 	for i := range step.Steps {
 		child := &step.Steps[i]
 		if child.Type == schema.TaskTypeSimulate && child.Cursor {
+			return true
+		}
+		if child.Type == castPlaybackStepType && castStepHasVisibleCursor(child) {
 			return true
 		}
 	}

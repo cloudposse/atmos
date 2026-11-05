@@ -7,6 +7,15 @@ description: >-
 cast:
   file: /casts/examples/quick-start-simple/list-and-plan.cast
   title: atmos quick start simple
+related_docs:
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
+  - label: "Quick Start"
+    url: /quick-start
+  - label: "Simple Tutorial"
+    url: /quick-start/simple
 ---
 
 # Example: Quick Start Simple
@@ -23,9 +32,9 @@ Learn more in the [Quick Start Guide](https://atmos.tools/quick-start/).
 
 ## Try It
 
-```shell
-cd examples/quick-start-simple
+From this example's directory, run:
 
+```shell
 # List all stacks
 atmos list stacks
 

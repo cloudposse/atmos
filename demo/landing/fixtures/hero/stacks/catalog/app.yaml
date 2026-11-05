@@ -1,0 +1,18 @@
+components:
+  terraform:
+    app:
+      vars:
+        retention_seconds: 3600
+  helm:
+    ingress:
+      chart: .
+      namespace: atmos-demo
+  kubernetes:
+    namespace:
+      paths: [manifests]
+  ansible:
+    web:
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory.ini

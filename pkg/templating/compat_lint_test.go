@@ -9,14 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// parseForLint parses text with the same stub functions Render's fast path
-// uses for renderer-only functions (ds, datasource, include, ...), so a
-// template calling them parses without needing a real gomplate render. Lint
-// tests call lintDeprecatedUsage directly against the result, never Render,
-// so the datasource cases below never touch the network.
+// parseForLint parses text with the datasource functions bound to an empty
+// Data, so a template calling ds, datasource or include parses.
+// Lint tests call lintDeprecatedUsage directly against the result, never
+// Render, so the datasource cases below never touch the network.
 func parseForLint(t *testing.T, text string) *template.Template {
 	t.Helper()
-	tmpl, err := template.New("t").Funcs(stubFuncs()).Parse(text)
+	tmpl, err := template.New("t").Funcs(datasourceFuncs(&Data{})).Parse(text)
 	require.NoError(t, err)
 	return tmpl
 }
@@ -156,11 +155,10 @@ func TestLintDeprecatedUsage_RunsDuringRender(t *testing.T) {
 // datasourceCallName resolves that chain through its own *parse.ChainNode
 // case, which parseForLint's stub function map can't exercise (it has no
 // "atmos" stub), so this test wires a real "atmos" func and renders instead.
-// The render itself is expected to fail (no live AWS SSM access in tests),
-// but the lint warning fires before that, during parsing.
+// The namespace reads from its own empty Data, so the render fails without
+// any AWS access, but the lint warning fires before that, during parsing.
 func TestLintDeprecatedUsage_AtmosGomplateDatasourceValue(t *testing.T) {
-	e := New()
-	funcs := template.FuncMap{"atmos": func() any { return atmosNamespace{reader: e} }}
+	funcs := template.FuncMap{"atmos": func() any { return atmosNamespace{sources: &Data{}, cache: NewDatasourceCache()} }}
 	fake := &fakeReporter{}
 
 	_, _ = New(WithDeprecationReporter(fake)).Render(context.Background(), &Request{
@@ -179,7 +177,7 @@ func TestLintDeprecatedUsage_AtmosGomplateDatasourceValue(t *testing.T) {
 // which is how a JSON parameter was read under gomplate v3.
 func TestLintDeprecatedUsage_ValueWithNestedField(t *testing.T) {
 	fake := &fakeReporter{}
-	e := New(WithDeprecationReporter(fake), WithDatasourceCache(NewDatasourceCache()))
+	e := New(WithDeprecationReporter(fake))
 
 	parsed, err := parsePlain(&renderPlan{
 		req: &Request{
@@ -187,7 +185,7 @@ func TestLintDeprecatedUsage_ValueWithNestedField(t *testing.T) {
 			Text:        `{{ (ds "secret").Value.host }}`,
 			Datasources: map[string]Datasource{"secret": {URL: "aws+smp:///app/db"}},
 		},
-		funcs:      e.(*engine).baseFuncs(context.Background(), "t", nil),
+		funcs:      e.(*engine).baseFuncs(context.Background(), "t", nil, nil),
 		left:       DefaultLeftDelim,
 		right:      DefaultRightDelim,
 		missingKey: MissingKeyError,

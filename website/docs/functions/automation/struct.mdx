@@ -1,0 +1,67 @@
+---
+title: "struct"
+sidebar_position: 44
+sidebar_label: "struct"
+sidebar_class_name: command
+description: Create a record with named fields accessible through dot syntax.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `struct` function creates a record with named fields. Use it to group related values and read them with
+    dot syntax, such as `service.name` or `service.port`.
+</Intro>
+
+## Usage
+
+```python
+service = struct(name="api", port=8080)
+print(service.name)  # api
+output = service    # {"name":"api","port":8080}
+```
+
+## Arguments
+
+Any number of keyword arguments. Each keyword becomes a field with the supplied value. Positional arguments
+are rejected. `struct()` creates an empty record; `struct(**fields)` creates one from a dictionary of string keys.
+
+## Returns
+
+A value of type `struct`. Fields can hold any Starlark value, including other structs and functions.
+Use `dir(record)` to list field names, and `getattr` or `hasattr` for dynamic field access.
+
+Fields cannot be reassigned, added, or deleted. Collections stored in fields remain mutable until frozen by
+module loading or parallel execution:
+
+```python
+record = struct(names=[])
+record.names.append("api")  # allowed before the record is frozen
+```
+
+For a library's functions, use [`module.load`](/functions/automation/module.load) to create a namespace directly
+from a file without listing its functions again.
+
+## JSON and output
+
+Data-only structs encode as JSON objects through [`json.encode`](/functions/automation/json.encode) and the
+[`output`](/functions/automation/output) global. Every field must be JSON-encodable. A struct containing a
+function fails encoding, just as a dictionary containing a function does.
+
+## Errors
+
+- Positional arguments fail with `struct: unexpected positional arguments`.
+- Reading a field that does not exist fails with a missing-attribute error.
+- Assigning a field fails; construct a new record instead.
+- Mutating a nested collection after freezing fails with a frozen-value error.
+
+`struct` is available in automation scripts and their loaded files, including standalone tools, script steps,
+and hooks. It is not available in YAML `!starlark` expressions or policy predicates.
+
+## Related
+
+- [`config.load`](/functions/automation/config.load) creates validated, frozen records from YAML or JSON.
+
+- [`module.load`](/functions/automation/module.load) imports a library as a namespace.
+- [Data Types](/scripting/reference/data-types#modules-and-structs) describes modules and structs.
+- [`json.encode`](/functions/automation/json.encode) converts records to JSON.

@@ -47,6 +47,10 @@ var transportFlakeMarkers = []string{
 	// Matches all HTTP/2 error codes and both send/recv variants.
 	"stream error: stream ID",
 	"connection reset by peer",
+	// Windows egress enforcement can temporarily deny a connection even to
+	// an allowlisted endpoint. Retry the socket-level WSAEACCES message only;
+	// file/credential permission failures must still surface immediately.
+	"connectex: An attempt was made to access a socket in a way forbidden by its access permissions",
 	"TLS handshake timeout",
 	// macOS Security.framework can report this while cosign fetches a remote
 	// certificate sidecar. It is a transport/trust-store operation that happens

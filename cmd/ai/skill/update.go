@@ -52,6 +52,10 @@ var updateCmd = &cobra.Command{
 		skipConfirm := v.GetBool("yes")
 		path := v.GetString("path")
 
+		if handled, err := runDeclared(cmd, args, v); handled {
+			return err
+		}
+
 		installer, err := marketplace.NewInstaller(version.Version)
 		if err != nil {
 			return fmt.Errorf("failed to initialize installer: %w", err)
@@ -105,9 +109,11 @@ func init() {
 	// distribution flags -- update re-runs the same install/distribution
 	// logic under the hood once it's decided a reinstall is actually needed.
 	updateParser = flags.NewStandardParser(
+		flags.WithBoolFlag("force", "", false, "Replace modified owned skill copies"),
+		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
 		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompt"),
 		flags.WithEnvVars("yes", "ATMOS_AI_SKILL_YES"),
-		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: ~/.atmos/skills). Relative paths resolve against CWD."),
+		flags.WithStringFlag("path", "", "", "Override the skill install directory (default: .atmos/skills/content; --scope user: ~/.atmos/skills/content). Relative paths resolve against CWD."),
 		flags.WithEnvVars("path", "ATMOS_AI_SKILL_PATH"),
 		flags.WithStringSliceFlag(clientFlag, "c", nil, "AI client to distribute the updated skill to (repeatable): claude-code, vscode, gemini"),
 		flags.WithEnvVars(clientFlag, "ATMOS_AI_SKILL_CLIENT"),
@@ -123,6 +129,7 @@ func init() {
 
 	// Register flags on the command.
 	updateParser.RegisterFlags(updateCmd)
+	sourceFlags().RegisterFlags(updateCmd)
 
 	// Bind flags to Viper for environment variable support.
 	if err := updateParser.BindToViper(viper.GetViper()); err != nil {

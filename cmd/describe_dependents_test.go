@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -108,8 +109,7 @@ func TestDescribeDependentsSetsAuthDisabled(t *testing.T) {
 			assert.Equal(t, tc.wantAuthDisabled, captured.AuthDisabled,
 				"AuthDisabled should reflect the normalized identity flag value")
 			if tc.wantAuthDisabled {
-				assert.Nil(t, captured.AuthManager,
-					"AuthManager must be nil when authentication is explicitly disabled")
+				assert.True(t, authdeferred.AuthDisabled(captured.AuthManager), "the manager owns the explicit disable policy")
 			}
 		})
 	}

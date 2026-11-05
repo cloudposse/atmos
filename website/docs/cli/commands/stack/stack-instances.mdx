@@ -1,0 +1,41 @@
+---
+title: atmos stack instances
+sidebar_label: instances
+sidebar_class_name: command
+id: stack-instances
+description: List component instances across stacks.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+List component instances across stacks. This is an alias for [`atmos list instances`](/cli/commands/list/list-instances), with the same flags and output.
+</Intro>
+
+<CastPlayer title="atmos stack instances --help" src="/casts/screengrabs/atmos-stack-instances--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack instances [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Filter by stack name or glob pattern.</dd>
+  <dt>`--format` / `-f`</dt>
+  <dd>Select the output format, such as table, JSON, YAML, or CSV.</dd>
+  <dt>`--filter`</dt>
+  <dd>Filter instance rows with a YQ predicate.</dd>
+</dl>
+
+See [`atmos list instances`](/cli/commands/list/list-instances) for the complete flag reference.
+
+## Examples
+
+```shell
+atmos stack instances
+atmos stack instances --stack=dev --format=json
+```

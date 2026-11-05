@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -67,6 +68,10 @@ func newRepoListCommand() *cobra.Command {
 	cmd.Flags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests")
 	cmd.Flags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests")
 	cmd.Flags().StringSlice("skip", []string{}, "Skip paths when loading stack manifests")
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helm/repo-list"),
+	)
 	return cmd
 }
 

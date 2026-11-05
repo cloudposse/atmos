@@ -3,15 +3,38 @@ package toolchain
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
+// setupAddCommandRegistry exercises real Aqua resolution against a local fixture.
+// Each test starts with an empty cache so prior tests cannot hide network dependencies.
+func setupAddCommandRegistry(t *testing.T) {
+	t.Helper()
+	mock := httpmock.NewGitHubMockServer(t)
+	mock.Setenv(t)
+	for _, entry := range httpmock.IsolatedCacheEnv(t) {
+		key, value, _ := strings.Cut(entry, "=")
+		t.Setenv(key, value)
+	}
+	mock.RegisterAquaTool(&httpmock.AquaTool{Owner: "hashicorp", Repo: "terraform"})
+	mock.RegisterAquaTool(&httpmock.AquaTool{Owner: "helm", Repo: "helm"})
+	mock.RegisterAquaTool(&httpmock.AquaTool{
+		Owner: "kubernetes", Repo: "kubernetes", Name: "kubernetes/kubernetes/kubectl",
+	})
+	previousConfig := GetAtmosConfig()
+	t.Cleanup(func() { SetAtmosConfig(previousConfig) })
+}
+
 func TestAddCommand_ValidTool(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
@@ -30,6 +53,7 @@ func TestAddCommand_ValidTool(t *testing.T) {
 }
 
 func TestAddCommand_ValidToolWithAlias(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
@@ -48,6 +72,7 @@ func TestAddCommand_ValidToolWithAlias(t *testing.T) {
 }
 
 func TestAddCommand_ValidToolWithCanonicalName(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
@@ -67,6 +92,7 @@ func TestAddCommand_ValidToolWithCanonicalName(t *testing.T) {
 }
 
 func TestAddCommand_InvalidTool(t *testing.T) {
+	setupAddCommandRegistry(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -85,6 +111,7 @@ func TestAddCommand_InvalidTool(t *testing.T) {
 }
 
 func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
+	setupAddCommandRegistry(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -104,6 +131,7 @@ func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
 }
 
 func TestAddCommand_UpdateExistingTool(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 	// Create a temporary .tool-versions file with existing tool
 	tempDir := t.TempDir()
@@ -132,6 +160,7 @@ func TestAddCommand_UpdateExistingTool(t *testing.T) {
 }
 
 func TestAddCommand_InvalidVersion(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
@@ -154,6 +183,7 @@ func TestAddCommand_InvalidVersion(t *testing.T) {
 }
 
 func TestAddCommand_CustomToolVersionsFile(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 	// Create a temporary directory with custom .tool-versions file
 	tempDir := t.TempDir()
@@ -174,14 +204,13 @@ func TestAddCommand_CustomToolVersionsFile(t *testing.T) {
 }
 
 func TestAddCommand_AquaRegistryTool(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
-	// Test adding a tool from Aqua registry
-	// Note: This test may fail if kubectl is not available in the Aqua registry
-	// or if there are network issues
+	// Test adding a monorepo tool from the local Aqua registry fixture.
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
@@ -200,6 +229,7 @@ func TestAddCommand_AquaRegistryTool(t *testing.T) {
 // .tool-versions and only failing later at `install` time with a raw,
 // confusing HTTP 404 (the range was treated as a literal release tag).
 func TestAddCommand_RejectsRangeSyntax(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 
 	for _, version := range []string{"^1.7.0", "~>1.7.0", ">=1.7.0", ">=1.0.0,<2.0.0"} {
@@ -227,6 +257,7 @@ func TestAddCommand_RejectsRangeSyntax(t *testing.T) {
 // (setAsDefault=true) replaces the tool's default version instead of
 // appending, unlike plain `add`.
 func TestAddCommand_DefaultFlagReplacesExisting(t *testing.T) {
+	setupAddCommandRegistry(t)
 	setupTestIO(t)
 
 	tempDir := t.TempDir()
@@ -252,6 +283,7 @@ func TestAddCommand_DefaultFlagReplacesExisting(t *testing.T) {
 }
 
 func TestAddCommand_EdgeCases(t *testing.T) {
+	setupAddCommandRegistry(t)
 	tests := []struct {
 		name          string
 		tool          string

@@ -17,6 +17,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/startup"
 )
 
 func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
@@ -76,7 +77,7 @@ func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
 				}
 			}
 
-			reconcileMaskingForCommand(leaf)
+			startup.ReconcileMasking(leaf, nil)
 			assert.Equal(t, tt.want, iolib.MaskingEnabled())
 		})
 	}
@@ -151,7 +152,7 @@ func TestSyncGlobalFlagsToViperIncludesEdition(t *testing.T) {
 	command.Flags().String(editionFlagName, "", "Edition pin")
 	require.NoError(t, command.Flags().Set(editionFlagName, "2025-09"))
 
-	syncGlobalFlagsToViper(command)
+	startup.SyncGlobalFlagsToViper(command)
 	assert.Equal(t, "2025-09", viper.GetString(editionFlagName))
 }
 

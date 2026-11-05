@@ -3,6 +3,7 @@ package user
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -20,4 +21,8 @@ func init() {
 	defer perf.Track(nil, "auth.user.init")()
 
 	// Subcommands are added in their respective init() functions.
+	internal.RegisterCommandMetadata(
+		AuthUserCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/user"),
+	)
 }

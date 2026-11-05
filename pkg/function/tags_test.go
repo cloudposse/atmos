@@ -13,6 +13,8 @@ func TestAllTags(t *testing.T) {
 
 	// Verify all expected tags are present.
 	expectedTags := []string{
+		TagCILabels,
+		TagStarlark,
 		TagExec,
 		TagSecret,
 		TagStore,
@@ -44,6 +46,7 @@ func TestAllTags(t *testing.T) {
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
 		TagAwsOrganizationID,
+		TagAwsCloudFormationOutput,
 		TagEmulator,
 		TagVersion,
 		TagTags,
@@ -62,6 +65,7 @@ func TestAllTags(t *testing.T) {
 func TestIsValidTag(t *testing.T) {
 	// Verify all expected tags are valid.
 	expectedTags := []string{
+		TagStarlark,
 		TagExec,
 		TagSecret,
 		TagStore,
@@ -93,6 +97,7 @@ func TestIsValidTag(t *testing.T) {
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
 		TagAwsOrganizationID,
+		TagAwsCloudFormationOutput,
 		TagEmulator,
 		TagVersion,
 	}

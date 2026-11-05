@@ -1,7 +1,9 @@
 package config
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,6 +17,163 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// writeImportPolicy points ATMOS_POLICY_DIR at one rule of the given input kind that denies when rule is true.
+func writeImportPolicy(t *testing.T, kind, rule string) {
+	t.Helper()
+	directory := t.TempDir()
+	manifest := fmt.Sprintf("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: imports}\nspec:\n  policies:\n    deny:\n      on: %s\n      action: deny\n      rule: %q\n", kind, rule)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(manifest), 0o600))
+	t.Setenv("ATMOS_POLICY_DIR", directory)
+}
+
+// recordingSchemeAdapter is a remote-style import adapter that records resolutions.
+type recordingSchemeAdapter struct {
+	schemes  []string
+	err      error
+	resolved []string
+}
+
+func (a *recordingSchemeAdapter) Schemes() []string { return a.schemes }
+
+func (a *recordingSchemeAdapter) Resolve(_ context.Context, importPath, _, _ string, _, _ int, _ *schema.AtmosConfiguration) ([]ResolvedPaths, error) {
+	a.resolved = append(a.resolved, importPath)
+	if a.err != nil {
+		return nil, a.err
+	}
+	return []ResolvedPaths{{FilePath: "resolved.yaml", ImportPaths: importPath, ImportType: ADAPTER}}, nil
+}
+
+func TestProcessImports_RemoteSourcePolicy(t *testing.T) {
+	const (
+		allowedImport = "https://example.com/stack.yaml"
+		deniedImport  = "https://localhost/stack.yaml"
+	)
+	newAdapter := func(t *testing.T, resolveErr error) *recordingSchemeAdapter {
+		t.Helper()
+		ResetImportAdapterRegistry()
+		t.Cleanup(ResetImportAdapterRegistry)
+		adapter := &recordingSchemeAdapter{schemes: []string{"https://"}, err: resolveErr}
+		RegisterImportAdapter(adapter)
+		SetDefaultAdapter(&testLocalAdapter{})
+		return adapter
+	}
+
+	t.Run("denied remote import is rejected before the adapter runs", func(t *testing.T) {
+		writeImportPolicy(t, "source", "input.host == 'localhost'")
+		adapter := newAdapter(t, nil)
+		tempDir := t.TempDir()
+
+		paths, err := processImports(nil, tempDir, strImports(deniedImport), tempDir, 1, MaximumImportLvL)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, paths)
+		assert.Empty(t, adapter.resolved)
+	})
+
+	t.Run("a denied import stops later imports from resolving", func(t *testing.T) {
+		writeImportPolicy(t, "source", "input.host == 'localhost'")
+		adapter := newAdapter(t, nil)
+		tempDir := t.TempDir()
+
+		_, err := processImports(nil, tempDir, strImports(deniedImport, allowedImport), tempDir, 1, MaximumImportLvL)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Empty(t, adapter.resolved)
+	})
+
+	t.Run("allowed remote import resolves", func(t *testing.T) {
+		writeImportPolicy(t, "source", "input.host == 'localhost'")
+		adapter := newAdapter(t, nil)
+		tempDir := t.TempDir()
+
+		paths, err := processImports(nil, tempDir, strImports(allowedImport), tempDir, 1, MaximumImportLvL)
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		assert.Equal(t, allowedImport, paths[0].ImportPaths)
+		assert.Equal(t, []string{allowedImport}, adapter.resolved)
+	})
+
+	t.Run("policy errors from an adapter are not suppressed", func(t *testing.T) {
+		adapter := newAdapter(t, fmt.Errorf("%w: nested source", errUtils.ErrPolicyDenied))
+		tempDir := t.TempDir()
+
+		paths, err := processImports(nil, tempDir, strImports(allowedImport, "https://example.org/other.yaml"), tempDir, 1, MaximumImportLvL)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, paths)
+		assert.Equal(t, []string{allowedImport}, adapter.resolved)
+	})
+
+	t.Run("ordinary adapter errors skip only that import", func(t *testing.T) {
+		adapter := newAdapter(t, errors.New("download failed"))
+		tempDir := t.TempDir()
+
+		paths, err := processImports(nil, tempDir, strImports(allowedImport, "https://example.org/other.yaml"), tempDir, 1, MaximumImportLvL)
+		require.NoError(t, err)
+		assert.Empty(t, paths)
+		assert.Equal(t, []string{allowedImport, "https://example.org/other.yaml"}, adapter.resolved)
+	})
+}
+
+func TestMergeResolvedImports_PolicyErrors(t *testing.T) {
+	fs := filesystem.NewOSFileSystem()
+
+	t.Run("policy denial while merging aborts the load", func(t *testing.T) {
+		writeImportPolicy(t, "function", "input.name == 'exec'")
+		file := filepath.Join(t.TempDir(), "imported.yaml")
+		require.NoError(t, os.WriteFile(file, []byte("base_path: !exec echo never-runs\n"), 0o600))
+
+		dst := viper.New()
+		dst.SetConfigType("yaml")
+
+		dir, err := mergeResolvedImports([]ResolvedPaths{{FilePath: file, ImportPaths: "imported.yaml", ImportType: LOCAL}}, dst, fs)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Empty(t, dir)
+	})
+
+	t.Run("ordinary merge failures skip the file and keep going", func(t *testing.T) {
+		tempDir := t.TempDir()
+		good := filepath.Join(tempDir, "good.yaml")
+		require.NoError(t, os.WriteFile(good, []byte("settings:\n  merged: true\n"), 0o600))
+		missing := filepath.Join(tempDir, "missing.yaml")
+		dst := viper.New()
+		dst.SetConfigType("yaml")
+
+		// Optional imports (SkipIfMissing: true): the missing file is skipped and the good one merges.
+		dir, err := mergeResolvedImports([]ResolvedPaths{
+			{FilePath: missing, ImportPaths: "missing.yaml", ImportType: LOCAL, SkipIfMissing: true},
+			{FilePath: good, ImportPaths: "good.yaml", ImportType: LOCAL, SkipIfMissing: true},
+		}, dst, fs)
+		require.NoError(t, err)
+		assert.Empty(t, dir)
+		assert.True(t, dst.GetBool("settings.merged"))
+	})
+
+	t.Run("required merge failure fails closed", func(t *testing.T) {
+		tempDir := t.TempDir()
+		missing := filepath.Join(tempDir, "missing.yaml")
+		dst := viper.New()
+		dst.SetConfigType("yaml")
+
+		// A required import (SkipIfMissing: false) that cannot be merged aborts the load.
+		_, err := mergeResolvedImports([]ResolvedPaths{
+			{FilePath: missing, ImportPaths: "missing.yaml", ImportType: LOCAL, SkipIfMissing: false},
+		}, dst, fs)
+		require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
+	})
+}
+
+func TestProcessConfigImports_PolicyDenialAbortsLoad(t *testing.T) {
+	setupTestAdapters()
+	t.Cleanup(ResetImportAdapterRegistry)
+	writeImportPolicy(t, "function", "input.name == 'exec'")
+	baseDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(baseDir, "imported.yaml"), []byte("base_path: !exec echo never-runs\n"), 0o600))
+	source := &schema.AtmosConfiguration{BasePath: baseDir, Import: schema.ConfigImportsFromPaths([]string{"imported.yaml"})}
+	dst := viper.New()
+	dst.SetConfigType("yaml")
+
+	err := processConfigImports(source, dst)
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+}
 
 // TestProcessConfigImports_NilSource tests error path at imports.go:70-72.
 func TestProcessConfigImports_NilSource(t *testing.T) {
@@ -41,7 +200,7 @@ func TestProcessConfigImports_NilDestination(t *testing.T) {
 func TestProcessConfigImports_EmptyImports(t *testing.T) {
 	source := &schema.AtmosConfiguration{
 		BasePath: "/test",
-		Import:   []string{}, // Empty imports
+		Import:   schema.ConfigImportsFromPaths([]string{}), // Empty imports
 	}
 
 	v := viper.New()
@@ -69,7 +228,7 @@ func TestProcessConfigImports_MkdirTempError_WithMock(t *testing.T) {
 
 	source := &schema.AtmosConfiguration{
 		BasePath: "/test",
-		Import:   []string{"config.yaml"},
+		Import:   schema.ConfigImportsFromPaths([]string{"config.yaml"}),
 	}
 
 	v := viper.New()
@@ -106,7 +265,7 @@ func TestProcessConfigImports_ProvenanceReadError(t *testing.T) {
 
 	source := &schema.AtmosConfiguration{
 		BasePath: root,
-		Import:   []string{filepath.Join(".atmos", "extra.yaml")},
+		Import:   schema.ConfigImportsFromPaths([]string{filepath.Join(".atmos", "extra.yaml")}),
 	}
 
 	v := viper.New()
@@ -126,7 +285,7 @@ func TestProcessConfigImports_EmptyBasePathPropagates(t *testing.T) {
 
 	source := &schema.AtmosConfiguration{
 		BasePath: "",
-		Import:   []string{"x.yaml"},
+		Import:   schema.ConfigImportsFromPaths([]string{"x.yaml"}),
 	}
 
 	v := viper.New()
@@ -141,7 +300,7 @@ func TestProcessConfigImports_EmptyBasePathPropagates(t *testing.T) {
 func TestProcessImports_EmptyBasePath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(nil, "", []string{"test.yaml"}, tempDir, 1, MaximumImportLvL)
+	_, err := processImports(nil, "", strImports("test.yaml"), tempDir, 1, MaximumImportLvL)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrBasePath)
 }
@@ -150,7 +309,7 @@ func TestProcessImports_EmptyBasePath(t *testing.T) {
 func TestProcessImports_EmptyTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(nil, tempDir, []string{"test.yaml"}, "", 1, MaximumImportLvL)
+	_, err := processImports(nil, tempDir, strImports("test.yaml"), "", 1, MaximumImportLvL)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTempDir)
 }
@@ -159,7 +318,7 @@ func TestProcessImports_EmptyTempDir(t *testing.T) {
 func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(nil, tempDir, []string{"test.yaml"}, tempDir, 11, 10)
+	_, err := processImports(nil, tempDir, strImports("test.yaml"), tempDir, 11, 10)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMaxImportDepth)
 }
@@ -172,7 +331,7 @@ func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 func TestProcessImports_EmptyImportPath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	paths, err := processImports(nil, tempDir, []string{""}, tempDir, 1, MaximumImportLvL)
+	paths, err := processImports(nil, tempDir, strImports(""), tempDir, 1, MaximumImportLvL)
 	assert.NoError(t, err)
 	assert.Empty(t, paths) // Empty import path should be skipped
 }

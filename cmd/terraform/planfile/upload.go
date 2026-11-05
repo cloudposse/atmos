@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
@@ -77,6 +78,10 @@ func init() {
 
 	// Add to parent command.
 	PlanfileCmd.AddCommand(uploadCmd)
+	internal.RegisterCommandMetadata(
+		uploadCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/planfile/upload"),
+	)
 }
 
 // parseUploadOptions parses command flags into UploadOptions.

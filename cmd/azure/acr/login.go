@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
@@ -220,4 +221,8 @@ func init() {
 	loginParser.RegisterFlags(loginCmd)
 
 	AcrCmd.AddCommand(loginCmd)
+	internal.RegisterCommandMetadata(
+		loginCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/azure/acr-login"),
+	)
 }

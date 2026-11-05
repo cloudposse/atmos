@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -274,7 +275,7 @@ func buildExplanationMarkdown(err error, wrappedMsg string, maxLineLength int) s
 	// maxLineLength is unused here because the markdown renderer handles wrapping.
 	_ = maxLineLength
 
-	details := errors.GetAllDetails(err)
+	details := AllDetails(err)
 	hasContent := len(details) > 0 || wrappedMsg != ""
 
 	if !hasContent {
@@ -304,7 +305,7 @@ func buildExplanationMarkdown(err error, wrappedMsg string, maxLineLength int) s
 
 // extractCustomTitle extracts the custom title from error hints.
 func extractCustomTitle(err error) string {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	for _, hint := range allHints {
 		if strings.HasPrefix(hint, "TITLE:") {
 			return strings.TrimPrefix(hint, "TITLE:")
@@ -334,7 +335,7 @@ func categorizeHints(allHints []string) (examples []string, hints []string) {
 
 // addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
 func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int) {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	examples, hints := categorizeHints(allHints)
 
 	// Add Example section.
@@ -388,20 +389,22 @@ func renderMarkdownSections(sections markdownSections, config FormatterConfig, u
 	}
 
 	if strings.TrimSpace(sections.explanationMarkdown) != "" {
-		renderedExplanation, ok := renderMarkdown(sections.explanationMarkdown, explanationMarkdownLineLength(width, useColor))
+		renderedExplanation, ok := renderSectionMarkdown(sections.explanationMarkdown, explanationMarkdownLineLength(width, useColor), useColor)
 		if !ok {
 			return "", false
-		}
-		if !useColor {
-			renderedExplanation = stripANSI(renderedExplanation)
 		}
 		appendRenderedSection(&out, renderExplanationCallout(renderedExplanation, width, useColor))
 	}
 
 	if strings.TrimSpace(sections.remainderMarkdown) != "" {
-		if !appendRenderedMarkdownSection(&out, sections.remainderMarkdown, width, useColor) {
+		// Hints, examples, and command output carry author-supplied Markdown such as
+		// bold text wrapped around inline code, so they use the same readable
+		// rendering as the explanation when styling is unavailable.
+		renderedRemainder, ok := renderSectionMarkdown(sections.remainderMarkdown, width, useColor)
+		if !ok {
 			return "", false
 		}
+		appendRenderedSection(&out, renderedRemainder)
 	}
 
 	// Leading blank line separates the error block from whatever was printed
@@ -465,7 +468,11 @@ func appendRenderedMarkdownSection(out *strings.Builder, md string, maxLineLengt
 	if strings.TrimSpace(md) == "" {
 		return true
 	}
-	rendered, ok := renderMarkdown(md, maxLineLength)
+	if !useColor {
+		// The error section has a generated H1 title; plain output needs no heading marker.
+		md = strings.TrimPrefix(md, "# ")
+	}
+	rendered, ok := renderSectionMarkdown(md, maxLineLength, useColor)
 	if !ok {
 		return false
 	}
@@ -474,6 +481,19 @@ func appendRenderedMarkdownSection(out *strings.Builder, md string, maxLineLengt
 	}
 	appendRenderedSection(out, rendered)
 	return true
+}
+
+// renderSectionMarkdown renders author-supplied Markdown with ANSI styling when color is
+// enabled and as readable plain text otherwise.
+func renderSectionMarkdown(md string, maxLineLength int, useColor bool) (string, bool) {
+	if useColor {
+		return renderMarkdown(md, maxLineLength)
+	}
+	rendered, ok := renderReadableMarkdown(md, maxLineLength)
+	if !ok {
+		return "", false
+	}
+	return stripANSI(rendered), true
 }
 
 func appendRenderedSection(out *strings.Builder, section string) {
@@ -517,6 +537,12 @@ func renderExplanationCallout(rendered string, maxLineLength int, useColor bool)
 			PaddingLeft(1).
 			PaddingRight(1).
 			Width(width)
+		if i == 0 {
+			style = style.PaddingTop(1)
+		}
+		if i == len(lines)-1 {
+			style = style.PaddingBottom(1)
+		}
 
 		// Glamour emits a full ANSI reset (CSI 0 m) after styled spans. A full
 		// reset clears this outer background too, leaving only the padding tinted
@@ -662,6 +688,19 @@ func addStackTraceSection(md *strings.Builder, err error, useColor bool) {
 // 2. Error formatting works before the UI system is initialized (early startup errors)
 // 3. No circular dependencies (pkg/ui imports errors package)
 func renderMarkdown(md string, maxLineLength int) (string, bool) {
+	return renderWith(md, maxLineLength, (*markdown.Renderer).RenderErrorf)
+}
+
+// renderReadableMarkdown renders Markdown as plain text for output without styling.
+// It avoids the ASCII preset used for non-TTY stderr, which leaves bold markers
+// dangling around inline code and drops code-span backticks.
+func renderReadableMarkdown(md string, maxLineLength int) (string, bool) {
+	return renderWith(md, maxLineLength, func(r *markdown.Renderer, content string, _ ...interface{}) (string, error) {
+		return r.RenderReadable(content)
+	})
+}
+
+func renderWith(md string, maxLineLength int, render func(*markdown.Renderer, string, ...interface{}) (string, error)) (string, bool) {
 	// Use provided maxLineLength, or fall back to default if not set.
 	width := maxLineLength
 	if width <= 0 {
@@ -684,7 +723,7 @@ func renderMarkdown(md string, maxLineLength int) (string, bool) {
 		return "", false
 	}
 
-	rendered, renderErr := renderer.RenderErrorf(md)
+	rendered, renderErr := render(renderer, md)
 	if renderErr == nil {
 		return rendered, true
 	}
@@ -741,7 +780,7 @@ func formatContextForMarkdown(err error) string {
 func shouldUseColor() bool {
 	// Build terminal config from all sources (flags, env vars, atmos.yaml).
 	termConfig := &terminal.Config{
-		NoColor:    viper.GetBool("no-color"),
+		NoColor:    terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")),
 		Color:      viper.GetBool("color"),
 		ForceColor: viper.GetBool("force-color"),
 

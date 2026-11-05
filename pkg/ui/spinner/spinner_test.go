@@ -5,14 +5,50 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 )
+
+func TestSpinnerViews_PreserveRenderedProgress(t *testing.T) {
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("NO_COLOR", "")
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	original := ui.GetColorProfile()
+	t.Cleanup(func() { ui.SetColorProfile(original) })
+	ui.SetColorProfile(termenv.TrueColor)
+	bar := ui.NewProgress(progress.WithWidth(10), progress.WithoutPercentage()).ViewAs(0.5)
+	require.Contains(t, bar, "\x1b[", "exercise a colored bar")
+	message := "Downloading artifact (50%) " + bar
+	assert.Equal(t, ui.FormatInline("Installing `atmos`"), formatProgressMessage("Installing `atmos`"),
+		"unrendered labels retain the standard Markdown formatting")
+	for name, model := range map[string]tea.Model{
+		"manual":  newManualSpinnerModel(message),
+		"static":  newSpinnerModel(message, "done"),
+		"dynamic": newDynamicSpinnerModel(message),
+	} {
+		t.Run(name, func(t *testing.T) {
+			view := model.View()
+			assert.Contains(t, view, bar, "preserve the rendered gradient")
+			assert.Contains(t, ansi.Strip(view), "Downloading artifact (50%) █████░░░░░")
+			assert.NotContains(t, ansi.Strip(view), "[38;", "never print color parameters as text")
+			assert.NotContains(t, ansi.Strip(view), "[0m")
+		})
+	}
+}
 
 func TestNewSpinnerModel(t *testing.T) {
 	t.Run("creates model with correct messages", func(t *testing.T) {
@@ -485,6 +521,28 @@ func TestManualSpinnerModel_Update(t *testing.T) {
 
 		_, cmd := model.Update(keyMsg)
 		assert.NotNil(t, cmd) // Should return tea.Quit
+	})
+
+	t.Run("ctrl+c marks the model interrupted and clears the spinner line", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+
+		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.True(t, m.interrupted)
+		assert.True(t, m.done)
+		assert.Equal(t, terminal.EscResetLine, m.View(), "nothing is left on screen after an interrupt")
+	})
+
+	t.Run("a normal stop is not an interrupt", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+
+		updatedModel, _ := model.Update(manualStopMsg{})
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.False(t, m.interrupted)
 	})
 
 	t.Run("handles manual stop with success message", func(t *testing.T) {
@@ -1005,4 +1063,118 @@ func TestNewDotSpinner_AppliesFPSOverride(t *testing.T) {
 	t.Setenv(fps.EnvVar, "4")
 	s := newDotSpinner()
 	assert.Equal(t, time.Second/4, s.Spinner.FPS)
+}
+
+// TestNotifyIfInterrupted covers the decision the Start goroutine makes once the program has finished.
+func TestNotifyIfInterrupted(t *testing.T) {
+	tests := []struct {
+		name      string
+		final     tea.Model
+		nilHandle bool
+		wantCalls int
+	}{
+		{name: "interrupted model calls the handler once", final: manualSpinnerModel{done: true, interrupted: true}, wantCalls: 1},
+		{name: "normal stop does not call the handler", final: manualSpinnerModel{done: true}, wantCalls: 0},
+		{name: "running model does not call the handler", final: manualSpinnerModel{}, wantCalls: 0},
+		{name: "interrupted model without a handler is safe", final: manualSpinnerModel{done: true, interrupted: true}, nilHandle: true, wantCalls: 0},
+		{name: "model of another type does not call the handler", final: spinnerModel{done: true}, wantCalls: 0},
+		{name: "no final model does not call the handler", final: nil, wantCalls: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			var handler func()
+			if !tt.nilHandle {
+				handler = func() { calls++ }
+			}
+
+			assert.NotPanics(t, func() { notifyIfInterrupted(tt.final, handler) })
+
+			assert.Equal(t, tt.wantCalls, calls)
+		})
+	}
+}
+
+// TestSpinner_InterruptHandler runs the registered handler through the same model transitions the
+// Start goroutine sees: ctrl+c reaches the handler, a normal stop does not.
+func TestSpinner_InterruptHandler(t *testing.T) {
+	t.Run("ctrl+c calls the registered handler once", func(t *testing.T) {
+		calls := 0
+		s := New("working")
+		s.SetInterruptHandler(func() { calls++ })
+
+		final, cmd := newManualSpinnerModel("working").Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		require.NotNil(t, cmd, "the program quits")
+		notifyIfInterrupted(final, s.onInterrupt)
+
+		assert.Equal(t, 1, calls)
+	})
+
+	t.Run("stopping the spinner does not call the handler", func(t *testing.T) {
+		calls := 0
+		s := New("working")
+		s.SetInterruptHandler(func() { calls++ })
+
+		final, _ := newManualSpinnerModel("working").Update(manualStopMsg{message: "done", success: true})
+		notifyIfInterrupted(final, s.onInterrupt)
+
+		assert.Zero(t, calls)
+	})
+
+	t.Run("a spinner without a handler ignores ctrl+c", func(t *testing.T) {
+		s := New("working")
+		require.Nil(t, s.onInterrupt)
+
+		final, _ := newManualSpinnerModel("working").Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+		assert.NotPanics(t, func() { notifyIfInterrupted(final, s.onInterrupt) })
+	})
+
+	t.Run("a later handler replaces the earlier one", func(t *testing.T) {
+		first, second := 0, 0
+		s := New("working")
+		s.SetInterruptHandler(func() { first++ })
+		s.SetInterruptHandler(func() { second++ })
+
+		final, _ := newManualSpinnerModel("working").Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		notifyIfInterrupted(final, s.onInterrupt)
+
+		assert.Zero(t, first)
+		assert.Equal(t, 1, second)
+	})
+}
+
+// TestSpinnerModels_WindowSizeMsg covers all three models: a real width replaces the initial one and a
+// zero or negative width keeps it, so truncation stays on for the whole run.
+func TestSpinnerModels_WindowSizeMsg(t *testing.T) {
+	const initial = 77
+
+	tests := []struct {
+		name      string
+		msgWidth  int
+		wantWidth int
+	}{
+		{name: "positive width is taken", msgWidth: 42, wantWidth: 42},
+		{name: "zero width keeps the initial width", msgWidth: 0, wantWidth: initial},
+		{name: "negative width keeps the initial width", msgWidth: -5, wantWidth: initial},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := tea.WindowSizeMsg{Width: tt.msgWidth, Height: 24}
+
+			spinnerUpdated, cmd := spinnerModel{width: initial}.Update(msg)
+			assert.Nil(t, cmd)
+			assert.Equal(t, tt.wantWidth, spinnerUpdated.(spinnerModel).width)
+
+			dynamicUpdated, cmd := dynamicSpinnerModel{width: initial}.Update(msg)
+			assert.Nil(t, cmd)
+			assert.Equal(t, tt.wantWidth, dynamicUpdated.(dynamicSpinnerModel).width)
+
+			manualUpdated, cmd := manualSpinnerModel{width: initial}.Update(msg)
+			assert.Nil(t, cmd)
+			assert.Equal(t, tt.wantWidth, manualUpdated.(manualSpinnerModel).width)
+		})
+	}
 }

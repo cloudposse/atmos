@@ -182,7 +182,7 @@ func TestBuildProfileSuggestionError_SingleCandidate(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
 
 	assert.True(t, hintsContain(err, "alpha"), "hint should name the profile")
-	assert.True(t, hintsContain(err, "--profile alpha"),
+	assert.True(t, hintsContain(err, "--profile=alpha"),
 		"hint should show the exact re-run command")
 	assert.True(t, hintsContain(err, "root-admin"), "hint should name the identity")
 }
@@ -198,6 +198,9 @@ func TestBuildProfileSuggestionError_MultipleCandidates(t *testing.T) {
 	assert.True(t, hintsContain(err, "bravo"))
 	assert.True(t, hintsContain(err, "charlie"))
 	assert.True(t, hintsContain(err, "shared-id"))
+	// Each profile is quoted exactly once; the list must not be wrapped in a second pair of backticks.
+	assert.True(t, hintsContain(err, "profiles: `alpha`, `bravo`, `charlie`"))
+	assert.False(t, hintsContain(err, "``"), "profile list must not be double-quoted")
 }
 
 // joinQuoted wraps each name in backticks and joins with ", ".
@@ -597,7 +600,7 @@ func TestBuildAnyProfileSuggestionError_SingleCandidate(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
 
 	assert.True(t, hintsContain(err, "solo"), "hint should name the profile")
-	assert.True(t, hintsContain(err, "--profile solo"),
+	assert.True(t, hintsContain(err, "--profile=solo"),
 		"hint should show the exact re-run command")
 }
 

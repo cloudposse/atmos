@@ -1,0 +1,52 @@
+---
+title: atmos plugin catalog add
+sidebar_label: catalog add
+sidebar_class_name: command
+id: catalog-add
+description: Add a release’s verified metadata to a catalog.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Add a release’s verified metadata to a catalog.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin catalog add --help" src="/casts/screengrabs/atmos-plugin-catalog-add--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin catalog add <catalog> <release-reference>
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>catalog</code></dt>
+  <dd>A <code>plugins.registries</code> alias that configures a <code>catalog</code>, or an
+  <code>oci://</code> catalog reference. A bare reference such as <code>registry.example.com/team/catalog:stable</code>
+  is rejected with a hint listing the usable aliases, and an alias without a <code>catalog</code> is an error.</dd>
+  <dt><code>release-reference</code></dt>
+  <dd>OCI release reference that includes a version tag or a digest, with or without the <code>oci://</code>
+  prefix. A reference without a tag or digest is rejected before any registry request, because a registry
+  would otherwise resolve an implicit <code>latest</code> that a catalog must not pin.</dd>
+</dl>
+
+Atmos reads the release from the registry, verifies that it is a plugin release, and adds its version to
+the catalog entry. If the catalog does not exist yet, it is created.
+
+## Publisher coordination
+
+Run catalog mutations through one externally serialized maintainer workflow per catalog. The lock must cover reading the latest inputs, updating the snapshot, and publishing it. Revision and digest rechecks detect an already-stale update; they do not provide atomic compare-and-swap or prevent simultaneous writers from overwriting one another.
+
+Plugin release jobs should publish artifacts independently. Use direct repository discovery when a collection does not need a curated catalog; see [plugin search](search.mdx).
+
+## Examples
+
+```shell
+atmos plugin catalog add corporate oci://registry.example.com/team/oidc:0.1.0
+atmos plugin catalog add oci://registry.example.com/team/catalog:stable oci://registry.example.com/team/oidc@sha256:<digest>
+```

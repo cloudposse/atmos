@@ -1,0 +1,796 @@
+---
+title: Migrating from Fogg
+sidebar_label: From Fogg
+description: Replace Fogg with Atmos while preserving Terraform state, module addresses, providers, and workflows, with a behavioral parity assessment.
+id: fogg
+---
+import FAQItem from '@site/src/components/FAQItem'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Adopt Atmos around your existing Fogg-generated Terraform, then maintain your infrastructure with Atmos stacks, Terraform
+components, and workflows. Keep your state and resource addresses intact while replacing Fogg's configuration generation and
+Make targets incrementally.
+</Intro>
+
+This guide assesses **equivalent behavior**. Explicit Terraform code, Atmos configuration, and templates count as parity;
+continuing to run Fogg does not. An automatic importer is not required.
+
+The comparison covers Fogg configuration version 2 and [source revision
+`6b897917`](https://github.com/chanzuckerberg/fogg/tree/6b8979176e6fa20c3745cbb1d71393becf935120). The [published configuration
+reference](https://chanzuckerberg.github.io/fogg/reference/config_file.html) does not describe every capability in that
+revision. Inspect your generated files and pinned Fogg version before applying the examples, especially for custom templates,
+plugins, and TFE integration.
+
+:::important Different meanings of apply
+[Fogg's `fogg apply`](https://chanzuckerberg.github.io/fogg/) generates files. Its generated `make apply` runs Terraform.
+**`atmos terraform apply` changes infrastructure.** Use `atmos describe component` to inspect configuration and `atmos terraform
+generate files` when you explicitly want to generate auxiliary files.
+:::
+
+## Feature Parity
+
+**Supported** means an existing Atmos capability provides the behavior. **Supported with explicit configuration** means you
+supply the Terraform declarations or configuration shown below. **Gap** means the assessed behavior needs additional
+implementation; a generic ability to run a script is not evidence of parity.
+
+| Fogg capability | Status | Atmos implementation |
+|---|---|---|
+| Global, account, and environment root modules | Supported | Components pointing at existing directories; stacks for deployment configuration |
+| Defaults and per-component overrides | Supported | Stack imports, component inheritance, and `vars` |
+| S3 or remote backend and state locking | Supported with explicit configuration | Preserve the existing backend, or reproduce it with `backend_type` and `backend` |
+| Provider configuration and regional/account aliases | Supported with explicit configuration | Terraform provider blocks or `providers`, preserving aliases, roles, account restrictions, and tags |
+| Module invocation, provider mappings, output forwarding | Supported with explicit configuration | Maintain ordinary Terraform wrappers, create them from scaffolds, or regenerate them with explicit `generate` templates |
+| Global/account/sibling remote-state access | Supported with explicit configuration | Terraform data sources or `!terraform.output`; declare each required relationship |
+| Component ordering | Supported | `dependencies.components` and graph-backed Terraform commands or ordered workflows |
+| Terraform versions and CLI installation | Supported | `dependencies.tools` and toolchain registries |
+| Component templates and extra generated files | Supported with explicit configuration | Imports/inheritance for configuration, scaffolds for initial files, `generate` for runtime files |
+| Formatting, linting, validation, authentication, plan/apply | Supported with explicit configuration | Terraform commands, hooks, and the custom command below |
+| CircleCI, Travis CI, and GitHub Actions checks | Supported with explicit configuration | Run Atmos custom commands in the existing CI runner; preserve credentials, triggers, and approvals |
+| EKS authentication and Kubernetes provider wiring | Supported with explicit configuration | Atmos Auth EKS integrations and tokens, plus Terraform provider configuration |
+| Custom CLI downloads and custom Terraform providers | Supported with explicit configuration | Toolchain registries for CLIs; Terraform provider installation for providers |
+| TFE workspace-management Terraform | Supported with explicit configuration | Manage the existing TFE root module as a component and maintain its inputs/catalog explicitly |
+| Fogg's ten-minute cached refresh policy | Gap | No Fogg-equivalent refresh cache is configured by Atmos; use normal plan refresh, or implement the cache policy separately |
+
+There is no identified blocker to managing the existing infrastructure with Atmos. The refresh cache gap affects command
+behavior and performance, not the ability to plan and apply Terraform. See [operational differences](#operational-differences)
+before changing CI expectations.
+
+## Adopt Existing Terraform First
+
+### Inventory the Current Contract
+
+For each deployable root module, record:
+
+- Directory, Terraform executable/version, provider source addresses/versions, and lockfile if present.
+- Backend type and complete configuration, including state key, workspace, locking, and credentials.
+- Module labels, provider aliases and module mappings, output names and sensitivity, variable defaults,
+  locals, and environment variables supplied by Make or CI.
+- Remote-state consumers, dependency ordering, custom files, plugin paths, and CI checks.
+
+Fogg's term *workspace* commonly means a root-module directory. It does not tell you the selected Terraform CLI workspace. Check
+`terraform workspace show` using the existing pinned executable in each initialized directory. Record `TF_WORKSPACE` if your
+automation sets it.
+
+Capture a baseline plan using your established workflow and retain a state backup through your normal backend backup process.
+Freeze Terraform/provider versions during adoption. Do not combine this change with backend moves, resource renaming, or a
+Terraform upgrade.
+
+### Keep the Directory Layout
+
+This example assumes these root modules already exist:
+
+```text
+terraform/
+├── global/
+├── accounts/main-account/
+├── envs/development/
+│   ├── vpc/
+│   └── webserver/
+└── modules/webserver/          # Child module, not a separate deployment
+```
+
+Keep `fogg.tf`, generated `main.tf`/`outputs.tf`, hand-written files, and relative module source paths. Install
+[Atmos](/install), then create:
+
+```yaml title="atmos.yaml"
+base_path: .
+components:
+  terraform:
+    base_path: terraform
+    auto_generate_backend_file: false
+    auto_generate_files: false
+    apply_auto_approve: false
+stacks:
+  base_path: stacks
+  included_paths:
+    - deploy/**/*
+```
+
+Backend generation is disabled because `fogg.tf` already declares the backend. Leave `providers` and `generate` unset during
+this first step so the original Terraform remains authoritative.
+
+```yaml title="stacks/deploy/development.yaml"
+name: development
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: envs/development/vpc
+        terraform_workspace: default
+    webserver:
+      metadata:
+        component: envs/development/webserver
+        terraform_workspace: default
+```
+
+```yaml title="stacks/deploy/shared.yaml"
+name: shared
+components:
+  terraform:
+    global:
+      metadata:
+        component: global
+        terraform_workspace: default
+    main-account:
+      metadata:
+        component: accounts/main-account
+        terraform_workspace: default
+```
+
+These examples assume the recorded CLI workspace is `default`; substitute the actual workspace for each component. Each root
+retains its own state location. Deploy shared roots only through `shared`, rather than creating a second deployment of the same
+state in every environment stack.
+
+```shell
+atmos validate stacks
+atmos describe component webserver -s development
+atmos describe component global -s shared
+atmos terraform plan webserver -s development
+```
+
+Before planning, make the same Terraform executable and credentials available that Make used. The [tool selection
+example](#terraform-versions-and-tools) below makes this reproducible. Compare the resolved component path and workspace, then
+compare the Atmos plan with the baseline. Stop if Atmos targets empty state, proposes unexpected replacements, or changes
+provider/account selection. See [brownfield considerations](/components/terraform/brownfield).
+
+## Maintain the Configuration Without Fogg
+
+Stop running `fogg apply` for migrated files and remove it from their CI jobs. The generated Terraform is now maintained source
+code: replace obsolete generated-file notices when taking ownership. You can continue editing those files directly without
+replacing every declaration with YAML.
+
+During a mixed migration, Fogg may still regenerate files throughout the repository. Keep its configuration for migrated roots
+frozen and review generated diffs, or stop generation for the whole repository before taking ownership. Assign one apply
+pipeline per state.
+
+### Defaults, Inputs, and New Environments
+
+Map `defaults` to imported defaults, `envs` to stacks, and component overrides to component configuration. Fogg `owner`,
+`project`, and `extra_vars` can become Terraform inputs under `vars`. Keep their existing variable declarations and types;
+setting a stack value does not declare a Terraform variable. Fogg locals also remain locals until you explicitly refactor them.
+
+For roots that already declare `owner` and `project`, add:
+
+```yaml title="stacks/catalog/defaults.yaml"
+terraform:
+  vars:
+    owner: infra@example.com
+    project: acme
+```
+
+Import it at the top of each applicable deployment manifest:
+
+```yaml
+import:
+  - catalog/defaults
+```
+
+Use the exact existing values during migration. Introduce [component inheritance](/howto/inheritance) for reusable
+configurations as needed. Create future roots from maintained Terraform or [scaffolds](/cli/commands/scaffold/generate), then
+add stack entries pointing at them. A new environment needs its own state identity. Consolidating existing roots into one
+reusable directory is optional and should follow plan equivalence, especially when their locals differ.
+
+### Backend Configuration and State Identity
+
+Keeping the backend in Terraform is supported permanently. If you move it into [stack backend configuration](/stacks/backend),
+remove only the original backend block and enable `components.terraform.auto_generate_backend_file` after every root affected by
+that setting is ready. Do not remove the rest of `fogg.tf`.
+
+For an existing S3 backend, copy its actual values. This illustrative component fragment assumes the existing key is
+`terraform/acme/envs/development/components/webserver.tfstate`:
+
+```yaml
+components:
+  terraform:
+    webserver:
+      metadata:
+        component: envs/development/webserver
+        terraform_workspace: default
+      backend_type: s3
+      backend:
+        s3:
+          bucket: acme-terraform-state
+          key: terraform/acme/envs/development/components/webserver.tfstate
+          region: us-west-2
+          profile: acme-state
+          encrypt: true
+          dynamodb_table: acme-terraform-locks
+          workspace_key_prefix: "env:"
+```
+
+The key above matches this component's convention in the inspected [Fogg
+source](https://github.com/chanzuckerberg/fogg/blob/6b8979176e6fa20c3745cbb1d71393becf935120/plan/plan.go), but your actual
+backend is authoritative. Preserve the existing locking mechanism and role configuration using syntax accepted by your pinned
+Terraform version. Provider credentials and backend credentials are independent. Do not infer one from the other. For S3, the
+`default` workspace uses `key` directly; named workspaces additionally use `workspace_key_prefix` and the workspace name. If
+previously omitted, Terraform's S3 prefix is `env:`. See [Terraform's S3 backend
+reference](https://developer.hashicorp.com/terraform/language/backend/s3). Do not replace it with an Atmos naming convention
+during adoption.
+
+:::tip Move to S3 lockfiles after adoption
+DynamoDB locking is deprecated. After validating the Atmos migration, recommend migrating to
+S3 lockfiles with `backend.s3.use_lockfile: true` on [Terraform 1.10 or
+later](https://github.com/hashicorp/terraform/releases/tag/v1.10.0). Give the backend identity
+`s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject` on the `.tflock` object, including workspace
+paths. During a staged rollout, keep `dynamodb_table` alongside `use_lockfile` so upgraded
+clients acquire both locks. Remove DynamoDB locking only after every writer uses S3 locking;
+DynamoDB-only and S3-only writers do not coordinate. Keep the state bucket/key unchanged and
+handle any Terraform upgrade separately. See the [S3 locking
+reference](https://developer.hashicorp.com/terraform/language/backend/s3#state-locking).
+:::
+
+For a Terraform Cloud/Enterprise `remote` backend, retain the hostname, organization, and exact remote workspace name. The
+remote workspace name is distinct from the local CLI workspace:
+
+```yaml
+backend_type: remote
+backend:
+  remote:
+    hostname: app.terraform.io
+    organization: acme
+    workspaces:
+      name: acme-development-webserver
+```
+
+Place this fragment on the component. Keep the remote workspace's execution mode, variables, credentials, VCS settings, and
+Terraform version. If the existing remote execution setup rejects saved planfiles, use `atmos terraform plan webserver -s
+development --skip-planfile`. Adoption does not require `terraform init
+-migrate-state`, `state mv`, or importing resources.
+
+### Providers, Aliases, and Tags
+
+Fogg's provider configuration combines several concerns. Preserve each separately:
+
+- Provider source addresses and version constraints remain in `terraform.required_providers`.
+- Provider arguments can remain in HCL or move to [Atmos `providers`](/stacks/providers).
+- Regional/account aliases must keep their names, including references in child-module `providers` maps.
+- AWS `allowed_account_ids`, assume-role configuration, default tags, and any `TFC_*` metadata values
+  must retain their effective values to avoid changing resources during migration.
+
+For example, this fragment configures a primary AWS provider and an existing `us-east-1` alias:
+
+```yaml
+providers:
+  aws:
+    region: us-west-2
+    profile: acme-deploy
+    allowed_account_ids: ["123456789012"]
+    assume_role:
+      role_arn: arn:aws:iam::123456789012:role/terraform-role
+  aws.us-east-1:
+    region: us-east-1
+    profile: acme-deploy
+    allowed_account_ids: ["123456789012"]
+    assume_role:
+      role_arn: arn:aws:iam::123456789012:role/terraform-role
+```
+
+Atmos generates `providers_override.tf.json`. This example intentionally leaves existing `default_tags` in HCL; inspect the
+effective override before moving those too. Do not replace Fogg's tags with Atmos naming/tag conventions as part of the tool
+migration. An alias does not inherit the primary provider's arguments automatically, so configure each alias explicitly.
+
+### Module Calls and Outputs
+
+Fogg's `module_source`, `module_name`, and `provider_aliases` produce ordinary Terraform. Maintain the generated wrapper as the
+Atmos component. For a wrapper whose existing label is `webserver`, its shape remains:
+
+```hcl
+module "webserver" {
+  source = "../../../modules/webserver"
+
+  # Preserve the existing arguments and expressions.
+  vpc_id = local.vpc_id
+  providers = {
+    aws = aws.us-east-1
+  }
+}
+
+output "endpoint" {
+  value = module.webserver.endpoint
+}
+
+output "credentials" {
+  value     = module.webserver.credentials
+  sensitive = true
+}
+```
+
+This illustrates an existing child module that declares `vpc_id` and those outputs; use your module's actual interface. Keep its
+current label rather than renaming it to match this example. Renaming a module changes resource addresses. Replacing a wrapper
+with its child module as the root also changes addresses, so Atmos source provisioning is not a drop-in replacement for the
+wrapper.
+
+When changing the child module later, update arguments and forwarded outputs in this maintained Terraform code, or update your
+scaffold/template. Module introspection is not required to deploy the same resources or expose the same outputs.
+For roots containing several child modules, see [common questions](#common-questions) for a reusable generation example.
+
+### Remote State and Execution Ordering
+
+Fogg generates remote-state data sources for global, account, and sibling component state. Keep them unchanged initially. They
+continue to work without Fogg because Terraform performs the reads. Maintain their backend locations and output names when
+adding new consumers.
+
+Alternatively, declare Terraform inputs and supply outputs through Atmos. For a webserver with declared `vpc_id` and `zone_id`
+inputs, add this component fragment:
+
+```yaml
+dependencies:
+  components:
+    - name: vpc
+    - name: global
+      stack: shared
+vars:
+  vpc_id: !terraform.output vpc vpc_id
+  zone_id: !terraform.output global shared zone_id
+```
+
+Update Terraform references to use those inputs before removing the old data sources. `!terraform.output` reads an output; it
+does not apply the producer. `dependencies.components` declares ordering; it does not pass values. Do not translate every
+automatically generated remote-state data source into a dependency edge: declare actual producer/consumer relationships and
+avoid cycles.
+
+```shell
+# Include the producer components and plan in dependency order.
+atmos terraform plan --components webserver -s development --include-dependencies
+```
+
+See [component dependencies](/stacks/dependencies/components) and [`!terraform.output`](/functions/yaml/terraform.output). An
+output must exist before it can be read. Planning a new producer does not create its outputs; apply producers first during
+initial bootstrap, then plan consumers. Keep Terraform-side data sources when remote execution must read outputs itself rather
+than accepting values resolved on the Atmos runner.
+To publish selected outputs outside Terraform state, see the [stores example in common questions](#common-questions).
+
+### Terraform Versions and Tools
+
+Fogg's generated Makefiles select Terraform through tfenv. Atmos can select the same version with [tool
+dependencies](/stacks/dependencies):
+
+```yaml
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"
+```
+
+Place this in imported defaults, replacing `1.9.8` with your existing version. Keep the matching `required_version` constraint
+in Terraform. A component's `dependencies.tools` can override the default for roots on other versions. This is version
+selection, not an upgrade instruction. Check that binaries for your existing version are available on the target platform.
+
+### Templates and Generated Files
+
+Translate configuration reuse from `component_templates` into imports/inheritance. For files:
+
+- Use scaffolds for initial root modules and files developers will maintain.
+- Use [`generate`](/stacks/generate) for files that should be regenerated from stack configuration.
+  This feature is currently experimental; retaining maintained HCL does not require it.
+- Keep root-level CI files and `.gitignore` under version control, or manage them through an
+  explicit scaffold. `generate` writes into the resolved component directory.
+
+For example, after removing the corresponding declaration from the original generated file:
+
+```yaml
+generate:
+  migration.generated.tf:
+    locals:
+      project_owner: "{{ .vars.owner }}"
+```
+
+```shell
+atmos terraform generate files webserver -s development --dry-run
+atmos terraform generate files webserver -s development
+```
+
+Set `components.terraform.auto_generate_files: true` when generation should happen during Terraform commands. Add the generated
+filename to `.gitignore`. Keep each declaration owned by one file; do not let Fogg, Atmos, and a developer all rewrite the same
+file. Preserve an `extra_templates` file intended to be created only once as maintained source or a scaffold, rather than an
+always-regenerated file.
+See [common questions](#common-questions) for generating module calls and retaining TypeScript and monorepo tooling.
+
+## Replace Make and CI
+
+| Existing operation | Atmos operation |
+|---|---|
+| `fogg init` / repository layout setup | Create `atmos.yaml` and stacks; use a scaffold for future repositories |
+| `fogg apply` | Edit maintained Terraform/stacks; run file generation only for configured templates |
+| `make setup` | Install `.tool-versions` entries with `atmos toolchain install`, or specify `tool@version`; configure credentials separately |
+| `make plan` | `atmos terraform plan webserver -s development` |
+| `make apply` | `atmos terraform apply webserver -s development` |
+| `make run CMD='output'` | `atmos terraform output webserver -s development` |
+| `make check` / CI checks | The `atmos check-webserver` custom command below |
+
+This custom command assumes the pinned Terraform, AWS CLI, and TFLint are available through your toolchain or runner. The two AWS
+profiles must be the same profiles used by the backend and provider. If they assume roles, configure those profiles to assume
+the intended roles so the identity checks exercise the same credentials.
+
+Add this `commands` entry to `atmos.yaml`:
+
+```yaml title="atmos.yaml (additional configuration)"
+commands:
+  - name: check-webserver
+    description: Check the development webserver without applying changes
+    steps:
+      - name: backend-identity
+        type: shell
+        command: aws --profile acme-state sts get-caller-identity
+      - name: provider-identity
+        type: shell
+        command: aws --profile acme-deploy sts get-caller-identity
+      - name: format
+        type: atmos
+        command: terraform fmt webserver -s development -check -diff
+      - name: initialize
+        type: atmos
+        command: terraform init webserver -s development
+      - name: lint
+        type: shell
+        working_directory: terraform/envs/development/webserver
+        command: tflint
+      - name: validate
+        type: atmos
+        command: terraform validate webserver -s development
+      - name: plan
+        type: shell
+        command: |
+          status=0
+          atmos terraform plan webserver -s development -detailed-exitcode || status=$?
+          case "$status" in
+            0|2) exit 0 ;;
+            *) exit "$status" ;;
+          esac
+```
+
+Run it with `atmos check-webserver`; inspect it with `atmos check-webserver --help`. For provider-specific TFLint rulesets, preserve `.tflint.hcl` and install the
+plugins with `tflint --init` as part of runner setup. Keep formatting checks separate from formatting that rewrites files. For
+checks on every Terraform invocation, [lifecycle hooks](/stacks/hooks) can run TFLint instead of the explicit custom-command step.
+
+In CircleCI, Travis CI, or GitHub Actions, replace the Make invocation with this custom command after installing the pinned Atmos
+version and providing the existing credentials. Preserve triggers, required-check names, SSH access to private modules,
+environment variables, and apply approvals. For Heroku or other providers, preserve their credential mechanism and replace
+AWS-specific identity checks with the appropriate checks. For deployment, review the plan and use `atmos terraform apply
+webserver -s development --from-plan` where saved plans are supported. See [Makefile migration](/migration/makefile) for broader
+task-runner mappings.
+
+### Operational Differences
+
+Fogg's [component Make
+targets](https://github.com/chanzuckerberg/fogg/blob/6b8979176e6fa20c3745cbb1d71393becf935120/templates/templates/repo/scripts/component.mk)
+refresh state separately and cache that refresh for ten minutes for local execution. Atmos's normal plan uses Terraform's
+refresh behavior. The custom command above intentionally uses a fresh plan rather than reproducing this cache.
+
+**Remaining gap:** there is no ready-made Fogg refresh-cache policy here. If identical caching is required, additional
+implementation must track the last successful refresh per backend/workspace, refresh after expiry, skip the cache for remote
+execution, and invalidate it when state identity changes. Test expiry, failed refreshes, concurrent runs, and workspace
+isolation before relying on it. Simply passing `-refresh=false` does not reproduce the behavior.
+
+[Atmos hooks](/stacks/hooks) are the integration point for a custom refresh-cache policy:
+run it on `before.terraform.plan` with `on_failure: fail` so a refresh failure stops planning.
+The policy must initialize/select the same backend and workspace, refresh successfully before
+recording a timestamp, and coordinate concurrent readers/writers. Only after that succeeds may
+the outer plan use `-refresh=false`. Do not recursively invoke the same plan hook. A hook's
+`when: local` distinguishes the runner environment; it does not detect a Terraform remote
+backend. Hooks support this orchestration, but do not themselves supply the ten-minute cache.
+The gap is the cache-policy implementation, not hook support.
+
+Fogg's `check-plan` treats Terraform exit code 2 (changes present) as success; the custom command above does the same while preserving
+failures. It retains Terraform's state locking instead of copying Fogg's `-lock=false`. Normal Atmos plans save a planfile, so
+treat that artifact as potentially sensitive and follow your CI retention/access policy. Remote execution may require
+`--skip-planfile`, as described above. Do not assume the two tools have identical refresh, artifact, or approval defaults.
+
+## Advanced Integrations
+
+### EKS and Kubernetes Providers
+
+Fogg's EKS support ultimately produces Terraform provider wiring. Keep existing `aws_eks_cluster` and `aws_eks_cluster_auth`
+data sources and Kubernetes/Helm/kubectl provider blocks in the component, preserving their names and provider versions.
+Terraform will still resolve the endpoint, CA certificate, and credentials without Fogg.
+
+For new configuration, use [Atmos Auth](/cli/configuration/auth) to manage the AWS identity
+and refresh EKS credentials through `atmos aws eks token`. The following provider example
+assumes an Atmos identity named `dev-admin` with access to the cluster in `us-west-2`:
+
+```hcl
+variable "cluster_name" {
+  type = string
+}
+
+data "aws_eks_cluster" "cluster" {
+  name = var.cluster_name
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "atmos"
+    args = [
+      "aws", "eks", "token",
+      "--cluster-name", var.cluster_name,
+      "--region", "us-west-2",
+      "--identity", "dev-admin"
+    ]
+  }
+}
+```
+
+Declare the required AWS and Kubernetes providers and pass `cluster_name` through stack `vars`.
+Match the identity, region, and AWS provider credentials to the existing deployment, for example
+with `atmos terraform plan webserver -s development --identity dev-admin`. Keep Helm/kubectl
+configuration appropriate to the pinned provider versions. Terraform's execution environment
+must have Atmos and its auth configuration available for the `exec` command.
+
+For kubectl and other kubeconfig consumers, add an `aws/eks` integration referencing that
+existing Atmos identity:
+
+```yaml title="atmos.yaml (additional configuration)"
+auth:
+  integrations:
+    development-eks:
+      kind: aws/eks
+      via:
+        identity: dev-admin
+      spec:
+        cluster:
+          name: acme-development
+          region: us-west-2
+          alias: acme-development
+```
+
+```shell
+atmos auth login --identity dev-admin
+atmos aws eks update-kubeconfig --integration development-eks
+```
+
+The generated kubeconfig uses Atmos to obtain fresh EKS tokens. Configure the identity and
+cluster access first; authenticating to AWS does not itself grant Kubernetes permissions.
+Terraform provider configuration and a shell's kubectl context remain separate. See the
+[EKS authentication tutorial](/tutorials/eks-kubeconfig-authentication) for identity setup,
+kubeconfig paths, and integration options. These account-dependent examples require validation
+against your cluster.
+
+### Custom Binaries and Providers
+
+Fogg's [plugin
+installer](https://github.com/chanzuckerberg/fogg/blob/6b8979176e6fa20c3745cbb1d71393becf935120/plugins/custom_plugin.go)
+downloads binaries or extracts archives. For a custom CLI, declare an Atmos [toolchain
+registry](/cli/configuration/toolchain/registries), for example:
+
+```yaml title="atmos.yaml (additional configuration)"
+toolchain:
+  registries:
+    - name: internal-tools
+      type: atmos
+      priority: 150
+      tools:
+        acme/infra-check:
+          type: http
+          url: "https://artifacts.example.com/infra-check/{{.Version}}/{{.OS}}/{{.Arch}}/infra-check"
+```
+
+Replace the illustrative URL with your binary distribution, then declare `dependencies.tools: { acme/infra-check: "1.2.3" }` on
+the command or workflow that runs it. For archives, configure the matching format and file mapping in the registry. Update
+scripts that hard-code `.fogg/bin` to invoke the tool on `PATH`.
+
+Terraform provider plugins are different from CLI tools. Preserve their source addresses and versions in `required_providers`.
+Use a provider registry or Terraform's `provider_installation` configuration with a filesystem/network mirror. For an existing
+unpacked mirror:
+
+```hcl title="terraform.rc"
+provider_installation {
+  filesystem_mirror {
+    path    = "/opt/terraform-provider-mirror"
+    include = ["registry.example.com/acme/*"]
+  }
+  direct {
+    exclude = ["registry.example.com/acme/*"]
+  }
+}
+```
+
+Provision the mirror on each runner in Terraform's required host/namespace/type/version/platform layout and set
+`TF_CLI_CONFIG_FILE` to the absolute path of this file. See Terraform's [provider installation
+reference](https://developer.hashicorp.com/terraform/cli/config/config-file#provider-installation). Atmos selecting a CLI binary
+does not by itself install that binary as a Terraform provider. If you only have legacy loose binaries, packaging the mirror
+remains required migration work.
+
+### Terraform Enterprise Management
+
+Fogg's TFE integration may also manage Terraform that creates remote workspaces, team access, and VCS/check settings. Register
+that existing root module, typically `terraform/tfe`, as another component in the `shared` stack:
+
+```yaml
+components:
+  terraform:
+    tfe:
+      metadata:
+        component: tfe
+        terraform_workspace: default
+```
+
+Use its recorded workspace, retain its TFE provider and backend, and take ownership of its generated `locals.tf` and
+`locals.tf.json`. Maintain the accounts/environment catalog, Terraform versions, team permissions, VCS configuration, and
+required checks there when adding workspaces. Alternatively, move those values into declared Terraform inputs or a `generate`
+template that emits the same object shape. Do not infer that the presence of an Atmos stack creates a TFE workspace. This is
+explicit Terraform management, separate from using a `remote` backend.
+
+## Common Questions
+
+These optional migration scenarios cover existing repository customizations as well as generated Terraform. They do not
+extend the upstream Fogg feature assessment above.
+
+<FAQItem question="Can one component contain multiple Terraform modules?">
+
+Yes. A Terraform root managed as one Atmos component can call multiple child modules, sharing that root's state. Preserve
+each module's label, source, version, provider mappings, `for_each` or `count`, dependencies, and forwarded outputs during
+migration. Independently deployed roots with separate states should remain separate Atmos components.
+
+Keep the existing wrapper HCL, or use an explicit `generate` template to maintain its module calls. Both provide equivalent
+behavior; splitting child modules into separate states is not required.
+
+</FAQItem>
+
+<FAQItem question="Can Atmos keep generating configuration from my stacks?">
+
+Yes. [`generate`](/stacks/generate) supports reusable templates with access to component `settings`, `vars`, backend, and
+provider configuration. Share templates through stack imports or [component inheritance](/howto/inheritance). In your stack
+manifest, add `settings` and `generate` under `components.terraform.webserver` to generate two child-module calls:
+
+```yaml title="stacks/deploy/development.yaml (component additions)"
+components:
+  terraform:
+    webserver:
+      settings:
+        modules:
+          webserver:
+            source: ../../../modules/webserver
+          worker:
+            source: ../../../modules/worker
+      generate:
+        modules.generated.tf: |
+          {{ range $name, $module := .settings.modules }}
+          module {{ printf "%q" $name }} {
+            source = {{ printf "%q" $module.source }}
+            vpc_id = local.vpc_id
+          }
+          {{ end }}
+```
+
+This example assumes both local modules accept `vpc_id` and the root already defines `local.vpc_id`. Substitute the existing
+module labels, paths, and arguments, including any provider mappings or output declarations. Transfer ownership of the
+module blocks before generating them so the original files do not declare them twice.
+
+Preview with `atmos terraform generate files webserver -s development --dry-run`. Enable
+`components.terraform.auto_generate_files` when generation should run with Terraform commands. `generate` is currently
+experimental and writes into the resolved component directory; use scaffolds for initial repository-level files. It does
+not automatically inspect child-module interfaces to discover inputs or outputs.
+
+</FAQItem>
+
+<FAQItem question="Can I publish outputs to SSM Parameter Store or other stores?">
+
+Yes. Atmos has first-class [stores](/cli/configuration/stores) for publishing and sharing data outside Terraform state.
+Configure a named store in `atmos.yaml`:
+
+```yaml title="atmos.yaml (additional configuration)"
+stores:
+  outputs:
+    kind: aws/ssm
+    options:
+      region: us-east-1
+      prefix: /infra
+```
+
+Publish selected root outputs with a store hook, then read them from another component:
+
+```yaml title="stacks/deploy/development.yaml (component additions)"
+components:
+  terraform:
+    vpc:
+      hooks:
+        publish-outputs:
+          events: [after.terraform.apply]
+          kind: store
+          name: outputs
+          outputs:
+            vpc_id: .vpc_id
+    webserver:
+      vars:
+        vpc_id: !store outputs vpc vpc_id
+```
+
+The producer must expose `vpc_id` as a root output, and the consumer must declare that input. The hook writes after apply;
+the value must exist before resolving the consumer. Declare component dependencies separately when ordering deployments.
+Store paths follow `prefix/stack/component/key`: with stack name `development`, this example writes
+`/infra/development/vpc/vpc_id`. Preserve existing consumer paths and value formats during migration. See
+[sharing data through stores](/stacks/sharing-state/stores) for other backends and cross-stack reads.
+
+Publish only explicitly selected non-sensitive outputs through this ordinary store. For secrets, use a supported encrypted
+store marked `secret: true` and the [secrets configuration](/cli/configuration/secrets) with `!secret`; ordinary `!store`
+reads can appear in configuration output and cannot read secret stores.
+
+If Terraform should own the parameters' lifecycle, keep or generate `aws_ssm_parameter` resources referencing module
+outputs instead. Terraform resolves those expressions during deployment. Both approaches are supported with explicit
+configuration. Keep existing Terraform-managed parameters under that ownership during adoption; moving publication to a
+store hook is a separate ownership change, not a second writer to the same parameters.
+
+</FAQItem>
+
+<FAQItem question="Can I keep TypeScript, CDK Terrain, or TerraConstructs components?">
+
+Yes. CDK Terrain (`cdktn`) is the community fork of CDK for Terraform (CDKTF). Keep the application source and synthesize
+Terraform JSON before running Terraform through Atmos. The
+[CDK and CDK Terrain tutorial](/tutorials/deploy-cdk-with-hooks) shows synthesis hooks, artifact handling, and adoption of
+existing CDKTF deployments. Preserve construct paths, resource addresses, providers, and state identity.
+
+Use `generate` for component JSON or YAML configuration consumed by the application. Any adapter that turns that
+configuration into constructs, providers, backends, or remote-state references must be retained or adapted to the new
+configuration contract. File generation alone does not implement that adapter. Complete the migration by removing its
+dependency on Fogg-generated configuration.
+
+</FAQItem>
+
+<FAQItem question="Can I preserve typed outputs and their tests?">
+
+Yes. Keep TypeScript interfaces, remote-state helper code, type checks, and output contract tests in the application's build.
+You can generate declarations from output names and types explicitly supplied in stack settings. This does not automatically
+infer types from arbitrary Terraform modules or provide typed runtime accessors. Preserve or adapt any inspection and helper
+code your application uses, and keep tests that compare declared output contracts with synthesized Terraform outputs.
+
+</FAQItem>
+
+<FAQItem question="Can I keep pnpm, Turborepo, and VS Code workspaces?">
+
+Yes. Keep the workspace manifests, lockfiles, editor configuration, and build scripts alongside Atmos. Use
+[scaffolds](/cli/commands/scaffold/generate) for initial repository setup, `generate` for component-local configuration, and
+[custom commands](/scripting/custom-commands) or [hooks](/stacks/hooks) to invoke builds, tests, and synthesis.
+
+Turborepo can continue managing package dependencies, affected builds, and artifact caching. Atmos component dependencies
+control infrastructure execution order; they do not automatically import the package build graph. Preserve the existing
+build-before-synthesis order and required artifacts when replacing Make or CI entry points.
+
+</FAQItem>
+
+## Cutover Checklist
+
+1. Validate stacks and inspect each resolved component path, workspace, dependencies, and tool pin.
+2. Confirm generated backends select the original state and provider overrides preserve aliases,
+   account restrictions, and tags. Verify module addresses and output names/sensitivity are unchanged.
+3. Compare baseline and Atmos plans under identical credentials, inputs, versions, and refresh
+   conditions. Investigate drift rather than accepting unexpected migration changes.
+4. Exercise checks in CI, including a failing check and a plan with changes. Check dependency order
+   and bootstrap producers before consumers that read outputs.
+5. Switch one state at a time to its Atmos apply pipeline. Disable competing writes through the
+   former pipeline. Remove Fogg/Make setup only after inventorying custom tasks and plugin paths.
+6. Remove `fogg.yml`, Fogg runtime dependencies, and obsolete generated-file notices once all roots
+   and automation are owned by Terraform/Atmos. Retain the maintained Terraform files.
+
+Rollback means restoring the prior configuration and execution pipeline against the same state, with only one writer enabled.
+Remove only Atmos-generated override files introduced during the cutover if they would affect the restored configuration. Do not
+restore an old state snapshot over newer applies merely to change orchestration tools.
+
+:::note Validation boundary
+Stack resolution and local file generation can be checked without cloud access. AWS plans, cross-account authentication, custom
+artifact downloads, and Terraform Cloud/Enterprise runs must be verified against your own environment. The illustrative account
+names, backend locations, module interfaces, and artifact URLs in this guide are not a deployed reference environment.
+:::

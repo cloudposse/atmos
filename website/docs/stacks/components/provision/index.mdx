@@ -8,14 +8,15 @@ slug: /stacks/components/provision
 id: component-provision
 ---
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
 The `provision` section controls automatic, just-in-time creation of supporting infrastructure (Terraform state backends) and execution environments (isolated workdirs) before component commands run. Use it to remove manual bootstrap steps and to enable safe concurrent execution.
 </Intro>
 
-<Experimental />
+[Just-in-time source vendoring](/cli/commands/terraform/source), including its automatic
+workdir support, and standalone workdir management are stable. Backend provisioning
+and workdir provisioning for local-only components remain experimental; see the [graduation announcement](/changelog/core-features-graduate-to-stable).
 
 ## Two Independent Capabilities
 
@@ -34,12 +35,11 @@ Component provisioning is split into two focused capabilities you can enable ind
 
 ## Configuration Scope
 
-The `provision` block can appear at three levels and is deep-merged across them. Lower levels override higher levels, so a component can opt out of any default by setting `enabled: false`.
+The `provision` block can appear at two levels and is deep-merged across them. Lower levels override higher levels, so a component can opt out of any default by setting `enabled: false`. A stack-wide default belongs in the toolchain section of a shared stack manifest, alongside global `vars`, `metadata`, and `secrets` - not in `atmos.yaml` settings.
 
 | Level | Path | Applies To |
 |---|---|---|
-| Global | `settings.provision` in `atmos.yaml` | Every component, every stack (workdir only today) |
-| Toolchain | `terraform.provision`, `helmfile.provision`, `packer.provision`, `ansible.provision` | Every component of that toolchain |
+| Toolchain (global default) | `terraform.provision`, `helm.provision`, `kubernetes.provision` | Every component of that toolchain in the stacks that import it |
 | Component | `components.<type>.<name>.provision` | A single component instance |
 
 ## Schema Summary
@@ -58,11 +58,12 @@ components:
 | Key | Applies To | Documentation |
 |---|---|---|
 | `provision.backend.enabled` | Terraform components only | [Backend Provisioning](/stacks/components/provision/backend) |
-| `provision.workdir.enabled` | Terraform, Helmfile, Packer, Ansible | [Workdir Provisioning](/stacks/components/provision/workdir) |
+| `provision.workdir.enabled` | Terraform; Helmfile, Packer, Helm, and Kubernetes components with a top-level `source` | [Workdir Provisioning](/stacks/components/provision/workdir) |
+
+For components with a `source`, a `metadata.working_directory` or `settings.working_directory` override takes precedence over an isolated workdir. Local components without a `source` support workdir provisioning only for Terraform. See [Workdir Provisioning](/stacks/components/provision/workdir#configuration) for configuration examples and restrictions.
 
 ## Related
 
 - [Terraform Backend Configuration](/stacks/components/terraform/backend) — The separate `backend:` block that describes *where* state is stored.
-- [Settings: Provision Defaults](/cli/configuration/settings/provision) — Global workdir defaults in `atmos.yaml`.
 - [`atmos terraform workdir`](/cli/commands/terraform/workdir) — CLI commands for managing workdirs.
 - [`atmos terraform backend`](/cli/commands/terraform/terraform-backend) — CLI commands for backend management.

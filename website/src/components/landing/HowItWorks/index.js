@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import DemoVideo from '@site/src/components/landing/DemoVideo';
+import DemoCast from '@site/src/components/landing/DemoCast';
 
 const STEPS = [
   {
@@ -62,7 +62,7 @@ function HowItWorks() {
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
         >
-          <DemoVideo title="Config in, infrastructure out" slug="how-it-works" />
+          <DemoCast title="Config in, infrastructure out" slug="how-it-works" />
         </motion.div>
       </div>
     </section>

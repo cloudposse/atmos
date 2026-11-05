@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -29,6 +30,10 @@ func init() {
 		flags.WithBoolFlag("raw", "r", false, "Print the raw value with no trailing newline (text only; ideal for piping, e.g. | pbcopy)"),
 	)
 	getParser.RegisterFlags(getCmd)
+	internal.RegisterCommandMetadata(
+		getCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/store/get"),
+	)
 }
 
 func runStoreGet(cmd *cobra.Command, args []string) error {

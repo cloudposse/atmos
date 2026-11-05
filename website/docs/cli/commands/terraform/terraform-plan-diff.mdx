@@ -22,7 +22,7 @@ The `atmos terraform plan-diff` command compares two Terraform plans and shows t
 
 It takes an original plan file (`--orig`) and optionally a new plan file (`--new`). If the new plan file is not provided, it will generate one by running `terraform plan` with the current configuration.
 
-The command shows differences in variables, resources, and outputs between the two plans.
+The command shows differences in variables, resources, and outputs between the two plans. Input plan files and any existing saved component plan are preserved.
 
 :::info
 [Data sources](https://opentofu.org/docs/language/data-sources/) are automatically skipped during comparison and will not appear in the diff.
@@ -58,6 +58,61 @@ atmos terraform plan-diff <component> -s <stack> --orig=<original-plan-file> [--
 </dl>
 
 You can also pass any additional flags and arguments that are supported by the `terraform plan` command when generating a new plan.
+
+## Ignoring attribute changes
+
+Configure `components.terraform.plan_diff.ignore_changes` in `atmos.yaml` to exclude resource
+attributes that are expected to vary between plans. These exclusions apply to both
+`atmos terraform plan-diff` and plan verification during `atmos terraform deploy`.
+
+For example, an RDS instance's computed `latest_restorable_time` can change between plans
+even when its configuration has not changed:
+
+```yaml title="atmos.yaml"
+components:
+  terraform:
+    plan_diff:
+      ignore_changes:
+        - aws_db_instance.latest_restorable_time
+```
+
+Each entry must be an exact `resource_type.attribute` name. The rule applies to every instance
+of that resource type, including instances inside modules. Only top-level attributes are supported;
+bare attribute names, wildcards, resource addresses, and nested attribute paths are invalid.
+Malformed entries cause a configuration error before Terraform runs. When an entry is well formed
+but matches no attribute on the resources of that type present in the plans, which usually means a
+resource address or a typo was configured, Atmos prints a warning and leaves the comparison unchanged.
+Values that become known only after apply are shown as `(known after apply)` rather than as removed
+or added attributes.
+
+No resource attributes are excluded from comparison by default.
+
+Exclusions affect both the displayed diff and the comparison verdict. If the plans differ only
+in excluded attributes, `plan-diff` exits with code `0`, and deployment plan verification passes.
+Other attribute changes, resource additions and removals, lifecycle action changes, and replacement
+metadata still count as differences. Variables and outputs are compared independently: exporting
+an ignored resource attribute as an output does not exclude that output from comparison.
+
+:::note
+This setting controls Atmos's comparison of two plans. It does not modify Terraform plans, state,
+or resource updates, and it does not configure Terraform's `lifecycle.ignore_changes`.
+:::
+
+### Edition compatibility
+
+Starting with the `2026-10-13` [edition](/cli/configuration/edition), Atmos displays differences in
+`response_body_base64`, `content_base64sha256`, `content_base64sha512`, `content_md5`,
+`content_sha1`, `content_sha256`, and `content_sha512`. Unpinned projects get this behavior too.
+
+Earlier editions retain the historical display-only suppression of these seven attributes.
+Their differences still cause `plan-diff` to exit with code `2` and deployment verification to fail,
+just as before; a resource heading can appear without an attribute diff. Pin an earlier date,
+such as `edition: "2026-10-12"`, to preserve that display behavior.
+
+Explicit `ignore_changes` entries exclude attributes from both comparison and display under
+**every** edition. To tolerate a content hash change, add its qualified attribute explicitly,
+for example `local_file.content_sha256`. Computed attributes and content hashes can represent
+real changes and are not automatically safe to ignore.
 
 ## Examples
 

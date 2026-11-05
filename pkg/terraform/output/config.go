@@ -280,5 +280,5 @@ func ValidateBackendConfig(config *ComponentConfig, component, stack string) err
 func GetComponentInfo(component, stack string) string {
 	defer perf.Track(nil, "output.GetComponentInfo")()
 
-	return fmt.Sprintf("component '%s' in stack '%s'", component, stack)
+	return fmt.Sprintf("component %q in stack %q", component, stack)
 }

@@ -54,7 +54,7 @@ Decisions locked in:
 Still deferred:
 
 - Collision avoidance across multiple concurrent `atmos terraform plan` invocations writing to the same PR. Only plan produces comments in this release (apply/deploy are excluded; describe/affected does not post comments). Concurrent plan runs for **different** `{component, stack}` tuples produce independent comments and never collide. Concurrent plan runs for the **same** `{component, stack}` tuple are last-writer-wins per the `{command, component, stack}` marker key — rare in practice but theoretically possible if a PR is re-pushed before the prior run finishes.
-- Custom template override (`ci.comments.template`) is currently ignored — the comment always reuses the summary template from `ci.templates.terraform.plan`. Wiring a dedicated comment template is a follow-up.
+- There is no dedicated comment template key: the comment always reuses the summary template from `ci.templates.terraform.plan`. Scripts that post through `ci.comment` name their template in the call.
 
 ## Configuration
 

@@ -5,8 +5,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -21,11 +23,30 @@ import (
 // pkg/asciicast's own session test helper.
 const sessionShellHelperEnv = "_ATMOS_STEP_SESSION_SHELL"
 
+// sessionShellBannerEnv makes the fake shell print sessionShellBanner once it reads input.
+const (
+	sessionShellBannerEnv = "_ATMOS_STEP_SESSION_BANNER"
+	sessionShellBanner    = "shell-up"
+)
+
+// sessionShellPrintDelay is how long the fake shell takes to run a delay-print command.
+const sessionShellPrintDelay = 1500 * time.Millisecond
+
+// sessionShellDelayEnv simulates a subprocess scheduled after its PTY has
+// already echoed input, exposing waits that mistake input echo for a response.
+const sessionShellDelayEnv = "_ATMOS_STEP_SESSION_DELAY"
+
 // _atmosStepFakeRMGlobEnv names the env var carrying the glob pattern that the
 // "rm-glob-and-fail" _ATMOS_STEP_FAKE mode deletes before exiting non-zero.
 // This lets cast_test.go exercise a child step that deletes a file and fails,
 // without depending on the platform-specific "rm" binary or a shell.
 const atmosStepFakeRMGlobEnv = "_ATMOS_STEP_FAKE_RM_GLOB"
+
+// atmosStepFakeSleepMSEnv carries the sleep duration, in milliseconds, of the "sleep" _ATMOS_STEP_FAKE mode.
+const atmosStepFakeSleepMSEnv = "_ATMOS_STEP_FAKE_SLEEP_MS"
+
+// atmosStepFakeEnvNameEnv names the variable the "printenv" _ATMOS_STEP_FAKE mode prints.
+const atmosStepFakeEnvNameEnv = "_ATMOS_STEP_FAKE_ENV_NAME"
 
 // TestMain lets the test binary impersonate a fake "atmos" executable so that
 // subprocess-executing handlers (e.g. AtmosHandler) can be tested
@@ -35,6 +56,7 @@ const atmosStepFakeRMGlobEnv = "_ATMOS_STEP_FAKE_RM_GLOB"
 // exits immediately instead of running the test suite:
 //   - "ok":               print a known marker to stdout, exit 0.
 //   - "fail":             print an error marker to stderr, exit 3.
+//   - "deny":             print a denial marker to stderr, exit 77 (policy denied).
 //   - "rm-glob-and-fail": delete files matching atmosStepFakeRMGlobEnv's glob
 //     pattern, then exit 1.
 //
@@ -56,12 +78,39 @@ func TestMain(m *testing.M) {
 	case "fail":
 		_, _ = os.Stderr.WriteString("fake-atmos-error")
 		os.Exit(3)
+	case "deny":
+		// A nested atmos command that a policy denied exits with errUtils.ExitCodePolicyDenied.
+		_, _ = os.Stderr.WriteString("policy denied execution")
+		os.Exit(77)
+	case "echo-selection":
+		// Report the profile and identity the nested command would run with.
+		_, _ = os.Stdout.WriteString(os.Getenv("ATMOS_PROFILE") + "|" + os.Getenv("ATMOS_IDENTITY"))
+		os.Exit(0)
 	case "rm-glob-and-fail":
 		removeGlobMatches(os.Getenv(atmosStepFakeRMGlobEnv))
 		os.Exit(1)
 	case "spin-output":
 		_, _ = os.Stdout.WriteString("spin-stdout")
 		_, _ = os.Stderr.WriteString("spin-stderr")
+		os.Exit(0)
+	case "sleep":
+		// Sleep for _ATMOS_STEP_FAKE_SLEEP_MS milliseconds so tests can exercise step timeouts.
+		if ms, err := strconv.Atoi(os.Getenv(atmosStepFakeSleepMSEnv)); err == nil {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
+		os.Exit(0)
+	case "spawn-grandchild":
+		// Record the pid, start a grandchild that also records its pid, then wait for the group to
+		// be killed. Tests use it to prove a step timeout ends the whole process tree.
+		runStepSpawnGrandchild()
+		os.Exit(0)
+	case "pidfile-sleep":
+		writeStepPIDFile("child")
+		time.Sleep(stepHelperSleep)
+		os.Exit(0)
+	case "printenv":
+		// Print the value of the variable named by _ATMOS_STEP_FAKE_ENV_NAME.
+		_, _ = os.Stdout.WriteString(os.Getenv(os.Getenv(atmosStepFakeEnvNameEnv)))
 		os.Exit(0)
 	}
 	if os.Getenv(sessionShellHelperEnv) == "1" {
@@ -76,6 +125,7 @@ func TestMain(m *testing.M) {
 	data.InitWriter(ioCtx)
 	ui.InitFormatter(ioCtx)
 
+	builtInStepTypes = registeredStepTypesForDocumentation()
 	os.Exit(m.Run())
 }
 
@@ -95,6 +145,15 @@ func removeGlobMatches(pattern string) {
 // stdin/stdout: it recognizes a couple of scripted commands used by
 // runCastSessionMode tests and echoes deterministic output for each.
 func runStepSessionShellHelper() {
+	// The test binary can emit terminal queries during startup that swallow
+	// input typed before the helper starts reading. Tests that need their typed
+	// line to reach the helper wait for this banner before typing.
+	if os.Getenv(sessionShellBannerEnv) == "1" {
+		_, _ = os.Stdout.WriteString(sessionShellBanner + "\n")
+	}
+	if os.Getenv(sessionShellDelayEnv) == "1" {
+		time.Sleep(3 * time.Second)
+	}
 	reader := bufio.NewReader(os.Stdin)
 	var line strings.Builder
 	for {
@@ -109,8 +168,18 @@ func runStepSessionShellHelper() {
 		case 4:
 			return
 		case '\r', '\n':
-			if strings.TrimSpace(line.String()) == "printf ready" {
+			command := strings.TrimSpace(line.String())
+			if command == "printf ready" {
 				_, _ = os.Stdout.WriteString("ready\n")
+			}
+			// "delay-print <word>..." prints "out:<word>" per word after a delay,
+			// so tests can tell a command's output apart from the terminal's
+			// echo of the typed command (which contains the bare words).
+			if rest, ok := strings.CutPrefix(command, "delay-print "); ok {
+				time.Sleep(sessionShellPrintDelay)
+				for _, word := range strings.Fields(rest) {
+					_, _ = os.Stdout.WriteString("out:" + word + "\n")
+				}
 			}
 			line.Reset()
 		default:

@@ -47,19 +47,24 @@ package-global metrics map (not safe for concurrent use, while Atmos renders sta
 
 ## Changes
 
-- New `pkg/templating` package, the only importer of gomplate. `Engine.Render` parses with `text/template`
-  first and executes there (lock-free, in-memory `.` data, unchanged error text) unless the template calls a
-  renderer-only function or `atmos.GomplateDatasource`; those renders go through gomplate's renderer,
-  serialized by a mutex, via a one-action wrapper that uses gomplate's public `tmpl.Inline` to execute the
-  user's template with the in-memory data (so struct data and integer types are preserved, no temp-file
-  round-trip). `Engine.Datasource` serves `atmos.GomplateDatasource` from the live render, with a cache keyed
-  by alias and arguments (the old cache ignored arguments). Datasource URLs are parsed the way gomplate's CLI
-  parses them (bare absolute paths, Windows drive/UNC paths, `-` for stdin).
-- `pkg/template.UsesFunctions` inspects a parsed template for function calls; `walkAST` now descends into
+- New `pkg/templating` package, the only importer of gomplate. `Engine.Render` parses and executes with
+  `text/template` (lock-free, in-memory `.` data, unchanged error text). Gomplate's renderer-only functions
+  are provided without its renderer: `templating.Data` reads datasources lazily through a private
+  per-alias gomplate renderer whose only functions capture the native result (so integer and EJSON types
+  survive), and the `tmpl` namespace and `tpl` alias are bound to the parsed template with gomplate's public
+  `tmpl.New`. Gomplate's renderer is used only for those datasource reads and for templates whose context
+  comes from datasources (`Request.ContextSources`, the README path); it is serialized by a mutex because it
+  writes a package-global metrics map. `atmos.GomplateDatasource` reads through a process-wide cache keyed by
+  alias, the alias's effective URL and headers, and arguments (the old cache keyed by alias alone, so two
+  stacks defining one alias differently shared a value). Datasource URLs passed as definitions are parsed
+  the way gomplate's CLI parses them (bare absolute paths, Windows drive/UNC paths, `-` for stdin).
+  `Request.WrapFuncs` and `Request.Prepare` let callers guard the assembled function map and rewrite the
+  parse tree; `tmpl`/`tpl` are left undefined when `Prepare` is set, so run-time templates can't escape it.
+- `pkg/template.WalkNodes` exposes the AST traversal for lint passes; `walkAST` now descends into
   `ChainNode` expressions such as `(ds "cfg").name`, which it previously skipped.
-- `internal/exec/template_utils.go`, `template_funcs.go` and `pkg/generator/engine/templating.go` are thin
-  call sites; `template_funcs_gomplate_datasource.go` and the dead `gomplate/v4` import are gone.
-  `ProcessTmplWithDatasourcesGomplate` now honors its `ignoreMissingTemplateValues` argument.
+- `internal/exec/template_utils.go`, `template_funcs.go` and `pkg/generator/engine/templating.go` render
+  through `pkg/templating`; the dead `gomplate/v4` import is gone. `ProcessTmplWithDatasourcesGomplate`
+  now honors its `ignoreMissingTemplateValues` argument.
 - `go.mod`: `gomplate/v3` and `/v4` dropped, `gomplate/v5` v5.2.0 added, `hashicorp/vault/api/auth/aws`
   pinned to the ported pseudo-version (with an explanatory comment), `golang.org/x/crypto` v0.56.0. The
   `gocloud.dev`/`go-fsimpl` pins that existed for gomplate/v3 are removed. gomplate v5 requires
@@ -103,6 +108,27 @@ templates written against gomplate v3 names keep working instead of failing outr
   three are warn-only findings; the render is never blocked by them.
 - New static error `ErrTemplateConversion` in `errors/errors.go`, wrapped with a hint by the
   conversion-error overrides above.
+
+### Merging main's gomplate v4 wrapper (#3457)
+
+While this branch was open, #3457 reintroduced gomplate v4 on `main` (and with it AWS SDK v1) through a
+wrapper in `pkg/template/gomplate`, policy admission wrappers in `internal/exec/template_policy*.go`, and a
+README renderer in `pkg/template/datasource`. Merging `main` folded those into `pkg/templating` instead of
+keeping a second gomplate importer:
+
+- `pkg/template/gomplate`'s `Data` (datasource definitions, lazy reads, recovery when an alias is defined
+  after a failed read) and its Windows native `file` namespace (with write confinement to the working
+  directory) moved to `pkg/templating` (`data.go`, `file_native.go`) with their tests;
+  `templating.GomplateFuncs(ctx, sources)` replaces `CreateFuncs`.
+- `processTmpl`, `ProcessTmplWithDatasources` (one `renderTemplatePass` per evaluation) and
+  `ProcessTmplWithDatasourcesGomplate` render through the engine. Main's literal, credential and YAML-tag
+  protection wraps the text before and after the render; policy admission plugs in as `WrapFuncs`
+  (`policyFuncsWrapper`); manifest-load `atmos.Component` deferral and the stack-identity guard plug in as
+  `Prepare`. `pkg/template/datasource.RenderWith` takes `Options` instead of a function builder.
+- The policy guard for the `net` namespace covers gomplate v5's methods (`ParseAddr`, `ParsePrefix`,
+  `ParseRange`) and the v3 names the shims keep (`ParseIP` returns `templating.LegacyIP`), and refuses a
+  `net` namespace it can't guard instead of panicking.
+- `gomplate/v4`, `aws-sdk-go` v1 and `inet.af/netaddr` are gone from `go.mod` again; `NOTICE` regenerated.
 
 ## Validation
 

@@ -1,0 +1,42 @@
+---
+title: Using Kubernetes
+sidebar_position: 2
+sidebar_label: Kubernetes
+id: kubernetes
+description: Deploy Kubernetes manifests and Kustomize overlays as Atmos components.
+sidebar_group: component-library
+component_type: kubernetes
+component_implementation: Kubernetes manifests and Kustomize overlays
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Kubernetes components let Atmos render and deploy manifests or Kustomize overlays
+for each stack. Use them when you want Kubernetes resources to share Atmos stack
+variables, inheritance, authentication, and deployment ordering with the rest of
+your infrastructure.
+</Intro>
+
+For example, a stack can select a Kustomize overlay and pass environment-specific
+values to the component:
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      provider: kustomize
+      paths:
+        - overlays/dev
+      vars:
+        namespace: argocd
+```
+
+The `argocd` key names this component instance. See the
+[Kubernetes stack configuration](/stacks/components/kubernetes) for supported
+providers, rendering, hooks, and deployment targets.
+
+## Next steps
+
+- [Configure a Kubernetes component](/stacks/components/kubernetes)
+- [Run Kubernetes commands](/cli/commands/kubernetes/usage)

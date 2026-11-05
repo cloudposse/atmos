@@ -1,0 +1,515 @@
+:global([data-theme="dark"]) .page {
+  --accent: var(--ifm-color-primary-light);
+}
+.page {
+  --accent: var(--ifm-color-primary-dark);
+  --line: var(--ifm-color-emphasis-200);
+  --muted: var(--ifm-color-emphasis-700);
+  --subtle: var(--ifm-color-emphasis-600);
+  --surface: var(--ifm-background-surface-color);
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 36px 80px;
+  color: var(--ifm-font-color-base);
+}
+.page button {
+  font: inherit;
+  cursor: pointer;
+}
+.page a {
+  text-decoration: none;
+}
+.page :is(button, a, input, select):focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 4px;
+}
+.page svg {
+  flex-shrink: 0;
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  font-size: 14px;
+  color: var(--subtle);
+}
+.breadcrumb a {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+}
+.previewLabel {
+  margin-left: auto;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 7px;
+}
+.hero {
+  padding: 32px 0 28px;
+  display: flex;
+  gap: 30px;
+  justify-content: space-between;
+  align-items: center;
+}
+.heroText {
+  min-width: 0;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 1.2px;
+  color: var(--accent);
+  margin-bottom: 18px;
+}
+.eyebrow span {
+  color: var(--subtle);
+  border-left: 1px solid var(--line);
+  padding-left: 12px;
+  margin-left: 4px;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+}
+.hero h1 {
+  font-size: clamp(30px, 3.2vw, 44px);
+  letter-spacing: -1.8px;
+  line-height: 1.12;
+  margin: 0 0 15px;
+  font-weight: 650;
+}
+.hero p {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.75;
+  margin: 0 0 20px;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.tags span {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.heroActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.primary,
+.secondary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.primary {
+  color: #fff;
+  background: var(--ifm-color-primary-dark);
+  border: 1px solid var(--ifm-color-primary);
+}
+.primary:hover {
+  color: #fff;
+  background: var(--ifm-color-primary-darker);
+}
+.secondary {
+  border: 1px solid var(--line);
+  color: var(--ifm-font-color-base);
+}
+.secondary:hover {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-font-color-base);
+}
+.tabbar {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+.tabbar [role="tablist"] {
+  display: flex;
+  gap: 25px;
+}
+.tabbar [role="tab"] {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--subtle);
+  padding: 14px 0;
+  margin-bottom: -1px;
+  font-size: 14px;
+}
+.tabbar [aria-selected="true"] {
+  color: var(--ifm-font-color-base);
+  border-bottom-color: var(--accent);
+}
+.tabbar [role="tab"] span {
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.tabMeta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--subtle);
+}
+.overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 244px;
+  gap: 40px;
+}
+.content {
+  min-width: 0;
+}
+.page h2 {
+  font-size: 20px;
+  letter-spacing: -0.35px;
+  font-weight: 600;
+  margin: 0 0 18px;
+}
+.sectionHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+.sectionHeading h2 {
+  margin: 0;
+}
+.sectionHeading > span {
+  font-size: 10px;
+  letter-spacing: 0.9px;
+  color: var(--subtle);
+}
+.page h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 7px;
+}
+.rail {
+  align-self: start;
+  position: sticky;
+  top: 90px;
+  padding-left: 24px;
+  border-left: 1px solid var(--line);
+}
+.rail h2 {
+  font-size: 14px;
+  margin-bottom: 10px;
+  letter-spacing: 0;
+}
+.rail p {
+  font-size: 12px;
+  color: var(--subtle);
+}
+.onPage,
+.keyFiles,
+.docs {
+  margin-top: 29px;
+}
+.onPage a {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 0;
+}
+.onPage a:first-of-type {
+  color: var(--accent);
+}
+.keyFiles button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 9px 0;
+  color: var(--muted);
+}
+.keyFiles button > span {
+  display: flex;
+  gap: 8px;
+  align-items: start;
+}
+.keyFiles button svg {
+  font-size: 14px;
+}
+.keyFiles strong {
+  display: block;
+  font-size: 11px;
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.keyFiles small {
+  display: block;
+  font-size: 11px;
+  color: var(--subtle);
+  margin-top: 3px;
+}
+.keyFiles .browseAll {
+  color: var(--accent);
+  font-size: 12px;
+  margin-top: 7px;
+  justify-content: start;
+}
+.docs a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 6px 0;
+  color: var(--muted);
+}
+.rail a:hover,
+.keyFiles button:hover {
+  color: var(--accent);
+}
+@media (min-width: 1500px) {
+  .page {
+    max-width: 1380px;
+  }
+  .overview {
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: 48px;
+  }
+  .hero h1 {
+    font-size: 48px;
+  }
+  .hero p {
+    font-size: 15px;
+  }
+}
+@media (max-width: 1000px) {
+  .page {
+    padding: 24px;
+  }
+  .overview {
+    grid-template-columns: minmax(0, 1fr) 210px;
+    gap: 26px;
+  }
+  .rail {
+    padding-left: 18px;
+  }
+  .hero h1 {
+    font-size: 35px;
+  }
+  .hero {
+    flex-wrap: wrap;
+  }
+  .hero p {
+    font-size: 13px;
+  }
+  .sectionHeading > span {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .page {
+    padding: 20px 20px 45px;
+  }
+  .previewLabel {
+    font-size: 10px;
+  }
+  .breadcrumb {
+    font-size: 12px;
+    gap: 9px;
+  }
+  .hero {
+    display: block;
+    padding: 31px 0 24px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    margin-bottom: 16px;
+  }
+  .eyebrow span {
+    font-size: 7px;
+    letter-spacing: 0.3px;
+    padding-left: 8px;
+    margin-left: 0;
+  }
+  .hero h1 {
+    font-size: 36px;
+    letter-spacing: -1.3px;
+    line-height: 1.13;
+  }
+  .hero p {
+    font-size: 13px;
+    margin-bottom: 17px;
+  }
+  .heroActions {
+    flex-direction: row;
+    margin-top: 23px;
+    min-width: 0;
+  }
+  .heroActions a {
+    flex: 1;
+    font-size: 12px;
+    padding: 10px 8px;
+  }
+  .tabbar {
+    margin-bottom: 24px;
+  }
+  .tabMeta {
+    font-size: 10px;
+  }
+  .overview {
+    display: block;
+  }
+  .rail {
+    position: static;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 25px 0 0;
+    margin-top: 35px;
+  }
+  .onPage {
+    display: none;
+  }
+  .rail h2 {
+    font-size: 14px;
+  }
+  .keyFiles strong,
+  .keyFiles small {
+    font-size: 13px;
+  }
+  .page h2 {
+    font-size: 20px;
+  }
+  .page h3 {
+    font-size: 13px;
+  }
+}
+@media (max-width: 360px) {
+  .heroActions {
+    gap: 8px;
+  }
+  .heroActions a {
+    font-size: 11px;
+    gap: 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page *,
+  .page *::before,
+  .page *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.page section[id] {
+  scroll-margin-top: 90px;
+}
+
+/* The content is the existing GitHub-style README, rendered by FileViewer. */
+.heroText {
+  max-width: 680px;
+}
+.readme {
+  margin-top: 30px;
+  min-width: 0;
+}
+.readme h1 {
+  font-size: 28px;
+  letter-spacing: -0.6px;
+}
+.readme h2 {
+  margin-top: 30px;
+}
+.readme h3 {
+  font-size: 18px;
+}
+.readme p,
+.readme li,
+.readme td {
+  font-size: 14px;
+  line-height: 1.75;
+}
+.readme pre {
+  font-size: 13px;
+}
+.rail .onPage {
+  margin-top: 0;
+}
+
+.page {
+  --subtle: var(--ifm-color-content-secondary);
+}
+.page :is(button, a, input, select, [role="tabpanel"]):focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 4px;
+}
+.hero h1 {
+  overflow-wrap: anywhere;
+}
+.heroActions button.primary {
+  font-size: 14px;
+}
+.breadcrumb > span {
+  overflow-wrap: anywhere;
+}
+.heroActions {
+  max-width: 100%;
+}
+.readme:first-child {
+  margin-top: 0;
+}
+.readme a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rail > :first-child {
+  margin-top: 0;
+}
+.keyFiles button > span,
+.keyFiles button > span > span {
+  min-width: 0;
+}
+.keyFiles strong,
+.keyFiles small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.docs a {
+  gap: 10px;
+}
+@media (max-width: 760px) {
+  .heroActions button.primary {
+    flex: 1;
+    font-size: 12px;
+    padding: 10px 8px;
+  }
+}

@@ -1,0 +1,8 @@
+vars:
+  stage: root-zero
+timeout: 0
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: root-zero

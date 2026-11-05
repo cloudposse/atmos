@@ -1,0 +1,35 @@
+---
+title: "os.arch"
+sidebar_position: 15
+sidebar_label: "os.arch"
+sidebar_class_name: command
+description: Read the architecture of the running Atmos executable.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `os.arch` attribute is a read-only string identifying the architecture of the running Atmos executable.
+</Intro>
+
+## Usage
+
+```python
+os.arch
+```
+
+Common values are `"amd64"` and `"arm64"`. Values follow Go's architecture names; for example, x86-64 is `"amd64"`.
+Read the attribute directly, without parentheses. Environment variables cannot override it.
+When Atmos runs under emulation, this describes its executable's architecture, which can differ from the physical CPU.
+
+## Examples
+
+```python
+asset = "my-tool-" + os.platform + "-" + os.arch
+print(asset)
+```
+
+## Related
+
+- [`os.platform`](/functions/automation/os.platform) reports the operating system.
+- [`exec.run`](/functions/automation/exec.run) runs a program.

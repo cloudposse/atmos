@@ -23,7 +23,7 @@ atmos terraform generate planfile <component> -s <stack> [options]
 
 This command generates a Terraform planfile for a specified Atmos component in a stack.
 
-Under the hood, Atmos executes `terraform plan` to create a binary planfile, then uses `terraform show` to convert it into a human-readable format (YAML or JSON). This enables easy integration with other tooling like `checkov`.
+Under the hood, Atmos executes `terraform plan` to create a binary planfile, then uses `terraform show` to convert it into a human-readable format (YAML or JSON). This enables easy integration with other tooling like `checkov`. The binary plan used for conversion is temporary; any existing saved component plan remains available for `apply --from-plan`.
 
 :::tip
 Run `atmos terraform generate planfile --help` to see all the available options

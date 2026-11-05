@@ -1,0 +1,45 @@
+---
+title: atmos plugin run
+sidebar_label: run
+sidebar_class_name: command
+id: run
+description: Execute an installed plugin’s selected command and preserve its exit code.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Execute an installed plugin’s selected command and preserve its exit code.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin run --help" src="/casts/screengrabs/atmos-plugin-run--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin run <alias> -- [arguments...]
+```
+
+Atmos identifies the selected command and its description on stderr before
+execution. The plugin's own stdout and exit code remain available to callers.
+The OIDC starter exports an `about` command: running it displays what the plugin
+supports and how to authenticate. It does not perform a login. Configure an
+identity using the plugin and run `atmos auth login --identity <identity>` to
+authenticate.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>alias</code></dt>
+  <dd>Installed package alias. If a package exports multiple commands, select one with plugins.packages.&lt;alias&gt;.command.</dd>
+  <dt><code>arguments</code></dt>
+  <dd>Arguments after -- are passed unchanged to the plugin command.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin run corporate --
+```

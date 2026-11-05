@@ -4,15 +4,18 @@ import (
 	"context"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	tea "github.com/charmbracelet/bubbletea"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -496,14 +499,12 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a context with a short timeout to simulate cancellation.
-	// Use 1ms timeout (not nanoseconds) for cross-platform compatibility.
-	// Windows has ~15.6ms timer resolution, so very short timeouts may not work reliably.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 
-	// Wait for context to expire. Use 50ms to ensure the timeout has triggered
-	// across all platforms including Windows with its coarser timer resolution.
-	time.Sleep(50 * time.Millisecond)
+	// Synchronize with cancellation instead of assuming a fixed sleep gives the
+	// deadline callback enough time to run on a busy CI worker.
+	<-ctx.Done()
 
 	// Note: We can't easily test pollForAccessToken in isolation without a real OIDC client.
 	// The context cancellation is tested indirectly through the Authenticate method.
@@ -933,9 +934,16 @@ func TestSSOProvider_Authenticate_NonInteractive_ErrorMessage(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = provider.Authenticate(ctx)
-	assert.Error(t, err)
-	// The error should wrap ErrAuthenticationFailed.
-	assert.ErrorContains(t, err, "authentication failed")
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+
+	// Regression: the hint used to point at `aws sso login`, which cannot help because Atmos
+	// keeps its own SSO token cache. It must point at `atmos auth login` instead, while
+	// keeping the CI/OIDC guidance.
+	hints := cockroachErrors.GetAllHints(err)
+	joined := strings.Join(hints, "\n")
+	assert.Contains(t, joined, "atmos auth login --provider="+testProviderName)
+	assert.NotContains(t, joined, "Use 'aws sso login' to authenticate")
+	assert.Contains(t, joined, "OIDC")
 }
 
 func TestNewSSOProvider_InvalidProviderKind(t *testing.T) {

@@ -21,14 +21,18 @@ import (
 // file's orchestration calls, so we don't have to implement the whole interface.
 type fakeAuthManager struct {
 	types.AuthManager
-	execErr error
-	whoami  *types.WhoamiInfo
-	authErr error
-	gotName string
+	execErr      error
+	whoami       *types.WhoamiInfo
+	authErr      error
+	gotName      string
+	gotOverrides types.IntegrationOverrides
 }
 
-func (f *fakeAuthManager) ExecuteIntegration(_ context.Context, name string) error {
+func (f *fakeAuthManager) ExecuteIntegration(_ context.Context, name string, opts ...types.IntegrationOption) error {
 	f.gotName = name
+	for _, opt := range opts {
+		opt(&f.gotOverrides)
+	}
 	return f.execErr
 }
 
@@ -80,7 +84,7 @@ func TestExecuteAKSUpdateKubeconfigViaIntegration(t *testing.T) {
 				return fake, tt.mgrErr
 			}
 
-			err := executeAKSUpdateKubeconfigViaIntegration("dev/aks")
+			err := executeAKSUpdateKubeconfigViaIntegration("dev/aks", "", "")
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -93,6 +97,27 @@ func TestExecuteAKSUpdateKubeconfigViaIntegration(t *testing.T) {
 			assert.Equal(t, tt.wantIntArg, fake.gotName)
 		})
 	}
+}
+
+// TestExecuteAKSUpdateKubeconfigViaIntegration_ForwardsOverrides is the
+// regression guard for issue #3386 on the Azure side: --kubeconfig/--alias
+// passed alongside --integration must reach ExecuteIntegration as overrides
+// instead of being silently dropped.
+func TestExecuteAKSUpdateKubeconfigViaIntegration_ForwardsOverrides(t *testing.T) {
+	restoreSeams(t)
+
+	initCliConfig = okInitConfig
+	fake := &fakeAuthManager{}
+	newAuthManager = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
+		return fake, nil
+	}
+
+	err := executeAKSUpdateKubeconfigViaIntegration("prod/aks", "/home/dev/.config/atmos/kube/prod", "prod-aks")
+	require.NoError(t, err)
+
+	assert.Equal(t, "prod/aks", fake.gotName)
+	assert.Equal(t, "/home/dev/.config/atmos/kube/prod", fake.gotOverrides.KubeconfigPath)
+	assert.Equal(t, "prod-aks", fake.gotOverrides.Alias)
 }
 
 func TestExecuteAKSUpdateKubeconfigDirect_Errors(t *testing.T) {

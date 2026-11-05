@@ -12,6 +12,8 @@ Atmos now supports **[component mocks](/stacks/components/mocks)**: literal, com
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The problem: a small dependency can make a plan non-local
 
 Consider an `app` component that takes its VPC ID from a `vpc` component:
@@ -82,8 +84,7 @@ Mutating Terraform commands—including `apply`, `deploy`, and `destroy`—and T
 
 Because `mocks` follows normal component inheritance and deep-merge behavior, a base component can provide shared fixtures while a concrete component replaces only the outputs that differ.
 
-## Try it
-
+## Try it out
 The repository includes a provider-free example with a producer, a consumer, the normal real-state flow, and the mocked flow:
 
 ```shell
@@ -106,3 +107,13 @@ atmos terraform plan app -s dev
 Read more about [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output), or use the example as the smallest starting point for adding mocks to your own stack.
 
 For usage and configuration, see [component output mocks](/stacks/components/mocks).
+
+<TryExample example="terraform-component-mocks">
+
+Resolve the component with mock outputs; no cloud credentials are needed.
+
+```shell
+atmos describe component app -s dev --use-mocks
+```
+
+</TryExample>

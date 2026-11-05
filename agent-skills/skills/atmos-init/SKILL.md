@@ -99,6 +99,7 @@ of failing" interactive prompt, shared verbatim between both commands).
 - `atmos init` is for *consuming* the built-in project-template catalog to bootstrap a
   new repo. Authoring a new template — even one you intend to use via `init` — is
   `atmos-scaffold` territory.
-- `--git` defaults to **true** here (opposite of `scaffold generate`) — an accidental
-  `atmos init` in an existing git repo will create an initial commit unless `--no-git`
-  is passed.
+- `--git` defaults to **true** here (opposite of `scaffold generate`). A new project
+  outside an existing Git repository gets an initial commit. Inside an existing
+  repository, Atmos skips Git initialization and the initial commit. Use `--no-git`
+  to disable initialization for a new standalone project.

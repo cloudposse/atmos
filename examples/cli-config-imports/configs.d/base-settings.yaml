@@ -1,0 +1,9 @@
+# Imported as a string entry (optional / fail open) from atmos.yaml.
+settings:
+  terminal:
+    max_width: 120
+    color: true
+    # Explicit false baseline so the `when: local` import (local-tooling.yaml) has something to
+    # override to true on workstations, and this stays false in CI where that import is skipped.
+    syntax_highlighting:
+      enabled: false

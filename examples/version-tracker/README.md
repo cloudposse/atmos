@@ -8,6 +8,11 @@ description: >-
 cast:
   file: /casts/examples/version-tracker/tracks-and-vars.cast
   title: atmos version tracker — independent dev/prod tracks
+related_docs:
+  - label: "Version tracking commands and catalog configuration"
+    url: /cli/commands/version/track
+  - label: "Version catalogs"
+    url: /cli/commands/version/track/add
 ---
 
 # Version Tracker

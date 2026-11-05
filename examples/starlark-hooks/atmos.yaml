@@ -1,0 +1,15 @@
+base_path: .
+
+settings:
+  metrics:
+    enabled: false
+
+components:
+  terraform:
+    base_path: components/terraform
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: stacks
+  included_paths: ["*.yaml"]
+  name_template: '{{.vars.stage}}'

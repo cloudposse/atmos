@@ -11,6 +11,8 @@ tests:
     env:
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
+      # Unroutable so the fake token can never reach api.github.com.
+      GITHUB_API_URL: "http://127.0.0.1:9"
       GITHUB_OUTPUT: "github-output.txt"
       GITHUB_STEP_SUMMARY: "github-step-summary.txt"
       GITHUB_REPOSITORY: "test-owner/test-repo"
@@ -50,6 +52,8 @@ tests:
     env:
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
+      # Unroutable so the fake token can never reach api.github.com.
+      GITHUB_API_URL: "http://127.0.0.1:9"
       GITHUB_OUTPUT: "github-output.txt"
       GITHUB_STEP_SUMMARY: "github-step-summary.txt"
       GITHUB_REPOSITORY: "test-owner/test-repo"
@@ -94,6 +98,8 @@ tests:
     env:
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
+      # Unroutable so the fake token can never reach api.github.com.
+      GITHUB_API_URL: "http://127.0.0.1:9"
       GITHUB_OUTPUT: "github-output.txt"
       GITHUB_STEP_SUMMARY: "github-step-summary.txt"
       GITHUB_REPOSITORY: "test-owner/test-repo"

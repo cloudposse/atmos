@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -55,29 +56,11 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 	ui.Info(fmt.Sprintf("AI tools initialized: %d total", registry.Count()))
 	ui.Info(fmt.Sprintf("AI provider: %s", atmosConfig.AI.DefaultProvider))
 
-	// Initialize permission cache for persistent decisions.
-	permCache, err := permission.NewPermissionCache(atmosConfig.BasePath)
+	// Create permission checker (mode, allow/restrict/block lists, cached prompter).
+	permChecker, err := permission.NewFromConfig(atmosConfig)
 	if err != nil {
-		log.Warnf("Failed to initialize permission cache: %v", err)
-		// Continue without cache - will prompt every time.
-		permCache = nil
+		return nil, err
 	}
-
-	// Create permission checker with cache-aware prompter.
-	permConfig := &permission.Config{
-		Mode:       getPermissionMode(atmosConfig),
-		Allowed:    atmosConfig.AI.Tools.Allowed,
-		Restricted: atmosConfig.AI.Tools.Restricted,
-		Blocked:    atmosConfig.AI.Tools.Blocked,
-		YOLOMode:   atmosConfig.AI.Tools.YOLOMode,
-	}
-	var prompter permission.Prompter
-	if permCache != nil {
-		prompter = permission.NewCLIPrompterWithCache(permCache)
-	} else {
-		prompter = permission.NewCLIPrompter()
-	}
-	permChecker := permission.NewChecker(permConfig, prompter)
 
 	// Create tool executor.
 	executor := tools.NewExecutor(registry, permChecker, tools.DefaultTimeout)
@@ -88,6 +71,12 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 		Executor: executor,
 		MCPMgr:   mcpMgr,
 	}, nil
+}
+
+// isInvalidToolMode reports whether tool setup failed because ai.tools.mode is not a valid value.
+// Callers stop on it: carrying on without tools would silently drop the user's setting.
+func isInvalidToolMode(err error) bool {
+	return errors.Is(err, errUtils.ErrAIToolsInvalidMode)
 }
 
 // registerMCPServerTools registers external MCP server tools with toolchain resolution,

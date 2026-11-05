@@ -1,0 +1,7 @@
+vars:
+  stage: dev
+  typo: !terraform.staet app dev output
+  typed: !!str '!terraform.staet is data'
+  verbatim: !<tag:yaml.org,2002:str> '!terraform.staet is also data'
+  literal: !literal '!terraform.staet is literal'
+  number: !!int 42

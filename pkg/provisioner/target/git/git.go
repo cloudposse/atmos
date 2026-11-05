@@ -15,15 +15,21 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	// Blank imports register the "cli" git provider (the only v1 backend) so
+	// atmosgit.NewProvider("cli") resolves wherever the git target is compiled in, and the pull
+	// request publishers pull_request mode picks from a repository URI. The target never names
+	// a forge itself; supporting another forge means importing its provider here.
+	_ "github.com/cloudposse/atmos/pkg/git/providers/azuredevops"
+	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
+	_ "github.com/cloudposse/atmos/pkg/git/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-
-	// Blank import registers the "cli" git provider (the only v1 backend) so
-	// atmosgit.NewProvider("cli") resolves wherever the git target is compiled in.
-	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
 )
 
 const (
@@ -51,7 +57,7 @@ type config struct {
 	Identity      string
 	CommitMessage string
 	Signing       string
-	PullRequest   bool
+	PullRequest   schema.ProvisionTargetPullRequest
 	// Split selects file-vs-directory semantics for Path: true fans out one file
 	// per manifest under Path (a directory); false writes Path as a single
 	// multi-document YAML file. nil defers to resolveSplit's extension inference.
@@ -83,17 +89,15 @@ type repoSession struct {
 
 // Deliver writes the artifact files into the deployment repository's configured
 // path, commits the scoped path, and pushes. Clone is reconcile (clone-if-absent,
-// otherwise fetch + fast-forward). A no-op (no changes) is not an error.
+// otherwise fetch + fast-forward). A no-op (no changes) is not an error. With
+// pull_request.enabled, the commit lands on a feature branch and a pull request
+// into the repository's branch is created or updated (see deliverPullRequest).
 func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) error {
 	defer perf.Track(in.AtmosConfig, "target.git.Deliver")()
 
 	cfg, err := parseConfig(in.TargetConfig)
 	if err != nil {
 		return err
-	}
-
-	if cfg.PullRequest {
-		return fmt.Errorf("%w: target %q", errUtils.ErrGitPullRequestNotSupported, in.TargetName)
 	}
 
 	resolved, err := atmosgit.ResolveRepository(&in.AtmosConfig.Git, cfg.Repository)
@@ -120,6 +124,11 @@ func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) e
 			Env:     env,
 		},
 		resolved: resolved,
+	}
+
+	if cfg.PullRequest.Enabled {
+		// Pull-request mode chooses which branch to reconcile, so it runs reconcile itself.
+		return deliverPullRequest(ctx, session, &cfg, in)
 	}
 
 	if err := reconcile(ctx, session); err != nil {
@@ -269,6 +278,13 @@ func reconcile(ctx context.Context, s *repoSession) error {
 // commitAndPush stages the managed path, commits any changes, and pushes when a
 // commit was created.
 func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *target.ProvisionArtifact) error {
+	_, err := commitAndPushResult(ctx, s, cfg, artifact, false)
+	return err
+}
+
+// commitAndPushResult optionally pushes unchanged content to retry a previously
+// failed push. Reconciliation accepts a local branch that is ahead of the remote.
+func commitAndPushResult(ctx context.Context, s *repoSession, cfg *config, artifact *target.ProvisionArtifact, pushUnchanged bool) (string, error) {
 	var result atmosgit.CommitResult
 	stderr, err := atmosgit.CaptureStderr(s.provider, func() error {
 		res, commitErr := s.provider.Commit(ctx, &atmosgit.CommitOptions{
@@ -285,11 +301,11 @@ func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *t
 		return commitErr
 	})
 	if err != nil {
-		return atmosgit.WrapOperationError("commit Git changes", s.rc.Workdir, stderr, err, "")
+		return result.SHA, atmosgit.WrapOperationError("commit Git changes", s.rc.Workdir, stderr, err, "")
 	}
-	if !result.Committed {
+	if !result.Committed && !pushUnchanged {
 		// Nothing changed in the managed path; a no-op is a clean success.
-		return nil
+		return "", nil
 	}
 
 	stderr, err = atmosgit.CaptureStderr(s.provider, func() error {
@@ -298,7 +314,7 @@ func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *t
 			Retries:     s.resolved.PushRetries,
 		})
 	})
-	return atmosgit.WrapOperationError(
+	return result.SHA, atmosgit.WrapOperationError(
 		"push Git repository",
 		s.rc.Workdir,
 		stderr,
@@ -419,8 +435,10 @@ func parseConfig(block map[string]any) (config, error) {
 		cfg.CommitMessage = stringField(commit, "message")
 		cfg.Signing = stringField(commit, "signing")
 	}
-	if pr, ok := block["pull_request"].(map[string]any); ok {
-		cfg.PullRequest, _ = pr["enabled"].(bool)
+	if raw, present := block["pull_request"]; present {
+		if err := mapstructure.Decode(raw, &cfg.PullRequest); err != nil {
+			return config{}, fmt.Errorf("%w: %w", errUtils.ErrGitTargetPullRequestConfig, err)
+		}
 	}
 	return cfg, nil
 }

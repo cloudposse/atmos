@@ -46,7 +46,7 @@ func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 
@@ -57,6 +57,118 @@ func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
 	assert.Equal(t, deletionTypeComponent, deleted[0].DeletionType)
 	assert.True(t, deleted[0].Deleted)
 	assert.Contains(t, deleted[0].AffectedAll, affectedReasonDeleted)
+}
+
+// TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted guards against
+// helm/kubernetes deletions going undetected (both were previously omitted
+// from the hardcoded [terraform, helmfile, packer] search list). Registered custom
+// providers must remain excluded until the live affected path supports them.
+//
+//nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
+func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T) {
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType, "test-provider")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev-us-east-1": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"nginx-ingress": map[string]any{
+						"vars": map[string]any{"replicas": 3},
+					},
+				},
+				cfg.KubernetesComponentType: map[string]any{
+					"cert-manager": map[string]any{
+						"vars": map[string]any{"namespace": "cert-manager"},
+					},
+				},
+				"test-provider": map[string]any{
+					"custom-widget": map[string]any{
+						"vars": map[string]any{"name": "custom-widget"},
+					},
+				},
+			},
+		},
+	}
+
+	// All three components are deleted in HEAD; only the supported types are reported.
+	currentStacks := map[string]any{
+		"dev-us-east-1": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType:       map[string]any{},
+				cfg.KubernetesComponentType: map[string]any{},
+			},
+		},
+	}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
+	require.NoError(t, err)
+	require.Len(t, deleted, 2)
+
+	byComponent := make(map[string]schema.Affected, len(deleted))
+	for _, d := range deleted {
+		byComponent[d.Component] = d
+	}
+	require.Contains(t, byComponent, "nginx-ingress")
+	require.Contains(t, byComponent, "cert-manager")
+	assert.Equal(t, cfg.HelmComponentType, byComponent["nginx-ingress"].ComponentType)
+	assert.Equal(t, cfg.KubernetesComponentType, byComponent["cert-manager"].ComponentType)
+}
+
+// TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted guards the
+// processAllComponentsAsDeleted path (entire-stack deletion) for canonical
+// component types while excluding unsupported registered custom providers.
+// The sibling test above exercises processDeletedComponentsInStack (a component
+// removed from a stack that still exists); this exercises the other deletion loop.
+//
+//nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
+func TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted(t *testing.T) {
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType, "test-provider")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev-us-east-1": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"nginx-ingress": map[string]any{
+						"vars": map[string]any{"replicas": 3},
+					},
+				},
+				cfg.KubernetesComponentType: map[string]any{
+					"cert-manager": map[string]any{
+						"vars": map[string]any{"namespace": "cert-manager"},
+					},
+				},
+				"test-provider": map[string]any{
+					"custom-widget": map[string]any{
+						"vars": map[string]any{"name": "custom-widget"},
+					},
+				},
+			},
+		},
+	}
+
+	// The entire stack is gone in HEAD.
+	currentStacks := map[string]any{}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
+	require.NoError(t, err)
+	require.Len(t, deleted, 2)
+
+	byComponent := make(map[string]schema.Affected, len(deleted))
+	for _, d := range deleted {
+		byComponent[d.Component] = d
+	}
+	require.Contains(t, byComponent, "nginx-ingress")
+	require.Contains(t, byComponent, "cert-manager")
+	assert.Equal(t, cfg.HelmComponentType, byComponent["nginx-ingress"].ComponentType)
+	assert.Equal(t, cfg.KubernetesComponentType, byComponent["cert-manager"].ComponentType)
+	assert.Equal(t, affectedReasonDeletedStack, byComponent["nginx-ingress"].Affected)
+	assert.Equal(t, deletionTypeStack, byComponent["nginx-ingress"].DeletionType)
+	assert.Equal(t, affectedReasonDeletedStack, byComponent["cert-manager"].Affected)
+	assert.Equal(t, deletionTypeStack, byComponent["cert-manager"].DeletionType)
 }
 
 // TestDetectDeletedComponents_EntireStackDeleted tests detection when an entire stack is deleted.
@@ -84,7 +196,7 @@ func TestDetectDeletedComponents_EntireStackDeleted(t *testing.T) {
 	// Stack doesn't exist in HEAD.
 	currentStacks := map[string]any{}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 2)
 
@@ -140,7 +252,7 @@ func TestDetectDeletedComponents_AbstractComponentNotReported(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	// Abstract component should not be reported as deleted.
 	require.Len(t, deleted, 0)
@@ -189,7 +301,7 @@ func TestDetectDeletedComponents_WithStackFilter(t *testing.T) {
 	}
 
 	// Filter to only dev stack.
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "dev-us-east-1")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "dev-us-east-1", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	assert.Equal(t, "prometheus", deleted[0].Component)
@@ -236,7 +348,7 @@ func TestDetectDeletedComponents_MultipleComponentTypes(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 3)
 
@@ -249,6 +361,165 @@ func TestDetectDeletedComponents_MultipleComponentTypes(t *testing.T) {
 	assert.True(t, componentTypes[cfg.TerraformComponentType])
 	assert.True(t, componentTypes[cfg.HelmfileComponentType])
 	assert.True(t, componentTypes[cfg.PackerComponentType])
+}
+
+// TestDetectDeletedComponents_NativeHelmComponentDeleted is the regression test for #3199: a
+// deleted native `helm` component must be reported the same way Terraform, Helmfile, and Packer
+// deletions are. Before the fix, the deletion-detection loops omitted the `helm` component type,
+// so a deleted native Helm release produced no affected item (added Helm components were already
+// detected by the separate added/modified path, which is why the omission was easy to miss).
+func TestDetectDeletedComponents_NativeHelmComponentDeleted(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"hello": map[string]any{
+						"vars": map[string]any{"name": "hello"},
+					},
+				},
+			},
+		},
+	}
+
+	currentStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{},
+			},
+		},
+	}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
+	require.NoError(t, err)
+	require.Len(t, deleted, 1)
+	assert.Equal(t, "hello", deleted[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, deleted[0].ComponentType)
+	assert.Equal(t, "dev", deleted[0].Stack)
+	assert.Equal(t, affectedReasonDeleted, deleted[0].Affected)
+	assert.Equal(t, deletionTypeComponent, deleted[0].DeletionType)
+	assert.True(t, deleted[0].Deleted)
+}
+
+// TestDetectDeletedComponents_EntireStackDeletedNativeHelm verifies that when an entire stack
+// containing a native helm component is deleted, the helm component is reported with the stack
+// deletion type. Regression coverage for #3199.
+func TestDetectDeletedComponents_EntireStackDeletedNativeHelm(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"hello": map[string]any{
+						"vars": map[string]any{"name": "hello"},
+					},
+				},
+			},
+		},
+	}
+
+	// Stack doesn't exist in HEAD.
+	currentStacks := map[string]any{}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
+	require.NoError(t, err)
+	require.Len(t, deleted, 1)
+	assert.Equal(t, "hello", deleted[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, deleted[0].ComponentType)
+	assert.Equal(t, affectedReasonDeletedStack, deleted[0].Affected)
+	assert.Equal(t, deletionTypeStack, deleted[0].DeletionType)
+	assert.True(t, deleted[0].Deleted)
+}
+
+// TestDetectDeletedComponents_AllProvisionableTypes verifies deletions are detected for every
+// component type describe-affected evaluates: the full eight-type canonical set (terraform,
+// helmfile, packer, ansible, container, emulator, kubernetes, helm). Regression coverage for
+// #3199 (native helm/kubernetes originally omitted) and #3203 (ansible/container/emulator added).
+func TestDetectDeletedComponents_AllProvisionableTypes(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	types := []string{
+		cfg.TerraformComponentType,
+		cfg.HelmfileComponentType,
+		cfg.PackerComponentType,
+		cfg.AnsibleComponentType,
+		cfg.ContainerComponentType,
+		cfg.EmulatorComponentType,
+		cfg.KubernetesComponentType,
+		cfg.HelmComponentType,
+	}
+
+	remoteComponents := map[string]any{}
+	currentComponents := map[string]any{}
+	for _, ct := range types {
+		remoteComponents[ct] = map[string]any{
+			ct + "-comp": map[string]any{
+				"vars": map[string]any{"enabled": true},
+			},
+		}
+		currentComponents[ct] = map[string]any{}
+	}
+
+	remoteStacks := map[string]any{"dev": map[string]any{"components": remoteComponents}}
+	currentStacks := map[string]any{"dev": map[string]any{"components": currentComponents}}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
+	require.NoError(t, err)
+	require.Len(t, deleted, len(types))
+
+	got := make(map[string]bool)
+	for _, d := range deleted {
+		got[d.ComponentType] = true
+		assert.True(t, d.Deleted)
+		assert.Equal(t, deletionTypeComponent, d.DeletionType)
+	}
+	for _, ct := range types {
+		assert.True(t, got[ct], "deleted %s component must be detected", ct)
+	}
+}
+
+// TestDetectDeletedComponents_EntireStackDeletedSkipsAbstractAndMalformed covers the entire-stack
+// deletion path (processAllComponentsAsDeleted): within a deleted stack, abstract components and
+// malformed (non-map) component sections are skipped, while a real component is still reported.
+func TestDetectDeletedComponents_EntireStackDeletedSkipsAbstractAndMalformed(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"cidr": "10.0.0.0/16"},
+					},
+					"abstract-base": map[string]any{
+						"metadata": map[string]any{"type": "abstract"},
+						"vars":     map[string]any{"enabled": true},
+					},
+					"malformed": "not-a-map",
+				},
+			},
+		},
+	}
+
+	// Entire stack is gone in HEAD.
+	currentStacks := map[string]any{}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
+	require.NoError(t, err)
+	// Only the real "vpc" component is reported; abstract and malformed are skipped.
+	require.Len(t, deleted, 1)
+	assert.Equal(t, "vpc", deleted[0].Component)
+	assert.Equal(t, deletionTypeStack, deleted[0].DeletionType)
 }
 
 // TestDetectDeletedComponents_NoComponentsSection tests when HEAD stack has no components section.
@@ -279,7 +550,7 @@ func TestDetectDeletedComponents_NoComponentsSection(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	assert.Equal(t, "vpc", deleted[0].Component)
@@ -306,7 +577,7 @@ func TestDetectDeletedComponents_NoDeletions(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&stacks, &stacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&stacks, &stacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 0)
 }
@@ -337,7 +608,7 @@ func TestDetectDeletedComponents_StackSlug(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	// Component name with "/" should have it replaced with "-" in stack_slug.
@@ -451,7 +722,7 @@ func TestDetectDeletedComponents_MalformedData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			deleted, err := detectDeletedComponents(&tt.remoteStacks, &tt.currentStacks, atmosConfig, "")
+			deleted, err := detectDeletedComponents(&tt.remoteStacks, &tt.currentStacks, atmosConfig, "", AffectedFilter{})
 			require.NoError(t, err, tt.description)
 			assert.Len(t, deleted, tt.expectedCount, tt.description)
 		})
@@ -501,7 +772,7 @@ func TestDetectDeletedComponents_ComponentPath(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 2)
 
@@ -519,6 +790,59 @@ func TestDetectDeletedComponents_ComponentPath(t *testing.T) {
 	assert.Equal(t, expectedVpcPath, componentPaths["vpc"])
 	// eks uses explicit "component" field value as folder.
 	assert.Equal(t, expectedEksPath, componentPaths["eks"])
+}
+
+// TestDetectDeletedComponents_ComponentPathNewTypes verifies BuildComponentPath resolves the
+// component path for deleted ansible and container components, and leaves it empty for emulator
+// (no filesystem source tree). See #3204.
+func TestDetectDeletedComponents_ComponentPathNewTypes(t *testing.T) {
+	t.Parallel()
+
+	basePath := "project"
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Ansible:   schema.Ansible{BasePath: filepath.Join("components", "ansible")},
+			Container: schema.ContainerComponentsConfig{BasePath: filepath.Join("components", "container")},
+		},
+	}
+
+	remoteStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.AnsibleComponentType: map[string]any{
+					"webserver": map[string]any{"vars": map[string]any{"playbook": "site.yml"}},
+				},
+				cfg.ContainerComponentType: map[string]any{
+					"app": map[string]any{"vars": map[string]any{"image": "app:1.0"}},
+				},
+				cfg.EmulatorComponentType: map[string]any{
+					"gcs": map[string]any{"vars": map[string]any{"port": "8080"}},
+				},
+			},
+		},
+	}
+	currentStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.AnsibleComponentType:   map[string]any{},
+				cfg.ContainerComponentType: map[string]any{},
+				cfg.EmulatorComponentType:  map[string]any{},
+			},
+		},
+	}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
+	require.NoError(t, err)
+	require.Len(t, deleted, 3)
+
+	paths := make(map[string]string)
+	for _, d := range deleted {
+		paths[d.Component] = d.ComponentPath
+	}
+	assert.Equal(t, filepath.Join(basePath, "components", "ansible", "webserver"), paths["webserver"])
+	assert.Equal(t, filepath.Join(basePath, "components", "container", "app"), paths["app"])
+	assert.Empty(t, paths["gcs"], "emulator components have no filesystem source path")
 }
 
 // TestIsAbstractComponent tests the isAbstractComponent helper.

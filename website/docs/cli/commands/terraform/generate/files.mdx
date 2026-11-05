@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: files
 description: Generate auxiliary configuration files for Terraform components
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -183,3 +185,15 @@ components:
         ```
     </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="generate-files">
+
+Preview the generated files without writing them.
+
+```shell
+atmos terraform generate files demo -s dev --dry-run
+```
+
+</TryExample>

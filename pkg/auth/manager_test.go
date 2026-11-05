@@ -507,7 +507,8 @@ func TestManager_Whoami_FallbackAuthenticationFails(t *testing.T) {
 	// Should return error.
 	assert.Error(t, err)
 	assert.Nil(t, info)
-	assert.Contains(t, err.Error(), "failed to authenticate via credential chain")
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.Equal(t, `authentication failed for identity "dev" via provider "p": provider auth failed`, err.Error())
 }
 
 func TestManager_Whoami_FallbackAuthenticationSucceeds(t *testing.T) {
@@ -949,7 +950,7 @@ func TestManager_Authenticate_PostAuthenticatePreservesHints(t *testing.T) {
 		validator:       dummyValidator{},
 	}
 
-	_, err := m.Authenticate(types.WithSuppressAuthErrors(context.Background(), true), "dev")
+	_, err := m.Authenticate(context.Background(), "dev")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	assert.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)

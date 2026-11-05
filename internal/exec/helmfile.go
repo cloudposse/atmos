@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -33,11 +34,70 @@ const (
 
 	// Log key constants.
 	logKeyCluster = "cluster"
+
+	// HelmDiffColorEnvVar is the env var the helm-diff plugin reads to decide
+	// whether to colorize its output, overriding its own (unreliable, once piped
+	// through helmfile) isatty check.
+	helmDiffColorEnvVar = "HELM_DIFF_COLOR"
 )
 
+// helmDiffColorEnv returns "HELM_DIFF_COLOR=true" when colorEnabled is true and
+// none of globalEnv, envVars, or the parent process environment already set
+// HELM_DIFF_COLOR, or "" when no override is needed (color disabled, or the
+// user already decided -- including explicitly setting HELM_DIFF_COLOR to an
+// empty string to opt out).
+//
+// The globalEnv parameter is atmos.yaml's top-level `env` section
+// (atmosConfig.Env). It must be checked here, not left to ExecuteShellCommand's
+// own env merge: that merge is process env < globalEnv < envVars
+// (env.MergeGlobalEnv appends globalEnv after the process env, then
+// ExecuteShellCommand appends envVars after that, and exec.Cmd resolves
+// duplicate "KEY=value" entries by last-one-wins). Since envVars is the same
+// slice this override gets appended to, an override added here would
+// unconditionally outrank an explicit `env: HELM_DIFF_COLOR: false` in
+// atmos.yaml regardless of this function's own envVars/os.LookupEnv checks.
+//
+// Presence in the parent process environment is checked with os.LookupEnv rather
+// than viper: viper.BindEnv is forbidden outside pkg/flags/ (see .golangci.yml's
+// forbidigo config), and even there it couldn't tell "unset" apart from
+// "explicitly set to empty" by default (viper's getEnv treats an empty env var
+// as unset unless AllowEmptyEnv is toggled globally). The ok result from
+// os.LookupEnv is the repo's existing idiom for exactly this presence check --
+// see pkg/flags/standard_parser.go's IsBoolFlagExplicitlySet and
+// pkg/flags/interactive.go's ATMOS_FORCE_TTY check.
+func helmDiffColorEnv(envVars []string, globalEnv map[string]string, colorEnabled bool) string {
+	if !colorEnabled {
+		return ""
+	}
+	if _, explicitlySet := globalEnv[helmDiffColorEnvVar]; explicitlySet {
+		return ""
+	}
+	if envKeyIsSet(envVars, helmDiffColorEnvVar) {
+		return ""
+	}
+	if _, explicitlySet := os.LookupEnv(helmDiffColorEnvVar); explicitlySet {
+		return ""
+	}
+	return helmDiffColorEnvVar + "=true"
+}
+
+// helmDiffColorEnabled reports whether atmos's color decision for the stream
+// helm-diff's output actually reaches (helmfile's stdout, piped through to
+// atmos's own stdout) says color should be used. Kept as its own small,
+// Terminal-injectable function -- rather than inlined at the call site -- so
+// a test can swap in a fake Terminal whose ColorProfileFor varies by stream,
+// proving this asks about Stdout specifically rather than regressing to the
+// general, stderr-biased ColorProfile().
+func helmDiffColorEnabled(term terminal.Terminal) bool {
+	return term.ColorProfileFor(terminal.Stdout) != terminal.ColorNone
+}
+
 // ExecuteHelmfile executes helmfile commands.
-func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
+//
+//nolint:gocognit,revive,cyclop,funlen,gocritic // Existing execution pipeline; reporting adds only a deferred snapshot.
+func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecuteHelmfile")()
+	defer attachComponentReporting(&resultErr, &info, "helmfile", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -45,12 +105,19 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Add the `command` from `components.helmfile.command` from `atmos.yaml`.
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+	}
 	if info.Command == "" {
 		if atmosConfig.Components.Helmfile.Command != "" {
 			info.Command = atmosConfig.Components.Helmfile.Command
 		} else {
 			info.Command = cfg.HelmfileComponentType
 		}
+	}
+
+	if info.DryRun {
+		return previewHelmfile(&atmosConfig, &info)
 	}
 
 	if info.SubCommand == "version" {
@@ -64,7 +131,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			[]string{info.SubCommand},
 			"",
 			tenv.EnvVars(),
-			false,
+			info.DryRun,
 			info.RedirectStdErr,
 		)
 	}
@@ -134,21 +201,8 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
-	if (info.SubCommand == "sync" || info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
-		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
-	}
-
-	// Check if the component is locked (`metadata.locked` is set to true).
-	if info.ComponentIsLocked {
-		// Allow read-only commands, block modification commands.
-		switch info.SubCommand {
-		case "sync", "apply", "deploy", "delete", "destroy":
-			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
-				errUtils.ErrLockedComponentCantBeProvisioned,
-				filepath.Join(info.ComponentFolderPrefix, info.Component))
-		}
+	if err := checkHelmfileRestrictions(&info); err != nil {
+		return err
 	}
 
 	// Resolve and install component dependencies.
@@ -279,18 +333,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		log.Debug("Downloading and saving kubeconfig", logKeyCluster, clusterName, "path", kubeconfigPath)
 
 		// Build aws eks update-kubeconfig command args.
-		awsArgs := []string{
-			"eks",
-			"update-kubeconfig",
-			fmt.Sprintf("--name=%s", clusterName),
-			fmt.Sprintf("--region=%s", stackContext.Region),
-			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
-		}
-
-		// Add profile flag if using deprecated profile pattern (not identity auth).
-		if !useIdentityAuth && helmAwsProfile != "" {
-			awsArgs = append([]string{"--profile", helmAwsProfile}, awsArgs...)
-		}
+		awsArgs := buildHelmfileEKSArgs(clusterName, stackContext.Region, kubeconfigPath, useIdentityAuth, helmAwsProfile)
 
 		err = ExecuteShellCommand(
 			atmosConfig,
@@ -342,12 +385,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	log.Debug("Using", "working dir", workingDir)
 
 	// Prepare arguments and flags.
-	allArgsAndFlags := []string{"--state-values-file", varFile}
-	if info.GlobalOptions != nil && len(info.GlobalOptions) > 0 {
-		allArgsAndFlags = append(allArgsAndFlags, info.GlobalOptions...)
-	}
-	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
-	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
+	allArgsAndFlags := buildHelmfileArgs(&info, varFile, info.SubCommand)
 
 	// Convert ComponentEnvSection to ComponentEnvList.
 	// ComponentEnvSection is populated by auth hooks and stack config env sections.
@@ -397,6 +435,25 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
+
+	// Helmfile pipes the helm-diff plugin's output so it can label it per release,
+	// which makes helm-diff's own isatty check on its stdout see a pipe instead of
+	// the real terminal, even when the user's terminal supports color. HELM_DIFF_COLOR
+	// is the documented override for exactly this case (databus23/helm-diff); set it
+	// when atmos's own color decision says color should be on and the user hasn't
+	// already set it themselves.
+	//
+	// ColorProfileFor(Stdout), not ColorProfile(): helmfile's labeled diff output
+	// (and thus helm-diff's ANSI codes) reaches atmos's own stdout, not stderr.
+	// ColorProfile() is cached from stderr's TTY status (atmos's own UI output),
+	// so it would say "color enabled" even when stdout is redirected to a file
+	// but stderr is still an interactive terminal -- leaking ANSI codes into
+	// non-interactive output. ColorProfileFor(Stdout) still honors NO_COLOR/
+	// --force-color/CLICOLOR_FORCE the same way; only the TTY-dependent
+	// auto-detect fallback changes to check the stream the output actually goes to.
+	if v := helmDiffColorEnv(envVars, atmosConfig.Env, helmDiffColorEnabled(terminal.New())); v != "" {
+		envVars = append(envVars, v)
+	}
 
 	envVars, err = prepareComponentAuthEnvironment(authManager, info.Identity, envVars)
 	if err != nil {
@@ -529,10 +586,7 @@ func deliverHelmfileToTarget(
 	info *schema.ConfigAndStacksInfo,
 	d helmfileTargetDelivery,
 ) (string, error) {
-	templateArgs := []string{"--state-values-file", d.varFile}
-	templateArgs = append(templateArgs, info.GlobalOptions...)
-	templateArgs = append(templateArgs, "template")
-	templateArgs = append(templateArgs, info.AdditionalArgsAndFlags...)
+	templateArgs := buildHelmfileArgs(info, d.varFile, "template")
 
 	var envProvider target.IdentityEnvironmentProvider
 	if mgr, ok := info.AuthManager.(auth.AuthManager); ok {

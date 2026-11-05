@@ -88,7 +88,7 @@ atmos git init flux-deploy -- --template=/path/to/git-template
 | `--from=<uri>` (default) | Single fresh initial commit (`Initialize from <uri>`); source history discarded | `origin` → configured `uri` |
 | `--from=<uri> --keep-history` | Source's full history preserved | `origin` → configured `uri`, `upstream` → source `uri` (pull future template updates with `git pull upstream`) |
 
-In fresh mode the configured `branch` names the **new** history (`git init -b <branch>`); the source's default branch supplies the content. In keep-history mode the configured `branch` must exist in the source repository, because the history is the source's.
+In fresh mode the configured `branch` names the **new** history (`git init -b <branch>`); the source's default branch supplies the content. In keep-history mode the source is cloned at its default branch and the configured `branch` is created there, so it does not need to exist in the source repository.
 
 The initial commit created in fresh mode honors the repository's [`commit.signing`](/cli/configuration/git) mode and `commit.author` override.
 

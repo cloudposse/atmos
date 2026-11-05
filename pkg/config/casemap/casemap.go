@@ -96,31 +96,38 @@ func ExtractFromYAML(rawYAML []byte, paths []string) (*CaseMaps, error) {
 // the top-level `env:` already is. Command-level `env:` written as a list of
 // {key, value} pairs is unaffected by Viper and is intentionally not collected here.
 func CollectEnvKeysRecursive(rawYAML []byte) (CaseMap, error) {
+	return CollectKeysRecursive(rawYAML, "env")
+}
+
+// CollectKeysRecursive walks the raw YAML and returns a CaseMap of lowercase->original for every
+// key found under any mapping-valued field named fieldName (matched case-insensitively) at any
+// depth, including inside lists. A field of that name whose value is not a mapping is ignored.
+func CollectKeysRecursive(rawYAML []byte, fieldName string) (CaseMap, error) {
 	var root interface{}
 	if err := yaml.Unmarshal(rawYAML, &root); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 	caseMap := make(CaseMap)
-	collectEnvKeys(root, false, caseMap)
+	collectFieldKeys(root, false, fieldName, caseMap)
 	return caseMap, nil
 }
 
-// collectEnvKeys recurses through arbitrary YAML structure. When underEnv is true,
-// the current node is the value of an `env:` mapping, so its keys are env var names.
-func collectEnvKeys(node interface{}, underEnv bool, out CaseMap) {
+// collectFieldKeys recurses through arbitrary YAML structure. When underField is true, the
+// current node is the value of a field named fieldName, so its keys are recorded.
+func collectFieldKeys(node interface{}, underField bool, fieldName string, out CaseMap) {
 	switch n := node.(type) {
 	case map[string]interface{}:
-		if underEnv {
+		if underField {
 			for key := range n {
 				out[strings.ToLower(key)] = key
 			}
 		}
 		for key, value := range n {
-			collectEnvKeys(value, strings.EqualFold(key, "env"), out)
+			collectFieldKeys(value, strings.EqualFold(key, fieldName), fieldName, out)
 		}
 	case []interface{}:
 		for _, item := range n {
-			collectEnvKeys(item, false, out)
+			collectFieldKeys(item, false, fieldName, out)
 		}
 	}
 }

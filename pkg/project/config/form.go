@@ -118,12 +118,16 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 	}
 
 	var groups []*huh.Group
+	seenNames := make(map[string]struct{}, len(scaffoldConfig.Spec.Fields))
 	for i := range scaffoldConfig.Spec.Fields {
 		field := &scaffoldConfig.Spec.Fields[i]
-		if _, exists := valueGetters[field.Name]; exists {
+		if _, exists := seenNames[field.Name]; exists {
 			// A silent map overwrite here would still render both prompts but
 			// drop one of their answers when extractFormValues runs, since only
-			// the last getter for this name survives.
+			// the last getter for this name survives. Checked against
+			// seenNames (every field, computed or not) rather than
+			// valueGetters, since a computed field below never gets a getter
+			// at all but must still collide with a same-named regular field.
 			return nil, nil, errUtils.Build(errUtils.ErrDuplicateScaffoldFieldName).
 				WithExplanationf("Field name `%s` is declared more than once in scaffold.yaml", field.Name).
 				WithHint("Each field's `name` must be unique so its answer isn't silently dropped").
@@ -131,6 +135,15 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 				WithExitCode(2).
 				Err()
 		}
+		seenNames[field.Name] = struct{}{}
+
+		if field.Type == fieldTypeComputed {
+			// Computed fields are never prompted for -- ComputeFields derives
+			// their value from other answers after the form completes, so no
+			// huh field/group (and no valueGetters entry) is created here.
+			continue
+		}
+
 		huhField, getter := createFieldInContext(field.Name, field, formValues, ctx)
 		valueGetters[field.Name] = getter
 
@@ -624,6 +637,14 @@ func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[st
 			valueStr = strings.Join(v, ", ")
 		case bool:
 			valueStr = fmt.Sprintf("%t", v)
+		case map[string]interface{}, []interface{}:
+			// A computed field's value: can be a literal of any type, not just
+			// a template-expression string -- a decoded YAML map or a non-
+			// string list has no sensible flat single-line rendering, and
+			// falling through to %v would print Go's raw internal syntax
+			// (e.g. "map[eastasia:map[abbreviation:eas ...]]") on this
+			// review screen. Found via a /field-test pass.
+			valueStr = "(complex data)"
 		default:
 			valueStr = fmt.Sprintf("%v", v)
 		}
@@ -631,6 +652,9 @@ func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[st
 		source := valueSources[key]
 		if source == "" {
 			source = "default"
+		}
+		if scaffoldConfig.Spec.Fields[i].Type == fieldTypeComputed {
+			source = "computed"
 		}
 
 		rows = append(rows, []string{

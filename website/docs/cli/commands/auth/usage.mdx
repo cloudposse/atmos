@@ -5,6 +5,8 @@ sidebar_class_name: command
 description: Atmos Authentication Commands
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import DocCardList from '@theme/DocCardList';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
@@ -120,6 +122,7 @@ Using the equals syntax (`--identity=admin`) is unambiguous and works in all con
 
 **Azure**
 - **Subscription**: `azure/subscription`
+- **PIM Role Activation**: `azure/pim-role`
 
 **GCP**
 - **Service Account**: `gcp/service-account`
@@ -584,3 +587,15 @@ ATMOS_LOG_LEVEL=Debug atmos auth whoami
 - Use least-privilege access
 - Validate configurations regularly: `atmos auth validate`
 - Use shorter session durations for high-security environments
+
+## Try it out
+
+<TryExample example="demo-auth">
+
+Inspect the sample identities locally. Configure your own provider and account details before logging in.
+
+```shell
+atmos auth list
+```
+
+</TryExample>

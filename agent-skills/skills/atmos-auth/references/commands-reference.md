@@ -89,16 +89,28 @@ atmos auth whoami -i                    # Interactive selector
 ## atmos auth validate
 
 Validate the `auth` configuration in `atmos.yaml` for syntax errors, missing required fields, circular
-dependency chains, and logical inconsistencies.
+dependency chains, and logical inconsistencies. Add `--stack` to validate every concrete component’s
+merged auth after imports and inheritance, including its component overrides. `--component` narrows
+the selection across component types and requires `--stack`. Abstract components are excluded; no
+matches is an error. Each failing scope names the stack, component, and component type.
+
+Global validation remains strict. If a principal is supplied in stack manifests, use scoped
+validation instead of a placeholder principal in `atmos.yaml`. Scoped validation does not authenticate
+or evaluate component templates/YAML functions. Unresolved dynamic auth values fail with
+`cannot fully validate`; unrelated component expressions are left unevaluated. Dynamic import paths
+and manifests requiring template rendering are unsupported. Remote imports are rejected without
+fetching; local imports and inheritance still load. Locals and native includes remain unevaluated. Global `--base-path`, `--config`, `--config-path`, and `--profile` selectors apply.
 
 ```shell
-atmos auth validate [--verbose]
+atmos auth validate [--stack <stack> [--component <component>]] [--verbose]
 ```
 
 ### Flags
 
 | Flag | Alias | Description |
 |------|-------|-------------|
+| `--stack` | `-s` | Logical stack or manifest path whose merged auth to validate |
+| `--component` | `-c` | Component name to validate within `--stack` |
 | `--verbose` | `-v` | Enable verbose validation output |
 
 ### Environment Variables
@@ -110,7 +122,9 @@ atmos auth validate [--verbose]
 ### Examples
 
 ```shell
-atmos auth validate                     # Basic validation
+atmos auth validate                     # Strict global validation
+atmos auth validate -s dev              # Every concrete component in dev
+atmos auth validate -s dev -c demo      # Components named demo in dev
 atmos auth validate --verbose           # Verbose output with details
 ```
 
@@ -218,7 +232,7 @@ atmos auth exec --identity azure-prod -- terraform apply -auto-approve
 Output credential environment variables for shell evaluation. Does not perform authentication by default.
 
 ```shell
-atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
+atmos auth env [--identity <name>] [--format bash|json|dotenv|env|github|credential-process] [--output-file <file>] [--login] [--min-validity <duration>]
 ```
 
 ### Flags
@@ -226,8 +240,10 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
 | Flag | Alias | Description |
 |------|-------|-------------|
 | `--identity` | `-i` | Identity to use |
-| `--format` | `-f` | Output format: `bash` (default), `json`, `dotenv` |
-| `--login` | | Trigger authentication if credentials are missing or expired |
+| `--format` | `-f` | Output format: `bash` (default), `json`, `dotenv`, `env` (plain `KEY=value`), `github` (`$GITHUB_ENV` lines), `credential-process` (AWS process-credential JSON; alias of `atmos aws credential-process`) |
+| `--output-file` | `-o` | Write output to a file instead of stdout. `github` defaults to `$GITHUB_ENV`. `credential-process` writes the file atomically with mode `0600` and never falls back to `$GITHUB_ENV`. |
+| `--login` | | Trigger authentication if credentials are missing or expired. With `credential-process`, `--login=false` is an error. |
+| `--min-validity` | | `credential-process` only: refresh cached credentials with less than this lifetime left. Default `15m`. Needs a unit (for example `30m`). Other formats reject it. |
 
 ### Environment Variables
 
@@ -235,6 +251,8 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
 |----------|---------|
 | `ATMOS_IDENTITY` | Default identity |
 | `ATMOS_AUTH_ENV_FORMAT` | Default output format |
+| `ATMOS_AUTH_ENV_OUTPUT_FILE` | Default output file |
+| `ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY` | Default for `--min-validity` (`credential-process` format) |
 
 ### Output Variables (AWS)
 
@@ -289,13 +307,70 @@ eval $(atmos auth env)
 
 ---
 
+## atmos aws credential-process
+
+Print AWS credentials for an Atmos identity in the AWS process-credential JSON format, so a
+`credential_process` profile in `~/.aws/config` can delegate to Atmos.
+
+```shell
+atmos aws credential-process --identity=<name> [--min-validity=15m]
+```
+
+Alias with the same output: `atmos auth env --format=credential-process --identity=<name>`.
+
+### Flags
+
+| Flag | Alias | Description |
+|------|-------|-------------|
+| `--identity` | `-i` | Identity to print credentials for. Resolved from the flag, then `ATMOS_IDENTITY`, then the single `default: true` identity. Never prompts: required unless exactly one default identity exists. |
+| `--min-validity` | | Reuse cached credentials only while more than this lifetime remains. Default `15m`. Needs a unit (for example `30m`). Environment variable: `ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY`. |
+
+### Output
+
+One JSON document on stdout, unmasked; logs go to stderr:
+
+```json
+{"Version":1,"AccessKeyId":"ASIA...","SecretAccessKey":"...","SessionToken":"...","Expiration":"2026-10-02T18:30:00Z"}
+```
+
+`SessionToken` and `Expiration` are omitted for long-lived keys.
+
+### Examples
+
+```ini
+# ~/.aws/config (--chdir is the most robust way to find atmos.yaml from any directory)
+[profile app-sandbox-1]
+credential_process = atmos --chdir=/path/to/infrastructure aws credential-process --identity=app-sandbox-1
+region = us-east-1
+
+# Alternatives: --config-path=/path/to/infrastructure, ATMOS_CLI_CONFIG_PATH, or a global ~/.atmos/atmos.yaml
+```
+
+```shell
+aws sts get-caller-identity --profile=app-sandbox-1
+```
+
+### Notes
+
+- Cached credentials with more than `--min-validity` left print with no network call. Otherwise Atmos
+  authenticates like `atmos auth login`, but skips integrations (ECR login, EKS kubeconfig).
+- Prompts need both stdin and stderr to be terminals. The AWS CLI captures stderr, so when an
+  interactive login is required (for example an expired SSO session), the command fails fast with a
+  hint. Run `atmos auth login --identity=<name>` first.
+- For identities defined in an Atmos profile, add Atmos's `--profile=<name>` (or `ATMOS_PROFILE`) to
+  the `credential_process` line. It is not `aws --profile`.
+- Works with AWS identities only.
+- Full recipes and troubleshooting: [aws-credential-process.md](aws-credential-process.md).
+
+---
+
 ## atmos auth console
 
 Open cloud provider web console in your default browser using authenticated credentials.
 
 ```shell
 atmos auth console [--identity <name>] [--destination <url-or-alias>] [--duration <duration>]
-                   [--issuer <name>] [--print-only] [--no-open]
+                    [--issuer <name>] [--print-only] [--no-open]
 ```
 
 ### Flags
@@ -390,13 +465,13 @@ atmos auth list --format graphviz | dot -Tsvg > auth.svg
 
 ---
 
-## atmos auth ecr-login
+## atmos aws ecr login
 
 Login to AWS Elastic Container Registry using integrations or explicit registry URLs. Writes Docker
 credentials to `~/.docker/config.json`.
 
 ```shell
-atmos auth ecr-login [integration] [--identity <name>] [--registry <url>]
+atmos aws ecr login [integration] [--identity <name>] [--registry <url>] [--public]
 ```
 
 ### Arguments
@@ -411,21 +486,22 @@ atmos auth ecr-login [integration] [--identity <name>] [--registry <url>]
 |------|-------|-------------|
 | `--identity` | `-i` | Execute all ECR integrations linked to this identity |
 | `--registry` | `-r` | Explicit registry URL(s) for ad-hoc login (can be repeated) |
+| `--public` | | Login to ECR Public using ambient credentials or the selected identity |
 
 ### Examples
 
 ```shell
 # Named integration
-atmos auth ecr-login dev/ecr/primary
+atmos aws ecr login dev/ecr/primary
 
 # All integrations for an identity
-atmos auth ecr-login --identity dev-admin
+atmos aws ecr login --identity dev-admin
 
 # Explicit registry URL
-atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
+atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
 
 # Multiple explicit registries
-atmos auth ecr-login \
+atmos aws ecr login \
   --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com \
   --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
 ```
@@ -434,7 +510,7 @@ atmos auth ecr-login \
 
 - ECR tokens expire after approximately 12 hours (AWS-enforced).
 - Requires IAM permission: `ecr:GetAuthorizationToken`.
-- Only private ECR registries are supported (not ECR Public or China/GovCloud).
+- Use `--public` for ECR Public; it cannot be combined with an integration name or `--registry`.
 - Respects `DOCKER_CONFIG` environment variable for credential file location.
 
 ---

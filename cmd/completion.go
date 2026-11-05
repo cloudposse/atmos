@@ -4,6 +4,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 var completionCmd = &cobra.Command{
@@ -47,4 +49,8 @@ func init() {
 		})
 	}
 	RootCmd.AddCommand(completionCmd)
+	internal.RegisterCommandMetadata(
+		completionCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/completion"),
+	)
 }

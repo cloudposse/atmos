@@ -172,14 +172,14 @@ func buildProfileSuggestionError(identityName string, candidates []string) error
 	if len(candidates) == 1 {
 		b = b.
 			WithHintf("Identity `%s` is defined in profile `%s`", identityName, candidates[0]).
-			WithHintf("Re-run with `%s %s` to use it", profileFlagName, candidates[0])
+			WithHintf("Re-run with `%s=%s` to use it", profileFlagName, candidates[0])
 	} else {
 		sorted := make([]string, len(candidates))
 		copy(sorted, candidates)
 		sort.Strings(sorted)
 		b = b.
-			WithHintf("Identity `%s` is defined in these profiles: `%s`", identityName, joinQuoted(sorted)).
-			WithHint("Re-run with `--profile <name>` using one of the profiles above")
+			WithHintf("Identity `%s` is defined in these profiles: %s", identityName, joinQuoted(sorted)).
+			WithHint("Re-run with `--profile=<name>` using one of the profiles above")
 	}
 
 	return b.
@@ -374,11 +374,11 @@ func buildAnyProfileSuggestionError(candidates []string) error {
 	if len(sorted) == 1 {
 		b = b.
 			WithHintf("Profile `%s` defines auth configuration", sorted[0]).
-			WithHintf("Re-run with `%s %s` to use it", profileFlagName, sorted[0])
+			WithHintf("Re-run with `%s=%s` to use it", profileFlagName, sorted[0])
 	} else {
 		b = b.
 			WithHintf("These profiles define auth configuration: %s", joinQuoted(sorted)).
-			WithHint("Re-run with `--profile <name>` using one of the profiles above")
+			WithHint("Re-run with `--profile=<name>` using one of the profiles above")
 	}
 
 	return b.
@@ -475,12 +475,13 @@ func reExecWithProfile(profileName string, reExecCtx ReExecContext) error {
 	// --chdir / -C was already applied to this process by processEarlyChdirFlag;
 	// stripping it from the child's argv prevents a relative chdir from being
 	// re-applied against the already-changed cwd.
-	origArgs := os.Args
+	origArgs := reexec.Args()
 	newArgs := make([]string, 0, len(origArgs)+6)
 	newArgs = append(newArgs, origArgs[0])
 	newArgs = append(newArgs, profileFlagName, profileName)
 	if len(origArgs) > 1 {
-		newArgs = append(newArgs, reexec.StripChdirArgs(origArgs[1:])...)
+		// A standalone script's own arguments are forwarded unchanged.
+		newArgs = append(newArgs, reexec.StripBeforeScript(origArgs[1:], reexec.ScriptArgs(), reexec.StripChdirArgs)...)
 	}
 
 	// Carry forward component/stack values that were resolved via an

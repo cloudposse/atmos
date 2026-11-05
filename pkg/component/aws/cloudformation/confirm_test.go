@@ -1,0 +1,350 @@
+package cloudformation
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"testing"
+
+	"github.com/charmbracelet/huh"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
+
+// stubConfirmOperation replaces confirmOperation for a single test with a
+// function returning the given confirmed/error pair. Auto-restores on cleanup.
+func stubConfirmOperation(t *testing.T, confirmed bool, err error) {
+	t.Helper()
+	original := confirmOperation
+	originalTerminal := stdinIsTerminal
+	stdinIsTerminal = func() bool { return true }
+	t.Cleanup(func() { stdinIsTerminal = originalTerminal })
+	confirmOperation = func(_ string) (bool, error) { return confirmed, err }
+	t.Cleanup(func() { confirmOperation = original })
+}
+
+// requireConfirmation must never prompt for operations other than apply/delete.
+func TestRequireConfirmation_SkipsNonMutatingOperations(t *testing.T) {
+	// No confirmOperation stub installed — a call would panic against the real
+	// (interactive) implementation, proving these operations never prompt.
+	original := confirmOperation
+	confirmOperation = func(_ string) (bool, error) {
+		t.Fatal("confirmOperation must not be called for a non-mutating operation")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	for _, op := range []Operation{OperationDiff, OperationRender, OperationValidate, OperationOutput} {
+		require.NoError(t, requireConfirmation(op, "vpc", map[string]any{}))
+	}
+}
+
+// --auto-approve must skip the prompt entirely for apply and delete.
+func TestRequireConfirmation_AutoApproveSkipsPrompt(t *testing.T) {
+	original := confirmOperation
+	confirmOperation = func(_ string) (bool, error) {
+		t.Fatal("confirmOperation must not be called when --auto-approve is set")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	flags := map[string]any{"auto-approve": true}
+	require.NoError(t, requireConfirmation(OperationApply, "vpc", flags))
+	require.NoError(t, requireConfirmation(OperationDelete, "vpc", flags))
+}
+
+// changeset-execute must prompt for confirmation, using the distinct "execute
+// changeset against" verb, and must skip the prompt when --auto-approve is set.
+func TestRequireConfirmation_ChangesetExecutePrompts(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
+	var gotMessage string
+	original := confirmOperation
+	confirmOperation = func(message string) (bool, error) {
+		gotMessage = message
+		return true, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	require.NoError(t, requireConfirmation(OperationChangesetExecute, "vpc", map[string]any{}))
+	assert.Contains(t, gotMessage, "execute changeset against")
+	assert.Contains(t, gotMessage, "vpc")
+}
+
+// changeset-execute must include the changeset name in the confirmation prompt when one is given,
+// so two changesets against the same stack produce distinguishable prompts — a user who supplies
+// a valid but unintended --changeset-name can catch the mistake before it executes.
+func TestRequireConfirmation_ChangesetExecutePromptsIncludesChangesetName(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
+	var gotMessage string
+	original := confirmOperation
+	confirmOperation = func(message string) (bool, error) {
+		gotMessage = message
+		return true, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	flags := map[string]any{"changeset-name": "my-changeset"}
+	require.NoError(t, requireConfirmation(OperationChangesetExecute, "vpc", flags))
+	assert.Contains(t, gotMessage, "my-changeset")
+	assert.Contains(t, gotMessage, "vpc")
+}
+
+// changeset-execute must respect --auto-approve like apply/delete.
+func TestRequireConfirmation_ChangesetExecuteAutoApproveSkipsPrompt(t *testing.T) {
+	original := confirmOperation
+	confirmOperation = func(_ string) (bool, error) {
+		t.Fatal("confirmOperation must not be called when --auto-approve is set")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	require.NoError(t, requireConfirmation(OperationChangesetExecute, "vpc", map[string]any{"auto-approve": true}))
+}
+
+// changeset-execute must abort with ErrUserAborted when declined, same as
+// apply/delete.
+func TestRequireConfirmation_ChangesetExecuteDeclinedAborts(t *testing.T) {
+	stubConfirmOperation(t, false, nil)
+	err := requireConfirmation(OperationChangesetExecute, "vpc", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+// changeset-delete must prompt, for consistency with every other mutating
+// verb (stackset delete already did; changeset delete previously didn't).
+func TestRequireConfirmation_ChangesetDeletePrompts(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
+	var gotMessage string
+	original := confirmOperation
+	confirmOperation = func(message string) (bool, error) {
+		gotMessage = message
+		return true, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	require.NoError(t, requireConfirmation(OperationChangesetDelete, "vpc", map[string]any{}))
+	assert.Contains(t, gotMessage, "delete changeset for")
+	assert.Contains(t, gotMessage, "vpc")
+}
+
+// changeset-delete must include the changeset name in the confirmation prompt when
+// one is given, mirroring changeset-execute's identical requirement: a user with
+// multiple changesets against the same stack must be able to tell which one a
+// prompt refers to before confirming.
+func TestRequireConfirmation_ChangesetDeletePromptsIncludesChangesetName(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
+	var gotMessage string
+	original := confirmOperation
+	confirmOperation = func(message string) (bool, error) {
+		gotMessage = message
+		return true, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	flags := map[string]any{"changeset-name": "my-changeset"}
+	require.NoError(t, requireConfirmation(OperationChangesetDelete, "vpc", flags))
+	assert.Contains(t, gotMessage, "my-changeset")
+	assert.Contains(t, gotMessage, "vpc")
+}
+
+// changeset-delete must respect --auto-approve.
+func TestRequireConfirmation_ChangesetDeleteAutoApproveSkipsPrompt(t *testing.T) {
+	original := confirmOperation
+	confirmOperation = func(_ string) (bool, error) {
+		t.Fatal("confirmOperation must not be called when --auto-approve is set")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	require.NoError(t, requireConfirmation(OperationChangesetDelete, "vpc", map[string]any{"auto-approve": true}))
+}
+
+// changeset-delete must abort with ErrUserAborted when declined.
+func TestRequireConfirmation_ChangesetDeleteDeclinedAborts(t *testing.T) {
+	stubConfirmOperation(t, false, nil)
+	err := requireConfirmation(OperationChangesetDelete, "vpc", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+// A confirmed prompt allows the operation to proceed.
+func TestRequireConfirmation_ConfirmedProceeds(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
+	require.NoError(t, requireConfirmation(OperationApply, "vpc", map[string]any{}))
+}
+
+// A declined prompt (confirmed == false) must abort with ErrUserAborted.
+func TestRequireConfirmation_DeclinedAborts(t *testing.T) {
+	stubConfirmOperation(t, false, nil)
+	err := requireConfirmation(OperationDelete, "vpc", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+// stackset create/update/delete must each prompt for confirmation, using
+// their own distinct verb, and must skip the prompt when --auto-approve is set.
+func TestRequireConfirmation_StackSetOperationsPrompt(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
+	tests := []struct {
+		op       Operation
+		wantVerb string
+	}{
+		{OperationStackSetCreate, "create stackset for"},
+		{OperationStackSetUpdate, "update stackset for"},
+		{OperationStackSetDelete, "delete stackset for"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.op), func(t *testing.T) {
+			var gotMessage string
+			original := confirmOperation
+			confirmOperation = func(message string) (bool, error) {
+				gotMessage = message
+				return true, nil
+			}
+			t.Cleanup(func() { confirmOperation = original })
+
+			require.NoError(t, requireConfirmation(tt.op, "vpc", map[string]any{}))
+			assert.Contains(t, gotMessage, tt.wantVerb)
+			assert.Contains(t, gotMessage, "vpc")
+		})
+	}
+}
+
+// stackset create/update/delete must respect --auto-approve like apply/delete.
+func TestRequireConfirmation_StackSetOperationsAutoApproveSkipsPrompt(t *testing.T) {
+	original := confirmOperation
+	confirmOperation = func(_ string) (bool, error) {
+		t.Fatal("confirmOperation must not be called when --auto-approve is set")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	flags := map[string]any{"auto-approve": true}
+	require.NoError(t, requireConfirmation(OperationStackSetCreate, "vpc", flags))
+	require.NoError(t, requireConfirmation(OperationStackSetUpdate, "vpc", flags))
+	require.NoError(t, requireConfirmation(OperationStackSetDelete, "vpc", flags))
+}
+
+// stackset create/update/delete must abort with ErrUserAborted when declined.
+func TestRequireConfirmation_StackSetOperationsDeclinedAborts(t *testing.T) {
+	stubConfirmOperation(t, false, nil)
+	for _, op := range []Operation{OperationStackSetCreate, OperationStackSetUpdate, OperationStackSetDelete} {
+		err := requireConfirmation(op, "vpc", map[string]any{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+	}
+}
+
+// An error from the underlying prompt propagates unchanged.
+func TestRequireConfirmation_PromptErrorPropagates(t *testing.T) {
+	sentinel := errors.New("tty unavailable")
+	stubConfirmOperation(t, false, sentinel)
+	err := requireConfirmation(OperationApply, "vpc", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+}
+
+// stubRunConfirmField replaces runConfirmField for a single test. Mirrors the
+// runForm seam pattern in pkg/auth/profile_fallback.go: a real huh field
+// requires an interactive TTY unit tests can't provide.
+func stubRunConfirmField(t *testing.T, err error) {
+	t.Helper()
+	original := runConfirmField
+	runConfirmField = func(_ huh.Field) error { return err }
+	t.Cleanup(func() { runConfirmField = original })
+}
+
+// defaultConfirmOperation: a nil form error with the bound value left at its
+// default (false) reports "not confirmed" without error.
+func TestDefaultConfirmOperation_DefaultIsNotConfirmed(t *testing.T) {
+	stubRunConfirmField(t, nil)
+	confirmed, err := defaultConfirmOperation(`apply stack "vpc"?`)
+	require.NoError(t, err)
+	assert.False(t, confirmed)
+}
+
+// defaultConfirmOperation: the user aborting the field (ctrl+c/esc) must
+// translate huh.ErrUserAborted to errUtils.ErrUserAborted.
+func TestDefaultConfirmOperation_UserAborted(t *testing.T) {
+	stubRunConfirmField(t, huh.ErrUserAborted)
+	_, err := defaultConfirmOperation(`apply stack "vpc"?`)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+// defaultConfirmOperation: any other field error propagates as-is (not
+// translated to ErrUserAborted).
+func TestDefaultConfirmOperation_OtherError(t *testing.T) {
+	sentinel := errors.New("render failed")
+	stubRunConfirmField(t, sentinel)
+	_, err := defaultConfirmOperation(`apply stack "vpc"?`)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+	assert.NotErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+func TestRequireConfirmation_NonTerminalAbortsWithoutPrompt(t *testing.T) {
+	stdin, err := os.CreateTemp(t.TempDir(), "stdin")
+	require.NoError(t, err)
+	defer stdin.Close()
+	original := os.Stdin
+	os.Stdin = stdin
+	t.Cleanup(func() { os.Stdin = original })
+	originalConfirm := confirmOperation
+	confirmOperation = func(string) (bool, error) { t.Fatal("non-terminal input must not prompt"); return true, nil }
+	t.Cleanup(func() { confirmOperation = originalConfirm })
+	for _, operation := range []Operation{OperationApply, OperationDelete, OperationChangesetExecute, OperationChangesetDelete, OperationStackSetCreate, OperationStackSetUpdate, OperationStackSetDelete} {
+		err := requireConfirmation(operation, "vpc", nil)
+		// Nothing was declined: stdin simply cannot answer, so this is the
+		// "confirmation required" error, not a user abort.
+		require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationConfirmationRequired)
+		assert.NotErrorIs(t, err, errUtils.ErrUserAborted)
+		assert.True(t, errUtils.HasHint(err, "--auto-approve"))
+		require.NoError(t, requireConfirmation(operation, "vpc", map[string]any{"auto-approve": true}))
+	}
+}
+
+// In a bulk run the graph wraps each component's error as "component=X stack=Y:
+// <error>", and the formatter then drops the explanation and hint of the wrapped
+// error. The confirmation-required error therefore carries the --auto-approve
+// guidance in its own message, so it survives that wrapping.
+func TestConfirmationRequired_GuidanceSurvivesBulkWrapping(t *testing.T) {
+	original := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+	t.Cleanup(func() { stdinIsTerminal = original })
+
+	err := requireInteractiveOrAutoApprove(OperationApply, map[string]any{})
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationConfirmationRequired)
+
+	wrapped := fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrComponentExecutionFailed, "beta", "bk1", err)
+	rendered := errUtils.Format(wrapped, errUtils.DefaultFormatterConfig())
+	assert.Contains(t, rendered, "component=beta stack=bk1")
+	assert.Contains(t, rendered, "--auto-approve")
+	assert.NotContains(t, rendered, "user aborted")
+}
+
+// The fast gate is a no-op when the operation needs no confirmation, when
+// --auto-approve is set, or when stdin is a terminal (the prompt can be shown).
+func TestRequireInteractiveOrAutoApprove_PassesWhenAnswerable(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation Operation
+		flags     map[string]any
+		terminal  bool
+	}{
+		{name: "diff needs no confirmation", operation: OperationDiff, terminal: false},
+		{name: "auto-approve", operation: OperationApply, flags: map[string]any{"auto-approve": true}, terminal: false},
+		{name: "terminal", operation: OperationApply, terminal: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := stdinIsTerminal
+			stdinIsTerminal = func() bool { return tt.terminal }
+			t.Cleanup(func() { stdinIsTerminal = original })
+			require.NoError(t, requireInteractiveOrAutoApprove(tt.operation, tt.flags))
+		})
+	}
+}

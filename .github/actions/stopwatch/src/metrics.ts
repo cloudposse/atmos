@@ -14,6 +14,8 @@ export interface WorkflowRun {
   updatedAt: string;
   htmlUrl: string;
   pullRequests: PullRequestReference[];
+  headBranch?: string | null;
+  headRepositoryOwner?: string | null;
 }
 
 export interface WorkflowJob {

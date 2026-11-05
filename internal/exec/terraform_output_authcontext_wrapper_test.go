@@ -1,11 +1,13 @@
 package exec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -121,4 +123,19 @@ func TestAuthContextWrapperResolveProviderConfig(t *testing.T) {
 	provider, found = wrapper.ResolveProviderConfig("test-identity")
 	assert.Nil(t, provider, "ResolveProviderConfig should return nil for any identity")
 	assert.False(t, found, "ResolveProviderConfig should return false for any identity")
+}
+
+// TestAuthContextWrapper_AuthenticateIsolated verifies the wrapper never authenticates and never panics.
+func TestAuthContextWrapper_AuthenticateIsolated(t *testing.T) {
+	t.Parallel()
+
+	wrapper := &authContextWrapper{stackInfo: &schema.ConfigAndStacksInfo{}}
+
+	var got *schema.AuthContext
+	var err error
+	require.NotPanics(t, func() {
+		got, err = wrapper.AuthenticateIsolated(context.Background(), "any-identity")
+	})
+	require.ErrorIs(t, err, errUtils.ErrNotImplemented)
+	assert.Nil(t, got)
 }

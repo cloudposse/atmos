@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // validateCmd validates the complete project or one of its focused validation targets.
@@ -23,4 +25,10 @@ func init() {
 	addAffectedValidationFlags(validateCmd)
 	addValidationExcludeFlag(validateCmd)
 	RootCmd.AddCommand(validateCmd)
+	internal.RegisterCommandMetadata(
+		validateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/validate/usage"),
+		internal.WithExample("examples/demo-schemas", "Schema Validation"),
+		internal.WithExample("examples/demo-opa", "OPA Validation"),
+	)
 }

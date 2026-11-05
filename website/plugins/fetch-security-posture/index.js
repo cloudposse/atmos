@@ -1,6 +1,7 @@
 const SCORECARD_URL = 'https://api.scorecard.dev/projects/github.com/cloudposse/atmos';
 const BEST_PRACTICES_URL = 'https://www.bestpractices.dev/projects/14393.json';
 const FETCH_TIMEOUT_MS = 10000;
+const { getBuildTimestamp } = require('../build-timestamp');
 
 async function fetchJson(url, label) {
   const controller = new AbortController();
@@ -56,7 +57,7 @@ module.exports = function(context, options) {
       return {
         scorecard: isValidScorecard(scorecard) ? scorecard : null,
         bestPractices: isValidBestPractices(bestPractices) ? bestPractices : null,
-        fetchedAt: new Date().toISOString(),
+        fetchedAt: getBuildTimestamp(),
       };
     },
     async contentLoaded({ content, actions }) {

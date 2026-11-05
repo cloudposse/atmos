@@ -1,0 +1,14 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: ignores-reserved
+spec:
+  stack:
+    manifest: '{{ .Config.stack_file }}'
+  fields:
+    - name: environment
+      type: input
+      required: true
+  files:
+    - path: stack.yaml
+      target: '{{ .Config.stack_file }}'

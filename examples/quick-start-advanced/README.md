@@ -8,6 +8,15 @@ description: >-
 cast:
   file: /casts/examples/quick-start-advanced/list-instances.cast
   title: atmos quick start advanced
+related_docs:
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
+  - label: "Quick Start"
+    url: /quick-start
+  - label: "Advanced Tutorial"
+    url: /quick-start/advanced
 ---
 
 # Atmos Quick Start (Advanced)
@@ -72,8 +81,9 @@ atmos terraform cache trust
 # `secret init` also accepts the file through stdin: `atmos secret init < .env.local ...`.
 atmos secret init --input .env.local -s plat-ue2-dev -c app-config
 
-# Plan every component before state exists. `--use-mocks` resolves Terraform lookup
-# functions from literal, component-owned mocks instead of the cold remote state. Exit code 2
+# Plan every component before state exists. `--use-mocks` fills Terraform lookup
+# functions from literal, component-owned mocks wherever the remote state is still cold
+# (real state wins once it exists; `--use-mocks=always` ignores state). Exit code 2
 # means Terraform found changes and is expected for a first plan.
 atmos terraform plan --all -s plat-ue2-dev --use-mocks
 
@@ -139,7 +149,7 @@ atmos terraform plan --all --labels tier=foundational -s plat-ue2-dev --use-mock
 
 ## Operator commands
 
-This example also registers operator-focused [custom commands](https://atmos.tools/core-concepts/custom-commands)
+This example also registers operator-focused [custom commands](https://atmos.tools/cli/configuration/commands)
 in `atmos.yaml`:
 
 ```shell

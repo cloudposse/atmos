@@ -18,6 +18,8 @@ A new `compositions` section groups the components that make up a system.
 
 <!--truncate-->
 
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
 This is the stack-scoped counterpart to the [native container steps](/changelog/native-container-steps) shipped
 earlier. The step is ephemeral and workflow-scoped; the component is addressable infrastructure that
 lives in your stacks alongside Terraform and Helmfile — same imports, inheritance, catalogs, deep-merge,
@@ -88,8 +90,7 @@ yet provided in a given stack — a closed contract for membership, open for ful
 
 [View the full example](/examples/compositions)
 
-## Try It
-
+## Try it out
 The new `examples/container-component` example defines an abstract base, a long-running web service with
 a health check, and a built-from-Dockerfile worker — all under one composition:
 
@@ -107,3 +108,27 @@ Container components are experimental while the surface settles. The goal is unc
 declared system locally, in CI, and against real environments — without one-off shell scripts.
 
 For usage and configuration, see [Using Containers](/components/container).
+
+<TryExamples>
+
+<TryExample example="compositions" label="Compositions">
+
+Inspect the compositions, then follow the README to run the services with Docker or Podman.
+
+```shell
+atmos composition list
+```
+
+</TryExample>
+
+<TryExample example="container-component" label="Container Component">
+
+Install Docker or Podman before building and running the example containers.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
+</TryExamples>

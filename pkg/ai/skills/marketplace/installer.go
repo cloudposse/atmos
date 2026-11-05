@@ -796,11 +796,8 @@ func copyEntry(srcPath, dstPath string, isDir bool) error {
 
 // Uninstall removes an installed skill.
 //
-// The basePath and clients arguments drive best-effort cleanup of any
-// per-client copies distributed by a prior install (see distributeToClients);
-// pass a nil/empty clients slice to skip client cleanup. Scope is the
-// distribution scope ("project" or "user") the client copies were installed
-// under.
+// Legacy registries own canonical paths only. Distributed copies have no ownership
+// evidence and remain in place until explicitly reinstalled through reconciliation.
 func (i *Installer) Uninstall(name string, force bool, basePath string, clients []string, scopes []string) error {
 	defer perf.Track(nil, "marketplace.Installer.Uninstall")()
 
@@ -828,26 +825,10 @@ func (i *Installer) Uninstall(name string, force bool, basePath string, clients 
 		return err
 	}
 
-	// 5. Best-effort cleanup of any distributed client copies.
-	skipped := removeClientCopies(basePath, name, clients, scopes)
+	// Legacy client copies are unowned; never infer ownership from their names.
 
 	ui.Successf("Skill %q uninstalled successfully", skill.DisplayName)
-	reportSkippedSymlinks(skipped)
 	return nil
-}
-
-// reportSkippedSymlinks prints a single aggregate note for client-distributed
-// copies left in place because they're symbolic links (see
-// removeClientCopies), instead of one warning line per skill.
-func reportSkippedSymlinks(count int) {
-	if count == 0 {
-		return
-	}
-	noun := "copy"
-	if count > 1 {
-		noun = "copies"
-	}
-	ui.Infof("%d client-distributed %s left in place (symbolic link, use `--path` to manage a plain directory instead)", count, noun)
 }
 
 // UninstallAll removes every installed skill. It mirrors `atmos mcp
@@ -881,7 +862,6 @@ func (i *Installer) UninstallAll(force bool, basePath string, clients []string, 
 	}
 
 	removed := 0
-	skippedSymlinks := 0
 	for _, skill := range installed {
 		if err := os.RemoveAll(skill.Path); err != nil {
 			log.Warnf("Failed to remove skill directory for %s: %v", skill.Name, err)
@@ -891,12 +871,10 @@ func (i *Installer) UninstallAll(force bool, basePath string, clients []string, 
 			log.Warnf("Failed to remove %s from registry: %v", skill.Name, err)
 			continue
 		}
-		skippedSymlinks += removeClientCopies(basePath, skill.Name, clients, scopes)
 		removed++
 	}
 
 	ui.Successf("%d skills uninstalled successfully", removed)
-	reportSkippedSymlinks(skippedSymlinks)
 	return nil
 }
 
@@ -915,6 +893,12 @@ func (i *Installer) Get(name string) (*InstalledSkill, error) {
 // LoadInstalledSkills loads all installed community skills into the skill registry.
 func (i *Installer) LoadInstalledSkills(registry *skills.Registry) error {
 	defer perf.Track(nil, "marketplace.Installer.LoadInstalledSkills")()
+
+	if dir, err := GetSkillsDir(); err == nil {
+		if err = loadOwnedSkills(registry, dir); err != nil {
+			log.Warnf("Failed to load owned user skills: %v", err)
+		}
+	}
 
 	for _, installed := range i.localRegistry.List() {
 		if !installed.Enabled {
@@ -966,10 +950,15 @@ func readSkillPromptWithReferences(skillDir string, metadata *SkillMetadata) (st
 		return "", err
 	}
 
+	// Confine referenced files to the installed skill even if its metadata changes.
+	root, err := os.OpenRoot(skillDir)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
 	// Append reference files if any.
 	for _, ref := range metadata.References {
-		refPath := filepath.Join(skillDir, ref)
-		refContent, err := os.ReadFile(refPath)
+		refContent, err := root.ReadFile(ref)
 		if err != nil {
 			log.Warnf("Failed to read reference file %q: %v", ref, err)
 			continue

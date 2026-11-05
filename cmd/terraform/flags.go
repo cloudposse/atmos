@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -103,12 +104,18 @@ func registerProcessingFlags(registry *flags.FlagRegistry) {
 		Description: "Enable/disable YAML functions processing in Atmos stack manifests",
 		EnvVars:     []string{"ATMOS_PROCESS_FUNCTIONS"},
 	})
-	registry.Register(&flags.BoolFlag{
-		Name:        "use-mocks",
-		Shorthand:   "",
-		Default:     false,
-		Description: "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands",
-		EnvVars:     []string{"ATMOS_USE_MOCKS"},
+	// --use-mocks (no value) enables component mocks using components.terraform.mocks.mode;
+	// --use-mocks=fallback|always enables them and overrides that mode for this run;
+	// --use-mocks=false disables them. A following positional argument is never consumed as the
+	// value (NoOptDefValNoSpaceValue), so `--use-mocks vpc` keeps `vpc` as the component.
+	registry.Register(&flags.StringFlag{
+		Name:                    "use-mocks",
+		Shorthand:               "",
+		Default:                 "",
+		Description:             "Resolve Terraform state/output YAML functions from component mocks. Set a mode with =fallback (real state first, mocks only when missing) or =always (mocks only); a bare flag uses components.terraform.mocks.mode. Supported only by plan and describe commands",
+		EnvVars:                 []string{"ATMOS_USE_MOCKS"},
+		NoOptDefVal:             cfg.UseMocksTrue,
+		NoOptDefValNoSpaceValue: true,
 	})
 	registry.Register(&flags.StringSliceFlag{
 		Name:        "skip",
@@ -142,13 +149,13 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Description: "Filter by tags (comma-separated, matches any): --tags=production,tier-1",
 		EnvVars:     []string{"ATMOS_TAGS"},
 	})
-	registry.Register(&flags.StringFlag{
+	registry.Register(&flags.StringArrayFlag{StringSliceFlag: flags.StringSliceFlag{
 		Name:        "labels",
 		Shorthand:   "",
-		Default:     "",
-		Description: "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox",
+		Default:     nil,
+		Description: "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox",
 		EnvVars:     []string{"ATMOS_LABELS"},
-	})
+	}})
 }
 
 // TerraformAffectedFlags returns a registry with flags for affected component detection.

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests/testhelpers"
@@ -356,4 +357,56 @@ func TestWorkflowStepOutputAttemptHelper(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(path, []byte(strconv.Itoa(attempt)), 0o600))
 	_, _ = fmt.Fprint(os.Stdout, "complete")
+}
+
+func TestExecuteWorkflowRejectsUnknownOutputMode(t *testing.T) {
+	tests := []struct {
+		name string
+		def  schema.WorkflowDefinition
+	}{
+		{
+			name: "step output",
+			def: schema.WorkflowDefinition{Steps: []schema.WorkflowStep{
+				{Name: "typo", Type: "shell", Command: "echo must-not-run", Output: "capture"},
+			}},
+		},
+		{
+			name: "workflow output",
+			def: schema.WorkflowDefinition{Output: "capture", Steps: []schema.WorkflowStep{
+				{Name: "ok", Type: "shell", Command: "echo must-not-run"},
+			}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ResetStepExecutorState()
+			t.Cleanup(ResetStepExecutorState)
+			tmpDir := t.TempDir()
+
+			err := ExecuteWorkflow(schema.AtmosConfiguration{BasePath: tmpDir}, "bad-output", filepath.Join(tmpDir, "workflow.yaml"), &tt.def, false, "", "", "")
+
+			require.ErrorIs(t, err, schema.ErrStepInvalidOutputMode)
+		})
+	}
+}
+
+func TestExecuteWorkflowEnforcesShellStepTimeout(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	tmpDir := t.TempDir()
+	workflowDef := &schema.WorkflowDefinition{Steps: []schema.WorkflowStep{{
+		Name:    "slow",
+		Type:    "shell",
+		Timeout: "300ms",
+		Command: fmt.Sprintf("%q", exePath),
+		Env:     map[string]string{"_ATMOS_TEST_SLEEP_MS": "30000"},
+	}}}
+
+	start := time.Now()
+	err = ExecuteWorkflow(schema.AtmosConfiguration{BasePath: tmpDir}, "timeout", filepath.Join(tmpDir, "workflow.yaml"), workflowDef, false, "", "", "")
+
+	require.ErrorIs(t, err, errUtils.ErrStepTimeout)
+	assert.Less(t, time.Since(start), 15*time.Second, "the timeout must cancel the running process")
 }

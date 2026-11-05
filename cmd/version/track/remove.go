@@ -3,6 +3,7 @@ package track
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -29,4 +30,8 @@ var trackRemoveCmd = &cobra.Command{
 func init() {
 	flags.NewStandardParser(trackParserOptions()...).RegisterFlags(trackRemoveCmd)
 	trackCmd.AddCommand(trackRemoveCmd)
+	internal.RegisterCommandMetadata(
+		trackRemoveCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/track/remove"),
+	)
 }

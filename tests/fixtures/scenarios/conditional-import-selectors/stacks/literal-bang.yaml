@@ -1,0 +1,6 @@
+name: literal-bang
+metadata: {tags: ["!env PCI"]}
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel "'!env PCI' in tags"

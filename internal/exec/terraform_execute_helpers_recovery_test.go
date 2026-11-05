@@ -303,7 +303,7 @@ func TestRetryMainCommand_ScopesExecMetadataToRetryOnly(t *testing.T) {
 		ExecMetadataRawOutput: "stale output from the original failed attempt",
 	}
 
-	err := retryMainCommand(&atmosConfig, info, []string{"plan"}, "/tmp/component", false)
+	err := retryMainCommand(&atmosConfig, info, []string{"plan"}, "/tmp/component", false, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "retry attempt output", info.ExecMetadataRawOutput,
 		"ExecMetadataRawOutput must reflect only the retry, not the original attempt's stale output")
@@ -320,7 +320,7 @@ func TestRetryMainCommand_PropagatesRetryError(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	err := retryMainCommand(&atmosConfig, info, []string{"plan"}, "/tmp/component", false)
+	err := retryMainCommand(&atmosConfig, info, []string{"plan"}, "/tmp/component", false, nil)
 	require.Error(t, err)
 	assert.Same(t, retryErr, err)
 }

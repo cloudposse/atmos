@@ -332,3 +332,17 @@ func TestValidateAuthConfig_ErrorWrapping(t *testing.T) {
 		})
 	}
 }
+
+// ADC derives all of its settings from Application Default Credentials when no
+// optional overrides are configured. Other providers retain their requirements.
+func TestValidateProviderOptionalADCSpec(t *testing.T) {
+	v := NewValidator()
+	for _, spec := range []map[string]any{nil, {}} {
+		assert.NoError(t, v.ValidateProvider("adc", &schema.Provider{Kind: "gcp/adc", Spec: spec}))
+	}
+	for _, kind := range []string{"gcp/workload-identity-federation", "github/oidc", "aws/iam-identity-center"} {
+		t.Run(kind, func(t *testing.T) {
+			assert.Error(t, v.ValidateProvider("missing-fields", &schema.Provider{Kind: kind}))
+		})
+	}
+}

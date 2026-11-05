@@ -78,6 +78,10 @@ func init() {
 		panic(err)
 	}
 
+	internal.RegisterCommandMetadata(
+		startCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/mcp/start"),
+	)
 	mcpcmd.McpCmd.AddCommand(startCmd)
 }
 

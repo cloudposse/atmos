@@ -4,6 +4,11 @@ tags: [Emulators, Kubernetes]
 cast:
   file: /casts/examples/emulator-k8s/lifecycle.cast
   title: atmos kubernetes emulator lifecycle
+related_docs:
+  - label: "Emulator commands"
+    url: /cli/commands/emulator/usage
+  - label: "Emulator component configuration"
+    url: /stacks/components/emulator
 ---
 
 ## Notes

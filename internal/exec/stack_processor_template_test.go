@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -228,10 +229,10 @@ components:
 
 	require.NoError(t, err)
 	vars := result.DeepMergedConfig["components"].(map[string]any)["terraform"].(map[string]any)["consumer"].(map[string]any)["vars"].(map[string]any)
-	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, vars["state_lookup"])
-	assert.Equal(t, "!terraform.output producer private_key", vars["output_lookup"])
-	assert.Equal(t, "!store secure-store consumer private_key", vars["store_lookup"])
-	assert.Equal(t, "!env PRIVATE_KEY", vars["environment_lookup"])
+	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, yamlsource.Display(vars["state_lookup"]))
+	assert.Equal(t, "!terraform.output producer private_key", yamlsource.Display(vars["output_lookup"]))
+	assert.Equal(t, "!store secure-store consumer private_key", yamlsource.Display(vars["store_lookup"]))
+	assert.Equal(t, "!env PRIVATE_KEY", yamlsource.Display(vars["environment_lookup"]))
 	assert.Equal(t, "resolved-template-value", vars["template_value"])
 }
 

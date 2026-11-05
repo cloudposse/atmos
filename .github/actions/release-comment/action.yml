@@ -1,0 +1,18 @@
+name: Release PR notifications
+description: Notify included pull requests when an Atmos release is published.
+inputs:
+  github-token:
+    description: GitHub token with contents read and pull-requests write permissions
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        RELEASE_COMMENT_ACTION_PATH: ${{ github.action_path }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        retries: 3
+        script: |
+          const notify = require(require('node:path').join(process.env.RELEASE_COMMENT_ACTION_PATH, 'comment.cjs'));
+          await notify({ github, context });

@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -161,7 +162,7 @@ func executePublicLoginWithIdentity(ctx context.Context, atmosConfig *schema.Atm
 
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+		return errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 	if whoami.Credentials == nil {
 		return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, errUtils.ErrIdentityCredentialsNone)
@@ -319,4 +320,8 @@ func init() {
 	loginCmd.Flags().Bool("public", false, "Login to AWS ECR Public (public.ecr.aws)")
 
 	EcrCmd.AddCommand(loginCmd)
+	internal.RegisterCommandMetadata(
+		loginCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/ecr-login"),
+	)
 }

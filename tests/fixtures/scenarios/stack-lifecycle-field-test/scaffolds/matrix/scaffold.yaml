@@ -1,0 +1,14 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: matrix
+spec:
+  stack:
+    manifest: '{{ .Config.stack_file }}'
+  files:
+    - path: stack.yaml
+      target: '{{ .Config.stack_file }}'
+    - path: extra.yaml
+      target: 'stacks/deploy/extra-{{ .matrix.region }}.yaml'
+      matrix:
+        region: [east, west]

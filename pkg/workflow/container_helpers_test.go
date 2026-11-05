@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests/testhelpers"
@@ -260,6 +261,18 @@ func TestConvertWorkflowMounts(t *testing.T) {
 	assert.True(t, mounts[1].ReadOnly)
 }
 
+func TestConvertWorkflowMounts_ExpandsHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	mounts := convertWorkflowMounts([]schema.ContainerMount{{Source: "~/sub", Target: "/c"}})
+	require.Len(t, mounts, 1)
+	assert.Equal(t, filepath.Join(home, "sub"), mounts[0].Source)
+}
+
 func TestConvertWorkflowPorts(t *testing.T) {
 	ports := convertWorkflowPorts([]schema.ContainerPort{
 		{Host: 8080, Container: 80},
@@ -283,16 +296,6 @@ func TestMergeEnvSlices(t *testing.T) {
 	// Overlay wins on collisions; first-seen order preserved; malformed entry skipped.
 	got := mergeEnvSlices([]string{"A=1", "B=2"}, []string{"B=override", "C=3", "malformed"})
 	assert.Equal(t, []string{"A=1", "B=override", "C=3"}, got)
-}
-
-func TestExpandHome(t *testing.T) {
-	assert.Equal(t, "", expandHome(""))
-	assert.Equal(t, "/abs/path", expandHome("/abs/path"))
-	assert.Equal(t, "relative", expandHome("relative"))
-
-	home := expandHome("~")
-	assert.NotEqual(t, "~", home)
-	assert.Equal(t, filepath.Join(home, "sub"), expandHome("~/sub"))
 }
 
 func TestDefaultStringAndRuntimePreviewName(t *testing.T) {

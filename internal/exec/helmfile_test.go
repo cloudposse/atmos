@@ -11,9 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -210,14 +212,14 @@ func (n *testHelmfileNodeHooks) After(_ context.Context, _ *schema.ConfigAndStac
 }
 
 // newHelmfileNodeHooksFixture writes a minimal atmos project with one
-// helmfile component ("myapp") that has no chart releases — no AWS/EKS auth
-// is configured, so ExecuteHelmfile reaches the real `helmfile <cmd>`
-// execution deterministically and offline, failing only because the
-// component has no matching releases. This is what lets the test reach
-// info.NodeHooks.Before/After without a real cluster.
+// helmfile component ("myapp") and a portable subprocess with a controlled
+// exit code. No AWS/EKS auth, Helm installation, or cluster is required to
+// exercise info.NodeHooks.Before/After.
 func newHelmfileNodeHooksFixture(t *testing.T) schema.ConfigAndStacksInfo {
 	t.Helper()
-	tests.RequireHelmfile(t)
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv("_ATMOS_TEST_EXIT_CODE", "1")
 
 	tempDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "helmfile", "myapp"), 0o755))
@@ -248,6 +250,7 @@ components:
 	t.Chdir(tempDir)
 
 	return schema.ConfigAndStacksInfo{
+		ComponentCommand: binary,
 		ComponentFromArg: "myapp",
 		Stack:            "dev",
 		SubCommand:       "diff",
@@ -257,9 +260,7 @@ components:
 
 // TestExecuteHelmfileNodeHooks_InvokedAroundExecution is a regression test
 // for the NodeHooks wiring added to ExecuteHelmfile: both Before and After
-// must fire around the real helmfile execution (which fails here because the
-// fixture component has no chart releases — that failure is incidental, not
-// the point of the test).
+// must fire around a portable subprocess that reports an execution failure.
 func TestExecuteHelmfileNodeHooks_InvokedAroundExecution(t *testing.T) {
 	info := newHelmfileNodeHooksFixture(t)
 	nodeHooks := &testHelmfileNodeHooks{}
@@ -267,7 +268,7 @@ func TestExecuteHelmfileNodeHooks_InvokedAroundExecution(t *testing.T) {
 
 	err := ExecuteHelmfile(info)
 
-	require.Error(t, err, "the fixture component has no releases, so helmfile itself fails")
+	require.Error(t, err, "the fixture subprocess reports an execution failure")
 	assert.True(t, nodeHooks.beforeCalled)
 	assert.True(t, nodeHooks.afterCalled)
 	assert.Error(t, nodeHooks.afterExecErr, "After must receive the real execution error")
@@ -296,7 +297,7 @@ func TestExecuteHelmfileNodeHooks_BeforeErrorAbortsExecution(t *testing.T) {
 // underlying helmfile execution itself reported no error.
 func TestExecuteHelmfileNodeHooks_AfterErrorBecomesResultWhenExecSucceeded(t *testing.T) {
 	info := newHelmfileNodeHooksFixture(t)
-	info.DryRun = true // Skips the real helmfile execution, so execErr is nil.
+	t.Setenv("_ATMOS_TEST_EXIT_CODE", "0") // Successful execution still fires hooks.
 	sentinelErr := errors.New("after hook failed")
 	nodeHooks := &testHelmfileNodeHooks{afterErr: sentinelErr}
 	info.NodeHooks = nodeHooks
@@ -305,7 +306,22 @@ func TestExecuteHelmfileNodeHooks_AfterErrorBecomesResultWhenExecSucceeded(t *te
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinelErr)
-	assert.NoError(t, nodeHooks.afterExecErr, "dry-run means the underlying exec reported no error")
+	assert.NoError(t, nodeHooks.afterExecErr, "the subprocess completed successfully")
+}
+
+// Dry-run must not execute the subprocess or either component hook.
+func TestExecuteHelmfileNodeHooks_DryRunSkipsExecution(t *testing.T) {
+	info := newHelmfileNodeHooksFixture(t)
+	info.DryRun = true
+	marker := filepath.Join(t.TempDir(), "subprocess-ran")
+	t.Setenv("_ATMOS_TEST_COUNTER_FILE", marker)
+	nodeHooks := &testHelmfileNodeHooks{beforeErr: errors.New("before must not run"), afterErr: errors.New("after must not run")}
+	info.NodeHooks = nodeHooks
+
+	require.NoError(t, ExecuteHelmfile(info))
+	assert.False(t, nodeHooks.beforeCalled)
+	assert.False(t, nodeHooks.afterCalled)
+	require.NoFileExists(t, marker)
 }
 
 // TestExecuteHelmfileNodeHooks_AfterErrorDroppedWhenExecAlreadyFailed asserts
@@ -436,4 +452,110 @@ func TestExecuteHelmfileCommandWithRetry_ComposesWithNodeHooksCapture(t *testing
 	require.Error(t, err)
 	assert.Contains(t, nodeHooksStderr.String(), "502 Bad Gateway",
 		"the NodeHooks-style caller capture buffer must still receive output when retry is also active")
+}
+
+// TestHelmDiffColorEnv covers the HELM_DIFF_COLOR override that works around
+// helm-diff's own isatty check failing once helmfile pipes its output (issue #2561:
+// `atmos helmfile diff` showed no color without an explicit `--color` flag).
+func TestHelmDiffColorEnv(t *testing.T) {
+	// unsetHelmDiffColor truly removes HELM_DIFF_COLOR from the process environment
+	// (not just sets it to ""), restoring whatever the developer's shell had on
+	// cleanup. This must be a real unset: since helmDiffColorEnv now distinguishes
+	// "unset" from "explicitly set to empty" via os.LookupEnv, t.Setenv(key, "")
+	// would be observed as explicitly set and no longer isolates these cases.
+	unsetHelmDiffColor := func(t *testing.T) {
+		t.Helper()
+		original, hadValue := os.LookupEnv("HELM_DIFF_COLOR")
+		require.NoError(t, os.Unsetenv("HELM_DIFF_COLOR"))
+		t.Cleanup(func() {
+			if hadValue {
+				require.NoError(t, os.Setenv("HELM_DIFF_COLOR", original))
+			}
+		})
+	}
+
+	t.Run("color disabled: no override", func(t *testing.T) {
+		unsetHelmDiffColor(t)
+		assert.Empty(t, helmDiffColorEnv(nil, nil, false))
+	})
+
+	t.Run("color enabled, nothing set: forces HELM_DIFF_COLOR=true", func(t *testing.T) {
+		unsetHelmDiffColor(t)
+		assert.Equal(t, "HELM_DIFF_COLOR=true", helmDiffColorEnv(nil, nil, true))
+	})
+
+	t.Run("color enabled, already set in component env: left alone", func(t *testing.T) {
+		unsetHelmDiffColor(t)
+		envVars := []string{"HELM_DIFF_COLOR=false"}
+		assert.Empty(t, helmDiffColorEnv(envVars, nil, true))
+	})
+
+	t.Run("color enabled, already set in parent process env: left alone", func(t *testing.T) {
+		t.Setenv("HELM_DIFF_COLOR", "false")
+		assert.Empty(t, helmDiffColorEnv(nil, nil, true))
+	})
+
+	t.Run("color enabled, explicitly set to empty string in parent env: respects the user's explicit opt-out", func(t *testing.T) {
+		// Regression test for the bug where os.Getenv(key) != "" could not tell
+		// "unset" apart from "explicitly set to empty", so an explicit opt-out
+		// (HELM_DIFF_COLOR=) was silently overridden back to "true".
+		t.Setenv("HELM_DIFF_COLOR", "")
+		assert.Empty(t, helmDiffColorEnv(nil, nil, true))
+	})
+
+	t.Run("color enabled, explicitly set to empty string in component env: respects the user's explicit opt-out", func(t *testing.T) {
+		unsetHelmDiffColor(t)
+		envVars := []string{"HELM_DIFF_COLOR="}
+		assert.Empty(t, helmDiffColorEnv(envVars, nil, true))
+	})
+
+	t.Run("color enabled, set false in atmos.yaml global env: respects the global setting", func(t *testing.T) {
+		// Regression test (CodeRabbit finding on 4ea50ae4e): ExecuteShellCommand
+		// merges process env < atmosConfig.Env (global `env:` section) < envVars
+		// (env.MergeGlobalEnv, then ExecuteShellCommand's own append), with
+		// exec.Cmd resolving duplicate "KEY=value" entries by last-one-wins. Since
+		// this function's return value gets appended into that same envVars slice,
+		// an override returned here would always outrank an explicit global
+		// `env: HELM_DIFF_COLOR: false` in atmos.yaml, even though neither envVars
+		// nor the parent process env set the key.
+		unsetHelmDiffColor(t)
+		globalEnv := map[string]string{"HELM_DIFF_COLOR": "false"}
+		assert.Empty(t, helmDiffColorEnv(nil, globalEnv, true))
+	})
+
+	t.Run("color enabled, global env sets unrelated key: still overrides", func(t *testing.T) {
+		unsetHelmDiffColor(t)
+		globalEnv := map[string]string{"SOME_OTHER_VAR": "x"}
+		assert.Equal(t, "HELM_DIFF_COLOR=true", helmDiffColorEnv(nil, globalEnv, true))
+	})
+}
+
+// TestHelmDiffColorEnabled covers the bug (CodeRabbit finding on 4ea50ae4e)
+// where using the general terminal.ColorProfile() -- cached from stderr's TTY
+// status -- could say "color enabled" purely because stderr is an interactive
+// terminal, even when stdout (where helmfile's labeled diff output, and thus
+// helm-diff's ANSI codes, actually goes) is redirected to a file or pipe. The
+// fix asks about terminal.Stdout specifically via ColorProfileFor.
+//
+// Only terminal.Stdout is stubbed on the mock (not terminal.Stderr or
+// ColorProfile()): a regression that falls back to the general, stderr-biased
+// profile would call one of those instead, failing the test on the
+// unexpected call rather than silently returning a wrong value.
+func TestHelmDiffColorEnabled(t *testing.T) {
+	t.Run("stderr is a TTY but stdout is redirected: color disabled", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		term := terminal.NewMockTerminal(ctrl)
+		term.EXPECT().ColorProfileFor(terminal.Stdout).Return(terminal.ColorNone)
+
+		assert.False(t, helmDiffColorEnabled(term),
+			"must check stdout's color profile, not stderr's -- stdout is where helmfile's output actually goes")
+	})
+
+	t.Run("stdout is a TTY: color enabled", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		term := terminal.NewMockTerminal(ctrl)
+		term.EXPECT().ColorProfileFor(terminal.Stdout).Return(terminal.ColorTrue)
+
+		assert.True(t, helmDiffColorEnabled(term))
+	})
 }

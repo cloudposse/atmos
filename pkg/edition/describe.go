@@ -15,7 +15,7 @@ type Pin struct {
 	Granularity Granularity `json:"granularity,omitempty" yaml:"granularity,omitempty"`
 	// Source is where the pin came from: "flag", "env", or "config".
 	Source string `json:"source,omitempty" yaml:"source,omitempty"`
-	// Overrides lists each default the pin rolls back: FromValue is the pinned
+	// Overrides lists each default or behavior the pin rolls back: FromValue is the pinned
 	// (effective) value, ToValue the latest default the project would get by unpinning.
 	Overrides []Change `json:"overrides" yaml:"overrides"`
 }

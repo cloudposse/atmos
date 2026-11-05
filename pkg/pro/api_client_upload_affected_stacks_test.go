@@ -18,6 +18,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func TestUploadAffectedStacks_ByteLimits(t *testing.T) {
+	t.Parallel()
+	testUploadByteLimits(t, false)
+}
+
 func TestUploadAffectedStacks_Success(t *testing.T) {
 	t.Parallel()
 

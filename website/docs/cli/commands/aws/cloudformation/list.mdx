@@ -1,0 +1,131 @@
+---
+title: atmos aws cloudformation list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List deployed CloudFormation stacks in the account.
+---
+
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+List deployed CloudFormation stacks in an AWS account and region. Each stack is
+marked as managed when its name matches a configured Atmos component.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation list --help" src="/casts/screengrabs/atmos-aws-cloudformation-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation list [--stack <stack>] [options]
+```
+
+## Examples
+
+Annotate against the components configured in every Atmos stack:
+
+```shell
+atmos aws cloudformation list
+```
+
+Annotate against a single Atmos stack:
+
+```shell
+atmos aws cloudformation list --stack plat-ue2-dev
+```
+
+Only stacks currently in a `*_COMPLETE` status:
+
+```shell
+atmos aws cloudformation list --stack plat-ue2-dev --status CREATE_COMPLETE,UPDATE_COMPLETE
+```
+
+List stacks in a specific region:
+
+```shell
+atmos aws cloudformation list --stack plat-ue2-dev --region us-west-2
+```
+
+## Arguments
+
+This command does not take positional arguments.
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(optional)</em></dt>
+  <dd>Atmos stack whose component names determine the `managed` annotation.
+  Omit to compare against all Atmos stacks. An unknown stack is an error.
+  Go templates in stack names are evaluated; YAML functions are not.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>
+    Identity to use for authentication. Without it, `list` uses the single
+    `default: true` identity declared in your auth configuration or stack
+    manifests, the same way the component verbs do. If no identity can be
+    resolved and the AWS SDK finds no credentials either, the error suggests
+    passing `--identity`. `--identity` with no value selects interactively.
+  </dd>
+
+  <dt>`--status` <em>(optional)</em></dt>
+  <dd>
+    Filter by stack status (comma-separated, e.g. `CREATE_COMPLETE,UPDATE_COMPLETE`).
+    Values are matched case-insensitively against the CloudFormation stack
+    statuses, so `create_complete` works. An unknown value is an error that
+    names it and lists every valid status; it is rejected before any AWS call.
+    By default every status except `DELETE_COMPLETE` is listed.
+  </dd>
+
+  <dt>`--region` <em>(optional)</em></dt>
+  <dd>AWS region to list stacks in. Defaults to the active identity's region, then the AWS SDK's standard resolution chain.</dd>
+</dl>
+
+## Behavior
+
+This command lists stacks in one AWS account and region. It does not take a
+component argument or support `--all`, `--affected`, `--tags`, or `--labels`.
+The `--stack` flag controls annotations; it does not restrict which AWS stacks
+are returned.
+
+## Output
+
+The table starts with a header row. Each following line shows whether the
+stack is `managed` (its name matches an `aws/cloudformation` component's
+configured `stack_name` in the queried stack, or in any stack when `--stack`
+is omitted) or `unmanaged`, its status, and its name:
+
+```text
+MANAGED   STATUS                         STACK NAME
+managed   CREATE_COMPLETE                vpc-plat-ue2-dev
+unmanaged UPDATE_COMPLETE                some-other-stack
+```
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Requires Docker or Podman, Python 3, and network access. Deploy the demo into the local AWS emulator, inspect it, then clean up. No AWS account is needed.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft list -s local
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>

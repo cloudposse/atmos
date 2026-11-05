@@ -24,7 +24,7 @@ func TestRegisterBackendCreate(t *testing.T) {
 	// Reset registry before test.
 	resetBackendRegistry()
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		return &ProvisionResult{}, nil
 	}
 
@@ -46,11 +46,11 @@ func TestGetBackendCreate_MultipleTypes(t *testing.T) {
 	// Reset registry before test.
 	resetBackendRegistry()
 
-	s3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	s3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		return &ProvisionResult{}, nil
 	}
 
-	gcsProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	gcsProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		return &ProvisionResult{}, nil
 	}
 
@@ -109,7 +109,7 @@ func TestGetBackendDelete_MultipleTypes(t *testing.T) {
 
 func TestResetRegistryForTesting(t *testing.T) {
 	// Register some functions first.
-	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		return &ProvisionResult{}, nil
 	}
 	mockDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
@@ -135,7 +135,7 @@ func TestResetRegistryForTesting_ClearsAllEntries(t *testing.T) {
 	// Reset at start.
 	ResetRegistryForTesting()
 
-	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		return &ProvisionResult{}, nil
 	}
 	mockDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
@@ -332,7 +332,7 @@ func TestProvisionBackend_Success(t *testing.T) {
 	var capturedBackendConfig map[string]any
 	var capturedAuthContext *schema.AuthContext
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		provisionerCalled = true
 		capturedBackendConfig = backendConfig
 		capturedAuthContext = authContext
@@ -372,7 +372,7 @@ func TestProvisionBackend_WithAuthContext(t *testing.T) {
 
 	var capturedAuthContext *schema.AuthContext
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		capturedAuthContext = authContext
 		return &ProvisionResult{}, nil
 	}
@@ -414,7 +414,7 @@ func TestProvisionBackend_ProvisionerFailure(t *testing.T) {
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		return nil, errors.New("bucket creation failed: permission denied")
 	}
 
@@ -449,12 +449,12 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 	s3Called := false
 	gcsCalled := false
 
-	mockS3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockS3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		s3Called = true
 		return &ProvisionResult{}, nil
 	}
 
-	mockGCSProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockGCSProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		gcsCalled = true
 		return &ProvisionResult{}, nil
 	}
@@ -515,7 +515,7 @@ func TestConcurrentBackendProvisioning(t *testing.T) {
 	var callCount int
 	var mu sync.Mutex
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 		mu.Lock()
 		callCount++
 		mu.Unlock()
@@ -603,7 +603,7 @@ func TestProvisionBackend_EnabledWrongType(t *testing.T) {
 			resetBackendRegistry()
 
 			provisionerCalled := false
-			mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+			mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
 				provisionerCalled = true
 				return &ProvisionResult{}, nil
 			}

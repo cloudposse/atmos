@@ -25,7 +25,10 @@ var gcpCmd = &cobra.Command{
 // init registers the GCP command hierarchy with the root command.
 func init() {
 	gcpCmd.AddCommand(gke.GkeCmd)
-	internal.Register(&GCPCommandProvider{})
+	internal.Register(
+		&GCPCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/gcp/usage"),
+	)
 }
 
 // GCPCommandProvider registers the gcp command.

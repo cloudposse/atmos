@@ -21,10 +21,6 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}"
-logs:
-  file: "/dev/stderr"
-  level: Info
-
 commands:
   - name: "test"
     description: "Render the local Helm chart, deploy it to the k3s emulator, verify it, then tear it down"

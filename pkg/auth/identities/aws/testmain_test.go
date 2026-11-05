@@ -29,7 +29,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// testCredentialProcessJSONEnv, when set, turns the test binary into a fake AWS credential_process
+// helper that prints its value to stdout and exits. The credential-process identity tests spawn
+// the test binary itself (via os.Executable) so they work on every platform without Unix-only tools.
+const testCredentialProcessJSONEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_JSON"
+
 func TestMain(m *testing.M) {
+	// Act as the fake credential_process helper when requested.
+	if out, ok := os.LookupEnv(testCredentialProcessJSONEnv); ok {
+		fmt.Fprint(os.Stdout, out)
+		os.Exit(0)
+	}
+
 	// Force pkg/browser into its GO_TEST short-circuit as a belt-and-
 	// suspenders safety net in case any code somehow bypasses openURLFunc.
 	//nolint:lintroller // TestMain has no *testing.T; os.Setenv is the only option.

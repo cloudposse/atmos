@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -162,8 +163,8 @@ components:
 
 	// During raw YAML parsing, !env functions are stored as strings (deferred).
 	// They are resolved during stack processing via processCustomYamlTags.
-	assert.Contains(t, vars["env_value"].(string), "!env", "!env should be deferred during parsing")
-	assert.Contains(t, vars["env_value_2"].(string), "!env", "!env should be deferred during parsing")
+	assert.Contains(t, yamlsource.Display(vars["env_value"].(string)), "!env", "!env should be deferred during parsing")
+	assert.Contains(t, yamlsource.Display(vars["env_value_2"].(string)), "!env", "!env should be deferred during parsing")
 	assert.Equal(t, "static", vars["static_value"])
 }
 
@@ -202,15 +203,15 @@ components:
 	// During raw YAML parsing, !env functions in lists are stored as strings (deferred).
 	envList := vars["env_list"].([]interface{})
 	assert.Equal(t, 3, len(envList), "List should have 3 items")
-	assert.Contains(t, envList[0].(string), "!env", "List items with !env should be deferred")
-	assert.Contains(t, envList[1].(string), "!env", "List items with !env should be deferred")
-	assert.Contains(t, envList[2].(string), "!env", "List items with !env should be deferred")
+	assert.Contains(t, yamlsource.Display(envList[0].(string)), "!env", "List items with !env should be deferred")
+	assert.Contains(t, yamlsource.Display(envList[1].(string)), "!env", "List items with !env should be deferred")
+	assert.Contains(t, yamlsource.Display(envList[2].(string)), "!env", "List items with !env should be deferred")
 
 	// Verify mixed list - static values are resolved, !env is deferred.
 	mixedList := vars["mixed_list"].([]interface{})
 	assert.Equal(t, 3, len(mixedList), "Mixed list should have 3 items")
 	assert.Equal(t, "static", mixedList[0], "Static values should be preserved")
-	assert.Contains(t, mixedList[1].(string), "!env", "!env items should be deferred")
+	assert.Contains(t, yamlsource.Display(mixedList[1].(string)), "!env", "!env items should be deferred")
 	assert.Equal(t, "another-static", mixedList[2], "Static values should be preserved")
 }
 

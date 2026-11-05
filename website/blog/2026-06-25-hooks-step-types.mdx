@@ -23,6 +23,8 @@ Here's a `kind: step` hook wired to a custom command, running end to end:
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 Until now, a hook's `kind` selected from a fixed list — `store`, `command`, `infracost`,
@@ -117,7 +119,19 @@ registered step type such as `container`, `toast`, `log`, or `markdown` — the 
 every registered step type.
 :::
 
+## Try it out
+
+<TryExample example="hooks-custom-command">
+
+Install Terraform before running the sample plan and its custom hook.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
+
 ## Get Involved
 
 See the [Hooks reference](/stacks/hooks#kind-step-run-a-step-type) for the full `kind: step`
-documentation, and the [step types](/workflows/steps/type) reference for the available steps.
+documentation, and the [step types](/steps/type) reference for the available steps.

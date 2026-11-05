@@ -20,11 +20,11 @@ func BenchmarkFindAffectedParallel(b *testing.B) {
 			&remoteStacks,
 			atmosConfig,
 			changedFiles,
-			false,                // includeSpaceliftAdminStacks
-			false,                // includeSettings
-			"",                   // stackToFilter
-			false,                // excludeLocked
-			atmosConfig.BasePath, // gitRepoRoot
+			false,                                // includeSpaceliftAdminStacks
+			false,                                // includeSettings
+			"",                                   // stackToFilter
+			AffectedFilter{ExcludeLocked: false}, // filter
+			atmosConfig.BasePath,                 // gitRepoRoot
 		)
 		if err != nil {
 			b.Fatal(err)

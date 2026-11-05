@@ -1,0 +1,23 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: lifecycle-lint-successful-plan
+  description: "Require TFLint to run and succeed after each successful Terraform plan."
+spec:
+  policies:
+    lint-successful-plan:
+      on: operation
+      action: hooks
+      rule: input.event == 'after.terraform.plan' && input.status == 'success'
+      hooks:
+        - ref: lint
+          event: after.terraform.plan
+          required: true
+          require_success: true
+  hooks:
+    lint:
+      kind: command
+      command: tflint
+      args:
+        - --recursive
+  tools: {}

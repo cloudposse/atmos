@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -22,14 +24,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/scaffoldhooks"
+	"github.com/cloudposse/atmos/pkg/generator/source"
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/list/format"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // UI layout constants.
@@ -37,13 +42,7 @@ const (
 	// Terminal and table width defaults.
 	defaultTerminalWidth = 80
 	tableMargin          = 20
-	tableBorderPadding   = 6
 	tableBorderSpacing   = 8
-
-	// Column widths for configuration summary table.
-	settingColumnMinWidth = 12
-	valueColumnMinWidth   = 45
-	sourceColumnMinWidth  = 12
 
 	// Column widths for template table.
 	nameColumnMinWidth    = 20
@@ -94,6 +93,15 @@ const (
 	// executeWithSetup), not one of these two labels.
 	dryRunCreateStatus = "(would create)"
 	dryRunUpdateStatus = "(would update)"
+
+	// Per-file status labels for a file the template stopped generating (see
+	// handleTemplateDeletions). The "forced" variants apply when local edits
+	// survived but --force deleted it anyway instead of leaving it as an
+	// unresolved conflict (see processDeletionCandidate).
+	deletedStatus            = "(deleted)"
+	dryRunDeleteStatus       = "(would delete)"
+	forcedDeletedStatus      = "(deleted --force, had local modifications)"
+	dryRunForcedDeleteStatus = "(would delete --force, had local modifications)"
 )
 
 // fileExistsAt reports whether a file (not directory) already exists at
@@ -114,19 +122,66 @@ func toEngineFile(file tmpl.File) engine.File {
 	}
 }
 
-// FileSpecByPath indexes a scaffold config's spec.files overlay by declared
-// path, for O(1) lookup during the file-generation loop. Files not listed in
-// the overlay generate unconditionally with no Target/Matrix override --
+// FileSpecByPath resolves, for every discovered file, which spec.files[]
+// overlay entry (if any) applies to it, for O(1) lookup by path during the
+// file-generation loop. spec.files[].path may be a literal path or a glob
+// pattern (doublestar syntax: *, ?, [...], **, {a,b} -- see
+// pkg/utils.PathMatch), matched against every discovered file's path, so
+// one entry can gate or multiply an entire directory at once (see
+// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)"). When
+// multiple entries match the same file, the *last* matching entry in
+// declaration order wins -- the same precedence convention as .gitignore/
+// CODEOWNERS (write broad patterns first, specific overrides after; a
+// wrong-order override is a silent no-op, not an error). Files not matched
+// by any entry generate unconditionally with no Target/Matrix override --
 // FileSpec's zero-value When already evaluates to true (see
 // condition.Condition.Evaluate). Exported so the `--dry-run` preview
 // (cmd/scaffold) can gate its file list with the exact same spec.When
 // evaluation real generation uses, instead of a second, divergent copy.
-func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig) map[string]config.FileSpec {
-	specByPath := make(map[string]config.FileSpec, len(scaffoldConfig.Spec.Files))
-	for _, f := range scaffoldConfig.Spec.Files {
-		specByPath[f.Path] = f
+func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig, files []tmpl.File) map[string]config.FileSpec {
+	specByPath := make(map[string]config.FileSpec, len(files))
+	for _, file := range files {
+		if file.IsDirectory {
+			continue
+		}
+		for _, spec := range scaffoldConfig.Spec.Files {
+			matched, err := u.PathMatch(u.NormalizeGlobPattern(spec.Path), file.Path)
+			if err != nil || !matched {
+				continue
+			}
+			specByPath[file.Path] = spec
+		}
 	}
 	return specByPath
+}
+
+// includedPathSet normalizes includedPaths (raw !include/!include.raw path
+// arguments exactly as written, e.g. "./lib/regions.yaml" or an absolute path
+// inside sourceDir, collected by config.WithIncludedPaths) into the same
+// relative, forward-slash, no-leading-"./" form tmpl.File.Path already uses,
+// so the two can be compared by simple map lookup. An absolute argument is
+// first rebased onto sourceDir -- the directory findLocalFile itself resolved
+// it against -- since otherwise it would never match the relative
+// tmpl.File.Path and the consumed file would leak into project output. Once
+// relative, the path package (not filepath) does the rest of the
+// normalization, since this is a fs.FS-relative convention, not an OS one --
+// filepath.Clean would rewrite separators to "\" on Windows and silently
+// break every lookup there.
+func includedPathSet(includedPaths []string, sourceDir string) map[string]bool {
+	set := make(map[string]bool, len(includedPaths))
+	for _, p := range includedPaths {
+		if filepath.IsAbs(p) && sourceDir != "" {
+			if sourceAbs, err := filepath.Abs(sourceDir); err == nil {
+				if rel, err := filepath.Rel(sourceAbs, p); err == nil &&
+					rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					p = rel
+				}
+			}
+		}
+		p = filepath.ToSlash(p)
+		set[path.Clean(strings.TrimPrefix(p, "./"))] = true
+	}
+	return set
 }
 
 // FileOutputPath resolves the output path template for one discovered file:
@@ -141,6 +196,72 @@ func FileOutputPath(file tmpl.File, spec config.FileSpec) string {
 		return spec.Target
 	}
 	return file.Path
+}
+
+// validateDirectoryMatrixTargetsDifferentiate returns an error if any
+// spec.files[] entry declares matrix: and its path (literal or glob)
+// matches more than one discovered file, but its target: never references
+// .file.Path or .file.RelPath. This isn't a heuristic guess: .matrix.<axis>
+// and .Config.* are identical across every file one entry matches for the
+// same resolved combination, and .file.* is the *only* template data that
+// varies per matched file (see engine.FileContext) -- so a target: that
+// never references it is guaranteed, not merely likely, to render every
+// matched file to the same output path for a given combination. Without
+// this check that collision would only surface mid-run, once the second
+// matched file's write is reached, after the first one has already been
+// written to disk (checkDuplicateRenderedPath only prevents the *second*
+// colliding write, not the first). Called before any file in the run is
+// written, so this specific misconfiguration fails cleanly with zero
+// partial output.
+//
+// The activeDelimiters argument must be the same scaffold-wide pair the run's actual
+// rendering starts from (see executeWithSetup's ResolveDelimiters call); each
+// spec's own delimiters, when it declares any, override it via
+// ResolveFileDelimiters -- exactly as processFileEntry does at render time --
+// so TargetReferencesFileContext parses spec.Target's template actions with
+// the delimiters that will really render it instead of always assuming the
+// default "{{"/"}}"  -- a scaffold with custom delimiters would otherwise see
+// every target: parsed as plain text with no actions at all.
+func validateDirectoryMatrixTargetsDifferentiate(fileSpecs map[string]config.FileSpec, activeDelimiters []string) error {
+	matchCounts := make(map[string]int, len(fileSpecs))
+	specByPath := make(map[string]config.FileSpec, len(fileSpecs))
+	for _, spec := range fileSpecs {
+		if len(spec.Matrix) == 0 {
+			continue
+		}
+		matchCounts[spec.Path]++
+		specByPath[spec.Path] = spec
+	}
+
+	for path, count := range matchCounts {
+		if count < 2 {
+			continue
+		}
+		spec := specByPath[path]
+		// Parses spec.Target's own AST and checks for a genuine .file.Path/
+		// .file.RelPath field-access node, rather than a raw
+		// strings.Contains(spec.Target, ".file.") substring search -- which
+		// would also accept a target that merely contains that literal text
+		// outside any template action (e.g. an output filename like
+		// "output.file.txt"), or an invalid field like ".file.Unknown" that
+		// can never actually differentiate matched files. See
+		// engine.TargetReferencesFileContext's doc comment.
+		referencesFile, err := engine.TargetReferencesFileContext(spec.Target, ResolveFileDelimiters(activeDelimiters, spec))
+		if err != nil {
+			return err
+		}
+		if referencesFile {
+			continue
+		}
+		return errUtils.Build(errUtils.ErrScaffoldMatrixTargetMissingFileContext).
+			WithExplanationf("spec.files[] entry `%s` matches %d files but its target does not reference .file.Path or .file.RelPath", path, count).
+			WithHint("Add {{ .file.RelPath }} (or {{ .file.Path }}) to target: so each matched file renders to a distinct output path").
+			WithContext("file_path", path).
+			WithContext("matched_file_count", strconv.Itoa(count)).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
 }
 
 // truncateString truncates a string to the specified length and adds "..." if truncated.
@@ -167,6 +288,20 @@ func ResolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfi
 		return delimiters
 	}
 	return []string{"{{", "}}"}
+}
+
+// ResolveFileDelimiters returns the delimiter pair that applies to every
+// render for one discovered file: the matching spec.files[] entry's own
+// delimiters when it declares exactly two non-empty entries, otherwise active
+// (the scaffold-wide pair from ResolveDelimiters). It is the single place that
+// per-file precedence lives. The processFileEntry function calls it once per file, so the
+// file's content, discovered path, target:, matrix: axis expressions, and
+// engine.File.Delimiters all see the same pair; the --update-strategy=rendered
+// pristine re-render reaches it through the same processFileEntry call.
+// when: is CEL and does not use delimiters. The README is not a spec.files[]
+// entry and always uses the scaffold-wide pair.
+func ResolveFileDelimiters(active []string, spec config.FileSpec) []string {
+	return spec.ResolveDelimiters(active)
 }
 
 // delimitersAsScaffoldConfig wraps activeDelimiters in the
@@ -427,16 +562,32 @@ func (m spinnerModel) View() string {
 
 // InitUI handles the user interface for the init command.
 type InitUI struct {
-	checkmark    string
-	xMark        string
-	grayStyle    lipgloss.Style
-	successStyle lipgloss.Style
-	errorStyle   lipgloss.Style
-	output       strings.Builder
-	processor    *engine.Processor
-	ioCtx        iolib.Context
-	term         terminal.Terminal
-	skipHooks    func(string) bool
+	edition      string
+	creationPlan *CreationPlan
+	// quietPlan suppresses the per-file preview lines, the "Would generate N files." summary, and
+	// the README that a creation plan would otherwise print, so the caller can report its own
+	// result. It only has an effect while creationPlan is set (see PlanCreationQuiet).
+	quietPlan bool
+
+	checkmark          string
+	xMark              string
+	grayStyle          lipgloss.Style
+	successStyle       lipgloss.Style
+	errorStyle         lipgloss.Style
+	output             strings.Builder
+	processor          *engine.Processor
+	ioCtx              iolib.Context
+	term               terminal.Terminal
+	skipHooks          func(string) bool
+	updateStrategy     engine.UpdateStrategy
+	renderedBaseConfig *tmpl.Configuration
+	renderedBaseValues map[string]interface{}
+	// renderedBaseRoot is the root of the pristine old-ref render tempDir set
+	// up by setupUpdateBase for UpdateStrategyRendered (see renderPristineBase).
+	// It stays valid for the lifetime of one Execute* call -- the caller defers
+	// cleanup until after generation finishes -- and is read by
+	// handleTemplateDeletions to detect files the template stopped generating.
+	renderedBaseRoot string
 }
 
 // NewInitUI creates a new InitUI instance.
@@ -454,8 +605,14 @@ func NewInitUI(ioCtx iolib.Context, term terminal.Terminal) *InitUI {
 	}
 }
 
-// SetThreshold sets the threshold for merge operations.
-func (ui *InitUI) SetThreshold(thresholdPercent int) {
+// SetEdition selects the project edition used for scaffold hook validation.
+func (ui *InitUI) SetEdition(pin string) {
+	ui.edition = pin
+}
+
+// SetMaxChanges sets the maximum percentage of changed lines allowed in a
+// 3-way merge before --update fails instead of applying it.
+func (ui *InitUI) SetMaxChanges(thresholdPercent int) {
 	ui.processor.SetMaxChanges(thresholdPercent)
 }
 
@@ -475,6 +632,13 @@ func (ui *InitUI) SetConflictStrategy(strategy merge.ConflictStrategy) {
 // SetMergeDriver sets which merger handles every file during a 3-way merge.
 func (ui *InitUI) SetMergeDriver(driver merge.Driver) {
 	ui.processor.SetMergeDriver(driver)
+}
+
+// SetRecreateDeleted controls whether --update recreates a file the user
+// deleted but the template still generates (default false: the deletion is
+// left in place). See engine.Processor.SetRecreateDeleted.
+func (ui *InitUI) SetRecreateDeleted(recreate bool) {
+	ui.processor.SetRecreateDeleted(recreate)
 }
 
 // SetSkipHooks configures the --skip-hooks predicate (see
@@ -510,9 +674,21 @@ func (ui *InitUI) colorSource(source string) string {
 		return styles.Command.Render("scaffold")
 	case "flag":
 		return styles.PackageName.Render("flag")
+	case "computed":
+		return styles.PackageName.Render("computed")
 	default:
 		return styles.Muted.Render("default")
 	}
+}
+
+// flushGenerationOutput flushes the file-generation phase's buffered output (per-file status lines
+// and the summary line). A quiet creation plan discards it instead.
+func (ui *InitUI) flushGenerationOutput() {
+	if ui.quietPlan && ui.creationPlan != nil {
+		ui.output.Reset()
+		return
+	}
+	ui.flushOutput()
 }
 
 // flushOutput writes the accumulated output to stderr (UI channel) and clears the buffer.
@@ -536,6 +712,51 @@ func (ui *InitUI) ExecuteWithBaseRef(embedsConfig *tmpl.Configuration, targetPat
 	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, []string{"{{", "}}"})
 }
 
+// setupUpdateBase configures the Processor's 3-way merge base for --update,
+// per ui.updateStrategy: UpdateStrategyRendered renders a pristine old-ref
+// copy of the template (see renderPristineBase) and points the merge base at
+// it; UpdateStrategyTracked (the default) sets up git-history-backed storage
+// when baseRef is known. Delimiters is forwarded to renderPristineBase so the
+// old-ref render resolves the same active delimiters as this run's own
+// files, rather than falling back to the "{{"/"}}" default whenever the old
+// scaffold.yaml didn't set spec.delimiters. The returned cleanup is always
+// safe to call (a no-op under UpdateStrategyTracked) and must be deferred by
+// the caller.
+func (ui *InitUI) setupUpdateBase(targetPath, baseRef string, delimiters []string) (cleanup func(), err error) {
+	if ui.updateStrategy == engine.UpdateStrategyRendered {
+		// ui.renderedBaseConfig is only ever populated by SetRenderedBaseSource,
+		// called by the CLI layer after resolving the target's recorded
+		// provenance (source.ResolveRenderedBase). A caller that flips
+		// updateStrategy to Rendered without also calling SetRenderedBaseSource
+		// first (e.g. a "confirm update instead" retry that turns update=true
+		// on after the fact) would otherwise reach renderPristineBase with a
+		// nil config and panic dereferencing its Files field.
+		if ui.renderedBaseConfig == nil {
+			return func() {}, errUtils.Build(errUtils.ErrRenderedBaseNotConfigured).
+				WithExplanation("Internal error: rendered update-strategy was selected but no base source was resolved").
+				WithHint("This is an atmos bug -- please report it").
+				Err()
+		}
+		renderedTempDir, cleanupRenderedBase, err := ui.renderPristineBase(ui.renderedBaseConfig, ui.renderedBaseValues, delimiters)
+		if err != nil {
+			return func() {}, fmt.Errorf("failed to render the update-strategy=rendered base: %w", err)
+		}
+		ui.processor.SetupRenderedBaseStorage(targetPath, renderedTempDir)
+		ui.renderedBaseRoot = renderedTempDir
+		return func() {
+			cleanupRenderedBase()
+			ui.renderedBaseRoot = ""
+		}, nil
+	}
+
+	if baseRef != "" {
+		if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
+			return func() {}, fmt.Errorf("failed to setup git storage: %w", err)
+		}
+	}
+	return func() {}, nil
+}
+
 // ExecuteWithDelimiters runs the initialization process with UI and custom delimiters.
 //
 //nolint:revive // argument-limit: public API maintains compatibility
@@ -553,11 +774,16 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig *tmpl.Configuration, target
 		return err
 	}
 
-	// Setup git storage for update mode
-	if update && baseRef != "" {
-		if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
-			return fmt.Errorf("failed to setup git storage: %w", err)
+	// Setup the 3-way merge base for update mode. UpdateStrategyRendered's
+	// base comes from a pristine re-render of the template (no baseRef/git
+	// dependency, see renderPristineBase); UpdateStrategyTracked (the
+	// default) is today's existing git-history-backed behavior.
+	if update {
+		cleanupUpdateBase, err := ui.setupUpdateBase(targetPath, baseRef, delimiters)
+		if err != nil {
+			return err
 		}
+		defer cleanupUpdateBase()
 	}
 
 	ui.writeOutput("Generating %s in %s\n\n", embedsConfig.Name, targetPath)
@@ -722,10 +948,24 @@ func (ui *InitUI) resolvePreCollectedValues(
 
 	// Fresh generation: merge the pre-collected values into cmdTemplateValues
 	// and use --use-defaults so executeWithSetup skips showing the form again.
-	merged := make(map[string]interface{}, len(preCollectedValues)+len(cmdTemplateValues))
+	scaffoldConfig, cfgErr := ui.loadScaffoldConfigFromEmbeds(embedsConfig)
+	if cfgErr != nil {
+		return nil, useDefaults, cfgErr
+	}
+	merged := make(map[string]interface{}, len(preCollectedValues))
 	for k, v := range preCollectedValues {
 		merged[k] = v
 	}
+	// preCollectedValues already contains this temp-dir setup pass's own
+	// ComputeFields results, keyed by field name like everything else in
+	// the map. Strip them back out before this becomes the next call's
+	// cmdTemplateValues -- otherwise the second RunSetupForm's own
+	// RejectComputedFieldOverrides would mistake the first pass's own
+	// computed output for a user-supplied --set override on the same
+	// field and reject it, even though the user never touched it. The
+	// second pass recomputes each one fresh from the regular-field
+	// answers already present in merged.
+	config.StripComputedFieldValues(scaffoldConfig, merged)
 	// Caller-supplied flags take highest priority and overwrite.
 	for k, v := range cmdTemplateValues {
 		merged[k] = v
@@ -814,7 +1054,7 @@ func (ui *InitUI) loadScaffoldConfigFromEmbeds(embedsConfig *tmpl.Configuration)
 			Err()
 	}
 
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content, config.WithSourceDir(embedsConfig.IncludeSourceDir()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load scaffold configuration: %w", err)
 	}
@@ -838,6 +1078,14 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 	return currentDirPrefix + filepath.Base(config.Name)
 }
 
+// fileCount renders a count with the correctly pluralized noun ("1 file", "2 files").
+func fileCount(n int) string {
+	if n == 1 {
+		return "1 file"
+	}
+	return fmt.Sprintf("%d files", n)
+}
+
 // initializationSummaryLine formats executeWithCommandValues's post-run
 // summary line. When dryRun is true nothing was actually written to disk, so
 // the line is worded as a preview ("Would initialize") instead of a
@@ -847,13 +1095,13 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 func initializationSummaryLine(dryRun bool, successCount, errorCount int) string {
 	switch {
 	case errorCount > 0 && dryRun:
-		return fmt.Sprintf("Would initialize %d files. %d would fail.\n", successCount, errorCount)
+		return fmt.Sprintf("Would initialize %s. %d would fail.\n", fileCount(successCount), errorCount)
 	case errorCount > 0:
-		return fmt.Sprintf("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
+		return fmt.Sprintf("Initialized %s. Failed to initialize %s.\n", fileCount(successCount), fileCount(errorCount))
 	case dryRun:
-		return fmt.Sprintf("Would initialize %d files.\n", successCount)
+		return fmt.Sprintf("Would initialize %s.\n", fileCount(successCount))
 	default:
-		return fmt.Sprintf("Initialized %d files.\n", successCount)
+		return fmt.Sprintf("Initialized %s.\n", fileCount(successCount))
 	}
 }
 
@@ -932,7 +1180,7 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 // RunSetupForm runs the interactive setup form to collect configuration values
 // This method can be used by both init and scaffold commands.
 func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath string, useDefaults bool, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
-	mergedValues, valueSources, err := buildSetupValues(scaffoldConfig, targetPath, cmdTemplateValues)
+	mergedValues, valueSources, err := buildSetupValuesWithHistory(scaffoldConfig, targetPath, cmdTemplateValues, ui.creationPlan == nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -953,6 +1201,15 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 		return nil, nil, err
 	}
 
+	// Derive every type: computed field's value from the now-final answers
+	// (user-supplied and defaulted alike). Runs after validation, not before,
+	// so a computed field's expression always sees fully-validated answers,
+	// and before the summary below, so a computed field's value is visible
+	// in it like any other field's.
+	if err := config.ComputeFields(scaffoldConfig, mergedValues, ui.processor.RenderAnswersExpression); err != nil {
+		return nil, nil, fmt.Errorf("failed to compute derived fields: %w", err)
+	}
+
 	// Show configuration summary after any user input
 	// Get configuration summary data and display it
 	rows, header := config.GetConfigurationSummary(scaffoldConfig, mergedValues, valueSources)
@@ -968,14 +1225,25 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	return mergedValues, valueSources, nil
 }
 
-// buildSetupValues merges project defaults, any values already persisted at
+// buildSetupValuesWithHistory merges project defaults, any values already persisted at
 // targetPath, and the command-line-supplied values (highest priority),
 // tracking which source each field ultimately came from for display.
-func buildSetupValues(scaffoldConfig *config.ScaffoldConfig, targetPath string, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
+func buildSetupValuesWithHistory(scaffoldConfig *config.ScaffoldConfig, targetPath string, cmdTemplateValues map[string]interface{}, history bool) (map[string]interface{}, map[string]string, error) {
+	// Reject --set (or any other command-line-supplied) values targeting a
+	// type: computed field immediately, rather than letting ComputeFields
+	// silently overwrite them later with no explanation.
+	if err := config.RejectComputedFieldOverrides(scaffoldConfig, cmdTemplateValues); err != nil {
+		return nil, nil, err
+	}
+
 	// Load existing user values from the scaffold template directory
-	userValues, err := config.LoadUserValues(targetPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load user values: %w", err)
+	userValues := map[string]interface{}{}
+	if history {
+		var err error
+		userValues, err = config.LoadUserValues(targetPath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to load user values: %w", err)
+		}
 	}
 
 	// Deep merge project defaults with user values
@@ -1059,6 +1327,8 @@ func validateSetupValues(scaffoldConfig *config.ScaffoldConfig, mergedValues map
 // spec.Target (or file.Path when Target is unset) as the output path
 // template (processSingleFileEntry), or once per matrix combination that
 // survives spec.When when spec.Matrix is set (processMatrixedFileEntry).
+// The activeDelimiters argument is the scaffold-wide pair; the file's own pair (see
+// ResolveFileDelimiters) is resolved here once and used for everything below.
 //
 //nolint:revive // argument-limit: dispatches to processSingleFileEntry/processMatrixedFileEntry, which need the same full context
 func (ui *InitUI) processFileEntry(
@@ -1070,13 +1340,19 @@ func (ui *InitUI) processFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
+	matrixExpansions map[string]matrixExpansionResult,
 ) (successCount, errorCount int, failedPaths []string, err error) {
 	outputTemplate := FileOutputPath(file, spec)
+
+	// From here down activeDelimiters is this file's own pair, not the
+	// scaffold-wide one: every render below (path, target:, matrix: axes,
+	// content) must agree on it.
+	activeDelimiters = ResolveFileDelimiters(activeDelimiters, spec)
 
 	if len(spec.Matrix) == 0 {
 		return ui.processSingleFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
 	}
-	return ui.processMatrixedFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	return ui.processMatrixedFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths, matrixExpansions)
 }
 
 // processSingleFileEntry renders and writes file's one non-matrix output,
@@ -1103,7 +1379,7 @@ func (ui *InitUI) processSingleFileEntry(
 			ui.grayStyle.Render(skippedText))
 		return 0, 0, nil, nil
 	}
-	success, failed, causeErr := ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	success, failed, causeErr := ui.writeOneOutput(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, nil, activeDelimiters, seenRenderedPaths)
 	switch {
 	case success:
 		return 1, 0, nil, nil
@@ -1114,6 +1390,20 @@ func (ui *InitUI) processSingleFileEntry(
 	}
 }
 
+// matrixExpansionResult caches one spec.files[] entry's resolved matrix rows
+// (or expansion error), keyed by spec.Path in executeWithSetup's per-run
+// matrixExpansions map. Without this cache, a directory-level glob entry
+// matching N discovered files would call engine.ExpandMatrix N independent
+// times with identical inputs -- redundant, but also unsafe: an axis
+// expression can use a non-deterministic template function (e.g. Sprig's
+// randAlphaNum/uuidv4/now), and re-executing it fresh per matched file would
+// resolve a *different* value for what the scaffold author intended as one
+// shared combination applied uniformly across the whole matched directory.
+type matrixExpansionResult struct {
+	rows []map[string]string
+	err  error
+}
+
 // processMatrixedFileEntry renders and writes one output per matrix
 // combination that survives spec.When. Each combination is bound into a
 // shallow-cloned copy of mergedValues under engine.MatrixKey, which
@@ -1121,7 +1411,10 @@ func (ui *InitUI) processSingleFileEntry(
 // so path and content templates see .matrix.<axis> directly. An expansion
 // error counts as one failure for the whole entry; err joins every failed
 // combination's own error so callers can preserve the real cause(s)
-// alongside the generic "Failed to generate N files" summary.
+// alongside the generic "Failed to generate N files" summary. matrixExpansions
+// caches spec.Matrix's resolution per spec.Path (see matrixExpansionResult)
+// so every file a directory-level glob entry matches sees the exact same
+// resolved rows.
 //
 //nolint:revive // argument-limit: needs the same full context processFileEntry received
 func (ui *InitUI) processMatrixedFileEntry(
@@ -1134,8 +1427,15 @@ func (ui *InitUI) processMatrixedFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
+	matrixExpansions map[string]matrixExpansionResult,
 ) (successCount, errorCount int, failedPaths []string, err error) {
-	rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderAnswersListExpression, activeDelimiters)
+	expansion, cached := matrixExpansions[spec.Path]
+	if !cached {
+		rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderAnswersListExpression, activeDelimiters)
+		expansion = matrixExpansionResult{rows: rows, err: expandErr}
+		matrixExpansions[spec.Path] = expansion
+	}
+	rows, expandErr := expansion.rows, expansion.err
 	if expandErr != nil {
 		ui.writeOutput(fileStatusFormat,
 			ui.errorStyle.Render(ui.xMark),
@@ -1186,9 +1486,10 @@ func (ui *InitUI) processMatrixedFileEntry(
 
 // processMatrixRow renders and writes a single matrix combination (row),
 // gated by spec.When -- split out of processMatrixedFileEntry's loop to
-// keep that function within this repo's function-length limit. Row is
-// bound into mergedValues under engine.MatrixKey, same as
-// processMatrixedFileEntry's own doc comment describes.
+// keep that function within this repo's function-length limit. Row (and,
+// when file is one of several files a directory-level glob spec.Path
+// matched, file's own context) is bound in by writeOneOutput's single
+// clone point -- see mergedValuesWithContext.
 //
 //nolint:revive // argument-limit: needs the same full context processMatrixedFileEntry received
 func (ui *InitUI) processMatrixRow(
@@ -1203,14 +1504,9 @@ func (ui *InitUI) processMatrixRow(
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
 ) (success, failed bool, causeErr error) {
-	iterValues := make(map[string]interface{}, len(mergedValues)+1)
-	for k, v := range mergedValues {
-		iterValues[k] = v
-	}
-	iterValues[engine.MatrixKey] = row
-
 	if !spec.When.Evaluate(condition.Context{Answers: mergedValues, Matrix: row}) {
-		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, iterValues, activeDelimiters)
+		values := mergedValuesWithContext(mergedValues, row, file, spec)
+		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, values, activeDelimiters)
 		if pathErr != nil {
 			renderedPath = outputTemplate
 		}
@@ -1221,7 +1517,7 @@ func (ui *InitUI) processMatrixRow(
 		return false, false, nil
 	}
 
-	return ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, iterValues, activeDelimiters, seenRenderedPaths)
+	return ui.writeOneOutput(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, row, activeDelimiters, seenRenderedPaths)
 }
 
 // checkDuplicateRenderedPath reports whether renderedPath was already
@@ -1276,11 +1572,17 @@ func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefor
 		}
 		return true, false
 	case errors.As(err, &skipErr):
-		// File was intentionally skipped.
+		// File was intentionally skipped. A specific Reason (e.g. the user
+		// deleted this file -- see engine.Processor.deletedByUser) overrides
+		// the generic "(skipped)" label with that explanation.
+		label := skippedText
+		if skipErr.Reason != "" {
+			label = fmt.Sprintf("(skipped: %s)", skipErr.Reason)
+		}
 		ui.writeOutput(fileStatusFormat,
 			ui.grayStyle.Render(bulletSymbol),
 			skipErr.Path,
-			ui.grayStyle.Render(skippedText))
+			ui.grayStyle.Render(label))
 		return false, false
 	default:
 		ui.writeOutput(fileStatusFormat,
@@ -1291,22 +1593,53 @@ func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefor
 	}
 }
 
-// writeOneOutput renders outputTemplate against values, applies the skip
-// and duplicate-output-path guards, and writes via ProcessFile -- shared by
-// both the single-file and per-combination matrix paths. See
+// mergedValuesWithContext returns a single shallow clone of mergedValues
+// with the current matrix row (if any -- nil for a non-matrix entry) and
+// the current discovered file's own path exposed under
+// engine.MatrixKey/engine.FileContextKey, letting Target/Path and Content
+// templates reference .matrix.<axis> and .file.Path/.file.RelPath. This is
+// the single point both writeOneOutput and processMatrixRow's own
+// skip-line display rendering use -- mergedValues itself is never mutated
+// in place, since it's the shared per-run answers map, read again by
+// scaffoldhooks.Run after every file in this run has been processed.
+func mergedValuesWithContext(mergedValues map[string]interface{}, row map[string]string, file tmpl.File, spec config.FileSpec) map[string]interface{} {
+	values := make(map[string]interface{}, len(mergedValues))
+	for k, v := range mergedValues {
+		values[k] = v
+	}
+	if row != nil {
+		values[engine.MatrixKey] = row
+	}
+	values[engine.FileContextKey] = engine.FileContext{
+		Path:    file.Path,
+		RelPath: u.WildcardRelPath(spec.Path, file.Path),
+	}
+	return values
+}
+
+// writeOneOutput renders outputTemplate against mergedValues (plus row and
+// file's own context, folded in once via mergedValuesWithContext), applies
+// the skip and duplicate-output-path guards, and writes via ProcessFile --
+// shared by both the single-file and per-combination matrix paths. See
 // reportWriteResult for what success/failed mean; causeErr is the
 // underlying error when failed is true, for callers that want to preserve
 // it instead of a generic message.
+//
+//nolint:revive // argument-limit: needs the same full context processFileEntry received
 func (ui *InitUI) writeOneOutput(
 	file tmpl.File,
+	spec config.FileSpec,
 	outputTemplate string,
 	targetPath string,
 	force, update bool,
 	scaffoldConfig *config.ScaffoldConfig,
-	values map[string]interface{},
+	mergedValues map[string]interface{},
+	row map[string]string,
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
 ) (success, failed bool, causeErr error) {
+	values := mergedValuesWithContext(mergedValues, row, file, spec)
+
 	// Process the file path as a template first to check if it should be skipped.
 	renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, values, activeDelimiters)
 	if pathErr != nil {
@@ -1336,9 +1669,17 @@ func (ui *InitUI) writeOneOutput(
 	// Use the templating processor to handle file processing. The engine
 	// File's Path is outputTemplate (spec.Target when set, else file.Path
 	// unchanged), so ProcessFile re-renders and writes the same path this
-	// function just resolved above.
+	// function just resolved above. OriginalSourcePath is captured before
+	// Path is overwritten -- it's the file's own path as discovered in the
+	// template's source tree, which determineBaseContent falls back to as a
+	// merge-base candidate when spec.Target has changed since the file was
+	// last generated (see File.OriginalSourcePath's doc comment).
 	engineFile := toEngineFile(file)
+	engineFile.OriginalSourcePath = engineFile.Path
 	engineFile.Path = outputTemplate
+	// ProcessFile derives its delimiters from scaffoldConfig unless the file
+	// carries its own, so hand it the pair resolved for this file above.
+	engineFile.Delimiters = activeDelimiters
 	err := ui.processor.ProcessFile(engineFile, targetPath, force, update, scaffoldConfig, values)
 
 	success, failed = ui.reportWriteResult(err, renderedPath, existedBefore)
@@ -1358,13 +1699,13 @@ func (ui *InitUI) writeOneOutput(
 func generationSummaryLine(dryRun bool, successCount, errorCount int) string {
 	switch {
 	case errorCount > 0 && dryRun:
-		return fmt.Sprintf("Would generate %d files. %d would fail.\n", successCount, errorCount)
+		return fmt.Sprintf("Would generate %s. %d would fail.\n", fileCount(successCount), errorCount)
 	case errorCount > 0:
-		return fmt.Sprintf("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
+		return fmt.Sprintf("Generated %s. Failed to generate %s.\n", fileCount(successCount), fileCount(errorCount))
 	case dryRun:
-		return fmt.Sprintf("Would generate %d files.\n", successCount)
+		return fmt.Sprintf("Would generate %s.\n", fileCount(successCount))
 	default:
-		return fmt.Sprintf("Generated %d files.\n", successCount)
+		return fmt.Sprintf("Generated %s.\n", fileCount(successCount))
 	}
 }
 
@@ -1372,6 +1713,19 @@ func generationSummaryLine(dryRun bool, successCount, errorCount int) string {
 //
 //nolint:gocognit,revive,cyclop,funlen // complex orchestration function with multiple setup phases
 func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
+	// Reject a rendered-strategy generation up front when embedsConfig's
+	// source can never yield a project record a later rendered update could
+	// actually reconstruct from (e.g. an embedded template, or a git/oci
+	// source whose ref failed to resolve) -- see
+	// source.ValidateRenderedSource's doc comment. Checked before any
+	// prompt, directory creation, or hook runs, so a doomed rendered request
+	// fails immediately instead of only surfacing at the next update.
+	if ui.updateStrategy == engine.UpdateStrategyRendered {
+		if err := source.ValidateRenderedSource(embedsConfig.Source, embedsConfig.ResolvedRef); err != nil {
+			return err
+		}
+	}
+
 	// Find the scaffold.yaml file in the configuration
 	var scaffoldConfigFile *tmpl.File
 	for i := range embedsConfig.Files {
@@ -1387,17 +1741,11 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			Err()
 	}
 
-	// Create directory if needed. Skipped in dry-run: a preview must leave no
-	// trace on disk, including an otherwise-empty target directory that
-	// didn't exist before the preview ran.
-	if !ui.processor.DryRun {
-		if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
-		}
-	}
-
 	// Load the scaffold configuration from embedded content (don't write to target folder)
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
+	var includedPaths []string
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(
+		scaffoldConfigFile.Content, config.WithSourceDir(embedsConfig.IncludeSourceDir()), config.WithIncludedPaths(&includedPaths),
+	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrGeneratorValidation) {
 			return errUtils.Build(err).
@@ -1409,15 +1757,53 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to load scaffold configuration: %w", err)
 	}
 
+	scaffoldHooks, err := config.DecodeHooks(scaffoldConfig.Spec.Hooks)
+	if err != nil {
+		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
+	}
+
+	if err := hooks.ValidateEvents(ui.edition, scaffoldHooks); err != nil {
+		return err
+	}
+
 	// Run the setup form to collect configuration values.
 	mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, targetPath, useDefaults, cmdTemplateValues)
 	if err != nil {
 		return fmt.Errorf("failed to run setup form: %w", err)
 	}
 
-	scaffoldHooks, err := config.DecodeHooks(scaffoldConfig.Spec.Hooks)
-	if err != nil {
-		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
+	if ui.creationPlan != nil {
+		ui.creationPlan.Config = scaffoldConfig
+		ui.creationPlan.Values = mergedValues
+	}
+
+	// Resolved once, up front, with the same precedence ProcessFile's own
+	// extractDelimiters uses (scaffoldConfig.Spec.Delimiters wins), so this
+	// preflight check, the actual file-body rendering below, and README
+	// rendering all agree on which delimiters a template action uses. This is
+	// the scaffold-wide pair: a spec.files[] entry's own delimiters override
+	// it per file (see ResolveFileDelimiters), in the preflight check and in
+	// processFileEntry alike; only the README always uses this one.
+	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
+
+	// Resolved before hooks run (not just before writing) so a scaffold with
+	// this specific misconfiguration fails with zero side effects at all --
+	// not even a pre-generate hook -- rather than a partially-generated
+	// project. See validateDirectoryMatrixTargetsDifferentiate's doc comment
+	// for why this check can't wait until a colliding file is actually
+	// reached mid-run.
+	fileSpecs := FileSpecByPath(scaffoldConfig, embedsConfig.Files)
+	if err := validateDirectoryMatrixTargetsDifferentiate(fileSpecs, activeDelimiters); err != nil {
+		return err
+	}
+
+	// Create directory if needed. Skipped in dry-run: a preview must leave no
+	// trace on disk, including an otherwise-empty target directory that
+	// didn't exist before the preview ran.
+	if !ui.processor.DryRun {
+		if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
 	}
 
 	// Run pre-generate hooks before any file is written: nothing has run yet
@@ -1426,7 +1812,15 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// commands (git operations, notifications, ...) that are real side
 	// effects a preview must never trigger.
 	if !ui.processor.DryRun {
-		if err := scaffoldhooks.Run(scaffoldHooks, hooks.BeforeScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+		if err := scaffoldhooks.Run(scaffoldhooks.RunInput{
+			Edition:    ui.edition,
+			HooksMap:   scaffoldHooks,
+			Event:      hooks.BeforeScaffoldGenerate,
+			Answers:    mergedValues,
+			Status:     "success",
+			SkipHooks:  ui.skipHooks,
+			TargetPath: targetPath,
+		}); err != nil {
 			return fmt.Errorf("pre-generate hook failed: %w", err)
 		}
 	}
@@ -1440,18 +1834,28 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// real cause(s) via errors.Join instead of only carrying the generic
 	// ErrScaffoldGeneration sentinel.
 	var failureErrs []error
-	// Resolve once, with the same precedence ProcessFile's own extractDelimiters
-	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
-	// check and the actual file-body rendering below never disagree.
-	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
-	fileSpecs := FileSpecByPath(scaffoldConfig)
 	// Tracks every rendered output path across the whole loop (not just
 	// matrix entries) so two files -- matrixed or not -- can never silently
 	// clobber one another's write.
 	seenRenderedPaths := make(map[string]string)
+	// Caches ExpandMatrix's result per spec.Path (not per discovered file),
+	// so a directory-level glob entry matching N files resolves its
+	// combination(s) exactly once and reuses the same rows for every matched
+	// file -- see matrixExpansionResult's doc comment for why recomputing
+	// per file is unsafe, not just wasteful.
+	matrixExpansions := make(map[string]matrixExpansionResult)
+	includedSet := includedPathSet(includedPaths, embedsConfig.IncludeSourceDir())
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
+			continue
+		}
+
+		// Skip a file some !include tag in scaffold.yaml consumed -- it
+		// exists only to be read as data (options:, computed value:, or a
+		// matrix: axis), never to be generated as regular project output.
+		// See config.WithIncludedPaths.
+		if includedSet[file.Path] {
 			continue
 		}
 
@@ -1464,7 +1868,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 
 		spec := fileSpecs[file.Path]
 		entrySuccess, entryErrors, entryFailedPaths, entryErr := ui.processFileEntry(
-			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths,
+			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths, matrixExpansions,
 		)
 		successCount += entrySuccess
 		errorCount += entryErrors
@@ -1474,20 +1878,63 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		}
 	}
 
+	// Delete files the template stopped generating (--update-strategy=rendered
+	// only -- see handleTemplateDeletions's own doc comment). A no-op for every
+	// other strategy/mode, folded into the same counters as any other entry
+	// above so the summary line and error branch below need no special-casing.
+	//
+	// Skipped entirely when the main loop already failed: a failed entry (e.g.
+	// a matrix expansion error in processMatrixedFileEntry) returns before
+	// seenRenderedPaths is ever populated for that file's outputs, making them
+	// indistinguishable from paths the template genuinely stopped generating.
+	// Running the deletion pass against that incomplete set could delete files
+	// still-valid-but-unrecorded due to the unrelated failure, not because the
+	// template actually removed them.
+	if errorCount == 0 {
+		deletionResult, deleteErr := ui.handleTemplateDeletions(targetPath, seenRenderedPaths, force)
+		successCount += deletionResult.successCount
+		errorCount += deletionResult.errorCount
+		failedFiles = append(failedFiles, deletionResult.failedPaths...)
+		if deleteErr != nil {
+			failureErrs = append(failureErrs, deleteErr)
+			// handleTemplateDeletions can fail (e.g. the filepath.WalkDir scan
+			// itself erroring) without ever incrementing deletionResult.errorCount
+			// -- that only counts individual candidate failures, not a scan
+			// failure before any candidate was even reached. Without this,
+			// errorCount would stay 0, the failure branch below would never
+			// trigger, and the run would report success and persist a new
+			// project record despite a real deletion-scan failure -- losing the
+			// old rendered reference a later --update would need to find the
+			// remaining obsolete files.
+			if deletionResult.errorCount == 0 {
+				errorCount++
+			}
+		}
+	}
+
 	// Print summary. In dry-run mode nothing was actually written to disk, so
 	// the wording says "would" instead of implying files were generated.
 	ui.writeOutput(newlineStr)
 	ui.writeOutput("%s", generationSummaryLine(ui.processor.DryRun, successCount, errorCount))
 	if errorCount > 0 {
 		// Don't render README if there were errors - flush output and return error immediately.
-		ui.flushOutput()
+		ui.flushGenerationOutput()
 		// Post-generate hooks still get a chance to run on failure (e.g. a
 		// cleanup step declaring when: always/failure); the implicit-success
 		// default on an unconditioned hook skips it here, matching hooks
 		// elsewhere in Atmos. Skipped in dry-run, same as the pre-generate
 		// hooks above.
 		if !ui.processor.DryRun {
-			if hookErr := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "failure", ui.skipHooks); hookErr != nil {
+			if hookErr := scaffoldhooks.Run(scaffoldhooks.RunInput{
+				Edition:    ui.edition,
+				HooksMap:   scaffoldHooks,
+				Event:      hooks.AfterScaffoldGenerate,
+				Answers:    mergedValues,
+				Status:     "failure",
+				Err:        errors.Join(failureErrs...),
+				SkipHooks:  ui.skipHooks,
+				TargetPath: targetPath,
+			}); hookErr != nil {
 				log.Warn("Post-generate hook failed", "error", hookErr)
 			}
 		}
@@ -1504,23 +1951,62 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// --update against that same directory would wrongly treat it as an
 	// existing project instead of a fresh generate.
 	if !ui.processor.DryRun {
-		if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
+		// RenderedRef and BaseRef are mutually exclusive (see
+		// ScaffoldSpec.RenderedRef): each is only ever set under the update
+		// strategy it belongs to, even though embedsConfig.ResolvedRef is
+		// populated for any git:: or oci:// fetch regardless of strategy, and
+		// baseRef can arrive non-empty here regardless of strategy too (e.g.
+		// a caller's own "offer update instead" retry-base-ref resolution).
+		// Gating both defends this write site directly rather than relying on
+		// every caller to pass an empty baseRef under rendered.
+		provenance := config.ProjectRecordProvenance{Source: embedsConfig.Source}
+		if ui.updateStrategy == engine.UpdateStrategyRendered {
+			provenance.RenderedRef = embedsConfig.ResolvedRef
+			if provenance.RenderedRef == "" && !source.IsPinnableSource(embedsConfig.Source) {
+				// Local/file, S3, and plain HTTP sources have no immutable ref
+				// to pin (see source.IsPinnableSource), so Resolve legitimately
+				// left ResolvedRef empty here -- that's expected, not a
+				// resolution failure. Recording the documented marker instead
+				// of leaving RenderedRef empty keeps SaveProjectRecord from
+				// dropping the field, so a later --update-strategy=rendered
+				// update doesn't wrongly fail with "no recorded
+				// rendered-strategy history", and a later
+				// --update-strategy=tracked run's CheckNotSwitchedFromRendered
+				// still detects the strategy switch instead of silently
+				// treating the record as if it were never generated under
+				// rendered at all. An unresolved git/oci ref (a genuine
+				// resolution failure) intentionally does not get this marker.
+				provenance.RenderedRef = source.UnpinnedRenderedRefMarker
+			}
+		} else {
+			provenance.BaseRef = baseRef
+		}
+		if err := config.SaveProjectRecord(targetPath, scaffoldConfig, provenance, mergedValues); err != nil {
 			return fmt.Errorf("failed to save project record: %w", err)
 		}
 
 		// Run post-generate hooks after the project record is saved, so a hook
 		// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
 		// Skipped in dry-run, same as the pre-generate hooks above.
-		if err := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+		if err := scaffoldhooks.Run(scaffoldhooks.RunInput{
+			Edition:    ui.edition,
+			HooksMap:   scaffoldHooks,
+			Event:      hooks.AfterScaffoldGenerate,
+			Answers:    mergedValues,
+			Status:     "success",
+			SkipHooks:  ui.skipHooks,
+			TargetPath: targetPath,
+		}); err != nil {
 			return fmt.Errorf("post-generate hook failed: %w", err)
 		}
 	}
 
 	// Flush all output before rendering README.
-	ui.flushOutput()
+	ui.flushGenerationOutput()
 
-	// Only render README if all files were successful.
-	if embedsConfig.README != "" {
+	// Only render README if all files were successful. A quiet creation plan leaves the README to
+	// the caller, like the rest of the output.
+	if embedsConfig.README != "" && (!ui.quietPlan || ui.creationPlan == nil) {
 		// Resolve delimiters: use passed-in, or scaffold config, or defaults.
 		delimiters = ResolveDelimiters(delimiters, scaffoldConfig)
 
@@ -1573,45 +2059,6 @@ func (ui *InitUI) renderREADME(readmeContent string, targetPath string, delimite
 	return ui.renderMarkdown(processedContent)
 }
 
-// columnWidths holds the calculated widths for table columns.
-type columnWidths struct {
-	setting int
-	value   int
-	source  int
-}
-
-// calculateColumnWidths computes the optimal width for each column based on content.
-// It ensures minimum widths and adds padding for readability.
-func (ui *InitUI) calculateColumnWidths(rows [][]string) columnWidths {
-	widths := columnWidths{
-		setting: settingColumnMinWidth, // Minimum width for setting names
-		value:   valueColumnMinWidth,   // Minimum width for values
-		source:  sourceColumnMinWidth,  // Minimum width for sources
-	}
-
-	// Find the maximum content width for each column
-	for _, row := range rows {
-		if len(row[0]) > widths.setting {
-			widths.setting = len(row[0])
-		}
-		if len(row[1]) > widths.value {
-			widths.value = len(row[1])
-		}
-		// For source column, account for colored strings
-		coloredSource := ui.colorSource(row[2])
-		if len(coloredSource) > widths.source {
-			widths.source = len(coloredSource)
-		}
-	}
-
-	// Add padding to each column
-	widths.setting += 2
-	widths.value += 2
-	widths.source += 2
-
-	return widths
-}
-
 // applyTableStyles applies consistent styling to the table including colors and borders.
 func applyTableStyles(t *table.Model) {
 	s := table.DefaultStyles()
@@ -1631,63 +2078,27 @@ func applyTableStyles(t *table.Model) {
 	t.SetStyles(s)
 }
 
-// prepareTableRows converts raw rows to table.Row format with colored sources.
-func (ui *InitUI) prepareTableRows(rows [][]string) []table.Row {
-	tableRows := make([]table.Row, 0, len(rows))
-	for _, row := range rows {
-		coloredSource := ui.colorSource(row[2])
-		coloredRow := []string{row[0], row[1], coloredSource}
-		tableRows = append(tableRows, table.Row(coloredRow))
-	}
-	return tableRows
-}
-
-// displayConfigurationTable displays configuration data in a formatted table.
-func (ui *InitUI) displayConfigurationTable(_ []string, rows [][]string) {
-	// Don't display table if there are no rows to show
+// displayConfigurationTable displays configuration data using the shared wrapping table.
+func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 	if len(rows) == 0 {
 		return
 	}
 
-	// Get terminal width with fallback
-	width := ui.term.Width(terminal.Stdout)
-	if width == 0 {
+	// This summary is emitted on stderr. Keep every value visible by wrapping
+	// long descriptions and paths within that stream's terminal width.
+	width := ui.term.Width(terminal.Stderr)
+	if width <= 0 {
 		width = defaultTerminalWidth
 	}
-	tableWidth := width - tableMargin // Leave margin
-
-	// Prepare table data
-	tableRows := ui.prepareTableRows(rows)
-	widths := ui.calculateColumnWidths(rows)
-
-	// Calculate total width needed
-	totalContentWidth := widths.setting + widths.value + widths.source + tableBorderPadding // for borders
-	if totalContentWidth > tableWidth {
-		tableWidth = totalContentWidth
+	tableRows := make([][]string, len(rows))
+	for index, row := range rows {
+		tableRows[index] = []string{row[0], row[1], ui.colorSource(row[2])}
 	}
-
-	// Create table
-	t := table.New(
-		table.WithColumns([]table.Column{
-			{Title: "Setting", Width: widths.setting},
-			{Title: "Value", Width: widths.value},
-			{Title: "Source", Width: widths.source},
-		}),
-		table.WithRows(tableRows),
-		table.WithWidth(tableWidth),
-		table.WithFocused(false),
-		table.WithHeight(len(tableRows)+1),
-	)
-
-	// Apply styling
-	applyTableStyles(&t)
-
-	// Print the table
-	ui.writeOutput(newlineStr)
-	ui.writeOutput("CONFIGURATION SUMMARY\n")
-	ui.writeOutput(newlineStr)
-	ui.writeOutput("%s\n", t.View())
-	ui.writeOutput(newlineStr)
+	if len(header) == 0 {
+		header = []string{"Setting", "Value", "Source"}
+	}
+	tableOutput := format.CreateStyledTableWithOptions(header, tableRows, format.TableOptions{Width: width})
+	ui.writeOutput("\nCONFIGURATION SUMMARY\n%s", tableOutput)
 }
 
 // DisplayTemplateTable displays template data in a formatted table.

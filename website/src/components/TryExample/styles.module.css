@@ -1,0 +1,54 @@
+.example {
+  min-width: 0;
+  margin: 1.5rem 0;
+}
+
+.example :global(.tabs) {
+  flex-wrap: wrap;
+  gap: 0 1.5rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.example :global(.tabs .tabs__item) {
+  margin: 0;
+  padding: 0.65rem 0;
+  border-radius: 0;
+  border-bottom-width: 2px;
+  font-size: 0.95rem;
+}
+
+.example :global(.tabs__item:hover) {
+  background: transparent;
+  color: var(--ifm-color-primary);
+}
+
+.example :global(.install-widget) {
+  margin: 0 0 0.75rem;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  font-size: 0.85rem;
+}
+
+.links a {
+  color: var(--ifm-color-emphasis-700);
+}
+
+.links a:hover {
+  color: var(--ifm-link-color);
+}
+
+.example p:last-child {
+  margin-bottom: 0;
+}
+
+/* Match shell chrome to Prism's light palette inside this component. */
+:global(html[data-theme='light']) .example {
+  --atmos-terminal-bg: var(--ifm-background-surface-color);
+  --atmos-terminal-text: var(--ifm-font-color-base);
+  --atmos-terminal-border: var(--ifm-color-emphasis-300);
+  --atmos-terminal-header-bg: var(--ifm-color-emphasis-100);
+}

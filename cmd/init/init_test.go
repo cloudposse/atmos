@@ -18,6 +18,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/manifest"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 func TestNewInitCommandProvider(t *testing.T) {
@@ -110,6 +112,18 @@ func TestInitCmd_FlagDefinitions(t *testing.T) {
 			flagName:     "merge-driver",
 			shorthand:    "",
 			defaultValue: "auto",
+		},
+		{
+			name:         "max-changes flag",
+			flagName:     "max-changes",
+			shorthand:    "",
+			defaultValue: "50",
+		},
+		{
+			name:         "recreate-deleted flag",
+			flagName:     "recreate-deleted",
+			shorthand:    "",
+			defaultValue: "false",
 		},
 	}
 
@@ -489,6 +503,24 @@ func TestExecuteInit_InvalidMergeDriver(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrUnknownMergeDriver)
 }
 
+// TestExecuteInit_HydrateFailurePropagatesError covers executeInit's
+// source.Hydrate error branch: a template name that resolves as a direct
+// local-path source (rather than a catalog/embedded template key) but points
+// at a nonexistent directory must fail loudly, wrapped in
+// errUtils.ErrInitialization, instead of proceeding to generation with a
+// half-hydrated configuration.
+func TestExecuteInit_HydrateFailurePropagatesError(t *testing.T) {
+	err := executeInit(context.Background(), &initOptions{
+		templateName: "./this-template-path-does-not-exist-xyz",
+		targetDir:    t.TempDir(),
+		interactive:  false,
+		templateVars: map[string]interface{}{},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInitialization)
+}
+
 func TestMaybeInitGeneratedProjectGit_GitEnabled(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o600))
@@ -608,6 +640,31 @@ func TestShouldOfferUpdate_UsesActualTargetDir(t *testing.T) {
 	assert.Equal(t, "pinned-at-real-dir", baseRef)
 }
 
+// TestShouldOfferUpdate_RenderedStrategySkipsBaseRefResolution reproduces the
+// finding: under --update-strategy=rendered, shouldOfferUpdate used to
+// resolve a retry base ref via tracked-only defaultBaseRef regardless of
+// strategy. That non-empty value flowed unchanged into the retry's
+// executeWithSetup call, which sets spec.baseRef from whatever it's given
+// regardless of strategy too -- reintroducing the exact project-record
+// pollution CheckNotSwitchedFromRendered exists to guard against, just
+// reached through this offer-a-retry path instead of an explicit --update.
+// A real pinned metadata file proves the empty result is a deliberate skip,
+// not a coincidence of nothing being pinned.
+func TestShouldOfferUpdate_RenderedStrategySkipsBaseRefResolution(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "pinned-at-real-dir", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true, updateStrategy: "rendered"}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.NoError(t, err)
+	assert.True(t, offer)
+	assert.Empty(t, baseRef, "rendered mode must never resolve a retry base ref, even when one is pinned")
+}
+
 // TestShouldOfferUpdate_PropagatesMetadataLoadError verifies a
 // corrupt/unreadable metadata file surfaces as an error from
 // shouldOfferUpdate rather than silently resolving to "HEAD".
@@ -621,6 +678,21 @@ func TestShouldOfferUpdate_PropagatesMetadataLoadError(t *testing.T) {
 	opts := &initOptions{interactive: true}
 
 	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.Error(t, err)
+	assert.False(t, offer)
+	assert.Empty(t, baseRef)
+}
+
+// TestShouldOfferUpdate_InvalidUpdateStrategyPropagatesError covers
+// shouldOfferUpdate's own engine.ParseUpdateStrategy error branch: a bogus
+// --update-strategy value must surface as an error directly rather than
+// silently falling through to a tracked-style defaultBaseRef resolution.
+func TestShouldOfferUpdate_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true, updateStrategy: "bogus"}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, t.TempDir())
 
 	require.Error(t, err)
 	assert.False(t, offer)
@@ -793,6 +865,212 @@ func TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError(t *
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve default --base-ref")
+}
+
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected covers --update-strategy's
+// own validation: a value outside tracked/rendered must fail before any
+// generation work starts. See the isolated-*cobra.Command rationale on
+// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+// above.
+func TestInitCmd_RunE_UpdateStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	// Rejected by initParser.ValidateFlagValues (the WithValidValues
+	// registration for update-strategy), not by the later
+	// engine.ParseUpdateStrategy call -- proves the framework-standard
+	// validation entry point is actually reachable and firing, rather than
+	// the flag's own separate, redundant string-matching validation being
+	// the only thing catching this.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MergeDriverInvalidValueRejected covers --merge-driver's own
+// WithValidValues registration: a value outside auto/text must be rejected by
+// initParser.ValidateFlagValues before merge.ParseDriver ever runs, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MergeDriverInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("merge-driver", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MergeStrategyInvalidValueRejected covers --merge-strategy's
+// own WithValidValues registration: a value outside manual/ours/theirs must be
+// rejected by initParser.ValidateFlagValues before merge.ParseConflictStrategy
+// (via merge.ResolveConflictStrategy) ever runs, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MergeStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("merge-strategy", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MaxChangesNegativeRejected covers --max-changes's manual
+// range validation (non-negative only; there is no upper bound because the
+// underlying computed change percentage isn't capped at 100 either -- see
+// engine.Processor.SetMaxChanges's doc comment -- checked directly in RunE
+// since pkg/flags has no built-in numeric-range validation option): a
+// negative value must be rejected with errUtils.ErrInvalidFlagValue before
+// any generation work starts, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MaxChangesNegativeRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "-1"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MaxChangesAboveHundredAccepted covers the flip side of the
+// above: --max-changes has no upper bound, so a value above 100 (previously
+// rejected before this was changed to an unbounded flag) must be accepted,
+// not rejected -- proven here by pairing it with the pre-existing
+// --base-ref/--update-strategy=rendered mutual-exclusion check
+// (TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected): if max-changes were
+// still rejecting values above 100, this would fail with
+// errUtils.ErrInvalidFlagValue instead of reaching that later check.
+func TestInitCmd_RunE_MaxChangesAboveHundredAccepted(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd.Flags().Set("base-ref", "some-ref"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "1000"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected covers the explicit
+// --base-ref + --update-strategy=rendered mutual-exclusion check: rendered's
+// base ref comes from the target's own recorded scaffold.yaml, not
+// --base-ref, so combining them is a contradiction rather than a value to
+// silently ignore.
+func TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd.Flags().Set("base-ref", "some-ref"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig covers
+// --update-strategy=rendered against a target with no recorded
+// .atmos/scaffold.yaml project record: unlike tracked (which falls back to
+// literal "HEAD" against the target's own git history), rendered has no
+// fallback -- there is nothing to reconstruct the old ref/answers from.
+func TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrRenderedStrategyRequiresConfig)
+}
+
+// TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected covers a target
+// last generated under --update-strategy=rendered (spec.renderedRef set,
+// spec.baseRef empty): a plain --update run (defaulting to tracked) against
+// it must fail loudly via CheckNotSwitchedFromRendered instead of silently
+// resolving a base ref against git history the target was never meant to
+// have.
+func TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "sample"}}
+	require.NoError(t, config.SaveProjectRecord(dir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
+}
+
+// TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError covers
+// prepareRenderedRetryBase's own defensive re-parse of opts.updateStrategy:
+// a bogus value must surface as an error directly, not reach
+// source.ResolveRenderedBase or initUI at all (nil initUI would panic if it
+// did).
+func TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	opts := &initOptions{updateStrategy: "bogus"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError covers
+// source.ResolveRenderedBase failing during the retry (no recorded project
+// state at targetDir): the failure must propagate directly rather than
+// reaching initUI.SetRenderedBaseSource (nil initUI would panic if it did).
+func TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError(t *testing.T) {
+	opts := &initOptions{updateStrategy: "rendered"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
 }
 
 // TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged
@@ -1086,4 +1364,19 @@ func TestParseSetFlag(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLoadInitTemplateConfigs_OmitsStackTemplate verifies the stack-creation template is not an
+// init choice, while the other embedded project templates still are.
+func TestLoadInitTemplateConfigs_OmitsStackTemplate(t *testing.T) {
+	configs, err := loadInitTemplateConfigs("")
+	require.NoError(t, err)
+
+	assert.NotContains(t, configs, "stack", "the stack template belongs to `atmos stack create`")
+	assert.Contains(t, configs, "simple")
+
+	// The template stays available to scaffold and stack create.
+	embedded, err := templates.GetAvailableConfigurations()
+	require.NoError(t, err)
+	assert.Contains(t, embedded, "stack")
 }

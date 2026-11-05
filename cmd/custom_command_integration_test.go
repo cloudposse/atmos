@@ -1578,7 +1578,7 @@ func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
 	exePath, err := os.Executable()
 	require.NoError(t, err)
 
-	// A custom command bound to the `script` component type whose step dumps its environment.
+	// A custom command bound to the `example` component type whose step dumps its environment.
 	testCommand := schema.Command{
 		Name:        "test-component-env",
 		Description: "Dump the environment of a custom component step",
@@ -1588,7 +1588,7 @@ func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
 		Flags: []schema.CommandFlag{
 			{Name: "stack", Shorthand: "s", Provides: "stack", Required: true},
 		},
-		Component: &schema.CommandComponent{Type: "script"},
+		Component: &schema.CommandComponent{Type: "example"},
 		Env:       []schema.CommandEnv{{Key: "_ATMOS_TEST_DUMP_ENV", Value: envOutputFile}},
 		Steps:     stepsFromStrings(fmt.Sprintf("%q", exePath)),
 	}

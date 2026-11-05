@@ -1,0 +1,59 @@
+---
+slug: starlark-cast-recorder
+title: "Terminal demos you can maintain like code"
+authors: [osterman]
+tags: [feature, dx]
+cast: "/casts/examples/demo-env/masked-token.cast"
+castTitle: "Environment output masks terminal secrets"
+---
+
+Keeping a terminal demo current means more than recording it again. You want to know that the commands still work, the output shows what you intended, and someone else can reproduce the result. The [Starlark cast recorder](/functions/automation/cast.recorder) lets you express that intent in a small script: commands, narration, and checks together, with functions and shared settings you can reuse across demos.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed';
+
+## The Problem
+
+A useful demo tells a story: start with a prepared project, run a command, show its result, and move on. As the project changes, you need a convenient way to update that story and check that it remains accurate. Interactive prompts add another consideration: the next keystroke needs to arrive when the program is ready.
+
+## The Fix
+
+For developers who enjoy working in code, Starlark makes the recording itself a small, readable program. You can extract repeated sequences into functions, use loops for related examples, and load shared defaults for timing, colors, and output paths. A teammate reviewing a change can see both the command and the result you expect from it.
+
+Each `rec.run` call types and executes a command. Add `expect`, `reject`, or an expected exit code to check the behavior you are demonstrating. For interactive programs, `rec.terminal.wait` synchronizes the next action with actual output; pauses remain available when you want to give the viewer time to read.
+
+Setup and cleanup give each recording a repeatable starting point. Cleanup runs even if an action fails or the recording is canceled. Failed execution, cleanup, or validation preserves the previous cast.
+
+If you already use VHS tapes or YAML casts, you can keep using them. Choose Starlark when you want to compose your demos with functions and shared modules, and keep their checks alongside the actions they describe.
+
+## How to Use It
+
+Declare the story and its expected result, then generate the recording:
+
+```python
+rec = cast.recorder(output="demo.cast", title="Inspect the project")
+
+
+# Show the available stacks and check that dev is present.
+rec.comment("List the available stacks")
+rec.run("atmos list stacks", expect="dev")
+
+
+# Publish the recording after its checks pass.
+rec.generate()
+```
+
+Use this inside an existing custom command with `type: script` and `interpreter: starlark`, or keep the script in its own file and point `source:` at it. To check a saved recording, use `rec.validate()` in place of `rec.generate()`. It checks the recording against the same declaration without rerunning the commands or writing artifacts.
+
+The environment demo uses this approach to check that terminal output masks a token while file output preserves it for automation:
+
+<CastEmbed src="/casts/examples/demo-env/masked-token.cast" title="Environment output masks terminal secrets" chrome controls scrubber />
+
+[View the full example](/examples/demo-env)
+
+See the [cast recorder reference](/functions/automation/cast.recorder) for interactive sessions, setup and cleanup, screenshots, and shared policy checks.
+
+## Get Involved
+
+Try scripting a demo you update regularly, or share a helper across a few recordings. We'd like to hear what makes those demos easier to maintain in [GitHub discussions](https://github.com/cloudposse/atmos/discussions).

@@ -1,4 +1,4 @@
-# Landing-page fixture for the "Developer experience" demo (demo/landing/dx.tape).
+# Landing-page fixture for the "Developer experience" demo (casts generate demo landing dx).
 #
 # This project exists only to back the homepage DX demo: running `atmos terraform plan`
 # with no component and no stack, so Atmos prompts for *which component* and *which stack*
@@ -31,12 +31,12 @@ logs:
   level: Info
 
 # A single aws/emulator identity binds every component to the local sandbox.
-# `atmos emulator up aws -s <stack>` starts the emulator; the provider-config
+# `atmos emulator up landing-dx-aws -s <stack>` starts the emulator; the provider-config
 # contributor and this identity wire Terraform to its live endpoint at runtime —
 # no providers.tf, no endpoint configuration, no hand-rolled docker-compose.
 auth:
   identities:
     local-aws:
       kind: aws/emulator
-      emulator: aws
+      emulator: landing-dx-aws
       default: true

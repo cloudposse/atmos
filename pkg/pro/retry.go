@@ -60,7 +60,7 @@ func float64Ptr(f float64) *float64 { return &f }
 // doWithRetry executes fn with retry logic for transient failures.
 // On 401 errors, it calls refresher.RefreshToken() before retrying.
 // On 5xx or network errors, it retries with exponential backoff.
-// On 400/403/404, it returns immediately without retrying.
+// On 400/403/404/413, it returns immediately without retrying.
 func doWithRetry(operation string, fn func() error, refresher tokenRefresher, cfg retryConfig) error {
 	attempt := 0
 	schemaCfg := cfg.toSchemaConfig()
@@ -123,7 +123,7 @@ func classifyError(operation string, lastErr error, attempt int, cfg retryConfig
 	}
 
 	if !apiErr.IsRetryable() {
-		// 400, 403, 404 — non-retryable, return immediately.
+		// 400, 403, 404, 413 — non-retryable, return immediately.
 		return false, nil
 	}
 

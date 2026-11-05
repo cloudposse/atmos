@@ -1,0 +1,26 @@
+vars:
+  stage: inherited-tags
+  # Inherited by every component below. The Go templates and the Git YAML function must be
+  # rendered even when a component overrides the whole map with a YAML function.
+  tags:
+    plain: static
+    stack: "{{ .atmos_stack }}"
+    component: "{{ .atmos_component }}"
+    repository: !git.repository unknown
+
+components:
+  terraform:
+    labeled:
+      metadata:
+        component: yaml-function-test
+        labels:
+          cost-center: platform
+      vars:
+        tags: !labels
+
+    plain-map:
+      metadata:
+        component: yaml-function-test
+      vars:
+        tags:
+          extra: value

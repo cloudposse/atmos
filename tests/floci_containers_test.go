@@ -18,7 +18,7 @@ import (
 // service containers in .github/workflows/test.yml (job "[floci] go e2e"); the
 // trailing comment tracks the human-readable tag.
 const (
-	flociAWSImage   = "floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2"     // 1.5.23.
+	flociAWSImage   = "floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08"     // 1.5.33 (same digest as the CI service container).
 	flociGCPImage   = "floci/floci-gcp@sha256:a6420f308ad721fa4a203b70658563eab9c8fbc8d091feca2d95016239f5854a" // latest.
 	flociAzureImage = "floci/floci-az@sha256:1e514c57db14dc41938f7925bbc1aca0293aa4da272c7014d98f1fba378cedb2"  // latest.
 

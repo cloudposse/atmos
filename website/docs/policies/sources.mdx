@@ -1,0 +1,89 @@
+---
+title: Source and Filesystem Policies
+sidebar_label: Sources and Filesystem
+description: Restrict source transports, domains, and local include or template paths before access.
+---
+
+import Intro from '@site/src/components/Intro';
+
+<Intro>
+
+Source policies are opt-in `on: source` rules. Without configured restrictions, normal source behavior
+is preserved. Rules run before imports (including cached imports), downloads, YAML includes, and
+guarded template file or datasource operations. They use the same CEL/Starlark evaluators and pinned
+policy bundle as command admission.
+
+</Intro>
+
+## Restrict transports and domains
+
+```yaml title="policy.d/sources.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: sources
+spec:
+  policies:
+    trusted-hosts:
+      on: source
+      action: deny
+      rule: >-
+        input.remote &&
+        (input.scheme != 'https' || !(input.host in ['github.com', 'raw.githubusercontent.com']))
+```
+
+The collector normalizes forced go-getter transports, supported Git shorthand, SCP-style URLs,
+host casing, and trailing dots. Policies see the effective transport scheme and hostname; credentials,
+query parameters, and request headers are omitted. HTTP redirect destinations are checked before
+being contacted. Protect the runner's transport configuration, credentials, and policy files.
+
+| Field | Meaning |
+|---|---|
+| `operation` | `import`, `download`, `include`, `template.file`, `template.datasource`, or `template.dns` |
+| `scheme` | Effective transport, such as `https`, `ssh`, `file`, or `dns` |
+| `host` | Normalized hostname, without credentials or port |
+| `path` | URI path, or an absolute local path with symlinks resolved when possible |
+| `remote` | Whether the destination is outside the local filesystem |
+| `path_resolved` | Whether the local path was successfully resolved through symlinks |
+| `provenance` | `local`, `remote`, or `unknown` origin of the calling configuration |
+| `source_file` | Available caller attribution, with URI credentials and queries removed |
+| `within_allowed_roots` | Whether the canonical local path is inside the rule's `allowed_roots`; computed only for rules with a nonempty `allowed_roots` list, and `false` for unresolved paths |
+
+## Confine includes and template file reads
+
+```yaml title="policy.d/files.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: files
+spec:
+  policies:
+    confine:
+      on: source
+      allowed_roots: [../stacks, ../shared]
+      action: deny
+      rule: >-
+        input.operation in ['include', 'template.file', 'template.datasource'] &&
+        input.scheme == 'file' && !input.within_allowed_roots
+```
+
+`allowed_roots` is permitted only on source rules. Relative roots are anchored to the policy file's
+directory, not `base_path` or an imported configuration. Roots must be existing directories. Both roots and accessed
+paths are canonicalized. The rule receives `input.within_allowed_roots`, computed with path-segment
+boundaries, so sibling prefixes, parent traversal, and symlink escapes do not count as contained.
+An unresolved path is outside the roots. The predicate decides which operations to restrict.
+This is a configuration access gate, not an operating-system sandbox for arbitrary external programs.
+
+## Supported guarded transports
+
+Source-governed downloads check each go-getter destination and HTTP request. Archive extraction
+uses go-getter's symlink protection. Git HTTP redirects are disabled; recursive Git submodules and
+Mercurial downloads fail closed because their nested transport destinations are not collected.
+
+Source-governed template datasources support local files, environment sources, and HTTP(S), including
+alias resolution and subpath handling. HTTP(S) responses are bounded to 16 MiB and five seconds;
+JSON, YAML, CSV, TOML, and text are supported. Other datasource schemes and the AWS/GCP template
+namespaces report unavailable guarded collection rather than bypassing source rules. Implicit EJSON
+key-file reads also fail closed; ordinary JSON remains supported. These limits
+apply when source policies are configured. YAML store and secret functions remain governed by
+function admission; source policies do not intercept arbitrary SDK calls or external tools.

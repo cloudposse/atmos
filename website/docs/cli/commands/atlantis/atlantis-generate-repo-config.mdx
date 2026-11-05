@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: generate-repo-config
 description: Use this command to generate a repository configuration for Atlantis.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -110,3 +112,15 @@ atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true
 Refer to [Atlantis Integration](/cli/configuration/integrations/atlantis) for more details on the Atlantis integration in Atmos
 
 :::
+
+## Try it out
+
+<TryExample example="demo-atlantis">
+
+Generate an Atlantis repository configuration from the included project and configuration templates. No Atlantis server is needed for generation.
+
+```shell
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1
+```
+
+</TryExample>

@@ -57,3 +57,20 @@ func RecordMaskedOutput(stream Stream, content string) {
 
 	recordOutput(stream, content)
 }
+
+// RecordMarker writes a named checkpoint ("m" stream) to the active recorder,
+// if one is installed. No-op otherwise. Unlike DataStream/UIStream writes, a
+// marker is never suppressed by session-level hide/discard state: it carries
+// only a label, never terminal bytes, so there is nothing to leak by recording
+// one while hidden.
+func RecordMarker(label string) {
+	defer perf.Track(nil, "io.RecordMarker")()
+
+	recorderState.mu.RLock()
+	rec := recorderState.recorder
+	recorderState.mu.RUnlock()
+	if rec == nil || label == "" {
+		return
+	}
+	rec.Record("m", label)
+}

@@ -1,0 +1,38 @@
+base_path: .
+settings:
+  metrics:
+    enabled: false
+stacks:
+  base_path: stacks
+  included_paths: ['*.yaml']
+  name_template: '{{ .vars.stage }}'
+plugins:
+  cache_dir: .cache/plugins
+commands:
+  - name: demo test-downloaded
+    description: Run the scaffold's local OIDC fixtures against the downloaded executable
+    steps:
+      - type: script
+        name: prepare-downloaded-tests
+        interpreter: python3
+        script: |
+          import json
+          import pathlib
+          import shutil
+          import subprocess
+
+          installed = json.loads(subprocess.check_output([
+              'atmos', 'plugin', 'info', 'corporate', '--format', 'json',
+          ]))
+          if installed['state'] != 'installed':
+              raise SystemExit('Expected an installed OCI release')
+          source = pathlib.Path(installed['path'])
+          target = pathlib.Path('downloaded')
+          shutil.copytree(source, target)
+          shutil.copyfile('corporate-oidc/plugin.tests.yaml', target / 'plugin.tests.yaml')
+          if (source / 'bin/plugin').read_bytes() != (target / 'bin/plugin').read_bytes():
+              raise SystemExit('Downloaded executable did not survive copying')
+      - type: shell
+        name: oidc-conformance
+        command: atmos plugin test downloaded
+        output: raw

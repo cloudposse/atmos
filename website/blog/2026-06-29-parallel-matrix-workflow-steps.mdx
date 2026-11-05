@@ -14,6 +14,8 @@ Atmos workflows can now run independent work concurrently with first-class `para
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Workflows are where teams encode the operational knowledge that should not live in someone's shell history: run the checks, build the thing, deploy the dependencies, then summarize what happened.
@@ -173,17 +175,7 @@ Parallel and matrix workflow steps make Atmos workflows feel like real orchestra
 
 This is especially useful for validation workflows, multi-component smoke tests, cross-platform checks, reporting jobs, and any operational task where several independent branches can run safely at the same time.
 
-## Try It
-
-This PR includes a runnable example:
-
-```shell
-cd examples/parallel-steps
-
-atmos workflow checks -f parallel
-atmos workflow prefixed -f parallel
-atmos workflow matrix -f parallel
-```
+## See it in action {#try-it}
 
 Here are the control steps running end to end:
 
@@ -193,7 +185,22 @@ Here are the control steps running end to end:
 
 Start with validation and reporting workflows first. They usually have the safest fan-out shape: independent checks, obvious dependencies, and low risk if one branch fails.
 
-For the full field reference, see the [`parallel`](/workflows/steps/type/parallel) and [`matrix`](/workflows/steps/type/matrix) step type documentation.
+For the full field reference, see the [`parallel`](/steps/type/parallel) and [`matrix`](/steps/type/matrix) step type documentation.
+
+## Try it out
+
+<TryExample example="parallel-steps">
+
+Run independent checks concurrently, compare live prefixed output, and try matrix fan-out.
+These workflows use local shell commands and require no cloud credentials:
+
+```shell
+atmos workflow checks -f parallel
+atmos workflow prefixed -f parallel
+atmos workflow matrix -f parallel
+```
+
+</TryExample>
 
 ## Get Involved
 

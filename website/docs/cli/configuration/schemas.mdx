@@ -17,7 +17,7 @@ Configure the paths where Atmos finds OPA and JSON Schema files to validate stac
 
 ## Configuration
 
-Schemas are configured in the `schemas` section:
+Atmos bundles the manifest and CLI configuration schemas with the installed binary. Leave their overrides unset so validation stays aligned with your Atmos version. Configure your own component schemas and policies in the `schemas` section:
 
 <File title="atmos.yaml">
 ```yaml
@@ -25,19 +25,14 @@ Schemas are configured in the `schemas` section:
 schemas:
   # https://json-schema.org
   jsonschema:
-    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' command-line argument
+    # Can also be set using 'ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH' ENV var, or '--schemas-jsonschema-dir' on `atmos validate component`
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/jsonschema"
   # https://www.openpolicyagent.org
   opa:
-    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line argument
+    # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' on `atmos validate component`
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
-  # JSON Schema to validate Atmos manifests
-  atmos:
-    # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
-    # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
-    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 </File>
 
@@ -46,12 +41,12 @@ schemas:
 <dl>
   <dt>`schemas.jsonschema.base_path`</dt>
   <dd>
-    Base path to JSON Schema files for component validation. Supports both absolute and relative paths. Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` environment variable or `--schemas-jsonschema-dir` command-line argument.
+    Base path to JSON Schema files for component validation. Supports both absolute and relative paths. Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` environment variable or `--schemas-jsonschema-dir` on `atmos validate component`.
   </dd>
 
   <dt>`schemas.opa.base_path`</dt>
   <dd>
-    Base path to OPA (Open Policy Agent) policy files for component validation. Supports both absolute and relative paths. Can also be set using `ATMOS_SCHEMAS_OPA_BASE_PATH` environment variable or `--schemas-opa-dir` command-line argument.
+    Base path to OPA (Open Policy Agent) policy files for component validation. Supports both absolute and relative paths. Can also be set using `ATMOS_SCHEMAS_OPA_BASE_PATH` environment variable or `--schemas-opa-dir` on `atmos validate component`.
   </dd>
 
   <dt>`schemas.atmos.manifest`</dt>
@@ -75,25 +70,38 @@ stacks/schemas/
 │   ├── vpc.json
 │   ├── eks-cluster.json
 │   └── rds.json
-├── opa/
-│   ├── vpc.rego
-│   ├── security.rego
-│   └── compliance.rego
-└── atmos/
-    └── atmos-manifest/
-        └── 1.0/
-            └── atmos-manifest.json
+└── opa/
+    ├── vpc.rego
+    ├── security.rego
+    └── compliance.rego
 ```
 
 ## Atmos Manifest JSON Schema
 
 The [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) validates Atmos stack manifests and provides auto-completion in supported editors.
 
+### Removing a local schema copy
+
+Run `atmos doctor --only=local-atmos-schema` to find local overrides. Remove
+`schemas.atmos.manifest` and unset `ATMOS_SCHEMAS_ATMOS_MANIFEST` to use the bundled
+manifest schema. Remove a local `schemas.config` override to restore the default
+CLI configuration validator. If you use custom file matches, retain them and set
+`schemas.config.schema` to `atmos://schema/atmos/config/1.0`.
+
+Doctor distinguishes an identical copy from one that differs. Differences may be
+custom constraints or version differences; review them before switching. Once you
+have updated remaining references, delete obsolete copies. Keep component JSON
+Schemas, OPA/CUE policies, and intentional custom validators.
+
+Editor associations are separate from CLI validation. Update editors to a published
+HTTPS schema URL before deleting a referenced copy; the `atmos://` URI is for Atmos,
+not for editors. Doctor does not delete files or change these associations.
+
 ### Floating vs. Pinned Schema URLs
 
 The published schema is available at two kinds of URLs:
 
-- **Floating** — `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` always reflects the schema shipped by the latest Atmos release. Use this (the default) when you want validation to automatically pick up new manifest fields as you upgrade Atmos.
+- **Floating** — `https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` always reflects the schema shipped by the latest Atmos release. Use this for editor associations that should track the latest release. CLI validation defaults to the bundled schema for the installed version, which may differ from the latest release.
 - **Pinned** — `https://atmos.tools/schemas/atmos/atmos-manifest/<atmos-version>/atmos-manifest.json` (e.g. `.../atmos-manifest/1.219.0/atmos-manifest.json`) is an immutable snapshot of the schema exactly as it shipped with that Atmos release. Use this when you want to upgrade the `atmos` binary without silently absorbing new schema fields — pin `schemas.atmos.manifest` to the version you've reviewed, and only bump it deliberately when you're ready to adopt newer manifest fields.
 
 ```yaml title="atmos.yaml"

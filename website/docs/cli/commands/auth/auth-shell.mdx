@@ -27,6 +27,10 @@ Use `shell` for interactive sessions where you'll run multiple commands. Use [`e
 atmos auth shell [--identity <name>] [--shell <path>] [-- <shell-args>...]
 ```
 
+:::note Justification for privileged identities
+Authenticating an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity activates the role and requires a justification. Supply it with the [`--justification`](/cli/global-flags#authentication-flags) global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable (resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt). In a non-interactive context with none supplied, the command fails fast.
+:::
+
 ## Examples
 
 ```shell

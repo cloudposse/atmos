@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -56,6 +57,10 @@ func init() {
 
 	// Add to parent command.
 	PlanfileCmd.AddCommand(showCmd)
+	internal.RegisterCommandMetadata(
+		showCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/planfile/show"),
+	)
 }
 
 // parseShowOptions parses command flags into ShowOptions.

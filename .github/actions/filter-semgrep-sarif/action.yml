@@ -1,0 +1,23 @@
+name: Filter Semgrep SARIF
+description: Honor inline Semgrep suppressions before uploading SARIF to GitHub code scanning.
+inputs:
+  input-file:
+    description: Path to the original Semgrep SARIF report
+    required: true
+  output-file:
+    description: Path for the filtered SARIF report
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        SEMGREP_FILTER_ACTION_PATH: ${{ github.action_path }}
+        SEMGREP_INPUT_FILE: ${{ inputs.input-file }}
+        SEMGREP_OUTPUT_FILE: ${{ inputs.output-file }}
+      with:
+        script: |
+          const fs = require('node:fs');
+          const filter = require(require('node:path').join(process.env.SEMGREP_FILTER_ACTION_PATH, 'filter-semgrep-sarif.cjs'));
+          const report = JSON.parse(fs.readFileSync(process.env.SEMGREP_INPUT_FILE, 'utf8'));
+          fs.writeFileSync(process.env.SEMGREP_OUTPUT_FILE, JSON.stringify(filter(report)));

@@ -1,0 +1,27 @@
+import StepTypeCatalog from './_type-catalog.mdx'
+
+Steps are shared building blocks for workflows, custom commands, and lifecycle hooks. Browse the [Steps reference](/steps) for usage and execution-context differences.
+
+### Step Types Overview
+
+<StepTypeCatalog />
+
+### Status Messages
+
+Use `type: toast` for themed status messages. `success`, `info`, `warn`, and `error` are `level` values, not step types:
+
+```yaml
+steps:
+  - name: done
+    type: toast
+    level: success
+    content: Deployment complete.
+```
+
+### Interactive Steps
+
+Interactive step types require a TTY. In CI, avoid prompts by using non-interactive command steps, defaults, or values supplied through environment variables.
+
+### Full Reference
+
+See the [step type reference](/steps/type) for the complete list, examples, required fields, and type-specific behavior.

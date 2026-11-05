@@ -10,9 +10,9 @@ on:
       - released
 
 # Serialize deploys. The merge queue can land several PRs on main minutes apart, and
-# each push triggers a deploy that runs `aws s3 sync --delete` against the ONE shared
-# origin prefix. Two runs in flight at once race: run A uploads its hashed bundles and
-# index.html, then run B's --delete removes A's bundles (they are not in B's build)
+# each push triggers a content-aware deploy against the ONE shared origin prefix. Two
+# runs in flight at once race: run A uploads its hashed bundles and index.html, then
+# run B's manifest delta removes A's bundles (they are not in B's build)
 # while A's index.html still references them -- the site goes blank until the next
 # deploy. Only the newest pending run is kept per group; the in-flight run is never
 # cancelled because aborting mid-sync would leave a half-uploaded site.
@@ -36,7 +36,7 @@ permissions:
 
 jobs:
   website-deploy-prod:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     environment:
       name: production
@@ -44,33 +44,19 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            sts.us-east-2.amazonaws.com:443
-            *.actions.githubusercontent.com:443
-            github.com:443
-            api.github.com:443
-            nodejs.org:443
-            registry.npmjs.org:443
-            release-assets.githubusercontent.com:443
-            proxy.golang.org:443
-            storage.googleapis.com:443
-            us.i.posthog.com:443
-            cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
-            cloudfront.amazonaws.com:443
-            api.scorecard.dev:443
-            www.bestpractices.dev:443
-
-      # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ env.IAM_ROLE_ARN }}
-          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
-
+          # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
+          policies: >-
+            github
+            github-releases
+            github-content
+            github-actions
+            telemetry
+            website-build
+            go-proxy
+            go-toolchain
+            website-production-storage
       - name: Checkout Repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -94,17 +80,22 @@ jobs:
           cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Set up Go
-        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: "go.mod"
 
-      # `go run .` below has no prior module cache warm-up, so a single
-      # mid-stream proxy.golang.org reset (e.g. "stream error: ...
-      # INTERNAL_ERROR; received from peer") aborts it outright -- see
+      # Retry downloads for modules missing from the restored cache so a
+      # transient proxy.golang.org reset cannot abort schema generation; see
       # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
       - name: Download Go modules (with retry)
         uses: ./.github/actions/go-mod-download-retry
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       - name: Publish atmos-manifest schema
         uses: ./.github/actions/publish-atmos-schema
@@ -125,11 +116,24 @@ jobs:
       - name: Install Dependencies and Build Website
         run: |
           node --version
+          # Wall-clock plugin data changes content-hashed bundles and thousands
+          # of HTML references, defeating the incremental S3 uploader.
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           cd website
           pnpm install --frozen-lockfile
+          pnpm run test:build-timestamp
           pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Builds can outlive the initial AWS session; refresh before deployment.
+      - name: Refresh AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       # `s3 sync --delete` can remove hashed JS/CSS bundles that an edge location's
       # cached `index.html` from the previous deploy still references (the

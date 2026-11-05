@@ -143,7 +143,7 @@ auth:
 ```
 
 **Implementation**:
-- Add `"aws/assume-root"` case to `factory.NewIdentity()`.
+- Add `"aws/assume-root": identityConstructor(awsIdentities.NewAssumeRootIdentity)` to `builtinIdentities()` in `pkg/auth/registry/builtins.go`.
 - Create `awsIdentities.NewAssumeRootIdentity()` constructor.
 - Add constant `IdentityKindAWSAssumeRoot = "aws/assume-root"` to `types/constants.go`.
 
@@ -323,8 +323,8 @@ pkg/auth/identities/aws/
 ├─ assume_root_test.go     # Unit tests
 └─ (existing files)
 
-pkg/auth/factory/
-└─ factory.go              # Add aws/assume-root case
+pkg/auth/registry/
+└─ builtins.go             # Add aws/assume-root to builtinIdentities()
 
 pkg/auth/types/
 └─ constants.go            # Add IdentityKindAWSAssumeRoot
@@ -438,7 +438,7 @@ return errUtils.Build(errUtils.ErrAuthenticationFailed).
 2. Implement `NewAssumeRootIdentity()` constructor
 3. Implement `Kind()` and `Validate()` methods
 4. Add constant to `pkg/auth/types/constants.go`
-5. Register in `pkg/auth/factory/factory.go`
+5. Register in `builtinIdentities()` in `pkg/auth/registry/builtins.go`
 6. Write unit tests for validation
 
 **Deliverable**: Identity registration and validation working
@@ -680,29 +680,29 @@ To use `aws/assume-root` identities, your AWS organization must have:
 1. **Centralized Root Access Enabled**: In the AWS Organizations management account, enable centralized root access for member accounts.
 
 2. **Permission Set with AssumeRoot**: Create an IAM Identity Center permission set with the `sts:AssumeRoot` permission:
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": "sts:AssumeRoot",
-         "Resource": "*",
-         "Condition": {
-           "StringEquals": {
-             "sts:TaskPolicyArn": [
-               "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
-               "arn:aws:iam::aws:policy/root-task/IAMDeleteRootUserCredentials",
-               "arn:aws:iam::aws:policy/root-task/IAMCreateRootUserPassword",
-               "arn:aws:iam::aws:policy/root-task/S3UnlockBucketPolicy",
-               "arn:aws:iam::aws:policy/root-task/SQSUnlockQueuePolicy"
-             ]
-           }
-         }
-       }
-     ]
-   }
-   ```
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": "sts:AssumeRoot",
+          "Resource": "*",
+          "Condition": {
+            "StringEquals": {
+              "sts:TaskPolicyArn": [
+                "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+                "arn:aws:iam::aws:policy/root-task/IAMDeleteRootUserCredentials",
+                "arn:aws:iam::aws:policy/root-task/IAMCreateRootUserPassword",
+                "arn:aws:iam::aws:policy/root-task/S3UnlockBucketPolicy",
+                "arn:aws:iam::aws:policy/root-task/SQSUnlockQueuePolicy"
+              ]
+            }
+          }
+        }
+      ]
+    }
+    ```
 
 3. **Assignment to Management Account**: The permission set must be assigned to users/groups in the organization's management account.
 

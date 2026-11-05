@@ -1,0 +1,35 @@
+# Custom commands whose flag defaults have the wrong YAML type. Each is registered as a stub that
+# reports the mistake, and the valid command next to them keeps working.
+base_path: "./"
+
+logs:
+  file: "/dev/stderr"
+  level: Warning
+
+commands:
+  - name: ft-string-integer-default
+    description: An unquoted 2 is an integer, not the string a string flag needs
+    flags:
+      - name: replicas
+        description: Replica count
+        default: 2
+    steps:
+      - echo "must not run"
+
+  - name: ft-bool-string-default
+    description: The quoted string "true" is not a boolean
+    flags:
+      - name: dry
+        type: bool
+        default: "true"
+    steps:
+      - echo "must not run"
+
+  - name: ft-valid
+    description: A valid command keeps working
+    flags:
+      - name: replicas
+        type: int
+        default: 2
+    steps:
+      - echo "replicas={{ .Flags.replicas }}"

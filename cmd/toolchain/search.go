@@ -3,6 +3,7 @@ package toolchain
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	registrycmd "github.com/cloudposse/atmos/cmd/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -43,6 +44,10 @@ func init() {
 	if searchParser != nil {
 		searchParser.RegisterFlags(searchAliasCmd)
 	}
+	internal.RegisterCommandMetadata(
+		searchAliasCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/search"),
+	)
 }
 
 // SearchCommandProvider implements the CommandProvider interface.

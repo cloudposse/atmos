@@ -4,7 +4,7 @@ sidebar_label: planfile
 sidebar_class_name: command
 sidebar_position: 1
 id: planfile
-description: Commands for managing Terraform planfiles across multiple storage backends.
+description: "Carry a saved Terraform plan from a planning job to a later apply job."
 ---
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
@@ -13,7 +13,9 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The `atmos terraform planfile` command group provides tools for managing Terraform planfiles. Store, retrieve, and share planfiles across CI/CD pipelines using local filesystem, S3, or GitHub Artifacts storage.
+Carry a saved Terraform plan from a planning job to a later apply job. Store and retrieve planfiles
+so your pipeline can apply the same plan that was reviewed, even when the jobs run on different
+machines.
 </Intro>
 
 <Experimental/>

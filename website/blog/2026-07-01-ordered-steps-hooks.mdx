@@ -12,6 +12,8 @@ stay local to the component being operated on.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 `kind: step` runs one registered step type as a lifecycle hook. `kind: steps`
@@ -86,6 +88,18 @@ generates the tested component varfile from the selected stack and can pass a
 second generated test varfile from `test.vars`. Because `test.vars` resolves
 after `before.terraform.test` hooks run, it can use [`!terraform.state`](/functions/yaml/terraform.state) to pass
 fixture outputs into Terraform test without scripts.
+
+## Try it out
+
+<TryExample example="hooks-custom-command">
+
+Install Terraform before running the sample plan and its custom hook.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Learn More
 

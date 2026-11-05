@@ -180,7 +180,8 @@ func fieldKey(ident []string) string {
 
 // WalkNodes calls fn for every node in every template associated with tmpl
 // (including tmpl itself, and any template declared inside it with `define`),
-// using the same traversal rules as UsesFunctions. It exists so packages
+// descending into pipelines, branches and chained expressions such as
+// `(ds "cfg").name`. It exists so packages
 // outside this one can run their own analysis passes (for example, a
 // deprecation lint) over a parsed template without duplicating the AST
 // traversal.
@@ -195,54 +196,6 @@ func WalkNodes(tmpl *template.Template, fn func(parse.Node)) {
 			continue
 		}
 		walkAST(t.Root, fn)
-	}
-}
-
-// UsesFunctions reports whether the parsed template (or any template
-// associated with it, e.g. one declared with `define`) calls any of the
-// named functions, or any of the named `identifier.Method` chains
-// (e.g. "atmos.GomplateDatasource"). Function calls appear in the AST as
-// IdentifierNodes; a method call on a function's result appears as a
-// ChainNode whose head is that IdentifierNode. Only names present in the
-// maps are matched, so callers can pass an empty map for either set.
-func UsesFunctions(tmpl *template.Template, funcNames map[string]struct{}, methodChains map[string]struct{}) bool {
-	defer perf.Track(nil, "template.UsesFunctions")()
-
-	if tmpl == nil {
-		return false
-	}
-
-	found := false
-	for _, t := range tmpl.Templates() {
-		if found || t.Tree == nil || t.Root == nil {
-			continue
-		}
-		walkAST(t.Root, func(node parse.Node) {
-			if !found && matchesFunction(node, funcNames, methodChains) {
-				found = true
-			}
-		})
-	}
-
-	return found
-}
-
-// matchesFunction reports whether node is a call to one of funcNames or a
-// method chain listed in methodChains.
-func matchesFunction(node parse.Node, funcNames map[string]struct{}, methodChains map[string]struct{}) bool {
-	switch n := node.(type) {
-	case *parse.IdentifierNode:
-		_, ok := funcNames[n.Ident]
-		return ok
-	case *parse.ChainNode:
-		ident, ok := n.Node.(*parse.IdentifierNode)
-		if !ok || len(n.Field) == 0 {
-			return false
-		}
-		_, ok = methodChains[ident.Ident+"."+n.Field[0]]
-		return ok
-	default:
-		return false
 	}
 }
 

@@ -1,0 +1,100 @@
+# yaml-language-server: $schema=schema.json
+
+# CI reporter behavior through the real CLI: the generic provider renders what a CI provider would post,
+# and the GitHub API endpoint is chosen by ATMOS_CI_GITHUB_API_URL, then GITHUB_API_URL. Every GitHub URL here
+# is unroutable on purpose, so no case can reach the real api.github.com.
+tests:
+  - name: "native ci reporter: terraform plan --ci previews the PR comment and the run URL"
+    enabled: true
+    preconditions: ["tofu"]
+    sandbox: true
+    clean: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan mycomponent -s prod --ci' with the ATMOS_CI_* variables supplying the run metadata. The generic provider previews the PR comment for the PR and names the run URL on the commit status."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    env:
+      ATMOS_CI_PR: "7"
+      ATMOS_CI_REPOSITORY: "test-owner/test-repo"
+      ATMOS_CI_SHA: "abc123def456789"
+      ATMOS_CI_RUN_URL: "https://ci.example.test/runs/7"
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+      - "--ci"
+    expect:
+      exit_code: 0
+      stderr:
+        - "PR comment preview \\(upsert, PR #7\\)"
+        - "<!-- atmos:ci:plan:mycomponent:prod -->"
+        - "Check run created: atmos/plan/prod/mycomponent"
+        - "URL: https://ci.example.test/runs/7"
+
+  - name: "native ci reporter: ATMOS_CI_GITHUB_API_URL takes precedence over GITHUB_API_URL"
+    enabled: true
+    preconditions: ["tofu"]
+    sandbox: true
+    clean: true
+    snapshot: false
+    description: "Runs a plan under GitHub Actions with both API URL variables set to unroutable addresses. The commit status request goes to the ATMOS_CI_GITHUB_API_URL address (port 9), never the GITHUB_API_URL one (port 7)."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_TOKEN: "test-token-for-ci"
+      GITHUB_OUTPUT: "github-output.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_REPOSITORY: "test-owner/test-repo"
+      GITHUB_SHA: "abc123def456789"
+      GITHUB_RUN_ID: "12345"
+      ATMOS_CI_GITHUB_API_URL: "http://127.0.0.1:9"
+      GITHUB_API_URL: "http://127.0.0.1:7"
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+    expect:
+      exit_code: 0
+      stderr:
+        - "127\\.0\\.0\\.1:9"
+        - !not "127\\.0\\.0\\.1:7"
+        - !not "invalid URL"
+
+  - name: "native ci reporter: an invalid GITHUB_API_URL is reported as an invalid URL"
+    enabled: true
+    preconditions: ["tofu"]
+    sandbox: true
+    clean: true
+    snapshot: false
+    description: "Runs a plan under GitHub Actions with GITHUB_API_URL=not-a-url. The token is never sent anywhere: the hook reports the invalid URL and names the variable."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_TOKEN: "test-token-for-ci"
+      GITHUB_OUTPUT: "github-output.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_REPOSITORY: "test-owner/test-repo"
+      GITHUB_SHA: "abc123def456789"
+      GITHUB_RUN_ID: "12345"
+      GITHUB_API_URL: "not-a-url"
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+    expect:
+      exit_code: 1
+      stderr:
+        - "invalid URL"
+        - "GITHUB_API_URL"
+        - "not-a-url"

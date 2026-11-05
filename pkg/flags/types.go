@@ -201,6 +201,15 @@ func (f *BoolFlag) GetNoOptDefValConsumesNextArg() bool {
 	return false
 }
 
+// IsBool reports that this flag is boolean. It satisfies the optional
+// preprocess.BoolFlagInfo interface so "--flag true|false" can be rewritten to
+// "--flag=true|false" before Cobra parses the arguments.
+func (f *BoolFlag) IsBool() bool {
+	defer perf.Track(nil, "flags.BoolFlag.IsBool")()
+
+	return true
+}
+
 // GetEnvVars implements Flag.
 func (f *BoolFlag) GetEnvVars() []string {
 	defer perf.Track(nil, "flags.BoolFlag.GetEnvVars")()

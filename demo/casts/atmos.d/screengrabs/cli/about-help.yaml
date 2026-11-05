@@ -1,0 +1,19 @@
+commands:
+  - name: casts generate screengrabs cli about-help
+    description: Regenerate the About help screengrab cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: script
+        name: record
+        source: scripts/casts/about-help.star
+  - name: casts validate screengrabs cli about-help
+    description: Validate the About help screengrab cast
+    steps:
+      - type: script
+        name: validate
+        env:
+          CAST_VALIDATE: 'true'
+        source: scripts/casts/about-help.star

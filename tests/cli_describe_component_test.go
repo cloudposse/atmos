@@ -10,9 +10,6 @@ import (
 )
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
-	// This test uses a fixture that downloads from GitHub, so check rate limits first.
-	RequireGitHubAccess(t)
-
 	// Skip in CI environments without TTY.
 	// The pager functionality requires TTY support.
 	if !term.IsTTYSupportForStdout() {

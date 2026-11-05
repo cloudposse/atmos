@@ -132,6 +132,7 @@ func runScaffoldTerraformE2E(t *testing.T, tc *scaffoldTerraformE2E) {
 		"--set", "project_name="+tc.Project,
 		"--set", "terraform_command="+terraformCommandForScaffoldE2E(t),
 	)
+	pinFlociToolDependencies(t, filepath.Join(target, "stacks", "_defaults.yaml"), []string{"dependencies", "tools"})
 	runAtmosForScaffoldTest(t, target, env, 2*time.Minute, "validate", "stacks")
 
 	runAtmosForScaffoldTest(t, target, env, 3*time.Minute, "emulator", "up", tc.Emulator, "-s", "dev")
@@ -221,8 +222,8 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	cmd.Env = mergeCommandEnv(os.Environ(), map[string]string{
 		"GIT_TERMINAL_PROMPT": "0",
-		"GIT_CONFIG_GLOBAL":   os.DevNull,
-		"GIT_CONFIG_SYSTEM":   os.DevNull,
+		"GIT_CONFIG_GLOBAL":   "/dev/null",
+		"GIT_CONFIG_SYSTEM":   "/dev/null",
 	})
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "git %s failed: %s", strings.Join(args, " "), string(out))

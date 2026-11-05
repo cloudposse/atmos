@@ -7,14 +7,14 @@ tags: [feature]
 ---
 
 import File from '@site/src/components/File'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 Atmos can now connect to external MCP servers and use their tools directly in AI conversations.
 Configure any MCP server in `atmos.yaml`, and its tools appear alongside native Atmos tools
 in [`atmos ai chat`](/cli/commands/ai/chat), [`atmos ai ask`](/cli/commands/ai/ask), and [`atmos ai exec`](/cli/commands/ai/exec) — no custom integration code needed.
 
 <!--truncate-->
+
+import TryExample from '@site/src/components/TryExample';
 
 ## Why This Matters
 
@@ -533,15 +533,17 @@ $ atmos ai ask "List all IAM roles with admin access"
   2. ✅ aws-iam → list_policies (174ms)
 ```
 
-## Try It
+## Try it out
 
-<ActionCard title="Explore the MCP Example">
-    Try a complete example with pre-configured AWS MCP servers — documentation, knowledge base,
-    pricing, API access, and security assessment.
-    <div>
-      <PrimaryCTA to="/examples/mcp">Browse Example</PrimaryCTA>
-    </div>
-</ActionCard>
+<TryExample example="mcp">
+
+List the configured servers, then follow the README to install their runtime dependencies and test a connection.
+
+```shell
+atmos mcp list
+```
+
+</TryExample>
 
 ## Learn More
 

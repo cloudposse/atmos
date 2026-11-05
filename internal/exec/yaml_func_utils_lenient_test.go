@@ -36,7 +36,7 @@ func TestProcessCustomYamlTagsLenient_RecoverableError_Strict(t *testing.T) {
 		"bucket": `!terraform.state vpc test-stack bucket_name`,
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
@@ -72,7 +72,7 @@ func TestProcessCustomYamlTagsLenient_RecoverableError_Warn(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}
 
 	var warnings []DegradationWarning
-	result, err := ProcessCustomYamlTagsLenient(atmosConfig, input, "test-stack", nil, stackInfo, func(w DegradationWarning) {
+	result, err := ProcessCustomYamlTagsLenient(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, stackInfo, func(w DegradationWarning) {
 		warnings = append(warnings, w)
 	})
 
@@ -106,7 +106,7 @@ func TestProcessCustomYamlTagsLenient_RecoverableError_NilCallback(t *testing.T)
 
 	result, err := ProcessCustomYamlTagsLenient(
 		atmosConfig,
-		schema.AtmosSectionMapType{"bucket": `!terraform.state vpc test-stack bucket_name`},
+		explicitYAMLFunctionsForTest(schema.AtmosSectionMapType{"bucket": `!terraform.state vpc test-stack bucket_name`}),
 		"test-stack", nil, &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}, nil,
 	)
 
@@ -141,7 +141,7 @@ func TestProcessCustomYamlTagsLenient_NonRecoverableError_StillFails(t *testing.
 	stackInfo := &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}
 
 	var warnings []DegradationWarning
-	result, err := ProcessCustomYamlTagsLenient(atmosConfig, input, "test-stack", nil, stackInfo, func(w DegradationWarning) {
+	result, err := ProcessCustomYamlTagsLenient(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, stackInfo, func(w DegradationWarning) {
 		warnings = append(warnings, w)
 	})
 
@@ -182,7 +182,7 @@ func TestProcessCustomYamlTagsLenient_S3CredentialFailure_Warn(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{Component: "vpc", Stack: "test-stack"}
 
 	var warnings []DegradationWarning
-	result, err := ProcessCustomYamlTagsLenient(atmosConfig, input, "test-stack", nil, stackInfo, func(w DegradationWarning) {
+	result, err := ProcessCustomYamlTagsLenient(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, stackInfo, func(w DegradationWarning) {
 		warnings = append(warnings, w)
 	})
 

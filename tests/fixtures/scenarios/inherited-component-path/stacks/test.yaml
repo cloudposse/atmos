@@ -1,0 +1,20 @@
+vars:
+  stage: test
+
+components:
+  terraform:
+    k8s_nodes/lxd/defaults:
+      metadata:
+        type: abstract
+        component: lxd/talos-nodes
+
+    k8s_nodes:
+      metadata:
+        inherits:
+          - k8s_nodes/lxd/defaults
+
+    consumer:
+      metadata:
+        component: lxd/talos-nodes
+      vars:
+        target: '{{ (atmos.Component "k8s_nodes" "test").outputs.example }}'

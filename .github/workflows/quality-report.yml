@@ -1,0 +1,65 @@
+name: Quality Gate
+
+# Per-PR reports only. Repository-wide true-ups (schedule, merges, milestone and
+# release changes, manual runs) live in quality-reconcile.yml, so a long true-up
+# never holds or cancels a queued report for one PR.
+on:
+  # CI Timing Summary calls this once a PR's CI completes.
+  workflow_call:
+  # A PR's release label or milestone can change without a new commit. Always
+  # run trusted default-branch code; these events never execute pull request source.
+  pull_request_target:
+    types: [labeled, unlabeled, milestoned, demilestoned]
+
+permissions: {}
+
+jobs:
+  report:
+    # Our readiness labels must not recursively trigger this reporter.
+    if: >-
+      github.event_name != 'pull_request_target' ||
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      contains(fromJSON('["major","minor","patch","no-release"]'), github.event.label.name)
+    # Serialize reports per PR; the true-up has its own group. Job-level, so a
+    # skipped label event never enters the group and replaces a queued report.
+    concurrency:
+      group: >-
+        atmos-quality-report-${{
+          github.event.pull_request.number ||
+          github.event.workflow_run.pull_requests[0].number ||
+          github.event.workflow_run.head_sha ||
+          github.run_id }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      statuses: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          # setup-go follows GitHub release redirects; the Go hosts cover its fallback.
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-actions
+            github-blob-storage
+            go-checksums
+            go-proxy
+            go-toolchain
+      - name: Check out trusted reporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Report quality gates for this PR
+        uses: ./.github/actions/quality-gate
+        with:
+          operation: report
+          github-token: ${{ github.token }}

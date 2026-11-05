@@ -3,6 +3,11 @@ base_path: "./"
 components:
   terraform:
     base_path: components/terraform
+    # Mocks used with --use-mocks. `fallback` (default) prefers real state and uses
+    # mocks only when a component isn't provisioned or an output is missing;
+    # `always` resolves from mocks only. Override per run with --use-mocks=<mode>.
+    # mocks:
+    #   mode: fallback
 
 stacks:
   base_path: stacks

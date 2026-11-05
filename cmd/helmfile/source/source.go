@@ -5,6 +5,7 @@ package source
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	sourcecmd "github.com/cloudposse/atmos/pkg/provisioner/source/cmd"
 )
 
@@ -33,10 +34,34 @@ Commands:
 
 func init() {
 	// Add subcommands from shared package.
-	sourceCmd.AddCommand(sourcecmd.PullCommand(helmfileConfig))
-	sourceCmd.AddCommand(sourcecmd.ListCommand(helmfileConfig))
-	sourceCmd.AddCommand(sourcecmd.DescribeCommand(helmfileConfig))
-	sourceCmd.AddCommand(sourcecmd.DeleteCommand(helmfileConfig))
+	pullCmd := sourcecmd.PullCommand(helmfileConfig)
+	internal.RegisterCommandMetadata(
+		pullCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/source/pull"),
+	)
+	sourceCmd.AddCommand(pullCmd)
+	listCmd := sourcecmd.ListCommand(helmfileConfig)
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/source/list"),
+	)
+	sourceCmd.AddCommand(listCmd)
+	describeCmd := sourcecmd.DescribeCommand(helmfileConfig)
+	internal.RegisterCommandMetadata(
+		describeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/source/describe"),
+	)
+	sourceCmd.AddCommand(describeCmd)
+	deleteCmd := sourcecmd.DeleteCommand(helmfileConfig)
+	internal.RegisterCommandMetadata(
+		deleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/source/delete"),
+	)
+	sourceCmd.AddCommand(deleteCmd)
+	internal.RegisterCommandMetadata(
+		sourceCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helmfile/source"),
+	)
 }
 
 // GetSourceCommand returns the source command for parent registration.

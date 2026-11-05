@@ -54,20 +54,31 @@ func (m *manager) chainCacheKey() string {
 }
 
 // authenticateChain performs credential chain authentication with bottom-up validation.
-func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICredentials, error) {
+func (m *manager) authenticateChain(ctx context.Context, identityName string) (types.ICredentials, error) {
+	if err := m.enforceAuthPolicy(ctx, identityName, m.chain); err != nil {
+		return nil, err
+	}
 	// Fast path: check process-level in-memory cache.
 	// Credentials authenticated during this process are guaranteed correct, unlike
 	// keyring/file caches which may hold stale data from previous runs.
+	//
+	// A direct standalone chain (a single identity that owns its credentials, such as
+	// aws/credential-process) bypasses this cache: helper credentials may carry no expiration,
+	// so isCredentialValid would treat them as valid and skip the helper for the whole process.
+	// Multi-step chains still cache their final downstream credentials.
+	skipProcessCache := (len(m.chain) == 1 && m.chainRootIsStandalone()) || m.chainRootHasPrivateCache()
 	cacheKey := m.chainCacheKey()
-	if entry, ok := processCredentialCache.Load(cacheKey); ok {
-		cached := entry.(*processCachedCreds)
-		if valid, _ := m.isCredentialValid("process-cache", cached.credentials); valid {
-			log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
-			return cached.credentials, nil
+	if !skipProcessCache {
+		if cached := m.cachedChainCredentials(cacheKey); cached != nil {
+			return cached, nil
 		}
-		// Expired — remove stale entry.
-		processCredentialCache.Delete(cacheKey)
-		log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
+	}
+
+	// Validate every identity in the chain before authenticating any step. Authentication starts
+	// at the root, so a misconfigured later identity would otherwise be reported only after the
+	// earlier steps already ran (for example after an upstream credential_process helper executed).
+	if err := m.validateChainIdentities(); err != nil {
+		return nil, err
 	}
 
 	// Step 1: Bottom-up validation - check cached credentials from target to root.
@@ -87,18 +98,9 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 		return nil, err
 	}
 
-	// Cache the successfully authenticated credentials for this process.
-	//
-	// Skip caching for nil credentials. Generic ambient identities
-	// (`kind: ambient`) return (nil, nil) from Authenticate by design — they
-	// do not manage credentials. Storing nil here would cause the fast-path
-	// cache hit on the next call to invoke isCredentialValid(_, nil), which
-	// historically dereferenced a nil ICredentials interface and panicked.
-	// Defense-in-depth nil check also lives in isCredentialValid; this skip
-	// avoids the redundant cache lookup entirely. Re-authentication for
-	// ambient is a no-op, so the savings the cache provides are immaterial
-	// for this kind.
-	if creds != nil {
+	// Ambient identities return nil credentials by design. Do not cache them:
+	// authentication is a no-op, and a later cache hit must not dereference nil.
+	if creds != nil && !skipProcessCache {
 		processCredentialCache.Store(cacheKey, &processCachedCreds{
 			credentials: creds,
 		})
@@ -107,24 +109,21 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	return creds, nil
 }
 
-// chainRootIsAmbient reports whether the provider at the root of the current chain
-// resolves credentials from ambient environment state on every authentication
-// (e.g. gcp/adc, azure/cli, and the OIDC providers).
-//
-// Chains rooted at such a provider are never served from — nor written to — the
-// persistent keyring: the provider's token is only a snapshot of whatever principal the
-// environment resolved to at that moment, and every credential derived from it inherits
-// that snapshot. Reusing a persisted entry would replay a stale principal after the
-// ambient identity changes.
-func (m *manager) chainRootIsAmbient() bool {
-	if len(m.chain) == 0 {
-		return false
+// cachedChainCredentials returns a valid process cache entry and removes expired ones.
+// Authentication policy must be enforced before calling this helper.
+func (m *manager) cachedChainCredentials(key string) types.ICredentials {
+	entry, ok := processCredentialCache.Load(key)
+	if !ok {
+		return nil
 	}
-	provider, exists := m.providers[m.chain[0]]
-	if !exists {
-		return false
+	creds := entry.(*processCachedCreds).credentials
+	if valid, _ := m.isCredentialValid("process-cache", creds); valid {
+		log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
+		return creds
 	}
-	return types.ProviderIsAmbient(provider)
+	processCredentialCache.Delete(key)
+	log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
+	return nil
 }
 
 // purgeCachedCredentials removes any persisted keyring entry for the given chain step.
@@ -157,13 +156,20 @@ func (m *manager) findFirstValidCachedCredentials() int {
 	// Ambient chains must always re-resolve from the environment. Returning -1 forces
 	// authentication to start at the provider so a changed ambient principal (e.g. a new
 	// `gcloud auth application-default login`) is picked up on the very next login.
-	if m.chainRootIsAmbient() {
-		log.Debug("Skipping cached credentials for ambient chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
+	if m.chainRootIsAmbient() || m.chainRootHasPrivateCache() {
+		log.Debug("Skipping cached credentials for externally managed chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
 		return -1
 	}
 
-	// Check from target identity (bottom) up to provider (top).
-	for i := len(m.chain) - 1; i >= 0; i-- {
+	// Check from target identity (bottom) up to the root (top). A standalone root is never a
+	// reusable starting point, so the scan stops before it.
+	lowestIndex := 0
+	if m.chainRootIsStandalone() {
+		lowestIndex = 1
+		log.Debug("Not scanning cached credentials of standalone chain root", logKeyChain, m.chain, logKeyIdentity, m.chain[0])
+	}
+
+	for i := len(m.chain) - 1; i >= lowestIndex; i-- {
 		identityName := m.chain[i]
 		log.Debug("Checking cached credentials", logKeyChainIndex, i, identityNameKey, identityName)
 
@@ -174,8 +180,8 @@ func (m *manager) findFirstValidCachedCredentials() int {
 			continue
 		}
 
-		// Validate credentials are not expired.
-		valid, expTime := m.isCredentialValid(identityName, cachedCreds)
+		// Validate credentials are eligible for chain reuse and are not expired.
+		valid, expTime := m.isChainCredentialValid(identityName, cachedCreds)
 		if valid {
 			if expTime != nil {
 				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, logKeyExpirationChain, *expTime)
@@ -219,7 +225,7 @@ func (m *manager) findFirstValidCachedCredentials() int {
 					"required_buffer", minCredentialValidityBuffer)
 			}
 		} else {
-			// This shouldn't happen - isCredentialValid returns valid=true when expTime=nil.
+			// Credentials may be unsuitable as chain input even without an expiration.
 			log.Debug("Credentials are invalid", logKeyChainIndex, i, identityNameKey, identityName)
 		}
 	}
@@ -268,10 +274,9 @@ func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICred
 
 // authenticateFromIndex performs authentication starting from the given index in the chain.
 func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (types.ICredentials, error) {
-	// Standalone identities (aws/user, aws/ambient, generic ambient, emulator-bound) form
-	// a single-element chain with no provider step. Dispatch to them polymorphically via
-	// the StandaloneIdentity interface instead of special-casing each concrete kind, so the
-	// generic manager stays free of imports on concrete identity implementations.
+	// A standalone identity can be the target itself or the root of a longer chain.
+	// Preserve direct authentication for a standalone target; longer chains dispatch
+	// their root through the same interface when no reusable credentials are available.
 	if len(m.chain) == 1 {
 		if standalone, ok := m.identities[m.chain[0]].(types.StandaloneIdentity); ok && standalone.IsStandalone() {
 			return standalone.AuthenticateStandalone(ctx)
@@ -282,35 +287,27 @@ func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (ty
 	return m.authenticateProviderChain(ctx, startIndex)
 }
 
-// authenticateProviderChain handles authentication for provider-based identity chains.
+// authenticateProviderChain handles chains rooted at a provider or standalone identity.
 func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int) (types.ICredentials, error) {
 	var currentCreds types.ICredentials
 	var err error
 
 	// Determine actual starting point for authentication.
-	// When startIndex is -1 (no valid cached credentials), this returns 0 (start from provider).
+	// When startIndex is -1 (no valid cached credentials), this returns 0 (start from root).
 	// When startIndex is >= 0, this returns the same index (valid cached credentials exist).
 	actualStartIndex := m.determineStartingIndex(startIndex)
 
 	// Retrieve cached credentials if starting from a cached point.
 	// Important: Only fetch cached credentials if we had valid ones (startIndex >= 0).
 	// If startIndex was -1 (no valid cached creds), actualStartIndex becomes 0 but we should NOT
-	// fetch cached credentials - we should start fresh from provider authentication.
+	// fetch cached credentials - we should start fresh from root authentication.
 	if startIndex >= 0 && actualStartIndex >= 0 {
 		currentCreds, actualStartIndex = m.fetchCachedCredentials(actualStartIndex)
 	}
 
-	// Step 1: Authenticate with provider if needed.
-	// Only authenticate provider if we don't have cached provider credentials.
-	if actualStartIndex == 0 { //nolint:nestif
-		// Allow provider to inspect the chain and prepare pre-auth preferences.
-		if provider, exists := m.providers[m.chain[0]]; exists {
-			if err := provider.PreAuthenticate(m); err != nil {
-				errUtils.CheckErrorAndPrint(err, "Pre Authenticate", "")
-				return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, m.chain[0], err)
-			}
-		}
-		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
+	// Step 1: Authenticate the root if no reusable cached credentials are available.
+	if actualStartIndex == 0 {
+		currentCreds, err = m.authenticateChainRoot(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -324,13 +321,19 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, int) {
 	// Guard against nil credential store (can happen in unit tests).
 	if m.credentialStore == nil {
-		log.Debug("No credential store available, starting from provider")
+		log.Debug("No credential store available, starting from chain root")
 		return nil, 0
 	}
 
 	currentCreds, err := m.getChainCredentials(m.chain, startIndex)
 	if err != nil {
-		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
+		log.Debug("Failed to retrieve cached credentials, starting from chain root", "error", err)
+		return nil, 0
+	}
+	// Storage may have changed since cache discovery, including a session expiring
+	// and falling back to long-lived user keys. Revalidate before skipping this step.
+	if valid, _ := m.isChainCredentialValid(m.chain[startIndex], currentCreds); !valid {
+		log.Debug("Cached credentials no longer reusable, starting from chain root")
 		return nil, 0
 	}
 	// Return cached credentials as OUTPUT of step at startIndex, so authentication
@@ -344,7 +347,7 @@ func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, in
 // determineStartingIndex determines where to start authentication based on cached credentials.
 func (m *manager) determineStartingIndex(startIndex int) int {
 	if startIndex == -1 {
-		return 0 // Start from provider if no valid cached credentials
+		return 0 // Start from chain root if no valid cached credentials.
 	}
 	return startIndex
 }
@@ -358,8 +361,13 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 // session credentials from files when they exist and are not expired, so users can see
 // accurate expiration times in whoami output.
 func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
-	// Fast path: Try keyring cache first.
-	keyringCreds, keyringErr := m.credentialStore.Retrieve(identityName, m.realm.Value)
+	// Fast path: Try keyring cache first. Identities that do not persist credentials (the helper
+	// owns them) skip it so a stale entry written by an older version is never reused.
+	keyringErr := credentials.ErrCredentialsNotFound
+	var keyringCreds types.ICredentials
+	if m.identityPersistsCredentials(identityName) {
+		keyringCreds, keyringErr = m.credentialStore.Retrieve(identityName, m.realm.Value)
+	}
 	if keyringErr == nil {
 		log.Debug("Retrieved credentials from keyring", logKeyIdentity, identityName)
 
@@ -458,19 +466,13 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	provider, exists := m.providers[providerName]
 	if !exists {
 		wrappedErr := fmt.Errorf("provider %q not registered: %w", providerName, errUtils.ErrInvalidAuthConfig)
-		if !types.SuppressAuthErrors(ctx) {
-			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate with Provider", "")
-		}
 		return nil, wrappedErr
 	}
 
 	log.Debug("Authenticating with provider", "provider", providerName)
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
-		if !types.SuppressAuthErrors(ctx) {
-			errUtils.CheckErrorAndPrint(err, "Authenticate with Provider", "")
-		}
-		return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+		return nil, errUtils.WrapAuthenticationFailed(err, "provider %q", providerName)
 	}
 
 	// Cache provider credentials, but skip session tokens and ambient providers.
@@ -479,6 +481,8 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	// principal from the environment on every call; persisting their token would make the
 	// next login replay that principal even after the ambient credentials change.
 	switch {
+	case types.UsesPrivateCredentialCache(provider):
+		m.purgeCachedCredentials(providerName)
 	case types.ProviderIsAmbient(provider):
 		log.Debug("Skipping keyring cache for ambient provider credentials", logKeyProvider, providerName)
 		m.purgeCachedCredentials(providerName)
@@ -641,9 +645,6 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		identity, exists := m.identities[identityStep]
 		if !exists {
 			wrappedErr := fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
-			if !types.SuppressAuthErrors(ctx) {
-				errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Identity Chain", "")
-			}
 			return nil, wrappedErr
 		}
 
@@ -652,7 +653,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// Each identity receives credentials from the previous step.
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			return nil, fmt.Errorf("%w: identity=%s step=%d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
+			return nil, errUtils.WrapAuthenticationFailed(err, "identity %q", identityStep)
 		}
 
 		currentCreds = nextCreds
@@ -666,6 +667,9 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// environment's principal, so persisting them would replay a stale identity for the
 		// intermediate steps of a chain just as caching the provider's own token would.
 		switch {
+		case !types.PersistsCredentialsInKeyring(identity):
+			log.Debug("Skipping keyring cache for identity that does not persist credentials", logKeyIdentityStep, identityStep)
+			m.purgeCachedCredentials(identityStep)
 		case ambientChain:
 			log.Debug("Skipping keyring cache for ambient chain", logKeyIdentityStep, identityStep)
 			m.purgeCachedCredentials(identityStep)
@@ -695,7 +699,6 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 	err := m.buildChainRecursive(identityName, &chain, visited)
 	if err != nil {
 		wrappedErr := fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
 		return nil, wrappedErr
 	}
 
@@ -712,7 +715,6 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
 	// Check for circular dependencies.
 	if visited[identityName] {
-		errUtils.CheckErrorAndPrint(errUtils.ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
 		return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", errUtils.ErrCircularDependency, identityName)
 	}
 	visited[identityName] = true
@@ -721,7 +723,6 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	identity, exists := m.config.Identities[identityName]
 
 	if !exists {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
 		return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 
@@ -732,7 +733,6 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 			*chain = append(*chain, identityName)
 			return nil
 		}
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has no via configuration", identityName))
 		return fmt.Errorf("%w: identity %q has no via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 	}
 
@@ -750,6 +750,5 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return m.buildChainRecursive(identity.Via.Identity, chain, visited)
 	}
 
-	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has invalid via configuration", identityName))
 	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
 }

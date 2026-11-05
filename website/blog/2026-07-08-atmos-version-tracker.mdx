@@ -20,6 +20,8 @@ See how independent dev and prod tracks resolve locked versions into stack varia
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Version pins are configuration, but nobody manages them like configuration:
@@ -123,6 +125,18 @@ steps:
 See the [`atmos version track` command reference](/cli/commands/version/track) and [Managed Versions configuration](/cli/configuration/version/managed-versions) for the full surface, or try the runnable [`examples/version-tracker`](https://github.com/cloudposse/atmos/tree/main/examples/version-tracker) example.
 
 For usage and configuration, see [Version](/cli/configuration/version).
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Inspect the checked-in version tracks and lock file before changing any pins.
+
+```shell
+atmos version track status
+```
+
+</TryExample>
 
 ## Get Involved
 

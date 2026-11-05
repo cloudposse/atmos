@@ -21,6 +21,26 @@ Given any component and stack in an Atmos supported infrastructure environment, 
 
 This action is intended to be used together with [Atmos Terraform Apply](/deprecated/github-actions/atmos-terraform-apply) and [Atmos Affected Stacks](/deprecated/github-actions/affected-stacks), as well as integrated into drift detection with [Atmos Terraform Detection and Remediation](/deprecated/github-actions/atmos-terraform-drift-detection).
 
+## Migrating to Native CI
+
+Native CI configures planfile storage directly in `atmos.yaml`. You can reuse the existing S3 bucket with the `aws/s3` backend; the separate storage action and metadata database are no longer required. Here's what changes:
+
+**Removed**
+- The `github-action-atmos-terraform-plan` step
+- The separate [`github-action-terraform-plan-storage`](/deprecated/github-actions/terraform-plan-storage) action and its DynamoDB or CosmosDB metadata database
+- Storage resources used only by the retired action, including Azure Blob storage. Retain the S3 bucket and required IAM access when using `aws/s3`; remove a bucket or storage IAM role only when it is no longer needed
+- The `integrations.github.gitops` block in `atmos.yaml`
+
+**Added**
+- `atmos terraform plan <component> -s <stack> --ci`, run directly — inside the [Atmos container image](/ci) (recommended), or on a bare runner with [`setup-atmos`](/integrations/github-actions/setup-atmos)
+- A `components.terraform.planfiles` block in `atmos.yaml` — the `github/artifacts` backend needs no cloud infra at all; `aws/s3` can point at your existing bucket if you'd rather keep it
+- If using `github/artifacts`: the [`github-runtime`](/ci/planfile-storage#using-github-artifacts-in-github-actions) action step, so Atmos's own upload can see the runner's artifact credentials
+
+**Unchanged**
+- The identity Atmos assumes to actually run `terraform plan` against your cloud account. That's a separate concern (see [Auth](/cli/configuration/auth)) — this action and its replacement only ever touched planfile storage, not your cloud credentials.
+
+This is normally migrated together with [Terraform Apply](/deprecated/github-actions/atmos-terraform-apply) and [Affected Stacks](/deprecated/github-actions/affected-stacks), since all three feed the same plan → apply pipeline. See [Native CI](/ci) for the full workflow and [Planfile Storage](/ci/planfile-storage) for the storage backend config.
+
 ## Features
 
 This GitHub Action incorporates superior GitOps support for Terraform by utilizing the capabilities of Atmos, enabling efficient management of large enterprise-scale environments.

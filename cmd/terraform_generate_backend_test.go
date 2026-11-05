@@ -1,15 +1,17 @@
 package cmd
 
 import (
-	"bytes"
-	"io"
 	"os"
-	"runtime"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -17,10 +19,6 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 	_ = NewTestKit(t)
 
 	tests.RequireTerraform(t)
-
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping on Windows: test hangs due to pipe/stderr interaction with background goroutines")
-	}
 
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
@@ -38,38 +36,71 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 		})
 	}()
 
-	// Capture stderr.
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	assert.NoError(t, err, "Creating pipe should not error")
-
-	os.Stderr = w
-
-	// Execute the command.
-	RootCmd.SetArgs([]string{"terraform", "generate", "backend", "component-1", "-s", "nonprod"})
-	err = Execute()
-	assert.NoError(t, err, "'TestTerraformGenerateBackendCmd' should execute without error")
-
-	// Restore stderr immediately after command execution to prevent any goroutines from blocking.
-	os.Stderr = oldStderr
-
-	// Close the writer to signal end of output.
-	err = w.Close()
-	assert.NoError(t, err, "Closing pipe writer should not error")
-
-	// Read captured output from the pipe.
-	var output bytes.Buffer
-	_, err = io.Copy(&output, r)
-	assert.NoError(t, err, "Reading from pipe should not error")
-
-	// Close the reader.
-	err = r.Close()
-	assert.NoError(t, err, "Closing pipe reader should not error")
+	// Capture stderr without a bounded pipe that can block Debug logging.
+	outputStr := captureTerraformGenerateStderr(t, func() {
+		// Execute the command.
+		RootCmd.SetArgs([]string{"terraform", "generate", "backend", "component-1", "-s", "nonprod"})
+		err := Execute()
+		assert.NoError(t, err, "'TestTerraformGenerateBackendCmd' should execute without error")
+	})
 
 	// Expected output after processing the templates in the component's `backend` section.
 	expectedOutput := "nonprod-tfstate-lock"
-	outputStr := output.String()
 
 	// Check if the output contains the expected output.
 	assert.Contains(t, outputStr, expectedOutput, "'TestTerraformGenerateBackendCmd' output should contain information about the generated backend")
+}
+
+// captureTerraformGenerateStderr captures synchronous command output without pipe backpressure.
+func captureTerraformGenerateStderr(t *testing.T, run func()) string {
+	t.Helper()
+
+	output, err := os.Create(filepath.Join(t.TempDir(), "stderr.log"))
+	require.NoError(t, err)
+
+	oldStderr, oldLogger := os.Stderr, log.Default()
+	os.Stderr = output
+	// Use an independent logger so Execute cannot leave the previous logger writing to a closed file.
+	log.SetDefault(log.New())
+	defer func() {
+		os.Stderr = oldStderr
+		log.SetDefault(oldLogger)
+		require.NoError(t, output.Close())
+	}()
+
+	run()
+	captured, err := os.ReadFile(output.Name())
+	require.NoError(t, err)
+	return string(captured)
+}
+
+func TestCaptureTerraformGenerateStderrLargeDebugOutput(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// This record exceeds the pipe buffer and reproduces the original maskedWriter deadlock.
+	payload := strings.Repeat("large-debug-record ", 1<<16)
+	output := captureTerraformGenerateStderr(t, func() {
+		log.SetOutput(iolib.MaskWriter(os.Stderr))
+		log.SetLevel(log.DebugLevel)
+		log.Debug(payload)
+	})
+	assert.Contains(t, output, payload)
+}
+
+func TestCaptureTerraformGenerateStderrRestoresAfterPanic(t *testing.T) {
+	_ = NewTestKit(t)
+
+	oldStderr, oldLogger := os.Stderr, log.Default()
+	var capturedFile *os.File
+	assert.Panics(t, func() {
+		captureTerraformGenerateStderr(t, func() {
+			capturedFile = os.Stderr
+			panic("command failed")
+		})
+	})
+	assert.Same(t, oldStderr, os.Stderr)
+	assert.Same(t, oldLogger, log.Default())
+	require.NotNil(t, capturedFile)
+	_, err := capturedFile.WriteString("after cleanup")
+	assert.ErrorIs(t, err, os.ErrClosed)
 }

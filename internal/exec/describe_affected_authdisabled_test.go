@@ -80,17 +80,17 @@ func TestExecutePropagatesAuthDisabled(t *testing.T) {
 
 			d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{}}
 			d.IsTTYSupportForStdout = func() bool { return false }
-			d.executeDescribeAffectedWithTargetRepoPath = func(_ *schema.AtmosConfiguration, _ string, _ bool, _ bool, _ string, _ bool, _ bool, _ []string, _ bool, _ auth.AuthManager, authDisabled bool, _ DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+			d.executeDescribeAffectedWithTargetRepoPath = func(_ *schema.AtmosConfiguration, _ string, _ bool, _ bool, _ string, _ bool, _ bool, _ []string, _ AffectedFilter, _ auth.AuthManager, authDisabled bool, _ DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 				v := authDisabled
 				gotRepoAuthDisabled = &v
 				return affectedResult, nil, nil, "", nil
 			}
-			d.executeDescribeAffectedWithTargetRefClone = func(_ *schema.AtmosConfiguration, _ string, _ string, _ string, _ string, _ bool, _ bool, _ string, _ bool, _ bool, _ []string, _ bool, _ auth.AuthManager, authDisabled bool, _ DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+			d.executeDescribeAffectedWithTargetRefClone = func(_ *schema.AtmosConfiguration, _ string, _ string, _ string, _ string, _ bool, _ bool, _ string, _ bool, _ bool, _ []string, _ AffectedFilter, _ auth.AuthManager, authDisabled bool, _ DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 				v := authDisabled
 				gotCloneAuthDisabled = &v
 				return affectedResult, nil, nil, "", nil
 			}
-			d.executeDescribeAffectedWithTargetRefCheckout = func(_ *schema.AtmosConfiguration, _ string, _ string, _ string, _ bool, _ bool, _ string, _ bool, _ bool, _ []string, _ bool, _ auth.AuthManager, authDisabled bool, _ DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+			d.executeDescribeAffectedWithTargetRefCheckout = func(_ *schema.AtmosConfiguration, _ string, _ string, _ string, _ bool, _ bool, _ string, _ bool, _ bool, _ []string, _ AffectedFilter, _ auth.AuthManager, authDisabled bool, _ DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 				v := authDisabled
 				gotCheckoutAuthDisabled = &v
 				return affectedResult, nil, nil, "", nil

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -68,4 +69,8 @@ func init() {
 	if err := cacheSaveParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		cacheSaveCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/cache/save"),
+	)
 }

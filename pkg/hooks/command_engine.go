@@ -325,8 +325,7 @@ func captureOutput(ctx *ExecContext, outputFile string) *Output {
 		if hErr != nil {
 			log.Warn(
 				"Hook ResultHandler failed",
-				logKeyKind, ctx.Hook.Kind,
-				"error", hErr,
+				append([]any{logKeyKind, ctx.Hook.Kind}, failureLogFields(hErr)...)...,
 			)
 		}
 		out.Summary = summary
@@ -411,6 +410,25 @@ func BuildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	defer perf.Track(nil, "hooks.BuildAtmosEnv")()
 
 	return buildAtmosEnv(ctx, outputFile, outputDir)
+}
+
+// OutcomeEnv returns the ATMOS_HOOK_STATUS, ATMOS_HOOK_EXIT_CODE, and ATMOS_HOOK_ERROR variables
+// that describe a lifecycle outcome. It is the single builder every hook kind uses (stack
+// lifecycle hooks and scaffold hooks alike), so the documented variables are identical
+// everywhere. An outcome with no status yields no status/exit-code variables, and ATMOS_HOOK_ERROR
+// is only set when the outcome carries an error.
+func OutcomeEnv(outcome Outcome) map[string]string {
+	defer perf.Track(nil, "hooks.OutcomeEnv")()
+
+	env := map[string]string{}
+	if outcome.Status != "" {
+		env["ATMOS_HOOK_STATUS"] = string(outcome.Status)
+		env["ATMOS_HOOK_EXIT_CODE"] = strconv.Itoa(outcome.ExitCode)
+	}
+	if outcome.Err != nil {
+		env["ATMOS_HOOK_ERROR"] = outcome.Err.Error()
+	}
+	return env
 }
 
 // renderCISummary appends the hook's markdown summary to the active CI
@@ -649,11 +667,7 @@ func ciEnabled(ctx *ExecContext) bool {
 // ciSummaryEnabled reports whether the job step summary should be written.
 // Defaults to true (nil) when ci.enabled, matching ci.summary's default.
 func ciSummaryEnabled(ctx *ExecContext) bool {
-	if !ciEnabled(ctx) {
-		return false
-	}
-	e := ctx.AtmosConfig.CI.Summary.Enabled
-	return e == nil || *e
+	return ctx != nil && ci.SummaryEnabled(ctx.AtmosConfig)
 }
 
 // ciAnnotationsEnabled reports whether inline annotations should be emitted.
@@ -687,12 +701,11 @@ func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	// Lifecycle outcome so hooks can report what happened (e.g. a `say` or
 	// `http` step on `when: failure`). Status mirrors the `{{ .status }}`
 	// template key; component/stack are already exported above.
-	if ctx.Outcome.Status != "" {
-		env["ATMOS_HOOK_STATUS"] = string(ctx.Outcome.Status)
-		env["ATMOS_HOOK_EXIT_CODE"] = strconv.Itoa(ctx.Outcome.ExitCode)
+	for k, v := range OutcomeEnv(ctx.Outcome) {
+		env[k] = v
 	}
-	if ctx.Outcome.Err != nil {
-		env["ATMOS_HOOK_ERROR"] = ctx.Outcome.Err.Error()
+	if ctx.HookDepth > 0 {
+		env[HookDepthEnvVar] = strconv.Itoa(ctx.HookDepth)
 	}
 	return env
 }
@@ -782,6 +795,8 @@ func componentBasePath(atmosConfig *schema.AtmosConfiguration, componentType str
 		return atmosConfig.KubernetesDirAbsolutePath
 	case cfg.HelmComponentType:
 		return atmosConfig.HelmDirAbsolutePath
+	case cfg.CloudFormationComponentType:
+		return atmosConfig.CloudFormationDirAbsolutePath
 	default:
 		return ""
 	}
@@ -990,8 +1005,7 @@ func applyOnFailure(ctx *ExecContext, runErr error) error {
 	case OnFailureIgnore:
 		log.Debug(
 			"Hook command failed (ignored per on_failure)",
-			logKeyKind, ctx.Hook.Kind,
-			"error", runErr,
+			append([]any{logKeyKind, ctx.Hook.Kind}, failureLogFields(runErr)...)...,
 		)
 		return nil
 	case OnFailureWarn:
@@ -999,8 +1013,7 @@ func applyOnFailure(ctx *ExecContext, runErr error) error {
 	default:
 		log.Warn(
 			"Hook command failed (warning per on_failure)",
-			logKeyKind, ctx.Hook.Kind,
-			"error", runErr,
+			append([]any{logKeyKind, ctx.Hook.Kind}, failureLogFields(runErr)...)...,
 		)
 		return nil
 	}

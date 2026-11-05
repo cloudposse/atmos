@@ -136,6 +136,50 @@ func (p *Plugin) emitTestAnnotations(ctx *plugin.HookContext, result *plugin.Out
 	}
 }
 
+// emitPlanWarningAnnotations emits one inline CI annotation per Terraform
+// `Warning:` diagnostic block captured from plan/apply/deploy stdout (GitHub:
+// `::warning file=…,line=…::message`). No-op when the provider lacks
+// annotation support, the parsed data isn't terraform plan/apply data, or
+// there are no warnings. Unlike error annotations, `Path`/`StartLine` are
+// best-effort: not every Terraform warning is tied to a source location.
+func (p *Plugin) emitPlanWarningAnnotations(ctx *plugin.HookContext, result *plugin.OutputResult) {
+	defer perf.Track(ctx.Config, "terraform.Plugin.emitPlanWarningAnnotations")()
+
+	data, ok := result.Data.(*plugin.TerraformOutputData)
+	if !ok || data == nil || len(data.Warnings) == 0 {
+		return
+	}
+	annotator, ok := ctx.Provider.(provider.Annotator)
+	if !ok {
+		return
+	}
+
+	annotations := make([]provider.Annotation, 0, len(data.Warnings))
+	for _, block := range data.Warnings {
+		annotations = append(annotations, annotationForWarningBlock(ctx.Command, block))
+	}
+	if err := annotator.Annotate(annotations); err != nil {
+		log.Warn("CI annotations failed", "error", err)
+	}
+}
+
+// annotationForWarningBlock builds a warning annotation from one raw
+// `Warning: ...` block, recovering its file/line from the diagnostic's
+// `on <file> line <N>:` locator when present (the same locator format and
+// regex used to recover error-diagnostic locations in synthesizeFallbackRun).
+func annotationForWarningBlock(command, block string) provider.Annotation {
+	annotation := provider.Annotation{
+		Level:   provider.AnnotationWarning,
+		Title:   "terraform " + command + ": warning",
+		Message: block,
+	}
+	if loc := errorLocationRe.FindStringSubmatch(block); len(loc) == 3 {
+		annotation.Path = loc[1]
+		annotation.StartLine = parseIntOrZero(loc[2])
+	}
+	return annotation
+}
+
 func shouldAnnotateTestRun(run *plugin.TerraformTestRun) bool {
 	if run.Status != "fail" && run.Status != "error" {
 		return false

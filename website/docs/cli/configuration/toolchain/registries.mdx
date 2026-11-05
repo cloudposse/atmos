@@ -24,7 +24,7 @@ Toolchain registries define where Atmos finds tool metadata and binaries. Atmos 
 
 ## Registry Types
 
-Atmos supports three registry types:
+Atmos supports two registry types, `aqua` and `atmos`, with the following configuration forms:
 
 ### 1. Aqua Registry
 
@@ -205,6 +205,19 @@ toolchain:
 4. Public Aqua registry (priority: 10)
 5. Error if tool not found in any registry
 
+The curated `atmos-builtin` registry is always included at priority 100. Set a custom registry's priority above 100 to override its definitions. When `toolchain.registries` is omitted, Atmos adds the default `aqua-public` registry at priority 10.
+
+## Inspect Configured Registries
+
+Use the configured `name` when browsing a registry:
+
+```shell
+atmos toolchain registry list --format json
+atmos toolchain registry list corporate --format json
+```
+
+The first command returns descriptors (`name`, `type`, and `priority`) without downloading catalogs. The second lists only the named registry's tools, when its backend supports enumeration. Inline registries support stable name ordering and pagination; per-package URL registries resolve tools by name but do not provide a complete catalog listing.
+
 ## Registry Configuration Options
 
 <dl>
@@ -232,7 +245,8 @@ toolchain:
     - Inline registries: 100-200
     - Corporate registries: 50-100
     - Public registries: 1-50
-    - Default: 10
+    - Omitted configured priority: 0
+    - Default Aqua registry when no registries are configured: 10
   </dd>
 
   <dt>`tools`</dt>
@@ -332,7 +346,7 @@ Atmos automatically detects and extracts:
 ```yaml
 toolchain:
   install_path: ".tools"
-  file_path: ".tool-versions"
+  versions_file: ".tool-versions"
 
   registries:
     # Corporate inline tools (highest priority)
@@ -359,7 +373,7 @@ toolchain:
 </File>
 
 <Note>
-Registry definitions are cached locally for performance. Use `atmos toolchain clean` to clear the cache and force a refresh.
+Registry definitions are cached locally for performance. Use `atmos toolchain clean --cache-only --force` to clear registry/download caches while preserving installed binaries.
 </Note>
 
 ## Related Documentation

@@ -8,6 +8,11 @@ description: >-
 cast:
   file: /casts/examples/emulator-aws/lifecycle.cast
   title: atmos emulator aws lifecycle
+related_docs:
+  - label: "Emulator commands"
+    url: /cli/commands/emulator/usage
+  - label: "Emulator component configuration"
+    url: /stacks/components/emulator
 ---
 
 ## Notes

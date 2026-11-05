@@ -1,0 +1,2 @@
+env keys: ["STEP_INPUT"]
+next step sees: {"answer":42,"declared":"from-step"} decoded answer: 42

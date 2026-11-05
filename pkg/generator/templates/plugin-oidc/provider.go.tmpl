@@ -1,0 +1,163 @@
+package main
+
+import (
+    "context"
+    "crypto/subtle"
+    "encoding/json"
+    "errors"
+"strings"
+    "time"
+
+    "github.com/coreos/go-oidc/v3/oidc"
+    "golang.org/x/oauth2"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
+    "google.golang.org/protobuf/types/known/structpb"
+    "google.golang.org/protobuf/types/known/timestamppb"
+
+    "github.com/cloudposse/atmos/sdk/api"
+    pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
+)
+
+type provider struct {
+    pluginv1.UnimplementedAuthProviderServer
+    api *api.Client
+}
+
+type session struct {
+    Version int `json:"version"`
+    Token *oauth2.Token `json:"token"`
+    IDToken string `json:"id_token"`
+    IDExpires time.Time `json:"id_expires"`
+    Subject string `json:"subject"`
+    Nonce string `json:"nonce"`
+Scopes []string `json:"scopes"`
+}
+
+func (p *provider) Validate(_ context.Context, request *pluginv1.ProviderRequest) (*pluginv1.ValidateResponse, error) {
+    _, err := parseSettings(request.GetSpec())
+    if err != nil { return nil, err }
+    return &pluginv1.ValidateResponse{}, nil
+}
+
+func (p *provider) Authenticate(request *pluginv1.ProviderRequest, stream grpc.ServerStreamingServer[pluginv1.AuthenticateEvent]) error {
+    ctx := api.WithInvocation(stream.Context(), request.GetInvocation().GetId())
+    credentials, err := p.authenticate(ctx, request)
+    if err != nil { return err }
+    return stream.Send(&pluginv1.AuthenticateEvent{Event: &pluginv1.AuthenticateEvent_Result{Result: credentials}})
+}
+
+func (p *provider) authenticate(ctx context.Context, request *pluginv1.ProviderRequest) (*pluginv1.Credentials, error) {
+    config, err := parseSettings(request.GetSpec())
+    if err != nil { return nil, err }
+    current, err := p.load(ctx)
+    if err != nil { return nil, err }
+    if current != nil && current.Token.Valid() { return credentialResult(config, current) }
+    if current == nil && !request.GetInvocation().GetInteractive() { return nil, interactionRequired() }
+    ctx = oidc.ClientContext(ctx, p.api.HTTPClient())
+    issuer, err := oidc.NewProvider(ctx, config.Issuer)
+    if err != nil { return nil, unavailable() }
+    endpoint := issuer.Endpoint()
+    if !safeEndpoint(endpoint.AuthURL) || !safeEndpoint(endpoint.TokenURL) { return nil, invalidConfig() }
+    // Explicit auth style avoids OAuth's automatic retry to probe client authentication.
+    endpoint.AuthStyle = oauth2.AuthStyleInParams
+    oauth := &oauth2.Config{ClientID: config.ClientID, Endpoint: endpoint, Scopes: config.Scopes}
+    if current != nil {
+        current, err = p.refresh(ctx, config, issuer, oauth, current)
+        if status.Code(err) == codes.FailedPrecondition && request.GetInvocation().GetInteractive() {
+            current, err = p.login(ctx, config, issuer, oauth)
+        }
+    } else {
+        current, err = p.login(ctx, config, issuer, oauth)
+    }
+    if err != nil { return nil, err }
+    raw, err := json.Marshal(current)
+    if err != nil { return nil, unavailable() }
+    // The rotated refresh token is durable before renewed downstream credentials escape.
+    if err := p.api.Put(ctx, "session/v1", raw); err != nil { return nil, err }
+    return credentialResult(config, current)
+}
+
+func (p *provider) load(ctx context.Context) (*session, error) {
+    raw, found, err := p.api.Get(ctx, "session/v1")
+    if err != nil { return nil, err }
+    if !found { return nil, nil }
+    var current session
+    if err := json.Unmarshal(raw, &current); err != nil || current.Version != 1 || current.Token == nil || current.Subject == "" { return nil, denied() }
+    return &current, nil
+}
+
+func (p *provider) login(ctx context.Context, config settings, issuer *oidc.Provider, oauth *oauth2.Config) (*session, error) {
+    state, nonce, verifier := oauth2.GenerateVerifier(), oauth2.GenerateVerifier(), oauth2.GenerateVerifier()
+    listener, err := p.api.Listen(ctx, "/callback", state)
+    if err != nil { return nil, err }
+    defer listener.Close()
+    oauth.RedirectURL = listener.RedirectURI()
+    target := oauth.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce), oauth2.AccessTypeOffline)
+    if err := p.api.Open(ctx, target); err != nil { return nil, err }
+    callback, err := listener.Receive()
+    if err != nil { return nil, err }
+    if callback.GetError() != "" || subtle.ConstantTimeCompare([]byte(callback.GetState()), []byte(state)) != 1 { return nil, denied() }
+    token, err := oauth.Exchange(ctx, callback.GetCode(), oauth2.VerifierOption(verifier))
+    if err != nil { return nil, unavailable() }
+    current := &session{Version: 1, Token: token, Nonce: nonce, Scopes: config.Scopes}
+    if err := validateToken(ctx, config, issuer, current, true); err != nil { return nil, err }
+    return current, nil
+}
+
+func (p *provider) refresh(ctx context.Context, config settings, issuer *oidc.Provider, oauth *oauth2.Config, current *session) (*session, error) {
+    if current.Token.RefreshToken == "" { return nil, interactionRequired() }
+    // Force one refresh instead of allowing oauth2.TokenSource to return the old token.
+    stale := *current.Token
+    stale.Expiry = time.Unix(1, 0)
+    token, err := oauth.TokenSource(ctx, &stale).Token()
+    if err != nil {
+        var response *oauth2.RetrieveError
+        if errors.As(err, &response) && response.ErrorCode == "invalid_grant" {
+            if err := p.api.Delete(ctx, "session/v1"); err != nil { return nil, err }
+            return nil, interactionRequired()
+        }
+        return nil, unavailable()
+    }
+    if token.RefreshToken == "" { token.RefreshToken = current.Token.RefreshToken }
+    updated := *current
+    updated.Token = token
+    if err := validateToken(ctx, config, issuer, &updated, false); err != nil { return nil, err }
+    return &updated, nil
+}
+
+func validateToken(ctx context.Context, config settings, issuer *oidc.Provider, current *session, initial bool) error {
+    if current.Token.AccessToken == "" || current.Token.Expiry.IsZero() || !current.Token.Valid() || !strings.EqualFold(current.Token.TokenType, "Bearer") { return denied() }
+    if granted, ok := current.Token.Extra("scope").(string); ok { current.Scopes = strings.Fields(granted) }
+rawID, _ := current.Token.Extra("id_token").(string)
+    if rawID == "" {
+        if initial { return denied() }
+        // A refresh may omit an ID token. Retain its original expiration exactly.
+        return nil
+    }
+    id, err := issuer.VerifierContext(ctx, &oidc.Config{ClientID: config.ClientID}).Verify(ctx, rawID)
+    if err != nil || id.Subject == "" { return denied() }
+    if (initial || id.Nonce != "") && subtle.ConstantTimeCompare([]byte(id.Nonce), []byte(current.Nonce)) != 1 { return denied() }
+    if current.Subject != "" && current.Subject != id.Subject { return denied() }
+    var claims struct { AuthorizedParty string `json:"azp"` }
+    if err := id.Claims(&claims); err != nil { return denied() }
+    if (len(id.Audience) > 1 && claims.AuthorizedParty == "") || (claims.AuthorizedParty != "" && claims.AuthorizedParty != config.ClientID) { return denied() }
+    if id.AccessTokenHash != "" && id.VerifyAccessToken(current.Token.AccessToken) != nil { return denied() }
+    current.IDToken, current.IDExpires, current.Subject = rawID, id.Expiry, id.Subject
+    return nil
+}
+
+func credentialResult(config settings, current *session) (*pluginv1.Credentials, error) {
+    scope := make([]any, len(current.Scopes))
+    for index, item := range current.Scopes { scope[index] = item }
+    data, err := structpb.NewStruct(map[string]any{
+        "issuer": config.Issuer, "subject": current.Subject, "client_id": config.ClientID,
+        "scopes": scope, "access_token": current.Token.AccessToken, "token_type": current.Token.TokenType,
+        "access_token_expires_at": current.Token.Expiry.UTC().Format(time.RFC3339Nano),
+        "id_token": current.IDToken, "id_token_expires_at": current.IDExpires.UTC().Format(time.RFC3339Nano),
+    })
+    if err != nil { return nil, unavailable() }
+    // This example's downstream broker consumes the access token, never the ID token.
+    return &pluginv1.Credentials{Type: "oidc/v1", ExpiresAt: timestamppb.New(current.Token.Expiry), Data: data, SensitiveKeys: []string{"access_token", "id_token"}}, nil
+}

@@ -1,0 +1,6 @@
+# Imported only when NOT running in CI (via `when: local` in atmos.yaml). Developer-tooling
+# settings like this have no purpose in an automated apply, so they are scoped to workstations.
+settings:
+  terminal:
+    syntax_highlighting:
+      enabled: true

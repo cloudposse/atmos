@@ -1,0 +1,123 @@
+---
+title: atmos aws cloudformation
+sidebar_label: cloudformation
+sidebar_class_name: command
+id: cloudformation
+description: Deploy and manage native aws/cloudformation stacks using the AWS SDK for Go v2.
+---
+
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Deploy, inspect, and delete CloudFormation stacks using Atmos stack configuration.
+The `cfn` alias is available for every CloudFormation command. No AWS CLI or Rain
+installation is required.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure CloudFormation Components">
+  Configure component locations, templates, parameters, and delivery targets.
+  <div>
+    <PrimaryCTA to="/stacks/components/aws-cloudformation">Stack Configuration</PrimaryCTA>
+  </div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation --help" src="/casts/screengrabs/atmos-aws-cloudformation--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation <subcommand> [options]
+```
+
+## Examples
+
+Preview and apply a component:
+
+```shell
+atmos aws cloudformation plan vpc -s plat-ue2-dev
+atmos aws cloudformation apply vpc -s plat-ue2-dev
+```
+
+Use the short alias:
+
+```shell
+atmos aws cfn output vpc -s plat-ue2-dev
+```
+
+Select multiple components:
+
+```shell
+atmos aws cloudformation apply --all -s plat-ue2-dev
+atmos aws cloudformation apply --affected --base origin/main
+```
+
+## Subcommands
+
+<DocCardList/>
+
+## Execution controls
+
+<dl>
+  <dt>`--identity`, `-i`</dt>
+  <dd>Atmos identity for the operation. Use without a value to select interactively.
+  Also configurable with `ATMOS_IDENTITY`. An explicit CLI/environment identity
+  overrides target defaults; see [Target Authentication](/stacks/components/aws-cloudformation#target-authentication).</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Validate static configuration without evaluating templates or YAML functions,
+  authenticating, downloading sources, running hooks, or calling AWS.
+  Checks requiring dynamic values are deferred.</dd>
+
+  <dt>`--ci`</dt>
+  <dd>Enable CI integration when `ci.enabled` is configured.
+  See [CI Summaries](#ci-summaries).</dd>
+
+  <dt>`--skip-hooks`</dt>
+  <dd>Skip all lifecycle hooks, or use `--skip-hooks=a,b` to skip named hooks.
+  Also configurable with `ATMOS_SKIP_HOOKS`. Applies to
+  [commands that fire hooks](/stacks/components/aws-cloudformation#lifecycle-hooks).</dd>
+</dl>
+
+### Bulk Selection
+
+Component operations accept `--all`, `--affected`, `--tags`, and `--labels`.
+Use Git comparison flags such as `--base` to select affected components.
+Selection is limited to CloudFormation components. Within that selection, apply runs dependencies
+first; deletion runs consumers first. Cross-type `dependencies.components` declarations do not make
+these commands deploy Terraform prerequisites. Deploy those first with `atmos terraform apply` or
+a separate workflow step.
+
+### CI Summaries
+
+With CI and summary output enabled, `diff`/`plan`, `apply`/`deploy`, `delete`,
+`drift detect`, and `drift describe` write job summaries. Dry-run does not.
+
+GitHub Actions uses `GITHUB_STEP_SUMMARY`. In other CI environments, set
+`ATMOS_CI_SUMMARY` to the destination file. CloudFormation also publishes [CI output variables](/ci#outputs), controlled
+independently by `ci.output.enabled` and `ci.output.variables`. It does not publish
+PR comments, commit statuses, or stored artifacts.
+See [CI configuration](/cli/configuration/ci).
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Requires Docker or Podman, Python 3, and network access for the emulator image. Run against the local AWS emulator; the final commands clean up. No AWS account is needed.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>

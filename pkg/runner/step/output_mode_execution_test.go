@@ -7,9 +7,11 @@ import (
 	"os/exec"
 	"testing"
 
+	cockroach "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -347,4 +349,29 @@ func TestOutputModeWriterExecuteWithEnvVars(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "test_value")
 	assert.Empty(t, stderr)
+}
+
+// A nested Atmos failure is marked only when the child's output, and the annotation in it, is forwarded.
+// The none mode captures that output silently, so the parent keeps the failure and reports it itself.
+func TestOutputModeWriterMarkNestedAtmosFailure(t *testing.T) {
+	failed := errUtils.ExitCodeError{Code: 3}
+	for _, tc := range []struct {
+		mode       OutputMode
+		wantMarked bool
+	}{
+		{OutputModeRaw, true},
+		{OutputModeLog, true},
+		{OutputModeViewport, true},
+		{OutputModeNone, false},
+	} {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			writer := NewOutputModeWriter(tc.mode, "nested", nil)
+			got := writer.MarkNestedAtmosFailure(failed)
+			require.Error(t, got)
+			assert.Equal(t, tc.wantMarked, cockroach.Is(got, errUtils.ErrNestedAtmosFailed))
+			assert.Equal(t, failed.Error(), got.Error(), "the error itself is unchanged")
+			assert.Equal(t, 3, errUtils.GetExitCode(got))
+		})
+	}
+	assert.NoError(t, NewOutputModeWriter(OutputModeRaw, "nested", nil).MarkNestedAtmosFailure(nil))
 }

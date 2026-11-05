@@ -135,6 +135,9 @@ stores:
       vault_url: "https://my-keyvault.vault.azure.net/"  # Required
       prefix: myapp               # Optional
       stack_delimiter: "-"         # Optional: default is "-"
+      labels:                      # Optional: applied as Azure Key Vault secret tags
+        managed-by: atmos
+      expires: 90d                 # Optional: 90d, 2160h, 2027-01-01, or RFC 3339
 ```
 
 Authentication uses the Azure Default Credential chain (environment variables, managed identity, Azure CLI). Secret names are normalized to comply with Azure Key Vault restrictions: only alphanumeric characters and hyphens are allowed.

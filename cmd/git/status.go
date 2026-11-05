@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -151,4 +152,8 @@ func init() {
 	if err := statusParser.BindToViper(viper.GetViper()); err != nil {
 		panic(fmt.Sprintf("git status: BindToViper: %v", err))
 	}
+	internal.RegisterCommandMetadata(
+		statusCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/status"),
+	)
 }

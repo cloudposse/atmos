@@ -86,14 +86,21 @@ func init() {
 	emulatorCmd.AddCommand(upCmd, downCmd, resetCmd, psCmd, listCmd, logsCmd, execCmd)
 
 	RegisterEmulatorCompletions(emulatorCmd)
-	internal.Register(&EmulatorCommandProvider{})
+	internal.Register(
+		&EmulatorCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/emulator/usage"),
+		internal.WithExample("examples/emulator-aws", "AWS Emulator"),
+		internal.WithExample("examples/emulator-k8s", "Kubernetes Emulator"),
+	)
 }
 
 // EmulatorCommandProvider implements the CommandProvider interface.
 type EmulatorCommandProvider struct{}
 
 // GetCommand returns the emulator command.
-func (c *EmulatorCommandProvider) GetCommand() *cobra.Command { return emulatorCmd }
+func (c *EmulatorCommandProvider) GetCommand() *cobra.Command {
+	return emulatorCmd
+}
 
 // GetName returns the command name.
 func (c *EmulatorCommandProvider) GetName() string { return "emulator" }
@@ -118,7 +125,7 @@ func (c *EmulatorCommandProvider) GetCompatibilityFlags() map[string]compat.Comp
 }
 
 // IsExperimental returns whether this command is experimental.
-func (c *EmulatorCommandProvider) IsExperimental() bool { return true }
+func (c *EmulatorCommandProvider) IsExperimental() bool { return false }
 
 // buildConfigAndStacksInfo creates a ConfigAndStacksInfo with global flags populated.
 func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {

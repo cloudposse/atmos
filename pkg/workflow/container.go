@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
@@ -175,6 +175,9 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 		return errUtils.ErrNilParam
 	}
 	step := params.Step
+	if err := rejectEmbeddedScriptInContainer(step); err != nil {
+		return err
+	}
 	containerWorkDir, err := mapHostWorkDirToContainer(params.HostWorkDir, s.hostWorkspace, defaultString(s.config.Workspace, "/workspace"))
 	if err != nil {
 		return err
@@ -204,7 +207,7 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 		})
 	}
 
-	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, params.WorkflowDef), step.Name, stepPkg.GetViewportConfig(step, params.WorkflowDef))
+	writer := stepPkg.NewCommandOutputWriter(step, params.WorkflowDef)
 	_, _, err = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		return s.backend.Exec(ctx, cmd, &container.ExecOptions{
 			User:         s.config.User,
@@ -230,6 +233,9 @@ func RunStepContainerOverride(ctx context.Context, params *ContainerStepParams) 
 	}
 	workflowDef := params.WorkflowDef
 	step := params.Step
+	if err := rejectEmbeddedScriptInContainer(step); err != nil {
+		return err
+	}
 	cfg := mergeWorkflowContainer(workflowDef.Container, step.Container)
 	if !cfg.IsEnabled() {
 		return nil
@@ -317,7 +323,7 @@ func writeEphemeralResult(params *ContainerStepParams, result *container.Ephemer
 	}
 	writeCapture(params.StdoutCapture, result.Stdout)
 	writeCapture(params.StderrCapture, result.Stderr)
-	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, params.WorkflowDef), step.Name, stepPkg.GetViewportConfig(step, params.WorkflowDef))
+	writer := stepPkg.NewCommandOutputWriter(step, params.WorkflowDef)
 	_, _, _ = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		if result.Stdout != "" {
 			_, _ = stdout.Write([]byte(result.Stdout))
@@ -438,7 +444,7 @@ func convertWorkflowMounts(mounts []schema.ContainerMount) []container.Mount {
 		}
 		result = append(result, container.Mount{
 			Type:     mountType,
-			Source:   expandHome(mount.Source),
+			Source:   filesystem.ExpandHome(mount.Source),
 			Target:   mount.Target,
 			ReadOnly: mount.ReadOnly,
 		})
@@ -511,23 +517,6 @@ func mergeEnvSlices(base, overlay []string) []string {
 		result = append(result, key+"="+values[key])
 	}
 	return result
-}
-
-func expandHome(path string) string {
-	if path == "" || path[0] != '~' {
-		return path
-	}
-	home, err := homedir.Dir()
-	if err != nil {
-		return path
-	}
-	if path == "~" {
-		return home
-	}
-	if strings.HasPrefix(path, "~/") {
-		return filepath.Join(home, path[2:])
-	}
-	return path
 }
 
 func defaultString(value, fallback string) string {

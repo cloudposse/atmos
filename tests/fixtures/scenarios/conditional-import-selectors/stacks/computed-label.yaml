@@ -1,0 +1,6 @@
+name: computed-label
+metadata: {labels: {pci: !env FIELD_TEST_PCI}}
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel labels.pci == true

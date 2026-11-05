@@ -25,6 +25,11 @@ var httpClient = &http.Client{Timeout: fetchTimeout}
 // GitHub API at apiURL. apiURL is a parameter (rather than always
 // repoAPIURL) so tests can point it at an httptest.Server.
 func fetchRepoDescription(apiURL string) (string, error) {
+	// Pull-request workflows already receive this public metadata in the event.
+	// Using it avoids both anonymous API limits and tokens in PR-controlled code.
+	if description, supplied := os.LookupEnv("ATMOS_NOTICE_REPO_DESCRIPTION"); supplied {
+		return validateRepoDescription(description)
+	}
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("build request for %s: %w", apiURL, err)
@@ -50,14 +55,17 @@ func fetchRepoDescription(apiURL string) (string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return "", fmt.Errorf("decode response from %s: %w", apiURL, err)
 	}
-	if payload.Description == "" {
-		return "", fmt.Errorf("%s: repository has no description", apiURL)
-	}
-	if !isSingleLinePrintable(payload.Description) {
-		return "", fmt.Errorf("%s: repository description contains line breaks or non-printable characters", apiURL)
-	}
+	return validateRepoDescription(payload.Description)
+}
 
-	return payload.Description, nil
+func validateRepoDescription(description string) (string, error) {
+	if description == "" {
+		return "", fmt.Errorf("repository has no description")
+	}
+	if !isSingleLinePrintable(description) {
+		return "", fmt.Errorf("repository description contains line breaks or non-printable characters")
+	}
+	return description, nil
 }
 
 // isSingleLinePrintable reports whether s is safe to embed verbatim in

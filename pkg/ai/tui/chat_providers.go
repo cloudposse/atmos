@@ -8,6 +8,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
+	"github.com/cloudposse/atmos/pkg/ai/agent/azureopenai"
+	"github.com/cloudposse/atmos/pkg/ai/agent/bedrock"
+	"github.com/cloudposse/atmos/pkg/ai/agent/gemini"
+	"github.com/cloudposse/atmos/pkg/ai/agent/github"
+	"github.com/cloudposse/atmos/pkg/ai/agent/grok"
+	"github.com/cloudposse/atmos/pkg/ai/agent/ollama"
+	"github.com/cloudposse/atmos/pkg/ai/agent/openai"
 	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/skills"
@@ -108,16 +116,28 @@ var providerDisplayNames = map[string]string{
 	"azureopenai":     "Azure OpenAI",
 }
 
+// providerDefaultModels maps each provider to the DefaultModel its client falls back to.
+var providerDefaultModels = map[string]string{
+	providerAnthropic: anthropic.DefaultModel,
+	"openai":          openai.DefaultModel,
+	"gemini":          gemini.DefaultModel,
+	"github":          github.DefaultModel,
+	"grok":            grok.DefaultModel,
+	"ollama":          ollama.DefaultModel,
+	"bedrock":         bedrock.DefaultModel,
+	"azureopenai":     azureopenai.DefaultModel,
+}
+
 // defaultProviderModels is the fallback list when no providers are configured.
 var defaultProviderModels = []ProviderWithModel{
-	{Name: providerAnthropic, DisplayName: "Anthropic (Claude)", Model: "claude-sonnet-4-5-20250929"},
-	{Name: "openai", DisplayName: "OpenAI (GPT)", Model: defaultOpenAIModel},
-	{Name: "gemini", DisplayName: "Google (Gemini)", Model: "gemini-2.5-flash"},
-	{Name: "github", DisplayName: "GitHub Models", Model: "openai/gpt-4o-mini"},
-	{Name: "grok", DisplayName: "xAI (Grok)", Model: "grok-4"},
-	{Name: "ollama", DisplayName: "Ollama (Local)", Model: "llama3.3:70b"},
-	{Name: "bedrock", DisplayName: "AWS Bedrock", Model: "anthropic.claude-sonnet-4-5-20250929-v1:0"},
-	{Name: "azureopenai", DisplayName: "Azure OpenAI", Model: defaultOpenAIModel},
+	{Name: providerAnthropic, DisplayName: "Anthropic (Claude)", Model: anthropic.DefaultModel},
+	{Name: "openai", DisplayName: "OpenAI (GPT)", Model: openai.DefaultModel},
+	{Name: "gemini", DisplayName: "Google (Gemini)", Model: gemini.DefaultModel},
+	{Name: "github", DisplayName: "GitHub Models", Model: github.DefaultModel},
+	{Name: "grok", DisplayName: "xAI (Grok)", Model: grok.DefaultModel},
+	{Name: "ollama", DisplayName: "Ollama (Local)", Model: ollama.DefaultModel},
+	{Name: "bedrock", DisplayName: "AWS Bedrock", Model: bedrock.DefaultModel},
+	{Name: "azureopenai", DisplayName: "Azure OpenAI", Model: azureopenai.DefaultModel},
 }
 
 // getConfiguredProvidersForCreate returns configured providers with their models from atmos.yaml.
@@ -139,10 +159,16 @@ func (m *ChatModel) getConfiguredProvidersForCreate() []ProviderWithModel {
 			displayName = provider.Name
 		}
 
+		// An omitted model uses the provider's default, as the client does.
+		model := providerDefaultModels[provider.Name]
+		if providerConfig != nil && providerConfig.Model != "" {
+			model = providerConfig.Model
+		}
+
 		configured = append(configured, ProviderWithModel{
 			Name:        provider.Name,
 			DisplayName: displayName,
-			Model:       providerConfig.Model,
+			Model:       model,
 		})
 	}
 

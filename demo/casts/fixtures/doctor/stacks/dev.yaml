@@ -1,0 +1,8 @@
+components:
+  terraform:
+    app:
+      settings:
+        depends_on:
+          - component: database
+      vars:
+        stage: dev

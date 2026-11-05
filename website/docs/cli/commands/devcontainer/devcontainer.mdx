@@ -3,8 +3,10 @@ title: atmos devcontainer
 sidebar_label: devcontainer
 sidebar_class_name: command
 id: devcontainer
-description: Manage development containers for Atmos workflows
+description: "Give your team a ready-to-use development environment with Atmos and its required tools already configured."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
@@ -16,9 +18,9 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
-Use this command to manage development containers (devcontainers) for your Atmos workflows.
-
-Devcontainers provide isolated, reproducible development environments with all required tools and dependencies pre-configured.
+Give your team a ready-to-use development environment with Atmos and its required tools already
+configured. Start an isolated container and run your project's workflows with a consistent setup
+across developer machines.
 </Intro>
 
 <Experimental />
@@ -241,6 +243,18 @@ atmos devcontainer stop geodesic
 # Remove a devcontainer
 atmos devcontainer remove geodesic
 ```
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Install Docker or Podman, then inspect the configured development containers.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
 
 ## See Also
 

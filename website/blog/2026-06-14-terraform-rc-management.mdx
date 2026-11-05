@@ -10,6 +10,8 @@ Atmos can now manage the **Terraform/OpenTofu runtime configuration (RC)** for y
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What is the "RC" file?
 
 "RC" is **runtime configuration** — the same convention as `.bashrc` or `.npmrc`. Terraform and OpenTofu read a CLI configuration file (named [`.terraformrc` / `terraform.rc`](https://developer.hashicorp.com/terraform/cli/config/config-file) for Terraform and [`.tofurc` / `.terraformrc`](https://opentofu.org/docs/cli/config/config-file/) for OpenTofu) that controls *how the CLI itself behaves* — distinct from your `.tf` code, which describes infrastructure. It is where you configure things like:
@@ -67,6 +69,18 @@ Atmos sets **both** `TF_CLI_CONFIG_FILE` and `TOFU_CLI_CONFIG_FILE` to the gener
 ## The foundation for the registry cache
 
 RC management is useful on its own, and it's also the injection point the new [Terraform Registry Cache](/changelog/terraform-registry-cache) builds on — the cache contributes its `network_mirror` and module `host` directives into this same generated CLI config. Enable the cache and the RC plumbing is driven for you.
+
+## Try it out
+
+<TryExample example="caching">
+
+Install Terraform, then follow the README to initialize the sample component and inspect provider caching.
+
+```shell
+atmos terraform cache list
+```
+
+</TryExample>
 
 ## Get involved
 

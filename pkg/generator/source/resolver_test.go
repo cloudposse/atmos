@@ -50,6 +50,7 @@ func TestIsTemplateSource(t *testing.T) {
 	assert.True(t, IsTemplateSource("git::https://example.com/acme/template.git"))
 	assert.True(t, IsTemplateSource("./local-template"))
 	assert.True(t, IsTemplateSource("/tmp/local-template"))
+	assert.True(t, IsTemplateSource(t.TempDir()), "native absolute paths must not be treated as template names")
 	assert.False(t, IsTemplateSource("aws/landing-zone"))
 	assert.False(t, IsTemplateSource("basic"))
 }
@@ -60,6 +61,71 @@ func TestWithRef(t *testing.T) {
 	assert.Equal(t, "github.com/acme/template?depth=1&ref=v1.2.3", WithRef("github.com/acme/template?depth=1", "v1.2.3"))
 	assert.Equal(t, "github.com/acme/template?ref=main", WithRef("github.com/acme/template?ref=main", "v1.2.3"))
 	assert.Equal(t, "./local", WithRef("./local", "v1.2.3"))
+}
+
+func TestReplaceRef(t *testing.T) {
+	assert.Equal(t, "github.com/acme/template?ref=v1.2.3", replaceRef("github.com/acme/template", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?depth=1&ref=v1.2.3", replaceRef("github.com/acme/template?depth=1", "v1.2.3"))
+	// Unlike WithRef, an existing ref= is overridden, not preserved.
+	assert.Equal(t, "github.com/acme/template?ref=v1.2.3", replaceRef("github.com/acme/template?ref=main", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?depth=1&ref=v1.2.3&clone=false", replaceRef("github.com/acme/template?depth=1&ref=main&clone=false", "v1.2.3"))
+	assert.Equal(t, "./local", replaceRef("./local", "v1.2.3"))
+	assert.Equal(t, "", replaceRef("", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?ref=main", replaceRef("github.com/acme/template?ref=main", ""))
+}
+
+// TestPinRenderedRef_Git proves pinRenderedRef appends a ?ref= for a
+// git-flavored source that doesn't have one yet -- rendered mode's git
+// provenance pinning.
+func TestPinRenderedRef_Git(t *testing.T) {
+	pinned, err := pinRenderedRef("github.com/acme/template", "abc123")
+	require.NoError(t, err)
+	assert.Equal(t, "github.com/acme/template?ref=abc123", pinned)
+}
+
+// TestPinRenderedRef_GitReplacesExistingRef proves pinRenderedRef overrides
+// an already-present ?ref= (e.g. a recorded source's own "?ref=main") with
+// the resolved, immutable renderedRef, rather than leaving the mutable
+// tag/branch in place as WithRef's --ref sugar intentionally does. Without
+// this, a moving branch could change what --update-strategy=rendered's
+// merge base resolves to on a later run.
+func TestPinRenderedRef_GitReplacesExistingRef(t *testing.T) {
+	pinned, err := pinRenderedRef("github.com/acme/template?ref=main", "abc123")
+	require.NoError(t, err)
+	assert.Equal(t, "github.com/acme/template?ref=abc123", pinned)
+}
+
+// TestPinRenderedRef_OCI proves pinRenderedRef pins an oci:// source to an
+// explicit "@sha256:..." digest reference rather than folding it into
+// WithRef's git-only ?ref= sugar (which OCI sources ignore entirely -- see
+// WithRef's own "local paths and file/OCI/S3 sources are returned
+// unchanged" behavior). This is the fix for the gap where
+// --update-strategy=rendered never resolved a pinnable ref for OCI-sourced
+// scaffold templates at all.
+func TestPinRenderedRef_OCI(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	pinned, err := pinRenderedRef("oci://ghcr.io/acme/template:v1", digest)
+	require.NoError(t, err)
+	assert.Equal(t, "oci://ghcr.io/acme/template@"+digest, pinned)
+}
+
+// TestPinRenderedRef_OCIInvalidReferencePropagatesError proves a malformed
+// OCI reference surfaces as an error instead of silently falling through to
+// an unpinned (and therefore not reproducible) source.
+func TestPinRenderedRef_OCIInvalidReferencePropagatesError(t *testing.T) {
+	_, err := pinRenderedRef("oci://", "sha256:"+strings.Repeat("a", 64))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidImageReference)
+}
+
+// TestPinRenderedRef_EmptyRenderedRefPassesThrough proves pinRenderedRef is
+// a no-op passthrough when no renderedRef is recorded yet, for both source
+// kinds -- mirroring WithRef's own empty-ref passthrough.
+func TestPinRenderedRef_EmptyRenderedRefPassesThrough(t *testing.T) {
+	pinned, err := pinRenderedRef("oci://ghcr.io/acme/template:v1", "")
+	require.NoError(t, err)
+	assert.Equal(t, "oci://ghcr.io/acme/template:v1", pinned)
 }
 
 func hasSampleFile(files []templates.File) bool {
@@ -96,7 +162,7 @@ func TestResolve_LocalPathDefaultTimeout(t *testing.T) {
 func TestResolve_FileURI(t *testing.T) {
 	dir := writeSampleTemplate(t)
 
-	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", "file://"+dir, time.Minute)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", sourceTestGitFileURI(dir), time.Minute)
 	require.NoError(t, err)
 	defer cleanup()
 	require.NotNil(t, cfg)
@@ -138,6 +204,34 @@ func TestResolve_OCISuccess(t *testing.T) {
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "OCI template files must be loaded")
 	assert.Equal(t, src, cfg.Source, "OCI sources must record the original oci:// source string, not the ephemeral fetch tempdir")
+	// Regression: OCI sources must resolve an immutable manifest digest the
+	// same way git sources resolve a commit SHA, or --update-strategy=rendered
+	// has nothing to pin an OCI-sourced project's provenance to (it silently
+	// never records spec.renderedRef and every later rendered update fails
+	// with "requires a recorded scaffold configuration").
+	assert.True(t, strings.HasPrefix(cfg.ResolvedRef, "sha256:"), "OCI ResolvedRef must be the pulled manifest's digest, got %q", cfg.ResolvedRef)
+}
+
+// TestResolve_OCIPreservesLocalDir proves LocalDir still points at the real,
+// on-disk fetch directory after Source is overwritten to the original oci://
+// reference -- a later re-parse of this template's own scaffold.yaml (e.g.
+// RunSetupForm re-loading it to resolve a local !include target) needs a
+// real path to resolve against, not the oci:// string Source now holds.
+func TestResolve_OCIPreservesLocalDir(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample:v1", map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "oci://" + imageRef
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	defer cleanup()
+
+	require.NotEmpty(t, cfg.LocalDir)
+	assert.NotEqual(t, cfg.Source, cfg.LocalDir, "LocalDir must diverge from the overwritten Source")
+	assert.FileExists(t, filepath.Join(cfg.LocalDir, "scaffold.yaml"), "LocalDir must still point at the real fetch directory, not a stale/removed path")
+	assert.Equal(t, cfg.LocalDir, cfg.IncludeSourceDir(), "IncludeSourceDir must prefer LocalDir once it's set")
 }
 
 // TestResolve_OCIEmptyRegistryFails proves a manifest with zero layers (a
@@ -336,12 +430,96 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app?ref=main"
 
 	requireGitBinary(t)
-	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, time.Minute)
+	// Real Git subprocesses can exceed a minute on busy Windows runners. Use
+	// the production fetch budget for the local Git transport.
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+	// Regression: go-getter's git fetch for a //subdir source clones the full
+	// repo into its own internal temp location and copies only the subdir's
+	// content into tempDir, so tempDir itself never has a usable .git
+	// directory to inspect afterward -- ResolvedRef
+	// used to silently stay empty for this extremely common source shape
+	// (the exact one `atmos init aws/app` uses), meaning
+	// --update-strategy=rendered could never record a pinnable ref for any
+	// subdir-sourced template at all.
+	assert.Regexp(t, `^[0-9a-f]{40}$`, cfg.ResolvedRef, "ResolvedRef must be captured even for a //subdir source")
+}
+
+// TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit verifies provenance
+// capture when fetching the repository's default branch.
+func TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit(t *testing.T) {
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"aws/app/scaffold.yaml": sampleScaffold,
+		"aws/app/file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app"
+
+	requireGitBinary(t)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.Regexp(t, `^[0-9a-f]{40}$`, cfg.ResolvedRef)
+}
+
+// commitFileToTestRepo writes an additional commit to an existing repo built
+// by initSourceTestGitRepo, moving its current branch forward -- used to
+// simulate a mutable ref (branch/tag) advancing mid-flight.
+func commitFileToTestRepo(t *testing.T, repoDir, relPath, content string) {
+	t.Helper()
+
+	repo, err := git.PlainOpen(repoDir)
+	require.NoError(t, err)
+
+	path := filepath.Join(repoDir, filepath.FromSlash(relPath))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, wt.AddGlob("."))
+	_, err = wt.Commit("advance ref", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test User",
+			Email: "test@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
+}
+
+// The content and provenance must come from a single checkout, even if the
+// remote branch later moves. A subdirectory fetch must not clone a probe repo.
+func TestResolveRemote_SubdirUsesSingleCheckout(t *testing.T) {
+	requireGitBinary(t)
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"aws/app/scaffold.yaml": sampleScaffold,
+		"aws/app/file.txt":      "v1",
+	})
+	repo, err := git.PlainOpen(repoDir)
+	require.NoError(t, err)
+	head, err := repo.Head()
+	require.NoError(t, err)
+	trace := filepath.Join(t.TempDir(), "git-trace.log")
+	t.Setenv("GIT_TRACE", trace)
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app?ref=main&depth=1"
+	conf, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
+	require.NoError(t, err)
+	defer cleanup()
+	commitFileToTestRepo(t, repoDir, "aws/app/file.txt", "v2")
+	assert.Equal(t, head.Hash().String(), conf.ResolvedRef)
+	for _, f := range conf.Files {
+		if f.Path == "file.txt" {
+			assert.Equal(t, "v1", f.Content)
+		}
+	}
+	commands, err := os.ReadFile(trace)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(commands), "built-in: git clone"), "fetch must clone only once: %s", commands)
 }
 
 // TestResolve_RemoteGitExcludesGitDirectory reproduces a client-reported bug: fetching a
@@ -423,6 +601,34 @@ func TestResolve_RemoteRecordsOriginalSource(t *testing.T) {
 
 	assert.True(t, hasSampleFile(cfg.Files), "remote archive template files must be loaded")
 	assert.Equal(t, src, cfg.Source, "remote sources must record the original source string, not the ephemeral fetch tempdir")
+}
+
+// TestResolve_RemotePreservesLocalDir mirrors
+// TestResolve_OCIPreservesLocalDir for the go-getter (git/https/s3) fetch
+// path -- resolveOCI and resolveRemote each set LocalDir independently, so
+// each needs its own regression coverage.
+func TestResolve_RemotePreservesLocalDir(t *testing.T) {
+	archive := zipArchive(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	src := server.URL + "/template.zip"
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	defer cleanup()
+
+	require.NotEmpty(t, cfg.LocalDir)
+	assert.NotEqual(t, cfg.Source, cfg.LocalDir, "LocalDir must diverge from the overwritten Source")
+	assert.FileExists(t, filepath.Join(cfg.LocalDir, "scaffold.yaml"), "LocalDir must still point at the real fetch directory, not a stale/removed path")
+	assert.Equal(t, cfg.LocalDir, cfg.IncludeSourceDir(), "IncludeSourceDir must prefer LocalDir once it's set")
 }
 
 // TestResolve_RemoteGitSubdirMissing pins the exact failure mode reported for

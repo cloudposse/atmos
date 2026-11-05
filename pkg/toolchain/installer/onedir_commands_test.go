@@ -1,0 +1,313 @@
+package installer
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestCopyOnedirCommandPreservesArchiveSymlink(t *testing.T) {
+	directory := t.TempDir()
+	writeFileUnder(t, directory, "lib/runtime", "BINARY")
+	writeFileUnder(t, directory, "lib/support", "SUPPORT")
+	require.NoError(t, os.Mkdir(filepath.Join(directory, "bin"), 0o755))
+	err := os.Symlink(filepath.Join("..", "lib", "runtime"), filepath.Join(directory, "bin", "source"))
+	if err != nil && runtime.GOOS == "windows" {
+		t.Skipf("runner cannot create archive symlinks: %v", err)
+	}
+	require.NoError(t, err)
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+	require.NoError(t, copyOnedirCommand(root, "bin/source", "bin/command"))
+	resolved, err := filepath.EvalSymlinks(filepath.Join(directory, "bin", "command"))
+	require.NoError(t, err)
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(resolved), "support"))
+	require.NoError(t, err)
+	require.Equal(t, "SUPPORT", string(data), "renamed commands must retain executable-relative runtime files")
+	require.FileExists(t, filepath.Join(directory, "bin", "source"))
+	err = copyOnedirCommand(root, "bin/source", "bin/command")
+	require.ErrorIs(t, err, ErrFileOperation)
+	require.ErrorIs(t, err, os.ErrExist)
+}
+
+func TestExposeOnedirCommands(t *testing.T) {
+	for _, test := range []struct {
+		name, goos, source, command, exposed string
+	}{
+		{"renamed", "linux", "bin/upstream", "compiler", "bin/compiler"},
+		{"unchanged", "linux", "bin/compiler", "compiler", "bin/compiler"},
+		{"windows extension", "windows", "bin/upstream.exe", "compiler", "bin/compiler.exe"},
+		{"windows explicit extension", "windows", "bin/upstream.exe", "compiler.exe", "bin/compiler.exe"},
+		{"windows case", "windows", "bin/Compiler.EXE", "compiler", "bin/Compiler.EXE"},
+		{"windows script", "windows", "bin/upstream.cmd", "compiler.cmd", "bin/compiler.cmd"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFileUnder(t, root, test.source, "BINARY")
+			eps := []entrypoint{{name: test.command, src: filepath.FromSlash(test.source)}}
+			actual, err := exposeOnedirCommands(root, eps, test.goos)
+			require.NoError(t, err)
+			require.Equal(t, []entrypoint{{name: test.command, src: filepath.FromSlash(test.exposed)}}, actual)
+			require.Equal(t, filepath.FromSlash(test.source), eps[0].src, "caller-owned declarations must remain unchanged")
+			data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(test.exposed)))
+			require.NoError(t, err)
+			require.Equal(t, "BINARY", string(data))
+			require.FileExists(t, filepath.Join(root, filepath.FromSlash(test.source)))
+		})
+	}
+}
+
+func TestExposeOnedirCommandsRejectsInvalidNames(t *testing.T) {
+	for _, name := range []string{"", ".", "..", "../escape", "nested/name", `nested\name`} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFileUnder(t, root, "bin/source", "ORIGINAL")
+			_, err := exposeOnedirCommands(root, []entrypoint{{name: name, src: "bin/source"}}, "linux")
+			require.ErrorIs(t, err, ErrFileOperation)
+			data, err := os.ReadFile(filepath.Join(root, "bin", "source"))
+			require.NoError(t, err)
+			require.Equal(t, "ORIGINAL", string(data))
+		})
+	}
+}
+
+func TestExposeOnedirCommandsRejectsMissingTree(t *testing.T) {
+	_, err := exposeOnedirCommands(filepath.Join(t.TempDir(), "missing"), nil, "linux")
+	require.ErrorIs(t, err, ErrFileOperation)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestExposeOnedirCommandsRejectsMissingCommand(t *testing.T) {
+	_, err := exposeOnedirCommands(t.TempDir(), []entrypoint{{name: "command", src: "missing"}}, "linux")
+	require.ErrorIs(t, err, ErrFileOperation)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.ErrorContains(t, err, "failed to make command missing executable")
+}
+
+func TestCopyOnedirCommandFailures(t *testing.T) {
+	directory := t.TempDir()
+	writeFileUnder(t, directory, "source", "SOURCE")
+	writeFileUnder(t, directory, "occupied", "DO-NOT-OVERWRITE")
+	require.NoError(t, os.Mkdir(filepath.Join(directory, "directory"), 0o755))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+	for _, test := range []struct{ source, destination string }{
+		{"missing", "command"},
+		{"directory", "command"},
+		{"source", "occupied"},
+		{"source", "missing/command"},
+		{"../outside", "command"},
+		{"source", "../outside"},
+	} {
+		t.Run(test.source+" to "+test.destination, func(t *testing.T) {
+			err := copyOnedirCommand(root, test.source, test.destination)
+			require.ErrorIs(t, err, ErrFileOperation)
+		})
+	}
+	data, err := os.ReadFile(filepath.Join(directory, "occupied"))
+	require.NoError(t, err)
+	require.Equal(t, "DO-NOT-OVERWRITE", string(data))
+	require.NoFileExists(t, filepath.Join(directory, "command"))
+}
+
+func TestInstallOnedirCommandCollisionRollsBack(t *testing.T) {
+	versionDir := filepath.Join(t.TempDir(), "owner", "tool", "1.0")
+	binaryPath := filepath.Join(versionDir, "compiler")
+	eps := []entrypoint{{name: "compiler", src: filepath.Join("bin", "upstream")}}
+	instance := &Installer{}
+	old := t.TempDir()
+	writeFileUnder(t, old, "bin/upstream", "OLD-BINARY")
+	writeFileUnder(t, old, "include/types.proto", "OLD-INCLUDE")
+	require.NoError(t, instance.installOnedirForOS(old, binaryPath, eps, deferredEntries{}, "linux"))
+	manifestBefore, err := os.ReadFile(filepath.Join(versionDir, onedirManifestName))
+	require.NoError(t, err)
+
+	staging := t.TempDir()
+	writeFileUnder(t, staging, "bin/upstream", "NEW-BINARY")
+	writeFileUnder(t, staging, "bin/compiler", "COLLISION")
+	err = instance.installOnedirForOS(staging, binaryPath, eps, deferredEntries{}, "linux")
+	require.ErrorIs(t, err, ErrFileOperation)
+	require.ErrorIs(t, err, os.ErrExist)
+	manifestAfter, err := os.ReadFile(filepath.Join(versionDir, onedirManifestName))
+	require.NoError(t, err)
+	require.Equal(t, manifestBefore, manifestAfter)
+	for path, expected := range map[string]string{
+		"bin/compiler": "OLD-BINARY", "bin/upstream": "OLD-BINARY", "include/types.proto": "OLD-INCLUDE",
+	} {
+		data, err := os.ReadFile(filepath.Join(versionDir, onedirTreeName, filepath.FromSlash(path)))
+		require.NoError(t, err)
+		require.Equal(t, expected, string(data))
+	}
+	require.NoDirExists(t, filepath.Join(versionDir, onedirTreeName+onedirBackupSuffix))
+}
+
+func TestInstallOnedirFlatCleanupFailureRollsBack(t *testing.T) {
+	for _, existingTree := range []bool{false, true} {
+		name := "flat only"
+		if existingTree {
+			name = "existing tree and manifest"
+		}
+		t.Run(name, func(t *testing.T) {
+			versionDir := filepath.Join(t.TempDir(), "version")
+			binaryName := EnsureWindowsExeExtension("tool")
+			binaryPath := filepath.Join(versionDir, binaryName)
+			treeDir := filepath.Join(versionDir, onedirTreeName)
+			manifestPath := filepath.Join(versionDir, onedirManifestName)
+			// A nonempty directory gives a deterministic removal failure on every OS,
+			// exercising the same rollback as a locked flat executable on Windows.
+			writeFileUnder(t, binaryPath, "retained", "OLD-FLAT")
+			var originalManifest []byte
+			var originalMode os.FileMode
+			if existingTree {
+				writeFileUnder(t, treeDir, "old/tool", "OLD-TREE")
+				require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+					Primary: "previous", Entrypoints: map[string]string{"previous": filepath.Join(onedirTreeName, "old", "tool")},
+				}))
+				require.NoError(t, os.Chmod(manifestPath, 0o600))
+				var err error
+				originalManifest, err = os.ReadFile(manifestPath)
+				require.NoError(t, err)
+				info, err := os.Stat(manifestPath)
+				require.NoError(t, err)
+				originalMode = info.Mode().Perm()
+			}
+			staging := t.TempDir()
+			source := filepath.Join("bin", binaryName)
+			writeFileUnder(t, staging, source, "NEW-TREE")
+			err := (&Installer{}).installOnedirForOS(staging, binaryPath, []entrypoint{{name: "tool", src: source}}, deferredEntries{}, runtime.GOOS)
+			require.ErrorIs(t, err, ErrFileOperation)
+			require.ErrorContains(t, err, "failed to remove stale flat entrypoint")
+			flat, err := os.ReadFile(filepath.Join(binaryPath, "retained"))
+			require.NoError(t, err)
+			require.Equal(t, "OLD-FLAT", string(flat))
+			require.NoDirExists(t, treeDir+onedirBackupSuffix)
+			require.NoFileExists(t, manifestPath+onedirBackupSuffix)
+			if !existingTree {
+				require.NoDirExists(t, treeDir)
+				require.NoFileExists(t, manifestPath)
+				return
+			}
+			old, err := os.ReadFile(filepath.Join(treeDir, "old", "tool"))
+			require.NoError(t, err)
+			require.Equal(t, "OLD-TREE", string(old))
+			require.NoFileExists(t, filepath.Join(treeDir, source))
+			restored, err := os.ReadFile(manifestPath)
+			require.NoError(t, err)
+			require.Equal(t, originalManifest, restored)
+			info, err := os.Stat(manifestPath)
+			require.NoError(t, err)
+			require.Equal(t, originalMode, info.Mode().Perm())
+		})
+	}
+}
+
+// TestOnedirRollbackFailureRetainsRecovery verifies that failed filesystem
+// recovery cannot publish old metadata over an unrestored tree or lose backups.
+func TestOnedirRollbackFailureRetainsRecovery(t *testing.T) {
+	for _, failure := range []string{"remove tree", "restore tree"} {
+		t.Run(failure, func(t *testing.T) {
+			versionDir := t.TempDir()
+			treeDir := filepath.Join(versionDir, onedirTreeName)
+			backupDir := treeDir + onedirBackupSuffix
+			writeFileUnder(t, backupDir, "old/tool", "OLD-TREE")
+			require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{Primary: "old", Entrypoints: map[string]string{"old": ".pkg/old/tool"}}))
+			snapshot, err := snapshotOnedirManifest(versionDir)
+			require.NoError(t, err)
+			require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{Primary: "new", Entrypoints: map[string]string{"new": ".pkg/new/tool"}}))
+			writeFileUnder(t, treeDir, "new/tool", "NEW-TREE")
+			target := treeDir + string(filepath.Separator) + "."
+			if failure == "restore tree" {
+				// Removal of a missing path succeeds, but restoration into its missing
+				// parent fails. The original backup remains available in versionDir.
+				target = filepath.Join(versionDir, "missing-parent", onedirTreeName)
+			}
+			// RemoveAll refuses a path ending in dot on every OS, without relying
+			// on Unix permissions or Windows-specific file locks.
+			err = rollbackOnedirInstall(target, backupDir, true, snapshot)
+			require.Error(t, err)
+			require.NoFileExists(t, filepath.Join(versionDir, onedirManifestName))
+			old, err := os.ReadFile(filepath.Join(backupDir, "old", "tool"))
+			require.NoError(t, err)
+			require.Equal(t, "OLD-TREE", string(old))
+			recoveryPath := filepath.Join(versionDir, onedirManifestName+onedirBackupSuffix)
+			recovery, err := os.ReadFile(recoveryPath)
+			require.NoError(t, err)
+			var saved onedirManifestRecovery
+			require.NoError(t, json.Unmarshal(recovery, &saved))
+			require.True(t, saved.Exists)
+			require.Equal(t, snapshot.data, saved.Data)
+			require.Equal(t, snapshot.mode, saved.Mode)
+			staging := t.TempDir()
+			writeFileUnder(t, staging, "tool", "NEXT-TREE")
+			err = (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), []entrypoint{{name: "tool", src: "tool"}}, nil, nil)
+			require.ErrorContains(t, err, "recovery")
+			retained, err := os.ReadFile(recoveryPath)
+			require.NoError(t, err)
+			require.Equal(t, recovery, retained)
+			old, err = os.ReadFile(filepath.Join(backupDir, "old", "tool"))
+			require.NoError(t, err)
+			require.Equal(t, "OLD-TREE", string(old))
+		})
+	}
+}
+
+// Recovery artifacts do not encode transaction phase. Preserve both an
+// interrupted original installation and a committed replacement with residue.
+func TestInstallOnedirRecoveryRequiresManualReinstall(t *testing.T) {
+	for _, committed := range []bool{false, true} {
+		name := "interrupted after detach"
+		if committed {
+			name = "committed with cleanup residue"
+		}
+		t.Run(name, func(t *testing.T) {
+			versionDir := t.TempDir()
+			treeDir := filepath.Join(versionDir, onedirTreeName)
+			manifestPath := filepath.Join(versionDir, onedirManifestName)
+			writeFileUnder(t, treeDir, "bin/tool", "ORIGINAL")
+			require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+				Primary: "tool", Entrypoints: map[string]string{"tool": ".pkg/bin/tool"},
+			}))
+			snapshot, err := snapshotOnedirManifest(versionDir)
+			require.NoError(t, err)
+			require.NoError(t, snapshot.detach())
+			if committed {
+				require.NoError(t, os.Rename(treeDir, treeDir+onedirBackupSuffix))
+				writeFileUnder(t, treeDir, "bin/tool", "COMMITTED")
+				require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+					Primary: "tool", Entrypoints: map[string]string{"tool": ".pkg/bin/tool"},
+				}))
+			}
+			before := map[string][]byte{}
+			require.NoError(t, filepath.WalkDir(versionDir, func(path string, entry os.DirEntry, walkErr error) error {
+				if walkErr != nil || entry.IsDir() {
+					return walkErr
+				}
+				data, readErr := os.ReadFile(path)
+				before[path] = data
+				return readErr
+			}))
+			staging := t.TempDir()
+			writeFileUnder(t, staging, "tool", "NEXT")
+			err = (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), []entrypoint{{name: "tool", src: "tool"}}, nil, nil)
+			require.ErrorIs(t, err, ErrFileOperation)
+			require.ErrorContains(t, err, "move its version directory aside")
+			require.ErrorContains(t, err, "https://atmos.tools/cli/commands/toolchain/install#recovering-an-interrupted-install")
+			for path, expected := range before {
+				data, readErr := os.ReadFile(path)
+				require.NoError(t, readErr)
+				require.Equal(t, expected, data, path)
+			}
+			if !committed {
+				require.NoFileExists(t, manifestPath)
+				require.NoDirExists(t, treeDir+onedirBackupSuffix)
+			}
+			require.FileExists(t, filepath.Join(staging, "tool"))
+		})
+	}
+}

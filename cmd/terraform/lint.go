@@ -98,6 +98,10 @@ func init() {
 	}
 	RegisterTerraformCompletions(lintCmd)
 	terraformCmd.AddCommand(lintCmd)
+	internal.RegisterCommandMetadata(
+		lintCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/lint"),
+	)
 }
 
 func runTerraformLint(cmd *cobra.Command, args []string) error {

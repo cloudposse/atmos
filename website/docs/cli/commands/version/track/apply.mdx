@@ -3,10 +3,19 @@ title: atmos version track apply
 sidebar_position: 110
 sidebar_label: apply
 sidebar_class_name: command
-description: Rewrite version-managed files from the lock file.
+description: "Update version references in your project files to match the lock file."
 ---
 
-Run the file managers over paths configured in `version.files` and rewrite version references from the lock file. The alias is `sync`.
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Update version references in your project files to match the lock file. Use this command to keep
+workflows, configuration, and generated files aligned with the dependency versions you have
+selected.
+</Intro>
+
+The file managers rewrite paths configured in `version.files` using values from the lock file. The alias is `sync`.
 
 ## Usage
 
@@ -61,3 +70,15 @@ atmos version track apply prod --check
 # Only rewrite GitHub Actions workflow refs
 atmos version track apply prod --manager=github-actions
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Check whether the managed files match the lock without rewriting them. No cloud credentials are needed.
+
+```shell
+atmos version track apply --check
+```
+
+</TryExample>

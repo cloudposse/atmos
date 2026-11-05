@@ -15,6 +15,8 @@ summarized, errors get explained with step-by-step fixes — zero workflow chang
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## How It Works
 
 1. Run any Atmos command with `--ai`
@@ -130,6 +132,18 @@ atmos list components --ai
       <PrimaryCTA to="/examples/ai">Browse Example</PrimaryCTA>
     </div>
 </ActionCard>
+
+## Try it out
+
+<TryExample example="ai">
+
+Configure an AI provider and its credentials as described in the README, then ask about the sample infrastructure.
+
+```shell
+atmos ai ask "What stacks and components do we have?"
+```
+
+</TryExample>
 
 ## Learn More
 

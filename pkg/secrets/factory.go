@@ -13,13 +13,12 @@ import (
 // registry. The component section is consulted so SOPS providers declared in a stack/component
 // `secrets.providers` block are found (with the atmos.yaml-level `secrets.providers` as a
 // fallback). Backends self-register their track, so adding one never touches this function.
+// Backend selectors are not evaluated here; use providerRequest.provider for that.
 func providerFor(atmosConfig *schema.AtmosConfiguration, decl *Declaration, componentSection map[string]any) (providers.Provider, error) {
 	defer perf.Track(atmosConfig, "secrets.providerFor")()
 
-	if decl.BackendType == "" {
-		return nil, ErrNoBackend
-	}
-	return providers.New(atmosConfig, string(decl.BackendType), decl.BackendName, ExtractProviders(componentSection))
+	req := providerRequest{atmosConfig: atmosConfig, section: componentSection}
+	return req.provider(decl)
 }
 
 // ExtractProviders reads the `secrets.providers` map from a resolved component section. This

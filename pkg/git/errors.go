@@ -2,6 +2,7 @@ package git
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -20,7 +21,7 @@ type StderrSwapper interface {
 // CaptureStderr runs operation with the provider's stderr swapped to a
 // masked capture buffer (when the provider supports StderrSwapper), and
 // returns the captured, trimmed text alongside operation's error. The buffer
-// is routed through iolib.MaskWriter so captured text is safe to embed in an
+// is routed through a streaming iolib masker so captured text is safe to embed in an
 // error message: never read RunResult.StderrTail directly for this purpose,
 // since that field is documented as bypassing masking.
 //
@@ -32,11 +33,17 @@ func CaptureStderr(provider Provider, operation func() error) (string, error) {
 		return "", operation()
 	}
 
+	// A streaming masker holds back a possible secret prefix between writes, so a secret split
+	// across two stderr writes is still masked; flush it once the operation has finished.
 	var stderr bytes.Buffer
-	restore := swapper.SwapStderr(iolib.MaskWriter(&stderr))
+	masked := iolib.NewStreamingMaskWriter(&stderr)
+	restore := swapper.SwapStderr(masked)
 	defer restore()
 
 	err := operation()
+	if flushErr := masked.Flush(); flushErr != nil {
+		err = errors.Join(err, flushErr)
+	}
 	return strings.TrimSpace(stderr.String()), err
 }
 

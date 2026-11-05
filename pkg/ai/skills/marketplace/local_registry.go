@@ -61,11 +61,8 @@ func NewLocalRegistry() (*LocalRegistry, error) {
 				WithHint("Atmos will recreate an empty registry on next run; you'll need to reinstall any previously-installed skills.").
 				Err()
 		}
-	} else {
-		// Create new registry file.
-		if err := registry.save(); err != nil {
-			return nil, fmt.Errorf("failed to create registry: %w", err)
-		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
 	}
 
 	return registry, nil

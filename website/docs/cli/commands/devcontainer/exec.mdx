@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: exec
 description: Execute a command in a running devcontainer
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -51,6 +53,9 @@ atmos devcontainer exec geodesic -- terraform version
 
 # Run a command with arguments
 atmos devcontainer exec geodesic -- atmos terraform plan vpc -s dev
+
+# Flags after -- belong to the container command
+atmos devcontainer exec geodesic -- sh -c 'printf "%s\n" "$PWD"'
 
 # Check environment variables (output masked)
 atmos devcontainer exec geodesic -- env | grep AWS
@@ -119,6 +124,21 @@ atmos devcontainer exec geodesic --pty -- bash
 - **PTY** (`--pty`): Both TTY + masking (experimental, Unix only)
 - For interactive shells, consider [`atmos devcontainer shell`](/cli/commands/devcontainer/shell) instead
 :::
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Requires a running Podman runtime (the example selects Podman) and network access for the image. The final commands clean up the local container.
+
+```shell
+atmos devcontainer start geodesic
+atmos devcontainer exec geodesic -- uname -a
+atmos devcontainer stop geodesic
+atmos devcontainer remove geodesic
+```
+
+</TryExample>
 
 ## See Also
 

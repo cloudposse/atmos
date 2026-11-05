@@ -11,6 +11,8 @@ While Atmos supports any devcontainer configuration, **Geodesic is a proven DevO
 
 <!--truncate-->
 
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
 ## What is Geodesic?
 
 [Geodesic](https://github.com/cloudposse/geodesic) is Cloud Posse's implementation of the DevOps toolbox pattern—a comprehensive development container that includes everything you need for modern infrastructure work.
@@ -315,6 +317,32 @@ Geodesic brings nearly a decade of DevOps toolbox experience into the modern dev
 **Install Atmos, run one command, and everything just works.**
 
 Check out the [native devcontainer support announcement](/changelog/native-devcontainer-support) to learn more about Atmos's devcontainer capabilities, or dive into the [examples](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer) to get started immediately.
+
+## Try it out
+
+<TryExamples>
+
+<TryExample example="devcontainer" label="Dev Container">
+
+Install Docker or Podman, then inspect the configured development containers.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
+
+<TryExample example="devcontainer-build" label="Build Geodesic">
+
+Install Docker or Podman before building or entering the Geodesic container.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
+
+</TryExamples>
 
 ## Resources
 

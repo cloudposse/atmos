@@ -137,6 +137,24 @@ func TestParseInclude(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, IncludeArgs{Path: "config with spaces.yaml"}, actual)
 
+	actual, err = ParseInclude(`template.yaml | eval`)
+	require.NoError(t, err)
+	assert.Equal(t, IncludeArgs{Path: "template.yaml", Eval: true}, actual)
+
+	actual, err = ParseInclude(`config.yaml .vars.items[] | select(.enabled) | eval`)
+	require.NoError(t, err)
+	assert.Equal(t, IncludeArgs{Path: "config.yaml", Query: ".vars.items[] | select(.enabled)", Eval: true}, actual, "only the trailing pipe is the option; earlier pipes stay in the query")
+
+	_, err = ParseInclude(`config.yaml .a | eval | select(.x)`)
+	require.Error(t, err, "once an option starts, every later clause must be an option")
+
+	actual, err = ParseInclude(`config.yaml .a | default x`)
+	require.NoError(t, err)
+	assert.Equal(t, IncludeArgs{Path: "config.yaml", Query: ".a | default x"}, actual, "!include has no default option; the pipe is yq text")
+
+	_, err = ParseInclude(`| eval`)
+	require.Error(t, err)
+
 	_, err = ParseInclude("")
 	require.Error(t, err)
 	_, err = ParseInclude(`"`)
@@ -274,7 +292,7 @@ func TestParserHelpers(t *testing.T) {
 	require.Error(t, err)
 	_, err = words("store | query .value")
 	require.Error(t, err)
-	_, _, err = parseOptions("| default", []token{{typeName: tokenPipe}, {typeName: tokenText, value: "default"}}, 0)
+	_, _, err = parseOptions("| default", []token{{typeName: tokenPipe}, {typeName: tokenText, value: "default"}}, 0, valueOptions)
 	require.Error(t, err)
 
 	_, err = ParseEnv(`"unterminated`)

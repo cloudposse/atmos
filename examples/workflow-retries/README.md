@@ -4,11 +4,16 @@ tags: [Automation]
 cast:
   file: /casts/examples/workflow-retries/retry-failure.cast
   title: atmos workflow retries
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Workflow configuration"
+    url: /workflows
 ---
 
 # Workflow Retries Example
 
-Demonstrates automatic retry configuration for workflow steps.
+Demonstrates automatic [retry configuration](https://atmos.tools/steps/retry) for workflow steps.
 
 ## Run
 

@@ -32,41 +32,33 @@ func Detect(data []byte) (kind, apiVersion string, err error) {
 // Load parses, validates, and decodes a YAML manifest of the given kind.
 // The document is validated against the JSON Schema generated at
 // registration time before being decoded into the typed envelope, so a
-// successful return guarantees a schema-valid manifest.
+// successful return guarantees a schema-valid manifest. Passing
+// WithIncludeResolution resolves every !include/!include.raw tag in data
+// first, so both the schema check and the final decode see the fully
+// resolved document rather than an unprocessed tag -- see
+// resolveIncludeTags. Omitted, data is validated and decoded unchanged,
+// exactly as before this option existed.
 //
 // The type parameter S must match the spec type registered for kind; a
 // mismatch is rejected before decoding to prevent silently returning a
 // zeroed or partially decoded Spec.
-func Load[S any](kind string, data []byte) (*Manifest[S], error) {
+func Load[S any](kind string, data []byte, opts ...LoadOption) (*Manifest[S], error) {
 	defer perf.Track(nil, "manifest.Load")()
 
-	// Verify that the caller's spec type S matches the registered prototype
-	// type so that a wrong-spec call fails loudly rather than decoding silently
-	// into a zero value (unknown YAML fields are ignored by yaml.Unmarshal).
-	def, ok := GetDefinition(kind)
-	if ok && def.SpecType() != nil {
-		// reflect.TypeOf(zero) would return nil when S is itself an interface
-		// type (a nil interface value carries no concrete type), silently
-		// skipping this whole mismatch check. Reflecting on *S instead is
-		// never nil regardless of what S is, so .Elem() always yields S's
-		// own type.
-		callerType := reflect.TypeOf((*S)(nil)).Elem()
-		// Unwrap pointer if the caller used *T.
-		if callerType != nil && callerType.Kind() == reflect.Ptr {
-			callerType = callerType.Elem()
+	var options LoadOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	if options.includeAtmosConfig != nil {
+		resolved, err := resolveIncludeTags(options.includeAtmosConfig, data, options.includeFile, options.consumedPaths)
+		if err != nil {
+			return nil, err
 		}
-		if callerType != nil && callerType != def.SpecType() {
-			return nil, errUtils.Build(errUtils.ErrManifestKindMismatch).
-				WithExplanationf(
-					"Load[%s] was called for kind `%s` but the registered spec type is `%s`",
-					callerType.Name(), kind, def.SpecType().Name(),
-				).
-				WithHint("Use the spec type that matches the registered kind").
-				WithContext("kind", kind).
-				WithContext("caller_type", callerType.Name()).
-				WithContext("registered_type", def.SpecType().Name()).
-				Err()
-		}
+		data = resolved
+	}
+
+	if err := verifySpecType[S](kind); err != nil {
+		return nil, err
 	}
 
 	if err := Validate(kind, data); err != nil {
@@ -82,6 +74,43 @@ func Load[S any](kind string, data []byte) (*Manifest[S], error) {
 			Err()
 	}
 	return &m, nil
+}
+
+// verifySpecType checks that the caller's spec type S matches the
+// registered prototype type for kind, so a wrong-spec Load[S] call fails
+// loudly rather than decoding silently into a zero value (unknown YAML
+// fields are ignored by yaml.Unmarshal). Extracted out of Load itself to
+// keep that function's own cyclomatic complexity down.
+func verifySpecType[S any](kind string) error {
+	def, ok := GetDefinition(kind)
+	if !ok || def.SpecType() == nil {
+		return nil
+	}
+
+	// reflect.TypeOf(zero) would return nil when S is itself an interface
+	// type (a nil interface value carries no concrete type), silently
+	// skipping this whole mismatch check. Reflecting on *S instead is
+	// never nil regardless of what S is, so .Elem() always yields S's own
+	// type.
+	callerType := reflect.TypeOf((*S)(nil)).Elem()
+	// Unwrap pointer if the caller used *T.
+	if callerType != nil && callerType.Kind() == reflect.Pointer {
+		callerType = callerType.Elem()
+	}
+	if callerType == nil || callerType == def.SpecType() {
+		return nil
+	}
+
+	return errUtils.Build(errUtils.ErrManifestKindMismatch).
+		WithExplanationf(
+			"Load[%s] was called for kind `%s` but the registered spec type is `%s`",
+			callerType.Name(), kind, def.SpecType().Name(),
+		).
+		WithHint("Use the spec type that matches the registered kind").
+		WithContext("kind", kind).
+		WithContext("caller_type", callerType.Name()).
+		WithContext("registered_type", def.SpecType().Name()).
+		Err()
 }
 
 // Validate checks a YAML manifest against the registered JSON Schema for the

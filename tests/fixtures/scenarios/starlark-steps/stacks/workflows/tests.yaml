@@ -1,0 +1,84 @@
+workflows:
+  test-suite:
+    description: type test with Starlark leaves of every shape.
+    steps:
+      - name: fetch
+        type: script
+        interpreter: starlark
+        script: |
+          output = {"status": "ok", "replicas": 2}
+      - name: suite
+        type: test
+        title: Starlark smoke tests
+        steps:
+          - name: passes
+            type: script
+            interpreter: starlark
+            env:
+              PAYLOAD: '{{ .steps.fetch.value }}'
+            script: |
+              data = json.decode(env["PAYLOAD"])
+              if data["status"] != "ok":
+                  fail("status was " + data["status"])
+          - name: fails-assertion
+            type: script
+            interpreter: starlark
+            env:
+              PAYLOAD: '{{ .steps.fetch.value }}'
+            script: |
+              data = json.decode(env["PAYLOAD"])
+              def check():
+                  if data["replicas"] < 3:
+                      fail("expected at least 3 replicas, got %d" % data["replicas"])
+              check()
+          - name: group
+            type: parallel
+            steps:
+              - name: par-pass
+                type: script
+                interpreter: starlark
+                script: |
+                  output = steps.parallel(functions = [lambda: 1, lambda: 2])
+              - name: par-fail
+                type: script
+                interpreter: starlark
+                script: |
+                  fail("parallel child assertion failed")
+          - name: per-region
+            type: matrix
+            matrix:
+              region: [us-east-1, eu-west-1]
+            steps:
+              - name: region-check
+                type: script
+                interpreter: starlark
+                env:
+                  REGION: '{{ .matrix.region }}'
+                script: |
+                  def check():
+                      if not env["REGION"].startswith("us-"):
+                          fail("region %s is not a US region" % env["REGION"])
+                  check()
+          - name: skipped
+            type: script
+            interpreter: starlark
+            when: 'false'
+            script: |
+              fail("should never run")
+
+  test-all-pass:
+    description: A suite where every Starlark leaf passes.
+    steps:
+      - name: suite
+        type: test
+        steps:
+          - name: a
+            type: script
+            interpreter: starlark
+            script: |
+              print("computed", 1 + 1)
+          - name: b
+            type: script
+            interpreter: starlark
+            script: |
+              output = {"ok": True}

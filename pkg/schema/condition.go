@@ -40,6 +40,6 @@ func ValidateStepCondition(c Condition) error {
 	return condition.ValidateStep(c)
 }
 
-func ConditionDecodeHook() mapstructure.DecodeHookFunc {
-	return condition.DecodeHook()
+func ConditionDecodeHook(strict ...bool) mapstructure.DecodeHookFunc {
+	return condition.DecodeHook(strict...)
 }

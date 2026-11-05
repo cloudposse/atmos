@@ -64,14 +64,15 @@ A pull request cannot merge while any of these fail.
 
 ### 4.2 Advisory
 
-These report findings to GitHub code scanning. They inform review. They do not block a merge today.
+These scanners report findings to GitHub code scanning. They inform review. They do not block a merge today.
 
 - Semgrep
 - gosec
 - govulncheck, which performs call-graph reachability analysis and reports whether Atmos calls an affected symbol
 - Trivy container image scan, for vulnerabilities and secrets
 - golangci-lint, which runs with a zero exit code
-- Patch test coverage, target 85 percent on new and changed lines, currently informational
+
+Patch test coverage is also advisory, but Codecov reports it as its own pull-request status rather than through GitHub code scanning. The target is 90 percent on new and changed lines, and the status is currently informational.
 
 Cloud Posse states this division deliberately. Describing an advisory scanner as a gate would be inaccurate and is verifiable in the repository configuration.
 

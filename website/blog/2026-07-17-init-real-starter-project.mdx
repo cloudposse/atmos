@@ -22,6 +22,8 @@ rather than asking every team to assemble it from scratch.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 <CastEmbed src="/casts/examples/init/init-basic.cast" title="atmos init a working project" chrome controls scrubber />
 
 [View the full init example](/examples/init)
@@ -54,5 +56,17 @@ snapshot of a repository.
 
 The `init` catalog distributes proven starting points with Atmos. For organization-owned golden
 paths that your platform team distributes through a catalog or Git repository, see [the scaffolds announcement](/changelog/scaffold-conditional-generation-and-hooks).
+
+## Try it out
+
+<TryExample example="init">
+
+Generate a starter project in a new subdirectory.
+
+```shell
+atmos init basic ./my-project --set project_name=my-project
+```
+
+</TryExample>
 
 See the [Init Command Documentation](/cli/commands/init) for the full template list.

@@ -7,6 +7,13 @@ description: >-
 cast:
   file: /casts/examples/demo-stacks/inheritance.cast
   title: atmos stack inheritance
+related_docs:
+  - label: "Describe stack configuration"
+    url: /cli/commands/describe/stacks
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
 ---
 
 # Example: Demo Stacks

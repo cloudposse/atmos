@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/go-viper/mapstructure/v2"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
@@ -396,28 +394,13 @@ func dependenciesFromComponentsSection(componentSection map[string]any, componen
 	return deps, true, nil
 }
 
-// dependenciesFromSettings reads the legacy `settings.depends_on` surface.
+// dependenciesFromSettings reads the legacy `settings.depends_on` surface in both its list and map forms.
 func dependenciesFromSettings(componentSection map[string]any) []schema.ComponentDependency {
 	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
 	if !ok {
 		return nil
 	}
-	var settings schema.Settings
-	if err := mapstructure.Decode(settingsSection, &settings); err != nil {
-		return nil
-	}
-	if len(settings.DependsOn) == 0 {
-		return nil
-	}
-	deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
-	for key := range settings.DependsOn {
-		ctx := settings.DependsOn[key]
-		if ctx.Component == "" {
-			continue
-		}
-		deps = append(deps, schema.ComponentDependency{Component: ctx.Component, Stack: ctx.Stack})
-	}
-	return deps
+	return schema.ParseLegacyDependsOn(settingsSection["depends_on"])
 }
 
 // filterComponentDependencies keeps only component-to-component dependencies,

@@ -8,6 +8,8 @@ var (
 	ErrEmptyStack           = errors.New("stack cannot be empty")
 	ErrEmptyComponent       = errors.New("component cannot be empty")
 	ErrEmptyKey             = errors.New("key cannot be empty")
+	ErrEmptyField           = errors.New("field cannot be empty")
+	ErrFieldNotFound        = errors.New("field not found in structured store value")
 	ErrStackDelimiterNotSet = errors.New("stack delimiter is not set")
 	ErrGetKey               = errors.New("failed to get key")
 
@@ -32,6 +34,7 @@ var (
 	ErrResourceNotFound     = errors.New("resource not found")
 	ErrPermissionDenied     = errors.New("permission denied")
 	ErrListSecretProperties = errors.New("failed to list secret properties")
+	ErrInvalidExpires       = errors.New("invalid expires value in azure key vault store configuration")
 
 	// Redis specific errors.
 	ErrParseRedisURL   = errors.New("failed to parse redis url")

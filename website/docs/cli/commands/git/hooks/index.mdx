@@ -3,14 +3,21 @@ title: atmos git hooks
 sidebar_label: hooks
 sidebar_class_name: command
 id: index
-description: Manage local Git hooks that delegate to Atmos workflows and custom commands.
+description: "Run your project's checks automatically when developers commit or push."
 ---
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-Install, uninstall, and run local Git hooks (`pre-commit`, `commit-msg`, `pre-push`, ...) configured under [`git.hooks`](/cli/configuration/git#local-git-hooks) in `atmos.yaml`. Atmos writes thin `.git/hooks/*` shims that delegate to `atmos git hooks run`, so your hooks execute through Atmos workflows and custom commands — with the toolchain, environment, and identity behavior you already have — instead of through Husky-style shell scripts.
+Run your project's checks automatically when developers commit or push. Define Git hooks through
+steps, workflows, or custom commands so the team shares the same checks, tools, and configuration.
 </Intro>
+
+Atmos installs small `.git/hooks/*` scripts that delegate to `atmos git hooks run`.
+Configure each hook under [`git.hooks`](/cli/configuration/git#local-git-hooks) in
+`atmos.yaml` with either a command or a sequence of steps.
+[Inline script steps](/cli/configuration/git#inline-script-steps) execute inside Atmos
+and can use the same step library as other automation scripts.
 
 Configure hooks once in `atmos.yaml`:
 

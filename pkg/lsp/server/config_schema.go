@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	protocol "github.com/tliron/glsp/protocol_3_16"
-	"github.com/xeipuuv/gojsonschema"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -55,7 +54,7 @@ func (h *Handler) validateConfigSchema(doc *Document) []protocol.Diagnostic {
 	}
 
 	positions := documentPositions(doc)
-	for _, validationError := range filterCascadeErrors(validationErrors) {
+	for _, validationError := range validator.FilterCascadeErrors(validationErrors) {
 		field := validationError.Field()
 		position := u.GetYAMLPosition(positions, schemaFieldToJSONPath(field))
 
@@ -95,38 +94,6 @@ func (h *Handler) validateConfigSchema(doc *Document) []protocol.Diagnostic {
 	}
 
 	return diagnostics
-}
-
-// anyOfErrorType is gojsonschema's error type for a failed anyOf keyword.
-const anyOfErrorType = "number_any_of"
-
-// filterCascadeErrors drops generic anyOf failures that have a more specific
-// nested error, so diagnostics point at the offending leaf value instead of
-// every ancestor (the generated schema wraps most values in anyOf to admit
-// YAML functions and null).
-func filterCascadeErrors(validationErrors []gojsonschema.ResultError) []gojsonschema.ResultError {
-	filtered := make([]gojsonschema.ResultError, 0, len(validationErrors))
-	for _, validationError := range validationErrors {
-		if validationError.Type() == anyOfErrorType && hasMoreSpecificError(validationErrors, validationError.Field()) {
-			continue
-		}
-		filtered = append(filtered, validationError)
-	}
-	return filtered
-}
-
-// hasMoreSpecificError reports whether a non-anyOf error exists at the field or
-// deeper within it.
-func hasMoreSpecificError(validationErrors []gojsonschema.ResultError, field string) bool {
-	for _, other := range validationErrors {
-		if other.Type() == anyOfErrorType {
-			continue
-		}
-		if other.Field() == field || strings.HasPrefix(other.Field(), field+".") {
-			return true
-		}
-	}
-	return false
 }
 
 // serverAtmosConfig returns the server's Atmos configuration, tolerating a

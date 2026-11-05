@@ -1,6 +1,6 @@
 ---
 name: atmos-yaml-functions
-description: "YAML functions: !terraform.state, !terraform.output, !store, !store.get, !secret, !emulator, !env, !exec, !include, !template, !append, !unset, !literal, !random, !aws.*, !git.*, !cwd, !repo-root"
+description: "YAML functions: !terraform.state, !terraform.output, !store, !store.get, !secret, !emulator, !env, !exec, !include, !template, !append, !unset, !literal, !starlark, !random, !aws.*, !git.*, !cwd, !repo-root"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -17,8 +17,10 @@ YAML functions are the recommended way to add dynamic behavior to Atmos stack co
 They use YAML explicit tags (the `!` prefix) and operate on structured data after YAML parsing.
 They cannot break YAML syntax, are type-safe, and produce clear error messages.
 
-All YAML functions support Go template expressions in their arguments. Atmos processes
-templates first, then executes the YAML functions.
+Support and timing depend on the file and field. Post-merge stack value functions can use
+component template results; load-time includes and merge directives run earlier.
+See `references/yaml-functions.md` for the scope matrix. Use `atmos doctor --only yaml-functions`
+to diagnose misplaced functions without executing them.
 
 ## Available YAML Functions
 
@@ -32,6 +34,7 @@ templates first, then executes the YAML functions.
 | `!emulator` | Resolve local emulator connection details |
 | `!labels` | Read all metadata labels, or `!labels key [default]` for one string value |
 | `!tags` / `!labels.keys` / `!labels.values` | Read metadata tags, sorted label keys, or values ordered by key |
+| `!ci.labels` | Read live CI pull request / merge-queue labels as a sorted list, or `!ci.labels [preview]` for an all-of boolean; GitHub Actions, needs a token with `pull-requests: read` |
 | `!env` | Read environment variables (from stack `env:` sections or OS) |
 | `!exec` | Execute shell scripts and use the output |
 | `!include` | Include local or remote files (YAML, JSON, HCL, text) |
@@ -40,6 +43,7 @@ templates first, then executes the YAML functions.
 | `!append` | Append values to inherited lists without replacing the whole list |
 | `!unset` | Remove inherited keys or values from merged config |
 | `!literal` | Preserve values verbatim, bypassing all template processing |
+| `!starlark` | Compute typed values with Starlark from the component's merged config (`ctx`); stack manifests only |
 | `!random` | Generate cryptographically secure random integers |
 | `!cwd` | Get the current working directory |
 | `!repo-root` | Get the repository root directory |
@@ -56,10 +60,10 @@ templates first, then executes the YAML functions.
 
 ## Supported Sections
 
-YAML functions work in all Atmos stack manifest sections:
-- `vars`, `settings`, `env`, `metadata`, `command`, `component`
-- `providers`, `overrides`, `backend`, `backend_type`
-- `remote_state_backend`, `remote_state_backend_type`
+Stack functions run in values that reach component evaluation, such as `vars`, `settings`,
+`env`, and backend values. Structural fields and import paths can be consumed earlier;
+do not assume every field receives the same evaluator. Workflow fields, CLI configuration,
+vendoring manifests, and scaffolds have different function sets.
 
 ## `!terraform.state` -- Fast State Backend Access (Recommended)
 
@@ -128,11 +132,35 @@ components:
 atmos terraform plan app -s dev --use-mocks
 ```
 
-`mocks:` is Terraform-only, never templated or YAML-function-processed, and (unlike a `//`
-default) requires the referenced component to declare `mocks:` -- with one exception: a `//`
-default in the caller's expression is still honored even when the referenced component declares
-no `mocks:` section at all, mirroring how a `//` default rescues a component with no real state.
-Do not conflate this feature with the `//`-default idiom above; they're separate mechanisms.
+By default (`components.terraform.mocks.mode: fallback`), mocks are fallbacks: the real value is used
+when it exists, and the producer's `mocks:` value is used only when the component is not provisioned
+or the output is missing. Credential, network, and backend errors still fail (the error hints at
+`--use-mocks=always`). The precedence is real value, then mock, then the caller's `//` default, then the
+original error. Map outputs are deep-merged: mocks sit under the real outputs, every value in real
+state wins, and a mock fills keys missing from a real map (real `{a: 1}` plus mock `{a: 0, b: 2}`
+gives `{a: 1, b: 2}`). Lists and scalars are never merged; a real list replaces the mock list.
+Terraform does not record `null` outputs in state, so in fallback mode a `null` output resolves to
+the mock; do not declare a mock for an output that can be `null`, or use `always`.
+
+`--use-mocks` values (case-insensitive): absent, empty, or a false boolean (`false`, `0`, `f`) is off;
+bare `--use-mocks` or a true boolean (`true`, `1`, `t`) is on using the configured mode;
+`--use-mocks=fallback` or `--use-mocks=always` is on and overrides the configured mode for that run;
+any other value is an error. Attach the mode with `=`: `--use-mocks always` leaves `always` as a
+positional argument and Atmos errors. Only `atmos terraform plan` and `atmos describe component`
+accept the flag; other terraform subcommands reject it. `ATMOS_USE_MOCKS` accepts the same values for
+`atmos terraform plan` only; `atmos describe component` reads the flag, not the variable, and an
+exported `ATMOS_USE_MOCKS` makes `apply`, `deploy`, `destroy`, and other non-plan terraform subcommands
+fail until it is unset. Mode `always` is the hermetic behavior: lookups
+resolve from `mocks:` only and never initialize Terraform, authenticate, or read a backend for those
+lookups (a `terraform plan` still uses the planned component's own backend and credentials), and a
+missing `mocks:` map or output is an error (a `//` default still rescues it). The mode also comes from
+`ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`; an invalid mode in `atmos.yaml` or that variable fails at
+config load. Unpinned projects default to `fallback`; projects whose
+`atmos.yaml` `edition` is pinned before 2026-10-01 default to `always`.
+
+`mocks:` is Terraform-only and never templated or YAML-function-processed. Do not conflate this
+feature with the `//`-default idiom above; they're separate mechanisms, and a `//` default in the
+caller's expression is still honored even when the referenced component declares no `mocks:` section.
 
 ## `!terraform.output` -- Remote State Access
 
@@ -236,6 +264,19 @@ vars:
 
   # Complex types must be returned as JSON
   config: !exec get-config.sh --format json
+```
+
+Set `settings.functions.exec.max_concurrency` in `atmos.yaml` to a positive integer to run ordinary
+`!exec` occurrences concurrently within a document evaluation. Default `1` preserves serial execution;
+`N > 1` permits up to N calls at once. Results retain their original locations and types regardless of
+completion order. No new tag, group, or dependency annotation is required. Users own shell side effects;
+Atmos does not infer dependencies between commands. Cancellation and `--skip=exec` remain effective.
+
+```yaml
+settings:
+  functions:
+    exec:
+      max_concurrency: 4
 ```
 
 ## `!include` -- File Inclusion

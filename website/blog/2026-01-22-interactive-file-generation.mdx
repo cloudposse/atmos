@@ -10,6 +10,8 @@ File generation now features interactive component and stack selection, plus cro
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 Building on the [declarative file generation](/changelog/declarative-file-generation) feature, this release adds several improvements:
@@ -105,6 +107,18 @@ export ATMOS_INTERACTIVE=false
 ```
 
 For usage and configuration, see [Generate Terraform Files](/stacks/generate).
+
+## Try it out
+
+<TryExample example="generate-files">
+
+Preview the generated files without writing them.
+
+```shell
+atmos terraform generate files demo -s dev --dry-run
+```
+
+</TryExample>
 
 ## Get Involved
 

@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -108,8 +109,8 @@ func (i *assumeRoleIdentity) buildAssumeRoleInput() *sts.AssumeRoleInput {
 		input.ExternalId = aws.String(externalID)
 	}
 	if durationStr, ok := i.config.Principal[principalDurationKey].(string); ok && durationStr != "" {
-		if duration, err := time.ParseDuration(durationStr); err == nil {
-			input.DurationSeconds = aws.Int32(int32(duration.Seconds()))
+		if parsed, err := duration.ParseDuration(durationStr); err == nil {
+			input.DurationSeconds = aws.Int32(int32(parsed.Seconds()))
 		} else {
 			log.Warn("Invalid duration specified for assume role", principalDurationKey, durationStr)
 		}
@@ -293,8 +294,8 @@ func (i *assumeRoleIdentity) buildAssumeRoleWithWebIdentityInput(oidcCreds *type
 
 	// Add duration if specified.
 	if durationStr, ok := i.config.Principal[principalDurationKey].(string); ok && durationStr != "" {
-		if duration, err := time.ParseDuration(durationStr); err == nil {
-			input.DurationSeconds = aws.Int32(int32(duration.Seconds()))
+		if parsed, err := duration.ParseDuration(durationStr); err == nil {
+			input.DurationSeconds = aws.Int32(int32(parsed.Seconds()))
 		} else {
 			log.Warn("Invalid duration specified for assume role with web identity", principalDurationKey, durationStr)
 		}

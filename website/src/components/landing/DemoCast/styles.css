@@ -1,0 +1,86 @@
+/* Preserve the homepage video frame while rendering selectable cast text. */
+.landing-demo-cast-viewport {
+  position: relative;
+  padding: 16px;
+  background: #111111;
+}
+
+.landing-demo-cast .landing-demo-cast-player {
+  aspect-ratio: 2 / 1;
+  max-width: none;
+  border: 0;
+  border-radius: 2px;
+  overflow: hidden;
+  background: #111111;
+  --atmos-terminal-bg: #111111;
+  --atmos-terminal-text: #f9f9f9;
+}
+
+.landing-demo-cast .landing-demo-cast-player > pre {
+  padding: clamp(8px, 1vw, 12px);
+  overflow: auto;
+  font-size: 32px;
+  line-height: 1.25;
+  text-align: left;
+  scrollbar-width: none;
+}
+
+.landing-demo-cast-player > pre::-webkit-scrollbar {
+  display: none;
+}
+
+/* Use CastPlayer's overlay without reserving space below the terminal. */
+.landing-demo-cast [data-cast-controls] {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  font-size: 12px;
+}
+
+.landing-demo-cast:hover [data-cast-controls],
+.landing-demo-cast:focus-within [data-cast-controls] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+/* Touch devices cannot hover; keep playback and seeking available. */
+@media (hover: none) {
+  .landing-demo-cast [data-cast-controls] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-demo-cast [data-cast-controls] {
+    transition: none;
+  }
+}
+
+.landing-demo-cast [data-cast-controls] > span {
+  grid-column: auto;
+  white-space: nowrap;
+}
+
+/* The hero's compact recording keeps commands readable in a half-width frame. */
+.lp-hero-visual .landing-demo-cast-viewport {
+  padding: 12px;
+}
+
+.lp-hero-visual .landing-demo-cast-player > pre {
+  padding: 4px;
+}
+
+/* Give the hero enough room before two narrow columns shrink terminal text. */
+@media screen and (min-width: 769px) and (max-width: 1200px) {
+  .lp-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  .lp-hero-visual {
+    width: 100%;
+    max-width: 720px;
+    justify-self: center;
+  }
+}

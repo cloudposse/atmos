@@ -110,7 +110,6 @@ steps:
     working_directory: string    # Optional: Working directory override
     retry:                       # Optional: Retry configuration
       max_attempts: integer
-      delay: duration
       backoff_strategy: string
       initial_delay: duration
       random_jitter: float
@@ -240,17 +239,16 @@ steps:
 
 ### retry
 
-Retry configuration for the step. Retries the command on failure.
+Retry configuration for the step. Retries the command on failure. An omitted or empty (`retry: {}`) policy runs once. Set `max_attempts` or `max_elapsed_time` to bound retries.
 
 ```yaml
 retry:
-  max_attempts: 3                    # Max attempts (default: 1, meaning no retry)
-  delay: 5s                          # Delay between retries (default: 5s)
+  max_attempts: 3                    # Max attempts (omit for unlimited in a nonempty policy)
   backoff_strategy: exponential      # constant | exponential | linear (default: constant)
-  initial_delay: 3s                  # Initial delay for backoff strategies (default: 5s)
+  initial_delay: 3s                  # Initial delay for backoff strategies (omit for no delay)
   random_jitter: 0.0                 # Random jitter added to delay (default: 0.0)
   multiplier: 2                      # Multiplier for exponential strategy (default: 2)
-  max_elapsed_time: 4m               # Total timeout for all retries (default: 30m)
+  max_elapsed_time: 4m               # Total timeout for all retries (omit for no time limit)
 ```
 
 **Backoff strategies**:
@@ -337,7 +335,7 @@ workflows:
         retry:
           max_attempts: 2
           backoff_strategy: constant
-          delay: 10s
+          initial_delay: 10s
       - command: |
           echo "VPC deployed, verifying..."
           sleep 5

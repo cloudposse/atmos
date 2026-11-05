@@ -1,0 +1,15 @@
+name: Restore job services
+description: Restore declared services stopped by runner hardening and wait for health.
+inputs:
+  services:
+    description: JSON from toJSON(job.services).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Restore services after Docker restart
+      shell: bash
+      env:
+        JOB_SERVICES: ${{ inputs.services }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: python3 "$ACTION_PATH/restore_services.py"

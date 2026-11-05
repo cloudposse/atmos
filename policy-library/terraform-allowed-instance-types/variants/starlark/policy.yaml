@@ -1,0 +1,29 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform-allowed-instance-types
+  description: "Require planned EC2 instance types to be known and explicitly approved."
+spec:
+  policies:
+    allowed-instance-types:
+      on: terraform.plan
+      engine: starlark
+      action: deny
+      reason: Instance type must be known and approved before apply
+      with:
+        allowed:
+          - t3.micro
+          - t3.small
+      rule: |
+        for resource in ctx.input.get("resource_changes", []):
+            if resource["mode"] != "managed" or resource["type"] != "aws_instance":
+                continue
+            change = resource["change"]
+            after = change["after"]
+            if after == None:
+                continue
+            if "instance_type" not in after or after["instance_type"] not in ctx.params["allowed"]:
+                return True
+            if change.get("after_unknown", {}).get("instance_type") == True:
+                return True
+        return False

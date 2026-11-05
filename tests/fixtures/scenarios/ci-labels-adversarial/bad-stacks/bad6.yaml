@@ -1,0 +1,8 @@
+vars:
+  stage: bad6
+components:
+  terraform:
+    bad:
+      metadata: {component: mock}
+      vars:
+        v: !ci.labels [~]

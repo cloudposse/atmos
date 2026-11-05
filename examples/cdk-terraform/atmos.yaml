@@ -1,0 +1,58 @@
+# Deploy a CDK Terrain application through an Atmos Terraform component. A before-hook
+# synthesizes the app to Terraform JSON before init/plan/apply and Terraform applies it
+# directly. The `local` stack targets a Floci AWS emulator, so no AWS account is needed.
+base_path: .
+
+components:
+  terraform:
+    base_path: components/terraform
+    auto_generate_backend_file: false
+    apply_auto_approve: false
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - deploy/**/*
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# One aws/emulator identity wires the AWS provider to the `local/aws` sandbox started by
+# `atmos emulator up aws -s local`. Remove this block to deploy to a real account.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: local/aws
+      default: true
+
+commands:
+  - name: "test"
+    description: "Bring up the sandbox, apply the Terrain app, check its outputs, then tear it down"
+    steps:
+      - name: validate
+        type: atmos
+        command: validate stacks
+      - name: emulator-up
+        type: atmos
+        command: emulator up aws -s local
+      - name: apply
+        type: atmos
+        command: terraform apply greeting -s local -auto-approve
+      - name: smoke-tests
+        title: Post-deployment tests
+        type: test
+        steps:
+          - name: outputs
+            title: Terraform exposes the parameter name
+            type: shell
+            command: atmos terraform output greeting -s local | grep parameter_name
+      - name: destroy
+        type: atmos
+        command: terraform destroy greeting -s local -auto-approve
+        when: always
+      - name: emulator-down
+        type: atmos
+        command: emulator down aws -s local
+        when: always

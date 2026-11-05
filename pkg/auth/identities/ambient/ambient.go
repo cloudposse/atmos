@@ -141,7 +141,7 @@ func (i *ambientIdentity) AuthenticateStandalone(ctx context.Context) (types.ICr
 	// Ambient identities return nil credentials — they don't manage credentials.
 	credentials, err := i.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: ambient identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, i.name, err)
+		return nil, errUtils.WrapAuthenticationFailed(err, "identity %q", i.name)
 	}
 
 	log.Debug("Ambient identity authenticated successfully", logKeyIdentityAmbient, i.name)

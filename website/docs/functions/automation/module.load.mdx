@@ -1,0 +1,125 @@
+---
+title: "module.load"
+sidebar_position: 43
+sidebar_label: "module.load"
+sidebar_class_name: command
+description: Load a local script as a namespace of public functions and values.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `module.load` function loads a local script and returns its public functions and values as a namespace.
+    Call helpers with dot syntax, such as `kube.get("pods")`, without declaring an export object in the library.
+</Intro>
+
+## Usage
+
+```python
+kube = module.load("lib/kube.star")
+kube.get("pods")
+```
+
+## Arguments
+
+<dl>
+    <dt>`path`</dt>
+    <dd>
+        Required, nonempty string. Accepts a positional argument or `path="lib/kube.star"`.
+        Relative paths resolve against the file containing the call, including when the call is inside a loaded
+        function. Inline scripts resolve paths against their `working_directory`. Absolute paths are used as given.
+    </dd>
+</dl>
+
+## Returns
+
+A read-only namespace of type `module`. Read members with dot syntax and list them with `dir(value)`.
+The namespace contains the file's public globals: functions, constants, and other assigned values whose names
+do not start with `_`. Predeclared names such as `exec`, `ctx`, and `module` are not automatically exported.
+
+Names imported with the ordinary `load()` statement are local to that file. To re-export one, assign it to a global:
+
+```python
+load("helpers.star", original = "format_name")
+format_name = original
+```
+
+The library can use private helpers internally. An importer cannot access them through the returned namespace.
+All globals, including private lists and dictionaries, are frozen when initialization finishes.
+
+## Examples
+
+### Share a library
+
+The file `lib/kube.star`:
+
+```python
+def get(resource):
+    return exec.run(["kubectl", "get", resource])
+
+def psql(pod):
+    return exec.run(["kubectl", "exec", "-it", pod, "--", "psql"])
+```
+
+The calling script:
+
+```python
+kube = module.load("lib/kube.star")
+kube.get("pods")
+```
+
+### Load inside a function or parallel task
+
+The file `lib/names.star`:
+
+```python
+def label(name):
+    return "service:" + name
+```
+
+The calling script:
+
+```python
+def describe(name):
+    names = module.load("lib/names.star")
+    return names.label(name)
+
+output = steps.parallel(tasks=[
+    steps.task(name=name, function=describe, args=[name])
+    for name in ["api", "worker"]
+])
+```
+
+```text
+["service:api","service:worker"]
+```
+
+## Behavior
+
+- `module.load` is a function. It accepts a computed path and works inside functions, conditionals, and parallel tasks.
+  The ordinary [`load`](/functions/automation/load) statement remains available for importing selected names.
+- Successful initialization is cached per run by the cleaned absolute path. Both import styles share this cache.
+  Repeated `module.load` calls return the same namespace, and concurrent callers wait for one initialization.
+- Failed initialization publishes no namespace. A later call, such as a task retry, can try again; any side effects
+  before the failure can repeat.
+- Top-level code in the loaded file runs on the first caller's thread, with its timeout, output destination, and
+  restrictions on host functions. Canceling another caller that is waiting does not cancel that initialization.
+- Loaded files see the same predeclared APIs as the caller. Dry runs resolve the entry script without reading or
+  executing loaded files.
+- This API is available in automation scripts, including standalone tools, script steps, and hooks. It is not
+  available in YAML `!starlark` expressions or policy predicates.
+
+## Errors
+
+- Missing files report `cannot read module: ...`, including the resolved path.
+- Cyclic imports fail with `cyclic load of <path>`, including cycles across parallel tasks or import styles.
+- Reading a missing or private member fails with a missing-attribute error.
+- Assigning namespace members or mutating exported collections fails. Functions in the library also cannot mutate
+  their frozen global state; create local collections inside each function instead.
+- Syntax and runtime errors identify the loaded file in their diagnostics or traceback.
+
+## Related
+
+- [`load`](/functions/automation/load) imports selected names at file scope.
+- [`struct`](/functions/automation/struct) creates records with named fields.
+- [`steps.parallel`](/functions/automation/steps.parallel) runs helper functions concurrently.

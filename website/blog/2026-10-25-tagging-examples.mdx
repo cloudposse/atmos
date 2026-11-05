@@ -1,0 +1,82 @@
+---
+slug: tagging-examples
+title: "Define Resource Tags Once and Inherit Them Across Stacks"
+authors: [osterman]
+tags: [documentation]
+cast: "/casts/examples/tagging-default-tags/inherit-tags.cast"
+castTitle: "Inherit AWS default tags"
+---
+
+Copying the same resource tags into every component makes ownership changes tedious and lets environments drift.
+Two focused examples now show how to define shared tags once and inherit them across stacks: one uses AWS provider
+default tags, and the other passes tags to Null Label. Each includes a terminal recording and commands you can run locally.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
+import TryExample from '@site/src/components/TryExample'
+
+<CastEmbed src="/casts/examples/tagging-default-tags/inherit-tags.cast" title="Inherit AWS default tags" chrome controls scrubber />
+
+[View the AWS default tags example](/examples/tagging-default-tags)
+
+## The Problem
+
+A tagging example should make it easy to see where shared tags are defined and what each environment receives.
+Adding an organizational hierarchy, Git metadata, CI conditions, and naming rules at the same time makes that
+basic behavior harder to follow.
+
+## The Fix
+
+Each example has one shared component configuration and two stacks, `dev` and `prod`:
+
+- **AWS provider default tags:** both stacks inherit `managed-by` and `owner`, then add their own `environment` tag.
+  Atmos [generates the provider configuration](/stacks/providers), so the S3 resource needs no `tags` argument.
+- **Null Label:** both stacks inherit the same tags and supply a stage to the naming module. The module combines the
+  supplied tags with generated `Name`, `Namespace`, and `Stage` tags. A built-in `terraform_data` resource shows the
+  result without creating cloud resources.
+
+The [tagging strategy tutorial](/tutorials/tagging-strategy) builds on these basics with an organizational hierarchy,
+source-control tag tradeoffs, provider limitations, and AWS enforcement guidance. The
+[shared Terraform code tutorial](/tutorials/share-terraform-code-across-components) explains how to distribute common
+files such as `context.tf` across components.
+
+## How to Use It
+
+The AWS example describes the merged tags without connecting to AWS:
+
+<TryExample example="tagging-default-tags">
+
+```shell
+atmos describe component app -s dev --query .providers.aws.default_tags.tags
+atmos describe component app -s prod --query .providers.aws.default_tags.tags
+```
+
+</TryExample>
+
+The example contains a real S3 bucket component. Planning or applying requires AWS credentials; applying creates
+a bucket. Provider default tags apply to supported resources, with exceptions such as Auto Scaling groups that
+need resource-specific tagging configuration.
+
+The Null Label example plans locally without cloud credentials. Its first plan downloads the module:
+
+<CastEmbed src="/casts/examples/tagging-null-label/plan-tags.cast" title="Pass inherited tags to Null Label" chrome controls scrubber />
+
+[View the Null Label example](/examples/tagging-null-label)
+
+<TryExample example="tagging-null-label">
+
+```shell
+atmos describe component app -s dev --query .vars
+atmos terraform plan app -s dev
+```
+
+</TryExample>
+
+When applying the resulting map to cloud resources, account for the target provider's tag or label restrictions.
+Null Label preserves supplied tags; it does not normalize them for each provider.
+
+## Get Involved
+
+Share tagging patterns or suggest another focused example in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

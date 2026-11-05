@@ -1,0 +1,10 @@
+vars:
+  stage: plugin-demo
+components:
+  emulator:
+    plugin-cast-registry:
+      driver: registry
+      container:
+        ports:
+          - host: 15556
+            container: 5000

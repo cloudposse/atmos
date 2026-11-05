@@ -25,9 +25,17 @@ func resolveLockFilePath(config *schema.AtmosConfiguration) string {
 		return ""
 	}
 	if config.Toolchain.LockFile != "" {
-		return config.Toolchain.LockFile
+		return resolveProjectPath(config, config.Toolchain.LockFile)
 	}
-	return filepath.Join(resolveDefaultInstallPath(config.Toolchain.InstallPath), "toolchain.lock.yaml")
+	return filepath.Join(resolveDefaultInstallPath(resolveProjectPath(config, config.Toolchain.InstallPath)), "toolchain.lock.yaml")
+}
+
+// resolveProjectPath anchors an explicitly configured path to the resolved project base.
+func resolveProjectPath(config *schema.AtmosConfiguration, path string) string {
+	if path != "" && config.BasePathAbsolute != "" && !filepath.IsAbs(path) {
+		return filepath.Join(config.BasePathAbsolute, path)
+	}
+	return path
 }
 
 // resolveDefaultInstallPath mirrors toolchain.GetInstallPath()'s fallback chain exactly
@@ -62,6 +70,12 @@ func resolveDefaultInstallPath(installPath string) string {
 // tree by the time the error is returned -- exactly the supply-chain guarantee use_lock_file
 // exists to provide. See docs/fixes for the incident this closes.
 func (i *Installer) checkLockFileChecksumMismatch(tool *registry.Tool, version string, result *verification.Result) error {
+	if err := i.requireFrozenEntry(tool.RepoOwner, tool.RepoName, version); err != nil {
+		return err
+	}
+	if i.frozenLockFile && (result == nil || result.Checksum == "") {
+		return fmt.Errorf("%w: downloaded artifact has no checksum", errUtils.ErrFrozenLockfile)
+	}
 	if !i.verifyAgainstLock || i.lockFilePath == "" || result == nil || result.Checksum == "" {
 		return nil
 	}
@@ -108,10 +122,13 @@ func lookupLockedChecksum(lf *installerLockFile, toolName, version, platform str
 }
 
 // updateLockFile persists a successful, already-verified install's checksum into
-// toolchain.lock.yaml. It no longer performs the mismatch check itself -- callers that extract
-// an artifact onto disk must call checkLockFileChecksumMismatch beforehand (see its doc
-// comment); this function assumes that check, if applicable, already passed.
+// toolchain.lock.yaml. Callers must check before extraction; the check is repeated
+// under the write lock to preserve entries added concurrently. Matching entries
+// are left unchanged, and frozen installs never acquire a write lock.
 func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string, result *verification.Result) error {
+	if i.frozenLockFile {
+		return i.checkLockFileChecksumMismatch(tool, version, result)
+	}
 	if !i.useLockFile || i.lockFilePath == "" || result == nil || result.Checksum == "" {
 		return nil
 	}
@@ -128,6 +145,15 @@ func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string
 			lf = newInstallerLockFile()
 		}
 		toolName := tool.RepoOwner + "/" + tool.RepoName
+		if i.verifyAgainstLock {
+			existing := lookupLockedChecksum(lf, toolName, version, runtime.GOOS+"_"+runtime.GOARCH)
+			if existing != "" {
+				if existing != result.Checksum {
+					return fmt.Errorf("%w: %s@%s", ErrLockfileChecksumMismatch, toolName, version)
+				}
+				return nil
+			}
+		}
 		versionEntry := getOrCreateInstallerToolVersion(lf, toolName, version)
 		platform := runtime.GOOS + "_" + runtime.GOARCH
 		versionEntry.Source = tool.Registry

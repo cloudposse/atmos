@@ -1,0 +1,12 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: lifecycle-deny-production-delete
+  description: "Deny direct deletion of Helm releases in production stacks."
+spec:
+  policies:
+    deny-production-delete:
+      on: operation
+      action: deny
+      reason: Production Helm releases cannot be deleted directly
+      rule: input.event == 'before.helm.delete' && input.stack.startsWith('prod-')

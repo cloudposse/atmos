@@ -7,12 +7,17 @@ description: >-
 cast:
   file: /casts/examples/say-something/pipeline.cast
   title: atmos say steps
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Speech steps"
+    url: /steps/type/say
 ---
 
 # Say Something Demo
 
-This example demonstrates the `say` step type for text-to-speech (TTS) in custom
-commands, workflows, and Terraform lifecycle hooks. Use this type of step to
+This example demonstrates the [`say` step type](https://atmos.tools/steps/type/say) for text-to-speech (TTS) in custom
+commands, [workflows](https://atmos.tools/cli/commands/workflow), and Terraform lifecycle hooks. Use this type of step to
 announce when things happen in your workflows, like when something completes or
 fails.
 

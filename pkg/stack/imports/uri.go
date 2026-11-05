@@ -160,6 +160,17 @@ func isVersionLike(s string) bool {
 	return versionPattern.MatchString(s)
 }
 
+// ociScheme is the URI scheme of an OCI registry artifact.
+const ociScheme = "oci://"
+
+// IsOCIURI checks if the URI references an OCI registry artifact (oci://host/repo:tag).
+// It must be checked before IsGitURI, which can match hosts such as github.com inside an oci:// URI.
+func IsOCIURI(uri string) bool {
+	defer perf.Track(nil, "imports.IsOCIURI")()
+
+	return strings.HasPrefix(uri, ociScheme)
+}
+
 // IsGitURI checks if the URI appears to be a Git repository URL.
 // Detection rules:
 // 1. Explicit git:: prefix.

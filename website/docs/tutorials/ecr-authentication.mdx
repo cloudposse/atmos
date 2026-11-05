@@ -39,8 +39,8 @@ auth:
         provider: company-sso
       principal:
         name: AdministratorAccess
-        account: dev
-
+        account:
+          name: dev
   integrations:
     dev/ecr:
       kind: aws/ecr
@@ -167,15 +167,16 @@ auth:
         provider: company-sso
       principal:
         name: AdministratorAccess
-        account: dev
-
+        account:
+          name: dev
     prod-deployer:
       kind: aws/permission-set
       via:
         provider: company-sso
       principal:
         name: ContainerDeploy
-        account: production
+        account:
+          name: production
 
   integrations:
     # Dev environment ECR

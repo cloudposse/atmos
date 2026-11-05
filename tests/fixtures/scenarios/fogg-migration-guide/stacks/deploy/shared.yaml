@@ -1,0 +1,17 @@
+import:
+  - catalog/defaults
+name: shared
+components:
+  terraform:
+    global:
+      metadata:
+        component: global
+        terraform_workspace: default
+    main-account:
+      metadata:
+        component: accounts/main-account
+        terraform_workspace: default
+    tfe:
+      metadata:
+        component: tfe
+        terraform_workspace: default

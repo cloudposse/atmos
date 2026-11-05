@@ -69,6 +69,23 @@ func TestBuild(t *testing.T) {
 	}))
 }
 
+// TestBuildIgnoresHostConfig verifies mirror construction never reads ambient config files.
+func TestBuildIgnoresHostConfig(t *testing.T) {
+	badConfig := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(badConfig, []byte("[invalid configuration\n"), 0o600))
+	t.Setenv("GIT_CONFIG_GLOBAL", badConfig)
+	t.Setenv("GIT_CONFIG_SYSTEM", badConfig)
+
+	// Prove the ambient config would prevent Git from even initializing a repository.
+	cmd := exec.Command("git", "init", "--quiet", t.TempDir())
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, "malformed ambient config must fail: %s", out)
+	require.Contains(t, string(out), "bad config line")
+
+	// Build must still initialize, commit, and push its fixture with isolated config.
+	require.NoError(t, Build(t.TempDir()))
+}
+
 // TestBuild_RelativeRoot verifies Build resolves a relative root against the caller's current
 // working directory, not against whatever directory a later step happens to run in -- the push
 // into the bare mirror runs with cmd.Dir set to a scratch directory, so passing the relative root

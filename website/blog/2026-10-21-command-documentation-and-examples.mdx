@@ -1,0 +1,61 @@
+---
+slug: command-documentation-and-examples
+title: "Find Documentation and Examples from Any Command"
+authors: [osterman]
+tags: [feature, dx]
+cast: "/casts/cli/command-discovery.cast"
+castTitle: "Find documentation and initialize an example"
+---
+
+Command help now includes a copyable documentation URL. Use `--docs` to open that
+page in your browser, or `--example` to choose a related example and initialize it
+locally—even before you have an Atmos project configured.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed';
+
+<CastEmbed src="/casts/cli/command-discovery.cast" title="Find documentation and initialize an example" chrome controls scrubber />
+
+[View the full example](/examples/quick-start-simple)
+
+## Open the documentation
+
+```shell
+atmos terraform --help
+atmos terraform --docs
+atmos terraform plan --docs
+atmos terraform plan --docs=md
+```
+
+Help and usage output show the documentation URL, including when redirected to a
+file. `--docs` prints the URL and opens it using your browser. These discovery
+flags work without a component, stack, Terraform installation, or cloud credentials.
+
+Use `--docs=md` to read the page in your terminal. Atmos prints the `.md`
+source URL, fetches it with a progress indicator, and renders it using its shared
+Markdown renderer. `--docs=markdown` is an alias. The homepage's Markdown index
+is available at `/index.md`. Relative links resolve to complete URLs, and Markdown
+exports of example tabs include the `atmos init` and `cd` instructions.
+
+## Try an example
+
+```shell
+atmos terraform --example
+```
+
+Choose an example from the ordered list; the first is recommended. Atmos shows
+its source, destination, and equivalent `atmos init` command, then asks for
+confirmation. **No is selected by default.** After you choose Yes, a progress
+indicator tracks initialization and Atmos displays the example's README.
+
+Examples install into `./<example-directory-name>`, respecting `--chdir`. Existing
+destinations require explicit confirmation before matching files are overwritten;
+other files are kept. Declining prints a message confirming that no files were
+changed. Initialization does not run Terraform. In a
+noninteractive terminal, `--example` prints the available examples and explicit
+installation commands without prompting or installing anything.
+
+Commands inherit documentation and examples from their nearest registered
+ancestor when they do not have their own. If no example is registered, Atmos
+prints an explanation and the documentation URL.

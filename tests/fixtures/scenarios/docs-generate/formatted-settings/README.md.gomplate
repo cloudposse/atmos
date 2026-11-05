@@ -1,0 +1,6 @@
+{{ (ds "config").terraform_docs }}
+{{ with terraform }}
+Native inputs: {{ len .Inputs }}
+Native outputs: {{ len .Outputs }}
+Native providers: {{ len .Providers }}
+{{ end }}

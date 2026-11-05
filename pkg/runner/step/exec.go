@@ -46,7 +46,7 @@ func (h *ExecHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 
 	workDir := step.WorkingDirectory
 	if workDir != "" {
-		workDir, err = vars.Resolve(workDir)
+		workDir, err = vars.ResolveStepField(step, "working_directory", workDir)
 		if err != nil {
 			return nil, fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
 		}
@@ -74,7 +74,7 @@ func (h *ExecHandler) execEnv(step *schema.WorkflowStep, vars *Variables) ([]str
 	if len(step.Env) == 0 {
 		return env, nil
 	}
-	resolved, err := vars.ResolveEnvMap(step.Env)
+	resolved, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
 		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
 	}

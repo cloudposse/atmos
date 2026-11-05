@@ -13,6 +13,12 @@ import (
 const (
 	// outputFilePermissions is the file permission mode for CI output files.
 	outputFilePermissions = 0o644
+
+	// The base delimiter for multiline values in CI output files.
+	heredocDelimiter = "EOF"
+
+	// The terminator for each line written to CI output files.
+	newline = "\n"
 )
 
 // NoopOutputWriter is an OutputWriter that does nothing.
@@ -58,31 +64,28 @@ func (w *FileOutputWriter) WriteOutput(key, value string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(w.OutputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
-	if err != nil {
-		return fmt.Errorf("%w: failed to open output file: %w", errUtils.ErrCIOutputWriteFailed, err)
-	}
-	defer f.Close()
-
-	// Use heredoc format for multiline values.
-	if strings.Contains(value, "\n") {
-		delimiter := "EOF"
-		// Ensure delimiter doesn't appear in value.
-		for strings.Contains(value, delimiter) {
-			delimiter += "_"
-		}
-		_, err = fmt.Fprintf(f, "%s<<%s\n%s\n%s\n", key, delimiter, value, delimiter)
-	} else {
-		_, err = fmt.Fprintf(f, "%s=%s\n", key, value)
-	}
-
-	if err != nil {
-		return fmt.Errorf("%w: failed to write output: %w", errUtils.ErrCIOutputWriteFailed, err)
-	}
-	return nil
+	return AppendFile(w.OutputPath, FormatOutputLine(key, value), errUtils.ErrCIOutputWriteFailed)
 }
 
-// WriteSummary appends content to the job summary file.
+// FormatOutputLine renders key=value for CI output files. Multiline values use a heredoc
+// whose delimiter is EOF, extended with underscores until it no longer appears in the value.
+// The GitHub Actions runner accepts any delimiter; this scheme is kept because pipelines
+// and golden tests parse it.
+func FormatOutputLine(key, value string) string {
+	defer perf.Track(nil, "provider.FormatOutputLine")()
+
+	if !strings.Contains(value, newline) {
+		return key + "=" + value + newline
+	}
+
+	delimiter := heredocDelimiter
+	for strings.Contains(value, delimiter) {
+		delimiter += "_"
+	}
+	return key + "<<" + delimiter + newline + value + newline + delimiter + newline
+}
+
+// WriteSummary appends masked content without exceeding the GitHub step-summary limit.
 func (w *FileOutputWriter) WriteSummary(content string) error {
 	defer perf.Track(nil, "provider.FileOutputWriter.WriteSummary")()
 
@@ -90,15 +93,22 @@ func (w *FileOutputWriter) WriteSummary(content string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(w.SummaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
+	return appendSummaryFile(w.SummaryPath, MaskPublishedContent(content))
+}
+
+// AppendFile appends content to the file at path, creating it when needed. Open and
+// write failures are wrapped in sentinel so callers get the right CI error kind.
+func AppendFile(path, content string, sentinel error) error {
+	defer perf.Track(nil, "provider.AppendFile")()
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
 	if err != nil {
-		return fmt.Errorf("%w: failed to open summary file: %w", errUtils.ErrCISummaryWriteFailed, err)
+		return fmt.Errorf("%w: failed to open %s: %w", sentinel, path, err)
 	}
 	defer f.Close()
 
-	_, err = f.WriteString(MaskPublishedContent(content))
-	if err != nil {
-		return fmt.Errorf("%w: failed to write summary: %w", errUtils.ErrCISummaryWriteFailed, err)
+	if _, err := f.WriteString(content); err != nil {
+		return fmt.Errorf("%w: failed to write %s: %w", sentinel, path, err)
 	}
 	return nil
 }

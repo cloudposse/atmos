@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -29,6 +30,10 @@ func init() {
 		flags.WithBoolFlag("stdin", "", false, "Read the value from standard input"),
 	)
 	setParser.RegisterFlags(setCmd)
+	internal.RegisterCommandMetadata(
+		setCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/store/set"),
+	)
 }
 
 func runStoreSet(cmd *cobra.Command, args []string) error {

@@ -1,0 +1,119 @@
+---
+title: atmos ci context
+sidebar_label: context
+sidebar_class_name: command
+sidebar_position: 4
+description: Inspect the provider-native CI snapshot and field paths available to policies.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Inspect the CI event and metadata available to policy expressions. Print the collected snapshot as
+JSON, or list its field paths and types without printing values.
+</Intro>
+
+<Experimental/>
+
+## Usage
+
+```shell
+atmos ci context
+atmos ci context --paths
+atmos ci context --query '.ci.event.status'
+```
+
+The command uses the same Native CI collector as policy evaluation. GitHub Actions collection
+reads allowlisted environment variables and `GITHUB_EVENT_PATH`; it makes no API calls and needs
+no token. It does not run component operations, execute lifecycle hooks, or verify approvals.
+Normal command-admission policies still apply to `ci context`.
+
+## Flags
+
+<dl>
+  <dt><code>--paths</code></dt>
+  <dd>List observed field paths and JSON types instead of snapshot values.</dd>
+  <dt><code>--query</code>, <code>-q</code></dt>
+  <dd>Filter output with a YQ expression, using the same engine as Atmos describe commands.
+  Defaults to no filtering. Also accepts <code>ATMOS_QUERY</code>; the flag takes precedence.
+  With <code>--paths</code>, the query operates on the field inventory array.</dd>
+</dl>
+
+Query results remain JSON, including quoted strings and <code>null</code>. Multiple results
+are emitted as successive JSON values; wrap the expression in <code>[...]</code> to collect
+them into an array. Object projection keys must be quoted, as shown below. Invalid queries
+return an error without writing partial results.
+
+## Inspect a snapshot
+
+```shell
+# Save the snapshot privately instead of dumping it into job logs. Removing any
+# earlier file first matters: umask applies only to a newly created file, so a
+# repeat run would otherwise keep the old, possibly wider, permissions.
+(umask 077; rm -f ci-context.json; atmos ci context > ci-context.json)
+
+# Inspect only the event name and collection status.
+atmos ci context --query '{"event_name": .ci.metadata.data.GITHUB_EVENT_NAME, "status": .ci.event.status}'
+
+# Inspect the pull-request object supplied to the current job.
+atmos ci context --query '.ci.event.data.pull_request'
+```
+
+Output has a single top-level `ci` key. Its value is the [CI snapshot](/policies/ci#snapshot-schema),
+accessible as `ci` in CEL and `ctx.ci` in Starlark. It is not a full policy request: command,
+component, plan, rule parameters, and affected-change inputs are not collected by this command.
+
+Outside a detected CI provider, output is `{"ci": null}`. Missing or malformed event data retains
+its dataset `status`, `complete`, and `reason`. Inspection succeeds when it can report that state;
+successful inspection does **not** mean a policy's `required_ci` requirements are satisfied.
+Collection, serialization, and output failures return an error.
+
+:::warning Private event data
+
+Metadata excludes tokens and arbitrary environment variables, but the native payload may contain
+private repository data, PR bodies, email addresses, or user-supplied secrets. Output uses Atmos's
+normal masking layer; masking is not a guarantee that every sensitive value is removed. Review
+snapshots before sharing them and avoid publishing them as public artifacts.
+
+:::
+
+## Explore field paths
+
+`--paths` emits a sorted-by-key traversal of the observed JSON fields. Every entry has a `path`
+and a JSON `type`: `object`, `array`, `string`, `number`, `boolean`, or `null`.
+
+For example, a pull-request event includes an entry like:
+
+```json
+{
+  "path": "ci[\"event\"][\"data\"][\"pull_request\"][\"head\"][\"repo\"][\"full_name\"]",
+  "type": "string"
+}
+```
+
+```shell
+atmos ci context --paths --query '[.[] | select(.path | contains("pull_request"))]'
+```
+
+Copy `path` directly into CEL. Prefix it with `ctx.` for Starlark:
+
+```python
+ctx.ci["event"]["data"]["pull_request"]["head"]["repo"]["full_name"]
+```
+
+Arrays use concrete indices, such as `[0]`. Empty containers are listed without inventing child
+fields. This is an inventory of the current payload, not a complete provider schema: other events
+can have different fields and null values. See the [GitHub event reference](/policies/ci#github-event-reference).
+Guard optional fields and check array lengths before indexing them.
+
+Paths omit values, but field names themselves can contain private information. The explorer rejects
+nesting deeper than 64 levels or inventories larger than 10,000 entries (including containers).
+Either limit returns an error without emitting a partial inventory. These limits apply to `--paths`;
+the native snapshot remains available without that flag.
+
+## Related
+
+- [Policy CI context](/policies/ci) — provider contract, event reference, and permissions
+- [Policy library](/policies/library) — searchable example inputs with CEL and Starlark expressions
+- [Approval requirements](/policies/approvals) — separate verification of fresh review evidence

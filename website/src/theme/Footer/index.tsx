@@ -13,6 +13,7 @@
 
 import React, { type ReactElement } from 'react';
 import Link from '@docusaurus/Link';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import {
   RiExternalLinkLine,
   RiGithubFill,
@@ -63,7 +64,8 @@ function FooterItemLink({ item }: { item: FooterLink }): ReactElement {
 }
 
 export default function Footer(): ReactElement {
-  const year = new Date().getFullYear();
+  const { siteConfig } = useDocusaurusContext();
+  const year = siteConfig.customFields.buildYear as number;
 
   return (
     <footer className={styles.footer}>

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	civalidate "github.com/cloudposse/atmos/pkg/ci/validate"
@@ -83,6 +84,13 @@ The command respects .github/actionlint.yaml and .github/actionlint.yml.`,
 
 // validateCmd is the `atmos ci validate` command instance.
 var validateCmd = NewValidateCommand()
+
+func init() {
+	internal.RegisterCommandMetadata(
+		validateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/validate"),
+	)
+}
 
 func runCIValidate(cmd *cobra.Command, args []string) error {
 	return runCIValidateWithPaths(cmd, args, nil, false, nil)

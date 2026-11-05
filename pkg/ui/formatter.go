@@ -462,6 +462,93 @@ func (o *Output) Infof(format string, a ...interface{}) {
 	writeStatus(f, o.writer, f.Infof(format, a...)+newline, "Output.Infof")
 }
 
+// Markdown renders content as terminal markdown and writes it to the configured
+// destination (the UI channel when nil). Rendered text is masked like every other
+// Output write. If the formatter is not initialized, the plain content is written
+// masked to an explicit writer (and dropped when there is none), so embedded hosts
+// and tests still receive the payload.
+func (o *Output) Markdown(content string) {
+	o.markdown(content, "")
+}
+
+// MarkdownWithBaseURL renders fetched Markdown, resolving relative links and
+// images against its source URL. Ordinary Markdown keeps local links unchanged.
+func (o *Output) MarkdownWithBaseURL(content, baseURL string) {
+	o.markdown(content, baseURL)
+}
+
+func (o *Output) markdown(content, baseURL string) {
+	defer perf.Track(nil, "ui.Output.Markdown")()
+
+	f, err := getFormatter()
+	if err != nil {
+		if o.writer == nil {
+			log.Debug("ui.Output.Markdown called before InitFormatter")
+			return
+		}
+		o.writePlain(content, "Output.Markdown")
+		return
+	}
+
+	rendered, renderErr := f.renderMarkdown(content, false, false, baseURL)
+	if renderErr != nil {
+		// Degrade gracefully - write plain content if rendering fails.
+		rendered = content
+	}
+	if !strings.HasSuffix(rendered, newline) {
+		rendered += newline
+	}
+	writeStatus(f, o.writer, rendered, "Output.Markdown")
+}
+
+// Error writes an error status line to the configured destination.
+func (o *Output) Error(text string) {
+	defer perf.Track(nil, "ui.Output.Error")()
+
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Output.Error called before InitFormatter")
+		return
+	}
+	writeStatus(f, o.writer, f.Error(text)+newline, "Output.Error")
+}
+
+// Errorf writes a formatted error status line to the configured destination.
+func (o *Output) Errorf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Errorf")()
+
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Output.Errorf called before InitFormatter")
+		return
+	}
+	writeStatus(f, o.writer, f.Errorf(format, a...)+newline, "Output.Errorf")
+}
+
+// Writef writes formatted text without icon or styling to the configured destination (masked).
+func (o *Output) Writef(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Writef")()
+
+	text := fmt.Sprintf(format, a...)
+	f, err := getFormatter()
+	if err != nil {
+		if o.writer == nil {
+			log.Debug("ui.Output.Writef called before InitFormatter")
+			return
+		}
+		o.writePlain(text, "Output.Writef")
+		return
+	}
+	writeStatus(f, o.writer, text, "Output.Writef")
+}
+
+// writePlain writes masked plain text to the explicit writer when the formatter is unavailable.
+func (o *Output) writePlain(text, operation string) {
+	if _, err := fmt.Fprint(o.writer, io.MaskString(text)); err != nil {
+		log.Debug("ui."+operation+" write failed", "error", err)
+	}
+}
+
 func writeStatus(f *formatter, writer stdio.Writer, formatted, operation string) {
 	if writer != nil {
 		if _, err := fmt.Fprint(writer, f.ioCtx.Masker().Mask(formatted)); err != nil {
@@ -822,79 +909,6 @@ func (f *formatter) Badge(text, background, foreground string) string {
 		Render(text)
 }
 
-// toastMarkdown renders markdown text with preserved newlines, an icon prefix, and auto-indents multi-line content.
-// Uses a compact stylesheet for toast-style inline formatting.
-func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text string) (string, error) {
-	// Render markdown with toast-specific compact stylesheet
-	rendered, err := f.renderToastMarkdown(text)
-	if err != nil {
-		return "", err
-	}
-
-	// Glamour adds 1 leading newline and 2 trailing newlines to every output.
-	// Remove these, but preserve any newlines that were in the original message.
-	rendered = strings.TrimPrefix(rendered, newline)         // Remove Glamour's leading newline
-	rendered = strings.TrimSuffix(rendered, newline+newline) // Remove Glamour's trailing newlines
-	// If there's still a trailing newline, it was from the original message.
-	if !strings.HasSuffix(rendered, newline) && strings.HasSuffix(text, newline) {
-		// Original had trailing newline but rendering lost it, add it back.
-		rendered += newline
-	}
-
-	// Style the icon if color is supported
-	var styledIcon string
-	if f.SupportsColor() && style != nil {
-		styledIcon = style.Render(icon)
-	} else {
-		styledIcon = icon
-	}
-
-	// Split by newlines and trim trailing padding that Glamour adds.
-	lines := atmosansi.TrimTrailingWhitespace(rendered, paragraphIndent, paragraphIndentWidth)
-
-	// Remove trailing empty/whitespace-only lines that Glamour may add.
-	// Glamour can output extra padded lines before trailing newlines.
-	// Note: Intentional trailing newlines from the original text are also stripped
-	// because they would cause extra indented empty lines in multi-line output.
-	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-		lines = lines[:len(lines)-1]
-	}
-
-	if len(lines) == 0 {
-		// Empty message: return icon + space for consistency with iconMessageFormat.
-		return fmt.Sprintf(iconMessageFormat, styledIcon, ""), nil
-	}
-
-	if len(lines) == 1 {
-		// For single line: trim leading spaces from Glamour's paragraph indent
-		// since the icon+space already provides visual separation.
-		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
-		line := atmosansi.TrimLeftSpaces(lines[0])
-		return fmt.Sprintf(iconMessageFormat, styledIcon, line), nil
-	}
-
-	// Multi-line: trim leading spaces from first line (goes next to icon).
-	// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
-	lines[0] = atmosansi.TrimLeftSpaces(lines[0])
-
-	// Multi-line: first line with icon, rest indented to align under first line's text.
-	result := fmt.Sprintf(iconMessageFormat, styledIcon, lines[0])
-
-	// Calculate indent: icon width + 1 space from iconMessageFormat.
-	// Use lipgloss.Width to handle multi-cell characters like emojis.
-	iconWidth := lipgloss.Width(icon)
-	indent := strings.Repeat(space, iconWidth+1) // +1 for the space in "%s %s" format.
-
-	for i := 1; i < len(lines); i++ {
-		// Glamour already added 2-space paragraph indent, replace with our calculated indent.
-		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
-		line := atmosansi.TrimLeftSpaces(lines[i])
-		result += newline + indent + line
-	}
-
-	return result, nil
-}
-
 // renderToastMarkdownFromStylesheet renders markdown using a provided stylesheet getter.
 // This is the shared implementation used by both renderToastMarkdown and renderToastMarkdownInline.
 // Uses the custom markdown renderer with extended syntax support (highlight, badge, admonitions).
@@ -1107,14 +1121,14 @@ func (f *formatter) Label(text string) string {
 // Markdown returns the rendered markdown string (pure function, no I/O).
 // For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage().
 func (f *formatter) Markdown(content string) (string, error) {
-	return f.renderMarkdown(content, false, false)
+	return f.renderMarkdown(content, false, false, "")
 }
 
 // MarkdownNoWrap returns rendered markdown without word-wrapping long lines.
 // Use for deterministic, snapshot-stable single-line notices where wrapping
 // would otherwise vary by terminal width.
 func (f *formatter) MarkdownNoWrap(content string) (string, error) {
-	rendered, err := f.renderMarkdown(content, false, true)
+	rendered, err := f.renderMarkdown(content, false, true, "")
 	// Glamour's document rendering pads output with a leading/trailing blank
 	// line, which is fine for multi-line documents but wrong for the
 	// single-line, snapshot-stable notices this method exists for (see
@@ -1187,7 +1201,8 @@ func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []
 }
 
 // renderMarkdown is the internal markdown rendering implementation.
-func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool) (string, error) {
+func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool, baseURL string) (string, error) {
+	content = markdown.StripFrontmatter(content)
 	opts := f.buildMarkdownRenderOptions(preserveNewlines, noWrap)
 
 	renderer, err := glamour.NewTermRenderer(opts...)
@@ -1201,6 +1216,7 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 	// command help/usage examples) from being auto-linked as mailto: links by glamour's
 	// default GFM Linkify extension.
 	markdown.ApplyStrictLinkify(renderer)
+	markdown.ApplyBaseURL(renderer, baseURL)
 
 	rendered, err := renderer.Render(content)
 	if err != nil {
@@ -1213,6 +1229,6 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 	// post-process rather than a renderer/style option).
 	rendered = markdown.FixListHangingIndent(rendered)
 
-	// Remove trailing whitespace that glamour adds for padding.
-	return atmosansi.TrimLinesRight(rendered), nil
+	// Remove padding without deleting foreground-styled text that ends in a space.
+	return atmosansi.TrimLinesRightSpaces(rendered), nil
 }

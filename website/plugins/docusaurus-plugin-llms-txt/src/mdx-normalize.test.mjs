@@ -1,7 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import { normalizeMdxToMarkdown } from './mdx-normalize.mjs';
+
+test('YAML function availability survives plain-Markdown export', async () => {
+  const random = await normalizeMdxToMarkdown('<YamlFunctionAvailability name="random" />');
+  assert.match(random, /## Availability and evaluation/);
+  assert.match(random, /Each evaluation generates a value/);
+  assert.match(random, /\[YAML function scope\]\(\/functions\/yaml\/scope\)/);
+  assert.doesNotMatch(random, /YamlFunctionAvailability/);
+
+  const version = await normalizeMdxToMarkdown('<YamlFunctionAvailability name="version" />');
+  assert.match(version, /ai\.skills\.<name>\.ref/);
+  assert.match(version, /installed or synchronized/);
+  await assert.rejects(
+    normalizeMdxToMarkdown('<YamlFunctionAvailability name="unknown" />'),
+    /Unknown YAML function availability/,
+  );
+});
 
 async function normalize(src) {
   return (await normalizeMdxToMarkdown(src)).trim();
@@ -148,4 +165,44 @@ test('non-truncate top-level HTML comments cause rejection (caller falls back to
     () => normalizeMdxToMarkdown('<!-- a real comment -->\n\n# Heading'),
     /Unexpected character/,
   );
+});
+
+
+test('TryExample exports initialization before its follow-up commands and retains links', async () => {
+  const out = await normalize('<TryExample example="quick-start-simple">\n\nRequires Terraform.\n\n```shell\natmos terraform plan station -s dev\n```\n\n</TryExample>');
+  assert.match(out, /```shell\natmos init examples\/quick-start-simple\ncd quick-start-simple\n```/);
+  assert.ok(out.indexOf('cd quick-start-simple') < out.indexOf('Requires Terraform.'));
+  assert.match(out, /atmos terraform plan station -s dev/);
+  assert.match(out, /\[Explore the example\]\(\/examples\/quick-start-simple\)/);
+  assert.match(out, /\[Installation guide\]\(\/install\)/);
+  assert.match(out, /\/cli\/commands\/init#examples-and-source-directories/);
+});
+
+test('TryExamples keeps labeled examples, nested destinations, and instructions in order', async () => {
+  const out = await normalize(`<TryExamples>
+<TryExample example="one" label="First">First instructions.</TryExample>
+<TryExample example={"nested/two"} label="Second" showExampleLink={false}>Second instructions.</TryExample>
+</TryExamples>`);
+  assert.match(out, /### First/);
+  assert.match(out, /### Second/);
+  assert.match(out, /atmos init examples\/nested\/two\ncd two/);
+  assert.ok(out.indexOf('First instructions.') < out.indexOf('atmos init examples/nested/two'));
+  assert.match(out, /Second instructions\./);
+  assert.doesNotMatch(out, /\]\(\/examples\/nested\/two\)/);
+});
+
+test('TryExample without a static source preserves children without inventing commands', async () => {
+  const out = await normalize('<TryExample example={project}>See the README.</TryExample>');
+  assert.equal(out, 'See the README.');
+  assert.match(await normalize('<TryExample example="one" />'), /atmos init examples\/one\ncd one/);
+});
+
+test('Terraform usage exports the complete runnable quick start from the real documentation', async () => {
+  const source = await readFile(new URL('../../../docs/cli/commands/terraform/usage.mdx', import.meta.url), 'utf8');
+  const out = await normalize(source.replace(/^---\n[\s\S]*?\n---\n/, ''));
+  const quickStart = out.slice(out.indexOf('## Try it out'));
+  assert.match(quickStart, /atmos init examples\/quick-start-simple\ncd quick-start-simple/);
+  assert.match(quickStart, /atmos terraform init station -s dev/);
+  assert.match(quickStart, /atmos terraform plan station -s dev/);
+  assert.doesNotMatch(quickStart, /<TryExample/);
 });

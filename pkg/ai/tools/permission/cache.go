@@ -101,6 +101,34 @@ func (c *PermissionCache) IsDenied(toolName string) bool {
 	return false
 }
 
+// IsAllowedExact checks if the exact key is in the allow list. Unlike IsAllowed it never
+// applies the legacy "Name(anything)" rule, so a stored "Bash(atmos list stacks)" can only
+// match that exact key. Used for command-scoped tools (see ScopedTool).
+func (c *PermissionCache) IsAllowedExact(key string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return containsExact(c.cache.Permissions.Allow, key)
+}
+
+// IsDeniedExact checks if the exact key is in the deny list. See IsAllowedExact.
+func (c *PermissionCache) IsDeniedExact(key string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return containsExact(c.cache.Permissions.Deny, key)
+}
+
+// containsExact reports whether list contains key by string equality.
+func containsExact(list []string, key string) bool {
+	for _, entry := range list {
+		if entry == key {
+			return true
+		}
+	}
+	return false
+}
+
 // AddAllow adds a tool to the allow list and saves.
 func (c *PermissionCache) AddAllow(pattern string) error {
 	c.mu.Lock()
@@ -225,6 +253,12 @@ func matchesCachePattern(toolName, pattern string) bool {
 	// Exact match.
 	if toolName == pattern {
 		return true
+	}
+
+	// A command-scoped key such as "Bash(atmos list stacks)" only ever matches itself
+	// exactly; it must never fall through to the tool-name-only rule below.
+	if findPatternSeparator(toolName) != -1 {
+		return false
 	}
 
 	// Pattern matching format: "ToolName(param:value)"

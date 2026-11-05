@@ -1,0 +1,145 @@
+---
+title: "config.load"
+sidebar_position: 45
+sidebar_label: "config.load"
+sidebar_class_name: command
+description: Load YAML or JSON configuration with an inline schema or a JSON Schema file.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Load configuration, validate its fields, and read the result with dot syntax. Use an inline schema for
+    compact script declarations or a JSON Schema file shared with other tools.
+</Intro>
+
+## Usage
+
+```python
+cfg = config.load("app.yaml", schema={
+    "database": {
+        "host": str,
+        "port": schema.field(int, default=5432, min=1, max=65535),
+    },
+    "debug": schema.field(bool, default=False),
+    "tags": schema.list(str),
+    "environment": schema.enum("dev", "staging", "prod"),
+    "description": schema.optional(str),
+})
+
+print(cfg.database.host)
+output = cfg
+```
+
+For example, `app.yaml` can contain:
+
+```yaml
+database:
+  host: localhost
+tags: [api]
+environment: dev
+```
+
+The result includes `database.port = 5432`, `debug = False`, and `description = None`.
+The same schema works with an equivalent `.json` file.
+
+## Arguments
+
+| Argument | Description |
+| --- | --- |
+| `path` | Required, nonempty local file path. |
+| `schema` | Required inline field dictionary, type, [schema helper](/functions/automation/schema), or a local path / HTTPS URL to a JSON Schema document. |
+| `format` | Optional `"json"` or `"yaml"` (`"yml"` is also accepted). Otherwise inferred from `.json`, `.yaml`, or `.yml`. |
+
+Relative configuration and schema paths resolve beside the calling Starlark file, including calls inside loaded
+functions. Inline scripts use their `working_directory`. Absolute paths are accepted. For extensionless data,
+use `config.load("settings", schema=app_schema, format="yaml")`.
+
+## Schema files
+
+A string in `schema` names a JSON Schema document, written in JSON or YAML:
+
+```python
+cfg = config.load("app.yaml", schema="schemas/app.schema.json")
+# A YAML representation of JSON Schema works too:
+other = config.load("app.json", schema="schemas/app.schema.yaml")
+```
+
+For a configuration containing only a `database` object, `schemas/app.schema.yaml` might be:
+
+```yaml
+type: object
+properties:
+  database:
+    type: object
+    properties:
+      host:
+        type: string
+      port:
+        type: integer
+        minimum: 1
+        maximum: 65535
+    required: [host, port]
+    additionalProperties: false
+required: [database]
+additionalProperties: false
+```
+
+Local `$ref` files resolve relative to the referring schema file. Fragments such as `#/$defs/database` work.
+Local schema files must use `.json`, `.yaml`, or `.yml` extensions.
+
+### HTTPS schemas
+
+```python
+cfg = config.load("app.yaml", schema="https://example.com/schemas/app.schema.json")
+```
+
+Remote schemas may be JSON or YAML. Relative `$ref` paths resolve against the schema URL; local schemas can
+also reference HTTPS resources. Remote resources cannot refer to local files, including by changing a schema
+ID to a `file:` URL. Both requests and redirects require HTTPS; embedded URL credentials are rejected.
+
+Each request has a 30-second timeout and a 4 MiB response limit, and a validation can load at most 64 schema
+resources. Cancellation interrupts requests. Redirects are limited to 10 hops. Formats are selected by URL
+extension; extensionless responses use a YAML content type when present, otherwise JSON. Requests use normal
+TLS certificate validation and do not attach Atmos authentication credentials. A schema resource is reused
+within one validation; later calls fetch it again. Dry runs make no requests.
+
+File schemas follow JSON Schema semantics: declare `required` and `additionalProperties: false` explicitly
+when needed. JSON Schema's `default` is an annotation and does **not** insert a value; use inline
+`schema.field(..., default=...)` when you want defaults applied. JSON Schema considers `1.0` an integer,
+while inline `int` requires a Starlark integer. Neither mode converts strings into numbers.
+
+## Results and errors
+
+Objects become immutable records of type `config`. Nested objects also support dot access, and arrays remain
+lists. Use `cfg["api-key"]` for fields that cannot be written with dot syntax. `dir(cfg)`, `len(cfg)`, key iteration,
+`"key" in cfg`, and `dict(cfg)` work. Attribute names refer to fields, including names such as `items` and `get`;
+records do not expose dictionary methods. The `merge` attribute is reserved for the
+[`merge` method](/functions/automation/config.merge); use `cfg["merge"]` for a field with that name. JSON encoding and `output = cfg` produce ordinary JSON objects.
+All nested collections are frozen, so records are safe to share with parallel tasks.
+
+Validation errors include the file, one-based line and column, and field path:
+
+```text
+app.yaml:3:9: database.port: expected int, got string
+```
+
+Locations are preserved for JSON as well as YAML. Missing fields point to the containing object. YAML aliases
+point to the anchor value. Schema validation reports the first failing field; file schemas report the first
+underlying validation failure. Parsing errors identify the source file.
+
+The loader accepts one plain-data document. Duplicate keys, non-string object keys, non-finite numbers, YAML
+merge keys, and custom YAML tags fail. Dates are strings; YAML does not evaluate Atmos tags, templates, stack
+imports, or secret lookups. Nesting and expanded YAML node counts are bounded.
+
+Each call reads and validates afresh. It works inside functions, imported helpers, and parallel tasks. Dry runs
+resolve API names without reading configuration or schemas. Available in automation scripts only, not YAML
+`!starlark` or policy expressions.
+
+## Related
+
+- [`schema`](/functions/automation/schema) defines inline types, defaults, lists, enums, and optional fields.
+- [`config.merge`](/functions/automation/config.merge) combines records using Atmos deep-merge rules.
+- [`config.validate`](/functions/automation/config.validate) checks data already in memory.
+- [`module.load`](/functions/automation/module.load) loads executable script libraries.
+- [`struct`](/functions/automation/struct) creates records without schema validation.

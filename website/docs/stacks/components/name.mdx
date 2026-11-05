@@ -1,0 +1,78 @@
+---
+title: Component names
+sidebar_label: <name>
+description: Choose a component instance name and understand how it relates to CLI commands, dependencies, and implementation paths.
+slug: /stacks/components/name
+---
+
+import Intro from '@site/src/components/Intro';
+
+<Intro>
+`<name>` is a placeholder for a component instance name that you choose, such as
+`vpc`, `vpc-primary`, or `nginx`. Replace it with a YAML map key beneath
+`components.<type>`. Do not copy the angle brackets into your configuration.
+</Intro>
+
+## Name an instance
+
+```yaml
+components:
+  terraform:
+    vpc-primary:                  # components.terraform.<name>
+      metadata:
+        component: vpc           # implementation: components/terraform/vpc
+      vars:
+        cidr_block: 10.0.0.0/16
+
+    app:
+      dependencies:
+        components:
+          - name: vpc-primary    # reference the instance name
+```
+
+Here, `vpc-primary` is the instance name. Pass that same name to the CLI:
+
+```shell
+atmos terraform plan vpc-primary -s tenant1-ue2-dev
+```
+
+The `name` in [`dependencies.components`](/stacks/dependencies/components) also
+identifies the instance. An omitted dependency `stack` means the current stack.
+The YAML placeholder does not introduce a nested `name:` field on the component.
+
+## Choose a useful name
+
+- Prefer short, descriptive lowercase names with hyphens: `vpc`, `vpc-primary`,
+  `app-database`, or `nginx`.
+- Use a stable name for the same logical component across stacks. The stack
+  already identifies its environment; a suffix such as `-prod` is usually unnecessary.
+- Give separate instances of the same implementation distinct names, such as
+  `vpc-primary` and `vpc-secondary`.
+- Slash-separated names such as `network/vpc` are supported. Use them consistently
+  when grouping components, and pass the full name to commands and references.
+- Avoid spaces and shell-sensitive characters to keep commands and scripts easy
+  to read and quote.
+
+These are naming recommendations, not a lowercase-only validation rule. The
+manifest schema also accepts names containing uppercase letters, underscores,
+and periods. The selected tool and any derived filesystem paths, workspace
+names, or resource names can impose additional constraints.
+
+## Scope and implementation paths
+
+Names are case-sensitive: `vpc` and `VPC` are different keys. Use the exact
+spelling in commands and references. An instance name identifies one entry
+within a component type in a resolved stack. Different stacks can reuse it, and different component types have separate
+maps. Definitions of the same instance across imported manifests are merged;
+renaming the key creates a different instance rather than another configuration
+layer for the original one.
+
+For directory-backed components such as Terraform, the instance name is also the
+default implementation path beneath the configured component base path. For
+example, `network/vpc` normally resolves to `components/terraform/network/vpc`.
+Use [`metadata.component`](/stacks/components/component-metadata#component) to
+choose another implementation path, as in the `vpc-primary` example above. The
+instance name remains the name used in CLI commands and dependency references.
+
+This instance name is separate from the [stack name](/stacks/name),
+`metadata.name`, and application variables such as `vars.name`.

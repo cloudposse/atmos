@@ -20,3 +20,6 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Generated from the CLI edition journal when Docusaurus loads its configuration.
+/docs/cli/editions.mdx

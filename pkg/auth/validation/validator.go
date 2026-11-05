@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth/factory"
+	authregistry "github.com/cloudposse/atmos/pkg/auth/registry"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -37,7 +37,7 @@ func (v *validator) ValidateAuthConfig(config *schema.AuthConfig) error {
 	}
 
 	// Validate providers.
-	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
+	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing a copy to the registry is intended.
 	for name, provider := range config.Providers {
 		if err := v.ValidateProvider(name, &provider); err != nil {
 			return fmt.Errorf("%w: provider %q validation failed: %w", errUtils.ErrInvalidAuthConfig, name, err)
@@ -92,7 +92,7 @@ func (v *validator) ValidateProvider(name string, provider *schema.Provider) err
 	}
 
 	// Create provider instance and use its Validate method.
-	providerInstance, err := factory.NewProvider(name, provider)
+	providerInstance, err := authregistry.NewProvider(name, provider)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (v *validator) ValidateIdentity(name string, identity *schema.Identity, pro
 	}
 
 	// Create identity instance and use its Validate method.
-	identityInstance, err := factory.NewIdentity(name, identity)
+	identityInstance, err := authregistry.NewIdentity(name, identity)
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func (v *validator) hasCycle(node string, graph map[string][]string, visited, re
 // Helper functions to convert map types.
 func convertProviders(providers map[string]schema.Provider) map[string]*schema.Provider {
 	result := make(map[string]*schema.Provider)
-	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
+	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing a copy to the registry is intended.
 	for k, v := range providers {
 		provider := v
 		result[k] = &provider

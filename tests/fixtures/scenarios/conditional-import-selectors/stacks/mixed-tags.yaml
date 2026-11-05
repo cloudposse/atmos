@@ -1,0 +1,6 @@
+name: mixed-tags
+metadata: {tags: [pci, !env FIELD_TEST_TAG]}
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel "'pci' in tags"

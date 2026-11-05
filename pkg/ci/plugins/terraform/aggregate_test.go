@@ -80,8 +80,10 @@ func TestOnAfterTerraformAggregateRendersSummaryOutputsCommentAndChecks(t *testi
 	assert.Contains(t, rendered, "| Skipped | dev/worker |")
 	assert.Contains(t, rendered, "| dev | app | failed |")
 	assert.Contains(t, rendered, "| dev | outputs | changed | Output values will change. No infrastructure changes.")
-	assert.Contains(t, rendered, "### Failed Components")
-	assert.Contains(t, rendered, "### Changed Components")
+	assert.Contains(t, rendered, "## Plan Failed for `app` in `dev`")
+	assert.Contains(t, rendered, "## No Changes for `database` in `dev`")
+	assert.Contains(t, rendered, "## Output Changes Found for `outputs` in `dev`")
+	assert.Contains(t, rendered, "## Resource Changes Found for `vpc` in `dev`")
 
 	outputs := mp.writer.outputs
 	assert.Equal(t, "true", outputs["has_changes"])
@@ -103,8 +105,8 @@ func TestOnAfterTerraformAggregateRendersSummaryOutputsCommentAndChecks(t *testi
 	assert.Contains(t, outputs["summary"], "Terraform Plan Summary")
 
 	require.Len(t, mp.commentCalls, 1)
-	assert.Equal(t, "<!-- atmos:ci:plan:aggregate:dev -->", mp.commentCalls[0].Marker)
-	assert.Contains(t, mp.commentCalls[0].Body, "<!-- atmos:ci:plan:aggregate:dev -->")
+	assert.Equal(t, "<!-- atmos:ci:aggregate:plan:dev -->", mp.commentCalls[0].Marker)
+	assert.Contains(t, mp.commentCalls[0].Body, "<!-- atmos:ci:aggregate:plan:dev -->")
 
 	require.Len(t, mp.updateRunCalls, 5)
 	assert.Equal(t, "atmos/plan/dev/app", mp.updateRunCalls[0].Name)
@@ -187,7 +189,7 @@ func TestOnAfterTerraformAggregateUsesCommandSpecificRendering(t *testing.T) {
 			}
 
 			require.Len(t, mp.commentCalls, 1)
-			assert.Equal(t, "<!-- atmos:ci:"+tt.command+":aggregate:dev -->", mp.commentCalls[0].Marker)
+			assert.Equal(t, "<!-- atmos:ci:aggregate:"+tt.command+":dev -->", mp.commentCalls[0].Marker)
 			require.Len(t, mp.updateRunCalls, 1)
 			assert.Equal(t, "atmos/"+tt.command+"/dev/vpc", mp.updateRunCalls[0].Name)
 		})
@@ -309,7 +311,7 @@ func TestBuildPlanAggregateExitCodeRules(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := p.buildPlanAggregate(tt.input)
+			got := p.buildPlanAggregate(newAggregateHookContext(), tt.input)
 			assert.Equal(t, tt.wantCode, got.ExitCode)
 		})
 	}
@@ -327,6 +329,7 @@ func TestOnAfterTerraformAggregateWritesGitHubOutputFiles(t *testing.T) {
 	ctx := newAggregateHookContext()
 	ctx.Config = &schema.AtmosConfiguration{
 		CI: schema.CIConfig{
+			Enabled: true,
 			Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
 			Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
 		},
@@ -431,6 +434,7 @@ You can apply this plan to save these new output values to the Terraform state, 
 func newAggregateTestConfig() *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
 		CI: schema.CIConfig{
+			Enabled: true,
 			Summary: schema.CISummaryConfig{
 				Enabled: boolPtr(true),
 			},
@@ -649,7 +653,7 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, normalized.Results, 2)
 
-	aggregate := p.buildPlanAggregate(*resultSet)
+	aggregate := p.buildPlanAggregate(newAggregateHookContext(), *resultSet)
 	require.Len(t, aggregate.Components, 2)
 	assert.Equal(t, "database", aggregate.Components[0].Result.Component, "components are sorted by stack/component/node")
 
@@ -678,7 +682,7 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 	assert.Equal(t, "-", markdownInline("\n"))
 
 	now := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
-	assert.Equal(t, "1500ms", formatAggregateDuration(&schema.TerraformPlanCIResult{
+	assert.Equal(t, "1.5s", formatAggregateDuration(&schema.TerraformPlanCIResult{
 		StartedAt:  now,
 		FinishedAt: now.Add(1500 * time.Millisecond),
 	}))
@@ -686,7 +690,7 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 
 	assert.Equal(t, "all", aggregateStackValue(nil))
 	assert.Equal(t, "all", aggregateStackValue(&schema.ConfigAndStacksInfo{}))
-	assert.Equal(t, "<!-- atmos:ci:plan:aggregate:all -->", buildAggregateCommentMarker("plan", ""))
+	assert.Equal(t, "aggregate:plan:all", buildAggregateCommentKey("plan", ""))
 }
 
 func TestAggregateMarkdownStaysBelowGitHubSummaryLimit(t *testing.T) {
@@ -712,10 +716,10 @@ func TestAggregateMarkdownStaysBelowGitHubSummaryLimit(t *testing.T) {
 		})
 	}
 
-	aggregate := p.buildPlanAggregate(schema.TerraformPlanCIResultSet{Command: "plan", Results: results})
+	aggregate := p.buildPlanAggregate(newAggregateHookContext(), schema.TerraformPlanCIResultSet{Command: "plan", Results: results})
 
 	assert.LessOrEqual(t, len(aggregate.Markdown), aggregateMarkdownMaxBytes)
-	assert.Contains(t, aggregate.Markdown, "Summary truncated to stay below GitHub Actions' 1 MB job summary limit")
+	assert.Contains(t, aggregate.Markdown, "Output exceeds the maximum summary size.")
 	assert.Contains(t, aggregate.Markdown, "| bulk | component-0 | changed |")
 	assert.Contains(t, aggregate.Markdown, "| bulk | component-119 | changed |")
 	assert.Less(t, strings.Count(aggregate.Markdown, "<details><summary>"), components)
@@ -725,7 +729,7 @@ func TestAggregateSummaryAndOutputsHandleProviderWithoutWriter(t *testing.T) {
 	p := &Plugin{}
 	ctx := newAggregateHookContext()
 	ctx.Provider = &nilOutputProvider{mockProvider: newMockProvider()}
-	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
+	aggregate := p.buildPlanAggregate(ctx, ctx.Aggregate.(schema.TerraformPlanCIResultSet))
 
 	require.NoError(t, p.writeAggregateSummary(ctx, aggregate.Markdown))
 	require.NoError(t, p.writeAggregateOutputs(ctx, &aggregate))
@@ -736,7 +740,7 @@ func TestWriteAggregateOutputsFiltersVariables(t *testing.T) {
 	ctx := newAggregateHookContext()
 	ctx.Config.CI.Output.Variables = []string{"has_changes", "exit_code"}
 	mp := ctx.Provider.(*mockProvider)
-	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
+	aggregate := p.buildPlanAggregate(ctx, ctx.Aggregate.(schema.TerraformPlanCIResultSet))
 
 	require.NoError(t, p.writeAggregateOutputs(ctx, &aggregate))
 	assert.Equal(t, map[string]string{
@@ -750,7 +754,7 @@ func TestWriteAggregateOutputsReturnsJoinedWriterErrors(t *testing.T) {
 	ctx := newAggregateHookContext()
 	ctx.Provider = &failingOutputProvider{mockProvider: newMockProvider()}
 	ctx.Config.CI.Output.Variables = []string{"has_changes", "exit_code"}
-	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
+	aggregate := p.buildPlanAggregate(ctx, ctx.Aggregate.(schema.TerraformPlanCIResultSet))
 
 	err := p.writeAggregateOutputs(ctx, &aggregate)
 
@@ -833,4 +837,11 @@ func TestPostAggregateCommentSkipsAndReturnsErrors(t *testing.T) {
 		assert.Contains(t, err.Error(), "api error")
 		assert.Len(t, mp.commentCalls, 1)
 	})
+}
+
+func TestAggregateCommentKeyDoesNotCollideWithComponentNamedAggregate(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"plan", "apply", "destroy", "test"} {
+		assert.NotEqual(t, buildCommentKey(command, "aggregate", "dev"), buildAggregateCommentKey(command, "dev"))
+	}
 }

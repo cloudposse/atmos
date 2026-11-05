@@ -44,6 +44,10 @@ import (
 // resolveTerraformCommand sets info.Command from atmosConfig if not already set.
 // Falls back to the cfg.TerraformComponentType default when neither is configured.
 func resolveTerraformCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+		return
+	}
 	if info.Command != "" {
 		return
 	}
@@ -62,15 +66,18 @@ func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schem
 	if err != nil {
 		return err
 	}
-	return ExecuteShellCommand(
-		*atmosConfig,
-		tenv.Resolve(info.Command),
-		[]string{info.SubCommand},
-		"",
-		tenv.EnvVars(),
-		false,
-		info.RedirectStdErr,
-	)
+	return ExecuteShellCommandWithRetry(atmosConfig, info, "version", func(opts ...ShellCommandOption) error {
+		return ExecuteShellCommand(
+			*atmosConfig,
+			tenv.Resolve(info.Command),
+			[]string{info.SubCommand},
+			"",
+			tenv.EnvVars(),
+			false,
+			info.RedirectStdErr,
+			opts...,
+		)
+	})
 }
 
 // setupTerraformAuth builds the merged auth config (global + component-specific via
@@ -348,9 +355,11 @@ func checkComponentRestrictions(info *schema.ConfigAndStacksInfo) error {
 
 // printAndWriteVarFiles logs component variables and, when not using a pre-existing
 // plan file, writes them to the varfile on disk (path derived from atmosConfig+info).
-// Workspace subcommands do not use varfiles and are skipped entirely.
+// Workspace subcommands do not use varfiles and are skipped, unless init.pass_vars is enabled: the init
+// that runs before a workspace command then receives -var-file, so the varfile must exist even for a
+// component that was never planned.
 func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	if info.SubCommand == subcommandWorkspace {
+	if info.SubCommand == subcommandWorkspace && !atmosConfig.Components.Terraform.Init.PassVars {
 		return nil
 	}
 

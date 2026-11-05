@@ -88,7 +88,7 @@ func TestComponentFunc_DisabledEnclosing_ReturnsEmptySections(t *testing.T) {
 		},
 	}
 
-	got, err := componentFunc(&schema.AtmosConfiguration{}, info, "target", "some-stack")
+	got, err := componentFunc(t.Context(), &schema.AtmosConfiguration{}, info, "target", "some-stack")
 	require.NoError(t, err)
 
 	sections, ok := got.(map[string]any)
@@ -150,7 +150,7 @@ func TestProcessComponentEntry_DisabledComponentSkipsTerraformState(t *testing.T
 			ClearResolutionContext()
 			t.Cleanup(ClearResolutionContext)
 
-			vars := map[string]any{"x": "!terraform.state some/component someoutput"}
+			vars := map[string]any{"x": taggedFunctionForTest("!terraform.state some/component someoutput")}
 			if tc.varsEnabled != nil {
 				vars["enabled"] = *tc.varsEnabled
 			}

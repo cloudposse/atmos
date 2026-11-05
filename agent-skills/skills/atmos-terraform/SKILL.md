@@ -9,9 +9,8 @@ metadata:
 
 # Atmos Terraform and OpenTofu Orchestration
 
-Atmos wraps the Terraform or OpenTofu CLI to provide stack-aware orchestration of infrastructure operations.
-Instead of manually managing workspaces, backends, variable files, and authentication for each component, Atmos
-resolves the full configuration from stack manifests and handles all of these concerns automatically.
+Atmos wraps Terraform/OpenTofu with stack-aware configuration, workspaces, backends, variable files,
+and authentication.
 
 Everything in this skill applies identically to **Terraform** and **OpenTofu**. The `atmos terraform` command
 namespace is the same regardless of which binary is configured -- `atmos terraform plan` runs `tofu plan` when
@@ -70,10 +69,10 @@ components:
 
 ### Per-invocation override
 
-Pass `--terraform-command` on the CLI to override for a single command:
+Pass `--command` (or its compatibility alias `--terraform-command`) to override the executable for one invocation. Use one flag, with a name or path; put native arguments after `--`:
 
 ```bash
-atmos terraform plan vpc -s dev --terraform-command=tofu
+atmos terraform plan vpc -s dev --command=tofu
 ```
 
 ### Installing and Pinning the Binary via Toolchain
@@ -225,19 +224,9 @@ disables auto-init for one invocation. Upstream init flags pass through when inv
 
 ### Streaming UI (`--ui`)
 
-`plan`, `apply`, `deploy`, `init`, and `destroy` support a `--ui` flag that renders a live,
-Docker-build-style progress view (spinners, a dependency tree, per-resource status) instead of
-raw Terraform output:
-
-```shell
-atmos terraform apply vpc -s dev --ui
-```
-
-Enable it by default via `components.terraform.ui.enabled: true` in atmos.yaml or
-`ATMOS_TERRAFORM_UI=true`; pass `--ui=false` to override a config-enabled default for one run.
-The UI auto-disables when output is piped, in CI (`CI=true`), or on unsupported commands.
-`refresh` doesn't support it — Terraform's `refresh` doesn't emit the structured `-json` output
-the UI depends on; `--ui refresh` prints a warning and falls back to standard output.
+`plan`, `apply`, `deploy`, `init`, and `destroy` support `--ui` for live progress. For configuration,
+overrides, and automatic fallback behavior, read
+[Streaming UI](references/commands-reference.md#streaming-ui---ui).
 
 ## Multi-Component Operations
 
@@ -316,6 +305,15 @@ atmos terraform generate planfile vpc -s plat-ue2-dev
 atmos terraform generate planfile vpc -s dev --format=json
 atmos terraform generate planfile vpc -s dev --format=yaml --file=planfile.yaml
 ```
+
+### Experimental Saved-Plan Policies
+
+`ATMOS_POLICY_DIR` opts Terraform execution into strict inline CEL `terraform.plan` denial rules
+from explicit `atmos/v1`, `kind: Policy` documents. Use `plan` then saved-plan apply; never suggest
+unsetting the directory to bypass enforcement. Before advising on governed execution, read
+[saved-plan policy requirements](references/commands-reference.md#experimental-saved-plan-policies)
+for supported operations, artifact checks, dry-run limits, and trust boundaries. For policy authoring,
+hooks, GitHub event context, samples/tests, and capability limits, use `atmos-policy`.
 
 ## Authentication Configuration
 
@@ -421,16 +419,8 @@ For the complete flag reference, see [references/commands-reference.md](referenc
 
 ## Path-Based Component Resolution
 
-You can use filesystem paths instead of component names:
-
-```shell
-cd components/terraform/vpc
-atmos terraform plan . -s dev
-atmos terraform apply . -s dev
-```
-
-Supported path formats: `.`, `./component`, `../sibling`, `/absolute/path`.
-If a path matches multiple components, Atmos prompts for selection in interactive mode.
+Filesystem paths can replace component names. See
+[path formats and disambiguation](references/commands-reference.md#path-based-component-resolution).
 
 ## Debugging
 
@@ -459,7 +449,8 @@ component, each overriding the layer below field-by-field. See
 1. **Use the two-stage plan/apply workflow for production.** Run `plan` first, review the output, then
     `apply --from-plan` to ensure exactly the reviewed changes are applied.
 
-2. **Use `deploy` for automated pipelines.** It combines plan and apply with auto-approve, ideal for CI/CD.
+2. **Use `deploy` for automated pipelines when appropriate.** It combines plan and apply with
+    auto-approve. With saved-plan policies enabled, use an explicit plan followed by saved-plan apply.
 
 3. **Always preview multi-component operations with `--dry-run`** before executing `--all` or `--affected`.
 

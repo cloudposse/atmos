@@ -1,0 +1,37 @@
+[
+  {
+    "name": "two deletions exceed budget",
+    "request": {"kind": "terraform.plan", "input": {"format_version": "1.2", "planned_values": {}, "resource_changes": [
+      {"mode": "managed", "change": {"actions": ["delete"]}},
+      {"mode": "managed", "change": {"actions": ["delete"]}}
+    ]}},
+    "status": "deny"
+  },
+  {
+    "name": "at budget with replacement counted once",
+    "request": {"kind": "terraform.plan", "input": {"format_version": "1.2", "planned_values": {}, "resource_changes": [
+      {"mode": "managed", "change": {"actions": ["create", "delete"]}},
+      {"mode": "managed", "change": {"actions": ["create"]}},
+      {"mode": "managed", "change": {"actions": ["update"]}}
+    ]}},
+    "status": "not_applicable"
+  },
+  {
+    "name": "data reads and unchanged resources cost nothing",
+    "request": {"kind": "terraform.plan", "input": {"format_version": "1.2", "planned_values": {}, "resource_changes": [
+      {"mode": "data", "change": {"actions": ["read"]}},
+      {"mode": "managed", "change": {"actions": ["no-op"]}}
+    ]}},
+    "status": "not_applicable"
+  },
+  {
+    "name": "empty plan",
+    "request": {"kind": "terraform.plan", "input": {"format_version": "1.2", "planned_values": {}}},
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {"kind": "operation", "input": {"command": "apply"}},
+    "status": "not_applicable"
+  }
+]

@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
@@ -72,6 +73,10 @@ var statusCmd = &cobra.Command{
 }
 
 func init() {
+	internal.RegisterCommandMetadata(
+		statusCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/mcp/status"),
+	)
 	mcpcmd.McpCmd.AddCommand(statusCmd)
 }
 

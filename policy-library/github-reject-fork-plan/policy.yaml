@@ -1,0 +1,18 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: github-reject-fork-plan
+  description: "Reject saved Terraform plans when the supplied GitHub event identifies a fork pull request."
+spec:
+  policies:
+    reject-fork-plan:
+      on: terraform.plan
+      action: deny
+      reason: This privileged plan job does not accept fork pull requests
+      required_ci:
+        - provider: github-actions
+          schema: github-actions/v1
+          dataset: event
+      rule: has(ci.event.data.pull_request) &&
+        ci.event.data.pull_request.head.repo.full_name !=
+        ci.event.data.pull_request.base.repo.full_name

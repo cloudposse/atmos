@@ -26,6 +26,10 @@ atmos auth console [flags]
 
 This command generates a temporary, secure sign-in URL using your authenticated identity's credentials and automatically opens it in your default browser. The URL is valid for a limited time and provides seamless access to the cloud provider's web console.
 
+:::note Justification for privileged identities
+Authenticating an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity activates the role and requires a justification. Supply it with the [`--justification`](/cli/global-flags#authentication-flags) global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable (resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt). In a non-interactive context with none supplied, the command fails fast.
+:::
+
 ## Examples
 
 ### Basic Usage
@@ -256,6 +260,7 @@ Support for Google Cloud Console is planned for future releases. The command str
 | AWS (IAM Identity Center) | ✅ Supported | Full support with federation endpoint |
 | AWS (SAML) | ✅ Supported | Full support with federation endpoint |
 | AWS (IAM user) | ✅ Supported | Atmos obtains temporary STS session credentials before console federation |
+| AWS (`aws/credential-process`) | ✅ Supported | The helper must return temporary credentials that include a session token; long-lived access keys fail |
 | Azure | ✅ Supported | Opens Azure Portal with configured subscription |
 | GCP | 🚧 Planned | Coming in future release |
 

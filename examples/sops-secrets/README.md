@@ -8,6 +8,11 @@ description: >-
 cast:
   file: /casts/examples/sops-secrets/secret-lifecycle.cast
   title: atmos sops secrets lifecycle
+related_docs:
+  - label: "Secret commands"
+    url: /cli/commands/secret/usage
+  - label: "Secret configuration"
+    url: /cli/configuration/secrets
 ---
 
 # SOPS Secrets Example

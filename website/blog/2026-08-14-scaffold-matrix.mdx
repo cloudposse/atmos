@@ -20,6 +20,8 @@ inside it.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 The number of files a project needs often depends on what gets selected when the project is
@@ -112,6 +114,18 @@ Answering the `environments` prompt with `dev` and `staging` generates `stacks/d
 entirely with `--set environments=dev,staging` for scripted, non-interactive use. Add `matrix:` to
 any `spec.files[]` entry alongside `target:` to do the same in your own templates, using a literal
 list, a `multiselect` answer, or a computed expression for each axis.
+
+## Try it out
+
+<TryExample example="scaffolding-matrix">
+
+Generate a stack file for each selected environment.
+
+```shell
+atmos scaffold generate example ./my-project --set environments=dev,staging
+```
+
+</TryExample>
 
 ## Get Involved
 

@@ -1,0 +1,51 @@
+---
+title: atmos plugin catalog remove
+sidebar_label: catalog remove
+sidebar_class_name: command
+id: catalog-remove
+description: Unlist a package or version without deleting release artifacts.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Unlist a package or version without deleting release artifacts.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin catalog remove --help" src="/casts/screengrabs/atmos-plugin-catalog-remove--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin catalog remove <catalog> <package>
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>catalog</code></dt>
+  <dd>A <code>plugins.registries</code> alias that configures a <code>catalog</code>, or an
+  <code>oci://</code> catalog reference. A bare reference such as <code>registry.example.com/team/catalog:stable</code>
+  is rejected with a hint listing the usable aliases, and an alias without a <code>catalog</code> is an error.</dd>
+  <dt><code>package</code></dt>
+  <dd>Canonical package name, such as acme/oidc.</dd>
+  <dt><code>--version</code></dt>
+  <dd>Unlist only this version; omit to remove the package from discovery. A leading <code>v</code>
+  is accepted, so <code>v0.1.0</code> and <code>0.1.0</code> select the same version. Fails and lists the
+  available versions when the version is not in the catalog.</dd>
+</dl>
+
+## Publisher coordination
+
+Run catalog mutations through one externally serialized maintainer workflow per catalog. The lock must cover reading the latest inputs, updating the snapshot, and publishing it. Revision and digest rechecks detect an already-stale update; they do not provide atomic compare-and-swap or prevent simultaneous writers from overwriting one another.
+
+Plugin release jobs should publish artifacts independently. Use direct repository discovery when a collection does not need a curated catalog; see [plugin search](search.mdx).
+
+## Examples
+
+```shell
+atmos plugin catalog remove corporate acme/oidc --version=0.1.0
+atmos plugin catalog remove corporate acme/oidc
+```

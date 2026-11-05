@@ -1,0 +1,10 @@
+# atmos:template
+vars:
+  stage: {{ .Config.environment | quote }}
+components:
+  terraform:
+    network:
+      metadata:
+        component: marker
+      vars:
+        name: {{ printf "%s-network" .Config.environment | quote }}

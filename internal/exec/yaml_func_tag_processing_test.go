@@ -266,7 +266,7 @@ func TestProcessNodes_RecursiveProcessing(t *testing.T) {
 					"level2": map[string]any{
 						"level3": map[string]any{
 							"level4": map[string]any{
-								"value": "!template deep_value",
+								"value": taggedFunctionForTest("!template deep_value"),
 							},
 						},
 					},
@@ -316,10 +316,10 @@ func TestProcessNodes_RecursiveProcessing(t *testing.T) {
 					map[string]any{
 						"items": []any{
 							map[string]any{
-								"value": "!template item1",
+								"value": taggedFunctionForTest("!template item1"),
 							},
 							map[string]any{
-								"value": "!template item2",
+								"value": taggedFunctionForTest("!template item2"),
 							},
 						},
 					},
@@ -343,11 +343,11 @@ func TestProcessNodes_RecursiveProcessing(t *testing.T) {
 		{
 			name: "parallel processing of multiple tags",
 			input: map[string]any{
-				"tag1": "!template value1",
-				"tag2": "!template value2",
-				"tag3": "!template value3",
-				"tag4": "!template value4",
-				"tag5": "!template value5",
+				"tag1": taggedFunctionForTest("!template value1"),
+				"tag2": taggedFunctionForTest("!template value2"),
+				"tag3": taggedFunctionForTest("!template value3"),
+				"tag4": taggedFunctionForTest("!template value4"),
+				"tag5": taggedFunctionForTest("!template value5"),
 			},
 			expected: map[string]any{
 				"tag1": "value1",
@@ -361,7 +361,7 @@ func TestProcessNodes_RecursiveProcessing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := processNodes(atmosConfig, tt.input, "test-stack", []string{}, nil)
+			result, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(tt.input), "test-stack", []string{}, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -500,8 +500,8 @@ func TestProcessNodes_TemplateTagNoSeparator(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	data := map[string]any{
-		"generated":     `!template["one","two"]`,
-		"generated_map": `!template{"key":"value"}`,
+		"generated":     taggedFunctionForTest(`!template["one","two"]`),
+		"generated_map": taggedFunctionForTest(`!template{"key":"value"}`),
 	}
 
 	result, err := processNodes(atmosConfig, data, "test-stack", nil, nil)

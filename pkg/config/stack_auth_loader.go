@@ -3,13 +3,14 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/condition"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -38,8 +39,9 @@ type stackAuthSection struct {
 // `default: false`. Without a pointer, that override would be indistinguishable
 // from "not mentioned" and the imported `true` would leak through.
 type stackAuthFileWithImports struct {
-	Import []any `yaml:"import"`
-	Auth   struct {
+	Import   []any                      `yaml:"import"`
+	Metadata schema.StackImportMetadata `yaml:"-"`
+	Auth     struct {
 		Identities map[string]struct {
 			Default *bool `yaml:"default"`
 		} `yaml:"identities"`
@@ -99,7 +101,7 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 		// Each top-level stack file gets its own visited set so import cycles
 		// in one file tree don't poison another.
 		visited := make(map[string]bool)
-		fileDefaults := loadAuthWithImports(filePath, atmosConfig.StacksBaseAbsolutePath, visited)
+		fileDefaults, _ := loadAuthWithMetadataScope(filePath, atmosConfig.StacksBaseAbsolutePath, visited, stackimports.MetadataScope{Config: atmosConfig}, atmosConfig.Templates.Settings.Delimiters)
 
 		for identity, isDefault := range fileDefaults {
 			if isDefault {
@@ -230,7 +232,7 @@ const (
 // precedence over imported files' auth sections when identity names conflict,
 // matching Atmos inheritance semantics (more specific wins over more general).
 //
-// The `visited` map tracks absolute file paths already processed to protect
+// The `visited` map tracks absolute file paths on the current recursion path to protect
 // against import cycles. `stacksBasePath` is `atmosConfig.StacksBaseAbsolutePath`
 // — the root that non-relative imports are resolved against. Relative imports
 // (`./foo`, `../bar`) are resolved against the importing file's directory.
@@ -241,20 +243,34 @@ const (
 func loadAuthWithImports(filePath, stacksBasePath string, visited map[string]bool) map[string]bool {
 	defer perf.Track(nil, "config.loadAuthWithImports")()
 
+	result, _ := loadAuthWithMetadataScope(filePath, stacksBasePath, visited, stackimports.MetadataScope{}, nil)
+	return result
+}
+
+func loadAuthWithMetadataScope(filePath, stacksBasePath string, visited map[string]bool,
+	scope stackimports.MetadataScope, delimiters []string,
+) (map[string]bool, schema.StackImportMetadata) {
 	absPath, ok := markVisited(filePath, visited)
 	if !ok {
-		return nil
+		return nil, schema.StackImportMetadata{}
 	}
-
-	parsed, ok := readStackAuthFile(absPath)
+	// A file can legitimately be imported again under a different metadata scope.
+	defer delete(visited, absPath)
+	parsed, ok := readStackAuthFile(absPath, delimiters)
 	if !ok {
-		return nil
+		return nil, schema.StackImportMetadata{}
 	}
-
 	result := make(map[string]bool)
-	mergeImportedAuthDefaults(parsed.Import, absPath, stacksBasePath, visited, result)
+	importedMetadata, err := mergeImportedAuthDefaults(parsed, absPath, stacksBasePath, visited, result, scope, delimiters)
+	if err != nil {
+		return nil, schema.StackImportMetadata{}
+	}
 	applyCurrentFileAuthDefaults(parsed, result)
-	return result
+	metadata, err := scope.Merge(importedMetadata, parsed.Metadata)
+	if err != nil {
+		return nil, schema.StackImportMetadata{}
+	}
+	return result, metadata
 }
 
 // markVisited returns the absolute path of filePath and true if it is not yet
@@ -276,7 +292,7 @@ func markVisited(filePath string, visited map[string]bool) (string, bool) {
 // and `auth:` sections. Returns the parsed struct and true on success, or zero
 // value and false for non-YAML extensions, unreadable files, or parse errors
 // (which often just mean the file contains Go templates).
-func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
+func readStackAuthFile(absPath string, delimiters []string) (stackAuthFileWithImports, bool) {
 	var zero stackAuthFileWithImports
 
 	ext := filepath.Ext(absPath)
@@ -294,6 +310,7 @@ func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
 		// Non-fatal: file may contain Go templates that prevent raw YAML parsing.
 		return zero, false
 	}
+	parsed.Metadata = stackimports.ReadMetadata(string(content), delimiters)
 	return parsed, true
 }
 
@@ -302,21 +319,57 @@ func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
 // Matches Atmos inheritance order: imported defaults are applied first, then
 // the current file overrides via applyCurrentFileAuthDefaults.
 func mergeImportedAuthDefaults(
-	imports []any,
+	parsed stackAuthFileWithImports,
 	importingFile, stacksBasePath string,
 	visited map[string]bool,
 	result map[string]bool,
-) {
-	for _, imp := range imports {
+	scope stackimports.MetadataScope,
+	delimiters []string,
+) (schema.StackImportMetadata, error) {
+	var whenCtx *condition.Context
+	var importedMetadata schema.StackImportMetadata
+	for _, imp := range parsed.Import {
+		var importObj schema.StackImport
+		if _, isString := imp.(string); !isString {
+			decoded, err := stackimports.DecodeObject(imp)
+			if err != nil {
+				// Invalid conditions cannot introduce auth defaults; normal loading reports the error.
+				log.Debug("Skipping invalid stack auth import", "file", importingFile, "error", err)
+				continue
+			}
+			importObj = decoded
+		}
+		if whenCtx == nil && !importObj.When.IsZero() {
+			ctx := stackimports.WhenContext()
+			whenCtx = &ctx
+		}
+		if whenCtx != nil {
+			if err := scope.Activate(whenCtx, importedMetadata, parsed.Metadata); err != nil {
+				return schema.StackImportMetadata{}, err
+			}
+		}
+		if !stackimports.IsActive(&importObj, whenCtx) {
+			continue
+		}
+		childScope, err := scope.Child(importedMetadata, parsed.Metadata)
+		if err != nil {
+			return schema.StackImportMetadata{}, err
+		}
 		importedFiles := resolveAuthImportPaths(imp, importingFile, stacksBasePath)
 		for _, impFile := range importedFiles {
-			for name, isDefault := range loadAuthWithImports(impFile, stacksBasePath, visited) {
+			defaults, metadata := loadAuthWithMetadataScope(impFile, stacksBasePath, visited, childScope, delimiters)
+			importedMetadata, err = scope.Merge(importedMetadata, metadata)
+			if err != nil {
+				return schema.StackImportMetadata{}, err
+			}
+			for name, isDefault := range defaults {
 				if isDefault {
 					result[name] = true
 				}
 			}
 		}
 	}
+	return importedMetadata, nil
 }
 
 // applyCurrentFileAuthDefaults applies the default flags declared in the
@@ -347,90 +400,43 @@ func applyCurrentFileAuthDefaults(parsed stackAuthFileWithImports, result map[st
 //
 //  1. Plain string: "orgs/acme/_defaults" — resolved against `stacksBasePath`.
 //  2. Glob string:  "mixins/region/*"    — resolved against `stacksBasePath`,
-//     then glob-expanded via `GetGlobMatches` (supports doublestar `**`).
+//     then glob-expanded (supports doublestar `**`).
 //  3. Map form with `path:` field:
 //     `- path: orgs/acme/_defaults` — the `path` value is treated as a string.
 //
 // Relative paths (`./foo`, `../bar`) are resolved against the importing file's
-// directory instead of `stacksBasePath`.
+// directory instead of `stacksBasePath`. Resolution itself is delegated to the
+// shared resolver in pkg/stack/imports so it matches the stack processor.
 //
 // Returns nil for import forms that cannot be resolved without running Go
-// templates (e.g., `path: "{{ .something }}"`), for paths that do not exist
-// on disk, or for any other error. This is intentional graceful degradation —
-// the scanner is best-effort and never blocks the auth flow on a malformed or
-// templated import.
+// templates (e.g., `path: "{{ .something }}"`), for remote imports, for Go
+// template files (`*.yaml.tmpl`), for paths that do not exist on disk, or for
+// any other error. This is intentional graceful degradation — the scanner is
+// best-effort and never blocks the auth flow on a malformed or templated import.
 func resolveAuthImportPaths(imp any, importingFile, stacksBasePath string) []string {
 	defer perf.Track(nil, "config.resolveAuthImportPaths")()
 
-	importPath := normalizeImportPath(extractImportPathString(imp))
-	if importPath == "" {
+	importPath := extractImportPathString(imp)
+	if importPath == "" || stackimports.IsTemplatedPath(importPath) || stackimports.IsRemote(importPath) {
 		return nil
 	}
 
-	candidate, ok := buildImportCandidatePath(importPath, importingFile, stacksBasePath)
-	if !ok {
+	matches, err := stackimports.ResolveLocal(importPath, importingFile, stacksBasePath)
+	if err != nil {
 		return nil
 	}
 
-	return matchImportCandidate(candidate)
-}
-
-// normalizeImportPath returns the raw import path with a `.yaml` extension
-// appended if missing, or empty string if the input is empty or contains a Go
-// template expression (which cannot be resolved without template context).
-func normalizeImportPath(rawPath string) string {
-	if rawPath == "" {
-		return ""
-	}
-	if strings.Contains(rawPath, "{{") {
-		return ""
-	}
-	if filepath.Ext(rawPath) == "" {
-		rawPath += yamlExt
-	}
-	return rawPath
-}
-
-// buildImportCandidatePath joins the normalized import path against either the
-// importing file's directory (for `./` / `../` relative imports) or the stacks
-// base path (for everything else). Returns the candidate path and true, or
-// empty/false if the base path required for resolution is missing.
-func buildImportCandidatePath(importPath, importingFile, stacksBasePath string) (string, bool) {
-	normalized := filepath.FromSlash(importPath)
-	if strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") {
-		return filepath.Join(filepath.Dir(importingFile), normalized), true
-	}
-	if stacksBasePath == "" {
-		return "", false
-	}
-	return filepath.Join(stacksBasePath, normalized), true
-}
-
-// matchImportCandidate returns matching file paths for a candidate. For glob
-// patterns it uses doublestar; for plain paths it uses a direct stat, with a
-// `.yml` fallback when the original `.yaml` candidate does not exist.
-func matchImportCandidate(candidate string) []string {
-	if strings.ContainsAny(candidate, "*?[") {
-		matches, err := u.GetGlobMatches(candidate)
-		if err != nil || len(matches) == 0 {
-			return nil
-		}
-		return matches
-	}
-
-	if _, err := os.Stat(candidate); err == nil {
-		return []string{candidate}
-	}
-
-	// Fall back to .yml if .yaml did not exist.
-	if strings.HasSuffix(candidate, yamlExt) {
-		alt := strings.TrimSuffix(candidate, yamlExt) + ymlExt
-		if _, err := os.Stat(alt); err == nil {
-			return []string{alt}
+	// Template files cannot be parsed as plain YAML.
+	result := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if !stackimports.IsTemplateFile(match) {
+			result = append(result, match)
 		}
 	}
-
-	return nil
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // extractImportPathString extracts the path string from an import list entry.

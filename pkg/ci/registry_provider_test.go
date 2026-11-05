@@ -212,6 +212,50 @@ func TestDetectOrError(t *testing.T) {
 	assert.Equal(t, "detected", p.Name())
 }
 
+func TestResolveProvider(t *testing.T) {
+	t.Run("detected provider wins over registered generic", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "generic", detected: false})
+		Register(&mockProvider{name: "detected", detected: true})
+
+		p := ResolveProvider()
+		if assert.NotNil(t, p) {
+			assert.Equal(t, "detected", p.Name())
+		}
+	})
+
+	t.Run("no detection falls back to registered generic", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "generic", detected: false})
+		Register(&mockProvider{name: "other", detected: false})
+
+		p := ResolveProvider()
+		if assert.NotNil(t, p) {
+			assert.Equal(t, "generic", p.Name())
+		}
+	})
+
+	t.Run("nothing registered returns nil", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		assert.Nil(t, ResolveProvider())
+	})
+
+	t.Run("no detection and no generic returns nil", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "other", detected: false})
+
+		assert.Nil(t, ResolveProvider())
+	})
+}
+
 func TestList(t *testing.T) {
 	backup := testSaveAndClearRegistry()
 	defer testRestoreRegistry(backup)

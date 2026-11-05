@@ -1,0 +1,207 @@
+commands:
+- name: casts generate demo landing hero
+  description: Record the Atmos workflow across stacks and workload types.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/hero
+    path: ../../.context/cast-fixtures/landing/hero
+    reset: true
+  - type: shell
+    command: |-
+      git init -q
+      git config user.email demo@atmos.tools
+      git config user.name demo
+      git config commit.gpgsign false
+      git add -A
+      git commit -qm baseline
+      git branch baseline
+      atmos emulator up landing-hero-aws --stack dev
+      atmos terraform workspace new app --stack dev
+      atmos terraform apply app --stack dev
+    working_directory: ../../.context/cast-fixtures/landing/hero
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: cast
+    name: hero
+    working_directory: ../../.context/cast-fixtures/landing/hero
+    title: One interface for your infrastructure
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/hero.cast
+    steps:
+    # Return the prompt immediately, briefly hold, then narrate the next step.
+    - type: simulate
+      text: "# Discover your environments"
+    - type: simulate
+      text: atmos list stacks
+    - type: shell
+      command: atmos list stacks
+      duration: 650ms
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 750ms
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
+    - type: simulate
+      text: "# Mix different tools in one stack"
+    - type: simulate
+      text: atmos list components --stack dev
+    - type: shell
+      command: atmos list components --stack dev
+      duration: 650ms
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 750ms
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
+    - type: simulate
+      text: "# Read the value and where it comes from"
+    - type: simulate
+      text: atmos stack get vars.retention_seconds --stack dev -c app
+    - type: shell
+      command: atmos stack get vars.retention_seconds --stack dev -c app
+      duration: 500ms
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 750ms
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
+    - type: simulate
+      text: "# Change only the dev stack"
+    - type: simulate
+      text: atmos stack set vars.retention_seconds 86400 --stack dev -c app
+    - type: shell
+      command: atmos stack set vars.retention_seconds 86400 --stack dev -c app
+      duration: 650ms
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 750ms
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
+    - type: simulate
+      text: "# Check the effective value"
+    - type: simulate
+      text: atmos stack get vars.retention_seconds --stack dev -c app
+    - type: shell
+      command: atmos stack get vars.retention_seconds --stack dev -c app
+      duration: 500ms
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 750ms
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
+    - type: simulate
+      text: "# Find exactly what this change affects"
+    - type: simulate
+      text: atmos list affected --ref baseline
+    - type: shell
+      command: atmos list affected --ref baseline
+      duration: 650ms
+      interval: 0s
+    - type: simulate
+      mode: prompt
+    - type: sleep
+      timeout: 750ms
+      interval: 0s
+      output: none
+    - type: shell
+      command: printf '\n'
+      interval: 0s
+    - type: session
+      shell: scripts/cast-shell.sh
+      timeout: 150s
+      steps:
+      - type: wait
+        text: "> "
+        timeout: 10s
+      - type: write
+        text: "# Preview the infrastructure change"
+      - type: key
+        key: enter
+      - type: wait
+        regex: '(?s)# Preview the infrastructure change\r?\n.*> '
+        timeout: 10s
+      - type: write
+        text: atmos terraform plan app --stack dev
+      - type: key
+        key: enter
+      - type: wait
+        regex: '(?s)OUTPUTS CHANGED.*> '
+        timeout: 30s
+      - type: pause
+        duration: 750ms
+      - type: key
+        key: enter
+      - type: write
+        text: "# Apply the changes with live progress"
+      - type: key
+        key: enter
+      - type: wait
+        regex: '(?s)# Apply the changes with live progress\r?\n.*> '
+        timeout: 10s
+      - type: write
+        text: atmos terraform deploy --stack dev --all
+      - type: playback
+        duration: 4s
+        steps:
+        - type: key
+          key: enter
+        - type: wait
+          regex: '(?s)Apply .*completed.*retention_seconds.*> '
+          timeout: 90s
+      - type: pause
+        duration: 3s
+    # Leave room for the recorder's final prompt after the real shell session.
+    - type: shell
+      command: printf '\r\033[2K'
+  - type: shell
+    command: atmos emulator down landing-hero-aws --stack dev
+    working_directory: ../../.context/cast-fixtures/landing/hero
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: python3 landing_checks.py sanitize hero
+  - type: shell
+    command: atmos casts validate demo landing hero
+- name: casts validate demo landing hero
+  description: Validate the hero homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate hero

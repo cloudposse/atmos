@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
@@ -165,9 +166,13 @@ func TestResolveShortName_IndexFetchFailure(t *testing.T) {
 	ar := newTestAquaRegistry(t, srv.URL)
 	_, _, err := ar.ResolveShortName("kubectl")
 	require.Error(t, err)
-	// Failure wraps ErrToolNotFound so callers can treat it uniformly with "no match".
-	assert.True(t, errors.Is(err, registry.ErrToolNotFound),
-		"expected wrap of ErrToolNotFound, got %v", err)
+	// An unreachable index is not a "no match": it must be distinguishable from
+	// a genuine not-found so callers can report the real cause.
+	assert.True(t, errors.Is(err, errUtils.ErrToolRegistryIndexUnavailable),
+		"expected wrap of ErrToolRegistryIndexUnavailable, got %v", err)
+	assert.False(t, errors.Is(err, registry.ErrToolNotFound),
+		"index fetch failure must not look like not-found, got %v", err)
+	assert.True(t, errors.Is(err, registry.ErrHTTPRequest), "cause should be preserved, got %v", err)
 }
 
 func TestBinaryFromPath(t *testing.T) {

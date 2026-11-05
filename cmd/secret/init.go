@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -83,6 +84,10 @@ func init() {
 		flags.WithStringFlag("mode", "", "warn", "Input handling mode: warn or strict for undeclared keys"),
 	)
 	initParser.RegisterFlags(initCmd)
+	internal.RegisterCommandMetadata(
+		initCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/init"),
+	)
 }
 
 func runSecretInit(cmd *cobra.Command, args []string) error {

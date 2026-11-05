@@ -1,0 +1,110 @@
+commands:
+- name: casts generate demo landing emulators
+  description: Record A whole cloud on your laptop using the dedicated landing fixture.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/emulators
+    path: ../../.context/cast-fixtures/landing/emulators
+    reset: true
+  - type: shell
+    command: atmos emulator up landing-gcp -s dev
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: shell
+    command: atmos emulator up landing-azure -s dev
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: shell
+    command: atmos emulator up landing-k3s -s dev
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: shell
+    command: atmos emulator up landing-aws -s dev
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: cast
+    name: emulators
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    title: A whole cloud on your laptop
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/emulators.cast
+    steps:
+    - type: simulate
+      text: atmos emulator up landing-aws -s dev
+    - type: shell
+      command: atmos emulator up landing-aws -s dev
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos emulator list -s dev
+    - type: shell
+      command: atmos emulator list -s dev
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos terraform deploy demo -s dev
+    - type: shell
+      command: atmos terraform deploy demo -s dev
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos terraform output demo -s dev
+    - type: shell
+      command: atmos terraform output demo -s dev
+      duration: 650ms
+      interval: 1s
+  - type: shell
+    command: atmos terraform destroy demo -s dev -auto-approve
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: atmos emulator down landing-aws -s dev
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: atmos emulator down landing-gcp -s dev
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: atmos emulator down landing-azure -s dev
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: atmos emulator down landing-k3s -s dev
+    working_directory: ../../.context/cast-fixtures/landing/emulators
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: python3 landing_checks.py sanitize emulators
+  - type: shell
+    command: atmos casts validate demo landing emulators
+- name: casts validate demo landing emulators
+  description: Validate the emulators homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate emulators

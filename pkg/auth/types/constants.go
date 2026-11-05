@@ -10,11 +10,23 @@ const (
 	ProviderKindAWSPermissionSet     = "aws/permission-set"
 	ProviderKindAWSAssumeRoot        = "aws/assume-root"
 
+	// AWS identity kinds.
+	// IdentityKindAWSCredentialProcess is a standalone identity whose credentials come from
+	// running an AWS `credential_process` command.
+	IdentityKindAWSCredentialProcess = "aws/credential-process"
+
 	// Azure provider kinds.
 	ProviderKindAzureOIDC        = "azure/oidc"
 	ProviderKindAzureCLI         = "azure/cli"
 	ProviderKindAzureDeviceCode  = "azure/device-code"
 	ProviderKindAzureInteractive = "azure/interactive"
+
+	// Azure identity kinds.
+	// IdentityKindAzureSubscription scopes an Azure identity to a subscription.
+	IdentityKindAzureSubscription = "azure/subscription"
+	// IdentityKindAzurePIMRole activates a PIM-eligible Azure resource role for the
+	// principal established by the parent identity (just-in-time elevation).
+	IdentityKindAzurePIMRole = "azure/pim-role"
 
 	// GCP provider kinds.
 	ProviderKindGCPADC                        = "gcp/adc"

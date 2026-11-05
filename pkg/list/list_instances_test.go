@@ -19,7 +19,7 @@ func TestBuildInstanceFilters_TagsLabels(t *testing.T) {
 		name          string
 		filterSpec    string
 		tags          []string
-		labelsRaw     string
+		labelsRaw     []string
 		expectedCount int
 		expectErr     bool
 	}{
@@ -39,24 +39,24 @@ func TestBuildInstanceFilters_TagsLabels(t *testing.T) {
 		},
 		{
 			name:          "labels only",
-			labelsRaw:     "team=platform",
+			labelsRaw:     []string{"team=platform"},
 			expectedCount: 1,
 		},
 		{
 			name:          "labels with colon separator",
-			labelsRaw:     "team:platform",
+			labelsRaw:     []string{"team:platform"},
 			expectedCount: 1,
 		},
 		{
 			name:          "filter spec plus tags plus labels",
 			filterSpec:    `.component == "vpc"`,
 			tags:          []string{"network"},
-			labelsRaw:     "team=platform",
+			labelsRaw:     []string{"team=platform"},
 			expectedCount: 3,
 		},
 		{
 			name:      "invalid labels error",
-			labelsRaw: "no-separator",
+			labelsRaw: []string{"no-separator"},
 			expectErr: true,
 		},
 	}
@@ -111,7 +111,7 @@ func TestBuildInstanceFilters_FiltersRows(t *testing.T) {
 	tests := []struct {
 		name           string
 		tags           []string
-		labelsRaw      string
+		labelsRaw      []string
 		wantFilterLen  int
 		wantComponents []string
 	}{
@@ -127,14 +127,14 @@ func TestBuildInstanceFilters_FiltersRows(t *testing.T) {
 			// eks has both team=platform and env=dev; vpc has team=platform but no env.
 			// All-match must require every requested label, not just one.
 			name:           "multi-label all-match",
-			labelsRaw:      "team:platform,env:dev",
+			labelsRaw:      []string{"team:platform", "env:dev"},
 			wantFilterLen:  1,
 			wantComponents: []string{"eks"},
 		},
 		{
 			name:           "tags and labels combined match only the intersection",
 			tags:           []string{"network"},
-			labelsRaw:      "team:platform",
+			labelsRaw:      []string{"team:platform"},
 			wantFilterLen:  2,
 			wantComponents: []string{"vpc", "eks"},
 		},

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -34,7 +35,7 @@ var stackConfigGetCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.config.getRunE")()
-		return runStackGet(args)
+		return runStackGetCommand(cmd, args)
 	},
 }
 
@@ -101,6 +102,7 @@ func stackPathPatternArg(args []string) string {
 }
 
 func init() {
+	registerGetFormat(stackConfigGetCmd, "stack_config_get", "ATMOS_STACK_CONFIG_GET_FORMAT")
 	for _, c := range []*cobra.Command{stackConfigGetCmd, stackConfigSetCmd, stackConfigDeleteCmd, stackConfigFormatCmd} {
 		registerStackEditFlags(c)
 	}
@@ -117,6 +119,30 @@ func init() {
 	stackConfigCmd.AddCommand(stackConfigDeleteCmd)
 	stackConfigCmd.AddCommand(stackConfigFormatCmd)
 	stackConfigCmd.AddCommand(stackConfigListCmd)
+	internal.RegisterCommandMetadata(
+		stackConfigCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/config"),
+	)
+	internal.RegisterCommandMetadata(
+		stackConfigDeleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/config/delete"),
+	)
+	internal.RegisterCommandMetadata(
+		stackConfigFormatCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/config/format"),
+	)
+	internal.RegisterCommandMetadata(
+		stackConfigGetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/config/get"),
+	)
+	internal.RegisterCommandMetadata(
+		stackConfigListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/config/list"),
+	)
+	internal.RegisterCommandMetadata(
+		stackConfigSetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/config/set"),
+	)
 }
 
 func runStackConfigList() ([]listpkg.PathRow, error) {

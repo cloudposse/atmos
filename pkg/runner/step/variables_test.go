@@ -568,3 +568,13 @@ func TestVariablesResolveWithFallback(t *testing.T) {
 		assert.Equal(t, map[string]string{"REGION": "base-region"}, fallback)
 	})
 }
+
+func TestVariablesSetTemplateRootPreservesInvocation(t *testing.T) {
+	vars := &Variables{}
+	vars.SetTemplateRoot("Arguments", map[string]string{"service": "api"})
+	branch := vars.Clone()
+	branch.SetTemplateRoot("matrix", map[string]string{"region": "east"})
+	assert.Equal(t, "api", branch.ScriptArguments()["service"])
+	assert.NotContains(t, vars.TemplateData(), "matrix")
+	assert.Equal(t, map[string]string{"region": "east"}, branch.TemplateData()["matrix"])
+}

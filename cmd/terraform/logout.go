@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // logoutCmd represents the terraform logout command.
@@ -23,4 +25,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(logoutCmd)
+	internal.RegisterCommandMetadata(
+		logoutCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/logout"),
+	)
 }

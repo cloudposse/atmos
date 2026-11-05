@@ -1,0 +1,103 @@
+commands:
+- name: casts generate demo landing dx
+  description: Record Atmos asks what you meant using the dedicated landing fixture.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/dx
+    path: ../../.context/cast-fixtures/landing/dx
+    reset: true
+  - type: shell
+    command: atmos emulator up landing-dx-aws -s dev
+    working_directory: ../../.context/cast-fixtures/landing/dx
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: shell
+    command: atmos terraform workspace new s3-bucket -s dev
+    working_directory: ../../.context/cast-fixtures/landing/dx
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: cast
+    name: dx
+    working_directory: ../../.context/cast-fixtures/landing/dx
+    title: Atmos asks what you meant
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/dx.cast
+    steps:
+    - type: session
+      shell: /bin/sh
+      timeout: 180s
+      steps:
+      - type: wait
+        text: "> "
+        timeout: 10s
+      - type: write
+        text: atmos terraform deploy
+      - type: key
+        key: enter
+      - type: wait
+        text: Choose a component
+        timeout: 30s
+      - type: pause
+        duration: 1200ms
+      - type: key
+        key: down
+      - type: pause
+        duration: 900ms
+      - type: key
+        key: up
+      - type: pause
+        duration: 900ms
+      - type: key
+        key: down
+      - type: pause
+        duration: 1500ms
+      - type: key
+        key: enter
+      - type: wait
+        text: Choose a stack
+        timeout: 30s
+      - type: pause
+        duration: 3s
+      - type: key
+        key: enter
+      - type: wait
+        text: Apply complete!
+        timeout: 180s
+      - type: pause
+        duration: 3s
+    - type: shell
+      command: printf '\r\033[2K'
+      interval: 0s
+  - type: shell
+    command: atmos terraform destroy s3-bucket -s dev -auto-approve
+    working_directory: ../../.context/cast-fixtures/landing/dx
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: atmos emulator down landing-dx-aws -s dev
+    working_directory: ../../.context/cast-fixtures/landing/dx
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+    when: always
+  - type: shell
+    command: python3 landing_checks.py sanitize dx
+  - type: shell
+    command: atmos casts validate demo landing dx
+- name: casts validate demo landing dx
+  description: Validate the dx homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate dx

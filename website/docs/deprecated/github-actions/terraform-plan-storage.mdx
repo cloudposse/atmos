@@ -1,0 +1,30 @@
+---
+title: Terraform Plan Storage (Deprecated)
+sidebar_position: 45
+sidebar_label: Terraform Plan Storage
+description: Legacy GitHub Action for storing and retrieving Terraform planfiles
+---
+import Intro from '@site/src/components/Intro'
+
+:::warning Deprecated
+`cloudposse/github-action-terraform-plan-storage` is deprecated. Atmos now has [built-in planfile storage](/ci/planfile-storage) — `atmos terraform plan` uploads planfiles directly, and `atmos terraform deploy` downloads and verifies them, with no separate S3/DynamoDB (or Azure Blob/CosmosDB) storage action to configure.
+:::
+
+<Intro>
+The [Terraform Plan Storage GitHub Action](https://github.com/cloudposse/github-action-terraform-plan-storage) securely stored Terraform plan files in cloud storage (S3 or Azure Blob Storage), with metadata tracked in a document database (DynamoDB or CosmosDB). It was the storage backend used by [`github-action-atmos-terraform-plan`](/deprecated/github-actions/atmos-terraform-plan) and [`github-action-atmos-terraform-apply`](/deprecated/github-actions/atmos-terraform-apply).
+</Intro>
+
+## Native CI Equivalent
+
+[Planfile storage](/ci/planfile-storage) is now a built-in Atmos feature, configured directly in `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      verify: fail
+```
+
+`atmos terraform plan` writes the planfile to storage; `atmos terraform deploy` downloads and verifies it before applying — no separate action, IAM role, or DynamoDB/CosmosDB table required.
+
+Discover more details, including the full list of `inputs` and `outputs`, in the [GitHub Action repository](https://github.com/cloudposse/github-action-terraform-plan-storage) on GitHub.

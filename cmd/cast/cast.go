@@ -68,7 +68,18 @@ func init() {
 		panic(err)
 	}
 	castCmd.AddCommand(playCmd, renderCmd)
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/cast/usage"),
+	)
+	internal.RegisterCommandMetadata(
+		playCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/cast/play"),
+	)
+	internal.RegisterCommandMetadata(
+		renderCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/cast/render"),
+	)
 }
 
 func newRenderParser() *flags.StandardParser {

@@ -89,7 +89,7 @@ Every modern AWS SDK (including `aws-sdk-go-v2`) ships a token provider that:
 
 1. Checks the cache for a non-expired access token
 2. If the access token is expired but `refreshToken` is present and unexpired, refreshes
-   silently against `ssooidc:CreateToken` with `grant_type=refresh_token`
+    silently against `ssooidc:CreateToken` with `grant_type=refresh_token`
 3. Only falls back to a full device-authorization flow when both fail
 
 Multiple AWS profiles that reference the same `sso-session` block share the cache file,
@@ -135,7 +135,7 @@ Cache path derivation (`sso_cache.go:69-82`):
 
 ```
 ~/.cache/atmos/aws-sso/<provider-name>/token.json
-                       ^^^^^^^^^^^^^^^ keyed by provider name
+                        ^^^^^^^^^^^^^^^ keyed by provider name
 ```
 
 ### 3.2 User-facing config (today, unchanged by this PRD)
@@ -171,13 +171,13 @@ Today: two browser flows. After this PRD: one.
 ### Goals
 
 1. One device-authorization flow per `(start_url, region)` tuple per cache lifetime,
-   regardless of how many atmos providers reference it.
+    regardless of how many atmos providers reference it.
 2. Refresh-token support so a long-running developer session doesn't re-prompt until
-   the portal-side session truly expires.
+    the portal-side session truly expires.
 3. Interop with `aws` CLI's `~/.aws/sso/cache/` (default behavior, opt-out available).
 4. **No changes to `pkg/schema/schema_auth.go` or user-facing config shape.**
 5. **No new provider kinds**; the existing `aws/iam-identity-center` provider absorbs
-   the change.
+    the change.
 
 ### Non-goals
 
@@ -295,12 +295,12 @@ Because the AWS CLI keys the cache by **session name**, atmos needs to know that
 The provider has none today. Two viable strategies:
 
 1. **Discover-and-match** — on cache lookup, atmos walks `~/.aws/sso/cache/*.json`,
-   parses each file, and matches on the `startUrl` JSON field. Slow (linear in #cache
-   files), but zero-config interop.
+    parses each file, and matches on the `startUrl` JSON field. Slow (linear in #cache
+    files), but zero-config interop.
 2. **Convention-based** — atmos derives a stable session name from the start_url
-   hostname (e.g., `acme-awsapps-com`) and uses `sha1(that_name)`. If the user picks
-   the same name when running `aws configure sso-session`, the cache files coincide.
-   Cheap, but fragile.
+    hostname (e.g., `acme-awsapps-com`) and uses `sha1(that_name)`. If the user picks
+    the same name when running `aws configure sso-session`, the cache files coincide.
+    Cheap, but fragile.
 
 PRD recommends **strategy 1 (discover-and-match)** for Option C, because cache
 directories are typically small (< 10 files) and the cost is paid only on a cache miss.
@@ -396,7 +396,7 @@ will find the cached token (when Option 1 is in effect).
 - `pkg/auth/identities/aws/permission_set.go` (consumes `AWSCredentials.AccessKeyID` —
   no contract change)
 - `pkg/auth/manager.go` (no manager-level changes needed)
-- `pkg/auth/factory/` (no new kinds registered)
+- `pkg/auth/registry/` (no new kinds registered)
 - All example `auth.yaml` files (no config-shape changes)
 
 ---
@@ -443,7 +443,7 @@ Existing telemetry calls in `sso.go` (CI detection, etc.) are preserved.
 3. Run `aws sso login --sso-session <any-named-session-pointing-at-same-portal>`
 4. Run `atmos auth login` → **zero** browser interactions
 5. Wait until `accessToken` expires (or shorten via debug flag), re-run `atmos auth
-   login` → no browser; refresh-token path used
+    login` → no browser; refresh-token path used
 
 ### 8.4 Non-regression
 
@@ -458,23 +458,23 @@ Existing telemetry calls in `sso.go` (CI detection, etc.) are preserved.
 ## 9. Open Questions
 
 1. **Default cache location** — PRD currently recommends **Option B** (XDG location,
-   AWS-compatible file format). Needs sign-off; the alternative is Option C (write
-   into `~/.aws/sso/cache/` for full `aws sso login` interop). Tradeoff is
-   "predictable / atmos-owned" vs. "one login works in both tools."
+    AWS-compatible file format). Needs sign-off; the alternative is Option C (write
+    into `~/.aws/sso/cache/` for full `aws sso login` interop). Tradeoff is
+    "predictable / atmos-owned" vs. "one login works in both tools."
 2. **AWS CLI cache-key reconciliation (only relevant if Option C is chosen)** —
-   `aws sso login` keys the cache by **session name** (`sha1(session_name)`); atmos has
-   no session name. PRD §5.3 proposes "discover-and-match" (walk
-   `~/.aws/sso/cache/*.json` and match the `startUrl` field). Alternative is a
-   convention-based name derived from the start_url. Decide before implementation.
+    `aws sso login` keys the cache by **session name** (`sha1(session_name)`); atmos has
+    no session name. PRD §5.3 proposes "discover-and-match" (walk
+    `~/.aws/sso/cache/*.json` and match the `startUrl` field). Alternative is a
+    convention-based name derived from the start_url. Decide before implementation.
 3. **`sso_extended_test.go` and `sso_provisioning.go` interaction** — the SSO
-   auto-provisioning flow (see [sso-role-auto-discovery PRD](./sso-role-auto-discovery.md))
-   calls `ListAccounts` with the access token. After this change, that token comes
-   from the shared session cache; verify the auto-provisioning code path is unaffected
-   by the cache key rename. Spike before implementation starts.
+    auto-provisioning flow (see [sso-role-auto-discovery PRD](./sso-role-auto-discovery.md))
+    calls `ListAccounts` with the access token. After this change, that token comes
+    from the shared session cache; verify the auto-provisioning code path is unaffected
+    by the cache key rename. Spike before implementation starts.
 4. **Multi-process locking** — today's serial usage doesn't need `flock`, but a
-   developer running `atmos terraform plan` in two terminals could race. Defer to a
-   follow-up issue (open at PR-merge time per CLAUDE.md follow-up tracking rules), or
-   include `flock` from day one? PRD recommends defer.
+    developer running `atmos terraform plan` in two terminals could race. Defer to a
+    follow-up issue (open at PR-merge time per CLAUDE.md follow-up tracking rules), or
+    include `flock` from day one? PRD recommends defer.
 
 ---
 

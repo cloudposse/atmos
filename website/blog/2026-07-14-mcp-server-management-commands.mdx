@@ -13,6 +13,8 @@ mean opening `atmos.yaml` and hand-writing a `mcp.servers` entry — then, separ
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Fix
 
 [`atmos mcp add`](/cli/commands/mcp/add) and [`atmos mcp remove`](/cli/commands/mcp/remove) manage `mcp.servers` in `atmos.yaml` directly — no YAML editing
@@ -49,6 +51,18 @@ atmos mcp uninstall aws-docs
 ```
 
 See the [MCP documentation](/mcp) for the full command reference and built-in preset details.
+
+## Try it out
+
+<TryExample example="mcp">
+
+List the configured servers, then follow the README to install their runtime dependencies and test a connection.
+
+```shell
+atmos mcp list
+```
+
+</TryExample>
 
 ## Get Involved
 

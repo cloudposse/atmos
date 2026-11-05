@@ -4,11 +4,16 @@ tags: [DX]
 cast:
   file: /casts/examples/devcontainer-build/build-config.cast
   title: atmos devcontainer build config
+related_docs:
+  - label: "Devcontainer commands"
+    url: /cli/commands/devcontainer/
+  - label: "Devcontainer configuration"
+    url: /cli/configuration/devcontainer
 ---
 
 # Custom Dockerfile Devcontainer Example
 
-This example demonstrates using a custom Dockerfile with Atmos devcontainers. The Dockerfile extends the Geodesic base image and pre-installs Atmos.
+This example demonstrates using a custom Dockerfile with [Atmos devcontainers](https://atmos.tools/cli/commands/devcontainer/). The Dockerfile extends the Geodesic base image and pre-installs Atmos.
 
 ## Files
 
@@ -135,9 +140,9 @@ RUN code-server --install-extension hashicorp.terraform
 When you run `atmos devcontainer shell`, Atmos will:
 
 1. **Build the image** (if not already built or if changed)
-   - Uses `docker build` or `podman build`
-   - Passes build args from `devcontainer.json`
-   - Tags the image as `atmos-devcontainer-geodesic`
+    - Uses `docker build` or `podman build`
+    - Passes build args from `devcontainer.json`
+    - Tags the image as `atmos-devcontainer-geodesic`
 
 2. **Create the container** from the built image
 

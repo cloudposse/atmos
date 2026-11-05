@@ -18,6 +18,8 @@ That is the point of this update: the docs now have short terminal casts for the
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 No big setup. No long pitch before the useful part. Open a page, press play, and see what happens.
 
 ## New Recordings
@@ -82,5 +84,17 @@ The recordings are made by Atmos:
 That file builds the binary, prepares the demo files, records the casts, copies them into the website, and checks the result.
 
 The docs get a visible example. The repo gets a repeatable way to refresh it.
+
+## Try it out
+
+<TryExample example="emulator-aws">
+
+Install Terraform and Docker or Podman. Follow the README to deploy locally and tear down the emulator afterward.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 For usage and configuration, see [atmos workflow](/cli/commands/workflow).

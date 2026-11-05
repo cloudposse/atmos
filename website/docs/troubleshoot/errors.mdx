@@ -116,7 +116,15 @@ If you type `no`, Terraform initializes a fresh, empty state in the new backend 
 
 #### How to resolve
 
-In `atmos.yaml`, set `components.terraform.init_run_reconfigure` to `true`:
+First inspect the resolved `backend` and `workspace` with `atmos describe component <component> -s <stack>`. Decide whether you are selecting an existing deployment or intentionally moving its state:
+
+| Situation | Next step |
+| --- | --- |
+| Switching between component instances with different, already-correct backend settings | Reinitialize the working directory for the selected backend with `-reconfigure`; do not copy another instance's state into it. |
+| Intentionally moving the same deployment to another backend location | Back up state and follow the backend's migration procedure. Terraform's `init -migrate-state` attempts to copy existing state; `-reconfigure` does not. |
+| A rename or configuration edit unexpectedly changed the backend or workspace | Restore the intended state identity before proceeding. See [renaming Terraform stacks](/tutorials/atmos-component-migrations-in-yaml#rename-a-terraform-stack-without-moving-state). |
+
+For the first case, if your workflow needs reconfiguration when switching instances, configure Atmos to run `terraform init -reconfigure`:
 
 ```yaml
 components:
@@ -125,9 +133,9 @@ components:
     init_run_reconfigure: true
 ```
 
-This will tell Atmos to run `terraform init -reconfigure` when executing Terraform commands.
-The `-reconfigure` option disregards any existing backend configuration and configures a new backend,
-preventing migration of any existing state.
+The `-reconfigure` option discards the working directory's previous backend configuration without migrating state. It is appropriate only when the selected backend already identifies the intended deployment. It does not repair a changed state key or move resources between workspaces. For an intentional migration, avoid forcing reconfiguration and follow the underlying tool's [backend initialization procedure](https://developer.hashicorp.com/terraform/cli/commands/init#backend-initialization).
+
+After initialization, review a plan. Unexpected creation of existing resources is a reason to recheck the backend and workspace, not to apply the plan.
 
 :::tip
 

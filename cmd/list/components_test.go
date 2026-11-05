@@ -352,7 +352,7 @@ func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {
 	})
 
 	t.Run("labels filter is added when set", func(t *testing.T) {
-		result, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "cost-center=platform"})
+		result, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: []string{"cost-center=platform"}})
 		require.NoError(t, err)
 		require.Len(t, result, 2) // abstract filter + labels filter
 		labelFilter, ok := result[1].(*filter.LabelFilter)
@@ -361,7 +361,7 @@ func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {
 	})
 
 	t.Run("malformed labels flag surfaces an error", func(t *testing.T) {
-		_, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "not-valid"})
+		_, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: []string{"not-valid"}})
 		require.Error(t, err)
 	})
 
@@ -372,7 +372,7 @@ func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {
 		// (dependencies/dependents) that don't themselves carry the seed tag.
 		result, err := buildComponentFilters(&ComponentsOptions{
 			Tags:                []string{"production"},
-			LabelsRaw:           "cost-center=platform",
+			LabelsRaw:           []string{"cost-center=platform"},
 			IncludeDependencies: -1,
 		})
 		require.NoError(t, err)

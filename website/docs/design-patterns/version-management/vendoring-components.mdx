@@ -4,6 +4,8 @@ sidebar_position: 6
 sidebar_label: Vendoring Component Versions
 description: Vendoring Component Versions - A complementary technique for automating component version copying
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
@@ -17,7 +19,7 @@ import KeyPoints from '@site/src/components/KeyPoints'
 Vendoring gives teams local control over external dependencies by bringing component code in-house while maintaining metadata about origin and lineage. Whether you use [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning), [Release Tracks](/design-patterns/version-management/release-tracks-channels), or [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning), vendoring provides predictable update cycles and the ability to apply custom modifications when necessary.
 
 <KeyPoints>
-- Why Atmos makes explicit what other tools do implicitly (just-in-time cloning)
+- When to choose committed component copies instead of just-in-time source provisioning
 - Operational benefits: visibility, audit trail, emergency agility, explicit divergence
 - Developer experience benefits: searchability, readability, IDE support
 - How to converge with upstream when it makes sense and diverge when needed
@@ -35,18 +37,14 @@ For simpler per-environment version pinning without managing vendor manifests, c
 
 ## Philosophy: Explicit Over Implicit
 
-Most tools that "pin to remote sources" actually do this behind the scenes:
-1. Clone the remote source to a temporary folder (just-in-time vendoring)
-2. Point Terraform/tooling at that temporary folder
-3. Clean up the folder after execution
+Atmos can fetch remote sources just in time or vendor them ahead of execution. This guide describes the explicit vendoring pattern:
 
-**Atmos makes this process explicit:**
-1. Vendor upstream components with `atmos vendor pull`
-2. Commit the vendored code to your repository
-3. Pin components to those vendored folders
-4. Update vendored code on your schedule
+1. Vendor upstream components with `atmos vendor pull`.
+2. Commit the vendored code to your repository when you want changes reviewed in Git.
+3. Reference those component folders in your stacks.
+4. Update the vendored code on your schedule.
 
-The result is functionally the same, but with critical advantages for operations and developer experience.
+This pattern provides local visibility and control. [Source-based versioning](/design-patterns/version-management/source-based-versioning) remains an alternative when you prefer to declare remote versions directly in stack configuration.
 
 ### Why We Vendor: Lessons from Countless Projects
 
@@ -370,9 +368,6 @@ atmos vendor pull
 # Pull specific component
 atmos vendor pull --component vpc
 
-# Pull with specific version override
-atmos vendor pull --component vpc --version 2.2.0
-
 # Dry run to see what would be vendored
 atmos vendor pull --dry-run
 ```
@@ -423,9 +418,6 @@ atmos vendor pull
 
 # Update specific component
 atmos vendor pull --component vpc
-
-# Update with specific version
-atmos vendor pull --component vpc --version v2.2.0
 
 # Dry run to preview changes
 atmos vendor pull --dry-run
@@ -624,3 +616,15 @@ Vendoring is about taking ownership of your dependencies. Use it when external c
 - [Release Tracks/Channels](./release-tracks-channels) - Abstract version management
 - [Component Catalog](/design-patterns/component-catalog) - Organizing vendored components
 - [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Extending vendored components
+
+## Try it out
+
+<TryExample example="demo-component-versions">
+
+Inspect the component versions before downloading them.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

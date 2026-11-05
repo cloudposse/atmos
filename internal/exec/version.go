@@ -1,9 +1,11 @@
 package exec
 
 import (
+	"context"
 	"crypto/fips140"
 	_ "embed"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -13,9 +15,11 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/installer"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/upgrade"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/cloudposse/atmos/pkg/version"
@@ -44,7 +48,17 @@ func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
 			return u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 		},
 		printMessage: func(s string) { _ = data.Writeln(s) },
-		printMessageToUpgradeToAtmosLatestRelease: u.PrintMessageToUpgradeToAtmosLatestRelease,
+		printMessageToUpgradeToAtmosLatestRelease: func(latestVersion string) {
+			root := ""
+			if atmosConfig != nil {
+				root = atmosConfig.Toolchain.InstallPath
+				if root != "" && !filepath.IsAbs(root) {
+					root = filepath.Join(atmosConfig.BasePathAbsolute, root)
+				}
+			}
+			installation := installer.Detect(context.Background(), installer.WithNativeRoots(root))
+			upgrade.PrintNotice(version.Version, latestVersion, installation.UpgradeHint(latestVersion))
+		},
 		loadCacheConfig:       cfg.LoadCache,
 		shouldCheckForUpdates: cfg.ShouldCheckForUpdates,
 	}
@@ -77,7 +91,7 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 	}
 
 	if updatedVersion, ok := v.GetLatestVersion(false); ok {
-		u.PrintMessageToUpgradeToAtmosLatestRelease(updatedVersion)
+		v.printMessageToUpgradeToAtmosLatestRelease(updatedVersion)
 	}
 	return nil
 }

@@ -1,0 +1,68 @@
+import:
+  - catalog/defaults
+name: development
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: envs/development/vpc
+        terraform_workspace: default
+      hooks:
+        publish-outputs:
+          events: [after.terraform.apply]
+          kind: store
+          name: outputs
+          outputs:
+            vpc_id: .vpc_id
+    webserver:
+      metadata:
+        component: envs/development/webserver
+        terraform_workspace: default
+      backend_type: s3
+      backend:
+        s3:
+          bucket: acme-terraform-state
+          key: terraform/acme/envs/development/components/webserver.tfstate
+          region: us-west-2
+          profile: acme-state
+          encrypt: true
+          dynamodb_table: acme-terraform-locks
+          workspace_key_prefix: "env:"
+      providers:
+        aws:
+          region: us-west-2
+          profile: acme-deploy
+          allowed_account_ids: ["123456789012"]
+          assume_role:
+            role_arn: arn:aws:iam::123456789012:role/terraform-role
+        aws.us-east-1:
+          region: us-east-1
+          profile: acme-deploy
+          allowed_account_ids: ["123456789012"]
+          assume_role:
+            role_arn: arn:aws:iam::123456789012:role/terraform-role
+      dependencies:
+        components:
+          - name: vpc
+          - name: global
+            stack: shared
+      vars:
+        vpc_id: !terraform.output vpc vpc_id
+        zone_id: !terraform.output global shared zone_id
+      settings:
+        modules:
+          webserver:
+            source: ../../../modules/webserver
+          worker:
+            source: ../../../modules/worker
+      generate:
+        migration.generated.tf:
+          locals:
+            project_owner: "{{ .vars.owner }}"
+        modules.generated.tf: |
+          {{ range $name, $module := .settings.modules }}
+          module {{ printf "%q" $name }} {
+            source = {{ printf "%q" $module.source }}
+            vpc_id = local.vpc_id
+          }
+          {{ end }}

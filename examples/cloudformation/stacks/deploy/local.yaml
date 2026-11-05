@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - catalog/emulator/aws
+  - catalog/demo
+
+vars:
+  stage: local
+
+components:
+  aws/cloudformation:
+    demo:
+      metadata:
+        type: real
+        tags: ["group-a"]
+    demo-broken:
+      metadata:
+        type: real
+        tags: ["group-b"]
+    demo-inline:
+      metadata:
+        type: real

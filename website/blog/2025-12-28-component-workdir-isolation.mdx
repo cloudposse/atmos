@@ -10,6 +10,8 @@ If you've ever had two component instances pointing to the same base component, 
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem: Shared Component Directories
 
 Atmos allows you to create multiple instances of the same component across different stacks. For example, you might have a `vpc` component deployed to both `dev` and `prod` environments:
@@ -158,6 +160,18 @@ components:
         workdir:
           enabled: true
 ```
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+Inspect the stacks, then follow the README to try the remote `ipinfo` component with Terraform. The `weather` variant uses a sibling example directory.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 For more details, see the [Component Configuration documentation](/cli/configuration/components).
 

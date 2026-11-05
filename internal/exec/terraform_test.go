@@ -2,7 +2,6 @@ package exec
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -602,7 +601,15 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 	tests.RequireTerraform(t)
 	workDir := "../../tests/fixtures/scenarios/atmos-pro"
+	// Terraform must not write into the shared mock fixture: the vendor tests
+	// read it concurrently in another process on Windows.
+	terraformComponentsPath := setupTerraformStateSandbox(t, workDir)
 	t.Chdir(workDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	require.Equal(t, terraformComponentsPath, atmosConfig.Components.Terraform.BasePath,
+		"deployment status tests must use sandboxed Terraform components")
 
 	// Set up test environment.
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
@@ -612,7 +619,6 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 		stack             string
 		component         string
 		uploadStatus      bool
-		proEnabled        bool
 		checkProWarning   bool
 		checkDetailedExit bool
 		exitCode          int
@@ -622,7 +628,6 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			stack:             "nonprod",
 			component:         "mock/disabled",
 			uploadStatus:      true,
-			proEnabled:        false,
 			checkProWarning:   true,
 			checkDetailedExit: true,
 			exitCode:          0,
@@ -632,7 +637,6 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			stack:             "nonprod",
 			component:         "mock/drift",
 			uploadStatus:      true,
-			proEnabled:        true,
 			checkProWarning:   false,
 			checkDetailedExit: true,
 			exitCode:          2, // Simulate drift detected
@@ -642,7 +646,6 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			stack:             "nonprod",
 			component:         "mock/nodrift",
 			uploadStatus:      true,
-			proEnabled:        true,
 			checkProWarning:   false,
 			checkDetailedExit: true,
 			exitCode:          0, // Simulate no drift
@@ -652,7 +655,6 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			stack:             "prod",
 			component:         "mock/drift",
 			uploadStatus:      true,
-			proEnabled:        true,
 			checkProWarning:   false,
 			checkDetailedExit: true,
 			exitCode:          2, // Simulate drift detected
@@ -662,7 +664,6 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			stack:             "prod",
 			component:         "mock/nodrift",
 			uploadStatus:      true,
-			proEnabled:        true,
 			checkProWarning:   false,
 			checkDetailedExit: true,
 			exitCode:          0, // Simulate no drift
@@ -672,7 +673,6 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			stack:             "nonprod",
 			component:         "mock/nodrift",
 			uploadStatus:      false,
-			proEnabled:        true,
 			checkProWarning:   false,
 			checkDetailedExit: false,
 			exitCode:          0,
@@ -681,35 +681,6 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create test directories
-			stackDir := filepath.Join(workDir, "stacks", tc.stack)
-			if err := os.MkdirAll(stackDir, 0o755); err != nil {
-				t.Fatalf("Failed to create stack dir: %v", err)
-			}
-
-			// Create component directory
-			componentDir := filepath.Join(workDir, "components", "terraform", tc.component)
-			if err := os.MkdirAll(componentDir, 0o755); err != nil {
-				t.Fatalf("Failed to create component dir: %v", err)
-			}
-
-			// Create stack file
-			stackFile := filepath.Join(stackDir, "mock.yaml")
-			stackContent := fmt.Sprintf("components:\n  terraform:\n    %s:\n      settings:\n        pro:\n          enabled: %v\n      vars:\n        foo: %s-a\n        bar: %s-b\n        baz: %s-c",
-				tc.component, tc.proEnabled, tc.component, tc.component, tc.component)
-			if err := os.WriteFile(stackFile, []byte(stackContent), 0o644); err != nil {
-				t.Fatalf("Failed to write stack file: %v", err)
-			}
-			defer os.Remove(stackFile)
-
-			// Create a minimal terraform configuration
-			mainTf := filepath.Join(componentDir, "main.tf")
-			mainTfContent := `output "foo" { value = "test" }`
-			if err := os.WriteFile(mainTf, []byte(mainTfContent), 0o644); err != nil {
-				t.Fatalf("Failed to write main.tf: %v", err)
-			}
-			defer os.Remove(mainTf)
-
 			info := schema.ConfigAndStacksInfo{
 				Stack:            tc.stack,
 				ComponentType:    "terraform",
@@ -742,6 +713,13 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 				Stderr: outputWriter,
 			}))
 			output := buf.String()
+
+			workspace := tc.stack + "-" + strings.ReplaceAll(tc.component, "/", "-")
+			// Terraform may remove an empty state after planning, so verify the
+			// selected workspace was written inside the sandbox.
+			environment, err := os.ReadFile(filepath.Join(terraformComponentsPath, "mock", ".terraform", "environment"))
+			require.NoError(t, err)
+			assert.Equal(t, workspace, strings.TrimSpace(string(environment)))
 
 			// Check the output for drift/no drift and pro warning
 			assert.Contains(t, output, "Changes to Outputs", "Expected 'Changes to Outputs' in output")

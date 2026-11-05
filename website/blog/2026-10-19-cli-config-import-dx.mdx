@@ -1,0 +1,130 @@
+---
+slug: cli-config-import-dx
+title: "CLI-config imports you can require, scope, and trust"
+authors: [aknysh]
+tags: [feature, dx]
+cast: "/casts/examples/cli-config-imports/describe-imports.cast"
+castTitle: "atmos describe config imports"
+---
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+Sharing one team's CLI configuration across many repositories is a common setup: keep developer-tooling
+config (AI assistants, MCP servers, toolchain pins) in a single source-of-truth repo, and have every other
+repo pull it in with a remote import so it is edited in one place. It works - until you try to adopt it
+safely. A fragment that quietly fails to load leaves its settings out with nothing but a warning. There is no
+way to say "this one must load." A tooling fragment meant for your laptop gets resolved by an automated
+`apply` holding deploy credentials. And an import pinned to a branch silently absorbs the upstream repo's
+edits on every run.
+
+<!--truncate-->
+
+import TryExample from '@site/src/components/TryExample';
+
+<CastEmbed src="/casts/examples/cli-config-imports/describe-imports.cast" title="atmos describe config imports" chrome controls scrubber />
+
+## The Problem
+
+Top-level CLI-config imports - the `import:` list in `atmos.yaml` and the auto-discovered `.atmos.d`
+fragments - were a plain list of strings, and every entry was implicitly optional. If an import could not be
+resolved or merged, Atmos logged a warning and kept going. That is the right default for a nice-to-have
+overlay, but it is exactly wrong for a fragment that constrains behavior - for example, a read-only tool
+allowlist that limits what the Atmos MCP server is permitted to do. A silent failure there leaves the tool
+running without its guardrail.
+
+The string-only model also left no room to express intent: no way to mark an import required, no way to scope
+an import to workstations versus CI, and no signal when a remote import was pinned to a mutable ref. The usual
+workaround for the CI problem was to keep the fragment out of the committed config entirely - gitignored
+behind a `*.yaml.example` template that nobody could actually use.
+
+## The Fix
+
+Each entry in the [`import:`](/cli/configuration/imports) list now accepts an object form alongside the
+familiar string form, bringing CLI-config imports toward parity with the object model that
+[stack-manifest imports](/stacks/imports) already have. The two forms mix freely, and string entries behave
+exactly as before.
+
+```yaml title="atmos.yaml"
+import:
+  # String form: OPTIONAL (fail open) - a failed import is warned and skipped. Unchanged.
+  - "configs.d/base-settings.yaml"
+
+  # Object form: REQUIRED by default (fail closed) - a failed import aborts the load.
+  - path: "git::https://github.com/acme/shared-config.git//.atmos.d/mcp.yaml?ref=v1.2.3"
+    skip_if_missing: false
+
+  # Conditional: resolve on workstations, skip in CI.
+  - path: "configs.d/local-tooling.yaml"
+    when: local
+```
+
+This closes four gaps at once:
+
+- **[Optional vs required](/cli/configuration/imports#optional-vs-required-imports).** A string entry stays
+  optional (warn and skip). An object entry is required by default - a failed resolve or merge aborts
+  configuration loading. Set `skip_if_missing: true` to opt an object entry back into warn-and-skip. Make the
+  fragment that matters fail closed, so a missing or malformed guardrail stops the run instead of silently
+  disappearing.
+- **[Conditional loading](/cli/configuration/imports#conditional-imports).** A per-import `when: local` or
+  `when: ci` condition decides whether the import is resolved at all. Developer-tooling config stays committed
+  and active for developers while auto-skipping in CI, so an automated `apply` never resolves a cross-repo
+  remote import - no gitignore/`.example` workaround required. For anything beyond local-vs-CI, `when` also
+  accepts a CEL expression - authored with an explicit `!cel` YAML tag - that can read the process environment
+  through the `env` map, so an import can be gated on any variable you set.
+- **[Optional MCP servers](/cli/configuration/mcp).** A server in a shared `mcp.servers` config can set
+  `optional: true`. When its `identity` cannot be resolved in the active auth context - for example a
+  central-logging reader that only some repos define - Atmos skips that server with a warning instead of
+  failing the others.
+- **[Pin warnings](/cli/configuration/imports#pin-remote-imports).** Atmos now warns when a `git::` import is
+  pinned to a mutable ref (a branch, or no `?ref=` at all), recommending a commit SHA or version tag - the
+  config-import analogue of catching an unpinned GitHub Action at author time.
+
+Everything here is additive. String entries, servers without `optional`, and unpinned imports all behave
+exactly as they did before - the pin check is a warning, not an error.
+
+## How to Use It
+
+Mark a security-bearing fragment required, and scope a developer-tooling fragment to local:
+
+```yaml title=".atmos.d/shared.yaml"
+import:
+  - path: "git::https://github.com/acme/shared-config.git//.atmos.d/mcp.yaml?ref=v1.2.3"
+    skip_if_missing: false                   # must load, or the run stops
+  - path: "git::https://github.com/acme/shared-config.git//.atmos.d/ai.yaml?ref=v1.2.3"
+    when: local                              # workstations only
+  - path: "configs.d/prod-overrides.yaml"
+    when: !cel 'env.DEPLOY_ENV == "prod"'    # dynamic: only when DEPLOY_ENV=prod
+```
+
+Share one MCP config across repos that do not all define the same identities:
+
+```yaml title="atmos.yaml"
+mcp:
+  servers:
+    central-logs:
+      command: uvx
+      args: ["awslabs.cloudwatch-mcp-server@latest"]
+      identity: "central-logging"   # defined only in some consumer repos
+      optional: true                # skip with a warning where unavailable
+```
+
+A runnable walkthrough lives in the [`cli-config-imports` example](/examples/cli-config-imports), including
+how to see conditional loading differ between a workstation and CI, and how a required import fails closed.
+
+## Try it out
+
+<TryExample example="cli-config-imports">
+
+Inspect the configuration assembled from the example's imports.
+
+```shell
+atmos describe config --format yaml
+```
+
+</TryExample>
+
+## Get Involved
+
+This landed from [issue #3430](https://github.com/cloudposse/atmos/issues/3430). If you share CLI config
+across repositories, try the object form and let us know what else should reach parity with stack imports -
+open an issue or start a discussion on [GitHub](https://github.com/cloudposse/atmos).

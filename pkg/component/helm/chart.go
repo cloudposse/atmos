@@ -21,6 +21,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
@@ -30,6 +31,7 @@ const helmXDGSubdir = "helm"
 
 // chartSpec is the resolved input needed to render or deploy a Helm chart.
 type chartSpec struct {
+	recovery *recovery.Runner
 	// Chart is the chart reference: a local path, an OCI ref (oci://...),
 	// a "repo/name" reference (resolved via Repositories), or a bare chart name
 	// used with RepoURL.
@@ -132,6 +134,7 @@ func newInstallAction(spec *chartSpec) (*action.Install, *cli.EnvSettings, error
 	settings := newSettingsForNamespace(spec.Namespace)
 
 	cfg := new(action.Configuration)
+	configureRecoveryTransport(settings, spec.recovery)
 	if err := cfg.Init(settings.RESTClientGetter(), spec.Namespace, os.Getenv("HELM_DRIVER")); err != nil { //nolint:forbidigo
 		return nil, nil, fmt.Errorf("failed to initialize Helm configuration: %w", err)
 	}
@@ -164,12 +167,14 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 	}
 	chartRef := resolveChartRef(client, spec)
 
-	chartPath, err := client.LocateChart(chartRef, settings)
+	chartPath, err := recovery.Call(ctx, spec.recovery, "chart", func() (string, error) { return client.LocateChart(chartRef, settings) })
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to locate Helm chart %q: %w", errUtils.ErrHelmRenderFailed, spec.Chart, err)
 	}
 
-	loaded, err := loadChartForAction(ctx, chartPath, settings, client.GetRegistryClient(), spec.DependencyUpdate)
+	loaded, err := recovery.Call(ctx, spec.recovery, "dependencies", func() (helmchart.Charter, error) {
+		return loadChartForAction(ctx, chartPath, settings, client.GetRegistryClient(), spec.DependencyUpdate)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -275,6 +280,12 @@ func renderReleaseManifest(rendered *release.Release) string {
 // bare chart name when a matching repository is configured. Local paths and OCI
 // refs pass through unchanged.
 func resolveChartRef(client *action.Install, spec *chartSpec) string {
+	return resolveChartPathOptions(&client.ChartPathOptions, spec)
+}
+
+// resolveChartPathOptions preserves repository authentication and TLS settings
+// when mapping a named repository to the explicit URL used by LocateChart.
+func resolveChartPathOptions(client *action.ChartPathOptions, spec *chartSpec) string {
 	if spec.RepoURL != "" {
 		client.RepoURL = spec.RepoURL
 		return spec.Chart
@@ -287,6 +298,13 @@ func resolveChartRef(client *action.Install, spec *chartSpec) string {
 	if name, chart, ok := cutRepoRef(spec.Chart); ok {
 		if repo, found := findRepository(spec.Repositories, name); found {
 			client.RepoURL = repo.URL
+			client.Username = repo.Username
+			client.Password = repo.Password
+			client.PassCredentialsAll = repo.PassCredentialsAll
+			client.CaFile = repo.CAFile
+			client.CertFile = repo.CertFile
+			client.KeyFile = repo.KeyFile
+			client.InsecureSkipTLSVerify = repo.InsecureSkipTLSVerify
 			return chart
 		}
 	}

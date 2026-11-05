@@ -2,15 +2,19 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/ci"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -37,15 +41,39 @@ type controlBridge struct{}
 func (controlBridge) RunControl(ctx context.Context, step *schema.WorkflowStep, vars *stepPkg.Variables) (*stepPkg.StepResult, error) {
 	defer perf.Track(nil, "workflow.controlBridge.RunControl")()
 
+	// Env values written with !literal are kept exactly as written.
+	parentEnv, err := vars.ResolveStepEnvMap(step, step.Env)
+	if err != nil {
+		return nil, err
+	}
 	childExecutor := &ControlCommandExecutor{
-		BaseEnv:     vars.EnvSlice(),
+		ScriptSteps:            stepPkg.NewAutomationLibrary(vars, nil),
+		InstallTools:           stepPkg.ScriptToolInstaller(vars.AtmosConfig),
+		CI:                     ci.NewReporter(vars.AtmosConfig),
+		DryRun:                 step.DryRun,
+		ScriptHook:             vars.ScriptHook,
+		ScriptComponent:        stepPkg.ScriptComponentRef(vars),
+		ScriptFlags:            vars.ScriptFlags(),
+		ScriptArguments:        vars.ScriptArguments(),
+		ResolveComponent:       stepPkg.ScriptComponentResolver(vars),
+		ScriptProcessOverrides: step.ScriptProcessOverrides,
+		BaseEnv:                envpkg.MergeGlobalEnv(vars.EnvSlice(), parentEnv),
+		PrepareEnv: func(base []string, _, _ string, _, childEnv map[string]string) ([]string, error) {
+			return envpkg.MergeGlobalEnv(base, childEnv), nil
+		},
 		RunCommand:  plainControlRunCommand,
 		ShellRunner: interpreterShellRunner,
 	}
-	err := ExecuteControlStep(ctx, step, childExecutor.Execute, ControlExecutionOptions{
+	if vars.AtmosConfig != nil {
+		childExecutor.ProjectRoot = stepPkg.ScriptProjectRoot(vars.AtmosConfig.BasePathAbsolute, vars.AtmosConfig.BasePath)
+	}
+	err = ExecuteControlStep(ctx, step, childExecutor.Execute, ControlExecutionOptions{
 		TemplateData: func(stepName string, matrix map[string]string) map[string]any {
 			return vars.TemplateData()
 		},
+		// Children render with the caller's renderer and pass count, like sequential steps.
+		RenderTemplate: vars.ResolveWithData,
+		Delimiters:     vars.TemplateDelimiters(),
 		StoreResult: func(result *scheduler.Result) {
 			storeControlBridgeResult(vars, result)
 		},
@@ -67,6 +95,9 @@ func storeControlBridgeResult(vars *stepPkg.Variables, result *scheduler.Result)
 			WithMetadata("stderr", controlResult.Stderr).
 			WithMetadata("status", string(result.Status)).
 			WithMetadata("canceled", controlResult.Canceled)
+		if controlResult.Value != nil {
+			stepResult.Value = *controlResult.Value
+		}
 		if controlResult.Err != nil {
 			stepResult.WithError(controlResult.Err.Error())
 		}
@@ -82,8 +113,12 @@ func storeControlBridgeResult(vars *stepPkg.Variables, result *scheduler.Result)
 // the request buffers so the aggregator can render summaries. An `atmos` child
 // resolves to the running binary so it works regardless of PATH.
 func plainControlRunCommand(request *ControlCommandRequest) error {
+	if request.DryRun {
+		return nil
+	}
 	program := request.Program
-	if program == schema.TaskTypeAtmos {
+	isAtmos := program == schema.TaskTypeAtmos
+	if isAtmos {
 		if exe, err := os.Executable(); err == nil {
 			program = exe
 		}
@@ -99,7 +134,17 @@ func plainControlRunCommand(request *ControlCommandRequest) error {
 	cmd.Stdin = request.Streams.Stdin
 	cmd.Stdout = controlWriter(request.Streams.Stdout, request.Stdout)
 	cmd.Stderr = controlWriter(request.Streams.Stderr, request.Stderr)
-	return cmd.Run()
+	err := cmd.Run()
+	if !isAtmos {
+		return err
+	}
+	// A nested Atmos command reports its own failure, including CI annotations; marking its exit keeps the
+	// parent from reporting the same failure a second time.
+	var exitErr *exec.ExitError
+	if err == nil || !errors.As(err, &exitErr) || exitErr.ExitCode() <= 0 {
+		return err
+	}
+	return script.NestedAtmosFailure(request.Args, exitErr.ExitCode(), err)
 }
 
 // interpreterShellRunner runs a control shell child through the in-process

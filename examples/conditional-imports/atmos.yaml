@@ -1,0 +1,20 @@
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "*.yaml"
+
+commands:
+  - name: test
+    description: Validate stacks, select labeled component instances, and inspect their configuration
+    steps:
+      - atmos validate stacks
+      - atmos list instances --labels pci:true
+      - atmos describe component app -s dev --query .vars
+      - atmos describe component app -s prod --query .vars

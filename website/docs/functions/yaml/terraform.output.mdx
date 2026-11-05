@@ -16,6 +16,13 @@ of components directly in Atmos stack manifests by internally executing a
 [`tofu output`](https://opentofu.org/docs/cli/commands/output/) command.
 </Intro>
 
+The caller's `--skip` list also applies when Atmos evaluates the referenced component.
+For example, `--skip=secret` leaves `!secret` expressions unevaluated in dependency
+components as well as in the component being run. It does not skip the Terraform
+lookup itself; use `--skip=terraform.output` or `--skip=terraform.state` for that.
+
+<YamlFunctionAvailability name="terraform.output" />
+
 ## Usage
 
 The `!terraform.output` function can be called with either two or three parameters:
@@ -50,7 +57,7 @@ The `!terraform.output` function can be called with either two or three paramete
 
 :::tip
 You can use [Atmos Stack Manifest Templating](/templates) in the `!terraform.output` YAML function expressions.
-Atmos processes the templates first, and then executes the `!terraform.output` function, allowing you to provide the parameters to
+In stack component values, Atmos processes templates before executing the `!terraform.output` function, allowing you to provide the parameters to
 the function dynamically.
 :::
 
@@ -181,8 +188,11 @@ A `//` default is a one-off fallback baked into a single expression. If you want
 component to declare its mock outputs once and have every consumer resolve them consistently,
 use the dedicated [`mocks`](/stacks/components/mocks) stack-config section with the
 `--use-mocks` flag instead — see [Component Mocks for Terraform YAML Lookups](/changelog/terraform-component-mocks).
-A `//` default in the caller's expression still applies even when the referenced component
-declares no `mocks` section at all; without one, an undeclared `mocks` section is a hard error.
+By default (`components.terraform.mocks.mode: fallback`), `--use-mocks` uses the real output when it exists and the
+component's mock only when the component is not provisioned or the output is missing; credential, network, and
+backend errors still fail. The precedence is real value, then mock, then the caller's `//` default, then the original error.
+With `--use-mocks=always`, lookups resolve from `mocks` only and never touch Terraform or a backend; a missing mock is then an error,
+unless the caller's `//` default supplies a value.
 :::
 
 :::tip Default Value Behavior

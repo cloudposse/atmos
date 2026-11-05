@@ -93,7 +93,7 @@ func TestProvisionWithParams_BackendProvisioningSuccess(t *testing.T) {
 
 	// Register a mock backend provisioner for testing.
 	mockProvisionerCalled := false
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...backend.CreateOption) (*backend.ProvisionResult, error) {
 		mockProvisionerCalled = true
 		// Verify the backend config was passed correctly.
 		bucket, ok := backendConfig["bucket"].(string)
@@ -148,7 +148,7 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 
 	backendProvisionErr := errors.New("provisioning failed: bucket already exists in another account")
 	// Register a mock backend provisioner that fails.
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...backend.CreateOption) (*backend.ProvisionResult, error) {
 		return nil, backendProvisionErr
 	}
 
@@ -201,7 +201,7 @@ func TestAutoProvisionBackendWrapsCreationError(t *testing.T) {
 	t.Cleanup(backend.ResetRegistryForTesting)
 
 	backendProvisionErr := errors.New("bucket already exists")
-	backend.RegisterBackendCreate("s3", func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext) (*backend.ProvisionResult, error) {
+	backend.RegisterBackendCreate("s3", func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext, ...backend.CreateOption) (*backend.ProvisionResult, error) {
 		return nil, backendProvisionErr
 	})
 
@@ -231,7 +231,7 @@ func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
 	ui.InitFormatter(ioCtx)
 	t.Cleanup(ui.Reset)
 
-	backend.RegisterBackendCreate("s3", func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext) (*backend.ProvisionResult, error) {
+	backend.RegisterBackendCreate("s3", func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext, ...backend.CreateOption) (*backend.ProvisionResult, error) {
 		return &backend.ProvisionResult{Warnings: []string{"bucket policy is permissive"}}, nil
 	})
 	var output bytes.Buffer
@@ -277,7 +277,7 @@ func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {
 
 	// Register a mock backend provisioner.
 	mockProvisionerCalled := false
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...backend.CreateOption) (*backend.ProvisionResult, error) {
 		mockProvisionerCalled = true
 		return &backend.ProvisionResult{}, nil
 	}
@@ -319,7 +319,7 @@ func TestProvisionWithParams_WithAuthContext(t *testing.T) {
 	}
 
 	// Register a mock backend provisioner that verifies authContext handling.
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...backend.CreateOption) (*backend.ProvisionResult, error) {
 		// AuthContext is passed through from params; nil here because test provides nil.
 		assert.Nil(t, authContext, "AuthContext should be nil when params.AuthContext is nil")
 		return &backend.ProvisionResult{}, nil
@@ -393,7 +393,7 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 
 			// Register a mock provisioner for backend type.
 			if tt.provisionType == "backend" {
-				mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
+				mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, _ ...backend.CreateOption) (*backend.ProvisionResult, error) {
 					return &backend.ProvisionResult{}, nil
 				}
 				backend.RegisterBackendCreate("s3", mockProvisioner)
@@ -421,50 +421,6 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestListBackends(t *testing.T) {
-	t.Run("returns ErrNotImplemented", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		opts := map[string]string{"format": "table"}
-
-		err := ListBackends(atmosConfig, opts)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-
-	t.Run("returns ErrNotImplemented with nil opts", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		err := ListBackends(atmosConfig, nil)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-}
-
-func TestDescribeBackend(t *testing.T) {
-	t.Run("returns ErrNotImplemented", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		component := "vpc"
-		opts := map[string]string{"format": "yaml"}
-
-		err := DescribeBackend(atmosConfig, component, opts)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-
-	t.Run("returns ErrNotImplemented with nil opts", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		err := DescribeBackend(atmosConfig, "vpc", nil)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-
-	t.Run("returns ErrNotImplemented with empty component", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		err := DescribeBackend(atmosConfig, "", map[string]string{"format": "json"})
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
 }
 
 func TestDeleteBackend(t *testing.T) {

@@ -1,0 +1,2 @@
+replicaCount: 1
+image: nginx:1.27.5-alpine

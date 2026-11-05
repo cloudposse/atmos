@@ -16,6 +16,8 @@ You can now specify an explicit `name` field in stack manifests to override the 
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 See it in action:
 
 <CastEmbed src="/casts/examples/stack-names/explicit-names.cast" title="atmos stack names" chrome controls scrubber />
@@ -141,6 +143,18 @@ This feature is analogous to `metadata.name` for components, which allows renami
 |-------|-------|---------|
 | Component | `metadata.name` | Override component instance name |
 | Stack | `name` | Override logical stack name |
+
+## Try it out
+
+<TryExample example="stack-names">
+
+Compare filename-derived stack names with the explicit production name.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Related Documentation
 

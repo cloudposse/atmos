@@ -9,6 +9,7 @@ import {
   type WorkflowJob,
   type WorkflowRun,
 } from "./metrics";
+import { findPullRequestByHead } from "./pull-request";
 
 const COORDINATOR_WORKFLOW_NAME = "CI Timing Summary";
 
@@ -31,6 +32,8 @@ interface ApiWorkflowRun {
   html_url: string | null;
   url: string;
   pull_requests?: Array<{ number: number }> | null;
+  head_branch?: string | null;
+  head_repository?: { owner?: { login?: string | null } | null } | null;
 }
 
 interface ApiWorkflowJob {
@@ -102,6 +105,8 @@ function toWorkflowRun(data: ApiWorkflowRun): WorkflowRun {
     updatedAt: data.updated_at,
     htmlUrl: data.html_url ?? data.url,
     pullRequests: data.pull_requests?.map(({ number }) => ({ number })) ?? [],
+    headBranch: data.head_branch ?? null,
+    headRepositoryOwner: data.head_repository?.owner?.login ?? null,
   };
 }
 
@@ -170,6 +175,16 @@ async function run(): Promise<void> {
       unwrapArray<ApiPullRequest>,
     );
     pullRequestNumber = associated.find((pullRequest) => pullRequest.state === "open")?.number;
+  }
+  if (pullRequestNumber === undefined) {
+    // Fork pull requests are invisible to both lookups above, so match by head owner and branch.
+    pullRequestNumber = await findPullRequestByHead(
+      client,
+      encodedRepo,
+      triggeringRun.headRepositoryOwner,
+      triggeringRun.headBranch,
+      headSha,
+    );
   }
 
   if (pullRequestNumber === undefined) {

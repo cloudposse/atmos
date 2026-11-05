@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -68,4 +69,8 @@ func init() {
 		flags.WithStringSliceFlag("only", "", nil, "Limit the update to the named entries (repeatable)"),
 	)...).RegisterFlags(trackUpdateCmd)
 	trackCmd.AddCommand(trackUpdateCmd)
+	internal.RegisterCommandMetadata(
+		trackUpdateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/track/update"),
+	)
 }

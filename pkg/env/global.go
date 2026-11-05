@@ -27,7 +27,7 @@ func MergeGlobalEnv(baseEnv []string, globalEnv map[string]string) []string {
 	// Append global env: os.Environ() already contains the system env,
 	// and we want global env to come after system env but before command-specific env.
 	// So we append global env to base env (which is typically os.Environ()).
-	result := make([]string, 0, len(baseEnv)+len(globalEnvSlice))
+	result := make([]string, 0, len(baseEnv))
 	result = append(result, baseEnv...)
 	result = append(result, globalEnvSlice...)
 

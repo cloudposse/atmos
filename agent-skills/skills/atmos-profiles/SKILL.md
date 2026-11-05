@@ -75,6 +75,7 @@ auth:
 | Auth providers, identities, OIDC, SSO, keyring in profiles | `atmos-auth` |
 | CI use of `ATMOS_PROFILE` | `atmos-ci` |
 | Tool versions or registries that differ by profile | `atmos-toolchain` |
+| Running a locally built native plugin through a profile (`plugins.packages.<alias>.path`) | `atmos-plugins` |
 | Base paths and profile-relative file layout | `atmos-project-layout` |
 
 ## Guardrails

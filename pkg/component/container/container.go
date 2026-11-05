@@ -148,26 +148,28 @@ var verbExecutors = map[string]verbExecutor{
 func (p *ContainerComponentProvider) Execute(execCtx *component.ExecutionContext) error {
 	defer perf.Track(execCtx.AtmosConfig, "container.Execute")()
 
+	execCtx.ConfigAndStacksInfo.SubCommand = execCtx.SubCommand
+
 	if shouldRunBulk(execCtx.SubCommand, &execCtx.ConfigAndStacksInfo) {
-		return ExecuteBulk(context.Background(), &execCtx.ConfigAndStacksInfo, execCtx.SubCommand)
+		return ExecuteBulk(execCtx.GoContext(), &execCtx.ConfigAndStacksInfo, execCtx.SubCommand)
 	}
 
 	// `logs` has its own single/multi + follow handling driven by --follow/--tail.
 	if execCtx.SubCommand == "logs" {
-		return ExecuteLogsWithOptions(context.Background(), &execCtx.ConfigAndStacksInfo, logsOptionsFrom(execCtx.Flags))
+		return ExecuteLogsWithOptions(execCtx.GoContext(), &execCtx.ConfigAndStacksInfo, logsOptionsFrom(execCtx.Flags))
 	}
 
 	// `ps` with no component lists every container component's running state
 	// (like `list`); with a component it shows that one's detail.
 	if execCtx.SubCommand == "ps" && execCtx.ConfigAndStacksInfo.ComponentFromArg == "" {
-		return ExecuteList(context.Background(), &execCtx.ConfigAndStacksInfo)
+		return ExecuteList(execCtx.GoContext(), &execCtx.ConfigAndStacksInfo)
 	}
 
 	exec, ok := verbExecutors[execCtx.SubCommand]
 	if !ok {
 		return fmt.Errorf("%w: unknown container subcommand %q", errUtils.ErrComponentExecutionFailed, execCtx.SubCommand)
 	}
-	return exec(context.Background(), &execCtx.ConfigAndStacksInfo, execCtx.Args)
+	return exec(execCtx.GoContext(), &execCtx.ConfigAndStacksInfo, execCtx.Args)
 }
 
 // GenerateArtifacts is a no-op for container components (no generated files).

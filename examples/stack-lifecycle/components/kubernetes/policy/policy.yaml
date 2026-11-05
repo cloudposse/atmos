@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: stack-lifecycle-demo
+  name: stack-lifecycle-demo
+spec:
+  podSelector:
+    matchLabels:
+      app: stack-lifecycle-demo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}

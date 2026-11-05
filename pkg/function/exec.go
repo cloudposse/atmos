@@ -39,6 +39,9 @@ func NewExecFunction() *ExecFunction {
 // Otherwise, the raw string output is returned.
 func (f *ExecFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.ExecFunction.Execute")()
+	if err := admitFunction(ctx, f.Name(), args, execCtx); err != nil {
+		return nil, err
+	}
 
 	log.Debug("Executing exec function", "args", args)
 

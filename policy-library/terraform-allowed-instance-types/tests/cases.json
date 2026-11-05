@@ -1,0 +1,182 @@
+[
+  {
+    "name": "approved",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "instance_type": "t3.micro"
+              },
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "unapproved",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "update"
+              ],
+              "before": null,
+              "after": {
+                "instance_type": "m5.24xlarge"
+              },
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "missing type",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {},
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "null type",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "instance_type": null
+              },
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "unknown mask wins",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "create"
+              ],
+              "before": null,
+              "after": {
+                "instance_type": "t3.micro"
+              },
+              "after_unknown": {
+                "instance_type": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "deleted",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": [
+          {
+            "address": "aws_instance.example",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "example",
+            "change": {
+              "actions": [
+                "delete"
+              ],
+              "before": null,
+              "after": null,
+              "after_unknown": {}
+            }
+          }
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {
+      "kind": "operation",
+      "input": {}
+    },
+    "status": "not_applicable"
+  }
+]

@@ -190,9 +190,10 @@ management problem. Two options: (a) versioned component folders (`vpc/v1`, `vpc
 [folder-based versioning](https://atmos.tools/design-patterns/version-management/folder-based-versioning))
 selected per-stack via `metadata.component: vpc/v2` -- use for a breaking module rewrite; (b) a
 per-stack `source`/version override on the same component -- use for a plain version bump. Prefer
-(a) when the module's variable contract changes; use `metadata.name: vpc` alongside it to keep the
-backend `workspace_key_prefix` stable across the version bump (see
-[Configure Component Metadata](https://atmos.tools/stacks/components/component-metadata#name)).
+(a) when the module's variable contract changes. Preserve state by explicitly retaining the existing
+backend key, `workspace_key_prefix`, and Terraform workspace where applicable.
+`metadata.name` alone does not keep the backend prefix stable when the implementation
+folder changes; inspect the resolved backend and workspace before applying.
 
 ## Recipe: `script{}` → Three-Way Decomposition
 

@@ -1,0 +1,9 @@
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: aws-sso-vendor-config
+spec:
+  source:
+    # The successor of aws-sso is named aws-identity-center.
+    uri: "github.com/cloudposse/terraform-aws-components.git//modules/aws-sso?ref={{.Version}}"
+    version: 1.495.0

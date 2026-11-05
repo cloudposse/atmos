@@ -1,6 +1,7 @@
 package github
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,6 +56,45 @@ func runGitCmd(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// initGitFixture disables maintenance in the repository itself so both fixture
+// commands and Git subprocesses in the code under test cannot outlive cleanup.
+func initGitFixture(t *testing.T, dir string) {
+	t.Helper()
+	runGitCmd(t, dir, "init", "-b", "main")
+	runGitCmd(t, dir, "config", "--local", "maintenance.auto", "false")
+	runGitCmd(t, dir, "config", "--local", "gc.auto", "0")
+}
+
+// TestRunGitCmdDoesNotStartBackgroundMaintenance keeps temporary repositories
+// free of detached writers that can race with t.TempDir cleanup.
+func TestRunGitCmdDoesNotStartBackgroundMaintenance(t *testing.T) {
+	tracePath := filepath.Join(t.TempDir(), "git-trace.jsonl")
+	t.Setenv("GIT_TRACE2_EVENT", tracePath)
+	dir := t.TempDir()
+	initGitFixture(t, dir)
+	runGitCmd(t, dir, "commit", "--allow-empty", "-m", "fixture commit")
+	// Bypass runGitCmd to verify subprocesses inherit the repository setting too.
+	cmd := exec.Command("git", "-C", dir, "-c", "commit.gpgsign=false",
+		"-c", "user.name=Test", "-c", "user.email=test@test.com",
+		"commit", "--allow-empty", "-m", "direct commit")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	trace, err := os.ReadFile(tracePath)
+	require.NoError(t, err)
+	require.NotEmpty(t, trace)
+	for _, line := range strings.Split(strings.TrimSpace(string(trace)), "\n") {
+		var event struct {
+			Event string   `json:"event"`
+			Argv  []string `json:"argv"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &event))
+		if event.Event == "child_start" && len(event.Argv) > 1 {
+			assert.NotContains(t, []string{"maintenance", "gc"}, event.Argv[1],
+				"fixture commands must not start maintenance that can outlive their temporary repository")
+		}
+	}
+}
+
 // commitFixtureFile writes a file and commits it, returning the commit SHA.
 func commitFixtureFile(t *testing.T, dir, name, content, msg string) string {
 	t.Helper()
@@ -69,7 +109,7 @@ func buildMergedPRFixture(t *testing.T) *mergedPRFixture {
 	dir := t.TempDir()
 	f := &mergedPRFixture{dir: dir}
 
-	runGitCmd(t, dir, "init", "-b", "main")
+	initGitFixture(t, dir)
 
 	f.forkPoint = commitFixtureFile(t, dir, "defaults.yaml", "backend: dynamodb\n", "fork point")
 
@@ -300,7 +340,7 @@ func TestResolveBase_MergedPR_FastForwardMerge(t *testing.T) {
 // applies to it.
 func TestClassifyPRCheckout_InitialCommit(t *testing.T) {
 	dir := t.TempDir()
-	runGitCmd(t, dir, "init", "-b", "main")
+	initGitFixture(t, dir)
 	initial := commitFixtureFile(t, dir, "a.txt", "a", "initial")
 	t.Chdir(dir)
 

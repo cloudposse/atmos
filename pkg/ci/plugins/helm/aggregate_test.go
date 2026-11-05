@@ -16,6 +16,7 @@ import (
 func TestOnAfterAggregateRendersPlanSummary(t *testing.T) {
 	writer := &fakeWriter{}
 	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider: fakeProvider{writer: writer},
 		Aggregate: schema.HelmCIResultSet{
 			Command: "plan",
@@ -55,6 +56,7 @@ func TestOnAfterAggregateRendersPlanSummary(t *testing.T) {
 func TestOnAfterAggregateRendersApplySummary(t *testing.T) {
 	writer := &fakeWriter{}
 	err := (&Plugin{}).onAfterAggregate(&plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider: fakeProvider{writer: writer},
 		Aggregate: &schema.HelmCIResultSet{
 			Command: "deploy",
@@ -75,6 +77,7 @@ func TestOnAfterAggregateRendersApplySummary(t *testing.T) {
 func TestOnAfterAggregateUsesSafeDetailFences(t *testing.T) {
 	writer := &fakeWriter{}
 	err := (&Plugin{}).onAfterAggregate(&plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider: fakeProvider{writer: writer},
 		Aggregate: schema.HelmCIResultSet{
 			Command: "plan",
@@ -97,8 +100,9 @@ func TestOnAfterAggregateUsesSafeDetailFences(t *testing.T) {
 
 func TestOnAfterAggregateSkipsInvalidOrDisabledAndReturnsWriterError(t *testing.T) {
 	pluginUnderTest := &Plugin{}
-	require.NoError(t, pluginUnderTest.onAfterAggregate(&plugin.HookContext{Provider: fakeProvider{}, Aggregate: "invalid"}))
+	require.NoError(t, pluginUnderTest.onAfterAggregate(&plugin.HookContext{Config: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, Provider: fakeProvider{}, Aggregate: "invalid"}))
 	require.NoError(t, pluginUnderTest.onAfterAggregate(&plugin.HookContext{
+		Config:    &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:  fakeProvider{},
 		Aggregate: schema.HelmCIResultSet{},
 	}))
@@ -106,7 +110,7 @@ func TestOnAfterAggregateSkipsInvalidOrDisabledAndReturnsWriterError(t *testing.
 	disabled := false
 	writer := &fakeWriter{}
 	require.NoError(t, pluginUnderTest.onAfterAggregate(&plugin.HookContext{
-		Config:    &schema.AtmosConfiguration{CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &disabled}}},
+		Config:    &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Summary: schema.CISummaryConfig{Enabled: &disabled}}},
 		Provider:  fakeProvider{writer: writer},
 		Aggregate: schema.HelmCIResultSet{Results: []schema.HelmCIResult{{Processed: true}}},
 	}))
@@ -114,6 +118,7 @@ func TestOnAfterAggregateSkipsInvalidOrDisabledAndReturnsWriterError(t *testing.
 
 	sentinel := errors.New("write failed")
 	err := pluginUnderTest.onAfterAggregate(&plugin.HookContext{
+		Config:    &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:  fakeProvider{writer: &fakeWriter{err: sentinel}},
 		Aggregate: schema.HelmCIResultSet{Results: []schema.HelmCIResult{{Processed: true}}},
 	})
@@ -123,6 +128,7 @@ func TestOnAfterAggregateSkipsInvalidOrDisabledAndReturnsWriterError(t *testing.
 func TestOnAfterAggregateRendersFailureWithoutResults(t *testing.T) {
 	writer := &fakeWriter{}
 	err := (&Plugin{}).onAfterAggregate(&plugin.HookContext{
+		Config:       &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:     fakeProvider{writer: writer},
 		Aggregate:    schema.HelmCIResultSet{Command: "apply"},
 		CommandError: errors.New("dependency graph contains a cycle"),

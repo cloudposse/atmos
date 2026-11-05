@@ -1,0 +1,77 @@
+---
+title: "schema"
+sidebar_position: 47
+sidebar_label: "schema"
+sidebar_class_name: command
+description: Define inline configuration schemas with types, defaults, bounds, lists, enums, and optional fields.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Define the shape of configuration using Starlark types and field dictionaries. Pass the schema to
+    config.load or config.validate to check values and return immutable records.
+</Intro>
+
+## Inline schemas
+
+```python
+app_schema = {
+    "database": {
+        "host": str,
+        "port": schema.field(int, default=5432, min=1, max=65535),
+    },
+    "debug": schema.field(bool, default=False),
+    "tags": schema.list(str),
+    "environment": schema.enum("dev", "staging", "prod"),
+    "description": schema.optional(str),
+}
+cfg = config.load("app.yaml", schema=app_schema)
+```
+
+A dictionary defines named fields. Keys must be strings. Fields are required unless a helper supplies a default
+or marks them optional, and unknown input fields fail validation. A required object is still required even when
+all its children have defaults; use `schema.field({...}, default={})` to default the object itself.
+
+Use the builtin values `str`, `int`, `float`, and `bool` directly, not strings such as `"int"`. Types are strict:
+`int` rejects floats and bools, `float` rejects integers, and numeric types reject numeric strings. Numbers must
+be finite. Validation never calls the type constructors to coerce values.
+
+## Helpers
+
+| Helper | Behavior |
+| --- | --- |
+| `schema.field(type, default=..., min=..., max=...)` | Wrap a type or nested schema, optionally supplying a missing value or inclusive numeric bounds. The options are keyword-only. |
+| `schema.optional(type)` | Permit a missing field or explicit `None`. Missing values become `None`, unless the wrapped rule has a default. |
+| `schema.list(type)` | Require a list and validate each item against the supplied type or nested schema. |
+| `schema.enum(*choices)` | Accept one of the supplied scalar values: strings, finite numbers, bools, or `None`. At least one choice is required; comparisons require matching types. |
+
+Defaults are copied, validated, and frozen when `schema.field` runs. Invalid defaults fail even if the
+configuration supplies the field. Caller-owned dictionaries and lists used as defaults remain mutable.
+A default fills only an absent field; it does not replace an explicit null. `min` and `max` apply only to
+numeric fields and must be finite numbers with `min <= max`.
+
+Schemas can be reused or exported from a library:
+
+```python
+# lib/types.star
+DATABASE = {
+    "host": str,
+    "port": schema.field(int, default=5432),
+}
+```
+
+```python
+# main.star
+types = module.load("lib/types.star")
+cfg = config.load("app.json", schema={"database": types.DATABASE})
+```
+
+Schema helpers snapshot their input definitions. Plain dictionaries are read when validation runs. Recursive
+schemas and excessive nesting fail. These helpers describe runtime validation; they do not add static type
+annotations to Starlark. They are available only in automation scripts and their helpers.
+
+## Related
+
+- [`config.load`](/functions/automation/config.load) reads YAML or JSON, with inline, local-file, or HTTPS schemas.
+- [`config.validate`](/functions/automation/config.validate) validates dictionaries and other existing values.

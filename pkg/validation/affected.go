@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,9 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// nullSeparatedFlag makes git separate listed paths with NUL so unusual file names survive.
+const nullSeparatedFlag = "-z"
 
 var errValidationExcludePatternEmpty = errors.New("validation exclude pattern cannot be empty")
 
@@ -44,32 +49,71 @@ func AffectedFiles(base string) ([]string, error) {
 func resolveAffectedMergeBase(base string) (string, error) {
 	resolvedBase, explicit := resolveAffectedBase(base)
 	mergeBase, err := runGit("merge-base", "HEAD", resolvedBase)
+	if err != nil && isNotGitRepository(err) {
+		return "", notInGitRepositoryError()
+	}
 	if err != nil && !explicit && resolvedBase == "origin/HEAD" {
-		mergeBase, err = runGit("merge-base", "HEAD", "HEAD~1")
+		// Report the failure of the base the user would recognize, not of the fallback.
+		var fallbackErr error
+		if mergeBase, fallbackErr = runGit("merge-base", "HEAD", "HEAD~1"); fallbackErr == nil {
+			err = nil
+		}
 	}
 	if err != nil {
-		return "", fmt.Errorf("resolve validation base %q: %w", resolvedBase, err)
+		return "", unresolvedBaseError(resolvedBase, explicit, err)
 	}
 	return mergeBase, nil
 }
 
+// notInGitRepositoryError explains that --affected needs Git history. The message carries the
+// guidance because machine-readable reports include the message but not the hints.
+func notInGitRepositoryError() error {
+	const guidance = "--affected compares against Git history; run inside a repository or drop --affected"
+	return errUtils.Build(fmt.Errorf("%w (%s)", errUtils.ErrNotInGitRepository, guidance)).
+		WithHint(guidance).
+		Err()
+}
+
+// unresolvedBaseError reports a base that Git cannot resolve, keeping the base name and Git's own
+// explanation. A default base (origin/HEAD) gets the fix for the usual cause; an explicit --base
+// is the user's own input, so it is only named.
+func unresolvedBaseError(base string, explicit bool, cause error) error {
+	if explicit {
+		return errUtils.Build(fmt.Errorf("%w %q: %w", errUtils.ErrAffectedBaseUnresolved, base, cause)).
+			WithHint("Check that --base names an existing branch, tag, or commit; fetch it first if it only exists on the remote").
+			Err()
+	}
+	return errUtils.Build(fmt.Errorf("%w %q (pass --base=<ref>): %w", errUtils.ErrAffectedBaseUnresolved, base, cause)).
+		WithHint("Pass --base=<ref> to choose the branch, tag, or commit to compare against").
+		WithHint("Run git remote set-head origin --auto to set origin/HEAD").
+		Err()
+}
+
 // collectAffectedDiffOutputs gathers and concatenates the NUL-separated path
 // lists that make up the affected set: committed changes since mergeBase,
-// uncommitted changes, and untracked files.
+// unstaged changes, staged changes, and untracked files. Every list is
+// repository-root relative regardless of the current working directory.
 func collectAffectedDiffOutputs(mergeBase string) (string, error) {
-	output, err := runGit("diff", "--name-only", "-z", "--diff-filter=ACMRD", strings.TrimSpace(mergeBase)+"...HEAD")
+	output, err := runGit("diff", "--name-only", nullSeparatedFlag, "--diff-filter=ACMRD", strings.TrimSpace(mergeBase)+"...HEAD")
 	if err != nil {
 		return "", fmt.Errorf("list files changed since %s: %w", strings.TrimSpace(mergeBase), err)
 	}
-	worktree, err := runGit("diff", "--name-only", "-z", "--diff-filter=ACMRD")
+	worktree, err := runGit("diff", "--name-only", nullSeparatedFlag, "--diff-filter=ACMRD")
 	if err != nil {
 		return "", fmt.Errorf("list uncommitted changed files: %w", err)
 	}
-	untracked, err := runGit("ls-files", "--others", "--exclude-standard", "-z")
+	staged, err := runGit("diff", "--cached", "--name-only", nullSeparatedFlag, "--diff-filter=ACMRD")
+	if err != nil {
+		return "", fmt.Errorf("list staged changed files: %w", err)
+	}
+	// ls-files is cwd-scoped and cwd-relative by default; --full-name makes the
+	// paths repository-root relative and the ":/" pathspec makes it cover the
+	// whole repository even when run from a subdirectory.
+	untracked, err := runGit("ls-files", "--others", "--exclude-standard", "--full-name", nullSeparatedFlag, "--", ":/")
 	if err != nil {
 		return "", fmt.Errorf("list untracked files: %w", err)
 	}
-	return output + worktree + untracked, nil
+	return output + worktree + staged + untracked, nil
 }
 
 // dedupeAffectedPaths splits a NUL-separated path list, normalizes separators,
@@ -91,10 +135,42 @@ func dedupeAffectedPaths(combined string) []string {
 	return result
 }
 
+// gitCommandError is a failed Git invocation together with what Git printed to stderr, which holds
+// the actual reason that "exit status 128" does not.
+type gitCommandError struct {
+	err    error
+	stderr string
+}
+
+func (e *gitCommandError) Error() string {
+	defer perf.Track(nil, "validation.gitCommandError.Error")()
+
+	if e.stderr == "" {
+		return e.err.Error()
+	}
+	// Git's explanation replaces "exit status 128", which only says that Git failed.
+	return e.stderr
+}
+
+func (e *gitCommandError) Unwrap() error {
+	defer perf.Track(nil, "validation.gitCommandError.Unwrap")()
+
+	return e.err
+}
+
+// isNotGitRepository reports whether Git failed because the working directory is not in a repository.
+func isNotGitRepository(err error) bool {
+	var gitErr *gitCommandError
+	return errors.As(err, &gitErr) && strings.Contains(gitErr.stderr, "not a git repository")
+}
+
 var runGit = func(args ...string) (string, error) {
-	output, err := exec.Command("git", args...).Output()
+	var stderr bytes.Buffer
+	cmd := exec.Command("git", args...)
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return "", &gitCommandError{err: err, stderr: strings.TrimSpace(stderr.String())}
 	}
 	return string(output), nil
 }

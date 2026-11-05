@@ -2186,7 +2186,7 @@ func TestMergeComponentConfigurations_AuthDeferredWriteBackError(t *testing.T) {
 		AtmosConfig:   atmosCfg,
 		GlobalAuth: map[string]any{
 			"nested": map[string]any{
-				"field": "!template 'deferred-value'",
+				"field": taggedFunctionForTest("!template 'deferred-value'"),
 			},
 		},
 	}
@@ -2213,7 +2213,7 @@ func TestMergeComponentConfigurations_ProvidersDeferredWriteBackError(t *testing
 		Component:     "vpc",
 		AtmosConfig:   atmosCfg,
 		TerraformProviders: map[string]any{
-			"nested": map[string]any{"field": "!template 'deferred-value'"},
+			"nested": map[string]any{"field": taggedFunctionForTest("!template 'deferred-value'")},
 		},
 	}
 	res := minimalComponentResult()
@@ -2235,7 +2235,7 @@ func TestMergeComponentConfigurations_RequiredProvidersDeferredWriteBackError(t 
 		Component:     "vpc",
 		AtmosConfig:   atmosCfg,
 		TerraformRequiredProviders: map[string]any{
-			"nested": map[string]any{"field": "!template 'deferred-value'"},
+			"nested": map[string]any{"field": taggedFunctionForTest("!template 'deferred-value'")},
 		},
 	}
 	res := minimalComponentResult()
@@ -2257,7 +2257,7 @@ func TestMergeComponentConfigurations_HooksDeferredWriteBackError(t *testing.T) 
 		Component:     "vpc",
 		AtmosConfig:   atmosCfg,
 		GlobalAndTerraformHooks: map[string]any{
-			"nested": map[string]any{"field": "!template 'deferred-value'"},
+			"nested": map[string]any{"field": taggedFunctionForTest("!template 'deferred-value'")},
 		},
 	}
 	res := minimalComponentResult()
@@ -2279,7 +2279,7 @@ func TestMergeComponentConfigurations_GenerateDeferredWriteBackError(t *testing.
 		Component:     "vpc",
 		AtmosConfig:   atmosCfg,
 		GlobalAndTerraformGenerate: map[string]any{
-			"nested": map[string]any{"field": "!template 'deferred-value'"},
+			"nested": map[string]any{"field": taggedFunctionForTest("!template 'deferred-value'")},
 		},
 	}
 	res := minimalComponentResult()
@@ -2304,7 +2304,7 @@ func TestMergeComponentConfigurations_TestDeferredWriteBackError(t *testing.T) {
 	}
 	res := minimalComponentResult()
 	res.BaseComponentTest = map[string]any{
-		"nested": map[string]any{"field": "!template 'deferred-value'"},
+		"nested": map[string]any{"field": taggedFunctionForTest("!template 'deferred-value'")},
 	}
 	res.ComponentTest = map[string]any{"nested": "concrete-scalar"}
 
@@ -2321,7 +2321,7 @@ func TestProcessAuthConfig_DeferredWriteBackError(t *testing.T) {
 	atmosCfg := &schema.AtmosConfiguration{}
 
 	globalAuthConfig := map[string]any{
-		"nested": map[string]any{"field": "!template 'deferred-value'"},
+		"nested": map[string]any{"field": taggedFunctionForTest("!template 'deferred-value'")},
 	}
 	authConfig := map[string]any{"nested": "concrete-scalar"}
 

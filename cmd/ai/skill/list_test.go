@@ -186,7 +186,7 @@ func TestListCmd_Flags(t *testing.T) {
 
 func TestSkillListColumns(t *testing.T) {
 	columns := skillListColumns()
-	require.Len(t, columns, 5)
+	require.Len(t, columns, 8)
 	assert.Equal(t, " ", columns[0].Name)
 	assert.Equal(t, 1, columns[0].Width)
 	assert.Equal(t, "Name", columns[1].Name)

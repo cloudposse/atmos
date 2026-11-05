@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -49,6 +50,13 @@ var trackCmd = &cobra.Command{
 	Aliases: []string{"tracks"},
 	Short:   "Manage tracked external versions (the Atmos Version Tracker)",
 	Long:    "The Atmos Version Tracker manages external versions declared in atmos.yaml: named version tracks, a deterministic lock file (versions.lock.yaml), CI status and verification, and rendering locked versions into project files.",
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		trackCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/track"),
+	)
 }
 
 // structuredFormatParserOptions returns the --format flag for verbs that only

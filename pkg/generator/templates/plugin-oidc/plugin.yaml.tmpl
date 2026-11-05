@@ -1,0 +1,42 @@
+apiVersion: atmos/v1
+kind: AtmosPluginConfig
+metadata:
+  name: {{ .Config.plugin_name }}
+  version: 0.1.0
+  display_name: {{ .Config.display_name | quote }}
+  description: {{ .Config.description | quote }}
+{{- if .Config.author }}
+  author: {{ .Config.author | quote }}
+{{- end }}
+{{- if .Config.repository }}
+  repository: {{ .Config.repository | quote }}
+{{- end }}
+spec:
+  runtime:
+    type: native
+    protocol: 1
+    executable: bin/plugin{{ if hasPrefix "windows/" .Config.platform }}.exe{{ end }}
+  platforms:
+    {{ .Config.platform }}:
+      executable: bin/plugin{{ if hasPrefix "windows/" .Config.platform }}.exe{{ end }}
+  compatibility:
+    protocol: ">=1 <2"
+    contracts:
+      auth.provider: ">=1"
+      auth.identity: ">=1"
+      command: ">=1"
+  capabilities:
+    commands:
+      about:
+        description: Display the plugin name and supported authentication flow
+    auth:
+      providers:
+        {{ .Config.plugin_name }}:
+          schema: schemas/provider.json
+          credentials: [oidc/v1]
+          features: [logout]
+      identities:
+        {{ .Config.plugin_name }}-broker:
+          schema: schemas/broker.json
+          accepts: [oidc/v1]
+          credentials: [aws/v1]

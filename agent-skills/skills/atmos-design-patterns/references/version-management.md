@@ -370,9 +370,12 @@ spec:
 ```shell
 atmos vendor pull                          # Pull all components
 atmos vendor pull --component vpc          # Pull specific component
-atmos vendor pull --component vpc --version 2.2.0  # Specific version
 atmos vendor pull --dry-run                # Preview changes
 ```
+
+To pull a specific version, set `version: 2.2.0` in the component's `component.yaml`
+or its source entry in `vendor.yaml`, then run `atmos vendor pull --component vpc`.
+The command has no `--version` flag.
 
 ### Divergence Management
 

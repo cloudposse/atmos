@@ -5,6 +5,8 @@ sidebar_class_name: command
 description: "List available configuration profiles"
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro';
 
@@ -148,6 +150,19 @@ atmos profile list --format json | jq -r '.[].name'
 # Count total profiles
 atmos profile list --format json | jq 'length'
 ```
+
+## Try it out
+
+<TryExample example="config-profiles">
+
+Inspect the sample profiles and their merged settings. Replace the sample cloud identities before running infrastructure commands.
+
+```shell
+atmos profile list
+atmos profile show developer
+```
+
+</TryExample>
 
 ## See Also
 

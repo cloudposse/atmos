@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // TestDecodeRetryConfig_NilOrEmpty asserts that DecodeRetryConfig returns (nil, nil)
@@ -95,19 +96,31 @@ func TestDecodeRetryConfig_InvalidDurationString(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrInvalidRetryConfig), "error must wrap ErrInvalidRetryConfig")
 }
 
-// TestDecodeRetryConfig_UnknownFieldsIgnored documents that mapstructure is configured
-// without ErrorUnused, so extra keys (e.g. forwards-compat fields, user typos) decode
-// successfully without surfacing an error. If we ever tighten this contract, this test
-// should be updated to assert the failure mode explicitly.
-func TestDecodeRetryConfig_UnknownFieldsIgnored(t *testing.T) {
+// TestDecodeRetryConfig_UnknownFieldsRejected verifies a misspelled key fails instead of silently
+// retrying with defaults, and that the error names the key and lists the valid ones.
+func TestDecodeRetryConfig_UnknownFieldsRejected(t *testing.T) {
 	got, err := DecodeRetryConfig(map[string]any{
-		"max_attempts":           4,
-		"this_is_not_a_real_key": "ignored",
+		"max_attempts": 4,
+		"delay":        "4s",
 	})
-	require.NoError(t, err)
-	require.NotNil(t, got)
-	require.NotNil(t, got.MaxAttempts)
-	assert.Equal(t, 4, *got.MaxAttempts)
+	require.Error(t, err)
+	assert.Nil(t, got)
+	assert.ErrorIs(t, err, ErrInvalidRetryConfig)
+	assert.Contains(t, err.Error(), `unknown retry field "delay"`)
+	assert.Contains(t, err.Error(), "initial_delay")
+	field, ok := UnknownRetryField(err)
+	assert.True(t, ok)
+	assert.Equal(t, "delay", field)
+}
+
+func TestUnknownRetryField_YAMLStrictError(t *testing.T) {
+	field, ok := UnknownRetryField(errors.New("yaml: unmarshal errors:\n  line 1: field delay not found in type schema.RetryConfig"))
+	assert.True(t, ok)
+	assert.Equal(t, "delay", field)
+	_, ok = UnknownRetryField(errors.New("something else"))
+	assert.False(t, ok)
+	_, ok = UnknownRetryField(nil)
+	assert.False(t, ok)
 }
 
 // TestDecodeRetryConfig_ConditionsOrderPreserved verifies that the conditions slice
@@ -122,4 +135,36 @@ func TestDecodeRetryConfig_ConditionsOrderPreserved(t *testing.T) {
 	require.Len(t, got.Conditions, 3)
 	assert.Equal(t, "/first/", got.Conditions[0])
 	assert.Equal(t, "/third/", got.Conditions[2])
+}
+
+func TestRetryNodeValidatesMergedFields(t *testing.T) {
+	tests := []struct {
+		name      string
+		defaults  string
+		wantError bool
+	}{
+		{name: "valid inherited fields", defaults: "max_attempts: 3"},
+		{name: "unknown inherited field", defaults: "delay: 1s", wantError: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			source := "defaults: &retry\n  " + tc.defaults + "\nstep:\n  command: echo\n  retry:\n    <<: *retry\n    initial_delay: 2s\n"
+			var document struct {
+				Defaults any          `yaml:"defaults"`
+				Step     WorkflowStep `yaml:"step"`
+			}
+			err := yaml.Unmarshal([]byte(source), &document)
+			if tc.wantError {
+				require.ErrorIs(t, err, ErrInvalidRetryConfig)
+				require.ErrorContains(t, err, `unknown retry field "delay"`)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, document.Step.Retry)
+			require.NotNil(t, document.Step.Retry.MaxAttempts)
+			assert.Equal(t, 3, *document.Step.Retry.MaxAttempts)
+			require.NotNil(t, document.Step.Retry.InitialDelay)
+			assert.Equal(t, 2*time.Second, *document.Step.Retry.InitialDelay)
+		})
+	}
 }

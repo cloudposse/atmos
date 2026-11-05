@@ -1,0 +1,39 @@
+---
+title: atmos plugin registry list
+sidebar_label: registry list
+sidebar_class_name: command
+id: registry-list
+description: List configured registry hosts, discovery sources, and auth identities.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>List configured registry hosts, discovery sources, and auth identities.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin registry list --help" src="/casts/screengrabs/atmos-plugin-registry-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin registry list [--format table|json|yaml|csv|tsv]
+```
+
+## Flags
+
+<dl>
+  <dt><code>--format</code></dt>
+  <dd>Output format: table (default), json, yaml, csv, or tsv. Set <code>ATMOS_PLUGIN_FORMAT</code> to change the default; an explicit flag takes precedence.</dd>
+</dl>
+
+Interactive table output uses the shared Atmos list styling. When piped, table output becomes plain tab-separated rows. JSON and YAML preserve the mapping of aliases to host, identity, optional catalog, and repository lists. Entries without discovery inputs configure authentication only.
+
+## Examples
+
+```shell
+atmos plugin registry list
+atmos plugin registry list --format=yaml
+```

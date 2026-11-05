@@ -126,45 +126,6 @@ func TestRecordingWriterRecordsPTYOutput(t *testing.T) {
 	}
 }
 
-func TestTerminalResponseReaderAnswersSplitQueries(t *testing.T) {
-	src := iotest.OneByteReader(strings.NewReader("\x1b]11;?\x1b\\\x1b[6n"))
-	var responses bytes.Buffer
-	reader := &terminalResponseReader{src: src, responder: &responses}
-
-	var out bytes.Buffer
-	if _, err := io.Copy(&out, reader); err != nil {
-		t.Fatalf("io.Copy() error = %v", err)
-	}
-
-	if out.String() != "\x1b]11;?\x1b\\\x1b[6n" {
-		t.Fatalf("output = %q", out.String())
-	}
-	if got := responses.String(); got != "\x1b]11;rgb:0000/0000/0000\x1b\\\x1b[1;1R" {
-		t.Fatalf("responses = %q", got)
-	}
-}
-
-// TestTerminalResponseReaderAnswersForegroundColorQuery verifies that the
-// OSC 10 (foreground color) query is answered, exercising the first branch
-// of respond() which TestTerminalResponseReaderAnswersSplitQueries does not cover.
-func TestTerminalResponseReaderAnswersForegroundColorQuery(t *testing.T) {
-	src := strings.NewReader("\x1b]10;?\x1b\\")
-	var responses bytes.Buffer
-	reader := &terminalResponseReader{src: src, responder: &responses}
-
-	var out bytes.Buffer
-	if _, err := io.Copy(&out, reader); err != nil {
-		t.Fatalf("io.Copy() error = %v", err)
-	}
-
-	if out.String() != "\x1b]10;?\x1b\\" {
-		t.Fatalf("output = %q", out.String())
-	}
-	if got := responses.String(); got != "\x1b]10;rgb:ffff/ffff/ffff\x1b\\" {
-		t.Fatalf("responses = %q", got)
-	}
-}
-
 func TestIsSupported(t *testing.T) {
 	supported := IsSupported()
 
@@ -707,5 +668,108 @@ func TestWaitOutputDrained_ForcesUnblockAfterDeadline(t *testing.T) {
 	}
 	if elapsed > outputDrainTimeout+5*time.Second {
 		t.Errorf("waitOutputDrained took %v; the deadline must force the pending read to return", elapsed)
+	}
+}
+
+func TestShouldEmulateTerminalResponses(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	tests := []struct {
+		name string
+		opts *Options
+		want bool
+	}{
+		{"stdin forwarding disabled", &Options{DisableStdinForward: true, Stdin: os.Stdin}, true},
+		{"stdin is not a file", &Options{Stdin: strings.NewReader("")}, true},
+		{"stdin is a non-terminal file", &Options{Stdin: file}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldEmulateTerminalResponses(tt.opts); got != tt.want {
+				t.Fatalf("shouldEmulateTerminalResponses() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRecordingWriterMasksSecretSplitAcrossWrites(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("Failed to create IO context: %v", err)
+	}
+	const secret = "pty-split-secret-value"
+	ioCtx.Masker().RegisterSecret(secret)
+
+	rec := &ptyTestRecorder{}
+	restore := iolib.SetRecorder(rec)
+	defer restore()
+
+	var buf bytes.Buffer
+	writer := &recordingWriter{underlying: &buf, masker: ioCtx.Masker()}
+
+	// A PTY read can end anywhere, including in the middle of a secret.
+	chunks := []string{"token=pty-split-", "secret-value done\n"}
+	for _, chunk := range chunks {
+		n, writeErr := writer.Write([]byte(chunk))
+		if writeErr != nil {
+			t.Fatalf("Write(%q) error = %v", chunk, writeErr)
+		}
+		if n != len(chunk) {
+			t.Fatalf("Write(%q) returned %d, want %d", chunk, n, len(chunk))
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		t.Fatalf("Flush() error = %v", err)
+	}
+
+	want := "token=" + iolib.MaskReplacement + " done\n"
+	if buf.String() != want {
+		t.Errorf("output = %q, want %q", buf.String(), want)
+	}
+	if got := strings.Join(rec.events, ""); got != want || strings.Contains(got, secret) {
+		t.Errorf("recorded = %q, want %q", got, want)
+	}
+}
+
+func TestRecordingWriterFlushReleasesHeldPrefix(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("Failed to create IO context: %v", err)
+	}
+	ioCtx.Masker().RegisterSecret("pty-split-secret-value")
+
+	var buf bytes.Buffer
+	// Interactive PTY sessions skip the unfinished-line hold, leaving only the literal-prefix hold.
+	writer := &recordingWriter{
+		underlying: &buf,
+		masker:     ioCtx.Masker(),
+		streamOpts: []iolib.StreamingMaskOption{iolib.WithoutLineHold()},
+	}
+
+	if _, err := writer.Write([]byte("ready pty-split-")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if buf.String() != "ready " {
+		t.Errorf("output before flush = %q, want only the text that cannot start a secret", buf.String())
+	}
+
+	// Negative path: the held bytes never completed a secret, so flush emits them verbatim.
+	if err := writer.Flush(); err != nil {
+		t.Fatalf("Flush() error = %v", err)
+	}
+	if buf.String() != "ready pty-split-" {
+		t.Errorf("output after flush = %q, want the held prefix released unchanged", buf.String())
+	}
+}
+
+func TestRecordingWriterFlushWithoutMaskingIsNoop(t *testing.T) {
+	var buf bytes.Buffer
+	writer := &recordingWriter{underlying: &buf}
+	if err := writer.Flush(); err != nil {
+		t.Fatalf("Flush() error = %v", err)
 	}
 }

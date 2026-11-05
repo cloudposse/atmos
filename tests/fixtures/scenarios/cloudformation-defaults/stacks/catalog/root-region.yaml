@@ -1,0 +1,3 @@
+# Imported catalog that sets a stack-root CloudFormation region.
+region: catalog-region
+timeout: 2h

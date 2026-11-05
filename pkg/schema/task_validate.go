@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 )
 
 // Sentinel errors for exec step validation.
@@ -40,6 +39,12 @@ type scriptStepView struct {
 	command     string
 	script      string
 	interpreter string
+	// source is the step's `source` field. A script step may run a file instead of an inline body,
+	// and the interpreter is then inferred from the file extension at execution.
+	source any
+	// scriptSource is the file an included `script` body came from; the interpreter may be
+	// inferred from it.
+	scriptSource string
 }
 
 // ValidateExecTasks validates exec steps in a task list (custom command steps).
@@ -57,15 +62,17 @@ func ValidateExecTasks(tasks Tasks) error {
 			tty:         task.Tty,
 			interactive: task.Interactive,
 			hasRetry:    task.Retry != nil,
-			hasTimeout:  task.Timeout != time.Duration(0),
+			hasTimeout:  strings.TrimSpace(task.Timeout) != "",
 			output:      task.Output,
 		})
 		scriptViews = append(scriptViews, scriptStepView{
-			name:        task.Name,
-			stepType:    task.Type,
-			command:     task.Command,
-			script:      task.Script,
-			interpreter: task.Interpreter,
+			name:         task.Name,
+			stepType:     task.Type,
+			command:      task.Command,
+			script:       task.Script,
+			interpreter:  task.Interpreter,
+			source:       task.Source,
+			scriptSource: task.ScriptSource,
 		})
 	}
 	if err := validateExecSteps(views); err != nil {
@@ -91,11 +98,13 @@ func ValidateExecWorkflowSteps(steps []WorkflowStep) error {
 			output:      step.Output,
 		})
 		scriptViews = append(scriptViews, scriptStepView{
-			name:        step.Name,
-			stepType:    step.Type,
-			command:     step.Command,
-			script:      step.Script,
-			interpreter: step.Interpreter,
+			name:         step.Name,
+			stepType:     step.Type,
+			command:      step.Command,
+			script:       step.Script,
+			interpreter:  step.Interpreter,
+			source:       step.Source,
+			scriptSource: step.ScriptSource,
 		})
 	}
 	if err := validateExecSteps(views); err != nil {
@@ -109,6 +118,9 @@ const containerStepType = "container"
 
 // ValidateWorkflowSteps validates top-level workflow steps and any control-step children.
 func ValidateWorkflowSteps(steps []WorkflowStep) error {
+	if err := validateStepOutputModes(steps); err != nil {
+		return err
+	}
 	if err := ValidateExecWorkflowSteps(steps); err != nil {
 		return err
 	}
@@ -235,11 +247,15 @@ func validateScriptSteps(views []scriptStepView) error {
 		if view.stepType != TaskTypeScript {
 			continue
 		}
+		// A script file (source, or an included script body) lets the interpreter be inferred
+		// from its extension, so the interpreter is only required for an inline script. The
+		// script step handler validates the source value and the inferred interpreter.
+		hasSource := view.source != nil
 		switch {
-		case strings.TrimSpace(view.interpreter) == "":
+		case strings.TrimSpace(view.interpreter) == "" && !hasSource && view.scriptSource == "":
 			return fmt.Errorf("%w: step %s missing %q", ErrScriptStepFieldRequired, scriptStepLabel(view, i), "interpreter")
-		case strings.TrimSpace(view.script) == "":
-			return fmt.Errorf("%w: step %s missing %q", ErrScriptStepFieldRequired, scriptStepLabel(view, i), "script")
+		case strings.TrimSpace(view.script) == "" && !hasSource:
+			return fmt.Errorf("%w: step %s missing %q (or %q)", ErrScriptStepFieldRequired, scriptStepLabel(view, i), "script", "source")
 		case strings.TrimSpace(view.command) != "":
 			return fmt.Errorf("%w: step %s sets %q; use %q for type %q", ErrScriptStepInvalidField, scriptStepLabel(view, i), "command", "script", TaskTypeScript)
 		}

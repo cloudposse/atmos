@@ -61,7 +61,7 @@ BUILT-IN COMMANDS
       untaint                           Remove the 'tainted' state from a resource instance
       validate                          Check whether the configuration is valid
       version                           Show the current Terraform version
-      workdir [command] [EXPERIMENTAL]  Manage component working directories
+      workdir [command]                 Manage component working directories
       workspace [command]               Manage Terraform workspaces
 
 FLAGS
@@ -70,6 +70,8 @@ FLAGS
                                      TF_APPEND_USER_AGENT)
 
       --clone-target-ref             Clone the target reference with which to compare the current branch
+
+      --command string               Executable name or path for this component invocation
 
       --components strings           Filter by specific components
 
@@ -88,8 +90,10 @@ FLAGS
       --init-pass-vars               Pass the generated varfile to terraform init using --var-file flag (OpenTofu
                                      feature)
 
-      --labels string                Filter by labels (comma-separated key=value or key:value pairs, matches all): --
-                                     labels=cost-center=platform,compliance=sox
+      --labels stringArray           Filter by labels (comma-separated key=value or key:value pairs within an
+                                     occurrence, and/or repeated, matches all): --labels=cost-
+                                     center=platform,compliance=sox or --labels cost-center=platform --labels
+                                     compliance=sox
 
       --process-functions            Enable/disable YAML functions processing in Atmos stack manifests (default
                                      true)
@@ -121,12 +125,16 @@ FLAGS
 
       --tags strings                 Filter by tags (comma-separated, matches any): --tags=production,tier-1
 
+      --terraform-command string     Compatibility alias for --command
+
       --ui                           Enable streaming UI mode for real-time resource status display
 
       --upload-status                Upload plan status to Atmos Pro
 
-      --use-mocks                    Resolve Terraform state/output YAML functions from component mocks instead of
-                                     remote state. Supported only by plan and describe commands
+      --use-mocks string             Resolve Terraform state/output YAML functions from component mocks. Set a mode
+                                     with =fallback (real state first, mocks only when missing) or =always (mocks
+                                     only); a bare flag uses components.terraform.mocks.mode. Supported only by plan
+                                     and describe commands
 
 
 COMPATIBILITY FLAGS
@@ -141,3 +149,5 @@ COMPATIBILITY FLAGS
 Use atmos terraform [command] --help for more information about a command.
 
 Use --help=usage for examples or --help=all for all flags and full help.
+
+  Documentation: https://atmos.tools/cli/commands/terraform/usage

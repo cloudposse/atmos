@@ -1,0 +1,107 @@
+---
+title: atmos plugin create
+sidebar_label: create
+sidebar_class_name: command
+id: create
+description: Scaffold a Go OIDC provider, AWS broker identity, and command using Atmos scaffolding.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Scaffold a Go OIDC provider, AWS broker identity, and command using Atmos scaffolding.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin create --help" src="/casts/screengrabs/atmos-plugin-create--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin create <directory>
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>directory</code></dt>
+  <dd>Destination for generated source and schemas.</dd>
+  <dt><code>--kind</code></dt>
+  <dd>Provider identifier in <code>organization/name</code> form, such as <code>acme/oidc</code>. Defaults to <code>example/oidc</code>.</dd>
+  <dt><code>--display-name</code></dt>
+  <dd>Human-readable plugin name. The stable package ID remains metadata.name, selected by --kind.</dd>
+  <dt><code>--description</code></dt>
+  <dd>Description stored in the plugin manifest.</dd>
+  <dt><code>--author</code></dt>
+  <dd>Optional author or maintainer.</dd>
+  <dt><code>--repository</code></dt>
+  <dd>Optional source repository URL. This is author-provided metadata; the consumer lockfile separately records the OCI download source.</dd>
+  <dt><code>--module</code></dt>
+  <dd>Go module path for the generated plugin. Defaults to <code>example.com/atmos-oidc</code>.</dd>
+  <dt><code>--runtime</code></dt>
+  <dd>Authoring runtime; the first implementation supports <code>go</code> (the default).</dd>
+  <dt><code>--capability</code></dt>
+  <dd>Primary extension capability. Takes a single value, not a list; the first starter supports only
+  <code>auth.provider</code> (the default). Other capabilities and combining several are not available yet.</dd>
+  <dt><code>--sdk-version</code></dt>
+  <dd>Released Atmos Plugin SDK module version.</dd>
+  <dt><code>--sdk-path</code></dt>
+  <dd>Absolute path to a local SDK checkout for development.</dd>
+  <dt><code>--defaults</code></dt>
+  <dd>Use scaffold field defaults without prompting.</dd>
+  <dt><code>--force</code></dt>
+  <dd>Permit overwriting generated files.</dd>
+</dl>
+
+## Examples
+
+Start in any directory where you want to keep the plugin source. The generator
+creates the source, manifest, schemas, README, local test fixtures, and an
+`atmos.yaml` with build, test, and push custom commands; you do not
+need to copy an Atmos demo project or set up an OCI registry to build and test it.
+
+```shell
+atmos plugin create ./corporate-oidc --kind=acme/oidc --module=example.com/acme/oidc --display-name="Corporate Identity" --repository=https://github.com/acme/atmos-oidc --defaults
+cd corporate-oidc
+atmos build
+atmos test
+```
+
+When developing against an unreleased Atmos checkout, add `--sdk-path` to select
+its local SDK. This is the only extra authoring setup required by an unreleased SDK:
+
+```shell
+# For unreleased SDK development:
+atmos plugin create ./corporate-oidc --defaults --sdk-path=/absolute/path/to/atmos/sdk
+```
+
+## Try OCI publishing locally
+
+The generated `stacks/local.yaml` configures an anonymous registry emulator on
+`localhost:15557`. With Docker running:
+
+```shell
+atmos dev registry up
+atmos push
+atmos plugin search oidc --registry=local
+atmos plugin install local/acme/oidc --as=corporate --version=0.1.0
+atmos plugin list
+atmos dev registry down
+```
+
+No authentication is required for this local registry. `atmos push` builds,
+validates, tests, packs, and publishes. Search indexes the configured OCI repository
+and caches its release metadata locally; no catalog needs to be maintained. Push preserves
+numbered layouts under the gitignored `.atmos/release/` directory. The emulator
+is ephemeral; stopping it discards registry contents. Change the port in
+`stacks/local.yaml` and its matching references in `atmos.yaml` if needed.
+
+After publishing another version, use `atmos plugin search oidc --registry local --refresh`
+to refresh discovery immediately. Normal searches reuse the cached index.
+
+For a remote registry, configure an auth identity and bind it with
+`plugins.registries.<name>.identity`. Then run `atmos auth login --identity publisher`
+and `atmos push --to oci://registry.example.com/team/oidc`.
+Use `--sign --yes` to sign the published release. Publishing does not update a shared catalog.
+The generated README includes a complete publishing identity example.

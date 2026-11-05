@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor-diff
 description: Show the Git diff between two versions of a vendored component without a local checkout.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -23,6 +25,7 @@ atmos vendor diff --component <name> [--type <type>] [--from <ref>] [--to <ref>]
 atmos vendor diff --tags <tag1>,<tag2> [options]
 atmos vendor diff --stack <stack> [--labels <key>=<value>] [options]
 atmos vendor diff --labels <key>=<value> [options]
+atmos vendor diff --labels <key1>=<value1>,<key2>=<value2> [options]
 ```
 
 `--from` defaults to the component's current pinned version and `--to` defaults to the
@@ -66,6 +69,9 @@ atmos vendor diff --tags networking
 atmos vendor diff --stack dev-us-west-2
 atmos vendor diff --labels tier=1
 
+# Combine multiple selectors in one comma-separated --labels value.
+atmos vendor diff --labels tier=1,cost-center=platform
+
 # Diff a stack's components, narrowed further by declared vendor.yaml tags.
 atmos vendor diff --stack dev-us-west-2 --tags networking
 ```
@@ -76,11 +82,11 @@ atmos vendor diff --stack dev-us-west-2 --tags networking
   <dt>`--component` / `-c` (string)</dt>
   <dd>The component to diff. Mutually exclusive with `--stack`/`--labels`. Composes with `--tags` (narrows to this component only if its declared `vendor.yaml` tags also match).</dd>
   <dt>`--tags` (string)</dt>
-  <dd>Diff only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
+  <dd>Diff only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.<br/>Environment variable: `ATMOS_VENDOR_TAGS`</dd>
   <dt>`--stack` / `-s` (string)</dt>
   <dd>Diff every component belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Mutually exclusive with `--component`.</dd>
   <dt>`--labels` (string)</dt>
-  <dd>Diff every component whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.</dd>
+  <dd>Diff every component whose stack `metadata.labels` match ALL of these `key=value` or `key:value` pairs — comma-separated in one flag value (`--labels tier=1,cost-center=platform`). Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.<br/>Environment variable: `ATMOS_VENDOR_LABELS`</dd>
   <dt>`--from` (string)</dt>
   <dd>Starting ref (tag, branch, or commit). Defaults to each component's current pinned version.</dd>
   <dt>`--to` (string)</dt>
@@ -94,6 +100,18 @@ atmos vendor diff --stack dev-us-west-2 --tags networking
 </dl>
 
 :::note
-Git sources only. The command performs a temporary clone (removed afterward); large
+Git sources only: `git::` sources, supported hosting-provider URLs, and explicit `git://` or `ssh://` repository URLs are recognized. Plain `file://` paths retain local-file semantics. The command performs a temporary clone (removed afterward); large
 repositories take proportionally longer. Private repositories are not yet supported.
 :::
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Compare the `weather` component's `main.tf` between two Atmos releases. Requires Git and network access. This file is unchanged between these releases, so no diff output is expected.
+
+```shell
+atmos vendor diff --component weather --from v1.200.0 --to v1.201.0 --diff-file examples/demo-library/weather/main.tf
+```
+
+</TryExample>

@@ -14,6 +14,8 @@ Workflows now have a `say` step type that speaks a message out loud using text-t
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Long-running workflows — a multi-stack `terraform apply`, a build pipeline, a vendoring sweep — often outlast your attention. You kick one off, switch to another window, and forget about it. The existing `alert` step rings the terminal bell, but a bell doesn't tell you *what* happened, and it's easy to miss.
@@ -84,7 +86,19 @@ Here's the build pipeline announcing its milestones end to end:
 
 The cross-platform plumbing lives in a reusable `pkg/say` package, mirroring the existing browser-opening abstraction, so other parts of Atmos can adopt audible notifications too.
 
-For usage and configuration, see [say](/workflows/steps/type/say).
+For usage and configuration, see [say](/steps/type/say).
+
+## Try it out
+
+<TryExample example="say-something">
+
+Try the local speech step. The README lists platform-specific speech dependencies.
+
+```shell
+atmos say something
+```
+
+</TryExample>
 
 ## Get Involved
 

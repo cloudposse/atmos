@@ -1,0 +1,43 @@
+# Real S3 backend on the Floci emulator. The test sets the bucket and endpoint:
+#   ATMOS_TEST_MOCKS_BUCKET, AWS_ENDPOINT_URL, plus test credentials.
+vars:
+  stage: emu
+
+terraform:
+  command: tofu
+  backend_type: s3
+  backend:
+    s3:
+      bucket: !env ATMOS_TEST_MOCKS_BUCKET
+      key: terraform.tfstate
+      region: us-east-1
+      endpoints:
+        s3: !env AWS_ENDPOINT_URL
+      use_path_style: true
+      skip_credentials_validation: true
+      skip_requesting_account_id: true
+      skip_metadata_api_check: true
+      skip_region_validation: true
+      skip_s3_checksum: true
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+      mocks:
+        vpc_id: vpc-local
+
+    app:
+      metadata:
+        component: app
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+      vars:
+        inputs:
+          state_vpc_id: !terraform.state vpc vpc_id
+          output_vpc_id: !terraform.output vpc vpc_id

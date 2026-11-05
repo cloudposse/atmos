@@ -252,3 +252,53 @@ func TestEnsureGoLicensesFailsAfterExhaustingRetries(t *testing.T) {
 	assert.ErrorIs(t, err, wantErr)
 	assert.Equal(t, goInstallMaxAttempts, attempt, "must stop after exactly goInstallMaxAttempts attempts")
 }
+
+func TestCollectLicenseReportRetriesFailedEmptyScans(t *testing.T) {
+	entry := "example.com/dep,https://example.com/LICENSE,MIT\n"
+	for _, scenario := range []string{"success", "empty success", "partial report", "recovers", "exhausted"} {
+		t.Run(scenario, func(t *testing.T) {
+			calls, sleeps := 0, 0
+			scanErr := errors.New("scanner failed")
+			entries, err := collectLicenseReport(func() ([]byte, error) {
+				calls++
+				switch scenario {
+				case "empty success":
+					return nil, nil
+				case "partial report":
+					return []byte("W1234 unresolved license\n" + entry), scanErr
+				case "exhausted":
+					return []byte("checksum service unavailable"), scanErr
+				case "recovers":
+					if calls == 1 {
+						return []byte("checksum service unavailable"), scanErr
+					}
+				}
+				return []byte(entry), nil
+			}, func(delay time.Duration) {
+				sleeps++
+				assert.Equal(t, licenseReportRetryDelay, delay)
+			})
+			if scenario == "exhausted" {
+				require.ErrorIs(t, err, scanErr)
+				assert.ErrorContains(t, err, "checksum service unavailable")
+				assert.Empty(t, entries)
+				assert.Equal(t, licenseReportMaxAttempts, calls)
+				assert.Equal(t, licenseReportMaxAttempts-1, sleeps)
+				return
+			}
+			require.NoError(t, err)
+			if scenario == "empty success" {
+				assert.Empty(t, entries)
+			} else {
+				assert.Equal(t, []LicenseEntry{{Module: "example.com/dep", URL: "https://example.com/LICENSE", License: "MIT"}}, entries)
+			}
+			if scenario == "recovers" {
+				assert.Equal(t, 2, calls)
+				assert.Equal(t, 1, sleeps)
+			} else {
+				assert.Equal(t, 1, calls)
+				assert.Zero(t, sleeps)
+			}
+		})
+	}
+}

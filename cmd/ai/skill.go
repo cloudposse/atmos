@@ -4,6 +4,8 @@ import (
 	_ "embed"
 
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 //go:embed markdown/atmos_ai_skill.md
@@ -20,4 +22,8 @@ var SkillCmd = &cobra.Command{
 func init() {
 	// Add 'skill' subcommand to 'ai' command.
 	aiCmd.AddCommand(SkillCmd)
+	internal.RegisterCommandMetadata(
+		SkillCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ai/skill"),
+	)
 }

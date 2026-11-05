@@ -1,0 +1,21 @@
+import:
+  - catalog/vpc
+
+terraform:
+  overrides:
+    # An unset in overrides drops every lower layer.
+    vars: !unset
+    # Overrides still apply on top of a component-level unset.
+    retry:
+      max_attempts: 7
+
+components:
+  terraform:
+    vpc-overrides:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-base
+      vars:
+        name: overridden
+      retry: !unset

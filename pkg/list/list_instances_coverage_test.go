@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -162,7 +163,7 @@ func TestExecuteListInstancesCmd_InvalidLabelsFlag(t *testing.T) {
 		Cmd:       cmd,
 		Args:      []string{},
 		Format:    "table",
-		LabelsRaw: "not-a-valid-label",
+		LabelsRaw: []string{"not-a-valid-label"},
 	})
 
 	require.Error(t, err)
@@ -928,7 +929,7 @@ func TestExecuteListInstancesCmd_ClosurePreview(t *testing.T) {
 		Tags:                []string{"istio"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
-		AuthDisabled:        true,
+		AuthManager:         authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
 	})
 
 	require.NoError(t, err, "a closure preview over a healthy fixture should render cleanly")
@@ -990,9 +991,10 @@ func TestExecuteListInstancesCmd_ClosurePreviewPropagatesError(t *testing.T) {
 		Args:                []string{},
 		Format:              "json",
 		Tags:                []string{"broken-tag"},
+		ColumnsFlag:         []string{"Value={{ .vars.upstream_value }}"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
-		AuthDisabled:        true,
+		AuthManager:         authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
 	})
 
 	require.Error(t, err)
@@ -1002,13 +1004,13 @@ func TestExecuteListInstancesCmd_ClosurePreviewPropagatesError(t *testing.T) {
 // TestBuildInstanceFilters covers the YQ-predicate wiring of `--filter`.
 func TestBuildInstanceFilters(t *testing.T) {
 	t.Run("empty spec returns no filters", func(t *testing.T) {
-		result, err := buildInstanceFilters("", nil, "", nil)
+		result, err := buildInstanceFilters("", nil, nil, nil)
 		require.NoError(t, err)
 		assert.Nil(t, result)
 	})
 
 	t.Run("non-empty spec yields one YQ filter", func(t *testing.T) {
-		result, err := buildInstanceFilters(".component == \"vpc\"", nil, "", nil)
+		result, err := buildInstanceFilters(".component == \"vpc\"", nil, nil, nil)
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 	})
@@ -1137,7 +1139,7 @@ func TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix(t *testi
 		format    string
 		upload    bool
 		tags      []string
-		labelsRaw string
+		labelsRaw []string
 		wantMatch string
 	}{
 		{
@@ -1148,7 +1150,7 @@ func TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix(t *testi
 		},
 		{
 			name:      "labels+upload rejected",
-			labelsRaw: "team=platform",
+			labelsRaw: []string{"team=platform"},
 			upload:    true,
 			wantMatch: "--tags/--labels is not supported with --upload",
 		},
@@ -1161,7 +1163,7 @@ func TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix(t *testi
 		{
 			name:      "labels+matrix rejected",
 			format:    "matrix",
-			labelsRaw: "team=platform",
+			labelsRaw: []string{"team=platform"},
 			wantMatch: "--tags/--labels is not supported with --format=matrix",
 		},
 	}

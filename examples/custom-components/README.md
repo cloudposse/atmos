@@ -4,15 +4,27 @@ tags: [Components]
 cast:
   file: /casts/examples/custom-components/script-command.cast
   title: atmos custom component command
+related_docs:
+  - label: "Custom component types"
+    url: /components/custom
+  - label: "Custom command configuration"
+    url: /cli/configuration/commands
+  - label: "Custom Component Types Reference"
+    url: /cli/configuration/commands/component#custom-component-types
 ---
 
 # Custom Components Example
 
-This example demonstrates how to define custom component types in Atmos using custom commands.
+This example demonstrates how to define [custom component types](https://atmos.tools/components/custom) in Atmos using [custom commands](https://atmos.tools/cli/configuration/commands).
 
 ## Overview
 
-Custom component types allow you to extend Atmos beyond the built-in component types (Terraform, Helmfile, Packer). You can define any component type (e.g., `script`, `ansible`, `manifest`) and access its configuration from stack files via Go templates.
+Custom component types allow you to extend Atmos beyond the built-in component types. This example defines an `example` type and accesses its configuration from stack files via Go templates.
+
+For implementation logic with conditions, loops, and reusable functions, use
+[Atmos scripting (Starlark)](https://atmos.tools/scripting). A `type: script` step
+with `interpreter: starlark` reads the resolved configuration through
+`ctx.component`. See the [Starlark custom-component walkthrough](https://atmos.tools/components/custom#implement-components-with-starlark).
 
 ## Structure
 
@@ -20,12 +32,12 @@ Custom component types allow you to extend Atmos beyond the built-in component t
 examples/custom-components/
 ├── atmos.yaml                           # Atmos configuration with custom command
 ├── components/
-│   └── script/
+│   └── example/
 │       └── deploy-app/
 │           └── deploy.sh                # Example script (not executed)
 └── stacks/
     ├── catalog/
-    │   └── script/
+    │   └── example/
     │       └── deploy-app.yaml          # Base component configuration
     └── deploy/
         └── dev.yaml                     # Stack with overrides
@@ -35,13 +47,13 @@ examples/custom-components/
 
 1. Inspect the custom component type configuration:
     ```bash
-    atmos describe config --format=yaml --query .components.script
+    atmos describe config --format=yaml --query .components.example
     ```
 
 2. Run the custom command:
     ```bash
     cd examples/custom-components
-    atmos script deploy-app -s dev
+    atmos example deploy-app --stack dev
     ```
 
 3. Expected output:
@@ -57,12 +69,12 @@ examples/custom-components/
 ## How It Works
 
 1. **Custom Command Definition** (`atmos.yaml`):
-    - The `script` command defines a custom component type
+    - The `example` command defines a custom component type
     - Arguments and flags with `provides: component` and `provides: stack` identify which values to use
     - The `component:` section specifies the component type name
 
 2. **Stack Configuration** (`stacks/`):
-    - Components are defined under `components.script.<name>`
+    - Components are defined under `components.example.<name>`
     - Standard Atmos inheritance and overrides work as expected
 
 3. **Template Access**:

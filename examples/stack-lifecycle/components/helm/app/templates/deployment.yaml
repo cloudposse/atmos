@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stack-lifecycle-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stack-lifecycle-demo
+  template:
+    metadata:
+      labels:
+        app: stack-lifecycle-demo
+    spec:
+      containers:
+        - name: web
+          image: {{ .Values.image | quote }}
+          ports:
+            - containerPort: 80

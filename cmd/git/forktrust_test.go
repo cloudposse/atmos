@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,7 +10,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	ghprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // registerGitHubProviderOnly isolates the CI registry to just the GitHub
@@ -139,4 +142,31 @@ func TestAllowUnsafeFork(t *testing.T) {
 
 	atmosConfigPtr = &schema.AtmosConfiguration{CI: schema.CIConfig{AllowUnsafeForkExecution: false}}
 	assert.False(t, allowUnsafeFork(&cloneOptions{}))
+}
+
+func TestGuardForkCheckoutWarnsOnEveryBypassSource(t *testing.T) {
+	for _, source := range []string{"flag", "config", "safe"} {
+		t.Run(source, func(t *testing.T) {
+			registerGitHubProviderOnly(t)
+			setForkPRTargetEnv(t)
+			original := atmosConfigPtr
+			t.Cleanup(func() { atmosConfigPtr = original })
+			atmosConfigPtr = &schema.AtmosConfiguration{}
+			opts := &cloneOptions{AllowUnsafeFork: source == "flag"}
+			atmosConfigPtr.CI.AllowUnsafeForkExecution = source == "config"
+			var stderr bytes.Buffer
+			ctx, err := iolib.NewContext(iolib.WithStreams(&testStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: &stderr}))
+			require.NoError(t, err)
+			ui.InitFormatter(ctx)
+			t.Cleanup(ui.Reset)
+			err = guardForkCheckout("refs/heads/main", "https://github.com/acme/infra.git", opts)
+			require.NoError(t, err)
+			if source == "safe" {
+				assert.NotContains(t, stderr.String(), "fork checkout safety gate")
+			} else {
+				assert.Contains(t, stderr.String(), "fork checkout safety gate")
+				assert.Contains(t, stderr.String(), "untrusted code")
+			}
+		})
+	}
 }

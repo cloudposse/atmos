@@ -1,0 +1,50 @@
+# CLI-config import DX example (https://github.com/cloudposse/atmos/issues/3430).
+#
+# Demonstrates the string and object forms of the top-level `import:` list, optional-vs-required
+# failure behavior, conditional (`when`) loading, and an optional MCP server.
+
+base_path: "."
+
+import:
+  # String form: OPTIONAL (fail open). A failed import is warned and skipped - the historical
+  # behavior, unchanged.
+  - "configs.d/base-settings.yaml"
+
+  # Object form: REQUIRED by default (fail closed). If this import cannot be resolved or merged,
+  # configuration loading aborts. Use this for config that MUST be present.
+  - path: "configs.d/required-logging.yaml"
+    skip_if_missing: false
+
+  # Conditional: developer-tooling settings load on workstations and are skipped in CI, so an
+  # automated `apply` never resolves them. Off-CI this file loads; in CI it is skipped.
+  - path: "configs.d/local-tooling.yaml"
+    when: local
+
+  # Optional object import: a nice-to-have overlay that may be absent in some checkouts. Being
+  # optional, a missing file is warned and skipped rather than aborting the load.
+  - path: "configs.d/optional-overrides.yaml"
+    skip_if_missing: true
+
+  # Dynamic condition via CEL. In atmos.yaml, author the CEL expression with an explicit !cel
+  # YAML tag, outside the quotes around its argument. It can reference the process environment as the `env` map.
+  # This loads prod overrides only when DEPLOY_ENV=prod.
+  - path: "configs.d/prod-overrides.yaml"
+    when: !cel 'env.DEPLOY_ENV == "prod"'
+
+# Optional MCP server: when its `identity` cannot be resolved in the active auth context (for
+# example, in a consumer repo whose profiles do not define `central-logging`), Atmos skips the
+# server with a warning instead of failing. No auth identity is defined in this example, so the
+# server would be skipped if started with `atmos mcp start`.
+mcp:
+  servers:
+    central-logs:
+      command: "uvx"
+      args: ["awslabs.cloudwatch-mcp-server@latest"]
+      identity: "central-logging" # defined only in some consumer repos
+      optional: true              # skip with a warning where the identity is unavailable
+
+commands:
+  - name: "test"
+    description: "Show the merged configuration for the cli-config-imports example"
+    steps:
+      - atmos describe config --format yaml

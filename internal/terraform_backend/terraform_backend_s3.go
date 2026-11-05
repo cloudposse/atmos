@@ -19,6 +19,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/autherrors"
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -342,7 +343,7 @@ func ReadTerraformBackendS3Internal(
 			}
 			// Retries exhausted - log warning with error details to help diagnose the issue.
 			logS3RetryExhausted(err, tfStateFilePath, bucket, maxRetryCount)
-			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrGetObjectFromS3, autherrors.Normalize(lastErr))
 		}
 
 		content, err := io.ReadAll(output.Body)
@@ -355,7 +356,7 @@ func ReadTerraformBackendS3Internal(
 		return content, nil
 	}
 
-	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
+	return nil, fmt.Errorf("%w: %w", errUtils.ErrGetObjectFromS3, autherrors.Normalize(lastErr))
 }
 
 // logS3RetryExhausted logs a warning when all retries are exhausted for S3 operations.

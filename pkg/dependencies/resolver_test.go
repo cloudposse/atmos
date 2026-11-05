@@ -458,7 +458,7 @@ func TestLoadToolVersionsDependencies(t *testing.T) {
 			}
 			toolchain.SetAtmosConfig(testConfig)
 
-			got, err := LoadToolVersionsDependencies(&schema.AtmosConfiguration{})
+			got, err := LoadToolVersionsDependencies(testConfig)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -496,7 +496,7 @@ func TestLoadToolVersionsDependencies_DirectoryError(t *testing.T) {
 	toolchain.SetAtmosConfig(testConfig)
 
 	// Should return an error because we can't read a directory as a file.
-	_, err = LoadToolVersionsDependencies(&schema.AtmosConfiguration{})
+	_, err = LoadToolVersionsDependencies(testConfig)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load .tool-versions")
 }

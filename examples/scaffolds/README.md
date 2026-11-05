@@ -5,6 +5,11 @@ description: Concrete, ready-to-run scaffold templates — the same catalog atmo
 cast:
   file: /casts/examples/scaffolds/aws-landing-zone-lifecycle.cast
   title: atmos scaffold generate ./aws/landing-zone
+related_docs:
+  - label: "Initialize a project"
+    url: /cli/commands/init
+  - label: "Scaffold generation and template configuration"
+    url: /cli/commands/scaffold/generate
 ---
 
 # Example: Scaffolds

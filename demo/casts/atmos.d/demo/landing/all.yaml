@@ -1,0 +1,45 @@
+commands:
+- name: casts generate demo landing
+  description: Generate all dedicated landing-page casts.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts generate demo landing hero
+  - type: shell
+    command: atmos casts generate demo landing how-it-works
+  - type: shell
+    command: atmos casts generate demo landing terraform
+  - type: shell
+    command: atmos casts generate demo landing kubernetes
+  - type: shell
+    command: atmos casts generate demo landing emulators
+  - type: shell
+    command: atmos casts generate demo landing local-ci
+  - type: shell
+    command: atmos casts generate demo landing secrets
+  - type: shell
+    command: atmos casts generate demo landing dx
+  - type: shell
+    command: atmos casts generate demo landing extensibility
+- name: casts validate demo landing
+  description: Validate all dedicated landing-page casts.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts validate demo landing hero
+  - type: shell
+    command: atmos casts validate demo landing how-it-works
+  - type: shell
+    command: atmos casts validate demo landing terraform
+  - type: shell
+    command: atmos casts validate demo landing kubernetes
+  - type: shell
+    command: atmos casts validate demo landing emulators
+  - type: shell
+    command: atmos casts validate demo landing local-ci
+  - type: shell
+    command: atmos casts validate demo landing secrets
+  - type: shell
+    command: atmos casts validate demo landing dx
+  - type: shell
+    command: atmos casts validate demo landing extensibility

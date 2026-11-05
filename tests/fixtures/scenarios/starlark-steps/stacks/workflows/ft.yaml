@@ -1,0 +1,216 @@
+# Field-test workflows (ft-). Run from the fixture directory:
+#   atmos workflow <name> --file ft
+workflows:
+  ft-fail:
+    description: A plain fail() in a one-step workflow with no retry configured.
+    steps:
+      - name: only
+        type: script
+        interpreter: starlark
+        script: |
+          fail("x")
+
+  ft-fail-second:
+    description: The second of three steps fails; check the --from-step resume hint.
+    steps:
+      - name: one
+        type: script
+        interpreter: starlark
+        script: |
+          print("one ran")
+      - name: two
+        type: script
+        interpreter: starlark
+        script: |
+          fail("two failed")
+      - name: three
+        type: script
+        interpreter: starlark
+        script: |
+          print("three ran")
+
+  ft-typo:
+    description: type starlark (typo) in a workflow.
+    steps:
+      - name: s
+        type: starlark
+        script: |
+          print("hi")
+
+  ft-templated-timeout:
+    description: A templated timeout (from a previous step value) on a script step.
+    steps:
+      - name: t
+        type: script
+        interpreter: starlark
+        script: |
+          output = "1s"
+      - name: s
+        type: script
+        interpreter: starlark
+        timeout: '{{ .steps.t.value }}'
+        script: |
+          exec.run(["sleep", "3.47"])
+          print("finished sleep")
+
+  ft-templated-timeout-shell:
+    description: A templated timeout (from a previous step value) on a shell step.
+    steps:
+      - name: t
+        type: script
+        interpreter: starlark
+        script: |
+          output = "1s"
+      - name: s
+        type: shell
+        timeout: '{{ .steps.t.value }}'
+        command: sleep 3.49
+
+  ft-templated-output:
+    description: Templated output (from a previous step value) on a workflow step.
+    steps:
+      - name: mode
+        type: script
+        interpreter: starlark
+        script: |
+          output = "none"
+      - name: s
+        type: script
+        interpreter: starlark
+        output: '{{ .steps.mode.value }}'
+        script: |
+          print("templated-output-line mode={{ .steps.mode.value }}")
+
+  ft-parallel-live:
+    description: Four 1s tasks in parallel; do lines stream live?
+    steps:
+      - name: group
+        type: script
+        interpreter: starlark
+        script: |
+          def work(n):
+              ui.info("start %d" % n)
+              exec.run(["sleep", "1"])
+              ui.success("done %d" % n)
+              return n
+          output = steps.parallel(tasks = [steps.task(name = "t%d" % i, function = work, args = [i]) for i in range(4)])
+
+  ft-ui-colors:
+    description: ui.* output in a forced-color run.
+    steps:
+      - name: colors
+        type: script
+        interpreter: starlark
+        script: |
+          ui.info("info line")
+          ui.success("success line")
+          ui.warning("warning line")
+
+  ft-dry:
+    description: dry-run with a parallel child, a script step, and load() of a missing module.
+    steps:
+      - name: group
+        type: parallel
+        steps:
+          - name: child
+            type: script
+            interpreter: starlark
+            script: |
+              print("parallel child ran")
+      - name: seq
+        type: script
+        interpreter: starlark
+        script: |
+          print("seq ran; ctx=%s" % ctx)
+      - name: missing-load
+        type: script
+        interpreter: starlark
+        script: |
+          load("does-not-exist.star", "x")
+          print(x)
+
+  ft-container-templated-timeout:
+    description: A templated timeout on a container-backed shell step (needs docker or podman).
+    steps:
+      - name: t
+        type: script
+        interpreter: starlark
+        script: |
+          output = "30s"
+      - name: c
+        type: shell
+        container:
+          image: alpine:3.20
+        timeout: '{{ .steps.t.value }}'
+        command: echo in-container
+
+  ft-container-literal-timeout:
+    description: The same container-backed step with a literal timeout (control).
+    steps:
+      - name: c
+        type: shell
+        container:
+          image: alpine:3.20
+        timeout: 30s
+        command: echo in-container
+
+  ft-container-starlark:
+    description: A Starlark step under a workflow-level container must fail validation.
+    container:
+      image: alpine:3.20
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        script: |
+          print("must not run")
+
+  ft-dry-syntax-seq:
+    description: A Starlark syntax error in a sequential step under --dry-run (docs say it is reported).
+    steps:
+      - name: bad
+        type: script
+        interpreter: starlark
+        script: |
+          x = (1 +
+
+  ft-dry-syntax-parallel:
+    description: A Starlark syntax error in a parallel child under --dry-run (is it parsed too).
+    steps:
+      - name: group
+        type: parallel
+        steps:
+          - name: bad-child
+            type: script
+            interpreter: starlark
+            script: |
+              x = (1 +
+
+  ft-dry-python:
+    description: A non-Starlark script step under --dry-run.
+    steps:
+      - name: py
+        type: script
+        interpreter: python3
+        script: |
+          print("python ran")
+
+  ft-timeout-invalid:
+    description: An invalid timeout value on a script step.
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        timeout: abc
+        script: |
+          print("must not run")
+
+  ft-timeout-zero:
+    description: A zero timeout on a script step.
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        timeout: 0s
+        script: |
+          print("ran with timeout 0s")

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
@@ -99,8 +100,11 @@ func (ar *AquaRegistry) packageInfoList() ([]indexPackageInfo, error) {
 		return pkgs, nil
 	}
 
+	// A failure to load or fetch the index is not a "not found" result: the
+	// tool may well exist, we just cannot tell. Surface it distinctly so callers
+	// can report the real cause (offline, proxy failure, no cache).
 	if _, err := ar.fetchRegistryIndex(context.Background()); err != nil {
-		return nil, fmt.Errorf("%w: %w", registry.ErrToolNotFound, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrToolRegistryIndexUnavailable, err)
 	}
 
 	ar.pathIndexMu.RLock()
@@ -108,7 +112,7 @@ func (ar *AquaRegistry) packageInfoList() ([]indexPackageInfo, error) {
 	ar.pathIndexMu.RUnlock()
 
 	if pkgs == nil {
-		return nil, fmt.Errorf("%w: registry index unavailable", registry.ErrToolNotFound)
+		return nil, fmt.Errorf("%w: registry index is empty", errUtils.ErrToolRegistryIndexUnavailable)
 	}
 	return pkgs, nil
 }

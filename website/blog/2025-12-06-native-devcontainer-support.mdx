@@ -20,6 +20,8 @@ Today, we're solving this problem once and for all with **native Development Con
 
 <!--truncate-->
 
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
 ## The DevOps Toolbox Pattern
 
 The concept of containerized development environments—what we call "DevOps toolboxes"—isn't new. Companies like CoreOS pioneered the toolbox pattern years ago, recognizing that developers need consistent, reproducible environments without installing dozens of tools locally.
@@ -449,6 +451,32 @@ No more "works on my machine." No more installation marathons. No more version c
 **Want a production-ready solution?** Check out [Geodesic: A Production-Ready DevOps Toolbox](/changelog/geodesic-production-ready-devcontainer) to get started in minutes. Or create your own devcontainer configuration. The `examples/devcontainer` folder has live examples you can use immediately.
 
 It's a pretty ingenious system, if we do say so ourselves.
+
+## Try it out
+
+<TryExamples>
+
+<TryExample example="devcontainer" label="Dev Container">
+
+Install Docker or Podman, then inspect the configured development containers.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
+
+<TryExample example="devcontainer-build" label="Build Geodesic">
+
+Install Docker or Podman before building or entering the Geodesic container.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
+
+</TryExamples>
 
 ## Resources
 

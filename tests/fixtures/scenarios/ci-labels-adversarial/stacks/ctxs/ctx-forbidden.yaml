@@ -1,0 +1,3 @@
+import: [catalog/contexts]
+vars: {stage: ctx-forbidden}
+components: {terraform: {ctx-forbidden: {metadata: {component: mock, inherits: [ctx-base], labels: {bad: !exec echo hi}}}}}

@@ -1,0 +1,57 @@
+---
+slug: parallel-yaml-exec
+title: "Run YAML Exec Expressions Concurrently"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Several independent configuration lookups can spend most of their time waiting on commands, with each
+lookup waiting for the previous one to finish. You can now set a
+[concurrency limit](/cli/configuration/settings/functions/exec) for ordinary
+[`!exec`](/functions/yaml/exec) expressions and let those commands overlap without restructuring your stack.
+
+<!--truncate-->
+
+## The Problem
+
+A document with several shell lookups evaluated them serially. Even when the commands were independent,
+configuration loading took the sum of their runtimes. Parallelizing them required changing how values were
+gathered rather than configuring the evaluation itself.
+
+## The Fix
+
+Set one concurrency limit in `atmos.yaml`. Atmos runs up to that many expressions at once and assigns every
+result back to its original location. Serial execution remains the default.
+
+## How to Use It
+
+Configure the limit:
+
+```yaml
+settings:
+  functions:
+    exec:
+      max_concurrency: 4
+```
+
+Keep your stack expressions as they are:
+
+```yaml
+vars:
+  network: !exec ./lookup-network
+  cluster: !exec ./lookup-cluster
+  registry: !exec ./lookup-registry
+```
+
+These three commands can overlap. Their completion order does not change which value belongs to which
+variable, and JSON results retain their existing decoding behavior.
+
+Use `1` for serial execution. Values below `1` are invalid. When enabling concurrency, you own dependencies
+between shell commands, including shared files and external state; Atmos does not infer them.
+Skipping `!exec` expressions still prevents their execution.
+
+## Get Involved
+
+Read the [configuration reference](/cli/configuration/settings/functions/exec) and
+[function reference](/functions/yaml/exec). Share your use cases in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

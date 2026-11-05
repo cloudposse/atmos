@@ -16,6 +16,8 @@ We replaced the old Make-based build and CI entrypoints with Atmos custom comman
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 The repository's development commands now live in `.atmos.d/` command groups instead of Make targets. The root `atmos.yaml` stays focused on project configuration, while the command surface is split by concern:
@@ -53,3 +55,15 @@ It also removes a layer. CI now calls grouped Atmos commands such as `atmos buil
 If you are maintaining a repo with an aging Makefile, `.atmos.d/` is a good place to split the command surface by concern. Keep project configuration in `atmos.yaml`; keep operational commands in grouped files such as `.atmos.d/build.yaml`, `.atmos.d/test.yaml`, and `.atmos.d/lint.yaml`.
 
 For the general command schema, see the [custom commands documentation](/cli/configuration/commands). For a smaller standalone example, browse the [custom commands example](/examples/custom-commands).
+
+## Try it out
+
+<TryExample example="custom-commands">
+
+Run a local custom command; no cloud account is needed.
+
+```shell
+atmos hello
+```
+
+</TryExample>

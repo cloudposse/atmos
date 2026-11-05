@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	term "github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -72,6 +73,10 @@ func init() {
 	if err := installParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		installCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/mcp/install"),
+	)
 	mcpcmd.McpCmd.AddCommand(installCmd)
 }
 

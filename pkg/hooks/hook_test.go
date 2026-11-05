@@ -128,6 +128,8 @@ func TestHook_MatchesAllTerraformEventNotations(t *testing.T) {
 		AfterTerraformApplyAggregate,
 		BeforeTerraformDeploy,
 		AfterTerraformDeploy,
+		BeforeTerraformDestroy,
+		AfterTerraformDestroy,
 		BeforeTerraformDestroyAggregate,
 		AfterTerraformDestroyAggregate,
 	}
@@ -165,6 +167,17 @@ func TestHook_MatchesDeployApplyAliasesInBothNotations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.True(t, Hook{Events: []string{tt.configured}}.MatchesEvent(tt.event))
+		})
+	}
+}
+
+// TestHookMatchesCloudFormationDriftEvents preserves the hyphenated operation name when matching the
+// drift and changeset lifecycle events.
+func TestHookMatchesCloudFormationDriftEvents(t *testing.T) {
+	for _, event := range []HookEvent{BeforeAwsCloudFormationDriftDetect, AfterAwsCloudFormationDriftDetect, BeforeAwsCloudFormationDriftDescribe, AfterAwsCloudFormationDriftDescribe, BeforeAwsCloudFormationChangesetCreate, AfterAwsCloudFormationChangesetCreate, BeforeAwsCloudFormationChangesetExecute, AfterAwsCloudFormationChangesetExecute} {
+		t.Run(string(event), func(t *testing.T) {
+			assert.True(t, Hook{Events: []string{string(event)}}.MatchesEvent(event))
+			assert.False(t, Hook{Events: []string{string(BeforeAwsCloudFormationApply)}}.MatchesEvent(event))
 		})
 	}
 }

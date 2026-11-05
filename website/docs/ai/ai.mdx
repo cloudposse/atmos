@@ -19,7 +19,7 @@ Atmos is designed for AI agents to operate your infrastructure directly. It can 
 
 Together, these make it easier for a team to work with the infrastructure and repositories Atmos manages — whichever AI tool each person happens to be using.
 
-- **[Agent Harness](#agent-harness)** — chat, ask, or script against your infrastructure with `atmos ai chat`/`ask`/`exec`, using either API tokens or your existing Claude Code/Codex/Copilot/Gemini subscription.
+- **[Agent Harness](#agent-harness)** — chat, ask, or script against your infrastructure with `atmos ai chat`/`ask`/`exec`, using either API tokens or your existing Claude Code/Codex/Copilot/opencode/Gemini subscription.
 - **[MCP](#mcp)** — connect Atmos to external MCP servers as a client, expose Atmos's own tools as a server, and distribute MCP server configuration from `atmos.yaml` so Atmos and every agent harness on your team use the same servers.
 - **[Command Analysis](#ai-powered-command-analysis)** — add `--ai` to any command for instant analysis of its output.
 - **[Agent Skills](#agent-skills)** — install and share domain knowledge that any Agent Skills-compatible tool can use.
@@ -45,11 +45,11 @@ ai:
 
 ### With Your Existing Subscription (No API Key)
 
-Use your locally installed Claude Code, OpenAI Codex, GitHub Copilot, or Gemini CLI binary. The CLI tool handles auth via its own subscription — no API key configuration needed.
+Use your locally installed Claude Code, OpenAI Codex, GitHub Copilot, opencode, or Gemini CLI binary. Each tool handles auth on its own — a subscription for Claude Code/Codex/Copilot, a Google account for Gemini CLI, or (for opencode) whatever model provider you've already configured and authenticated in opencode — so Atmos needs no API key configuration.
 
 :::note Bring your own CLI tool
 Atmos assumes one of these is already installed and authenticated on your machine — it doesn't
-install or log you into `claude`/`codex`/`copilot`/`gemini` for you. If you don't have one yet,
+install or log you into `claude`/`codex`/`copilot`/`opencode`/`gemini` for you. If you don't have one yet,
 the commands below install and authenticate each.
 :::
 
@@ -57,7 +57,7 @@ the commands below install and authenticate each.
 ```yaml
 ai:
   enabled: true
-  default_provider: "claude-code"  # or "codex-cli", "copilot-cli", "gemini-cli", or "auto" to auto-detect
+  default_provider: "claude-code"  # or "codex-cli", "copilot-cli", "opencode", "gemini-cli", or "auto" to auto-detect
   providers:
     claude-code:
       max_turns: 10
@@ -74,6 +74,9 @@ npm install -g @openai/codex && codex login
 
 # GitHub Copilot CLI
 npm install -g @github/copilot && copilot   # then /login (or set GH_TOKEN)
+
+# opencode (authenticate your model provider once)
+npm install -g opencode-ai && opencode auth login
 
 # Gemini CLI (authenticates on first run)
 npm install -g @google/gemini-cli && gemini
@@ -114,6 +117,9 @@ Atmos can act as an agent harness in its own right — `atmos ai chat`, `ask`, a
 | Google Gemini | `gemini`      | `GEMINI_API_KEY`       |
 | Grok (xAI)    | `grok`        | `XAI_API_KEY`          |
 | GitHub Models | `github`      | `GITHUB_TOKEN`         |
+| OpenRouter    | `openrouter`  | `OPENROUTER_API_KEY`   |
+| DeepSeek      | `deepseek`    | `DEEPSEEK_API_KEY`     |
+| Z.AI (GLM)    | `zai`         | `ZAI_API_KEY`          |
 | AWS Bedrock   | `bedrock`     | AWS IAM credentials    |
 | Azure OpenAI  | `azureopenai` | `AZURE_OPENAI_API_KEY` |
 | Ollama        | `ollama`      | None (local)           |
@@ -126,10 +132,11 @@ The CLI tool manages its own tool execution loop, and MCP servers are passed thr
 | Claude Code  | `claude-code` | `claude` | Claude Pro/Max subscription   | Full                          |
 | OpenAI Codex | `codex-cli`   | `codex`  | ChatGPT Plus/Pro subscription | Full                          |
 | GitHub Copilot | `copilot-cli` | `copilot` | Copilot subscription (`/login` or `GH_TOKEN`) | Full |
+| opencode     | `opencode`    | `opencode` | opencode's own model provider (`opencode auth login`) | Full |
 | Gemini CLI   | `gemini-cli`  | `gemini` | Google account (free tier)    | Blocked for personal accounts |
 
 :::tip When to use which
-- **Interactive development with MCP** — `claude-code` or `codex-cli` (subscription, full MCP), or any of the API providers
+- **Interactive development with MCP** — `claude-code`, `codex-cli`, `copilot-cli`, or `opencode` (subscription, full MCP), or any of the API providers
 - **CI/CD pipelines** — API providers (env var auth, no interactive login); `github` is zero-secret in GitHub Actions (built-in `GITHUB_TOKEN` with `permissions: models: read`)
 - **Cost-conscious** — `gemini-cli` (free tier, prompt-only)
 - **Enterprise** — `bedrock` or `azureopenai` (compliance, audit trails)

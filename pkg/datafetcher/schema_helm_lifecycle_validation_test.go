@@ -26,19 +26,25 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 			"source":       map[string]any{"uri": "github.com/cloudposse/atmos"},
 			"provision":    map[string]any{},
 			"release": map[string]any{
-				"timeout":     "10m",
-				"chart_hooks": true,
-				"wait":        map[string]any{"strategy": "watcher", "jobs": true},
-				"history":     map[string]any{"max": 10},
+				"timeout":           "10m",
+				"chart_hooks":       true,
+				"wait":              map[string]any{"strategy": "watcher", "jobs": true},
+				"history":           map[string]any{"max": 10},
+				"server_side_apply": true,
+				"force_conflicts":   false,
 				"install": map[string]any{
-					"timeout":    "60m",
-					"crds":       "create",
-					"on_failure": "uninstall",
+					"timeout":           "60m",
+					"crds":              "create",
+					"on_failure":        "uninstall",
+					"server_side_apply": "auto",
+					"force_conflicts":   true,
 				},
 				"upgrade": map[string]any{
 					"timeout":            "10m",
 					"on_failure":         "rollback",
 					"cleanup_on_failure": true,
+					"server_side_apply":  "false",
+					"force_conflicts":    false,
 				},
 				"delete": map[string]any{
 					"timeout": "5m",
@@ -149,6 +155,27 @@ func TestHelmLifecycleManifestSchemas(t *testing.T) {
 			field: "helm.release.delete.wait",
 			manifest: map[string]any{
 				"helm": map[string]any{"release": map[string]any{"delete": map[string]any{"wait": map[string]any{"jobs": true}}}},
+			},
+		},
+		{
+			name:  "unknown server_side_apply value",
+			field: "helm.release.install.server_side_apply",
+			manifest: map[string]any{
+				"helm": map[string]any{"release": map[string]any{"install": map[string]any{"server_side_apply": "maybe"}}},
+			},
+		},
+		{
+			name:  "force_conflicts wrong type",
+			field: "helm.release.upgrade.force_conflicts",
+			manifest: map[string]any{
+				"helm": map[string]any{"release": map[string]any{"upgrade": map[string]any{"force_conflicts": "yes"}}},
+			},
+		},
+		{
+			name:  "server_side_apply rejected on delete",
+			field: "helm.release.delete",
+			manifest: map[string]any{
+				"helm": map[string]any{"release": map[string]any{"delete": map[string]any{"server_side_apply": true}}},
 			},
 		},
 		{

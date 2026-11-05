@@ -6,10 +6,19 @@ import (
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	atmosErrors "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
+	"github.com/cloudposse/atmos/pkg/ai/agent/azureopenai"
+	"github.com/cloudposse/atmos/pkg/ai/agent/bedrock"
+	"github.com/cloudposse/atmos/pkg/ai/agent/gemini"
+	"github.com/cloudposse/atmos/pkg/ai/agent/github"
+	"github.com/cloudposse/atmos/pkg/ai/agent/grok"
+	"github.com/cloudposse/atmos/pkg/ai/agent/ollama"
+	"github.com/cloudposse/atmos/pkg/ai/agent/openai"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -558,4 +567,28 @@ func TestTruncateOutput_ExactlyOverLimit(t *testing.T) {
 	assert.LessOrEqual(t, len(result), maxOutputLength, "truncated result must not exceed limit")
 	assert.True(t, strings.HasSuffix(result, "\n... (output truncated)"))
 	assert.True(t, strings.HasPrefix(result, strings.Repeat("x", 100)))
+}
+
+func TestHintModel_MatchesProviderDefaults(t *testing.T) {
+	tests := map[string]string{
+		"anthropic":   anthropic.DefaultModel,
+		"openai":      openai.DefaultModel,
+		"gemini":      gemini.DefaultModel,
+		"bedrock":     bedrock.DefaultModel,
+		"azureopenai": azureopenai.DefaultModel,
+		"ollama":      ollama.DefaultModel,
+		"grok":        grok.DefaultModel,
+		"github":      github.DefaultModel,
+	}
+	for provider, want := range tests {
+		t.Run(provider, func(t *testing.T) {
+			assert.Equal(t, want, hintModel(provider))
+		})
+	}
+}
+
+func TestValidateAIConfig_NotEnabledHintUsesAnthropicDefault(t *testing.T) {
+	err := ValidateAIConfig(&schema.AtmosConfiguration{})
+	require.Error(t, err)
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "model: "+anthropic.DefaultModel+"\n")
 }

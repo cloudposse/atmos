@@ -1,0 +1,37 @@
+---
+title: Step Types
+sidebar_label: Step types
+sidebar_position: 2
+slug: /steps/type
+---
+
+import Intro from '@site/src/components/Intro'
+import StepTypeCatalog from './_partials/_type-catalog.mdx'
+
+<Intro>
+The step `type` field selects how Atmos executes or renders a step. Step types expose the building blocks that power the Atmos CLI itself — command execution, interactive prompts, and rich terminal UI — so you can assemble [lifecycle hooks](/stacks/hooks#kind-step-run-a-step-type), [custom commands](/cli/configuration/commands) and [workflows](/workflows) from the same primitives Atmos uses internally. Step types are values of `steps[].type`; they are not sibling YAML sections.
+</Intro>
+
+```yaml
+steps:
+  - name: prompt
+    type: input
+    prompt: Enter deployment message
+```
+
+<StepTypeCatalog />
+
+Use type-specific fields on the same step object:
+
+```yaml
+steps:
+  - name: environments
+    type: table
+    title: Available Environments
+    columns:
+      - name
+      - region
+    data:
+      - name: dev
+        region: us-east-1
+```

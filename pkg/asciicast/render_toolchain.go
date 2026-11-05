@@ -39,6 +39,12 @@ type renderToolSpec struct {
 var (
 	resolveRenderTools = resolveRenderToolsFromToolchain
 
+	// The renderToolInstallAllowed hook reports whether toolchain.install permits downloading the managed
+	// renderers. It is a variable so tests can inject a policy without loading a configuration.
+	renderToolInstallAllowed = func() (bool, error) {
+		return dependencies.InstallsAutomatically(toolchain.GetAtmosConfig())
+	}
+
 	ensureRenderToolDependencies = func(deps map[string]string) error {
 		return dependencies.NewInstaller(toolchain.GetAtmosConfig()).EnsureTools(deps)
 	}
@@ -92,14 +98,28 @@ func resolveRenderToolsFromToolchain(requirements renderToolRequirements) (rende
 	for _, spec := range specs {
 		deps[spec.dependency] = spec.version
 	}
-	if err := ensureRenderToolDependencies(deps); err != nil {
-		return renderTools{}, fmt.Errorf("%w: install managed cast renderers: %w", errUtils.ErrToolInstall, err)
+	installAllowed, err := renderToolInstallAllowed()
+	if err != nil {
+		return renderTools{}, err
+	}
+	if installAllowed {
+		if err := ensureRenderToolDependencies(deps); err != nil {
+			return renderTools{}, fmt.Errorf("%w: install managed cast renderers: %w", errUtils.ErrToolInstall, err)
+		}
 	}
 
 	tools := renderTools{}
 	for _, spec := range specs {
 		path, err := findRenderToolBinary(spec)
 		if err != nil {
+			if !installAllowed {
+				return renderTools{}, errUtils.Build(errUtils.ErrToolNotInstalled).
+					WithCause(err).
+					WithExplanationf("The managed cast renderer %s@%s is not installed.", spec.dependency, spec.version).
+					WithHintf("Run `atmos toolchain install %s@%s` to install it", spec.dependency, spec.version).
+					WithHint("Set `toolchain.install` to `declared`, `auto`, or `always` to let Atmos install it automatically").
+					Err()
+			}
 			return renderTools{}, fmt.Errorf("%w: %w", errUtils.ErrToolInstall, err)
 		}
 		if !filepath.IsAbs(path) {

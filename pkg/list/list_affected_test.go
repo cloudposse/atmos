@@ -1,13 +1,17 @@
 package list
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -954,4 +958,147 @@ func TestAffectedCommandOptions_IdentityName(t *testing.T) {
 			assert.Equal(t, tt.identityName, opts.IdentityName)
 		})
 	}
+}
+
+// TestAffectedCommandOptions_AffectedFilter verifies that the affected filter is built from tags, labels, and exclude-locked and rejects invalid labels.
+func TestAffectedCommandOptions_AffectedFilter(t *testing.T) {
+	t.Run("builds filter from tags, labels, and exclude-locked", func(t *testing.T) {
+		opts := &AffectedCommandOptions{
+			ExcludeLocked: true,
+			Tags:          []string{"prod", "tier-1"},
+			LabelsRaw:     "ci=auto,team:platform",
+		}
+
+		got, err := opts.affectedFilter()
+
+		require.NoError(t, err)
+		assert.True(t, got.ExcludeLocked)
+		assert.Equal(t, []string{"prod", "tier-1"}, got.Tags)
+		assert.Equal(t, map[string]string{"ci": "auto", "team": "platform"}, got.Labels)
+	})
+
+	t.Run("empty options yield an empty filter", func(t *testing.T) {
+		got, err := (&AffectedCommandOptions{}).affectedFilter()
+
+		require.NoError(t, err)
+		assert.False(t, got.ExcludeLocked)
+		assert.Empty(t, got.Tags)
+		assert.Empty(t, got.Labels)
+	})
+
+	t.Run("malformed labels return an invalid flag error", func(t *testing.T) {
+		_, err := (&AffectedCommandOptions{LabelsRaw: "no-separator"}).affectedFilter()
+
+		require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	})
+}
+
+// TestAffectedCommandOptions_AffectedFilter_DefersSelectorsWithDependents verifies that selectors are deferred only when dependents are included.
+func TestAffectedCommandOptions_AffectedFilter_DefersSelectorsWithDependents(t *testing.T) {
+	tests := []struct {
+		name string
+		opts AffectedCommandOptions
+		want bool
+	}{
+		{name: "dependents with tags defers", opts: AffectedCommandOptions{IncludeDependents: true, Tags: []string{"prod"}}, want: true},
+		{name: "dependents with labels defers", opts: AffectedCommandOptions{IncludeDependents: true, LabelsRaw: "ci=auto"}, want: true},
+		{name: "selectors without dependents apply immediately", opts: AffectedCommandOptions{Tags: []string{"prod"}, LabelsRaw: "ci=auto"}, want: false},
+		{name: "dependents without selectors has nothing to defer", opts: AffectedCommandOptions{IncludeDependents: true, ExcludeLocked: true}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.opts.affectedFilter()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.DeferSelectors)
+		})
+	}
+}
+
+// TestResolveAffectedDependents verifies when affected dependents are resolved and how the options are passed to the finalizer.
+func TestResolveAffectedDependents(t *testing.T) {
+	// Compile-time sentinel so a rename of the dependents options fails the build here.
+	_ = e.AffectedDependentsOptions{IncludeSettings: true, Flatten: true}
+
+	stubFinalizer := func(t *testing.T, fn func(*schema.AtmosConfiguration, *[]schema.Affected, *e.AffectedDependentsOptions) error) {
+		t.Helper()
+		original := finalizeAffectedDependents
+		finalizeAffectedDependents = fn
+		t.Cleanup(func() { finalizeAffectedDependents = original })
+	}
+
+	t.Run("does nothing without --include-dependents", func(t *testing.T) {
+		stubFinalizer(t, func(*schema.AtmosConfiguration, *[]schema.Affected, *e.AffectedDependentsOptions) error {
+			t.Fatal("dependents must not be resolved without --include-dependents")
+			return nil
+		})
+		affected := []schema.Affected{{Component: "vpc", Stack: "dev"}}
+
+		require.NoError(t, resolveAffectedDependents(&schema.AtmosConfiguration{}, &AffectedCommandOptions{}, &affected, &dependentsRunContext{}))
+		assert.Len(t, affected, 1)
+	})
+
+	t.Run("resolves dependents so the flattened rows appear", func(t *testing.T) {
+		var got *e.AffectedDependentsOptions
+		stubFinalizer(t, func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, o *e.AffectedDependentsOptions) error {
+			got = o
+			(*affected)[0].Dependents = []schema.Dependent{{Component: "app", ComponentType: "terraform", Stack: "dev", StackSlug: "dev-app"}}
+			return nil
+		})
+		opts := &AffectedCommandOptions{
+			IncludeDependents: true,
+			Stack:             "dev",
+			ProcessTemplates:  true,
+			ProcessFunctions:  true,
+			Skip:              []string{"terraform.output"},
+			Tags:              []string{"prod"},
+			LabelsRaw:         "ci=auto",
+		}
+		affected := []schema.Affected{{Component: "vpc", ComponentType: "terraform", Stack: "dev", StackSlug: "dev-vpc", Affected: "stack.vars"}}
+
+		require.NoError(t, resolveAffectedDependents(&schema.AtmosConfiguration{}, opts, &affected, &dependentsRunContext{AuthDisabled: true}))
+
+		require.NotNil(t, got)
+		assert.True(t, got.IncludeSettings)
+		assert.True(t, got.ProcessTemplates)
+		assert.True(t, got.ProcessYamlFunctions)
+		assert.True(t, got.AuthDisabled)
+		assert.False(t, got.Flatten)
+		assert.Equal(t, "dev", got.OnlyInStack)
+		assert.Equal(t, []string{"terraform.output"}, got.Skip)
+		assert.Equal(t, []string{"prod"}, got.Filter.Tags)
+		assert.Equal(t, map[string]string{"ci": "auto"}, got.Filter.Labels)
+
+		// The renderer's flatten step now sees the dependents, so `list affected --include-dependents`
+		// emits dependent rows after the affected row.
+		rows := extract.Affected(affected, opts.IncludeDependents)
+		require.Len(t, rows, 2)
+		assert.Equal(t, "vpc", rows[0]["component"])
+		assert.Equal(t, false, rows[0]["is_dependent"])
+		assert.Equal(t, "app", rows[1]["component"])
+		assert.Equal(t, true, rows[1]["is_dependent"])
+		assert.Equal(t, "dependent", rows[1]["affected"])
+	})
+
+	t.Run("propagates a resolution error", func(t *testing.T) {
+		wantErr := errors.New("boom")
+		stubFinalizer(t, func(*schema.AtmosConfiguration, *[]schema.Affected, *e.AffectedDependentsOptions) error {
+			return wantErr
+		})
+		affected := []schema.Affected{{Component: "vpc"}}
+
+		err := resolveAffectedDependents(&schema.AtmosConfiguration{}, &AffectedCommandOptions{IncludeDependents: true}, &affected, &dependentsRunContext{})
+		require.ErrorIs(t, err, wantErr)
+	})
+
+	t.Run("rejects malformed labels before resolving", func(t *testing.T) {
+		stubFinalizer(t, func(*schema.AtmosConfiguration, *[]schema.Affected, *e.AffectedDependentsOptions) error {
+			t.Fatal("must not resolve with an invalid selector")
+			return nil
+		})
+		affected := []schema.Affected{{Component: "vpc"}}
+
+		err := resolveAffectedDependents(&schema.AtmosConfiguration{}, &AffectedCommandOptions{IncludeDependents: true, LabelsRaw: "no-separator"}, &affected, &dependentsRunContext{})
+		require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	})
 }

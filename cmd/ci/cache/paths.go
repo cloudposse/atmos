@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -212,4 +213,8 @@ func init() {
 	if err := cachePathsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(fmt.Sprintf("failed to bind cache paths flags: %v", err))
 	}
+	internal.RegisterCommandMetadata(
+		cachePathsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/cache/paths"),
+	)
 }

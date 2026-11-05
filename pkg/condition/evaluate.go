@@ -255,7 +255,7 @@ func (n Node) value() any {
 	case kindPredicate:
 		return n.Name
 	case kindCEL:
-		return CELTag + " " + n.Expr
+		return n.Expr
 	case kindAll:
 		values := make([]any, 0, len(n.Children))
 		for _, child := range n.Children {

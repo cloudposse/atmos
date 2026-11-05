@@ -1,0 +1,4 @@
+#!/usr/bin/env -S atmos
+def main(args, flags):
+    ui.success("Hello, " + args["name"] + "!")
+cli.command(description="Greet", args=[cli.arg("name")], run=main)

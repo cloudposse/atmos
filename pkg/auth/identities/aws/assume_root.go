@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -251,13 +252,13 @@ func (i *assumeRootIdentity) parseDurationSeconds() *int32 {
 		return nil
 	}
 
-	duration, err := time.ParseDuration(durationStr)
+	parsedDuration, err := duration.ParseDuration(durationStr)
 	if err != nil {
 		log.Warn("Invalid duration specified for assume root", principalDurationKey, durationStr)
 		return nil
 	}
 
-	seconds := int32(duration.Seconds())
+	seconds := int32(parsedDuration.Seconds())
 	if seconds > maxAssumeRootDuration {
 		log.Warn("Duration exceeds maximum for AssumeRoot (900s), using maximum", principalDurationKey, durationStr)
 		seconds = maxAssumeRootDuration

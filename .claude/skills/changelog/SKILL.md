@@ -133,6 +133,15 @@ import CastEmbed from '@site/src/components/CastEmbed'
 
 - `src` points under `website/static/casts/{examples,demo}/...`.
 - Always carry the `chrome controls scrubber` flags.
+- **Also set `cast` and `castTitle` in the frontmatter** whenever the post embeds a cast. The changelog
+  timeline card (`website/src/components/ChangelogTimeline/TimelineEntry.tsx`) reads only the frontmatter,
+  so a post with just a body `<CastEmbed>` shows no player on its card. Use the primary embed's `src` and
+  `title`:
+
+  ```yaml
+  cast: "/casts/examples/demo-component-versions/vendor-versions.cast"
+  castTitle: "atmos component version vendoring"
+  ```
 - Multiple `<CastEmbed>` tags are fine in one post if there are multiple relevant recordings.
 - `CastEmbed` wraps `CastPlayer` and adds Download (rendered GIF/MP4/SVG/WEBM via Atmos Pro) and Share controls,
   on by default against `cloudposse/atmos` at the site build's Git commit (`GITHUB_SHA` in CI,

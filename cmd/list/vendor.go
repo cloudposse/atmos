@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -67,7 +68,7 @@ var vendorCmd = &cobra.Command{
 			Stack:   v.GetString("stack"),
 			Columns: v.GetStringSlice("columns"),
 			Sort:    v.GetString("sort"),
-			Tags:    tags.ParseTagsFlag(v.GetString("tags")),
+			Tags:    tags.ParseTagsFlag(v.GetString(vendorTagsViperKey)),
 		}
 
 		return listVendorWithOptions(opts)
@@ -127,6 +128,10 @@ func init() {
 	if err := vendorParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		vendorCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/list-vendor"),
+	)
 }
 
 func listVendorWithOptions(opts *VendorOptions) error {

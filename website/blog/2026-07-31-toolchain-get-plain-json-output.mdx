@@ -11,6 +11,8 @@ regex, a `head -1`, and a `2>&1` to work around output that was never meant to b
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 A CI job that needs a tool's configured version — to pass to another action, or write to
@@ -64,6 +66,18 @@ $ atmos toolchain get terraform --format=json
 `--format=plain` only makes sense for a single resolved version, so it's rejected when combined with
 [`--all`](/cli/commands/toolchain/get#flags) (which lists every available version) — use `--format=json` there instead, which returns the full
 list with each entry's installed and default status.
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Install the example's pinned tools. Downloads require network access.
+
+```shell
+atmos toolchain install
+```
+
+</TryExample>
 
 ## Get Involved
 

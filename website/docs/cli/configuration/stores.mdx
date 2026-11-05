@@ -68,9 +68,11 @@ You can reference stores in stack configuration using the `!store` function:
 
 ```yaml
 vars:
-  database_password: !store prod/secrets::database/password
-  api_key: !store prod/ssm::/app/api-key
+  database_host: !store prod/ssm::/app/database-host
+  api_endpoint: !store prod/ssm::/app/api-endpoint
 ```
+
+Use ordinary `!store` for non-sensitive configuration. For passwords and API keys, mark a supported encrypted store `secret: true`, declare the secrets, and use [`!secret`](/functions/yaml/secret). See [Secret Stores](#secret-stores) below.
 
 ## Supported Store Kinds
 
@@ -206,8 +208,21 @@ stores:
       without_authentication: true
       # Optional: permit sending the credential over plain http (does not rewrite the URL like endpoint_insecure)
       insecure_allow_credential_with_http: true
+      # Optional: labels applied as Azure Key Vault secret tags (values must be strings)
+      labels:
+        managed-by: atmos
+        environment: prod
+      # Optional: expiration applied to every secret Atmos writes. Accepts a duration
+      # or a specific date:
+      #   90d                    relative: now + 90 days, recomputed on every write
+      #   2160h                  Go durations also work (720h30m)
+      #   2027-01-01T00:00:00Z   absolute RFC 3339 timestamp
+      #   2027-01-01             date only, midnight UTC
+      expires: 90d
 ```
 </File>
+
+Labels are applied as Azure Key Vault secret tags. Use `labels` and `expires` when an Azure Policy requires every Key Vault secret to carry tags or an expiration date; without them the policy rejects Atmos writes. Both options only affect writes, so reads, existence checks, listing, and deletion are unchanged. A relative `expires` (such as `90d`) is recalculated each time Atmos writes a secret, so rewriting a secret renews its expiration. A fixed date that is already in the past is accepted, but Atmos logs a warning because Key Vault or your policy may reject it. A duration must be at least one second, because Key Vault stores expiration in whole seconds. Invalid values (for example `0d`, `500ms`, or `soon`) fail when the store is created.
 
 Authentication uses the [Azure Default Credential chain](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication), which checks environment variables, managed identity, Azure CLI, and other sources.
 
@@ -410,7 +425,7 @@ This writes Terraform outputs to the configured store after apply completes. The
 
 You can get raw read and write access to any configured store. This access does not depend on a
 Terraform output. Use the [`atmos store`](/cli/commands/store/usage) CLI command group or a
-[`type: store`](/workflows/steps/type/store) workflow step. Not every backend supports every
+[`type: store`](/steps/type/store) workflow step. Not every backend supports every
 operation. For example, `atmos store delete` returns an error for Redis and Artifactory, because
 these backends do not support deletion:
 
@@ -451,5 +466,5 @@ steps:
 - [External Stores](/stacks/sharing-state/stores) - Using `!store` function in stacks
 - [Hooks](/stacks/hooks) - Writing to stores with hooks
 - [`atmos store` CLI](/cli/commands/store/usage) - Read, write, delete, and list store values
-- [`type: store` workflow step](/workflows/steps/type/store) - Write a store value from a workflow, custom command, or hook
+- [`type: store` workflow step](/steps/type/store) - Write a store value from a workflow, custom command, or hook
 - [Terraform State](/stacks/sharing-state/terraform-state) - Alternative data sharing method

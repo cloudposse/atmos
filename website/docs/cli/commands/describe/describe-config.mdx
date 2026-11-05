@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: config
 description: Use this command to show the final (deep-merged) CLI configuration of all `atmos.yaml` file(s).
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Terminal from '@site/src/components/Terminal'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
@@ -48,3 +50,15 @@ atmos describe config --query <yq-expression>
   <dt>`--query` / `-q` <em>(optional)</em></dt>
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe config --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="config-profiles">
+
+Inspect the merged CLI configuration with the developer profile selected.
+
+```shell
+atmos describe config --profile developer
+```
+
+</TryExample>

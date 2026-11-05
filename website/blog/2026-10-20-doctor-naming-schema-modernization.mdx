@@ -1,0 +1,60 @@
+---
+slug: doctor-naming-schema-modernization
+title: "Modernize Naming and Schema Configuration with Atmos Doctor"
+authors: [osterman]
+tags: [enhancement, bugfix, dx]
+---
+
+Replacing legacy naming patterns can accidentally select a different Terraform workspace, while a copied schema can reject configuration supported by your installed Atmos version. The [Atmos Doctor command](/cli/commands/doctor#naming-modernization) now checks naming migrations before applying them and identifies local Atmos schema overrides for review.
+
+<!--truncate-->
+
+## The Problem
+
+Legacy naming tokens and Go templates can appear together, but their evaluation depends on the naming field and template settings. Replacing `{component}` without checking the resolved workspace can change its identity. A local schema copy can also differ from the bundled schema because of version differences or intentional custom constraints.
+
+## The Fix
+
+Doctor recommends template replacements for stack names, Terraform workspaces, and Helmfile cluster names. Automatic fixes require identical resolved names across the complete configuration, including imports, inheritance, and overrides. Conflicts, unsafe expressions, missing inputs, and identity changes receive manual guidance instead.
+
+Doctor also identifies [local Atmos schema overrides](/cli/configuration/schemas#removing-a-local-schema-copy), distinguishing identical copies from differing or custom schemas. It recommends bundled validation where appropriate without deleting files or removing component schemas and policies.
+
+Global metadata now accepts `terraform_workspace_template`. Errors forwarded through custom commands and workflows retain terminal color preferences, plain errors omit raw Markdown markers, and the global metadata error keeps one actionable hint. Routine hook dispatch messages now use the debug log level.
+
+## How to Use It
+
+Inspect naming recommendations and preview safe repairs:
+
+```shell
+atmos doctor --only=legacy-naming
+atmos doctor --only=legacy-naming --fix --dry-run
+atmos doctor --only=legacy-naming --fix
+```
+
+For example, Doctor proposes changing:
+
+```yaml
+metadata:
+  terraform_workspace_pattern: '{stage}-{component}'
+```
+
+To:
+
+```yaml
+metadata:
+  terraform_workspace_template: '{{ .vars.stage }}-{{ .atmos_component }}'
+```
+
+Doctor applies this change only after verifying equivalent resolved names. A mixed workspace template that currently retains literal `{component}` requires manual review because replacing that literal changes the workspace name.
+
+Inspect schema recommendations separately:
+
+```shell
+atmos doctor --only=local-atmos-schema
+```
+
+Review custom constraints and remaining references before removing an override or deleting a local copy. Editor schema associations are separate from CLI validation.
+
+## Get Involved
+
+See [issue #3452](https://github.com/cloudposse/atmos/issues/3452) for the workspace-template report, and share reproducible migration cases in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

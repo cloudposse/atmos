@@ -86,6 +86,43 @@ func TestTFLintHandlerExecuteReturnsScannerErrorWithResult(t *testing.T) {
 	assert.Equal(t, scannerErr.Error(), result.Error)
 }
 
+func TestTFLintHandlerEnforcesStepTimeout(t *testing.T) {
+	original := runTFLint
+	t.Cleanup(func() { runTFLint = original })
+
+	runTFLint = func(ctx context.Context, _ *tflintscanner.Options) (*scanners.Output, *scanners.Context, error) {
+		<-ctx.Done()
+		return nil, nil, ctx.Err()
+	}
+
+	vars := NewVariables()
+	vars.SetFlag("stack", "dev")
+	h := &TFLintHandler{BaseHandler: NewBaseHandler(tflintStepType, CategoryCommand, false)}
+	_, err := h.Execute(context.Background(), &schema.WorkflowStep{Name: "lint", Type: tflintStepType, Component: "vpc", Timeout: "20ms"}, vars)
+
+	require.ErrorIs(t, err, errUtils.ErrStepTimeout)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestTFLintHandlerWithoutTimeoutKeepsCallerContext(t *testing.T) {
+	original := runTFLint
+	t.Cleanup(func() { runTFLint = original })
+
+	runTFLint = func(ctx context.Context, _ *tflintscanner.Options) (*scanners.Output, *scanners.Context, error) {
+		_, hasDeadline := ctx.Deadline()
+		assert.False(t, hasDeadline)
+		return &scanners.Output{Summary: &scanners.Summary{Title: "clean"}}, nil, nil
+	}
+
+	vars := NewVariables()
+	vars.SetFlag("stack", "dev")
+	h := &TFLintHandler{BaseHandler: NewBaseHandler(tflintStepType, CategoryCommand, false)}
+	result, err := h.Execute(context.Background(), &schema.WorkflowStep{Name: "lint", Type: tflintStepType, Component: "vpc"}, vars)
+
+	require.NoError(t, err)
+	assert.Equal(t, "clean", result.Value)
+}
+
 func TestTFLintHandlerExecuteReturnsResolutionErrors(t *testing.T) {
 	h := &TFLintHandler{BaseHandler: NewBaseHandler(tflintStepType, CategoryCommand, false)}
 

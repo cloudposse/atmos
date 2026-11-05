@@ -222,7 +222,7 @@ commands:
 ## Parallel and Recursive Make Become `parallel` and `matrix`
 
 `$(MAKE) -j` runs independent targets at the same time. It maps to a
-[`parallel`](/workflows/steps/type/parallel) step.
+[`parallel`](/steps/type/parallel) step.
 
 `$(MAKE) -C dir target` (or `--directory=dir`) changes the working directory for **one**
 `make` invocation. It does not iterate over multiple directories, so it does not map to
@@ -253,7 +253,7 @@ $(SUBDIRS):
 	$(MAKE) -C $@
 ```
 
-That pattern maps to a [`matrix`](/workflows/steps/type/matrix) step, with each `$(SUBDIRS)`
+That pattern maps to a [`matrix`](/steps/type/matrix) step, with each `$(SUBDIRS)`
 entry becoming a matrix value:
 
 <File title="atmos.yaml">
@@ -278,8 +278,8 @@ commands:
 
 Make skips a target's recipe when every prerequisite (the target's own `inputs`) is older than
 the target file it already produced (the target's own `artifacts`) — comparing mtimes. The
-step-level [`inputs.sources`](/workflows/steps/inputs) and
-[`artifacts.paths`](/workflows/steps/artifacts) fields are the direct match:
+step-level [`inputs.sources`](/steps/inputs) and
+[`artifacts.paths`](/steps/artifacts) fields are the direct match:
 
 ```yaml
 commands:
@@ -300,7 +300,7 @@ matches the hash recorded after the last successful run. That default is a delib
 over Make's own mtime comparison: a fresh `git clone`/CI checkout resets every file's mtime,
 which makes Make (and the mtime-based `timestamp.changed` fact) think everything changed even
 when it didn't. Use `when: timestamp.changed` instead if you want Make's exact mtime semantics.
-See [inputs](/workflows/steps/inputs) for the full field reference. It does not carry over on its
+See [inputs](/steps/inputs) for the full field reference. It does not carry over on its
 own — add `inputs`/`artifacts` to the migrated step yourself.
 
 The scope is different, too: Make's freshness check gates the target's *entire* recipe, but
@@ -323,7 +323,7 @@ than spreading `inputs`/`artifacts` across several steps.
 - **Discoverable commands.** Add descriptions, typed flags, defaults, and per-command help for
   your team's tasks with `atmos --help` and `atmos <command> --help`.
 - **Typed steps.** Combine shell commands with HTTP requests, containers, parallel execution,
-  matrices, and other [step types](/workflows/steps/type).
+  matrices, and other [step types](/steps/type).
 - **Interactive workflows.** Add prompts, confirmations, and structured output where your
   tasks need them.
 - **Tool dependencies.** Declare required CLI versions with `dependencies.tools` so Atmos

@@ -1,0 +1,8 @@
+vars:
+  stage: comp-bad-string
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: comp-bad-string
+      timeout: soon

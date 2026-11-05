@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import useBrokenLinks from '@docusaurus/useBrokenLinks';
 import { motion, AnimatePresence } from 'framer-motion';
 import './index.css';
 
-const FAQItem = ({ question, children }) => {
+const LegacyFAQItem = ({ question, children }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -53,4 +54,25 @@ const FAQItem = ({ question, children }) => {
   );
 };
 
-export default FAQItem;
+export default function FAQItem({ variant, id, question, children }) {
+  const brokenLinks = useBrokenLinks();
+  if (variant !== 'minimal') {
+    return <LegacyFAQItem question={question}>{children}</LegacyFAQItem>;
+  }
+
+  brokenLinks.collectAnchor(id);
+  return (
+    <details id={id} className="faq-disclosure" data-faq-item>
+      <summary>
+        <span data-faq-question>{question}</span>
+        <span className="faq-disclosure-icon" aria-hidden="true" />
+      </summary>
+      <div className="faq-disclosure-answer">
+        <div data-faq-body>{children}</div>
+        <a className="faq-permalink" href={`#${id}`} aria-label={`Link to: ${question}`}>
+          Link to this answer <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </details>
+  );
+}

@@ -5,6 +5,8 @@ sidebar_class_name: command
 description: "Manage configuration profiles for environment-specific settings"
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList';
 import Intro from '@site/src/components/Intro';
@@ -132,6 +134,19 @@ Share consistent settings across team members:
 └── security-review/
     └── atmos.yaml      # Security audit settings
 ```
+
+## Try it out
+
+<TryExample example="config-profiles">
+
+Inspect the sample profiles and their merged settings. Replace the sample cloud identities before running infrastructure commands.
+
+```shell
+atmos profile list
+atmos profile show developer
+```
+
+</TryExample>
 
 ## See Also
 

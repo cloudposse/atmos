@@ -7,19 +7,24 @@ description: >-
 cast:
   file: /casts/examples/demo-schemas/validate.cast
   title: atmos validate schema
+related_docs:
+  - label: "Validate files against schemas"
+    url: /cli/commands/validate/schema
+  - label: "Schema configuration"
+    url: /cli/configuration/schemas
 ---
 
 # Example: Demo Schemas
 
-Validate stack configuration against JSON Schema before running Terraform.
+Validate YAML files against JSON Schema before using them in your workflows.
 
-Learn more about [Validation](https://atmos.tools/validation).
+Learn more about [Validation](https://atmos.tools/validation/validating).
 
 ## What You'll See
 
-- [Schema from file](https://atmos.tools/validation/json-schema) - local JSON Schema
-- [Schema from internet](https://atmos.tools/validation/json-schema#remote-schemas) - fetch from URL (schemastore.org)
-- [Inline schema](https://atmos.tools/validation/json-schema#inline-schemas) - embedded in atmos.yaml
+- [Schema from file](https://atmos.tools/cli/configuration/schemas) - local JSON Schema
+- [Schema from internet](https://atmos.tools/cli/configuration/schemas) - fetch from URL (schemastore.org)
+- [Inline schema](https://atmos.tools/cli/configuration/schemas) - embedded in atmos.yaml
 
 ## Try It
 

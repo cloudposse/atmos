@@ -1,0 +1,80 @@
+vars:
+  stage: precedence
+
+# Stack-root defaults (lowest precedence).
+region: root-region
+timeout: 1h
+
+# Component-type defaults override the stack root.
+aws/cloudformation:
+  region: type-region
+  timeout: 45m
+
+components:
+  aws/cloudformation:
+    base:
+      metadata:
+        type: abstract
+      region: base-region
+      timeout_in_minutes: 30
+    inherits-type:
+      metadata:
+        component: plain
+      path: template.yaml
+      stack_name: inherits-type
+    inherits-base:
+      metadata:
+        component: plain
+        inherits: [base]
+      path: template.yaml
+      stack_name: inherits-base
+    own:
+      metadata:
+        component: plain
+        inherits: [base]
+      path: template.yaml
+      stack_name: own
+      region: own-region
+      timeout: 90
+    overridden:
+      metadata:
+        component: plain
+        inherits: [base]
+      path: template.yaml
+      stack_name: overridden
+      region: own-region
+      overrides:
+        region: override-region
+        timeout_in_minutes: 20
+    legacy-only:
+      metadata:
+        component: plain
+      path: template.yaml
+      stack_name: legacy-only
+      settings:
+        aws_cloudformation:
+          region: legacy-region
+    legacy-vs-modern:
+      metadata:
+        component: plain
+      path: template.yaml
+      stack_name: legacy-vs-modern
+      region: modern-region
+      settings:
+        aws_cloudformation:
+          region: legacy-region
+    legacy-override:
+      metadata:
+        component: plain
+        inherits: [base]
+      path: template.yaml
+      stack_name: legacy-override
+      region: own-region
+      overrides:
+        settings:
+          aws_cloudformation:
+            region: legacy-override-region
+  terraform:
+    tf-reader:
+      vars:
+        region_from_settings: "none"

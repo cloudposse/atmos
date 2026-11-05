@@ -289,6 +289,19 @@ func TestLoadRejectsInvalidManifest(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrManifestValidation)
 }
 
+// TestLoad_UnregisteredKindSkipsSpecTypeCheck proves verifySpecType's own
+// early return (no registered definition at all for kind, so there is no
+// SpecType to compare S against) lets Load proceed to Validate instead of
+// raising a spurious mismatch -- Validate's own unknown-kind check is what
+// actually surfaces the real error.
+func TestLoad_UnregisteredKindSkipsSpecTypeCheck(t *testing.T) {
+	data := []byte("apiVersion: atmos/v1\nkind: NoSuchKind\nmetadata:\n  name: x\n")
+
+	_, err := Load[testSpec]("NoSuchKind", data)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrManifestKindUnknown)
+}
+
 // TestLoad_RejectsInterfaceTypedSpecMismatch covers reflect.TypeOf(zero)'s
 // nil-for-interface-type gap: with S = any (an interface type), the zero
 // value is a nil interface, and reflect.TypeOf on a nil interface returns
@@ -416,4 +429,21 @@ func TestWriteObjects_SingleFile(t *testing.T) {
 	decoded, err := DecodeObjects(data)
 	require.NoError(t, err)
 	require.Len(t, decoded, 2)
+}
+
+func TestRegisterRejectsContractReplacement(t *testing.T) {
+	resetRegistry()
+	t.Cleanup(resetRegistry)
+	require.NoError(t, Register(testKind, DefaultAPIVersion, &testSpec{}))
+	require.NoError(t, Register(testKind, DefaultAPIVersion, &testSpec{}))
+	before, found := GetDefinition(testKind)
+	require.True(t, found)
+	require.ErrorIs(t, Register(testKind, "atmos/v2", &testSpec{}), errUtils.ErrDuplicateManifestRegistration)
+	require.ErrorIs(t, Register(testKind, DefaultAPIVersion, &struct {
+		Different string `json:"different"`
+	}{}), errUtils.ErrDuplicateManifestRegistration)
+	after, found := GetDefinition(testKind)
+	require.True(t, found)
+	assert.Equal(t, before.SchemaJSON(), after.SchemaJSON())
+	assert.Equal(t, before.SpecType(), after.SpecType())
 }

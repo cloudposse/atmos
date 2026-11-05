@@ -160,6 +160,10 @@ func (s stubSamlMgr) Authenticate(context.Context, string) (*types.WhoamiInfo, e
 	return nil, nil
 }
 
+func (s stubSamlMgr) AuthenticateIsolated(context.Context, string) (*schema.AuthContext, error) {
+	return nil, nil
+}
+
 func (s stubSamlMgr) AuthenticateProvider(context.Context, string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }
@@ -192,7 +196,7 @@ func (s stubSamlMgr) EnsureIdentityEnvironment(context.Context, string) (map[str
 	return nil, nil
 }
 
-func (s stubSamlMgr) ExecuteIntegration(context.Context, string) error {
+func (s stubSamlMgr) ExecuteIntegration(context.Context, string, ...types.IntegrationOption) error {
 	return nil
 }
 

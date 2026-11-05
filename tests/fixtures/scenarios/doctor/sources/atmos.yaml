@@ -1,0 +1,10 @@
+# Sources doctor fixture: vendor and component source declarations for repository health checks.
+# Offline runs report notices only.
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths: ["**/*"]
+  name_template: "{{ .vars.stage }}"

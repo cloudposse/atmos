@@ -1,0 +1,7 @@
+╭───────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                Update available! 1.2.2 » 1.2.3                                │
+│ If Atmos is available from your configured repositories (requires administrative privileges): │
+│                                    Run: apk upgrade atmos                                     │
+│            Or download and install the newer .apk package from the releases page.             │
+│                    More info: https://github.com/cloudposse/atmos/releases                    │
+╰───────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: template
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 
 <Intro>
@@ -13,6 +15,8 @@ import Intro from "@site/src/components/Intro";
   version, then renders the chart in-process with the Helm Go SDK (equivalent to
   `helm template`). Output goes to stdout, to files, or to a provision target.
 </Intro>
+
+`atmos helm render` is an alias for this command.
 
 ## Usage
 
@@ -56,6 +60,9 @@ Render components filtered by tags or labels (composes with `--all`/`--affected`
 ```shell
 atmos helm template --all --tags production,tier-1
 atmos helm template --affected --labels cost-center=platform
+
+# Combine multiple selectors in one comma-separated --labels value
+atmos helm template --affected --labels cost-center=platform,compliance=sox
 ```
 
 `--output` and `--output-dir` are only supported when rendering one component.
@@ -100,9 +107,21 @@ atmos helm template monitoring -s plat-ue2-dev -f preview-values.yaml --set imag
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
 </dl>
 
 :::note
 `render` is accepted as an alias for `template`.
 :::
+
+## Try it out
+
+<TryExample example="helm">
+
+Render the included local chart without contacting a cluster.
+
+```shell
+atmos helm template demo -s dev
+```
+
+</TryExample>

@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -29,16 +30,20 @@ func init() {
 		flags.WithBoolFlag("raw", "r", false, "Print the raw value with no trailing newline (text only; ideal for piping, e.g. | pbcopy)"),
 	)
 	getParser.RegisterFlags(getCmd)
+	internal.RegisterCommandMetadata(
+		getCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/get"),
+	)
 }
 
 func runSecretGet(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretGet")()
 
-	scope, err := parseScope(cmd, args)
+	name := args[0]
+	scope, err := parseScopeForName(cmd, args, name, "get")
 	if err != nil {
 		return err
 	}
-	name := args[0]
 	format, _ := cmd.Flags().GetString("format")
 	path, _ := cmd.Flags().GetString("path")
 	raw, _ := cmd.Flags().GetBool("raw")

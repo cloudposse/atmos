@@ -1,0 +1,17 @@
+stacks:
+  base_path: stacks
+  included_paths: ["orgs/**/*"]
+docs:
+  generate:
+    formatting:
+      base-dir: ../native-terraform
+      template: ./README.md.gomplate
+      output: ./README.md
+      terraform:
+        enabled: true
+        source: .
+        show_providers: false
+        show_inputs: false
+        show_outputs: false
+        indent_level: 4
+        hide_empty: true

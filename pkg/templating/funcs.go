@@ -6,9 +6,7 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/hairyhenderson/gomplate/v5"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -30,60 +28,16 @@ func SprigFuncMap() template.FuncMap {
 	return sprigFuncMapCache
 }
 
-// GomplateFuncs returns the Gomplate function map bound to ctx. It does not
-// include the datasource functions, which gomplate only provides through its
-// renderer; see Engine.Render for how those are made available.
-func GomplateFuncs(ctx context.Context) template.FuncMap {
-	defer perf.Track(nil, "templating.GomplateFuncs")()
-
-	return gomplate.CreateFuncs(ctx)
-}
-
-// rendererOnlyFuncs are the functions gomplate registers only inside its
-// renderer (see gomplate's internal/funcs/datasource.go and template.go). A
-// template that calls any of them must be rendered through gomplate.
-var rendererOnlyFuncs = map[string]struct{}{
-	"datasource":          {},
-	"ds":                  {},
-	"include":             {},
-	"defineDatasource":    {},
-	"datasourceExists":    {},
-	"datasourceReachable": {},
-	"listDatasources":     {},
-	"_datasource":         {},
-	"tmpl":                {},
-	"tpl":                 {},
-}
-
-// rendererOnlyMethods are `namespace.Method` chains that need a live gomplate
-// render because they read datasources.
-var rendererOnlyMethods = map[string]struct{}{
-	"atmos.GomplateDatasource": {},
-}
-
-// stubFuncs lets templates that reference renderer-only functions parse on the
-// fast path so their AST can be inspected. They are never executed: a template
-// that uses them is routed to the gomplate renderer, which registers the real
-// implementations under the same names.
-func stubFuncs() template.FuncMap {
-	stubs := make(template.FuncMap, len(rendererOnlyFuncs))
-	for name := range rendererOnlyFuncs {
-		stubs[name] = func(...any) (any, error) {
-			return nil, errUtils.ErrGomplateDatasourceUnavailable
-		}
-	}
-	return stubs
-}
-
 // baseFuncs assembles Gomplate, Sprig and caller functions in precedence order:
 // later layers win, so Sprig overrides Gomplate and the caller overrides both.
 // The name parameter is the template name (Request.Name), threaded through so
 // the compatibility shims in compat.go and compat_aliases.go can attribute a
-// deprecation warning to the template that triggered it.
-func (e *engine) baseFuncs(ctx context.Context, name string, extra template.FuncMap) template.FuncMap {
+// deprecation warning to the template that triggered it. Gomplate's datasource
+// functions are served by sources.
+func (e *engine) baseFuncs(ctx context.Context, name string, extra template.FuncMap, sources *Data) template.FuncMap {
 	funcs := template.FuncMap{}
 	if e.gomplate {
-		gomplateFuncs := GomplateFuncs(ctx)
+		gomplateFuncs := GomplateFuncs(ctx, sources)
 		for k, v := range gomplateFuncs {
 			funcs[k] = v
 		}
@@ -99,4 +53,16 @@ func (e *engine) baseFuncs(ctx context.Context, name string, extra template.Func
 		funcs[k] = v
 	}
 	return funcs
+}
+
+// ApplyCompatShims keeps the gomplate v3 names gomplate v5 removed working in
+// a function map assembled outside an Engine (for example scaffold
+// templates). The funcs map must already contain Gomplate's namespaces and, if used,
+// Sprig's functions; deprecated calls are reported against templateName with
+// the process-wide deduplicating reporter.
+func ApplyCompatShims(funcs template.FuncMap, templateName string) {
+	defer perf.Track(nil, "templating.ApplyCompatShims")()
+
+	applyNamespaceShims(funcs, funcs, templateName, defaultDeprecationReporter)
+	applyBareAliasShims(funcs, templateName, defaultDeprecationReporter)
 }

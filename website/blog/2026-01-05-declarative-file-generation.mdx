@@ -14,6 +14,8 @@ Atmos now supports declarative file generation for Terraform components via the 
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 See it in action:
 
 <CastEmbed src="/casts/examples/generate-files/component-files.cast" title="atmos generate files" chrome controls scrubber />
@@ -116,6 +118,18 @@ components:
   terraform:
     auto_generate_files: true
 ```
+
+## Try it out
+
+<TryExample example="generate-files">
+
+Preview the generated files without writing them.
+
+```shell
+atmos terraform generate files demo -s dev --dry-run
+```
+
+</TryExample>
 
 ## Get Involved
 

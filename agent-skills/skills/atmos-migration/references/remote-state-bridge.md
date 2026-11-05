@@ -125,8 +125,9 @@ dummy has no resources, the plan would propose destroying everything in the lega
 
 Once a legacy directory becomes a real Atmos component, delete the corresponding bridge
 instance. The `!terraform.state` lookups can stay -- they'll resolve against the new real
-component automatically (the instance name is what matters, and you can preserve it via the
-new component's `metadata.name`).
+component when it retains the same logical key under `components.terraform`.
+`metadata.name` is not a lookup alias. If you rename that logical key, update each
+`!terraform.state` reference and preserve the backend/workspace mapping separately.
 
 ## Variant B — Abstract Real Component
 

@@ -33,6 +33,10 @@ const fileNameSep = "_"
 // convention. Name is required; the remaining fields are optional,
 // human-oriented annotations.
 type Metadata struct {
+	DisplayName string `yaml:"display_name,omitempty" json:"display_name,omitempty" jsonschema:"description=Human-readable display name"`
+	Repository  string `yaml:"repository,omitempty" json:"repository,omitempty" jsonschema:"description=Source repository configured by the author"`
+	Revision    int    `yaml:"revision,omitempty" json:"revision,omitempty" jsonschema:"description=Monotonic revision for mutable catalogs"`
+	GeneratedAt string `yaml:"generated_at,omitempty" json:"generated_at,omitempty" jsonschema:"description=Catalog generation timestamp"`
 	Name        string `yaml:"name" json:"name" jsonschema:"description=Unique name of this manifest,minLength=1"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"description=Human-readable description"`
 	Author      string `yaml:"author,omitempty" json:"author,omitempty" jsonschema:"description=Author or maintainer"`

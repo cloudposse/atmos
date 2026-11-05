@@ -25,6 +25,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -309,30 +310,50 @@ func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewSucceeds(t *testin
 }
 
 // TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv is an integration-level
-// regression test for issue #1412. It exercises the full ExecuteWithSections path
-// (ExtractComponentConfig → SetupEnvironment → SetEnv) and asserts the component's
-// vars reach the runner as TF_VAR_* when init.pass_vars is enabled, so the internal
-// `terraform init` can satisfy init-time variable dependencies.
+// regression test for issues #1412 and #3231. It exercises the full ExecuteWithSections path
+// (ExtractComponentConfig -> SetupEnvironment -> SetEnv/init) and asserts that, when init.pass_vars
+// is enabled, the component's vars reach the init subprocess as TF_VAR_* (so init-time variable
+// dependencies resolve) while runner.SetEnv never sees a TF_VAR_* key (terraform-exec rejects them).
 func TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv(t *testing.T) {
-	run := func(passVars bool) map[string]string {
+	type observed struct {
+		runnerEnv   map[string]string
+		initEnv     map[string]string
+		initCalls   int
+		initReq     *InitWithVarsRequest
+		runnerInits int // Calls to runner.Init (pass_vars=false only).
+	}
+
+	run := func(passVars bool) *observed {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		mockDescriber := NewMockComponentDescriber(ctrl)
 		mockRunner := NewMockTerraformRunner(ctrl)
+		obs := &observed{}
 
-		var capturedEnv map[string]string
 		mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
-			capturedEnv = env
-			return nil
+			obs.runnerEnv = env
+			return realRuleSetEnv(env)
 		}).AnyTimes()
-		mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+		// With pass_vars the mock has no Init expectation, so any runner.Init call fails the test.
+		if !passVars {
+			mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, ...tfexec.InitOption) error { obs.runnerInits++; return nil },
+			).Times(1)
+		}
 		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 		mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
 
-		exec := NewExecutor(mockDescriber, WithRunnerFactory(
-			func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil },
-		))
+		exec := NewExecutor(
+			mockDescriber,
+			WithRunnerFactory(func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil }),
+			WithInitWithVars(func(_ context.Context, req *InitWithVarsRequest) error {
+				obs.initCalls++
+				obs.initReq = req
+				obs.initEnv = req.Env
+				return nil
+			}),
+		)
 
 		atmosConfig := validAtmosConfig(t)
 		atmosConfig.Components.Terraform.Init.PassVars = passVars
@@ -342,15 +363,26 @@ func TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv(t *testing.T) {
 
 		_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
 		require.NoError(t, err)
-		return capturedEnv
+		return obs
 	}
 
 	withPassVars := run(true)
-	assert.Equal(t, "9.4.1", withPassVars["TF_VAR_aks_version"],
-		"pass_vars=true must forward component vars to the runner as TF_VAR_*")
+	require.Equal(t, 1, withPassVars.initCalls, "pass_vars=true must run init through the vars-aware seam")
+	assert.Equal(t, 0, withPassVars.runnerInits, "pass_vars=true must not call runner.Init")
+	assert.Equal(t, "9.4.1", withPassVars.initEnv["TF_VAR_aks_version"],
+		"pass_vars=true must forward component vars to the init subprocess as TF_VAR_*")
+	assert.NotEmpty(t, withPassVars.initReq.Dir)
+	assert.NotEmpty(t, withPassVars.initReq.Executable)
+	assert.Empty(t, tfexec.ProhibitedEnv(withPassVars.runnerEnv),
+		"runner.SetEnv must not receive keys terraform-exec prohibits (TF_VAR_*)")
+	for k := range withPassVars.runnerEnv {
+		assert.False(t, strings.HasPrefix(k, "TF_VAR_"), "runner env leaked %s", k)
+	}
 
 	withoutPassVars := run(false)
-	_, ok := withoutPassVars["TF_VAR_aks_version"]
+	assert.Equal(t, 0, withoutPassVars.initCalls, "pass_vars=false must not use the vars-aware init seam")
+	assert.Equal(t, 1, withoutPassVars.runnerInits, "pass_vars=false must init through the runner")
+	_, ok := withoutPassVars.runnerEnv["TF_VAR_aks_version"]
 	assert.False(t, ok, "pass_vars=false must not forward vars as TF_VAR_*")
 }
 
@@ -517,7 +549,7 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	atmosConfig := validAtmosConfig(t)
 
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("cached-stack", "cached-component")
+	stackSlug := refcache.NewKey(atmosConfig, "cached-stack", "cached-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"cached_value": "from-cache",
 	})
@@ -559,7 +591,7 @@ func TestExecutor_GetOutput_CacheHitIsVisible(t *testing.T) {
 	// Pre-populate the cache with two outputs for the same component+stack,
 	// mirroring a real fetch that caches every output at once. Neither
 	// lookup below triggers DescribeComponent -- both are cache hits.
-	stackSlug := stackComponentKey("fixtures", "vpc")
+	stackSlug := refcache.NewKey(atmosConfig, "fixtures", "vpc")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"vpc_id":   "vpc-abc123",
 		"vpc_cidr": "10.0.0.0/16",
@@ -597,10 +629,10 @@ func TestResolveOutputFromCache_MissReturnsNil(t *testing.T) {
 
 	// A unique, never-populated stackSlug guarantees test isolation --
 	// nothing else in this package's test suite could have cached it.
-	stackSlug := stackComponentKey("never-cached-stack", "never-cached-component")
+	stackSlug := refcache.NewKey(atmosConfig, "never-cached-stack", "never-cached-component")
 	terraformOutputsCache.Delete(stackSlug) // defensive: ensure a clean slate.
 
-	result := resolveOutputFromCache(atmosConfig, stackSlug, "never-cached-component", "never-cached-stack", "some_output")
+	result := resolveOutputFromCache(atmosConfig, &stackSlug, "never-cached-component", "never-cached-stack", "some_output")
 	assert.Nil(t, result, "a cache miss must return nil so the caller falls through to a real fetch")
 }
 
@@ -622,7 +654,7 @@ func TestResolveOutputFromCache_GetOutputVariableErrorIsVisible(t *testing.T) {
 	restoreUI := iolib.PushUIWriter(&uiOutput)
 	t.Cleanup(restoreUI)
 
-	stackSlug := stackComponentKey("malformed-yq-stack", "malformed-yq-component")
+	stackSlug := refcache.NewKey(atmosConfig, "malformed-yq-stack", "malformed-yq-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"vpc_id": "vpc-abc123",
 	})
@@ -631,7 +663,7 @@ func TestResolveOutputFromCache_GetOutputVariableErrorIsVisible(t *testing.T) {
 	// An unbalanced `[` is not a missing key -- it is a yq syntax error,
 	// which getOutputVariable/extractYqValue propagate as a real error
 	// rather than an "exists: false" result.
-	result := resolveOutputFromCache(atmosConfig, stackSlug, "malformed-yq-component", "malformed-yq-stack", "vpc_id[")
+	result := resolveOutputFromCache(atmosConfig, &stackSlug, "malformed-yq-component", "malformed-yq-stack", "vpc_id[")
 	require.NotNil(t, result)
 	require.Error(t, result.err)
 	assert.Contains(t, result.err.Error(), "failed to evaluate YQ expression")
@@ -651,7 +683,7 @@ func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	atmosConfig := validAtmosConfig(t)
 
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("nonexistent-stack", "nonexistent-component")
+	stackSlug := refcache.NewKey(atmosConfig, "nonexistent-stack", "nonexistent-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"existing_key": "value",
 	})
@@ -732,15 +764,17 @@ func TestSummarizeValue(t *testing.T) {
 
 func TestCheckOutputsCache(t *testing.T) {
 	// Test cache miss.
-	result := checkOutputsCache("miss-slug", "component", "stack")
+	missKey := refcache.NewKey(nil, "miss-stack", "component")
+	result := checkOutputsCache(&missKey, "component", "miss-stack")
 	assert.Nil(t, result)
 
 	// Test cache hit.
 	cached := map[string]any{"key": "value"}
-	terraformOutputsCache.Store("hit-slug", cached)
-	defer terraformOutputsCache.Delete("hit-slug")
+	hitKey := refcache.NewKey(nil, "hit-stack", "component")
+	terraformOutputsCache.Store(hitKey, cached)
+	defer terraformOutputsCache.Delete(hitKey)
 
-	result = checkOutputsCache("hit-slug", "component", "stack")
+	result = checkOutputsCache(&hitKey, "component", "hit-stack")
 	assert.Equal(t, cached, result)
 }
 
@@ -781,6 +815,12 @@ func TestExtractYqValue(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists)
 	assert.Nil(t, val)
+
+	// Test the bare identity expression: it returns the whole map and always exists.
+	val, exists, err = extractYqValue(atmosConfig, data, ".", "test context")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, data, val)
 }
 
 func TestGetStaticRemoteStateOutput(t *testing.T) {
@@ -802,6 +842,12 @@ func TestGetStaticRemoteStateOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists)
 	assert.Nil(t, val)
+
+	// Test the bare identity expression: it returns the whole static remote state.
+	val, exists, err = GetStaticRemoteStateOutput(atmosConfig, "comp", "stack", remoteState, ".")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, remoteState, val)
 }
 
 func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {
@@ -1148,13 +1194,13 @@ func TestExecutor_GetAllOutputs_CacheHit(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
+	atmosConfig := validAtmosConfig(t)
+
 	// Pre-populate cache.
-	stackSlug := stackComponentKey("cache-hit-stack", "cache-hit-component")
+	stackSlug := refcache.NewKey(atmosConfig, "cache-hit-stack", "cache-hit-component")
 	cachedOutputs := map[string]any{"cached_key": "cached_value"}
 	terraformOutputsCache.Store(stackSlug, cachedOutputs)
 	defer terraformOutputsCache.Delete(stackSlug)
-
-	atmosConfig := validAtmosConfig(t)
 
 	// No DescribeComponent call expected.
 	outputs, err := exec.GetAllOutputs(atmosConfig, "cache-hit-component", "cache-hit-stack", false, nil, nil)
@@ -1401,43 +1447,6 @@ func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
 	_, _, err := exec.GetOutput(atmosConfig, "exec-err-stack", "exec-err-component", "output", true, nil, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformOutputFailed), "expected ErrTerraformOutputFailed")
-}
-
-// TestHighlightValue_NilConfig tests the highlightValue function with nil config.
-func TestHighlightValue_NilConfig(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		config   *schema.AtmosConfiguration
-		expected string
-	}{
-		{
-			name:     "nil config returns input unchanged",
-			input:    `{"key": "value"}`,
-			config:   nil,
-			expected: `{"key": "value"}`,
-		},
-		{
-			name:     "with config attempts highlighting",
-			input:    `{"key": "value"}`,
-			config:   validAtmosConfig(t),
-			expected: `{"key": "value"}`, // May be highlighted or not depending on TTY.
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := highlightValue(tt.input, tt.config)
-			// For nil config, result should be exactly the input.
-			if tt.config == nil {
-				assert.Equal(t, tt.expected, result)
-			} else {
-				// For non-nil config, result may be highlighted or unchanged.
-				// Just ensure it contains the key content.
-				assert.Contains(t, result, "key")
-			}
-		})
-	}
 }
 
 // TestExecutor_ExecuteWithSections_ComponentPathResolution tests that component paths
@@ -1921,99 +1930,109 @@ func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
 // template functions fails with: exec: "tofu": executable file not found in $PATH
 // even though tofu was installed via `atmos toolchain install`.
 func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) {
-	// Restore package-global toolchain config after test to avoid leaking
-	// t.TempDir() paths into subsequent tests.
-	origToolchainConfig := toolchain.GetAtmosConfig()
-	t.Cleanup(func() {
-		toolchain.SetAtmosConfig(origToolchainConfig)
-	})
+	for _, source := range []string{"dependencies", "tool-versions"} {
+		t.Run(source, func(t *testing.T) {
+			// Restore package-global toolchain config after test to avoid leaking
+			// t.TempDir() paths into subsequent tests.
+			origToolchainConfig := toolchain.GetAtmosConfig()
+			t.Cleanup(func() {
+				toolchain.SetAtmosConfig(origToolchainConfig)
+			})
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-	mockDescriber := NewMockComponentDescriber(ctrl)
-	mockRunner := NewMockTerraformRunner(ctrl)
+			mockDescriber := NewMockComponentDescriber(ctrl)
+			mockRunner := NewMockTerraformRunner(ctrl)
 
-	// Track what executable path is passed to the runner factory.
-	var capturedExecutable string
-	customFactory := func(workdir, executable string) (TerraformRunner, error) {
-		capturedExecutable = executable
-		return mockRunner, nil
+			// Track what executable path is passed to the runner factory.
+			var capturedExecutable string
+			customFactory := func(workdir, executable string) (TerraformRunner, error) {
+				capturedExecutable = executable
+				return mockRunner, nil
+			}
+
+			exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+			// Create a temp dir structure simulating a toolchain install.
+			tempDir := t.TempDir()
+			componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+			require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+			// Create a fake toolchain binary at the expected toolchain install path.
+			toolchainDir := filepath.Join(tempDir, "toolchain")
+			binaryDir := filepath.Join(toolchainDir, "bin", "opentofu", "opentofu", "1.8.0")
+			require.NoError(t, os.MkdirAll(binaryDir, 0o755))
+			binaryName := "tofu"
+			if runtime.GOOS == "windows" {
+				binaryName = "tofu.exe"
+			}
+			fakeBinary := filepath.Join(binaryDir, binaryName)
+			require.NoError(t, os.WriteFile(fakeBinary, []byte("#!/bin/sh\n"), 0o755))
+
+			atmosConfig := &schema.AtmosConfiguration{
+				BasePath:         tempDir,
+				BasePathAbsolute: tempDir,
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath:                "components/terraform",
+						AutoGenerateBackendFile: false,
+						InitRunReconfigure:      false,
+					},
+				},
+				Toolchain: schema.Toolchain{
+					InstallPath: toolchainDir,
+				},
+				Logs: schema.Logs{
+					Level: "info",
+				},
+			}
+
+			// Sections with bare "tofu" executable and toolchain dependencies.
+			sections := map[string]any{
+				cfg.CommandSectionName:   "tofu",
+				cfg.WorkspaceSectionName: "test-workspace",
+				cfg.ComponentSectionName: "vpc",
+				"component_info": map[string]any{
+					"component_type": "terraform",
+				},
+				cfg.BackendTypeSectionName: "s3",
+				cfg.BackendSectionName: map[string]any{
+					"bucket": "test-bucket",
+					"key":    "test-key",
+				},
+				"dependencies": map[string]any{
+					"tools": map[string]any{
+						"opentofu": "1.8.0",
+					},
+				},
+			}
+
+			if source == "tool-versions" {
+				delete(sections, "dependencies")
+				require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".tool-versions"), []byte("opentofu/opentofu 1.8.0\n"), 0o600))
+			}
+
+			// Setup mock expectations for the full execution path.
+			mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+			mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+			mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
+			mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+				"vpc_id": {Value: []byte(`"vpc-123"`)},
+			}, nil)
+
+			outputs, err := exec.ExecuteWithSections(atmosConfig, "vpc", "dev-ue1", sections, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "vpc-123", outputs["vpc_id"])
+
+			// Verify the executable was resolved to the absolute toolchain path,
+			// not passed as the bare "tofu" name.
+			assert.True(t, filepath.IsAbs(capturedExecutable),
+				"expected executable to be resolved to an absolute path, got %q", capturedExecutable)
+			assert.Equal(t, fakeBinary, capturedExecutable,
+				"expected executable to be resolved to the toolchain binary path")
+		})
 	}
-
-	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-
-	// Create a temp dir structure simulating a toolchain install.
-	tempDir := t.TempDir()
-	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
-	require.NoError(t, os.MkdirAll(componentDir, 0o755))
-
-	// Create a fake toolchain binary at the expected toolchain install path.
-	toolchainDir := filepath.Join(tempDir, "toolchain")
-	binaryDir := filepath.Join(toolchainDir, "bin", "opentofu", "opentofu", "1.8.0")
-	require.NoError(t, os.MkdirAll(binaryDir, 0o755))
-	binaryName := "tofu"
-	if runtime.GOOS == "windows" {
-		binaryName = "tofu.exe"
-	}
-	fakeBinary := filepath.Join(binaryDir, binaryName)
-	require.NoError(t, os.WriteFile(fakeBinary, []byte("#!/bin/sh\n"), 0o755))
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath:                "components/terraform",
-				AutoGenerateBackendFile: false,
-				InitRunReconfigure:      false,
-			},
-		},
-		Toolchain: schema.Toolchain{
-			InstallPath: toolchainDir,
-		},
-		Logs: schema.Logs{
-			Level: "info",
-		},
-	}
-
-	// Sections with bare "tofu" executable and toolchain dependencies.
-	sections := map[string]any{
-		cfg.CommandSectionName:   "tofu",
-		cfg.WorkspaceSectionName: "test-workspace",
-		cfg.ComponentSectionName: "vpc",
-		"component_info": map[string]any{
-			"component_type": "terraform",
-		},
-		cfg.BackendTypeSectionName: "s3",
-		cfg.BackendSectionName: map[string]any{
-			"bucket": "test-bucket",
-			"key":    "test-key",
-		},
-		"dependencies": map[string]any{
-			"tools": map[string]any{
-				"opentofu": "1.8.0",
-			},
-		},
-	}
-
-	// Setup mock expectations for the full execution path.
-	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
-	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
-	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
-		"vpc_id": {Value: []byte(`"vpc-123"`)},
-	}, nil)
-
-	outputs, err := exec.ExecuteWithSections(atmosConfig, "vpc", "dev-ue1", sections, nil)
-	require.NoError(t, err)
-	assert.Equal(t, "vpc-123", outputs["vpc_id"])
-
-	// Verify the executable was resolved to the absolute toolchain path,
-	// not passed as the bare "tofu" name.
-	assert.True(t, filepath.IsAbs(capturedExecutable),
-		"expected executable to be resolved to an absolute path, got %q", capturedExecutable)
-	assert.Equal(t, fakeBinary, capturedExecutable,
-		"expected executable to be resolved to the toolchain binary path")
 }
 
 // TestExecutor_GetOutputWithOptions_SkipInit verifies that GetOutputWithOptions with
@@ -2084,7 +2103,7 @@ func TestExecutor_GetOutputWithOptions_CacheHit(t *testing.T) {
 
 	atmosConfig := validAtmosConfig(t)
 
-	stackSlug := stackComponentKey("opts-cache-stack", "opts-cache-component")
+	stackSlug := refcache.NewKey(atmosConfig, "opts-cache-stack", "opts-cache-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{"cached_out": "hit-value"})
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -2460,6 +2479,7 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 	}
 	errs := make([]error, 2)
 
+	leaderDone := make(chan struct{})
 	call := func(idx int) {
 		defer wg.Done()
 		// Each goroutine gets its own sections map to avoid a data race between
@@ -2471,6 +2491,9 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 		errs[idx] = executor.ensureWorkdirProvisioned(
 			context.Background(), cfg, localSections, nil, "vpc", "dev", configs[idx],
 		)
+		if idx == 0 {
+			close(leaderDone)
+		}
 	}
 
 	// Launch the leader alone first and wait for <-entered: this guarantees
@@ -2491,21 +2514,29 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 	go call(0)
 	<-entered
 
-	// followerJoined is closed by doChanEntryHook the instant the follower's own call
-	// reaches workdirProvisionGroup.DoChan -- a deterministic proof that the follower has
+	// followerJoined is closed by doChanRegisteredHook after the follower's own call
+	// returns from workdirProvisionGroup.DoChan -- a deterministic proof that the follower has
 	// registered with singleflight, unlike scheduler-yielding tricks (e.g. a
 	// runtime.Gosched loop), which only make losing the race less likely, never
 	// impossible: they prove nothing about which goroutine the runtime actually chose to
 	// run next.
 	followerJoined := make(chan struct{})
-	doChanEntryHook = func() { close(followerJoined) }
-	defer func() { doChanEntryHook = nil }()
+	followerRelease := make(chan struct{})
+	doChanRegisteredHook = func() {
+		close(followerJoined)
+		<-followerRelease
+	}
+	defer func() { doChanRegisteredHook = nil }()
 
 	wg.Add(1)
 	go call(1)
 	<-followerJoined
 
 	close(gate)
+	// Keep the follower at the hook until the leader finishes. A hook fired
+	// before registration now deterministically misses the shared result.
+	<-leaderDone
+	close(followerRelease)
 	wg.Wait()
 
 	require.NoError(t, errs[0])
@@ -2726,4 +2757,9 @@ func TestExecuteWithSections_ReturnsErrWhenProvisionFails(t *testing.T) {
 	require.Error(t, err, "ExecuteWithSections must surface provisioner errors to the caller")
 	require.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
 		"error must wrap ErrWorkdirProvision, got: %v", err)
+}
+
+func TestFetchingOutputMessage(t *testing.T) {
+	assert.Equal(t, "Fetching vpc_id output from vpc in dev", fetchingOutputMessage("vpc_id", "vpc", "dev"))
+	assert.Equal(t, "Fetching all outputs from vpc in dev", fetchingOutputMessage(".", "vpc", "dev"))
 }

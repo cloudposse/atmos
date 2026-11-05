@@ -242,7 +242,9 @@ components:
         notify:
           events:
             - after.kubernetes.apply
-          command: echo "applied argocd"
+          kind: command
+          command: echo
+          args: ["applied argocd"]
 ```
 
 ## Guidance

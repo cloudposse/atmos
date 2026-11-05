@@ -1,0 +1,23 @@
+import:
+  - mixins/region/us-east-1
+  - mixins/stage/prod
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+        locked: true
+        labels:
+          ci: manual
+    tgw/attachment:
+      metadata:
+        component: mock
+        tags: [network]
+        labels:
+          ci: auto
+      dependencies:
+        components:
+          - name: vpc
+          - name: tgw/hub
+            stack: "{{ .vars.environment }}-network"

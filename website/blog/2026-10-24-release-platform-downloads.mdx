@@ -1,0 +1,54 @@
+---
+slug: release-platform-downloads
+title: "Retiring Prebuilt Downloads for 32-bit Linux and FreeBSD"
+authors: [osterman]
+tags: [deprecation]
+---
+
+Building and verifying rarely downloaded binaries makes everyone wait longer for Atmos releases. We're retiring prebuilt downloads for Linux 386, Linux 32-bit ARM, and FreeBSD on amd64 and arm64 to reduce that overhead. Users on those platforms should [install Atmos with Go](/install#install-with-go), which builds it locally.
+
+<!--truncate-->
+
+## The Problem
+
+Each release builds binaries for multiple operating systems and architectures, then packages and verifies them. Our review of downloads across 12 stable releases published from July 26 through October 20, 2026 found that these four targets accounted for fewer than 0.05% of binary downloads among the current release targets. These are cumulative asset downloads, not a count of active users.
+
+Those targets still add compilation, linking, checksumming, and verification work to every release, and our cache warmups build them too. Removing them reduces the release matrix from ten binaries to six and the Linux package matrix from twelve packages to six. We expect shorter builds and releases; the actual time saved will depend on caching and parallelism.
+
+Other large projects have also reduced their 32-bit distributions:
+
+- [Node.js 24](https://nodejs.org/en/blog/migrations/v22-to-v24#platform-support) stopped providing prebuilt Linux ARMv7 binaries.
+- [Electron's July 2026 announcement](https://www.electronjs.org/blog/electron-43-0#support-for-32-bit-platforms-ending) identifies v43 as its last series with prebuilt Linux ARM and Windows x86 binaries, with support ending in January 2027.
+- [Debian 13's August 2025 announcement](https://www.debian.org/News/2025/20250809) removed the i386 installer and kernel while retaining limited use of i386 packages on amd64 systems.
+
+These changes provide context for retiring 32-bit downloads. Our decision to retire FreeBSD downloads is based on their low usage in our own release data.
+
+## The Fix
+
+Starting with the release containing this change, prebuilt downloads will cover six [platform combinations](/install#release-platforms):
+
+| Operating system | Architectures |
+| --- | --- |
+| Linux | amd64, arm64 |
+| macOS | amd64, arm64 |
+| Windows | amd64, arm64 |
+
+New releases will no longer include Linux 386 or 32-bit ARM binaries and their DEB, RPM, or APK packages, or FreeBSD amd64 and arm64 binaries. Assets from previous releases remain available.
+
+## How to Use It
+
+On the affected platforms, install Go and build the latest stable Atmos release locally:
+
+```shell
+go install github.com/cloudposse/atmos@latest
+```
+
+Use a Go toolchain that supports your operating system and architecture and meets the selected Atmos release's requirements. Ensure Go's binary installation directory is on your `PATH`: this is `GOBIN` if configured, otherwise the `bin` directory under `GOPATH` (usually `$HOME/go/bin`).
+
+For a specific release, replace `@latest` with its tag, such as `@v1.233.0`. Update automation that downloads release binaries to use this build step on the affected platforms. Download-based version switching also requires a published binary for your platform; use Go to install the desired version instead.
+
+The [Go installation instructions](/install#install-with-go) explain version reporting for locally built binaries. Compiling locally takes time and does not produce the signed release artifacts provided by our prebuilt downloads.
+
+## Get Involved
+
+If you rely on one of these downloads, [open an issue](https://github.com/cloudposse/atmos/issues) describing your platform and installation workflow so we can understand the impact.

@@ -1,0 +1,66 @@
+vars:
+  stage: dev
+
+# Local state lands in components/terraform/<component>/terraform.tfstate.d/dev/.
+terraform:
+  backend_type: local
+  backend:
+    local: {}
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      mocks:
+        vpc_id: vpc-local
+        config:
+          a: 0
+          b: 2
+        subnet_ids:
+          - subnet-mock-1
+        enabled: true
+        nullable: mock-not-null
+
+    nomocks:
+      metadata:
+        component: nomocks
+
+    never_applied:
+      metadata:
+        component: never_applied
+      mocks:
+        id: never-mock
+
+    app:
+      metadata:
+        component: app
+      vars:
+        inputs:
+          state_vpc_id: !terraform.state vpc vpc_id
+          output_vpc_id: !terraform.output vpc vpc_id
+          # Real `config = { a = 1 }`; the mock fills the missing `b`.
+          nested_b: !terraform.state vpc .config.b
+          subnet_ids: !terraform.state vpc subnet_ids
+          # YQ `//` treats a real `false` as missing, so this is "x" with or without mocks.
+          enabled_default: !terraform.state vpc '.enabled // "x"'
+          enabled_plain: !terraform.state vpc enabled
+          # Terraform does not store null outputs, so this resolves to the mock (documented limitation).
+          nullable: !terraform.state vpc nullable
+          missing_everywhere: !terraform.state vpc does_not_exist
+          default_with_mock: !terraform.state vpc '.vpc_id // "dflt"'
+
+    app-output-only:
+      metadata:
+        component: app
+      vars:
+        inputs:
+          never: !terraform.output never_applied id
+          never_state: !terraform.state never_applied id
+
+    app-nomocks:
+      metadata:
+        component: app
+      vars:
+        inputs:
+          id: !terraform.state nomocks id

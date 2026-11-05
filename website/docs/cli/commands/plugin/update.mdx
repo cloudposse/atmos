@@ -1,0 +1,59 @@
+---
+title: atmos plugin update
+sidebar_label: update
+sidebar_class_name: command
+id: update
+description: Explicitly advance selected release versions and update their lock entries.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Explicitly advance selected release versions and update their lock entries.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin update --help" src="/casts/screengrabs/atmos-plugin-update--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin update [alias]
+atmos plugin update <alias> --version=<constraint>
+```
+
+Without `--version`, `update` re-resolves each declared package within its existing constraint and
+rewrites only the lock. For each package it reports one of:
+
+- `Plugin <alias> is already up to date` when the newest matching release is the locked one.
+- `Updated plugin <alias> from <old> to <new>` when a newer matching release was selected.
+
+An exact version such as `1.2.3` is never advanced; a range such as `^1.2.0` moves to the latest
+matching stable release. Pre-releases are selected only when the constraint names a pre-release.
+The lock changes only after every selected package installs successfully, and `enabled: false`
+packages are skipped.
+
+With `--version`, `update` changes the constraint for one package. It edits the `version` of that
+package under `plugins.packages` in `atmos.yaml` (leaving comments and unrelated settings alone)
+and the lock together, in one transaction. The alias is required, and it must already be declared;
+use [`plugin install`](install.mdx) to add a new package.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>alias</code></dt>
+  <dd>Package alias to update. Omit to update every declared package. Required with <code>--version</code>.
+  Run <code>atmos plugin list</code> to see the aliases.</dd>
+  <dt><code>--version</code></dt>
+  <dd>Replace this package's version constraint in <code>atmos.yaml</code> and re-resolve the lock against it.
+  Needs an alias.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin update
+atmos plugin update corporate
+atmos plugin update corporate --version='^0.2'
+```

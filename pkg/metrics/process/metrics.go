@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -215,7 +216,7 @@ func DisplaySummary(label string, m ProcessMetrics, atmosConfig *schema.AtmosCon
 	}
 
 	msg := fmt.Sprintf("%s in **%s** | CPU: %s user, %s sys",
-		label, FormatDuration(m.WallTime), FormatDuration(m.UserCPUTime), FormatDuration(m.SystemCPUTime))
+		label, duration.Format(m.WallTime), duration.Format(m.UserCPUTime), duration.Format(m.SystemCPUTime))
 	if m.MaxRSSBytes > 0 {
 		msg += fmt.Sprintf(" | Peak memory (largest process): **%s**", FormatBytes(m.MaxRSSBytes))
 	}
@@ -247,22 +248,10 @@ func DisplayFinalSummary(atmosConfig *schema.AtmosConfiguration) {
 	DisplaySummary("Total for this invocation", combined, atmosConfig)
 }
 
-// FormatDuration formats a duration for human display (e.g. "45.2s", "800ms").
+// FormatBytes formats bytes into a human-readable string (e.g. "512.0 MB").
 // Exported so other packages that render resource-usage numbers alongside
 // Atmos's own local display — e.g. the Native CI job-summary templates —
 // produce identically formatted values.
-func FormatDuration(d time.Duration) string {
-	defer perf.Track(nil, "process.FormatDuration")()
-
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
-	}
-	return fmt.Sprintf("%.1fs", d.Seconds())
-}
-
-// FormatBytes formats bytes into a human-readable string (e.g. "512.0 MB").
-// Exported for the same cross-package formatting-consistency reason as
-// FormatDuration.
 func FormatBytes(b int64) string {
 	defer perf.Track(nil, "process.FormatBytes")()
 

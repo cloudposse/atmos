@@ -1,0 +1,13 @@
+# Shared provider tags are inherited by both stacks.
+terraform:
+  providers:
+    aws:
+      region: us-east-2
+      default_tags:
+        tags:
+          managed-by: atmos
+          owner: platform
+
+components:
+  terraform:
+    app: {}

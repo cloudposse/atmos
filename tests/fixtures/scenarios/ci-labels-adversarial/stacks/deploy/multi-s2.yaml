@@ -1,0 +1,6 @@
+import: [catalog/preview]
+vars: {stage: multi-s2}
+components:
+  terraform:
+    a: {metadata: {component: mock, inherits: [preview-defaults]}}
+    b: {metadata: {component: mock, inherits: [preview-defaults]}}

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -43,6 +44,10 @@ func init() {
 	if err := updateParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		updateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/update"),
+	)
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {

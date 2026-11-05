@@ -20,6 +20,8 @@ of a cluster — the producer side of a GitOps workflow.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 `components.kubernetes.<name>` is a native component type with the same stack
@@ -132,6 +134,18 @@ with a single flag.
 - Run `atmos kubernetes render|diff|apply|delete <component> -s <stack>`.
 - To publish to a deployment repo, declare a `git.repositories.<name>` and a
   `provision.targets` entry with `kind: git`, then `apply ... --target=<name>`.
+
+## Try it out
+
+<TryExample example="kubernetes">
+
+Install Docker or Podman and kubectl, then follow the README to start the local Kubernetes emulator and deploy.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 See the [Kubernetes component](/stacks/components/kubernetes) and
 [`atmos kubernetes`](/cli/commands/kubernetes/usage) documentation to get started.

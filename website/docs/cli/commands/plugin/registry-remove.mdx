@@ -1,0 +1,38 @@
+---
+title: atmos plugin registry remove
+sidebar_label: registry remove
+sidebar_class_name: command
+id: registry-remove
+description: Remove a registry configuration while retaining installed packages and stored credentials.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Remove a registry configuration while retaining installed packages and stored credentials.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin registry remove --help" src="/casts/screengrabs/atmos-plugin-registry-remove--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin registry remove <name>
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>name</code></dt>
+  <dd>Configured registry alias.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin registry remove corporate
+```
+
+Removing `cloudposse` also persists `plugins.discovery.default_registry: false`, so the built-in catalog stays disabled after reloading configuration. Explicitly adding the alias again restores that configured entry. See [plugin discovery configuration](/cli/configuration/plugins#pluginsdiscovery).

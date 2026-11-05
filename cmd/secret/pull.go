@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -32,12 +33,16 @@ func init() {
 		flags.WithStringFlag("format", "", "env", "Output format: env or json"),
 	)
 	pullParser.RegisterFlags(pullCmd)
+	internal.RegisterCommandMetadata(
+		pullCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/pull"),
+	)
 }
 
 func runSecretPull(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretPull")()
 
-	scope, err := parseScope(cmd, args)
+	scope, err := parseScopeForStack(cmd, args, "pull")
 	if err != nil {
 		return err
 	}

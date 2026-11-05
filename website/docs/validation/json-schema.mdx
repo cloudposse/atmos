@@ -21,14 +21,14 @@ JSON Schema is an industry standard and provides a vocabulary to annotate and va
 
 <Terminal>
 ```shell
-# Validate 'vpc' component using JSON Schema in the 'plat-ue2-prod' stack
-atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.json --schema-type jsonschema
+# Validate 's3-bucket' component using JSON Schema in the 'plat-ue2-prod' stack
+atmos validate component s3-bucket -s plat-ue2-prod --schema-path s3-bucket/validate-s3-bucket-component.json --schema-type jsonschema
 ```
 </Terminal>
 
 ### Configure Component Validation
 
-In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
+In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/atmos.yaml), add the `schemas`
 section:
 
 <File title="atmos.yaml">
@@ -37,21 +37,34 @@ section:
 schemas:
   # https://json-schema.org
   jsonschema:
-    # Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` ENV var, or `--schemas-jsonschema-dir` command-line arguments
+    # Can also be set using `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH` ENV var, or `--schemas-jsonschema-dir` on `atmos validate component`
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/jsonschema"
 ```
 </File>
 
-In the component [manifest](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
+In the component [manifest](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/catalog/s3-bucket/defaults.yaml), add
 the `settings.validation` section:
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml"/>
+<File title="stacks/catalog/s3-bucket/defaults.yaml">
+```yaml
+components:
+  terraform:
+    s3-bucket:
+      settings:
+        validation:
+          validate-s3-bucket-with-jsonschema:
+            schema_type: jsonschema
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.jsonschema.base_path' defined in `atmos.yaml`
+            schema_path: "s3-bucket/validate-s3-bucket-component.json"
+            description: Validate 's3-bucket' variables using JSON Schema
+```
+</File>
 
 Add the following JSON Schema in the
-file [`stacks/schemas/jsonschema/vpc/validate-vpc-component.json`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/jsonschema/vpc/validate-vpc-component.json):
+file [`stacks/schemas/jsonschema/s3-bucket/validate-s3-bucket-component.json`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/jsonschema/s3-bucket/validate-s3-bucket-component.json):
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/jsonschema/vpc/validate-vpc-component.json"/>
+<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/jsonschema/s3-bucket/validate-s3-bucket-component.json"/>
 
 ## Try It
 

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
 
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -26,9 +26,6 @@ const twoSpaceIndent = "  "
 
 // newlineStr is the literal newline string, reused when splitting/joining multi-line output.
 const newlineStr = "\n"
-
-// fmtIndentedSymbolLine formats an indented "<symbol> <line>" row (used by diff rendering).
-const fmtIndentedSymbolLine = "%s%s %s\n"
 
 // symbolColumnWidth is the width of the leading "  ●  " action-symbol column that every
 // tree and attribute-diff row is indented past.
@@ -109,8 +106,12 @@ type RenderConfig struct {
 	ShowAttributeBar bool
 	// Compact removes blank lines between resources.
 	Compact bool
-	// MaxLines controls collapsing of large JSON values (0 = show all).
+	// MaxLines controls collapsing of large JSON/YAML values (0 = show all).
 	MaxLines int
+	// Width overrides terminal detection when positive, primarily for embedded rendering.
+	Width int
+	// AtmosConfig supplies the existing syntax-highlighting and formatting settings.
+	AtmosConfig *schema.AtmosConfiguration
 
 	// CreateStyle, UpdateStyle, DeleteStyle, DimStyle, TreeStyle, and BarStyle are the
 	// styles used when rendering the tree and attribute changes. Populated with defaults
@@ -159,6 +160,8 @@ func resolveRenderConfig(config *RenderConfig) *RenderConfig {
 		resolved.ShowAttributeBar = config.ShowAttributeBar
 		resolved.Compact = config.Compact
 		resolved.MaxLines = config.MaxLines
+		resolved.Width = config.Width
+		resolved.AtmosConfig = config.AtmosConfig
 
 		overrideStyle(&resolved.CreateStyle, &config.CreateStyle)
 		overrideStyle(&resolved.UpdateStyle, &config.UpdateStyle)
@@ -166,6 +169,9 @@ func resolveRenderConfig(config *RenderConfig) *RenderConfig {
 		overrideStyle(&resolved.DimStyle, &config.DimStyle)
 		overrideStyle(&resolved.TreeStyle, &config.TreeStyle)
 		overrideStyle(&resolved.BarStyle, &config.BarStyle)
+	}
+	if resolved.Width <= 0 {
+		resolved.Width = templates.GetTerminalWidth()
 	}
 	return resolved
 }
@@ -179,17 +185,6 @@ func overrideStyle(dst, caller *lipgloss.Style) {
 	if !reflect.DeepEqual(*caller, lipgloss.Style{}) {
 		*dst = *caller
 	}
-}
-
-// diffStyles bundles the create/delete styles used when rendering a line-by-line diff.
-type diffStyles struct {
-	Create lipgloss.Style
-	Delete lipgloss.Style
-}
-
-// diffStylesFromConfig extracts the create/delete styles from a resolved RenderConfig.
-func diffStylesFromConfig(config *RenderConfig) *diffStyles {
-	return &diffStyles{Create: config.CreateStyle, Delete: config.DeleteStyle}
 }
 
 // attrRenderContext bundles the layout (indent/bar) and style configuration shared across
@@ -211,16 +206,6 @@ type attrStyleInfo struct {
 type attributeWidths struct {
 	Key    int
 	OldVal int
-}
-
-// attrRenderMeta bundles positional/formatting metadata for rendering a single complex
-// (map/array) attribute change.
-type attrRenderMeta struct {
-	Indent     string
-	Bar        string
-	Annotation string
-	KeyStyle   lipgloss.Style
-	Config     *RenderConfig
 }
 
 // attributeKeyStyle returns the style used for an attribute key, based on the change type:
@@ -247,65 +232,6 @@ func forcesReplacementAnnotation(change *AttributeChange) string {
 	return spaceChar + replaceStyle.Render("# forces replacement")
 }
 
-// formattedAttributeChange precomputes the rendering-relevant details for a single
-// attribute change, avoiding repeated formatting work in the main render loop.
-type formattedAttributeChange struct {
-	change    *AttributeChange
-	oldVal    string
-	newVal    string
-	isMulti   bool
-	isComplex bool
-}
-
-// formatOneAttributeChange precomputes the rendering-relevant details for a single change.
-func formatOneAttributeChange(change *AttributeChange) formattedAttributeChange {
-	_, beforeIsMultiline := getRawStringValue(change.Before, change.Sensitive)
-	afterStr, afterIsMultiline := getRawStringValue(change.After, change.Sensitive)
-	if change.Unknown {
-		afterStr = "(known after apply)"
-		afterIsMultiline = false
-	}
-
-	isMulti := beforeIsMultiline || afterIsMultiline
-	isComplex := isComplexValue(change.Before) || isComplexValue(change.After)
-
-	var oldVal, newVal string
-	if !isMulti && !isComplex {
-		oldVal = formatSimpleValue(change.Before, change.Sensitive)
-		newVal = afterStr
-		if newVal == "" {
-			newVal = formatSimpleValue(change.After, change.Sensitive)
-		}
-	}
-
-	return formattedAttributeChange{
-		change:    change,
-		oldVal:    oldVal,
-		newVal:    newVal,
-		isMulti:   isMulti,
-		isComplex: isComplex,
-	}
-}
-
-// precomputeAttributeFormatting formats every change once up front, computing the key and
-// old-value column widths needed for aligned single-line rendering.
-func precomputeAttributeFormatting(changes []*AttributeChange) (formatted []formattedAttributeChange, maxKeyWidth, maxOldValWidth int) {
-	formatted = make([]formattedAttributeChange, len(changes))
-	for i, change := range changes {
-		if len(change.Key) > maxKeyWidth {
-			maxKeyWidth = len(change.Key)
-		}
-
-		fc := formatOneAttributeChange(change)
-		if len(fc.oldVal) > maxOldValWidth {
-			maxOldValWidth = len(fc.oldVal)
-		}
-		formatted[i] = fc
-	}
-
-	return formatted, maxKeyWidth, maxOldValWidth
-}
-
 // renderUnchangedAttributesFooter renders a dim "# (N unchanged attributes hidden)" row,
 // mirroring Terraform's own plan-output convention, so a diff-only attribute list doesn't
 // read as if it were the resource's entire content. Indentation matches
@@ -321,7 +247,7 @@ func renderUnchangedAttributesFooter(b *strings.Builder, unchangedCount int, gut
 		noun = "attribute"
 	}
 	comment := fmt.Sprintf("# (%d unchanged %s hidden)", unchangedCount, noun)
-	fmt.Fprintf(b, "%s%s\n", baseIndent, config.DimStyle.Render(comment))
+	writeWrappedAttributeLine(b, config.DimStyle.Render(comment), baseIndent, baseIndent, config.Width)
 }
 
 // renderAttributeChanges renders attribute-level changes, aligned under the resource line.
@@ -343,133 +269,12 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, gutt
 		attrBar = config.BarStyle.Render("┃") + spaceChar
 	}
 
-	formatted, maxKeyWidth, maxOldValWidth := precomputeAttributeFormatting(changes)
+	formatted, maxKeyWidth, maxOldValWidth := precomputeAttributeFormatting(changes, config)
 	ctx := attrRenderContext{Indent: baseIndent, Bar: attrBar, Config: config}
 	widths := attributeWidths{Key: maxKeyWidth, OldVal: maxOldValWidth}
 
 	for _, fc := range formatted {
-		renderOneAttributeChange(b, fc, ctx, widths)
-	}
-}
-
-// renderOneAttributeChange renders a single (precomputed) attribute change: complex
-// (map/array) values as pretty-printed JSON, multi-line values as a line-by-line diff, and
-// everything else as a single aligned "key  old → new" row.
-func renderOneAttributeChange(b *strings.Builder, fc formattedAttributeChange, ctx attrRenderContext, widths attributeWidths) {
-	info := &attrStyleInfo{
-		KeyStyle:   attributeKeyStyle(fc.change, ctx.Config),
-		Annotation: forcesReplacementAnnotation(fc.change),
-	}
-
-	switch {
-	case fc.isComplex:
-		meta := &attrRenderMeta{Indent: ctx.Indent, Bar: ctx.Bar, Annotation: info.Annotation, KeyStyle: info.KeyStyle, Config: ctx.Config}
-		renderComplexAttributeChange(b, fc.change, meta, diffStylesFromConfig(ctx.Config))
-	case fc.isMulti:
-		renderMultilineAttributeChange(b, fc.change, ctx, info)
-	default:
-		renderSingleLineAttributeChange(b, fc, ctx, info, widths)
-	}
-}
-
-// renderSingleLineAttributeChange renders "key  old → new" on a single aligned row.
-func renderSingleLineAttributeChange(b *strings.Builder, fc formattedAttributeChange, ctx attrRenderContext, info *attrStyleInfo, widths attributeWidths) {
-	paddedKey := fmt.Sprintf("%-*s", widths.Key, fc.change.Key)
-	paddedOldVal := fmt.Sprintf("%-*s", widths.OldVal, fc.oldVal)
-
-	fmt.Fprintf(
-		b, "%s%s%s %s  %s  %s%s\n",
-		ctx.Indent,
-		ctx.Bar,
-		info.KeyStyle.Render(paddedKey),
-		ctx.Config.DimStyle.Render(paddedOldVal),
-		ctx.Config.DimStyle.Render("→"),
-		fc.newVal,
-		info.Annotation,
-	)
-}
-
-// renderMultilineAttributeChange renders a multi-line string value: the key on its own
-// line, followed by a line-by-line diff (or a pure addition/deletion) of the content.
-func renderMultilineAttributeChange(b *strings.Builder, change *AttributeChange, ctx attrRenderContext, info *attrStyleInfo) {
-	fmt.Fprintf(
-		b, "%s%s%s%s\n",
-		ctx.Indent,
-		ctx.Bar,
-		info.KeyStyle.Render(change.Key),
-		info.Annotation,
-	)
-
-	beforeStr, _ := getRawStringValue(change.Before, change.Sensitive)
-	afterStr, _ := getRawStringValue(change.After, change.Sensitive)
-	if change.Unknown {
-		afterStr = "(known after apply)"
-	}
-
-	hasBeforeContent := beforeStr != "" && beforeStr != "(none)"
-	hasAfterContent := afterStr != "" && afterStr != "(none)"
-
-	// Render diff based on what content we have.
-	contentIndent := ctx.Indent + twoSpaceIndent
-	if ctx.Bar != "" {
-		contentIndent = ctx.Indent + ctx.Bar + twoSpaceIndent
-	}
-
-	styles := diffStylesFromConfig(ctx.Config)
-	switch {
-	case hasBeforeContent && hasAfterContent:
-		renderMultilineDiffSimple(b, beforeStr, afterStr, contentIndent, styles)
-	case hasBeforeContent:
-		renderMultilineValueSimple(b, beforeStr, contentIndent, "-", &styles.Delete)
-	case hasAfterContent:
-		renderMultilineValueSimple(b, afterStr, contentIndent, "+", &styles.Create)
-	}
-}
-
-// renderComplexAttributeChange renders a complex attribute (map/array) with pretty-printed JSON.
-func renderComplexAttributeChange(b *strings.Builder, change *AttributeChange, meta *attrRenderMeta, styles *diffStyles) {
-	// Write key line.
-	fmt.Fprintf(
-		b, "%s%s%s%s\n",
-		meta.Indent,
-		meta.Bar,
-		meta.KeyStyle.Render(change.Key),
-		meta.Annotation,
-	)
-
-	// Format values as JSON lines.
-	beforeLines := formatComplexValue(change.Before, nil)
-	afterLines := formatComplexValue(change.After, nil)
-
-	// Apply collapsing if configured.
-	maxLines := 0
-	if meta.Config != nil {
-		maxLines = meta.Config.MaxLines
-	}
-	beforeLines = collapseIfNeeded(beforeLines, maxLines)
-	afterLines = collapseIfNeeded(afterLines, maxLines)
-
-	// Content indent for JSON lines.
-	contentIndent := meta.Indent + twoSpaceIndent
-	if meta.Bar != "" {
-		contentIndent = meta.Indent + meta.Bar + twoSpaceIndent
-	}
-
-	// Render based on what content we have.
-	switch {
-	case len(beforeLines) > 0 && len(afterLines) > 0:
-		// Both have values - show diff.
-		renderJSONDiff(b, beforeLines, afterLines, contentIndent, styles)
-	case len(beforeLines) > 0:
-		// Only before (deletion).
-		for _, line := range beforeLines {
-			fmt.Fprintf(b, fmtIndentedSymbolLine, contentIndent, styles.Delete.Render("-"), line)
-		}
-	case len(afterLines) > 0:
-		// Only after (creation).
-		for _, line := range afterLines {
-			fmt.Fprintf(b, fmtIndentedSymbolLine, contentIndent, styles.Create.Render("+"), line)
-		}
+		renderOneAttributeChange(b, &fc, ctx, widths)
 	}
 }
 
@@ -501,93 +306,6 @@ func collectChanges(before, after []string, start diffCursor) (deleted, added []
 		}
 	}
 	return deleted, added, diffCursor{I: i, J: j}
-}
-
-// transformLines applies transform to every line, returning lines unchanged if transform is nil.
-func transformLines(lines []string, transform func(string) string) []string {
-	if transform == nil {
-		return lines
-	}
-	out := make([]string, len(lines))
-	for i, line := range lines {
-		out[i] = transform(line)
-	}
-	return out
-}
-
-// renderDiffLines outputs deleted and added lines to the builder.
-func renderDiffLines(b *strings.Builder, deleted, added []string, indent string, styles *diffStyles) {
-	for _, line := range deleted {
-		fmt.Fprintf(b, fmtIndentedSymbolLine, indent, styles.Delete.Render("-"), line)
-	}
-	for _, line := range added {
-		fmt.Fprintf(b, fmtIndentedSymbolLine, indent, styles.Create.Render("+"), line)
-	}
-}
-
-// renderJSONDiff renders a line-by-line diff of JSON content.
-func renderJSONDiff(b *strings.Builder, beforeLines, afterLines []string, indent string, styles *diffStyles) {
-	cursor := diffCursor{}
-	for cursor.I < len(beforeLines) || cursor.J < len(afterLines) {
-		if linesMatch(beforeLines, afterLines, cursor.I, cursor.J) {
-			fmt.Fprintf(b, "%s  %s\n", indent, beforeLines[cursor.I])
-			cursor.I++
-			cursor.J++
-			continue
-		}
-		var deleted, added []string
-		deleted, added, cursor = collectChanges(beforeLines, afterLines, cursor)
-		renderDiffLines(b, deleted, added, indent, styles)
-	}
-}
-
-// makeTruncator returns a function that truncates lines to maxWidth, measuring and slicing by
-// terminal-cell display width (via runewidth, already used elsewhere in this package for the
-// same purpose - see init_model.go) rather than byte or rune count. Wide characters (e.g. CJK)
-// occupy two cells per rune, so slicing by rune count alone can either cut a wide rune in half
-// or, worse, index past the end of the rune slice (lipgloss.Width(line) can exceed maxWidth
-// while len([]rune(line)) is still less than maxWidth-3, which panics on a naive rune slice).
-func makeTruncator(maxWidth int) func(string) string {
-	return func(line string) string {
-		if maxWidth > 3 && runewidth.StringWidth(line) > maxWidth {
-			// runewidth.Truncate's width budget already accounts for the tail ("...")
-			// it appends, so pass maxWidth itself rather than maxWidth-3 - the total
-			// (content + tail) display width comes out to at most maxWidth.
-			return runewidth.Truncate(line, maxWidth, "...")
-		}
-		return line
-	}
-}
-
-// renderMultilineDiffSimple renders a simple line-by-line diff with clean indentation.
-func renderMultilineDiffSimple(b *strings.Builder, before, after, indent string, styles *diffStyles) {
-	maxWidth := getMaxLineWidth()
-	beforeLines := strings.Split(before, newlineStr)
-	afterLines := strings.Split(after, newlineStr)
-	truncateLine := makeTruncator(maxWidth)
-
-	cursor := diffCursor{}
-	for cursor.I < len(beforeLines) || cursor.J < len(afterLines) {
-		if linesMatch(beforeLines, afterLines, cursor.I, cursor.J) {
-			fmt.Fprintf(b, "%s  %s\n", indent, truncateLine(beforeLines[cursor.I]))
-			cursor.I++
-			cursor.J++
-			continue
-		}
-		var deleted, added []string
-		deleted, added, cursor = collectChanges(beforeLines, afterLines, cursor)
-		renderDiffLines(b, transformLines(deleted, truncateLine), transformLines(added, truncateLine), indent, styles)
-	}
-}
-
-// renderMultilineValueSimple renders multi-line content with clean indentation.
-func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol string, symbolStyle *lipgloss.Style) {
-	truncateLine := makeTruncator(getMaxLineWidth())
-	lines := strings.Split(content, newlineStr)
-
-	for _, line := range lines {
-		fmt.Fprintf(b, fmtIndentedSymbolLine, indent, symbolStyle.Render(symbol), truncateLine(line))
-	}
 }
 
 // colorizedActionSymbol maps a Terraform resource action to an indicator in its semantic theme color.

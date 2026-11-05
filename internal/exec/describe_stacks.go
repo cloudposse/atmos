@@ -7,6 +7,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -84,6 +85,11 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 	defer perf.Track(atmosConfig, "exec.DescribeStacksExec.Execute")()
 
 	errOptions, collector := ErrorOptionsFromMode(args.ErrorMode)
+	if len(args.Sections) > 0 {
+		for _, section := range args.Sections {
+			errOptions.EvaluationPaths = append(errOptions.EvaluationPaths, []string{section})
+		}
+	}
 
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
@@ -97,7 +103,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		args.IncludeEmptyStacks,
 		args.Skip,
 		args.AuthManager,
-		false,
+		authdeferred.AuthDisabled(atmosConfig.AuthManager),
 		errOptions,
 	)
 	if err != nil {
@@ -151,8 +157,13 @@ const (
 // recoverable per-value YAML function errors. The zero value is OnErrorStrict, matching
 // ExecuteDescribeStacks's historical fail-fast behavior.
 type DescribeStacksErrorOptions struct {
-	OnError   OnErrorMode
-	OnWarning func(DegradationWarning)
+	// StaticOnly inspects merged configuration without auth, expression evaluation, workspace
+	// synthesis, or evaluated-map cache reuse. Stack name templates allow only Go's pure built-ins.
+	StaticOnly bool
+	// EvaluationPaths optionally narrows list columns to fields within sections.
+	EvaluationPaths [][]string
+	OnError         OnErrorMode
+	OnWarning       func(DegradationWarning)
 	// OnProgress, when non-nil, is called once per stack file immediately before it's
 	// processed — stackFile is the file name, index is 0-based, total is the number of
 	// stack files describe-stacks will visit this call (both counted before filtering by
@@ -170,6 +181,11 @@ type DescribeStacksErrorOptions struct {
 	// appropriate for merely listing/describing stacks, but not for a Terraform preflight
 	// about to run real commands with whatever credentials it resolves.
 	StrictAuth bool
+	// ExtraComponentTypes names additional component kinds, such as custom kinds declared
+	// by custom commands, to process after the built-in kinds. Each kind must already be
+	// registered with the component registry for its stack section to be available. The
+	// zero value leaves the described component kinds exactly as before.
+	ExtraComponentTypes []string
 }
 
 // ResolveErrorMode determines the effective --error-mode value using the documented
@@ -388,24 +404,23 @@ func ExecuteDescribeStacksScoped(
 	includeEmptyStacks bool,
 	skip []string,
 	authManager auth.AuthManager,
-	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
 	errOptions DescribeStacksErrorOptions,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksScoped")()
 
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, false, false, tagsFilter, labelsFilter, errOptions, nil)
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authdeferred.AuthDisabled(authManager), false, false, tagsFilter, labelsFilter, errOptions, nil)
 }
 
 // ExecuteDescribeStacksWithEvalSections is the most general opt-in describe-stacks entry point:
-// authDisabled + tags/labels early-skip scope + graceful error-mode degradation + the
+// manager-owned authentication policy + tags/labels early-skip scope + graceful error-mode degradation + the
 // evaluation-sections gate, all in one call.
 //
 // The evalSections parameter is DELIBERATELY separate from `sections`: `sections` only trims the
 // OUTPUT after full evaluation (unaffected by this call, exactly as every other Execute* variant
 // leaves it); evalSections additionally restricts WHICH top-level component sections get
-// Go-template rendering and YAML-function resolution at all -- see isSectionRequired. A nil
+// Go-template rendering and YAML-function resolution at all -- see deferred.IsSectionRequired. A nil
 // evalSections reproduces the exact eager-evaluation behavior of every other Execute* variant.
 // Used by the `list stacks`/`list components`/`list instances` commands (via
 // column.RequiredSections) to avoid evaluating expensive
@@ -425,7 +440,6 @@ func ExecuteDescribeStacksWithEvalSections(
 	includeEmptyStacks bool,
 	skip []string,
 	authManager auth.AuthManager,
-	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
 	errOptions DescribeStacksErrorOptions,
@@ -436,7 +450,7 @@ func ExecuteDescribeStacksWithEvalSections(
 	return executeDescribeStacks(
 		atmosConfig, filterByStack, components, componentTypes, sections,
 		ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks,
-		skip, authManager, authDisabled, false, false, tagsFilter, labelsFilter, errOptions,
+		skip, authManager, authdeferred.AuthDisabled(authManager), false, false, tagsFilter, labelsFilter, errOptions,
 		evalSections,
 	)
 }
@@ -464,7 +478,32 @@ func executeDescribeStacks(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
-	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	// Bind the caller's handle without mutating configuration shared by other passes.
+	config := *atmosConfig
+	atmosConfig = &config
+	if errOptions.StaticOnly {
+		atmosConfig.DeferStackIncludes = true
+		atmosConfig.Templates.Settings.Enabled = false
+		atmosConfig.AuthManager = nil
+		authManager = nil
+		authDisabled = true
+		processTemplates = false
+		processYamlFunctions = false
+		resolveSecrets = false
+	}
+	if authManager == nil {
+		authManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
+	} else {
+		atmosConfig.AuthManager = authManager
+	}
+	authDisabled = authDisabled || authdeferred.AuthDisabled(authManager)
+	// Explicit identities bind to stores here, as describe component does. The deferred
+	// manager binds credentials per store read instead.
+	if !authdeferred.IsDeferred(authManager) {
+		injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
+	}
+
+	stacksMap, rawStackConfigs, deferredContexts, err := findDescribeStacksMap(atmosConfig, filterByStack, ignoreMissingFiles, errOptions.StaticOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -478,14 +517,21 @@ func executeDescribeStacks(
 		authManager,
 		authDisabled,
 	)
+	processor.staticOnly = errOptions.StaticOnly
 	processor.useMocks = useMocks
 	processor.resolveSecrets = resolveSecrets
 	processor.tagsFilter = tagsFilter
 	processor.labelsFilter = labelsFilter
 	processor.evalSections = evalSections
+	processor.extraComponentTypes = errOptions.ExtraComponentTypes
+	processor.evalPaths = errOptions.EvaluationPaths
+	if processor.evalPaths == nil {
+		processor.evalPaths = atmosConfig.ListEvaluationPaths
+	}
 	// Recover per-component deferred-merge contexts from the FindStacksMap cache so Stage 3
 	// (resolveDeferredYamlFunctions) can run below — see processComponentEntry.
 	processor.deferredContexts = deferredContexts
+	processor.rawStackConfigs = rawStackConfigs
 	if errOptions.OnError == OnErrorWarn {
 		processor.withDegradation(errOptions.OnWarning)
 		if errOptions.StrictAuth {
@@ -541,6 +587,11 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 		// component source trees. Leave component_path unset until a real source
 		// path is configured.
 		return ""
+	case cfg.CloudFormationSectionName:
+		// A template path is as meaningful a "base path" as a Terraform root
+		// module. Deliberately not fixing this for helm/kubernetes here — the
+		// PRD scopes that out; they remain "" as a pre-existing, unrelated gap.
+		return atmosConfig.Components.CloudFormation.BasePath
 	default:
 		return ""
 	}
@@ -608,7 +659,23 @@ func propagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager 
 	}
 	configAndStacksInfo.AuthManager = authManager
 	managerStackInfo := authManager.GetStackInfo()
+	// Carry the caller's original identity selection so evaluation sees the same request
+	// describe component and deploy do.
+	if managerStackInfo != nil && managerStackInfo.RequestedIdentity != nil {
+		configAndStacksInfo.RequestedIdentity = managerStackInfo.RequestedIdentity
+	}
 	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
 	}
+}
+
+// PropagateAuth exposes propagateAuth to command-layer callers outside this
+// package (e.g. the SDK-native aws/cloudformation component) that need
+// info.AuthContext populated, not just info.AuthManager, so identity-aware SDK
+// client construction (including Floci emulator endpoint routing) picks up the
+// active identity's resolved AuthContext.
+func PropagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+	defer perf.Track(nil, "exec.PropagateAuth")()
+
+	propagateAuth(configAndStacksInfo, authManager)
 }

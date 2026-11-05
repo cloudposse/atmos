@@ -1,0 +1,24 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: github-production-approval
+  description: Require a designated reviewer before applying or deploying a production instance.
+spec:
+  policies:
+    guard:
+      on: component.command
+      engine: starlark
+      action: require_approval
+      rule: |
+        return ctx.input["command"] in ["apply", "deploy"]
+
+      # Covers only instances labeled stage: prod. Replace with `stacks: [<exact stack>]` to select
+      # production by name instead.
+      match:
+        labels: {stage: prod}
+      approvals:
+        - id: platform
+          provider: github-actions
+          spec:
+            reviewers: [platform-maintainer]
+            minimum: 1

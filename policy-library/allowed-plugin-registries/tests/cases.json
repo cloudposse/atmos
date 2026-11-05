@@ -1,0 +1,383 @@
+[
+  {
+    "name": "approved install source permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "foreign install source denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://ghcr.io/outsider/oidc",
+        "registry": "ghcr.io",
+        "repository": "outsider/oidc",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "lookalike registry suffix denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://registry.example.com.attacker.test/team/oidc",
+        "registry": "registry.example.com.attacker.test",
+        "repository": "team/oidc",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "different registry port denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://registry.example.com:5000/team/oidc",
+        "registry": "registry.example.com:5000",
+        "repository": "team/oidc",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "approved cached activation permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "activate",
+        "phase": "package",
+        "origin": "cache",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "foreign cached activation denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "activate",
+        "phase": "package",
+        "origin": "cache",
+        "source": "oci://ghcr.io/outsider/oidc",
+        "registry": "ghcr.io",
+        "repository": "outsider/oidc",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "approved catalog read permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "registry.read",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://registry.example.com/catalog",
+        "registry": "registry.example.com",
+        "repository": "catalog",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "approved catalog configuration permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "registry.configure",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://registry.example.com/catalog",
+        "registry": "registry.example.com",
+        "repository": "catalog",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "foreign catalog write denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "registry.write",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://ghcr.io/catalog",
+        "registry": "ghcr.io",
+        "repository": "catalog",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "approved registry login permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "registry.login",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://registry.example.com",
+        "registry": "registry.example.com",
+        "repository": "",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "foreign registry login denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "registry.login",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://ghcr.io",
+        "registry": "ghcr.io",
+        "repository": "",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "approved publication permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "publish",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "approved signing permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "sign",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "local conformance source denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "test",
+        "phase": "source",
+        "origin": "development",
+        "source": "",
+        "registry": "",
+        "repository": "",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": true
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "local development activation denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "activate",
+        "phase": "package",
+        "origin": "development",
+        "source": "",
+        "registry": "",
+        "repository": "",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": true
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "layout source with approved claimed registry denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "source",
+        "origin": "layout",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "layout package with approved claimed registry denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "package",
+        "origin": "layout",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "deny"
+  }
+]

@@ -24,16 +24,16 @@ commands:
           - type: simulate
             text: "# inspect the custom component type"
           - type: simulate
-            text: &describe_config_cmd atmos describe config --format=yaml --query .components.script
+            text: &describe_config_cmd atmos describe config --format=yaml --query .components.example
           - type: shell
             name: describe-config
             duration: 450ms
             interval: 750ms
             command: *describe_config_cmd
           - type: simulate
-            text: "# run the custom script component"
+            text: "# run the custom example component"
           - type: simulate
-            text: &script_cmd atmos script deploy-app -s dev
+            text: &script_cmd atmos example deploy-app --stack dev
           - type: shell
             name: script-command
             duration: 450ms
@@ -57,10 +57,10 @@ commands:
           assert_no_experimental(text)
           for needle in [
               "# inspect the custom component type",
-              "atmos describe config --format=yaml --query .components.script",
-              "base_path: components/script",
-              "# run the custom script component",
-              "atmos script deploy-app -s dev",
+              "atmos describe config --format=yaml --query .components.example",
+              "base_path: components/example",
+              "# run the custom example component",
+              "atmos example deploy-app --stack dev",
               "Component: deploy-app",
               "Stack: dev",
               "App: myapp",

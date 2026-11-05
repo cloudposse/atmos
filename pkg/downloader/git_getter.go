@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/hashicorp/go-getter"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -14,6 +15,8 @@ import (
 // CustomGitGetter is a custom getter for git (git::) that removes symlinks.
 // It also supports retry configuration for transient errors.
 type CustomGitGetter struct {
+	// ResolvedCommit is captured before go-getter extracts a subdirectory and removes the checkout.
+	ResolvedCommit string
 	// OnRetry reports the one-based attempt when a retry starts.
 	OnRetry func(int)
 	getter.GitGetter
@@ -30,9 +33,16 @@ type CustomGitGetter struct {
 
 // Get implements the custom getter logic removing symlinks.
 func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
+	c.ResolvedCommit = ""
 	// Normal clone
 	if err := c.GetCustom(dst, url); err != nil {
 		return err
+	}
+	// Inspect the exact checkout that supplies the content, without another remote read.
+	if repo, err := git.PlainOpen(dst); err == nil {
+		if head, err := repo.Head(); err == nil {
+			c.ResolvedCommit = head.Hash().String()
+		}
 	}
 	// Remove symlinks
 	return removeSymlinks(dst)

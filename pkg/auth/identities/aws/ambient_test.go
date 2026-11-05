@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -109,6 +110,93 @@ func TestAWSAmbientIdentityEnvironment(t *testing.T) {
 	env, err := identity.Environment()
 	require.NoError(t, err)
 	assert.Empty(t, env)
+}
+
+func TestAWSAmbientIdentityEnvironmentOverrides(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "aws/ambient",
+		Env: []schema.EnvironmentVariable{
+			{Key: "FOO", Value: "first"},
+			{Key: "FOO", Value: "bar"},
+			{Key: "AWS_ACCESS_KEY_ID", Value: "123456789012"},
+			{Key: "EMPTY", Value: ""},
+		},
+	}
+	identity, err := NewAWSAmbientIdentity("test", config)
+	require.NoError(t, err)
+
+	env, err := identity.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"FOO": "bar", "AWS_ACCESS_KEY_ID": "123456789012", "EMPTY": "",
+	}, env)
+
+	// Each call returns an independent map, without changing the configuration.
+	env["FOO"] = "modified"
+	again, err := identity.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "bar", again["FOO"])
+	assert.Equal(t, "bar", config.Env[1].Value)
+	config.Env[1].Value = "changed"
+	assert.Equal(t, "bar", again["FOO"])
+}
+
+func TestAWSAmbientIdentityPrepareEnvironmentOverrides(t *testing.T) {
+	tests := []struct {
+		name  string
+		input map[string]string
+	}{
+		{name: "nil input"},
+		{name: "empty input", input: map[string]string{}},
+		{
+			name: "inherited environment",
+			input: map[string]string{
+				"FOO": "inherited", "EMPTY": "inherited",
+				"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "secret",
+				"AWS_SESSION_TOKEN": "token", "AWS_REGION": "us-west-1",
+				"AWS_DEFAULT_REGION": "us-west-1", "AWS_ENDPOINT_URL": "http://localhost:4566",
+				"AWS_ENDPOINT_URL_S3": "http://localhost:4566", "UNRELATED": "preserved",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, err := NewAWSAmbientIdentity("test", &schema.Identity{
+				Kind:      "aws/ambient",
+				Principal: map[string]interface{}{"region": "us-east-1"},
+				Env: []schema.EnvironmentVariable{
+					{Key: "FOO", Value: "first"},
+					{Key: "FOO", Value: "bar"},
+					{Key: "AWS_ACCESS_KEY_ID", Value: "123456789012"},
+					{Key: "AWS_REGION", Value: "eu-west-1"},
+					{Key: "AWS_DEFAULT_REGION", Value: "eu-west-2"},
+					{Key: "EMPTY", Value: ""},
+				},
+			})
+			require.NoError(t, err)
+			original := maps.Clone(tt.input)
+			want := map[string]string{
+				"FOO": "bar", "AWS_ACCESS_KEY_ID": "123456789012", "EMPTY": "",
+				"AWS_REGION": "eu-west-1", "AWS_DEFAULT_REGION": "eu-west-2",
+			}
+			for key, value := range tt.input {
+				if _, overridden := want[key]; !overridden {
+					want[key] = value
+				}
+			}
+
+			result, err := identity.PrepareEnvironment(context.Background(), tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, want, result)
+			assert.Equal(t, original, tt.input)
+			result["FOO"] = "modified"
+			assert.Equal(t, original, tt.input)
+			if tt.input != nil {
+				tt.input["FOO"] = "changed"
+				assert.Equal(t, "modified", result["FOO"])
+			}
+		})
+	}
 }
 
 func TestAWSAmbientIdentityPaths(t *testing.T) {

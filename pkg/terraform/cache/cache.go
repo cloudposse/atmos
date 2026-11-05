@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/duration"
 	httppkg "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/http/proxy"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -224,7 +225,7 @@ func parseDuration(s string, def time.Duration) time.Duration {
 	if s == "" {
 		return def
 	}
-	d, err := time.ParseDuration(s)
+	d, err := duration.ParseNonNegative(s)
 	if err != nil {
 		log.Debug("Invalid Terraform cache duration; using default", "value", s, "default", def)
 		return def

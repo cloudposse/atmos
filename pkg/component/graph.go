@@ -159,6 +159,14 @@ func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *de
 	nodeInfo.SubCommand = opts.SubCommand
 	nodeInfo.All = false
 	nodeInfo.Affected = false
+	// Query/Components/Tags/Labels must all be cleared: each component package's
+	// top-level Execute() re-enters the bulk path whenever any selection field is
+	// still set on info, and selection has already been applied by the graph
+	// filtering/sorting above before this node was ever selected for dispatch.
+	// Leaving Tags/Labels set here caused a real infinite recursion
+	// (executeBulk -> executeGraph -> executeGraphNode -> Provider.Execute ->
+	// Execute -> executeBulk -> ...) for any --tags/--labels-only bulk run (no
+	// --all/--affected).
 	nodeInfo.Query = ""
 	nodeInfo.Components = nil
 	nodeInfo.Tags = nil
@@ -501,7 +509,7 @@ func dependenciesFromSection(componentSection map[string]any, componentType, sta
 // legacyDependenciesFromSettings extracts dependencies from the deprecated 'settings.depends_on' section.
 func legacyDependenciesFromSettings(settingsSection map[string]any) []schema.ComponentDependency {
 	if dependsOn, ok := settingsSection["depends_on"]; ok {
-		deps := parseLegacyDependsOn(dependsOn)
+		deps := schema.ParseLegacyDependsOn(dependsOn)
 		if len(deps) > 0 {
 			log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
 			return deps
@@ -527,64 +535,6 @@ func legacyDependenciesFromSettings(settingsSection map[string]any) []schema.Com
 		})
 	}
 	return deps
-}
-
-func parseLegacyDependsOn(dependsOn any) []schema.ComponentDependency {
-	switch deps := dependsOn.(type) {
-	case []any:
-		return parseLegacyDependsOnList(deps)
-	case map[string]any:
-		values := make([]any, 0, len(deps))
-		for _, dep := range deps {
-			values = append(values, dep)
-		}
-		return parseLegacyDependsOnList(values)
-	case map[any]any:
-		values := make([]any, 0, len(deps))
-		for _, dep := range deps {
-			values = append(values, dep)
-		}
-		return parseLegacyDependsOnList(values)
-	default:
-		return nil
-	}
-}
-
-func parseLegacyDependsOnList(values []any) []schema.ComponentDependency {
-	deps := make([]schema.ComponentDependency, 0, len(values))
-	for _, value := range values {
-		dep, ok := parseLegacyDependsOnEntry(value)
-		if ok {
-			deps = append(deps, dep)
-		}
-	}
-	return deps
-}
-
-func parseLegacyDependsOnEntry(value any) (schema.ComponentDependency, bool) {
-	switch dep := value.(type) {
-	case string:
-		if dep == "" {
-			return schema.ComponentDependency{}, false
-		}
-		return schema.ComponentDependency{Component: dep}, true
-	case map[string]any:
-		component, _ := dep["component"].(string)
-		if component == "" {
-			return schema.ComponentDependency{}, false
-		}
-		stack, _ := dep["stack"].(string)
-		return schema.ComponentDependency{Component: component, Stack: stack}, true
-	case map[any]any:
-		component, _ := dep["component"].(string)
-		if component == "" {
-			return schema.ComponentDependency{}, false
-		}
-		stack, _ := dep["stack"].(string)
-		return schema.ComponentDependency{Component: component, Stack: stack}, true
-	default:
-		return schema.ComponentDependency{}, false
-	}
 }
 
 func targetStateFor(componentSection map[string]any) componentTargetState {

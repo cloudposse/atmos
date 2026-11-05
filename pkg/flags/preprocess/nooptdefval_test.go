@@ -299,3 +299,45 @@ func TestExtractFlagName(t *testing.T) {
 		})
 	}
 }
+
+func TestNoOptDefValPreprocessor_WithCommandNames(t *testing.T) {
+	t.Parallel()
+
+	commands := map[string]bool{"terraform": true, "tf": true, "doctor": true}
+	flags := []FlagInfo{
+		&mockFlag{name: "pager", noOptDefVal: "true"},
+		&mockFlag{name: "identity", shorthand: "i", noOptDefVal: "__SELECT__"},
+	}
+	withCommands := NewNoOptDefValPreprocessor(flags, WithCommandMatcher(func(s string) bool { return commands[s] }))
+
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{name: "command name is not folded", args: []string{"--pager", "terraform", "plan"}, want: []string{"--pager", "terraform", "plan"}},
+		{name: "alias is not folded", args: []string{"--pager", "tf", "plan"}, want: []string{"--pager", "tf", "plan"}},
+		{name: "shorthand command is not folded", args: []string{"-i", "doctor"}, want: []string{"-i", "doctor"}},
+		{name: "explicit equals value that looks like a command still works", args: []string{"--identity=terraform", "plan"}, want: []string{"--identity=terraform", "plan"}},
+		{name: "non-command value still folds", args: []string{"--pager", "less", "terraform", "plan"}, want: []string{"--pager=less", "terraform", "plan"}},
+		{name: "identity value still folds", args: []string{"--identity", "prod", "terraform", "plan"}, want: []string{"--identity=prod", "terraform", "plan"}},
+		// Once the command appears, a following word is a flag value even when it names another command.
+		{name: "value after the command folds even when it names a command", args: []string{"profile", "list", "--identity", "doctor"}, want: []string{"profile", "list", "--identity=doctor"}},
+		{name: "repeated flags after the command fold", args: []string{"terraform", "plan", "--pager", "tf", "--identity", "doctor"}, want: []string{"terraform", "plan", "--pager=tf", "--identity=doctor"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, withCommands.Preprocess(tt.args))
+		})
+	}
+
+	t.Run("without a matcher the legacy folding is unchanged", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, []string{"--pager=terraform", "plan"}, NewNoOptDefValPreprocessor(flags).Preprocess([]string{"--pager", "terraform", "plan"}))
+	})
+	t.Run("a nil matcher is ignored", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, []string{"--pager=terraform"}, NewNoOptDefValPreprocessor(flags, WithCommandMatcher(nil)).Preprocess([]string{"--pager", "terraform"}))
+	})
+}

@@ -88,3 +88,16 @@ func TestApplyOverridesSkipsModuleNotInEntries(t *testing.T) {
 	assert.Equal(t, 0, calls, "moduleVersion must not be called for modules with no override rule")
 	assert.Equal(t, "https://original.example/LICENSE", entries[0].URL)
 }
+
+func TestApplyOverridesResolvesPackageLicenseFromParentModule(t *testing.T) {
+	for _, original := range []string{"Unknown", "https://upstream.example/LICENSE"} {
+		t.Run(original, func(t *testing.T) {
+			entries := []LicenseEntry{{Module: "sigs.k8s.io/controller-runtime/pkg", URL: original, License: "Apache-2.0"}}
+			applyOverrides(entries, func(module string) (string, error) {
+				assert.Equal(t, "sigs.k8s.io/controller-runtime", module)
+				return "v0.24.1", nil
+			})
+			assert.Equal(t, "https://github.com/kubernetes-sigs/controller-runtime/blob/v0.24.1/LICENSE", entries[0].URL)
+		})
+	}
+}

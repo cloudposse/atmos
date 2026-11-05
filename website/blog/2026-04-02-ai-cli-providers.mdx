@@ -15,6 +15,8 @@ Gemini CLI as AI backends. No API keys needed. Just use your existing subscripti
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## Why This Matters
 
 Until now, using Atmos AI required purchasing API tokens from a provider and configuring keys.
@@ -179,6 +181,18 @@ atmos ai ask --provider anthropic "Describe the vpc component"
       <PrimaryCTA to="/examples/ai-claude-code">Browse Example</PrimaryCTA>
     </div>
 </ActionCard>
+
+## Try it out
+
+<TryExample example="ai-claude-code">
+
+Install and authenticate Claude Code as described in the README before making a request.
+
+```shell
+atmos ai ask "What stacks do we have?"
+```
+
+</TryExample>
 
 ## Learn More
 

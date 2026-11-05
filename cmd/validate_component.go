@@ -6,10 +6,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -159,6 +161,10 @@ func init() {
 	validateComponentCmd.DisableFlagParsing = false
 
 	AddStackCompletion(validateComponentCmd)
+	flags.NewStandardParser(
+		flags.WithStringFlag("schemas-jsonschema-dir", "", "", "Base directory for component JSON Schemas"),
+		flags.WithStringFlag("schemas-opa-dir", "", "", "Base directory for component OPA policies"),
+	).RegisterFlags(validateComponentCmd)
 	validateComponentCmd.PersistentFlags().String("schema-path", "", "Specify the path to the schema file used for validating the component configuration in the given stack, supporting schema types like jsonschema or opa.")
 	validateComponentCmd.PersistentFlags().String("schema-type", "", "Validate the specified component configuration in the given stack using the provided schema file path and schema type (`jsonschema` or `opa`).")
 	validateComponentCmd.PersistentFlags().StringSlice("module-paths", nil, "Specify the paths to OPA policy modules or catalogs used for validating the component configuration in the given stack.")
@@ -171,6 +177,10 @@ func init() {
 	}
 
 	validateCmd.AddCommand(validateComponentCmd)
+	internal.RegisterCommandMetadata(
+		validateComponentCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/validate/component"),
+	)
 }
 
 // componentStackSource supplies a stable file-level anchor until the component

@@ -50,7 +50,11 @@ func WriteFileAtomicWindows(filename string, data []byte, perm os.FileMode) erro
 
 	// On Windows, we need to remove the target file first if it exists.
 	// This is because Windows doesn't allow renaming over an existing file.
-	if _, err := os.Stat(filename); err == nil {
+	if info, err := os.Stat(filename); err == nil {
+		if info.IsDir() {
+			os.Remove(tmpName)
+			return fmt.Errorf("%w: destination is a directory: %s", errUtils.ErrFileOperation, filename)
+		}
 		if err := os.Remove(filename); err != nil {
 			os.Remove(tmpName) // Clean up temp file.
 			return err

@@ -73,10 +73,14 @@ func RunScript(ctx context.Context, spec *ScriptSpec, stdout, stderr io.Writer) 
 	if spec.DryRun {
 		return nil
 	}
-	cmd := NewScriptCommand(ctx, spec)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	executionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := NewScriptCommand(executionCtx, spec)
+	err := runScriptAndDrain(executionCtx, cancel, cmd, stdout, stderr)
+	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
 	}
 	return nil

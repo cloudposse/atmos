@@ -27,6 +27,11 @@ settings:
   yaml:
     key_delimiter: "."
 
+  # YAML function execution
+  functions:
+    exec:
+      max_concurrency: 1
+
   # Terminal settings
   terminal:
     max_width: 120
@@ -45,6 +50,7 @@ settings:
 
 | Section | Description |
 |---------|-------------|
+| [functions](/cli/configuration/settings/functions) | YAML function evaluation and `!exec` concurrency |
 | [YAML Settings](#yaml-settings) | YAML parsing behavior, key delimiter for dot notation |
 | [Experimental](/cli/configuration/settings/experimental) | Control experimental feature behavior |
 | [Terminal](/cli/configuration/settings/terminal) | Terminal display, color, width, pager, and syntax highlighting |

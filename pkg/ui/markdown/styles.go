@@ -284,6 +284,10 @@ func uintPtr(u uint) *uint {
 
 // GetASCIIStyle returns the plain-text style with no document margin and indented lists.
 func GetASCIIStyle() ([]byte, error) {
+	return json.Marshal(asciiStyleConfig())
+}
+
+func asciiStyleConfig() ansi.StyleConfig {
 	// Replace pointers instead of changing Glamour's shared preset. Serializing the
 	// full style lets each renderer decode its own copy without mutating the preset.
 	style := plainTextStyle()
@@ -293,6 +297,21 @@ func GetASCIIStyle() ([]byte, error) {
 	}
 	style.Item = ansi.StylePrimitive{BlockPrefix: "• "}
 	style.Enumeration = ansi.StylePrimitive{BlockPrefix: ". "}
+	return style
+}
+
+// GetASCIIReadableStyle returns the ASCII style with inline Markdown delimiters
+// resolved for plain-text readers. Glamour emits BlockPrefix/BlockSuffix once per
+// text fragment, so "**" around bold text that contains a code span or several
+// fragments leaves dangling markers ("!exec** is disabled**"). Bold, italic and
+// strikethrough delimiters are therefore dropped and the words stay. Code spans
+// keep the ASCII preset's behavior of rendering their text without backticks, which
+// existing non-TTY output and its tests rely on.
+func GetASCIIReadableStyle() ([]byte, error) {
+	style := asciiStyleConfig()
+	style.Strong = ansi.StylePrimitive{}
+	style.Emph = ansi.StylePrimitive{}
+	style.Strikethrough = ansi.StylePrimitive{}
 	return json.Marshal(style)
 }
 

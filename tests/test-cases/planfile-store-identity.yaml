@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the planfile-store-identity example: a per-store `identity` on a
+# planfile store is accepted by config loading and round-trips into the spec.
+tests:
+  - name: "planfile-store-identity example validates"
+    enabled: true
+    snapshot: false
+    description: "The example's stacks validate with a per-store planfile identity configured"
+    workdir: "../examples/planfile-store-identity"
+    command: "atmos"
+    args:
+      - "validate"
+      - "stacks"
+    expect:
+      exit_code: 0
+
+  - name: "planfile-store-identity field round-trips"
+    enabled: true
+    snapshot: false
+    description: "The store-level identity appears in the loaded planfile store configuration"
+    workdir: "../examples/planfile-store-identity"
+    command: "atmos"
+    args:
+      - "describe"
+      - "config"
+      - "--format"
+      - "json"
+    expect:
+      exit_code: 0
+      stdout:
+        - '"identity": "aws-backend"'

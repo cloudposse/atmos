@@ -213,24 +213,15 @@ Both `terraform` and `tf` resolve to `hashicorp/terraform`, so they represent th
 
 ## Listing Configured Aliases
 
-View all configured aliases:
+Use [`atmos toolchain aliases`](/cli/commands/toolchain/aliases) to list effective built-in and configured aliases. Configured aliases take precedence when names overlap.
 
-```bash
+```shell
 atmos toolchain aliases
+atmos toolchain aliases --format=json
+atmos toolchain aliases --format=yaml
 ```
 
-Output:
-```
-Configured Toolchain Aliases:
-
-terraform    → hashicorp/terraform
-tf           → hashicorp/terraform
-opentofu     → opentofu/opentofu
-tofu         → opentofu/opentofu
-kubectl      → kubernetes-sigs/kubectl
-helm         → helm/helm
-aws          → aws/aws-cli
-```
+The default table is sorted by alias name. JSON and YAML output are alias-to-target mappings. Targets are shown as defined; listing does not resolve alias chains, query registries, or install tools.
 
 ## Aliases with Custom Registries
 

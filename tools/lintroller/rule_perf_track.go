@@ -38,6 +38,7 @@ var excludedPackages = []string{
 	"/tests",           // Test packages and helpers.
 	"/pkg/auth",        // Auth runs once per command, not in hot path.
 	"/pkg/config",      // Config loading runs once per command, not in hot path.
+	"/pkg/duration",    // Pure parsing; must not import perf (pkg/schema imports it, and perf imports schema).
 	"/pkg/merge",       // Merge happens during config loading, not in hot path.
 	"/pkg/list",        // List commands are one-shot operations.
 	"/pkg/pager",       // Pager is UI concern, one-shot operation.
