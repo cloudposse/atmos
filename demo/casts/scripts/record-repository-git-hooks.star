@@ -2,12 +2,18 @@
 def index_state(root):
     return exec.run(["git", "ls-files", "--stage", "-z"], working_directory = root, output = "capture").stdout
 
-# Assert that recording leaves the caller's staged files and selected working files intact.
+# Read a working file, or None when it is absent, so a deleted file does not block recording.
+def read_working_file(root, path):
+    full = root + "/" + path
+    return fs.read_file(full) if fs.exists(full) else None
+
+# Assert that recording leaves the caller's staged files and selected working files intact,
+# including whether each file exists.
 def verify_unchanged(root, index, contents):
     if index_state(root) != index:
         fail("The live Git index changed during recording.")
     for path, before in contents.items():
-        if fs.read_file(root + "/" + path) != before:
+        if read_working_file(root, path) != before:
             fail("Working file changed during recording: " + path)
 
 # Stage the tracked check files from a revision into the private index, skipping paths the revision lacks.
@@ -33,7 +39,7 @@ def record():
         "scripts/checks/checks.star",
         "docs/development.md",
     ]
-    contents = {path: fs.read_file(root + "/" + path) for path in paths}
+    contents = {path: read_working_file(root, path) for path in paths}
     defer(verify_unchanged, root, index_state(root), contents)
     exec.run(["mkdir", "-p", root + "/.context"], output = "capture")
     scratch = exec.run(["mktemp", "-d", root + "/.context/git-hooks-cast.XXXXXX"], output = "capture").stdout.strip()
