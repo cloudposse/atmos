@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -214,9 +216,31 @@ func hasService(c testCase, name string) bool {
 	return false
 }
 
+// makeSandbox creates a case directory whose path has the same length on every
+// run. os.MkdirTemp appends a random number of 1 to 10 digits, and templates that
+// embed the sandbox path report error columns that shift with that length, which
+// made the old implementation look nondeterministic.
+func makeSandbox() (string, error) {
+	for range 10 {
+		suffix := make([]byte, 8)
+		if _, err := rand.Read(suffix); err != nil {
+			return "", err
+		}
+		dir := filepath.Join(os.TempDir(), "atmos-compat-case-"+hex.EncodeToString(suffix))
+		err := os.Mkdir(dir, 0o700)
+		if err == nil {
+			return dir, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return "", err
+		}
+	}
+	return "", errors.New("could not create a unique sandbox directory")
+}
+
 func (r *runner) runCase(ctx context.Context, binary string, c testCase, server *fixtureServer) (observation, error) {
 	o := observation{}
-	sandbox, err := os.MkdirTemp("", "atmos-compat-case-")
+	sandbox, err := makeSandbox()
 	if err != nil {
 		return o, err
 	}

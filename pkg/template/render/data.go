@@ -196,6 +196,12 @@ func (d *Data) initRenderer(alias string) error {
 	if d.renderers == nil {
 		d.renderers = make(map[string]gomplate.Renderer)
 	}
+	// gomplate.NewRenderer lazily initializes the package-global gomplate.Metrics,
+	// so creating a renderer needs the same lock as using one.
+	if !d.rendererHeld {
+		rendererMu.Lock()
+		defer rendererMu.Unlock()
+	}
 	d.renderers[alias] = gomplate.NewRenderer(gomplate.RenderOptions{Datasources: sources, ExtraHeaders: d.ExtraHeaders, Funcs: funcs})
 	return nil
 }

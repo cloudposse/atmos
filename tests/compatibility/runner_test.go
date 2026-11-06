@@ -147,3 +147,24 @@ func TestCandidateCannotRecordBaseline(t *testing.T) {
 		}
 	}
 }
+
+func TestMakeSandboxPathsHaveAFixedLength(t *testing.T) {
+	first, err := makeSandbox()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(first)
+	for range 20 {
+		next, err := makeSandbox()
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.RemoveAll(next)
+		if len(next) != len(first) {
+			t.Fatalf("sandbox path length varies: %q and %q", first, next)
+		}
+		if next == first {
+			t.Fatalf("sandbox path reused: %q", next)
+		}
+	}
+}

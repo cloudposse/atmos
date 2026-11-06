@@ -1,6 +1,6 @@
 {
   "revision": "4ffd8804d3500b4369e739095174000565b43973",
-  "corpus_sha256": "c942d2292293b92d842ca967976b7d21c8684fafd5e5d2b9ea53bb62efc9e1ed",
+  "corpus_sha256": "9e30baae1963ab1235f4ebb380af03fecb68ceb62f7b9d7e192137bda6b22ad3",
   "go_version": "go1.27.1",
   "platform": "darwin",
   "cases": {
