@@ -998,17 +998,19 @@ func buildTerraformExecData(subCommand, output, component, stack string, exitCod
 // buffers populated regardless of whether Native CI job summaries are also
 // enabled. Callers read the returned buffers themselves for their own
 // ciMode-gated CI-job-summary post-processing (e.g. capturedPlanOutput).
-// Component/stack are the invocation's already-resolved identity (research.md
-// Decision 21), threaded through to buildTerraformExecData's Data payload —
-// component is typically args[0], stack the already-parsed --stack value;
-// both empty for the multi-component path, which never reaches this closure.
-func terraformCaptureShellOpts(component, stack string) (opts []e.ShellCommandOption, stdoutBuf, stderrBuf *bytes.Buffer) {
+// The stack is the already-parsed --stack value (research.md Decision 21),
+// threaded through to buildTerraformExecData's Data payload. The component is
+// not known yet: a path-style argument is only resolved to its logical name
+// later, so the parser receives it at invocation time instead of capturing
+// args[0] here. Both are empty for the multi-component path, which never
+// reaches this closure.
+func terraformCaptureShellOpts(stack string) (opts []e.ShellCommandOption, stdoutBuf, stderrBuf *bytes.Buffer) {
 	stdoutBuf = &bytes.Buffer{}
 	stderrBuf = &bytes.Buffer{}
 	opts = []e.ShellCommandOption{
 		e.WithStdoutCapture(stdoutBuf),
 		e.WithStderrCapture(stderrBuf),
-		e.WithExecMetadataParser(terraformExecMetadataParserFunc(component, stack)),
+		e.WithExecMetadataParser(terraformExecMetadataParserFunc(stack)),
 	}
 	return opts, stdoutBuf, stderrBuf
 }
@@ -1024,8 +1026,8 @@ func terraformCaptureShellOpts(component, stack string) (opts []e.ShellCommandOp
 // (captureExecMetadataSync already computes it from
 // info.ExecMetadataRawExitCode, research.md Decision 27) — not captured
 // here, since neither value is known when this closure is created.
-func terraformExecMetadataParserFunc(component, stack string) func(subCommand string, exitCode int, output string) any {
-	return func(subCommand string, exitCode int, output string) any {
+func terraformExecMetadataParserFunc(stack string) func(subCommand, component string, exitCode int, output string) any {
+	return func(subCommand, component string, exitCode int, output string) any {
 		data := buildTerraformExecData(subCommand, ansi.Strip(output), component, stack, exitCode)
 		if data == nil {
 			return nil
