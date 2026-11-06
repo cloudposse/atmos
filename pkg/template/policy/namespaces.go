@@ -10,7 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
-	"github.com/cloudposse/atmos/pkg/template/compatibility"
+	"github.com/cloudposse/atmos/pkg/template/compatibility/netaddr"
 )
 
 // policyNetFuncs preserves pure IP helpers while guarding every DNS lookup method.
@@ -26,9 +26,9 @@ type nativeNetFuncs interface {
 	ParsePrefix(ipprefix any) (netip.Prefix, error)
 	ParseRange(iprange any) (netipx.IPRange, error)
 	// Gomplate v3 names, kept working by the templating compatibility shims.
-	ParseIP(ip any) (compatibility.LegacyIP, error)
-	ParseIPPrefix(ipprefix any) (netip.Prefix, error)
-	ParseIPRange(iprange any) (netipx.IPRange, error)
+	ParseIP(ip any) (netaddr.IP, error)
+	ParseIPPrefix(ipprefix any) (netaddr.IPPrefix, error)
+	ParseIPRange(iprange any) (netaddr.IPRange, error)
 	CIDRHost(hostnum any, prefix any) (netip.Addr, error)
 	CIDRNetmask(prefix any) (netip.Addr, error)
 	CIDRSubnets(newbits any, prefix any) ([]netip.Prefix, error)
@@ -48,7 +48,7 @@ func (f *policyNetFuncs) check(method string, name any) error {
 }
 
 func (f *policyNetFuncs) LookupIP(name any) (string, error) {
-	defer perf.Track(nil, "exec.LookupIP")()
+	defer perf.Track(nil, "policy.LookupIP")()
 
 	if err := f.check("LookupIP", name); err != nil {
 		return "", err
@@ -57,7 +57,7 @@ func (f *policyNetFuncs) LookupIP(name any) (string, error) {
 }
 
 func (f *policyNetFuncs) LookupIPs(name any) ([]string, error) {
-	defer perf.Track(nil, "exec.LookupIPs")()
+	defer perf.Track(nil, "policy.LookupIPs")()
 
 	if err := f.check("LookupIPs", name); err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (f *policyNetFuncs) LookupIPs(name any) ([]string, error) {
 }
 
 func (f *policyNetFuncs) LookupCNAME(name any) (string, error) {
-	defer perf.Track(nil, "exec.LookupCNAME")()
+	defer perf.Track(nil, "policy.LookupCNAME")()
 
 	if err := f.check("LookupCNAME", name); err != nil {
 		return "", err
@@ -75,7 +75,7 @@ func (f *policyNetFuncs) LookupCNAME(name any) (string, error) {
 }
 
 func (f *policyNetFuncs) LookupSRV(name any) (*net.SRV, error) {
-	defer perf.Track(nil, "exec.LookupSRV")()
+	defer perf.Track(nil, "policy.LookupSRV")()
 
 	if err := f.check("LookupSRV", name); err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (f *policyNetFuncs) LookupSRV(name any) (*net.SRV, error) {
 }
 
 func (f *policyNetFuncs) LookupSRVs(name any) ([]*net.SRV, error) {
-	defer perf.Track(nil, "exec.LookupSRVs")()
+	defer perf.Track(nil, "policy.LookupSRVs")()
 
 	if err := f.check("LookupSRVs", name); err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (f *policyNetFuncs) LookupSRVs(name any) ([]*net.SRV, error) {
 }
 
 func (f *policyNetFuncs) LookupTXT(name any) ([]string, error) {
-	defer perf.Track(nil, "exec.LookupTXT")()
+	defer perf.Track(nil, "policy.LookupTXT")()
 
 	if err := f.check("LookupTXT", name); err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ type policyEnvFuncs struct {
 }
 
 func (f *policyEnvFuncs) Getenv(key any, defaults ...string) (string, error) {
-	defer perf.Track(nil, "exec.Getenv")()
+	defer perf.Track(nil, "policy.Getenv")()
 
 	if err := guard.Function(context.Background(), "env.Getenv", Engine, guard.FileOrigin(f.file)); err != nil {
 		return "", err
@@ -122,7 +122,7 @@ func (f *policyEnvFuncs) Getenv(key any, defaults ...string) (string, error) {
 }
 
 func (f *policyEnvFuncs) ExpandEnv(value any) (string, error) {
-	defer perf.Track(nil, "exec.ExpandEnv")()
+	defer perf.Track(nil, "policy.ExpandEnv")()
 
 	if err := guard.Function(context.Background(), "env.ExpandEnv", Engine, guard.FileOrigin(f.file)); err != nil {
 		return "", err
@@ -131,7 +131,7 @@ func (f *policyEnvFuncs) ExpandEnv(value any) (string, error) {
 }
 
 func (f *policyNetFuncs) ParseAddr(ip any) (netip.Addr, error) {
-	defer perf.Track(nil, "exec.ParseAddr")()
+	defer perf.Track(nil, "policy.ParseAddr")()
 	if err := guard.Function(context.Background(), "net.ParseAddr", Engine, guard.FileOrigin(f.file)); err != nil {
 		return netip.Addr{}, err
 	}
@@ -139,7 +139,7 @@ func (f *policyNetFuncs) ParseAddr(ip any) (netip.Addr, error) {
 }
 
 func (f *policyNetFuncs) ParsePrefix(prefix any) (netip.Prefix, error) {
-	defer perf.Track(nil, "exec.ParsePrefix")()
+	defer perf.Track(nil, "policy.ParsePrefix")()
 	if err := guard.Function(context.Background(), "net.ParsePrefix", Engine, guard.FileOrigin(f.file)); err != nil {
 		return netip.Prefix{}, err
 	}
@@ -147,39 +147,39 @@ func (f *policyNetFuncs) ParsePrefix(prefix any) (netip.Prefix, error) {
 }
 
 func (f *policyNetFuncs) ParseRange(value any) (netipx.IPRange, error) {
-	defer perf.Track(nil, "exec.ParseRange")()
+	defer perf.Track(nil, "policy.ParseRange")()
 	if err := guard.Function(context.Background(), "net.ParseRange", Engine, guard.FileOrigin(f.file)); err != nil {
 		return netipx.IPRange{}, err
 	}
 	return f.native.ParseRange(value)
 }
 
-func (f *policyNetFuncs) ParseIP(ip any) (compatibility.LegacyIP, error) {
-	defer perf.Track(nil, "exec.ParseIP")()
+func (f *policyNetFuncs) ParseIP(ip any) (netaddr.IP, error) {
+	defer perf.Track(nil, "policy.ParseIP")()
 	if err := guard.Function(context.Background(), "net.ParseIP", Engine, guard.FileOrigin(f.file)); err != nil {
-		return compatibility.LegacyIP{}, err
+		return netaddr.IP{}, err
 	}
 	return f.native.ParseIP(ip)
 }
 
-func (f *policyNetFuncs) ParseIPPrefix(prefix any) (netip.Prefix, error) {
-	defer perf.Track(nil, "exec.ParseIPPrefix")()
+func (f *policyNetFuncs) ParseIPPrefix(prefix any) (netaddr.IPPrefix, error) {
+	defer perf.Track(nil, "policy.ParseIPPrefix")()
 	if err := guard.Function(context.Background(), "net.ParseIPPrefix", Engine, guard.FileOrigin(f.file)); err != nil {
-		return netip.Prefix{}, err
+		return netaddr.IPPrefix{}, err
 	}
 	return f.native.ParseIPPrefix(prefix)
 }
 
-func (f *policyNetFuncs) ParseIPRange(value any) (netipx.IPRange, error) {
-	defer perf.Track(nil, "exec.ParseIPRange")()
+func (f *policyNetFuncs) ParseIPRange(value any) (netaddr.IPRange, error) {
+	defer perf.Track(nil, "policy.ParseIPRange")()
 	if err := guard.Function(context.Background(), "net.ParseIPRange", Engine, guard.FileOrigin(f.file)); err != nil {
-		return netipx.IPRange{}, err
+		return netaddr.IPRange{}, err
 	}
 	return f.native.ParseIPRange(value)
 }
 
 func (f *policyNetFuncs) CIDRHost(host, prefix any) (netip.Addr, error) {
-	defer perf.Track(nil, "exec.CIDRHost")()
+	defer perf.Track(nil, "policy.CIDRHost")()
 	if err := guard.Function(context.Background(), "net.CIDRHost", Engine, guard.FileOrigin(f.file)); err != nil {
 		return netip.Addr{}, err
 	}
@@ -187,7 +187,7 @@ func (f *policyNetFuncs) CIDRHost(host, prefix any) (netip.Addr, error) {
 }
 
 func (f *policyNetFuncs) CIDRNetmask(prefix any) (netip.Addr, error) {
-	defer perf.Track(nil, "exec.CIDRNetmask")()
+	defer perf.Track(nil, "policy.CIDRNetmask")()
 	if err := guard.Function(context.Background(), "net.CIDRNetmask", Engine, guard.FileOrigin(f.file)); err != nil {
 		return netip.Addr{}, err
 	}
@@ -195,7 +195,7 @@ func (f *policyNetFuncs) CIDRNetmask(prefix any) (netip.Addr, error) {
 }
 
 func (f *policyNetFuncs) CIDRSubnets(bits, prefix any) ([]netip.Prefix, error) {
-	defer perf.Track(nil, "exec.CIDRSubnets")()
+	defer perf.Track(nil, "policy.CIDRSubnets")()
 	if err := guard.Function(context.Background(), "net.CIDRSubnets", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (f *policyNetFuncs) CIDRSubnets(bits, prefix any) ([]netip.Prefix, error) {
 }
 
 func (f *policyNetFuncs) CIDRSubnetSizes(args ...any) ([]netip.Prefix, error) {
-	defer perf.Track(nil, "exec.CIDRSubnetSizes")()
+	defer perf.Track(nil, "policy.CIDRSubnetSizes")()
 	if err := guard.Function(context.Background(), "net.CIDRSubnetSizes", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}

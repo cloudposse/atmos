@@ -24,6 +24,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/template/compatibility/netaddr"
 )
 
 // DeprecationReporter is notified when a template uses a gomplate v3 name
@@ -353,81 +354,50 @@ type netWrapper struct {
 	reporter DeprecationReporter
 }
 
-// LegacyIP adapts net.ParseAddr's netip.Addr result so a handful of methods
-// gomplate v3's net.ParseIP result (inet.af/netaddr.IP) exposed under
-// different names or signatures keep working: IsZero (netip.Addr spells this
-// the inverse way, IsValid), Is4in6 (netip: Is4In6), IPAddr (netip.Addr has
-// no equivalent; built from AsSlice and Zone) and Prior (netip: Prev).
-// Embedding netip.Addr promotes every other method unchanged, including
-// String, so `{{ net.ParseIP .x }}` still prints the address exactly as v3 did.
-type LegacyIP struct {
-	netip.Addr
-}
-
-// IsZero reports whether ip is the zero value, matching v3's
-// netaddr.IP.IsZero (netip.Addr's equivalent, IsValid, is inverted).
-func (ip LegacyIP) IsZero() bool {
-	defer perf.Track(nil, "compatibility.LegacyIP.IsZero")()
-
-	return !ip.IsValid()
-}
-
-// Is4in6 reports whether ip is an IPv4-mapped IPv6 address, matching v3's
-// netaddr.IP.Is4in6 (netip.Addr spells this Is4In6).
-func (ip LegacyIP) Is4in6() bool {
-	defer perf.Track(nil, "compatibility.LegacyIP.Is4in6")()
-
-	return ip.Is4In6()
-}
-
-// IPAddr converts ip to a *net.IPAddr, matching v3's netaddr.IP.IPAddr;
-// netip.Addr has no direct equivalent, so the result is built from the
-// address bytes and zone.
-func (ip LegacyIP) IPAddr() *stdnet.IPAddr {
-	defer perf.Track(nil, "compatibility.LegacyIP.IPAddr")()
-
-	return &stdnet.IPAddr{IP: stdnet.IP(ip.AsSlice()), Zone: ip.Zone()}
-}
-
-// Prior returns the IP address immediately before ip, matching v3's
-// netaddr.IP.Prior (netip.Addr spells this Prev).
-func (ip LegacyIP) Prior() netip.Addr {
-	defer perf.Track(nil, "compatibility.LegacyIP.Prior")()
-
-	return ip.Prev()
-}
-
 // ParseIP is gomplate v3's net.ParseIP, removed in v5 in favor of
-// net.ParseAddr. V3 returned an inet.af/netaddr IP; delegating to ParseAddr
-// and wrapping the result in LegacyIP keeps existing templates working,
-// including ones that call Is4, Is6, String, IsPrivate, IsZero, Is4in6,
-// IPAddr or Prior, and invalid input errors exactly as v3 did.
-func (w *netWrapper) ParseIP(ip any) (LegacyIP, error) {
+// net.ParseAddr. It returns the inet.af/netaddr-compatible IP v3 returned, so
+// templates that call its methods or pass it to IPPrefix/IPRange methods keep
+// working. Invalid input errors as before.
+func (w *netWrapper) ParseIP(ip any) (netaddr.IP, error) {
 	defer perf.Track(nil, "compatibility.netWrapper.ParseIP")()
 
-	w.reporter.Deprecated(w.name, "net.ParseIP", "net.ParseAddr", deprecationHint("net.ParseIP", "net.ParseAddr"))
+	w.reporter.Deprecated(w.name, "net.ParseIP", "net.ParseAddr",
+		deprecationHintTypeChanged("net.ParseIP", "net.ParseAddr", "netip.Addr"))
 	addr, err := w.ParseAddr(ip)
-	return LegacyIP{Addr: addr}, err
+	if err != nil {
+		return netaddr.IP{}, err
+	}
+	return netaddr.FromAddr(addr), nil
 }
 
 // ParseIPPrefix is gomplate v3's net.ParseIPPrefix, removed in v5 in favor of
-// net.ParsePrefix, which returns netip.Prefix instead of v3's netaddr.IPPrefix.
-func (w *netWrapper) ParseIPPrefix(ipprefix any) (netip.Prefix, error) {
+// net.ParsePrefix. It returns the inet.af/netaddr-compatible IPPrefix v3
+// returned.
+func (w *netWrapper) ParseIPPrefix(ipprefix any) (netaddr.IPPrefix, error) {
 	defer perf.Track(nil, "compatibility.netWrapper.ParseIPPrefix")()
 
 	w.reporter.Deprecated(w.name, "net.ParseIPPrefix", "net.ParsePrefix",
 		deprecationHintTypeChanged("net.ParseIPPrefix", "net.ParsePrefix", "netip.Prefix"))
-	return w.ParsePrefix(ipprefix)
+	prefix, err := w.ParsePrefix(ipprefix)
+	if err != nil {
+		return netaddr.IPPrefix{}, err
+	}
+	return netaddr.FromPrefix(prefix), nil
 }
 
 // ParseIPRange is gomplate v3's net.ParseIPRange, removed in v5 in favor of
-// net.ParseRange, which returns netipx.IPRange instead of v3's netaddr.IPRange.
-func (w *netWrapper) ParseIPRange(iprange any) (netipx.IPRange, error) {
+// net.ParseRange. It returns the inet.af/netaddr-compatible IPRange v3
+// returned.
+func (w *netWrapper) ParseIPRange(iprange any) (netaddr.IPRange, error) {
 	defer perf.Track(nil, "compatibility.netWrapper.ParseIPRange")()
 
 	w.reporter.Deprecated(w.name, "net.ParseIPRange", "net.ParseRange",
 		deprecationHintTypeChanged("net.ParseIPRange", "net.ParseRange", "netipx.IPRange"))
-	return w.ParseRange(iprange)
+	r, err := w.ParseRange(iprange)
+	if err != nil {
+		return netaddr.IPRange{}, err
+	}
+	return netaddr.FromRange(r), nil
 }
 
 // ApplyNamespaceShims replaces the conv, strings and net entries of funcs

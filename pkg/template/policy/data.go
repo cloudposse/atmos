@@ -56,7 +56,7 @@ func guardedTemplateJSON(input any) (map[string]any, error) {
 }
 
 func (f *policyDataFuncs) JSON(in any) (map[string]any, error) {
-	defer perf.Track(nil, "exec.JSON")()
+	defer perf.Track(nil, "policy.JSON")()
 	if err := guard.Function(context.Background(), "data.JSON", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (f *policyDataFuncs) JSON(in any) (map[string]any, error) {
 }
 
 func (f *policyDataFuncs) JSONArray(in any) ([]any, error) {
-	defer perf.Track(nil, "exec.JSONArray")()
+	defer perf.Track(nil, "policy.JSONArray")()
 	if err := guard.Function(context.Background(), "data.JSONArray", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (f *policyDataFuncs) JSONArray(in any) ([]any, error) {
 }
 
 func (f *policyDataFuncs) YAML(in any) (map[string]any, error) {
-	defer perf.Track(nil, "exec.YAML")()
+	defer perf.Track(nil, "policy.YAML")()
 	if err := guard.Function(context.Background(), "data.YAML", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (f *policyDataFuncs) YAML(in any) (map[string]any, error) {
 }
 
 func (f *policyDataFuncs) YAMLArray(in any) ([]any, error) {
-	defer perf.Track(nil, "exec.YAMLArray")()
+	defer perf.Track(nil, "policy.YAMLArray")()
 	if err := guard.Function(context.Background(), "data.YAMLArray", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (f *policyDataFuncs) YAMLArray(in any) ([]any, error) {
 }
 
 func (f *policyDataFuncs) TOML(in any) (any, error) {
-	defer perf.Track(nil, "exec.TOML")()
+	defer perf.Track(nil, "policy.TOML")()
 	if err := guard.Function(context.Background(), "data.TOML", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (f *policyDataFuncs) TOML(in any) (any, error) {
 }
 
 func (f *policyDataFuncs) CSV(args ...string) ([][]string, error) {
-	defer perf.Track(nil, "exec.CSV")()
+	defer perf.Track(nil, "policy.CSV")()
 	if err := guard.Function(context.Background(), "data.CSV", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (f *policyDataFuncs) CSV(args ...string) ([][]string, error) {
 }
 
 func (f *policyDataFuncs) CSVByRow(args ...string) ([]map[string]string, error) {
-	defer perf.Track(nil, "exec.CSVByRow")()
+	defer perf.Track(nil, "policy.CSVByRow")()
 	if err := guard.Function(context.Background(), "data.CSVByRow", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (f *policyDataFuncs) CSVByRow(args ...string) ([]map[string]string, error) 
 }
 
 func (f *policyDataFuncs) CSVByColumn(args ...string) (map[string][]string, error) {
-	defer perf.Track(nil, "exec.CSVByColumn")()
+	defer perf.Track(nil, "policy.CSVByColumn")()
 	if err := guard.Function(context.Background(), "data.CSVByColumn", Engine, guard.FileOrigin(f.file)); err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (f *policyDataFuncs) CSVByColumn(args ...string) (map[string][]string, erro
 }
 
 func (f *policyDataFuncs) ToCSV(args ...any) (string, error) {
-	defer perf.Track(nil, "exec.ToCSV")()
+	defer perf.Track(nil, "policy.ToCSV")()
 	if err := guard.Function(context.Background(), "data.ToCSV", Engine, guard.FileOrigin(f.file)); err != nil {
 		return "", err
 	}
@@ -128,7 +128,7 @@ func (f *policyDataFuncs) ToCSV(args ...any) (string, error) {
 }
 
 func (f *policyDataFuncs) ToJSON(in any) (string, error) {
-	defer perf.Track(nil, "exec.ToJSON")()
+	defer perf.Track(nil, "policy.ToJSON")()
 	if err := guard.Function(context.Background(), "data.ToJSON", Engine, guard.FileOrigin(f.file)); err != nil {
 		return "", err
 	}
@@ -136,7 +136,7 @@ func (f *policyDataFuncs) ToJSON(in any) (string, error) {
 }
 
 func (f *policyDataFuncs) ToJSONPretty(indent string, in any) (string, error) {
-	defer perf.Track(nil, "exec.ToJSONPretty")()
+	defer perf.Track(nil, "policy.ToJSONPretty")()
 	if err := guard.Function(context.Background(), "data.ToJSONPretty", Engine, guard.FileOrigin(f.file)); err != nil {
 		return "", err
 	}
@@ -144,7 +144,7 @@ func (f *policyDataFuncs) ToJSONPretty(indent string, in any) (string, error) {
 }
 
 func (f *policyDataFuncs) ToYAML(in any) (string, error) {
-	defer perf.Track(nil, "exec.ToYAML")()
+	defer perf.Track(nil, "policy.ToYAML")()
 	if err := guard.Function(context.Background(), "data.ToYAML", Engine, guard.FileOrigin(f.file)); err != nil {
 		return "", err
 	}
@@ -152,7 +152,7 @@ func (f *policyDataFuncs) ToYAML(in any) (string, error) {
 }
 
 func (f *policyDataFuncs) ToTOML(in any) (string, error) {
-	defer perf.Track(nil, "exec.ToTOML")()
+	defer perf.Track(nil, "policy.ToTOML")()
 	if err := guard.Function(context.Background(), "data.ToTOML", Engine, guard.FileOrigin(f.file)); err != nil {
 		return "", err
 	}

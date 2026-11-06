@@ -60,14 +60,12 @@ Atmos.
 
 ## What to Check in Your Stacks
 
-Gomplate removed functions it had deprecated in v3 and changed a few datasource behaviors in
-v5. Atmos provides compatibility shims for the legacy function names listed below and
-logs migration warnings when they are used. These shims do not guarantee identical behavior:
-conversion errors, network return types, and datasource changes can break existing templates.
-Review the affected calls and test your stack catalogs before upgrading. The shims are planned
-for removal in a future major release of Atmos, so migrate the old names even when their current
-output is unchanged. Datasource warnings identify some affected patterns, but do not restore
-Gomplate's old datasource behavior. The [templates configuration reference](/cli/configuration/templates) and the
+Gomplate v5 removed functions it had deprecated in v3 and changed some datasource behavior.
+Atmos keeps the removed names working through compatibility shims. Each shim logs a warning that
+names its replacement. A compatibility test suite runs the same templates through a v3 build and
+this release and compares the results; the sections below list the differences it found. The
+shims will be removed in a future major release, so replace the old names now. The
+[templates configuration reference](/cli/configuration/templates) and the
 [datasources reference](/templates/datasources) carry the same list.
 
 ### Renamed functions
@@ -94,13 +92,17 @@ ip: '{{ net.ParseAddr .vars.addr }}'
 cidr: '{{ net.ParsePrefix .vars.cidr }}'
 ```
 
+The old `net` functions still return their v3 types (`netaddr.IP`, `netaddr.IPPrefix`, and
+`netaddr.IPRange`), so method calls such as `.Contains` and `.Prior` keep working. The
+replacements return `net/netip` types, which have different methods.
+
 The unqualified aliases `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, and
 `trim` are no longer registered by Gomplate, but your templates keep working with no action needed:
 
-- `slice` is a built-in of Go templates.
-- `contains`, `hasPrefix`, `hasSuffix`, `split`, and `trim` resolve to Sprig, as they did before,
-  because Atmos layered Sprig over Gomplate's aliases. If you have disabled Sprig
-  (`templates.settings.sprig.enabled`), an Atmos shim restores Gomplate's original argument order.
+- `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, and `trim` resolve to Sprig, as they did
+  before, because Atmos layered Sprig over Gomplate's aliases. If you have disabled Sprig
+  (`templates.settings.sprig.enabled`), an Atmos shim restores Gomplate's versions. For `slice`,
+  that is Gomplate's list builder (`slice "a" "b"`), not Go's builtin.
 - `splitN` has no Sprig equivalent, so a shim always provides it.
 
 Replace shimmed names with their `strings.*` or `coll.*` forms when you get the chance.

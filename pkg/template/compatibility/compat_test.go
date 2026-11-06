@@ -162,7 +162,7 @@ func TestNetParseIP_InvalidInputErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "unable to parse IP")
 }
 
-// TestNetParseIP_LegacyIPMethods verifies the LegacyIP adapter net.ParseIP
+// TestNetParseIP_LegacyIPMethods verifies the netaddr.IP value net.ParseIP
 // returns keeps the v3 netaddr.IP method surface working: IsZero, Is4in6 and
 // IPAddr under their v3 names/signatures (netip.Addr spells the first two
 // IsValid/Is4In6 and has no equivalent of the third), Prior (netip.Addr:
@@ -292,22 +292,32 @@ func TestBareAliasShims_SprigEnabled(t *testing.T) {
 	assert.Equal(t, "splitN", fake.calls[0].deprecated)
 }
 
-// TestBareAliasShims_SliceNeverShadowsBuiltin verifies that "slice" is never
-// registered by this package, in either Sprig configuration: with Sprig
-// disabled, calling it must still hit text/template's own builtin (which has
-// different semantics than gomplate v3's variadic-args-to-list version), not
-// a shim.
-func TestBareAliasShims_SliceNeverShadowsBuiltin(t *testing.T) {
+// TestBareAliasShims_SliceBuildsAListWhenSprigDisabled verifies gomplate v3's
+// bare `slice`: with Sprig disabled, v3 registered coll.Slice under that name,
+// so `slice "a" "b"` built a list instead of reaching text/template's builtin.
+func TestBareAliasShims_SliceBuildsAListWhenSprigDisabled(t *testing.T) {
 	fake := &fakeReporter{}
-	// The builtin `slice` indexes an existing list; it errors on a list of
-	// bare integer literals used as if they were the list itself, which is
-	// exactly the point: gomplate v3's `slice 1 2 3` (build a list) doesn't
-	// work anymore, and this package must not resurrect it under this name.
-	_, err := render.New(render.WithSprig(false), render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
-		Name: "t", Text: `{{ slice (coll.Slice 1 2 3 4) 1 3 }}`,
+	out, err := render.New(render.WithSprig(false), render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
+		Name: "t", Text: `{{ slice "a" "b" | toJSON }}`,
 	})
 	require.NoError(t, err)
-	assert.Empty(t, fake.calls, "slice must never be shimmed; it would shadow the text/template builtin")
+	assert.Equal(t, `["a","b"]`, out)
+	require.Len(t, fake.calls, 1)
+	assert.Equal(t, "slice", fake.calls[0].deprecated)
+	assert.Equal(t, "coll.Slice", fake.calls[0].replacement)
+}
+
+// TestBareAliasShims_SliceIsSprigsWhenSprigEnabled verifies the shim never
+// replaces Sprig's `slice`, which indexes a list and won in v3 too because
+// Sprig is layered after gomplate.
+func TestBareAliasShims_SliceIsSprigsWhenSprigEnabled(t *testing.T) {
+	fake := &fakeReporter{}
+	out, err := render.New(render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
+		Name: "t", Text: `{{ slice (list 1 2 3 4) 1 3 }}`,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "[2 3]", out)
+	assert.Empty(t, fake.calls, "Sprig's slice is not a deprecated name")
 }
 
 // TestDefaultDeprecationReporter_LogsOncePerTemplate renders the same
@@ -351,4 +361,38 @@ func TestNamespaceShims_ApplyAlongsideDatasources(t *testing.T) {
 	assert.Equal(t, "true-atmos", out)
 	require.Len(t, fake.calls, 1)
 	assert.Equal(t, "conv.Bool", fake.calls[0].deprecated)
+}
+
+// TestNetLegacyValuesMatchGomplateV3 renders the template compatibility
+// corpus's net expressions; each expected value is gomplate v3's output for
+// the same expression.
+func TestNetLegacyValuesMatchGomplateV3(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"net-ip", `{{ printf "%T:%v" (net.ParseIP "192.0.2.1") (net.ParseIP "192.0.2.1") }}|{{ (net.ParseIP "192.0.2.1").As4 }}`, "netaddr.IP:192.0.2.1|[192 0 2 1]"},
+		{"net-prefix", `{{ printf "%T:%v" (net.ParseIPPrefix "192.0.2.0/24") (net.ParseIPPrefix "192.0.2.0/24") }}`, "netaddr.IPPrefix:192.0.2.0/24"},
+		{"net-range", `{{ printf "%T:%v" (net.ParseIPRange "192.0.2.1-192.0.2.3") (net.ParseIPRange "192.0.2.1-192.0.2.3") }}`, "netaddr.IPRange:192.0.2.1-192.0.2.3"},
+		{"ip-chain-prior", `{{ (net.ParseIP "192.0.2.2").Prior.IPAddr }}`, "192.0.2.1"},
+		{"ip-method-compare", `{{ (net.ParseIP "192.0.2.1").Compare (net.ParseIP "192.0.2.2") }}`, "-1"},
+		{"ip-method-less", `{{ (net.ParseIP "192.0.2.1").Less (net.ParseIP "192.0.2.2") }}`, "true"},
+		{"prefix-contains", `{{ (net.ParseIPPrefix "192.0.2.0/24").Contains (net.ParseIP "192.0.2.42") }}`, "true"},
+		{"prefix-method-ip", `{{ (net.ParseIPPrefix "192.0.2.1/24").IP }}`, "192.0.2.1"},
+		{"prefix-method-ipnet", `{{ (net.ParseIPPrefix "192.0.2.1/24").IPNet }}`, "192.0.2.1/24"},
+		{"prefix-method-iszero", `{{ (net.ParseIPPrefix "192.0.2.1/24").IsZero }}`, "false"},
+		{"prefix-method-range", `{{ (net.ParseIPPrefix "192.0.2.1/24").Range }}`, "192.0.2.0-192.0.2.255"},
+		{"prefix-method-valid", `{{ (net.ParseIPPrefix "192.0.2.1/24").Valid }}`, "true"},
+		{"range-contains", `{{ (net.ParseIPRange "192.0.2.1-192.0.2.3").Contains (net.ParseIP "192.0.2.2") }}`, "true"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := render.New(render.WithDeprecationReporter(&fakeReporter{})).Render(context.Background(), &render.Request{
+				Name: tt.name, Text: tt.text,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, out)
+		})
+	}
 }

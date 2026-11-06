@@ -227,7 +227,7 @@ func TestAtmosFuncsGomplateDatasourceCaching(t *testing.T) {
 
 		require.Equal(t, first, second)
 		require.EqualValues(t, 1, hits.Load(), "the second render is served from the cache")
-		require.EqualValues(t, 1, heads.Load(), "Gomplate reads metadata once, then reuses the cache")
+		require.EqualValues(t, 0, heads.Load(), "HTTP datasources are read with a single GET, then served from the cache")
 	})
 
 	t.Run("a source rule checks and reads every call", func(t *testing.T) {

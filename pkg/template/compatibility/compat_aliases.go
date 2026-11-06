@@ -17,13 +17,11 @@ import (
 // removal of these names change behavior, so that's the only case this shim
 // needs to cover.
 //
-// "slice" is deliberately not in this list: text/template has provided a
-// builtin `slice` function since Go 1.13, so leaving the name unregistered
-// means callers keep using that builtin exactly as before. Registering our
-// own copy here would shadow the builtin with gomplate's different
-// (variadic-args-to-list) semantics, which is the one thing this file must
-// never do.
-var bareAliasCandidates = []string{"contains", "hasPrefix", "hasSuffix", "split", "trim"}
+// "slice" follows the same rule: gomplate v3 registered it as coll.Slice
+// (build a list from its arguments), which shadowed text/template's builtin
+// `slice` (index into a list). With Sprig enabled, Sprig's own `slice` won, so
+// the name only needs a shim when Sprig is disabled.
+var bareAliasCandidates = []string{"contains", "hasPrefix", "hasSuffix", "split", "trim", "slice"}
 
 // ApplyBareAliasShims registers the v3 bare aliases gomplate v5 removed,
 // after Sprig has already been layered into funcs, so a name Sprig already
@@ -91,6 +89,13 @@ func bareAliasShim(alias, name string, reporter DeprecationReporter) any {
 		return func(s, sep string) []string {
 			reporter.Deprecated(name, "split", "strings.Split", bareAliasHint("split", "strings.Split"))
 			return strings.Split(s, sep)
+		}
+	case "slice":
+		return func(args ...any) []any {
+			reporter.Deprecated(name, "slice", "coll.Slice",
+				"the bare `slice` alias was removed in gomplate v5. Atmos still accepts it, but this shim will be removed in a future major release. "+
+					"Replace `slice` with `coll.Slice` (same arguments). Without this shim, `slice` is Go's builtin, which indexes a list instead of building one.")
+			return args
 		}
 	case "trim":
 		return func(s, cutset string) string {

@@ -50,7 +50,7 @@ func TestDatasourceHTTPAndCaching(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first, third)
 	require.EqualValues(t, 1, gets.Load())
-	require.EqualValues(t, 1, heads.Load())
+	require.EqualValues(t, 0, heads.Load(), "http datasources are read with a single GET")
 }
 
 func TestDatasourceGETOnlyEndpoint(t *testing.T) {
@@ -70,9 +70,9 @@ func TestDatasourceGETOnlyEndpoint(t *testing.T) {
 	result, err := d.Datasource(server.URL + "/data.json")
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{"works": true}, result)
-	require.EqualValues(t, 1, heads.Load())
-	// v4 falls back to GET for metadata and then reads the content with GET.
-	require.EqualValues(t, 2, gets.Load())
+	// One GET serves both the metadata and the content, as in gomplate v3.
+	require.EqualValues(t, 0, heads.Load())
+	require.EqualValues(t, 1, gets.Load())
 	require.True(t, d.DatasourceExists(server.URL+"/data.json"))
 	require.Equal(t, []string{server.URL + "/data.json"}, d.ListDatasources())
 }

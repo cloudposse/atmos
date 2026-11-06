@@ -191,20 +191,20 @@ background noise. Each removed function has a direct replacement:
   <dd>Use [`coll.Sort`](https://docs.gomplate.ca/functions/coll/#collsort).</dd>
 
   <dt>`net.ParseIP`, `net.ParseIPPrefix`, `net.ParseIPRange`</dt>
-  <dd>Use [`net.ParseAddr`](https://docs.gomplate.ca/functions/net/#netparseaddr), [`net.ParsePrefix`](https://docs.gomplate.ca/functions/net/#netparseprefix), and [`net.ParseRange`](https://docs.gomplate.ca/functions/net/#netparserange). The replacements return `netip.Addr`/`netip.Prefix`/a range type instead of the older IP types, so code that inspects the result directly (rather than just printing it) may need small adjustments.</dd>
+  <dd>Use [`net.ParseAddr`](https://docs.gomplate.ca/functions/net/#netparseaddr), [`net.ParsePrefix`](https://docs.gomplate.ca/functions/net/#netparseprefix), and [`net.ParseRange`](https://docs.gomplate.ca/functions/net/#netparserange). The old names still work, warn, and return their v3 types (`netaddr.IP`, `netaddr.IPPrefix`, and `netaddr.IPRange`), so their methods keep working. The replacements return `netip.Addr`, `netip.Prefix`, and `netipx.IPRange`, which have different methods.</dd>
 
   <dt>`slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, `trim` (bare aliases)</dt>
   <dd>
     Gomplate no longer registers these unqualified names. Use the namespaced forms (`coll.Slice`, `strings.Contains`,
     `strings.HasPrefix`, `strings.HasSuffix`, `strings.Split`, `strings.SplitN`, `strings.Trim`).
 
-    When `templates.settings.sprig.enabled` is `true` (the default), the bare `contains`, `hasPrefix`, `hasSuffix`,
-    `split`, and `trim` names keep working through [Sprig](https://masterminds.github.io/sprig/), which defines functions
+    When `templates.settings.sprig.enabled` is `true` (the default), the bare `slice`, `contains`, `hasPrefix`,
+    `hasSuffix`, `split`, and `trim` names keep working through [Sprig](https://masterminds.github.io/sprig/), which defines functions
     of the same name (note that Sprig's argument order differs from Gomplate's in some cases) — Atmos doesn't warn in
     that case, since Sprig owns the name and nothing changed. With Sprig disabled, Atmos's compatibility shim serves
-    the old Gomplate argument order and warns instead. The bare `slice` name is a Go `text/template` built-in and
-    continues to work as the builtin, unshimmed, in every configuration. There is no Sprig fallback for `splitN`, so
-    the shim covers it either way.
+    the old Gomplate argument order and warns instead. The bare `slice` name works the same way: Sprig's `slice` when
+    Sprig is enabled, and Gomplate's `slice` (build a list from its arguments, not Go's builtin) with a warning when
+    Sprig is disabled. There is no Sprig fallback for `splitN`, so the shim covers it either way.
   </dd>
 </dl>
 

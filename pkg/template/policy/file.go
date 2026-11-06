@@ -42,7 +42,7 @@ func (f *policyFileFuncs) check(method string, path any) (string, error) {
 }
 
 func (f *policyFileFuncs) Read(path any) (string, error) {
-	defer perf.Track(nil, "exec.Read")()
+	defer perf.Track(nil, "policy.Read")()
 
 	name, err := f.check("Read", path)
 	if err != nil {
@@ -52,7 +52,7 @@ func (f *policyFileFuncs) Read(path any) (string, error) {
 }
 
 func (f *policyFileFuncs) Stat(path any) (os.FileInfo, error) {
-	defer perf.Track(nil, "exec.Stat")()
+	defer perf.Track(nil, "policy.Stat")()
 
 	name, err := f.check("Stat", path)
 	if err != nil {
@@ -62,7 +62,7 @@ func (f *policyFileFuncs) Stat(path any) (os.FileInfo, error) {
 }
 
 func (f *policyFileFuncs) Exists(path any) (bool, error) {
-	defer perf.Track(nil, "exec.Exists")()
+	defer perf.Track(nil, "policy.Exists")()
 
 	name, err := f.check("Exists", path)
 	if err != nil {
@@ -72,7 +72,7 @@ func (f *policyFileFuncs) Exists(path any) (bool, error) {
 }
 
 func (f *policyFileFuncs) IsDir(path any) (bool, error) {
-	defer perf.Track(nil, "exec.IsDir")()
+	defer perf.Track(nil, "policy.IsDir")()
 
 	name, err := f.check("IsDir", path)
 	if err != nil {
@@ -82,7 +82,7 @@ func (f *policyFileFuncs) IsDir(path any) (bool, error) {
 }
 
 func (f *policyFileFuncs) ReadDir(path any) ([]string, error) {
-	defer perf.Track(nil, "exec.ReadDir")()
+	defer perf.Track(nil, "policy.ReadDir")()
 
 	name, err := f.check("ReadDir", path)
 	if err != nil {
@@ -92,7 +92,7 @@ func (f *policyFileFuncs) ReadDir(path any) ([]string, error) {
 }
 
 func (f *policyFileFuncs) Walk(path any) ([]string, error) {
-	defer perf.Track(nil, "exec.Walk")()
+	defer perf.Track(nil, "policy.Walk")()
 
 	name, err := f.check("Walk", path)
 	if err != nil {
@@ -102,7 +102,7 @@ func (f *policyFileFuncs) Walk(path any) ([]string, error) {
 }
 
 func (f *policyFileFuncs) Write(path, content any) (string, error) {
-	defer perf.Track(nil, "exec.Write")()
+	defer perf.Track(nil, "policy.Write")()
 
 	name, err := f.check("Write", path)
 	if err != nil {
