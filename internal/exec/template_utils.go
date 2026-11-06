@@ -643,12 +643,14 @@ type passScope struct {
 
 // newPassScope builds the scope for one pass. With gomplate enabled, the context carries the
 // datasource timeout (from `atmos.yaml` or the stack manifest, 5 seconds when neither sets it) and
-// the experimental flag, and the stack's datasources are defined with their headers.
+// the experimental flag, and the stack's datasources are defined with their headers. With gomplate
+// disabled, the pass has no datasources at all, so atmos.GomplateDatasource cannot read anything.
 func newPassScope(pass *templatePass, gomplateEnabled bool) (*passScope, error) {
-	scope := &passScope{ctx: context.TODO(), cancel: func() {}, sources: &render.Data{}}
+	scope := &passScope{ctx: context.TODO(), cancel: func() {}}
 	if !gomplateEnabled {
 		return scope, nil
 	}
+	scope.sources = &render.Data{}
 
 	timeoutSeconds, _ := lo.Coalesce(pass.templateSettings.Gomplate.Timeout, defaultDatasourceTimeoutSeconds)
 	scope.ctx, scope.cancel = context.WithTimeout(scope.ctx, time.Second*time.Duration(timeoutSeconds))

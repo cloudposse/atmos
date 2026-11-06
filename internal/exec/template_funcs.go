@@ -130,6 +130,10 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 	if err := guard.Function(f.ctx, "atmos.GomplateDatasource", templatepolicy.Engine, guard.FileOrigin(f.sourceFile)); err != nil {
 		return nil, err
 	}
+	// A render without datasources (Gomplate disabled) reads nothing, guarded or not.
+	if f.gomplateData == nil {
+		return nil, errUtils.ErrGomplateDatasourceUnavailable
+	}
 	sourceRules, err := guard.Enabled("source")
 	if err != nil {
 		return nil, err

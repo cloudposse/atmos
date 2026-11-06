@@ -102,6 +102,11 @@ The `atmos.GomplateDatasource` function automatically caches results in memory d
    for the same datasource definition (URL and headers), arguments, and environment variables, so stacks that set
    different `templates.settings.env` values (for example `AWS_PROFILE`) each read their own data
 
+:::note
+The cache applies only when no [admission policy](/policies/admission) has `source` rules. With source rules
+enabled, every call is checked against the policy and then read, so an HTTP datasource makes a request on each call.
+:::
+
 This caching mechanism provides several benefits:
 - **Performance**: Dramatically faster stack processing with multiple datasource references
 - **Reliability**: Reduces failures from rate limiting or network issues
@@ -112,8 +117,8 @@ This caching mechanism provides several benefits:
 
 | Feature | `datasource` (Gomplate) | `atmos.GomplateDatasource` |
 |---------|------------------------|---------------------------|
-| External calls | Every invocation | Once per alias |
-| Performance | Slower with multiple uses | Fast (cached) |
+| External calls | Every invocation | Once per definition, arguments, and environment (every call when source policies are enabled) |
+| Performance | Slower with multiple uses | Fast (cached, unless source policies are enabled) |
 | Rate limiting risk | High | Low |
 | Network failures | Each call can fail | Single point of failure |
 | Use case | Single reference | Multiple references |

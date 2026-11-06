@@ -1333,7 +1333,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/consul/api/v2
     License: MPL-2.0
-    URL: https://github.com/hashicorp/consul/blob/api/v2.0.0/api/LICENSE
+    URL: https://github.com/hashicorp/consul/blob/782793ebb720f9798e49b125351fba1cd89406b4/api/LICENSE
 
   - github.com/hashicorp/errwrap
     License: MPL-2.0

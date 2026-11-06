@@ -5,11 +5,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/template/render"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -78,6 +80,11 @@ func TestAtmosFuncs_GomplateDatasource(t *testing.T) {
 	// Test with invalid alias - should return error.
 	_, err := atmosFuncs.GomplateDatasource("nonexistent-alias")
 	assert.Error(t, err, "GomplateDatasource() should return error for invalid alias")
+
+	// A render without datasources (Gomplate disabled) reads nothing, not even an absolute URL.
+	withoutSources := &AtmosFuncs{atmosConfig: atmosConfig, configAndStacksInfo: configAndStacksInfo, ctx: ctx}
+	_, err = withoutSources.GomplateDatasource("https://example.invalid/data.json")
+	require.ErrorIs(t, err, errUtils.ErrGomplateDatasourceUnavailable)
 }
 
 // TestAtmosFuncs_GomplateDatasource_CacheKeyIncludesDefinition verifies that two stacks defining
@@ -141,4 +148,37 @@ func TestAtmosFuncs_Resolve(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "plain", result)
 	})
+}
+
+// TestProcessTmplWithDatasources_GomplateDisabledHasNoDatasources verifies that with
+// templates.settings.gomplate.enabled false, atmos.GomplateDatasource reads nothing, not even an
+// absolute URL, and fails with the unavailable error instead. Sprig-only renders still work.
+func TestProcessTmplWithDatasources_GomplateDisabledHasNoDatasources(t *testing.T) {
+	// No policy rules, so the read would otherwise go through the process-wide cache.
+	t.Setenv("ATMOS_POLICY_DIR", "")
+	t.Chdir(t.TempDir())
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"name":"fetched"}`)
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := &schema.AtmosConfiguration{}
+	cfg.Templates.Settings.Enabled = true
+	cfg.Templates.Settings.Sprig.Enabled = true
+	cfg.Templates.Settings.Gomplate.Enabled = false
+
+	_, err := ProcessTmplWithDatasources(cfg, &schema.ConfigAndStacksInfo{}, schema.Settings{},
+		"gomplate-disabled", `{{ (atmos.GomplateDatasource "`+server.URL+`/data.json").name }}`, nil, false)
+	require.ErrorIs(t, err, errUtils.ErrGomplateDatasourceUnavailable)
+	assert.Zero(t, requests.Load(), "no request is made when Gomplate is disabled")
+
+	// Negative path: the rest of the render is unaffected.
+	result, err := ProcessTmplWithDatasources(cfg, &schema.ConfigAndStacksInfo{}, schema.Settings{},
+		"gomplate-disabled", `name: {{ upper "ok" }}`, nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, "name: OK", result)
 }
