@@ -79,7 +79,8 @@ The fallback used when no CLI configuration file exists already enabled all thre
 
   <dt>`templates.settings.gomplate.timeout`</dt>
   <dd>
-    Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).
+    Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources). Defaults to 5. A
+    stack manifest can override it in `settings.templates.settings.gomplate.timeout`; otherwise this value applies.
   </dd>
 
   <dt>`templates.settings.gomplate.experimental`</dt>

@@ -449,6 +449,12 @@ func ProcessTmplWithDatasources(
 		templateSettings.Env = mergedEnv
 	}
 
+	// mapstructure turns an unset stack-level timeout into 0, which the merge above lets
+	// override the global timeout. Keep the global one unless the stack manifest sets its own.
+	if settingsSection.Templates.Settings.Gomplate.Timeout == 0 {
+		templateSettings.Gomplate.Timeout = atmosConfig.Templates.Settings.Gomplate.Timeout
+	}
+
 	// Number of processing evaluations/passes
 	evaluations, _ := lo.Coalesce(atmosConfig.Templates.Settings.Evaluations, 1)
 	result := tmplValue

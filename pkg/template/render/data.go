@@ -91,16 +91,43 @@ func (d *Data) DefineDatasource(alias, value string) (string, error) {
 	if d.DatasourceExists(alias) {
 		return "", nil
 	}
+	target, err := parseDefinitionURL(value)
+	if err != nil {
+		return "", err
+	}
+	d.define(alias, target, d.ExtraHeaders[alias])
+	return "", nil
+}
+
+// parseDefinitionURL parses a datasource definition URL exactly as gomplate
+// parses a `defineDatasource` value.
+func parseDefinitionURL(value string) (*url.URL, error) {
 	var node yaml.Node
 	if err := node.Encode(map[string]string{"url": value}); err != nil {
-		return "", err
+		return nil, err
 	}
 	var source gomplate.DataSource
 	if err := source.UnmarshalYAML(&node); err != nil {
-		return "", err
+		return nil, err
 	}
-	d.define(alias, source.URL, d.ExtraHeaders[alias])
-	return "", nil
+	return source.URL, nil
+}
+
+// effectiveSource returns the definition a read of alias uses: the registered
+// one, or for an undefined absolute URL the definition the read will register.
+// It returns nil for an alias that cannot be read.
+func (d *Data) effectiveSource(alias string) *Source {
+	if source, ok := d.Sources[alias]; ok {
+		return source
+	}
+	if target, err := url.Parse(alias); err != nil || !target.IsAbs() {
+		return nil
+	}
+	target, err := parseDefinitionURL(alias)
+	if err != nil {
+		return nil
+	}
+	return &Source{Alias: alias, URL: target, Header: d.ExtraHeaders[alias]}
 }
 
 // define registers an already-parsed datasource URL, bypassing a string round trip.

@@ -112,7 +112,8 @@ var searchDirs = projectroot.SearchDirs
 // flags each time dominated render cost. Only the roots are cached: the
 // policy.d inside them is checked on every call, so creating or removing it
 // takes effect immediately. A change to the working directory, arguments or
-// any environment variable recomputes the roots.
+// any environment variable recomputes the roots, and so does a change to the
+// on-disk inputs of discovery (see discoveryFingerprint).
 var searchRootsCache struct {
 	sync.Mutex
 	valid bool
@@ -121,9 +122,10 @@ var searchRootsCache struct {
 }
 
 // searchRoots returns the cached project roots for cwd, recomputing them when
-// the working directory, os.Args or the environment has changed.
+// the working directory, os.Args, the environment or the on-disk discovery
+// inputs have changed.
 func searchRoots(cwd string) []string {
-	key := searchRootsKey(cwd, os.Args, os.Environ())
+	key := searchRootsKey(cwd, os.Args, os.Environ()) + "\x00\x02" + discoveryFingerprint(cwd)
 	searchRootsCache.Lock()
 	defer searchRootsCache.Unlock()
 	if searchRootsCache.valid && searchRootsCache.key == key {
@@ -139,6 +141,34 @@ func searchRoots(cwd string) []string {
 func searchRootsKey(cwd string, args, environ []string) string {
 	const field, group = "\x00", "\x00\x01"
 	return cwd + group + strings.Join(args, field) + group + strings.Join(environ, field)
+}
+
+// discoveryFingerprint captures the on-disk inputs of root discovery that can
+// change while a process runs: configuration in cwd, the nearest ancestor with
+// atmos.yaml, and the nearest ancestor holding .git. Each is a short stat walk,
+// unlike the git root resolution and configuration flag parsing the cache
+// avoids.
+func discoveryFingerprint(cwd string) string {
+	local := "0"
+	if projectroot.HasLocalConfig(cwd) {
+		local = "1"
+	}
+	return local + "\x00" + projectroot.FindConfigInParentDirs(cwd) + "\x00" + nearestGitDirectory(cwd)
+}
+
+// nearestGitDirectory returns the closest directory at or above dir that
+// contains .git, or "" when there is none.
+func nearestGitDirectory(dir string) string {
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }
 
 // defaultDirectory returns candidate when it is an existing directory, and an

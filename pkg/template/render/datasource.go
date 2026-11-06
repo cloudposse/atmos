@@ -120,9 +120,9 @@ func (c *DatasourceCache) Read(sources *Data, alias string, args ...string) (any
 		return nil, errUtils.ErrGomplateDatasourceUnavailable
 	}
 
-	// An alias not present in the render's datasources is an absolute URL or
-	// one defined inline via defineDatasource; key on alias+args alone.
-	key := cacheKey(alias, sources.Sources[alias], args)
+	// An undefined absolute-URL alias is keyed by the definition the read
+	// registers, so the first and later reads share one entry.
+	key := cacheKey(alias, sources.effectiveSource(alias), args)
 	if value, ok := c.load(key); ok && value != nil {
 		return value, nil
 	}

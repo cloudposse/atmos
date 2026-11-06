@@ -168,3 +168,31 @@ func TestSearchRootsKeySeparatesFields(t *testing.T) {
 		searchRootsKey("/a/b", nil, nil),
 	)
 }
+
+// An ancestor that gains atmos.yaml while the process runs becomes a project
+// root, so its policy.d is found without a change to the cwd, arguments or
+// environment.
+func TestPolicyDirectoryRecomputesRootsWhenAnAncestorGainsConfig(t *testing.T) {
+	isolateDiscovery(t)
+	calls := countSearchDirs(t)
+	root := t.TempDir()
+	child := filepath.Join(root, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(child, 0o700))
+	require.NoError(t, os.Mkdir(filepath.Join(root, "policy.d"), 0o700))
+	t.Chdir(child)
+
+	directory, err := DirectoryFromEnvironment()
+	require.NoError(t, err)
+	require.Empty(t, directory, "without atmos.yaml the ancestor is not a project root")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte("base_path: .\n"), 0o600))
+	directory, err = DirectoryFromEnvironment()
+	require.NoError(t, err)
+	assert.Equal(t, resolved(t, filepath.Join(root, "policy.d")), resolved(t, directory))
+	assert.Equal(t, int32(2), calls.Load(), "the new configuration recomputes the roots once")
+
+	// Negative path: with nothing else changed, the recomputed roots are reused.
+	_, err = DirectoryFromEnvironment()
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), calls.Load())
+}

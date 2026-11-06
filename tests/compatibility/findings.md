@@ -1,12 +1,12 @@
 # Migration compatibility comparison
 
 Baseline: `4ffd8804d3500b4369e739095174000565b43973` (gomplate v3).
-Candidate: this branch at `ed658cd1`, compared with `runner compare` in CI on
-Linux, macOS and Windows.
+Candidate: this branch, compared with `runner compare` in CI on Linux, macOS
+and Windows.
 
 The old implementation reproduces **212/212 cases** across repeated runs. The
-candidate matches **159/212 cases**; the other **53 differences are approved**
-(`boltdb-json` and `boltdb-plain` below, plus the 51 recorded observations in
+candidate matches **158/212 cases**; the other **54 differences are approved**
+(`boltdb-json` and `boltdb-plain` below, plus the 52 recorded observations in
 `approved.json`; `boltdb-missing` failed before too, so it counts as a match)
 and **0 remain unapproved**, so the gate passes on all three platforms. These
 numbers count cases, not distinct root causes.
@@ -54,6 +54,7 @@ traffic; all others require the old requests.
 | `s3-corrupt-checksum` | An S3 object whose checksum does not match is rejected instead of returned. |
 | `env-datasource` | `env://NAME` read no variable in v3 (`NAME` parses as the URL host, so v3 read the variable named `""` and returned empty data); v5 fails. Use `env:NAME` or `env:///NAME`. |
 | `vault-kv2-raw` | v5 detects KV v2 mounts and adds `/data/` itself, so a URL that already includes `/data/` fails. Drop `/data/`; v5 returns the secret's data without the metadata envelope. |
+| `http-timeout` | The global `templates.settings.gomplate.timeout` applies when the stack manifest sets none. Older releases replaced it with the 5-second default, so this case's 1-second timeout was ignored and its 2-second read succeeded; it now times out. |
 | `coll-jq`, `tmpl-inline`, `tmpl-inline-datasource` | Failed in v3 because the function did not exist; work in v5. |
 | 13 `catalog-*` cases | `describe component` output gains empty `generate`, `provision` and `source` sections from newer Atmos; template-rendered values are unchanged. |
 

@@ -161,3 +161,29 @@ func TestGomplateFuncsRebindsReadersToTheRenderContext(t *testing.T) {
 	require.NoError(t, err, "a new render context replaces the reader bound to the canceled one")
 	assert.NotNil(t, value)
 }
+
+// An undefined absolute-URL alias is cached under the definition its first
+// read registers, so a later read, even through a Data where the alias is now
+// registered, reuses the entry instead of reading and parsing again.
+func TestDatasourceCacheKeyIsStableForAbsoluteURLAliases(t *testing.T) {
+	server, count := countingServer(t)
+	cache := NewDatasourceCache()
+	alias := server.URL + "/data.json"
+
+	d := &Data{}
+	first, err := cache.Read(d, alias)
+	require.NoError(t, err)
+	require.True(t, d.DatasourceExists(alias), "the first read registers the alias")
+
+	second, err := cache.Read(d, alias)
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+	assert.Equal(t, int32(1), count.Load(), "the second read hits the same cache entry")
+	entries := 0
+	cache.entries.Range(func(_, _ any) bool { entries++; return true })
+	assert.Equal(t, 1, entries, "both reads share one cache entry")
+
+	// Negative path: a relative, undefined alias has no definition to key on and still fails.
+	_, err = cache.Read(&Data{}, "not-a-url")
+	require.Error(t, err)
+}

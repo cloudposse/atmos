@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -181,4 +182,38 @@ func TestProcessTmplWithDatasources_GomplateDisabledHasNoDatasources(t *testing.
 		"gomplate-disabled", `name: {{ upper "ok" }}`, nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, "name: OK", result)
+}
+
+// TestProcessTmplWithDatasources_GlobalTimeoutIsKeptWhenTheStackSetsNone verifies the global
+// templates.settings.gomplate.timeout applies when the stack manifest sets no timeout of its own,
+// and that a stack-level timeout still overrides it.
+func TestProcessTmplWithDatasources_GlobalTimeoutIsKeptWhenTheStackSetsNone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(1500 * time.Millisecond):
+		case <-r.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"name":"slow"}`)
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := &schema.AtmosConfiguration{}
+	cfg.Templates.Settings.Enabled = true
+	cfg.Templates.Settings.Gomplate.Enabled = true
+	cfg.Templates.Settings.Gomplate.Timeout = 1
+	cfg.Templates.Settings.Gomplate.Datasources = map[string]schema.TemplatesSettingsGomplateDatasource{
+		"slow": {Url: server.URL + "/data.json"},
+	}
+	text := `name: {{ (ds "slow").name }}`
+
+	_, err := ProcessTmplWithDatasources(cfg, &schema.ConfigAndStacksInfo{}, schema.Settings{}, "timeout", text, nil, false)
+	require.Error(t, err, "the global 1s timeout applies when the stack sets none")
+
+	var stack schema.Settings
+	stack.Templates.Settings.Gomplate.Timeout = 3
+	result, err := ProcessTmplWithDatasources(cfg, &schema.ConfigAndStacksInfo{}, stack, "timeout", text, nil, false)
+	require.NoError(t, err, "a stack-level timeout still overrides the global one")
+	assert.Equal(t, "name: slow", result)
 }

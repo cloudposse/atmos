@@ -198,6 +198,11 @@ Vault reads first check the mount type. The values your templates read do not ch
 policies or proxies that allow only specific requests may need an update. HTTP datasources still
 make one GET request per read, as before.
 
+The datasource timeout in `atmos.yaml` (`templates.settings.gomplate.timeout`) now applies. Older
+releases replaced it with the 5-second default whenever a stack manifest did not set its own
+timeout, so a shorter global timeout was ignored. If a datasource takes longer than your global
+timeout, raise the timeout in `atmos.yaml` or in that stack's settings.
+
 ### New: `coll.JQ` and `tmpl`
 
 `coll.JQ` runs a jq expression on a value, and the `tmpl` namespace (`tmpl.Inline`, `tmpl.Exec`)

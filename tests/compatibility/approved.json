@@ -975,6 +975,15 @@
       "text": ""
     }
   },
+  "http-timeout": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "The global templates.settings.gomplate.timeout now applies when the stack manifest sets no timeout; older releases replaced it with the 5-second default, so the 1-second timeout was ignored and the 2-second read succeeded (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
   "s3-corrupt-checksum": {
     "exit_code": 1,
     "file_notices": [],
