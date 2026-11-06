@@ -180,3 +180,18 @@ func TestFileURIForUsesPlainDrivePathsOnWindows(t *testing.T) {
 		t.Fatalf("darwin escaping: %q", got)
 	}
 }
+
+func TestBaselinePlatformWarning(t *testing.T) {
+	if got := baselinePlatformWarning("darwin", "darwin"); got != "" {
+		t.Fatalf("same platform should not warn, got %q", got)
+	}
+	if got := baselinePlatformWarning("", "windows"); got != "" {
+		t.Fatalf("an unrecorded platform should not warn, got %q", got)
+	}
+	got := baselinePlatformWarning("darwin", "windows")
+	for _, want := range []string{"darwin", "windows", "verify"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("warning %q should mention %q", got, want)
+		}
+	}
+}

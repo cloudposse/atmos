@@ -195,9 +195,7 @@ func TestDatasourceCacheKeyIsStableForAbsoluteURLAliases(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, first, second)
 	assert.Equal(t, int32(1), count.Load(), "the second read hits the same cache entry")
-	entries := 0
-	cache.entries.Range(func(_, _ any) bool { entries++; return true })
-	assert.Equal(t, 1, entries, "both reads share one cache entry")
+	assert.Equal(t, 1, cache.len(), "both reads share one cache entry")
 
 	// Negative path: a relative, undefined alias has no definition to key on and still fails.
 	_, err = cache.Read(&Data{}, "not-a-url")
@@ -275,11 +273,7 @@ func TestDatasourceCacheSkipsValuesReadWhileTheEnvironmentChanged(t *testing.T) 
 	d, err := NewData([]string{"api=" + server.URL + "/data.json"}, nil)
 	require.NoError(t, err)
 	cache := NewDatasourceCache()
-	entries := func() int {
-		n := 0
-		cache.entries.Range(func(_, _ any) bool { n++; return true })
-		return n
-	}
+	entries := cache.len
 
 	value, err := cache.Read(d, "api")
 	require.NoError(t, err)
@@ -290,4 +284,28 @@ func TestDatasourceCacheSkipsValuesReadWhileTheEnvironmentChanged(t *testing.T) 
 	_, err = cache.Read(d, "api")
 	require.NoError(t, err)
 	assert.Equal(t, 1, entries())
+}
+
+// The cache keeps at most its limit of entries and evicts the least recently
+// used, so reads under ever more environments cannot grow it without bound,
+// while an entry still in use survives.
+func TestDatasourceCacheIsBounded(t *testing.T) {
+	cache := newDatasourceCache(2)
+	cache.store("a", "A")
+	cache.store("b", "B")
+	_, _ = cache.load("a") // a is now the most recently used.
+	cache.store("c", "C")
+
+	assert.Equal(t, 2, cache.len())
+	_, ok := cache.load("b")
+	assert.False(t, ok, "the least recently used entry is evicted")
+	value, ok := cache.load("a")
+	assert.True(t, ok, "a recently used entry is kept")
+	assert.Equal(t, "A", value)
+
+	// Negative path: storing an existing key updates it without evicting.
+	cache.store("c", "C2")
+	assert.Equal(t, 2, cache.len())
+	value, _ = cache.load("c")
+	assert.Equal(t, "C2", value)
 }

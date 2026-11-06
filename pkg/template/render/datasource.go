@@ -1,6 +1,7 @@
 package render
 
 import (
+	"container/list"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -19,17 +20,39 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// datasourceCacheLimit bounds the entries a DatasourceCache keeps. Each
+// distinct environment adds its own entries (see cacheKey), so without a bound
+// a long-running process that renders under many environments would keep
+// every value it ever read. The limit is far above what one run uses (a few
+// datasources per environment), so reuse across stacks is unaffected; the
+// least recently used entries go first.
+const datasourceCacheLimit = 512
+
 // DatasourceCache memoizes datasource reads by alias and arguments so that a
-// datasource referenced many times across a stack is fetched once.
+// datasource referenced many times across a stack is fetched once. It keeps
+// at most a fixed number of entries, evicting the least recently used.
 type DatasourceCache struct {
-	entries sync.Map
+	mu      sync.Mutex
+	limit   int
+	entries map[string]*list.Element
+	order   *list.List // front is the most recently used *cacheEntry
+}
+
+// cacheEntry is one cached datasource value.
+type cacheEntry struct {
+	key   string
+	value any
 }
 
 // NewDatasourceCache creates an empty DatasourceCache.
 func NewDatasourceCache() *DatasourceCache {
 	defer perf.Track(nil, "render.NewDatasourceCache")()
 
-	return &DatasourceCache{}
+	return newDatasourceCache(datasourceCacheLimit)
+}
+
+func newDatasourceCache(limit int) *DatasourceCache {
+	return &DatasourceCache{limit: limit, entries: map[string]*list.Element{}, order: list.New()}
 }
 
 // defaultDatasourceCache backs CachedDatasource, preserving the process-wide
@@ -98,14 +121,41 @@ func environmentKey() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// load returns the cached value for key, if any.
+// load returns the cached value for key, if any, and marks it recently used.
 func (c *DatasourceCache) load(key string) (any, bool) {
-	return c.entries.Load(key)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	element, ok := c.entries[key]
+	if !ok {
+		return nil, false
+	}
+	c.order.MoveToFront(element)
+	return element.Value.(*cacheEntry).value, true
 }
 
-// store caches value under key.
+// store caches value under key, evicting the least recently used entry when
+// the cache is full.
 func (c *DatasourceCache) store(key string, value any) {
-	c.entries.Store(key, value)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if element, ok := c.entries[key]; ok {
+		element.Value.(*cacheEntry).value = value
+		c.order.MoveToFront(element)
+		return
+	}
+	c.entries[key] = c.order.PushFront(&cacheEntry{key: key, value: value})
+	for c.order.Len() > c.limit {
+		oldest := c.order.Back()
+		c.order.Remove(oldest)
+		delete(c.entries, oldest.Value.(*cacheEntry).key)
+	}
+}
+
+// len returns the number of cached entries.
+func (c *DatasourceCache) len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.order.Len()
 }
 
 // Read returns the parsed value of the datasource registered under alias in

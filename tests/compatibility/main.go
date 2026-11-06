@@ -347,6 +347,16 @@ func (r *runner) report(path, binary, digest string, expected, actual map[string
 	})
 }
 
+// baselinePlatformWarning explains that comparing against a baseline recorded
+// on another OS can report OS-specific differences (path separators, for
+// example), or returns "" when the platforms match.
+func baselinePlatformWarning(baselinePlatform, current string) string {
+	if baselinePlatform == "" || baselinePlatform == current {
+		return ""
+	}
+	return fmt.Sprintf("warning: baseline.json was recorded on %s, but this is %s; compare can report OS-specific differences such as path separators. Run `verify` to compare against the pinned old source built on this OS.", baselinePlatform, current)
+}
+
 func execute(args []string) (int, error) {
 	if len(args) == 0 {
 		return 2, errors.New("usage: compatibility {baseline|compare|verify} [flags]")
@@ -398,6 +408,11 @@ func execute(args []string) (int, error) {
 		}
 		if expected.Revision != revision || expected.CorpusSHA256 != digest {
 			return 2, errors.New("baseline provenance/input mismatch; characterize the pinned OLD source again")
+		}
+		if command == "compare" {
+			if warning := baselinePlatformWarning(expected.Platform, runtime.GOOS); warning != "" {
+				fmt.Fprintln(os.Stderr, warning)
+			}
 		}
 	}
 	ctx := context.Background()
