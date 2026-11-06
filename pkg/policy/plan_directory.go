@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -59,24 +60,85 @@ const defaultDirectoryName = "policy.d"
 // missing directory is returned so loading fails rather than falling back.
 func DirectoryFromEnvironment() (string, error) {
 	defer perf.Track(nil, "policy.DirectoryFromEnvironment")()
-	settings := viper.New()
-	if err := settings.BindEnv("directory", "ATMOS_POLICY_DIR"); err != nil {
-		return "", err
-	}
-	if directory := settings.GetString("directory"); directory != "" {
-		return directory, nil
+	directory, err := explicitDirectory()
+	if err != nil || directory != "" {
+		return directory, err
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("%w: resolve working directory: %w", errUtils.ErrPolicyInvalid, err)
 	}
-	for _, root := range projectroot.SearchDirs(cwd, os.Args) {
+	for _, root := range searchRoots(cwd) {
 		directory, err := defaultDirectory(filepath.Join(root, defaultDirectoryName))
 		if err != nil || directory != "" {
 			return directory, err
 		}
 	}
 	return "", nil
+}
+
+// explicitSettings binds ATMOS_POLICY_DIR once. Viper reads a bound variable
+// when it is requested, so one instance sees every change to the environment;
+// the mutex is held because Viper is not safe for concurrent use.
+var explicitSettings struct {
+	sync.Mutex
+	once     sync.Once
+	settings *viper.Viper
+	err      error
+}
+
+// explicitDirectory returns the ATMOS_POLICY_DIR override, or "" when unset.
+func explicitDirectory() (string, error) {
+	explicitSettings.once.Do(func() {
+		settings := viper.New()
+		explicitSettings.err = settings.BindEnv("directory", "ATMOS_POLICY_DIR")
+		explicitSettings.settings = settings
+	})
+	if explicitSettings.err != nil {
+		return "", explicitSettings.err
+	}
+	explicitSettings.Lock()
+	defer explicitSettings.Unlock()
+	return explicitSettings.settings.GetString("directory"), nil
+}
+
+// searchDirs resolves the project roots that may hold policy.d. Overridden in tests.
+var searchDirs = projectroot.SearchDirs
+
+// searchRootsCache remembers the project roots for the last working directory,
+// argument list and environment. Without a CLI invocation pinning the bundle
+// (for example when Atmos is embedded as a library), every template render
+// consults discovery, and resolving the Git root and parsing configuration
+// flags each time dominated render cost. Only the roots are cached: the
+// policy.d inside them is checked on every call, so creating or removing it
+// takes effect immediately. A change to the working directory, arguments or
+// any environment variable recomputes the roots.
+var searchRootsCache struct {
+	sync.Mutex
+	valid bool
+	key   string
+	roots []string
+}
+
+// searchRoots returns the cached project roots for cwd, recomputing them when
+// the working directory, os.Args or the environment has changed.
+func searchRoots(cwd string) []string {
+	key := searchRootsKey(cwd, os.Args, os.Environ())
+	searchRootsCache.Lock()
+	defer searchRootsCache.Unlock()
+	if searchRootsCache.valid && searchRootsCache.key == key {
+		return searchRootsCache.roots
+	}
+	roots := searchDirs(cwd, os.Args)
+	searchRootsCache.valid, searchRootsCache.key, searchRootsCache.roots = true, key, roots
+	return roots
+}
+
+// searchRootsKey joins every discovery input with separators that cannot occur
+// in a path, argument or environment entry.
+func searchRootsKey(cwd string, args, environ []string) string {
+	const field, group = "\x00", "\x00\x01"
+	return cwd + group + strings.Join(args, field) + group + strings.Join(environ, field)
 }
 
 // defaultDirectory returns candidate when it is an existing directory, and an
