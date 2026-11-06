@@ -1,11 +1,14 @@
-// Package templating compat.go keeps gomplate v3 function names that gomplate
-// v4/v5 removed or renamed working: templates that still call them execute
-// exactly as before, and a DeprecationReporter is notified (once per template
-// per name) so the removal is visible without breaking the render. See
+// Package compatibility keeps gomplate v3 function names that gomplate v4/v5
+// removed or renamed working: templates that still call them execute exactly
+// as before, and a DeprecationReporter is notified (once per template per
+// name) so the removal is visible without breaking the render. See
 // compat_aliases.go for the bare (non-namespaced) v3 aliases and
 // compat_lint.go for the static checks that warn about datasource behavior
 // gomplate v5 changed without removing a name.
-package templating
+//
+// Everything here is scheduled for removal in a future major release; keeping
+// it in one package makes that removal a single directory deletion.
+package compatibility
 
 import (
 	"fmt"
@@ -43,16 +46,17 @@ type logDeprecationReporter struct {
 	seen sync.Map
 }
 
-// newLogDeprecationReporter creates the log-backed DeprecationReporter.
-func newLogDeprecationReporter() *logDeprecationReporter {
-	defer perf.Track(nil, "templating.newLogDeprecationReporter")()
+// NewLogReporter creates a log-backed DeprecationReporter with its own
+// deduplication state. Most callers want DefaultReporter instead.
+func NewLogReporter() DeprecationReporter {
+	defer perf.Track(nil, "compatibility.NewLogReporter")()
 
 	return &logDeprecationReporter{}
 }
 
 // Deprecated implements DeprecationReporter.
 func (r *logDeprecationReporter) Deprecated(templateName, deprecated, replacement, hint string) {
-	defer perf.Track(nil, "templating.logDeprecationReporter.Deprecated")()
+	defer perf.Track(nil, "compatibility.logDeprecationReporter.Deprecated")()
 
 	key := templateName + "\x00" + deprecated
 	if _, loaded := r.seen.LoadOrStore(key, struct{}{}); loaded {
@@ -62,22 +66,29 @@ func (r *logDeprecationReporter) Deprecated(templateName, deprecated, replacemen
 		"template", templateName, "deprecated", deprecated, "replacement", replacement, "hint", hint)
 }
 
-// defaultDeprecationReporter is shared by every Engine that does not set its
+// defaultDeprecationReporter is shared by every engine that does not set its
 // own reporter, so dedup holds for the lifetime of the process, matching how
-// defaultDatasourceCache is shared.
-var defaultDeprecationReporter = newLogDeprecationReporter()
+// the render package's datasource cache is shared.
+var defaultDeprecationReporter = NewLogReporter()
 
-// WithDeprecationReporter overrides the DeprecationReporter used to report
-// gomplate v3 names kept alive by this package's compatibility shims. The
-// default logs a warning via pkg/logger, deduplicated per template per name.
-func WithDeprecationReporter(reporter DeprecationReporter) Option {
-	defer perf.Track(nil, "templating.WithDeprecationReporter")()
+// DefaultReporter returns the process-wide log-backed DeprecationReporter,
+// which warns once per template per deprecated name.
+func DefaultReporter() DeprecationReporter {
+	defer perf.Track(nil, "compatibility.DefaultReporter")()
 
-	return func(e *engine) {
-		if reporter != nil {
-			e.reporter = reporter
-		}
-	}
+	return defaultDeprecationReporter
+}
+
+// ApplyShims keeps the gomplate v3 names gomplate v5 removed working in a
+// function map assembled outside the render engine (for example scaffold
+// templates). The funcs map must already contain Gomplate's namespaces and, if
+// used, Sprig's functions; deprecated calls are reported against templateName
+// with DefaultReporter.
+func ApplyShims(funcs template.FuncMap, templateName string) {
+	defer perf.Track(nil, "compatibility.ApplyShims")()
+
+	ApplyNamespaceShims(funcs, funcs, templateName, defaultDeprecationReporter)
+	ApplyBareAliasShims(funcs, templateName, defaultDeprecationReporter)
 }
 
 // deprecationHint builds the standard "was removed / still works / replace
@@ -254,7 +265,7 @@ type convWrapper struct {
 
 // Bool is gomplate v3's conv.Bool, removed in v5 in favor of ToBool.
 func (w *convWrapper) Bool(s any) bool {
-	defer perf.Track(nil, "templating.convWrapper.Bool")()
+	defer perf.Track(nil, "compatibility.convWrapper.Bool")()
 
 	w.reporter.Deprecated(w.name, "conv.Bool", "conv.ToBool", deprecationHint("conv.Bool", "conv.ToBool"))
 	return w.ToBool(s)
@@ -262,7 +273,7 @@ func (w *convWrapper) Bool(s any) bool {
 
 // Slice is gomplate v3's conv.Slice, removed in v5 in favor of coll.Slice.
 func (w *convWrapper) Slice(args ...any) []any {
-	defer perf.Track(nil, "templating.convWrapper.Slice")()
+	defer perf.Track(nil, "compatibility.convWrapper.Slice")()
 
 	w.reporter.Deprecated(w.name, "conv.Slice", "coll.Slice", deprecationHint("conv.Slice", "coll.Slice"))
 	return w.coll.Slice(args...)
@@ -270,7 +281,7 @@ func (w *convWrapper) Slice(args ...any) []any {
 
 // Dict is gomplate v3's conv.Dict, removed in v5 in favor of coll.Dict.
 func (w *convWrapper) Dict(in ...any) (map[string]any, error) {
-	defer perf.Track(nil, "templating.convWrapper.Dict")()
+	defer perf.Track(nil, "compatibility.convWrapper.Dict")()
 
 	w.reporter.Deprecated(w.name, "conv.Dict", "coll.Dict", deprecationHint("conv.Dict", "coll.Dict"))
 	return w.coll.Dict(in...)
@@ -278,7 +289,7 @@ func (w *convWrapper) Dict(in ...any) (map[string]any, error) {
 
 // Has is gomplate v3's conv.Has, removed in v5 in favor of coll.Has.
 func (w *convWrapper) Has(in any, key string) bool {
-	defer perf.Track(nil, "templating.convWrapper.Has")()
+	defer perf.Track(nil, "compatibility.convWrapper.Has")()
 
 	w.reporter.Deprecated(w.name, "conv.Has", "coll.Has", deprecationHint("conv.Has", "coll.Has"))
 	return w.coll.Has(in, key)
@@ -287,7 +298,7 @@ func (w *convWrapper) Has(in any, key string) bool {
 // ToInt64 overrides the embedded method to add a hint when gomplate v5's
 // error-returning behavior (instead of v3's silent zero) surprises a caller.
 func (w *convWrapper) ToInt64(in any) (int64, error) {
-	defer perf.Track(nil, "templating.convWrapper.ToInt64")()
+	defer perf.Track(nil, "compatibility.convWrapper.ToInt64")()
 
 	v, err := w.convNamespace.ToInt64(in)
 	return v, wrapConversionError(err, "conv.ToInt64")
@@ -295,7 +306,7 @@ func (w *convWrapper) ToInt64(in any) (int64, error) {
 
 // ToInt overrides the embedded method; see ToInt64.
 func (w *convWrapper) ToInt(in any) (int, error) {
-	defer perf.Track(nil, "templating.convWrapper.ToInt")()
+	defer perf.Track(nil, "compatibility.convWrapper.ToInt")()
 
 	v, err := w.convNamespace.ToInt(in)
 	return v, wrapConversionError(err, "conv.ToInt")
@@ -303,7 +314,7 @@ func (w *convWrapper) ToInt(in any) (int, error) {
 
 // ToFloat64 overrides the embedded method; see ToInt64.
 func (w *convWrapper) ToFloat64(in any) (float64, error) {
-	defer perf.Track(nil, "templating.convWrapper.ToFloat64")()
+	defer perf.Track(nil, "compatibility.convWrapper.ToFloat64")()
 
 	v, err := w.convNamespace.ToFloat64(in)
 	return v, wrapConversionError(err, "conv.ToFloat64")
@@ -311,7 +322,7 @@ func (w *convWrapper) ToFloat64(in any) (float64, error) {
 
 // Atoi overrides the embedded method; see ToInt64.
 func (w *convWrapper) Atoi(in any) (int, error) {
-	defer perf.Track(nil, "templating.convWrapper.Atoi")()
+	defer perf.Track(nil, "compatibility.convWrapper.Atoi")()
 
 	v, err := w.convNamespace.Atoi(in)
 	return v, wrapConversionError(err, "conv.Atoi")
@@ -328,7 +339,7 @@ type stringsWrapper struct {
 
 // Sort is gomplate v3's strings.Sort, removed in v5 in favor of coll.Sort.
 func (w *stringsWrapper) Sort(args ...any) ([]any, error) {
-	defer perf.Track(nil, "templating.stringsWrapper.Sort")()
+	defer perf.Track(nil, "compatibility.stringsWrapper.Sort")()
 
 	w.reporter.Deprecated(w.name, "strings.Sort", "coll.Sort", deprecationHint("strings.Sort", "coll.Sort"))
 	return w.coll.Sort(args...)
@@ -356,7 +367,7 @@ type LegacyIP struct {
 // IsZero reports whether ip is the zero value, matching v3's
 // netaddr.IP.IsZero (netip.Addr's equivalent, IsValid, is inverted).
 func (ip LegacyIP) IsZero() bool {
-	defer perf.Track(nil, "templating.LegacyIP.IsZero")()
+	defer perf.Track(nil, "compatibility.LegacyIP.IsZero")()
 
 	return !ip.IsValid()
 }
@@ -364,7 +375,7 @@ func (ip LegacyIP) IsZero() bool {
 // Is4in6 reports whether ip is an IPv4-mapped IPv6 address, matching v3's
 // netaddr.IP.Is4in6 (netip.Addr spells this Is4In6).
 func (ip LegacyIP) Is4in6() bool {
-	defer perf.Track(nil, "templating.LegacyIP.Is4in6")()
+	defer perf.Track(nil, "compatibility.LegacyIP.Is4in6")()
 
 	return ip.Is4In6()
 }
@@ -373,7 +384,7 @@ func (ip LegacyIP) Is4in6() bool {
 // netip.Addr has no direct equivalent, so the result is built from the
 // address bytes and zone.
 func (ip LegacyIP) IPAddr() *stdnet.IPAddr {
-	defer perf.Track(nil, "templating.LegacyIP.IPAddr")()
+	defer perf.Track(nil, "compatibility.LegacyIP.IPAddr")()
 
 	return &stdnet.IPAddr{IP: stdnet.IP(ip.AsSlice()), Zone: ip.Zone()}
 }
@@ -381,7 +392,7 @@ func (ip LegacyIP) IPAddr() *stdnet.IPAddr {
 // Prior returns the IP address immediately before ip, matching v3's
 // netaddr.IP.Prior (netip.Addr spells this Prev).
 func (ip LegacyIP) Prior() netip.Addr {
-	defer perf.Track(nil, "templating.LegacyIP.Prior")()
+	defer perf.Track(nil, "compatibility.LegacyIP.Prior")()
 
 	return ip.Prev()
 }
@@ -392,7 +403,7 @@ func (ip LegacyIP) Prior() netip.Addr {
 // including ones that call Is4, Is6, String, IsPrivate, IsZero, Is4in6,
 // IPAddr or Prior, and invalid input errors exactly as v3 did.
 func (w *netWrapper) ParseIP(ip any) (LegacyIP, error) {
-	defer perf.Track(nil, "templating.netWrapper.ParseIP")()
+	defer perf.Track(nil, "compatibility.netWrapper.ParseIP")()
 
 	w.reporter.Deprecated(w.name, "net.ParseIP", "net.ParseAddr", deprecationHint("net.ParseIP", "net.ParseAddr"))
 	addr, err := w.ParseAddr(ip)
@@ -402,7 +413,7 @@ func (w *netWrapper) ParseIP(ip any) (LegacyIP, error) {
 // ParseIPPrefix is gomplate v3's net.ParseIPPrefix, removed in v5 in favor of
 // net.ParsePrefix, which returns netip.Prefix instead of v3's netaddr.IPPrefix.
 func (w *netWrapper) ParseIPPrefix(ipprefix any) (netip.Prefix, error) {
-	defer perf.Track(nil, "templating.netWrapper.ParseIPPrefix")()
+	defer perf.Track(nil, "compatibility.netWrapper.ParseIPPrefix")()
 
 	w.reporter.Deprecated(w.name, "net.ParseIPPrefix", "net.ParsePrefix",
 		deprecationHintTypeChanged("net.ParseIPPrefix", "net.ParsePrefix", "netip.Prefix"))
@@ -412,21 +423,21 @@ func (w *netWrapper) ParseIPPrefix(ipprefix any) (netip.Prefix, error) {
 // ParseIPRange is gomplate v3's net.ParseIPRange, removed in v5 in favor of
 // net.ParseRange, which returns netipx.IPRange instead of v3's netaddr.IPRange.
 func (w *netWrapper) ParseIPRange(iprange any) (netipx.IPRange, error) {
-	defer perf.Track(nil, "templating.netWrapper.ParseIPRange")()
+	defer perf.Track(nil, "compatibility.netWrapper.ParseIPRange")()
 
 	w.reporter.Deprecated(w.name, "net.ParseIPRange", "net.ParseRange",
 		deprecationHintTypeChanged("net.ParseIPRange", "net.ParseRange", "netipx.IPRange"))
 	return w.ParseRange(iprange)
 }
 
-// applyNamespaceShims replaces the conv, strings and net entries of funcs
+// ApplyNamespaceShims replaces the conv, strings and net entries of funcs
 // (already populated from gomplateFuncs) with wrappers that keep the v3
 // method names gomplate v5 removed working. It is a no-op for any namespace
 // gomplateFuncs doesn't provide (gomplate disabled) or whose factory shape
 // doesn't match what this file expects (an upstream gomplate change), in
 // which case templates simply see whatever gomplate itself registered.
-func applyNamespaceShims(funcs, gomplateFuncs template.FuncMap, name string, reporter DeprecationReporter) {
-	defer perf.Track(nil, "templating.applyNamespaceShims")()
+func ApplyNamespaceShims(funcs, gomplateFuncs template.FuncMap, name string, reporter DeprecationReporter) {
+	defer perf.Track(nil, "compatibility.ApplyNamespaceShims")()
 
 	coll, ok := namespaceValue[collNamespace](gomplateFuncs, "coll")
 	if !ok {

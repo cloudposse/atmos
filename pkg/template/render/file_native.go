@@ -1,4 +1,4 @@
-package templating
+package render
 
 import (
 	"errors"
@@ -26,34 +26,34 @@ const (
 type nativeFileFuncs struct{}
 
 func (nativeFileFuncs) Read(path any) (string, error) {
-	defer perf.Track(nil, "templating.file.Read")()
+	defer perf.Track(nil, "render.file.Read")()
 
 	content, err := os.ReadFile(conv.ToString(path))
 	return string(content), err
 }
 
 func (nativeFileFuncs) Stat(path any) (os.FileInfo, error) {
-	defer perf.Track(nil, "templating.file.Stat")()
+	defer perf.Track(nil, "render.file.Stat")()
 
 	return os.Stat(conv.ToString(path))
 }
 
 func (f nativeFileFuncs) Exists(path any) bool {
-	defer perf.Track(nil, "templating.file.Exists")()
+	defer perf.Track(nil, "render.file.Exists")()
 
 	_, err := f.Stat(path)
 	return err == nil
 }
 
 func (f nativeFileFuncs) IsDir(path any) bool {
-	defer perf.Track(nil, "templating.file.IsDir")()
+	defer perf.Track(nil, "render.file.IsDir")()
 
 	info, err := f.Stat(path)
 	return err == nil && info.IsDir()
 }
 
 func (nativeFileFuncs) ReadDir(path any) ([]string, error) {
-	defer perf.Track(nil, "templating.file.ReadDir")()
+	defer perf.Track(nil, "render.file.ReadDir")()
 
 	entries, err := os.ReadDir(conv.ToString(path))
 	if err != nil {
@@ -67,7 +67,7 @@ func (nativeFileFuncs) ReadDir(path any) ([]string, error) {
 }
 
 func (nativeFileFuncs) Walk(path any) ([]string, error) {
-	defer perf.Track(nil, "templating.file.Walk")()
+	defer perf.Track(nil, "render.file.Walk")()
 
 	root := conv.ToString(path)
 	files := make([]string, 0)
@@ -102,7 +102,7 @@ func (nativeFileFuncs) Walk(path any) ([]string, error) {
 }
 
 func (nativeFileFuncs) Write(path, value any) (string, error) {
-	defer perf.Track(nil, "templating.file.Write")()
+	defer perf.Track(nil, "render.file.Write")()
 
 	filename := conv.ToString(path)
 	if err := assertFilePathInWD(filename); err != nil {

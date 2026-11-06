@@ -14,8 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	"github.com/cloudposse/atmos/pkg/template/compatibility"
+	"github.com/cloudposse/atmos/pkg/template/render"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
-	"github.com/cloudposse/atmos/pkg/templating"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -232,17 +233,17 @@ func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
 	funcs := template.FuncMap{}
 
 	// Add gomplate functions (base layer).
-	for k, v := range templating.GomplateFuncs(ctx, nil) {
+	for k, v := range render.GomplateFuncs(ctx, nil) {
 		funcs[k] = v
 	}
 
 	// Add sprig functions (overrides gomplate on collisions).
-	for k, v := range templating.SprigFuncMap() {
+	for k, v := range render.SprigFuncMap() {
 		funcs[k] = v
 	}
 
 	// Keep gomplate v3 names that v5 removed working, with a deprecation warning.
-	templating.ApplyCompatShims(funcs, "scaffold template")
+	compatibility.ApplyShims(funcs, "scaffold template")
 
 	// Add Atmos's own custom functions (highest priority, overrides both).
 	for k, v := range templatefuncs.FuncMap() {

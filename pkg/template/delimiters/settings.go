@@ -1,4 +1,4 @@
-package exec
+package delimiters
 
 import (
 	"strconv"
@@ -8,14 +8,19 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/function/literalsource"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// protectTemplateDelimiterSettings shields the delimiter declaration itself, which
-// is configuration rather than a template expression. Preserve source bytes so
+// ProtectSettings shields a manifest's delimiter declaration (the
+// settings.templates.settings.delimiters value), which is configuration rather
+// than a template expression. It returns the protected text and a function
+// that restores the original declaration. Preserve source bytes so
 // raw template syntax elsewhere is never changed by a YAML marshal round trip.
 // Restore before decoding each pass so newly introduced delimiters still take effect.
-func protectTemplateDelimiterSettings(input string) (string, func(string) string) {
+func ProtectSettings(input string) (string, func(string) string) {
+	defer perf.Track(nil, "delimiters.ProtectSettings")()
+
 	identity := func(s string) string { return s }
 	node := templateDelimiterSettingsNode(input)
 	if node == nil {
@@ -154,7 +159,12 @@ func templateBlockScalarEnd(input string, start int) int {
 	return end
 }
 
-func effectiveComponentTemplateDelimiters(config *schema.AtmosConfiguration, settings *schema.Settings) []string {
+// ForComponent returns the template delimiters configured for a component:
+// its own settings.templates.settings.delimiters when set, otherwise the
+// project-wide value from atmos.yaml.
+func ForComponent(config *schema.AtmosConfiguration, settings *schema.Settings) []string {
+	defer perf.Track(nil, "delimiters.ForComponent")()
+
 	if settings.Templates.Settings.Delimiters != nil {
 		return settings.Templates.Settings.Delimiters
 	}

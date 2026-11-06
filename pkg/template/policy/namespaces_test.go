@@ -1,4 +1,4 @@
-package exec
+package policy
 
 import (
 	"context"
@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/templating"
+	"github.com/cloudposse/atmos/pkg/template/compatibility"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
 const (
@@ -28,10 +29,10 @@ const (
 func guardedNamespaceValue(t *testing.T, name, file string) any {
 	t.Helper()
 
-	sources := &templating.Data{}
-	native := templating.GomplateFuncs(context.Background(), sources)
-	templating.ApplyCompatShims(native, file)
-	funcs, err := policyTemplateFuncs(native, file, sources)
+	sources := &render.Data{}
+	native := render.GomplateFuncs(context.Background(), sources)
+	compatibility.ApplyShims(native, file)
+	funcs, err := TemplateFuncs(native, file, sources)
 	require.NoError(t, err)
 	constructor, ok := funcs[name].(func() (any, error))
 	require.Truef(t, ok, "namespace %q is not a guarded constructor: %T", name, funcs[name])

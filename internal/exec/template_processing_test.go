@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/templating"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
 func TestProcessTemplateWithoutContext(t *testing.T) {
@@ -337,15 +337,15 @@ func TestGetSprigFuncMap_CachingBehavior(t *testing.T) {
 	t.Parallel()
 
 	// Call getSprigFuncMap multiple times
-	funcMap1 := templating.SprigFuncMap()
+	funcMap1 := render.SprigFuncMap()
 	require.NotNil(t, funcMap1)
 	require.NotEmpty(t, funcMap1)
 
-	funcMap2 := templating.SprigFuncMap()
+	funcMap2 := render.SprigFuncMap()
 	require.NotNil(t, funcMap2)
 	require.NotEmpty(t, funcMap2)
 
-	funcMap3 := templating.SprigFuncMap()
+	funcMap3 := render.SprigFuncMap()
 	require.NotNil(t, funcMap3)
 	require.NotEmpty(t, funcMap3)
 
@@ -395,7 +395,7 @@ func TestGetSprigFuncMap_Concurrent(t *testing.T) {
 			<-start
 
 			// Get cached function map
-			funcMap := templating.SprigFuncMap()
+			funcMap := render.SprigFuncMap()
 			if funcMap == nil {
 				errors <- assert.AnError
 				return
@@ -491,11 +491,11 @@ func TestGetSprigFuncMap_ConcurrentTemplateProcessing(t *testing.T) {
 // This demonstrates P7.7.2 optimization: after first call, subsequent calls have zero overhead.
 func BenchmarkGetSprigFuncMap(b *testing.B) {
 	// First call to initialize cache
-	_ = templating.SprigFuncMap()
+	_ = render.SprigFuncMap()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = templating.SprigFuncMap()
+		_ = render.SprigFuncMap()
 	}
 }
 

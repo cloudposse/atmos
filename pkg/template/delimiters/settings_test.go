@@ -1,4 +1,4 @@
-package exec
+package delimiters
 
 import (
 	"bytes"
@@ -22,7 +22,7 @@ func TestTemplateDelimiterSettingsSourcePreservation(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			input := "settings:\n  templates:\n    settings:\n" + declaration + "\nvars:\n  value: '<< .stage >>'\n"
-			protected, restoreSettings := protectTemplateDelimiterSettings(input)
+			protected, restoreSettings := ProtectSettings(input)
 			protected, restoreLiterals := literalsource.ProtectEncoded(protected, "<<", ">>")
 			tmpl, err := template.New("test").Delims("<<", ">>").Parse(protected)
 			require.NoError(t, err)

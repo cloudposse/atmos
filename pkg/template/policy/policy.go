@@ -1,4 +1,8 @@
-package exec
+// Package policy applies policy admission to the functions a Go template can
+// call: every function and namespace is wrapped so a call is admitted against
+// the template file it came from, and functions that read files, URLs or other
+// sources confine those reads to what the policy allows.
+package policy
 
 import (
 	"context"
@@ -8,15 +12,27 @@ import (
 	"text/template"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
-	"github.com/cloudposse/atmos/pkg/templating"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
-const policyTemplateEngine = "go-template"
+// Engine is the template engine name reported to policy admission.
+const Engine = "go-template"
 
-// policyTemplateFuncs wraps a private map, never the cached Sprig map.
+// SourceFileBinder is implemented by a template namespace (Atmos's `atmos`
+// namespace) that performs its own admission checks: it returns a copy bound
+// to the template file the calls come from, so those checks attribute each
+// call to the right file.
+type SourceFileBinder interface {
+	BindSourceFile(file string) any
+}
+
+// TemplateFuncs wraps a private map, never the cached Sprig map.
 // Namespace constructors are admission points too, including namespace values saved in template variables.
-func policyTemplateFuncs(original template.FuncMap, file string, d *templating.Data) (template.FuncMap, error) {
+func TemplateFuncs(original template.FuncMap, file string, d *render.Data) (template.FuncMap, error) {
+	defer perf.Track(nil, "policy.TemplateFuncs")()
+
 	functionRules, err := guard.Enabled("function")
 	if err != nil {
 		return nil, err
@@ -40,12 +56,14 @@ func policyTemplateFuncs(original template.FuncMap, file string, d *templating.D
 	return result, nil
 }
 
-// policyFuncsWrapper returns the template engine hook that applies policy admission to every
+// FuncsWrapper returns the template engine hook that applies policy admission to every
 // function a template rendered from file can call, reading datasources through the render's own
 // definitions.
-func policyFuncsWrapper(file string) templating.FuncsWrapper {
-	return func(funcs template.FuncMap, sources *templating.Data) (template.FuncMap, error) {
-		return policyTemplateFuncs(funcs, file, sources)
+func FuncsWrapper(file string) render.FuncsWrapper {
+	defer perf.Track(nil, "policy.FuncsWrapper")()
+
+	return func(funcs template.FuncMap, sources *render.Data) (template.FuncMap, error) {
+		return TemplateFuncs(funcs, file, sources)
 	}
 }
 
@@ -86,9 +104,10 @@ func wrapTemplateFunction(name string, fn any, file string) any {
 func policyNamespace(name string, fn any, file string) any {
 	switch name {
 	case "atmos":
-		native := *fn.(func() any)().(*AtmosFuncs)
-		native.sourceFile = file
-		return func() any { return &native }
+		if binder, ok := fn.(func() any)().(SourceFileBinder); ok {
+			bound := binder.BindSourceFile(file)
+			return func() any { return bound }
+		}
 	case "data":
 		native := fn.(func() any)().(nativeDataFuncs)
 		return func() any { return &policyDataFuncs{native: native, file: file} }
@@ -114,21 +133,21 @@ func policyNamespace(name string, fn any, file string) any {
 	return fn
 }
 
-func policySourceFunction(name string, fn any, file string, d *templating.Data) any {
+func policySourceFunction(name string, fn any, file string, d *render.Data) any {
 	switch name {
 	case "json":
 		return guardedTemplateJSON
 	case "datasource", "ds":
 		return func(alias string, args ...string) (any, error) {
-			return policyDatasource(d, file, alias, false, args...)
+			return Datasource(d, file, alias, false, args...)
 		}
 	case "include":
 		return func(alias string, args ...string) (any, error) {
-			return policyDatasource(d, file, alias, true, args...)
+			return Datasource(d, file, alias, true, args...)
 		}
 	case "datasourceReachable":
 		return func(alias string, args ...string) (bool, error) {
-			_, err := policyDatasource(d, file, alias, true, args...)
+			_, err := Datasource(d, file, alias, true, args...)
 			if err != nil && isPolicyOutcome(err) {
 				return false, err
 			}
@@ -166,7 +185,7 @@ func templateCallError(out []reflect.Type, err error) []reflect.Value {
 }
 
 func admitTemplateCall(name, file string, args []reflect.Value) error {
-	if err := guard.Function(context.Background(), name, policyTemplateEngine, guard.FileOrigin(file)); err != nil {
+	if err := guard.Function(context.Background(), name, Engine, guard.FileOrigin(file)); err != nil {
 		return err
 	}
 	if name == "getHostByName" && len(args) > 0 {

@@ -23,7 +23,8 @@ import (
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	"github.com/cloudposse/atmos/pkg/template/datasource"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
-	"github.com/cloudposse/atmos/pkg/templating"
+	templatepolicy "github.com/cloudposse/atmos/pkg/template/policy"
+	"github.com/cloudposse/atmos/pkg/template/render"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -42,9 +43,9 @@ const (
 //	template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
 func missingKeyOption(ignoreMissingTemplateValues bool) string {
 	if ignoreMissingTemplateValues {
-		return templating.MissingKeyDefault
+		return render.MissingKeyDefault
 	}
-	return templating.MissingKeyError
+	return render.MissingKeyError
 }
 
 // ProcessTmpl parses and executes Go templates in decoded scalar or arbitrary text.
@@ -148,7 +149,7 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 	}
 	ctx := context.TODO()
 	if lo.FromPtr(tmplConfig.Templates.Settings.Gomplate.Experimental) {
-		ctx = templating.WithExperimental(ctx)
+		ctx = render.WithExperimental(ctx)
 	}
 
 	// Gomplate, Sprig and Atmos template functions are attributed to the template's source file
@@ -157,12 +158,12 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 	if sourceFile == "" {
 		sourceFile = in.name
 	}
-	sources := &templating.Data{}
+	sources := &render.Data{}
 
 	effectiveDelims := in.delims.Normalize()
 	protectedSource, restoreLiterals := literalsource.ProtectEncoded(protectedSource, effectiveDelims.Left, effectiveDelims.Right)
 
-	result, err := templating.New().Render(ctx, &templating.Request{
+	result, err := render.New().Render(ctx, &render.Request{
 		Name:       in.name,
 		Text:       protectedSource,
 		Data:       literalsource.Restore(in.data),
@@ -171,7 +172,7 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 		RightDelim: effectiveDelims.Right,
 		MissingKey: missingKeyOption(in.ignoreMissing),
 		Sources:    sources,
-		WrapFuncs:  policyFuncsWrapper(sourceFile),
+		WrapFuncs:  templatepolicy.FuncsWrapper(sourceFile),
 		Prepare:    prepareTmpl(in),
 	})
 	if err != nil {
@@ -183,7 +184,7 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 
 // templateAtmosFuncs returns the Atmos template functions, with the manifest-load guard when a
 // stack manifest is being loaded.
-func templateAtmosFuncs(atmosConfig *schema.AtmosConfiguration, ctx context.Context, sources *templating.Data, manifestLoadFile string) template.FuncMap {
+func templateAtmosFuncs(atmosConfig *schema.AtmosConfiguration, ctx context.Context, sources *render.Data, manifestLoadFile string) template.FuncMap {
 	if manifestLoadFile != "" {
 		return manifestLoadFuncMap(atmosConfig, &schema.ConfigAndStacksInfo{}, ctx, sources, manifestLoadFile)
 	}
@@ -607,15 +608,15 @@ func renderTemplatePass(pass *templatePass) (string, error) {
 	}
 
 	// Shield envelopes for this pass's effective delimiters.
-	delimiterProtected, restoreDelimiterSettings := protectTemplateDelimiterSettings(pass.text)
+	delimiterProtected, restoreDelimiterSettings := delimiters.ProtectSettings(pass.text)
 	protectedText, restoreLiterals := literalsource.ProtectEncoded(delimiterProtected, leftDelimiter, rightDelimiter)
 
-	engine := templating.New(
-		templating.WithGomplate(gomplateEnabled),
-		templating.WithSprig(sprigEnabled),
+	engine := render.New(
+		render.WithGomplate(gomplateEnabled),
+		render.WithSprig(sprigEnabled),
 	)
 
-	rendered, err := engine.Render(scope.ctx, &templating.Request{
+	rendered, err := engine.Render(scope.ctx, &render.Request{
 		Name:       pass.name,
 		Text:       protectedText,
 		Data:       literalsource.Restore(pass.data),
@@ -624,7 +625,7 @@ func renderTemplatePass(pass *templatePass) (string, error) {
 		RightDelim: rightDelimiter,
 		MissingKey: missingKeyOption(pass.ignoreMissingTemplateValues),
 		Sources:    scope.sources,
-		WrapFuncs:  policyFuncsWrapper(pass.name),
+		WrapFuncs:  templatepolicy.FuncsWrapper(pass.name),
 	})
 	if err != nil {
 		return "", err
@@ -637,14 +638,14 @@ func renderTemplatePass(pass *templatePass) (string, error) {
 type passScope struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
-	sources *templating.Data
+	sources *render.Data
 }
 
 // newPassScope builds the scope for one pass. With gomplate enabled, the context carries the
 // datasource timeout (from `atmos.yaml` or the stack manifest, 5 seconds when neither sets it) and
 // the experimental flag, and the stack's datasources are defined with their headers.
 func newPassScope(pass *templatePass, gomplateEnabled bool) (*passScope, error) {
-	scope := &passScope{ctx: context.TODO(), cancel: func() {}, sources: &templating.Data{}}
+	scope := &passScope{ctx: context.TODO(), cancel: func() {}, sources: &render.Data{}}
 	if !gomplateEnabled {
 		return scope, nil
 	}
@@ -652,7 +653,7 @@ func newPassScope(pass *templatePass, gomplateEnabled bool) (*passScope, error) 
 	timeoutSeconds, _ := lo.Coalesce(pass.templateSettings.Gomplate.Timeout, defaultDatasourceTimeoutSeconds)
 	scope.ctx, scope.cancel = context.WithTimeout(scope.ctx, time.Second*time.Duration(timeoutSeconds))
 	if lo.FromPtr(pass.templateSettings.Gomplate.Experimental) {
-		scope.ctx = templating.WithExperimental(scope.ctx)
+		scope.ctx = render.WithExperimental(scope.ctx)
 	}
 	scope.sources.Ctx = scope.ctx
 
@@ -742,7 +743,7 @@ func ProcessTmplWithDatasourcesGomplate(
 	}()
 
 	return datasource.RenderWith(atmosConfig, tmplName, authSource, mergedData, &datasource.Options{
-		WrapFuncs:  policyFuncsWrapper(tmplName),
+		WrapFuncs:  templatepolicy.FuncsWrapper(tmplName),
 		MissingKey: missingKeyOption(ignoreMissingTemplateValues),
 	})
 }

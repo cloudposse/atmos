@@ -90,6 +90,20 @@ func ExtractFieldRefsByPrefix(templateStr string, prefix string) ([]string, erro
 	return result, nil
 }
 
+// branchOf returns the shared branch (pipeline, body and else body) of an
+// if, range or with node.
+func branchOf(node parse.Node) (*parse.BranchNode, bool) {
+	switch n := node.(type) {
+	case *parse.IfNode:
+		return &n.BranchNode, true
+	case *parse.RangeNode:
+		return &n.BranchNode, true
+	case *parse.WithNode:
+		return &n.BranchNode, true
+	}
+	return nil, false
+}
+
 // walkAST traverses all nodes in a template AST, calling fn for each node.
 // This handles all Go template node types including conditionals, ranges,
 // with blocks, and nested templates.
@@ -99,6 +113,11 @@ func walkAST(node parse.Node, fn func(parse.Node)) {
 	}
 
 	fn(node)
+
+	if branch, ok := branchOf(node); ok {
+		walkBranchNode(branch.Pipe, branch.List, branch.ElseList, fn)
+		return
+	}
 
 	switch n := node.(type) {
 	case *parse.ListNode:
@@ -112,15 +131,6 @@ func walkAST(node parse.Node, fn func(parse.Node)) {
 
 	case *parse.CommandNode:
 		walkCommandNode(n, fn)
-
-	case *parse.IfNode:
-		walkBranchNode(n.Pipe, n.List, n.ElseList, fn)
-
-	case *parse.RangeNode:
-		walkBranchNode(n.Pipe, n.List, n.ElseList, fn)
-
-	case *parse.WithNode:
-		walkBranchNode(n.Pipe, n.List, n.ElseList, fn)
 
 	case *parse.TemplateNode:
 		walkAST(n.Pipe, fn)

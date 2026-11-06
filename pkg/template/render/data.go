@@ -1,4 +1,4 @@
-package templating
+package render
 
 import (
 	"context"
@@ -54,7 +54,7 @@ type Data struct {
 
 // NewData builds datasources from alias=URL and alias=Header: value definitions.
 func NewData(sources, headers []string) (*Data, error) {
-	defer perf.Track(nil, "templating.NewData")()
+	defer perf.Track(nil, "render.NewData")()
 
 	d := &Data{Ctx: context.Background(), Sources: map[string]*Source{}, ExtraHeaders: map[string]http.Header{}}
 	for _, definition := range headers {
@@ -82,7 +82,7 @@ func NewData(sources, headers []string) (*Data, error) {
 
 // DefineDatasource registers an alias once, using Gomplate's own URL parsing rules.
 func (d *Data) DefineDatasource(alias, value string) (string, error) {
-	defer perf.Track(nil, "templating.DefineDatasource")()
+	defer perf.Track(nil, "render.DefineDatasource")()
 
 	if alias == "" {
 		return "", fmt.Errorf("%w: alias must be provided", errInvalidDatasource)
@@ -131,7 +131,7 @@ func (d *Data) defineAll(sources map[string]Datasource) error {
 
 // DatasourceExists reports whether the alias has been registered.
 func (d *Data) DatasourceExists(alias string) bool {
-	defer perf.Track(nil, "templating.DatasourceExists")()
+	defer perf.Track(nil, "render.DatasourceExists")()
 
 	_, exists := d.Sources[alias]
 	return exists
@@ -139,7 +139,7 @@ func (d *Data) DatasourceExists(alias string) bool {
 
 // ListDatasources returns the registered aliases in stable order.
 func (d *Data) ListDatasources() []string {
-	defer perf.Track(nil, "templating.ListDatasources")()
+	defer perf.Track(nil, "render.ListDatasources")()
 
 	aliases := make([]string, 0, len(d.Sources))
 	for alias := range d.Sources {
@@ -151,14 +151,14 @@ func (d *Data) ListDatasources() []string {
 
 // Datasource reads and parses a datasource without serializing its native return value.
 func (d *Data) Datasource(alias string, args ...string) (any, error) {
-	defer perf.Track(nil, "templating.Datasource")()
+	defer perf.Track(nil, "render.Datasource")()
 
 	return d.read("datasource", alias, args)
 }
 
 // Include reads a datasource without parsing its contents.
 func (d *Data) Include(alias string, args ...string) (string, error) {
-	defer perf.Track(nil, "templating.Include")()
+	defer perf.Track(nil, "render.Include")()
 
 	value, err := d.read("include", alias, args)
 	if err != nil {
@@ -169,7 +169,7 @@ func (d *Data) Include(alias string, args ...string) (string, error) {
 
 // DatasourceReachable preserves Gomplate's registered-alias probe behavior.
 func (d *Data) DatasourceReachable(alias string, args ...string) bool {
-	defer perf.Track(nil, "templating.DatasourceReachable")()
+	defer perf.Track(nil, "render.DatasourceReachable")()
 
 	if !d.DatasourceExists(alias) {
 		return false
@@ -260,7 +260,7 @@ func datasourceFuncs(d *Data) template.FuncMap {
 // Windows, the native file namespace. It does not include the `tmpl`
 // namespace, which gomplate only provides through its renderer.
 func GomplateFuncs(ctx context.Context, sources *Data) template.FuncMap {
-	defer perf.Track(nil, "templating.GomplateFuncs")()
+	defer perf.Track(nil, "render.GomplateFuncs")()
 
 	if sources == nil {
 		sources = &Data{}
@@ -278,28 +278,28 @@ func GomplateFuncs(ctx context.Context, sources *Data) template.FuncMap {
 
 // WithExperimental enables gomplate's experimental functions for renders bound to ctx.
 func WithExperimental(ctx context.Context) context.Context {
-	defer perf.Track(nil, "templating.WithExperimental")()
+	defer perf.Track(nil, "render.WithExperimental")()
 
 	return gomplate.SetExperimental(ctx)
 }
 
 // JSON uses Gomplate's native JSON and EJSON decoder.
 func JSON(value string) (map[string]any, error) {
-	defer perf.Track(nil, "templating.JSON")()
+	defer perf.Track(nil, "render.JSON")()
 
 	return gomplate.CreateFuncs(context.Background())["json"].(func(any) (map[string]any, error))(value)
 }
 
 // CSV uses Gomplate's native CSV decoder.
 func CSV(value string) ([][]string, error) {
-	defer perf.Track(nil, "templating.CSV")()
+	defer perf.Track(nil, "render.CSV")()
 
 	return gomplate.CreateFuncs(context.Background())["csv"].(func(...string) ([][]string, error))(value)
 }
 
 // TOML uses Gomplate's native TOML decoder.
 func TOML(value string) (any, error) {
-	defer perf.Track(nil, "templating.TOML")()
+	defer perf.Track(nil, "render.TOML")()
 
 	return gomplate.CreateFuncs(context.Background())["toml"].(func(any) (any, error))(value)
 }

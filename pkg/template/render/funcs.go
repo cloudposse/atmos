@@ -1,4 +1,4 @@
-package templating
+package render
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/template/compatibility"
 )
 
 // Sprig function maps are expensive to create (173MB+ allocations per profile
@@ -20,7 +21,7 @@ var (
 
 // SprigFuncMap returns the shared Sprig function map. Callers must not mutate it.
 func SprigFuncMap() template.FuncMap {
-	defer perf.Track(nil, "templating.SprigFuncMap")()
+	defer perf.Track(nil, "render.SprigFuncMap")()
 
 	sprigFuncMapCacheOnce.Do(func() {
 		sprigFuncMapCache = sprig.FuncMap()
@@ -41,28 +42,16 @@ func (e *engine) baseFuncs(ctx context.Context, name string, extra template.Func
 		for k, v := range gomplateFuncs {
 			funcs[k] = v
 		}
-		applyNamespaceShims(funcs, gomplateFuncs, name, e.reporter)
+		compatibility.ApplyNamespaceShims(funcs, gomplateFuncs, name, e.reporter)
 	}
 	if e.sprig {
 		for k, v := range SprigFuncMap() {
 			funcs[k] = v
 		}
 	}
-	applyBareAliasShims(funcs, name, e.reporter)
+	compatibility.ApplyBareAliasShims(funcs, name, e.reporter)
 	for k, v := range extra {
 		funcs[k] = v
 	}
 	return funcs
-}
-
-// ApplyCompatShims keeps the gomplate v3 names gomplate v5 removed working in
-// a function map assembled outside an Engine (for example scaffold
-// templates). The funcs map must already contain Gomplate's namespaces and, if used,
-// Sprig's functions; deprecated calls are reported against templateName with
-// the process-wide deduplicating reporter.
-func ApplyCompatShims(funcs template.FuncMap, templateName string) {
-	defer perf.Track(nil, "templating.ApplyCompatShims")()
-
-	applyNamespaceShims(funcs, funcs, templateName, defaultDeprecationReporter)
-	applyBareAliasShims(funcs, templateName, defaultDeprecationReporter)
 }

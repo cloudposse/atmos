@@ -1,4 +1,4 @@
-package exec
+package policy
 
 import (
 	"context"
@@ -14,11 +14,14 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
-	"github.com/cloudposse/atmos/pkg/templating"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
-func policyDatasource(d *templating.Data, file, alias string, raw bool, args ...string) (any, error) {
+func Datasource(d *render.Data, file, alias string, raw bool, args ...string) (any, error) {
+	defer perf.Track(nil, "policy.Datasource")()
+
 	enabled, err := guard.Enabled("source")
 	if err != nil {
 		return nil, err
@@ -50,7 +53,7 @@ func policyDatasource(d *templating.Data, file, alias string, raw bool, args ...
 	}
 }
 
-func readPolicyHTTPDatasource(d *templating.Data, file string, target *url.URL, headers http.Header, raw bool) (any, error) {
+func readPolicyHTTPDatasource(d *render.Data, file string, target *url.URL, headers http.Header, raw bool) (any, error) {
 	ctx := d.Ctx
 	if ctx == nil {
 		ctx = context.Background()
@@ -107,15 +110,15 @@ func parsePolicyDatasource(content []byte, path, mediaType string, raw bool) (an
 		}
 		return result, nil
 	case format == "text/csv", ext == ".csv":
-		return templating.CSV(string(content))
+		return render.CSV(string(content))
 	case format == "application/toml", ext == ".toml":
-		return templating.TOML(string(content))
+		return render.TOML(string(content))
 	default:
 		return string(content), nil
 	}
 }
 
-func policyDatasourceTarget(d *templating.Data, alias string, args []string) (*url.URL, http.Header, error) {
+func policyDatasourceTarget(d *render.Data, alias string, args []string) (*url.URL, http.Header, error) {
 	target, err := url.Parse(alias)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: invalid datasource", errUtils.ErrPolicyInputInvalid)

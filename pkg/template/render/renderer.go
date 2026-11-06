@@ -1,4 +1,4 @@
-// Package templating renders Go templates with the Gomplate, Sprig and Atmos
+// Package render renders Go templates with the Gomplate, Sprig and Atmos
 // function sets. It is the only package that imports gomplate, so the rest of
 // the codebase is insulated from gomplate's library API.
 //
@@ -9,15 +9,17 @@
 // Gomplate's renderer is used only to read datasources and to render
 // templates whose context comes from datasources (Request.ContextSources); it
 // updates package-global metrics, so those uses are serialized.
-package templating
+package render
 
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"text/template"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/template/compatibility"
 )
 
 const (
@@ -99,30 +101,43 @@ type Option func(*engine)
 
 // WithGomplate enables or disables the Gomplate function set (and datasources).
 func WithGomplate(enabled bool) Option {
-	defer perf.Track(nil, "templating.WithGomplate")()
+	defer perf.Track(nil, "render.WithGomplate")()
 
 	return func(e *engine) { e.gomplate = enabled }
 }
 
 // WithSprig enables or disables the Sprig function set.
 func WithSprig(enabled bool) Option {
-	defer perf.Track(nil, "templating.WithSprig")()
+	defer perf.Track(nil, "render.WithSprig")()
 
 	return func(e *engine) { e.sprig = enabled }
+}
+
+// WithDeprecationReporter overrides the reporter notified when a template uses
+// a gomplate v3 name kept alive by the compatibility shims. The default logs a
+// warning via pkg/logger, deduplicated per template per name.
+func WithDeprecationReporter(reporter compatibility.DeprecationReporter) Option {
+	defer perf.Track(nil, "render.WithDeprecationReporter")()
+
+	return func(e *engine) {
+		if reporter != nil {
+			e.reporter = reporter
+		}
+	}
 }
 
 // engine is the concrete Engine.
 type engine struct {
 	gomplate bool
 	sprig    bool
-	reporter DeprecationReporter
+	reporter compatibility.DeprecationReporter
 }
 
 // New creates an Engine with Gomplate and Sprig enabled by default.
 func New(opts ...Option) Engine {
-	defer perf.Track(nil, "templating.New")()
+	defer perf.Track(nil, "render.New")()
 
-	e := &engine{gomplate: true, sprig: true, reporter: defaultDeprecationReporter}
+	e := &engine{gomplate: true, sprig: true, reporter: compatibility.DefaultReporter()}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -143,7 +158,7 @@ type renderPlan struct {
 // Render renders the request, choosing the fast path unless the template needs
 // gomplate's renderer.
 func (e *engine) Render(ctx context.Context, req *Request) (string, error) {
-	defer perf.Track(nil, "templating.Engine.Render")()
+	defer perf.Track(nil, "render.Engine.Render")()
 
 	plan, err := e.plan(ctx, req)
 	if err != nil {
@@ -159,7 +174,7 @@ func (e *engine) Render(ctx context.Context, req *Request) (string, error) {
 		return "", err
 	}
 	if e.gomplate {
-		lintDeprecatedUsage(parsed, plan, e.reporter)
+		compatibility.LintDeprecatedUsage(parsed, plan.req.Name, planSourceURLs(plan), e.reporter)
 	}
 
 	if req.Prepare != nil {
@@ -221,4 +236,26 @@ func missingKeyOption(value string) (string, error) {
 	default:
 		return "", fmt.Errorf("%w: unsupported missingkey option %q", errUtils.ErrInvalidTemplateSettings, value)
 	}
+}
+
+// planSourceURLs returns the render's datasource URLs by alias for the
+// compatibility lint. A plan built without Data falls back to the request's
+// definitions; unparseable URLs are skipped, since defining them fails the
+// render anyway.
+func planSourceURLs(plan *renderPlan) map[string]*url.URL {
+	sources := map[string]*url.URL{}
+	if plan.sources != nil {
+		for alias, source := range plan.sources.Sources {
+			if source != nil && source.URL != nil {
+				sources[alias] = source.URL
+			}
+		}
+		return sources
+	}
+	for alias, definition := range plan.req.Datasources {
+		if parsed, err := parseDatasourceURL(definition.URL); err == nil {
+			sources[alias] = parsed
+		}
+	}
+	return sources
 }

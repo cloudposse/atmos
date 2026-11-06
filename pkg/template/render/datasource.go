@@ -1,4 +1,4 @@
-package templating
+package render
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ type DatasourceCache struct {
 
 // NewDatasourceCache creates an empty DatasourceCache.
 func NewDatasourceCache() *DatasourceCache {
-	defer perf.Track(nil, "templating.NewDatasourceCache")()
+	defer perf.Track(nil, "render.NewDatasourceCache")()
 
 	return &DatasourceCache{}
 }
@@ -97,7 +97,7 @@ func (c *DatasourceCache) store(key string, value any) {
 // same alias differently never see each other's values. Nil values are not
 // cached.
 func (c *DatasourceCache) Read(sources *Data, alias string, args ...string) (any, error) {
-	defer perf.Track(nil, "templating.DatasourceCache.Read")()
+	defer perf.Track(nil, "render.DatasourceCache.Read")()
 
 	if sources == nil {
 		return nil, errUtils.ErrGomplateDatasourceUnavailable
@@ -124,7 +124,7 @@ func (c *DatasourceCache) Read(sources *Data, alias string, args ...string) (any
 // backs `atmos.GomplateDatasource`, so a datasource referenced from many
 // stacks and components is fetched once.
 func CachedDatasource(sources *Data, alias string, args ...string) (any, error) {
-	defer perf.Track(nil, "templating.CachedDatasource")()
+	defer perf.Track(nil, "render.CachedDatasource")()
 
 	return defaultDatasourceCache.Read(sources, alias, args...)
 }

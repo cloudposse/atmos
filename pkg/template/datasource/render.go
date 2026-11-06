@@ -11,7 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/templating"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
 const defaultDirPermissions = 0o700
@@ -114,7 +114,7 @@ type Options struct {
 	// WrapFuncs receives the fully assembled function map and the render's
 	// datasources, which include "." and "config". Policy enforcement uses it
 	// to guard every function call.
-	WrapFuncs templating.FuncsWrapper
+	WrapFuncs render.FuncsWrapper
 	// MissingKey is the text/template "missingkey" option; empty means error.
 	MissingKey string
 }
@@ -166,14 +166,14 @@ func RenderWith(
 		return "", err
 	}
 
-	engine := templating.New(templating.WithSprig(false))
-	return engine.Render(context.Background(), &templating.Request{
+	engine := render.New(render.WithSprig(false))
+	return engine.Render(context.Background(), &render.Request{
 		Name:       tmplName,
 		Text:       tmplValue,
 		Funcs:      opts.Funcs,
 		WrapFuncs:  opts.WrapFuncs,
 		MissingKey: opts.MissingKey,
-		ContextSources: map[string]templating.Datasource{
+		ContextSources: map[string]render.Datasource{
 			".":      {URL: finalTopLevelFileURL.String()},
 			"config": {URL: finalFileUrl.String()},
 		},

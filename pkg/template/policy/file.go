@@ -1,4 +1,4 @@
-package exec
+package policy
 
 import (
 	"context"
@@ -31,7 +31,7 @@ type policyFileFuncs struct {
 // argument with conv.ToString, so a []byte or other value names the file it converts to; the same
 // string is checked and then handed to the native method, so admission and the read cannot disagree.
 func (f *policyFileFuncs) check(method string, path any) (string, error) {
-	if err := guard.Function(context.Background(), "file."+method, policyTemplateEngine, guard.FileOrigin(f.file)); err != nil {
+	if err := guard.Function(context.Background(), "file."+method, Engine, guard.FileOrigin(f.file)); err != nil {
 		return "", err
 	}
 	name := conv.ToString(path)

@@ -1,6 +1,7 @@
-package templating
+package compatibility
 
 import (
+	"net/url"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -18,26 +19,35 @@ var datasourceCallNames = map[string]struct{}{
 }
 
 // atmosDatasourceMethod is the `atmos.GomplateDatasource` method chain Atmos
-// layers on top of gomplate's datasource functions (see rendererOnlyMethods
-// in funcs.go); it reads a datasource the same way `ds`/`datasource` do.
+// layers on top of gomplate's datasource functions; it reads a datasource the
+// same way `ds`/`datasource` do.
 const atmosDatasourceMethod = "atmos.GomplateDatasource"
 
-// lintDeprecatedUsage warns about template constructs whose behavior changed
-// under gomplate v5 without the function name itself being removed, so
-// nothing else in this package catches them. It never fails a render: every
-// finding here is a warning through reporter, same as the namespace and bare
-// alias shims.
-func lintDeprecatedUsage(parsed *template.Template, plan *renderPlan, reporter DeprecationReporter) {
-	defer perf.Track(nil, "templating.lintDeprecatedUsage")()
+// lintTarget is the template being linted: the name findings are reported
+// against and its configured datasource URLs by alias.
+type lintTarget struct {
+	name    string
+	sources map[string]*url.URL
+}
 
-	lintDatasourceSchemes(plan, reporter)
+// LintDeprecatedUsage warns about template constructs whose behavior changed
+// under gomplate v5 without the function name itself being removed, so
+// nothing else in this package catches them. Findings are reported against
+// templateName, and sources maps each configured datasource alias to its
+// parsed URL. It never fails a render: every finding here is a
+// warning through reporter, same as the namespace and bare alias shims.
+func LintDeprecatedUsage(parsed *template.Template, templateName string, sources map[string]*url.URL, reporter DeprecationReporter) {
+	defer perf.Track(nil, "compatibility.LintDeprecatedUsage")()
+
+	target := &lintTarget{name: templateName, sources: sources}
+	lintDatasourceSchemes(target, reporter)
 
 	atmostemplate.WalkNodes(parsed, func(node parse.Node) {
 		switch n := node.(type) {
 		case *parse.ChainNode:
-			lintDotValueOnSecretsManagerDatasource(n, plan, reporter)
+			lintDotValueOnSecretsManagerDatasource(n, target, reporter)
 		case *parse.PipeNode:
-			lintDatasourceSubPathURLPipe(n, plan, reporter)
+			lintDatasourceSubPathURLPipe(n, target, reporter)
 		}
 	})
 }
@@ -45,12 +55,12 @@ func lintDeprecatedUsage(parsed *template.Template, plan *renderPlan, reporter D
 // lintDatasourceSchemes warns about configured datasource URLs whose scheme
 // gomplate v5 no longer supports, independent of whether the template
 // actually reads them.
-func lintDatasourceSchemes(plan *renderPlan, reporter DeprecationReporter) {
-	for alias, source := range planSources(plan) {
-		if source.URL.Scheme != "boltdb" {
+func lintDatasourceSchemes(target *lintTarget, reporter DeprecationReporter) {
+	for alias, sourceURL := range target.sources {
+		if sourceURL == nil || sourceURL.Scheme != "boltdb" {
 			continue
 		}
-		reporter.Deprecated(plan.req.Name, "boltdb:// datasource ("+alias+")", "a supported datasource scheme",
+		reporter.Deprecated(target.name, "boltdb:// datasource ("+alias+")", "a supported datasource scheme",
 			"the boltdb:// datasource scheme was removed in gomplate v5 and Atmos cannot emulate it. "+
 				"Replace the \""+alias+"\" datasource with a supported scheme (for example file://, s3://, or a store-backed datasource).")
 	}
@@ -61,7 +71,7 @@ func lintDatasourceSchemes(plan *renderPlan, reporter DeprecationReporter) {
 // gomplate v5's aws+smp datasource returns the parameter value directly
 // instead of a struct with a Value field, so `.Value` now looks up a field
 // that doesn't exist.
-func lintDotValueOnSecretsManagerDatasource(chain *parse.ChainNode, plan *renderPlan, reporter DeprecationReporter) {
+func lintDotValueOnSecretsManagerDatasource(chain *parse.ChainNode, target *lintTarget, reporter DeprecationReporter) {
 	if len(chain.Field) == 0 || chain.Field[0] != "Value" {
 		return
 	}
@@ -78,11 +88,11 @@ func lintDotValueOnSecretsManagerDatasource(chain *parse.ChainNode, plan *render
 	if !ok {
 		return
 	}
-	source, ok := planSources(plan)[alias]
-	if !ok || source.URL.Scheme != "aws+smp" {
+	sourceURL := target.sources[alias]
+	if sourceURL == nil || sourceURL.Scheme != "aws+smp" {
 		return
 	}
-	reporter.Deprecated(plan.req.Name, callName+" \""+alias+"\" .Value", "the parameter value directly",
+	reporter.Deprecated(target.name, callName+" \""+alias+"\" .Value", "the parameter value directly",
 		"aws+smp:// datasources return the parameter value directly in gomplate v5 instead of a struct with a Value field. "+
 			"Drop `.Value`; if you need the parsed JSON value of a String parameter, add `?type=application/json` to the datasource URL.")
 }
@@ -94,7 +104,7 @@ func lintDotValueOnSecretsManagerDatasource(chain *parse.ChainNode, plan *render
 // argument at execution time), which is invisible to cmd.Args, so the
 // command's position in the pipe tells lintDatasourceSubPathURL to count one
 // extra argument.
-func lintDatasourceSubPathURLPipe(pipe *parse.PipeNode, plan *renderPlan, reporter DeprecationReporter) {
+func lintDatasourceSubPathURLPipe(pipe *parse.PipeNode, target *lintTarget, reporter DeprecationReporter) {
 	if pipe == nil {
 		return
 	}
@@ -103,7 +113,7 @@ func lintDatasourceSubPathURLPipe(pipe *parse.PipeNode, plan *renderPlan, report
 		if i > 0 {
 			extraArgs = 1
 		}
-		lintDatasourceSubPathURL(cmd, extraArgs, plan, reporter)
+		lintDatasourceSubPathURL(cmd, extraArgs, target, reporter)
 	}
 }
 
@@ -114,7 +124,7 @@ func lintDatasourceSubPathURLPipe(pipe *parse.PipeNode, plan *renderPlan, report
 // datasource must end with "/" to be treated as one. The extraArgs parameter
 // accounts for a sub-path supplied through a pipeline rather than lexically
 // in cmd.Args; see lintDatasourceSubPathURLPipe.
-func lintDatasourceSubPathURL(cmd *parse.CommandNode, extraArgs int, plan *renderPlan, reporter DeprecationReporter) {
+func lintDatasourceSubPathURL(cmd *parse.CommandNode, extraArgs int, target *lintTarget, reporter DeprecationReporter) {
 	callName, ok := datasourceCallName(cmd)
 	if !ok || len(cmd.Args)+extraArgs < 3 {
 		return
@@ -123,34 +133,12 @@ func lintDatasourceSubPathURL(cmd *parse.CommandNode, extraArgs int, plan *rende
 	if !ok {
 		return
 	}
-	source, ok := planSources(plan)[alias]
-	if !ok || strings.HasSuffix(source.URL.Path, "/") {
+	sourceURL := target.sources[alias]
+	if sourceURL == nil || strings.HasSuffix(sourceURL.Path, "/") {
 		return
 	}
-	reporter.Deprecated(plan.req.Name, callName+" \""+alias+"\" <sub-path>", "a trailing slash on the datasource URL",
-		"sub-path arguments are resolved as relative URLs in gomplate v5; end the datasource URL with `/` so it is treated as a directory (currently: \""+source.URL.String()+"\").")
-}
-
-// planSources returns the render's datasource definitions with a parsed URL.
-// A plan built without Data (lint tests) falls back to the request's
-// definitions; unparseable URLs are skipped, since defining them fails the
-// render anyway.
-func planSources(plan *renderPlan) map[string]*Source {
-	sources := map[string]*Source{}
-	if plan.sources != nil {
-		for alias, source := range plan.sources.Sources {
-			if source != nil && source.URL != nil {
-				sources[alias] = source
-			}
-		}
-		return sources
-	}
-	for alias, definition := range plan.req.Datasources {
-		if parsed, err := parseDatasourceURL(definition.URL); err == nil {
-			sources[alias] = &Source{Alias: alias, URL: parsed}
-		}
-	}
-	return sources
+	reporter.Deprecated(target.name, callName+" \""+alias+"\" <sub-path>", "a trailing slash on the datasource URL",
+		"sub-path arguments are resolved as relative URLs in gomplate v5; end the datasource URL with `/` so it is treated as a directory (currently: \""+sourceURL.String()+"\").")
 }
 
 // datasourceCallName reports the datasource function name at the head of

@@ -1,4 +1,4 @@
-package templating
+package compatibility
 
 import (
 	"strings"
@@ -25,13 +25,13 @@ import (
 // never do.
 var bareAliasCandidates = []string{"contains", "hasPrefix", "hasSuffix", "split", "trim"}
 
-// applyBareAliasShims registers the v3 bare aliases gomplate v5 removed,
+// ApplyBareAliasShims registers the v3 bare aliases gomplate v5 removed,
 // after Sprig has already been layered into funcs, so a name Sprig already
 // provides is left untouched. Call names and hints all point at the
 // pipeline-friendly namespaced replacement and, since Sprig registers
 // equivalent names, at Sprig's version too.
-func applyBareAliasShims(funcs template.FuncMap, name string, reporter DeprecationReporter) {
-	defer perf.Track(nil, "templating.applyBareAliasShims")()
+func ApplyBareAliasShims(funcs template.FuncMap, name string, reporter DeprecationReporter) {
+	defer perf.Track(nil, "compatibility.ApplyBareAliasShims")()
 
 	if _, ok := funcs["splitN"]; !ok {
 		funcs["splitN"] = bareSplitN(name, reporter)

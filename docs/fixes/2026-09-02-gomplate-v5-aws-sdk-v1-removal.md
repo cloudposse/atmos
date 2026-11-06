@@ -130,14 +130,35 @@ keeping a second gomplate importer:
   `net` namespace it can't guard instead of panicking.
 - `gomplate/v4`, `aws-sdk-go` v1 and `inet.af/netaddr` are gone from `go.mod` again; `NOTICE` regenerated.
 
+### Package layout
+
+The engine first landed as a new `pkg/templating` package beside `pkg/template`. It now lives under
+`pkg/template`, and more template code left `internal/exec`:
+
+- `pkg/template/render`: the engine (`renderer.go`, `plain.go`, `funcs.go`, `gomplate.go`, `data.go`,
+  `datasource.go`, `file_native.go`).
+- `pkg/template/compatibility`: the gomplate v3 shims, the deprecation reporter, `LegacyIP`, and the
+  datasource lint. It does not import the engine: `LintDeprecatedUsage` takes the template name and the
+  datasource URLs. Removing the shims in a future major release removes this one directory.
+- `pkg/template/policy`: the policy wrappers that were `internal/exec/template_policy*.go`. The `atmos`
+  namespace binds to its template file through `SourceFileBinder` instead of a type assertion on
+  `AtmosFuncs`. Unit tests moved with the code; tests that render through `ProcessTmpl` stay in
+  `internal/exec`.
+- `pkg/template/delimiters`: `ProtectSettings` and `ForComponent`, formerly
+  `internal/exec/template_delimiter_settings.go`.
+- `internal/exec/template_funcs_gomplate_datasource.go` was a logging wrapper with one caller; it is inlined.
+
+Released Atmos used gomplate v3 for rendering; `gomplate/v4` was only a blank import until #3457, which no
+release contains. Users therefore move from v3 directly to v5.
+
 ## Validation
 
 ```bash
 go list -deps ./... | grep -c 'github.com/aws/aws-sdk-go/'   # 0
 grep -c 'github.com/aws/aws-sdk-go ' go.mod                   # 0
 go build ./... && CGO_ENABLED=0 go build .                    # ok
-go vet ./pkg/templating/ ./pkg/template/ ./internal/exec/ ./pkg/generator/engine/ ./pkg/project/config/
-go test -race ./pkg/templating/ ./pkg/template/               # ok
+go vet ./pkg/template/... ./internal/exec/ ./pkg/generator/engine/ ./pkg/project/config/
+go test -race ./pkg/template/...                              # ok
 go test ./internal/exec/ -run 'Template|Tmpl|Sprig|Gomplate|Datasource|DocsGenerate|Locals|Delimit|Env'
 go test ./pkg/project/config/... ./pkg/config/schema/... ./pkg/ai/agent/anthropic/... ./pkg/generator/engine/...
 go test ./pkg/stack/... ./pkg/tags/... ./pkg/vendoring/component/... ./pkg/hooks/... ./pkg/describe/...

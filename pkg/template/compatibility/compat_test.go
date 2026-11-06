@@ -1,22 +1,30 @@
-package templating
+package compatibility_test
 
 import (
 	"bytes"
 	"context"
 	"os"
-	"reflect"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
-	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
+
+// writeFixture writes content to a file in a fresh temp directory and returns its path.
+func writeFixture(t *testing.T, name, content string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	require.NoError(t, os.WriteFile(p, []byte(content), 0o600))
+	return p
+}
 
 // deprecationCall records one DeprecationReporter.Deprecated invocation.
 type deprecationCall struct {
@@ -118,7 +126,7 @@ func TestNamespaceShims_MatchReplacementOutput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deprecatedFake := &fakeReporter{}
-			out, err := New(WithDeprecationReporter(deprecatedFake)).Render(context.Background(), &Request{
+			out, err := render.New(render.WithDeprecationReporter(deprecatedFake)).Render(context.Background(), &render.Request{
 				Name: tt.name, Text: tt.deprecatedText,
 			})
 			require.NoError(t, err)
@@ -133,7 +141,7 @@ func TestNamespaceShims_MatchReplacementOutput(t *testing.T) {
 			assert.Contains(t, call.hint, "`"+tt.wantReplacement+"`")
 
 			replacementFake := &fakeReporter{}
-			out, err = New(WithDeprecationReporter(replacementFake)).Render(context.Background(), &Request{
+			out, err = render.New(render.WithDeprecationReporter(replacementFake)).Render(context.Background(), &render.Request{
 				Name: tt.name, Text: tt.replacementText,
 			})
 			require.NoError(t, err)
@@ -147,7 +155,7 @@ func TestNamespaceShims_MatchReplacementOutput(t *testing.T) {
 // input rather than silently returning a zero value, matching gomplate v3's
 // net.ParseIP (which also errored on invalid input, via a different parser).
 func TestNetParseIP_InvalidInputErrors(t *testing.T) {
-	_, err := New().Render(context.Background(), &Request{
+	_, err := render.New().Render(context.Background(), &render.Request{
 		Name: "t", Text: `{{ net.ParseIP "not-an-ip" }}`,
 	})
 	require.Error(t, err)
@@ -172,7 +180,7 @@ func TestNetParseIP_LegacyIPMethods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, err := New().Render(context.Background(), &Request{
+			out, err := render.New().Render(context.Background(), &render.Request{
 				Name: "t",
 				Text: `{{ $ip := net.ParseIP .ip }}` +
 					`zero=[{{ $ip.IsZero }}] ` +
@@ -213,7 +221,7 @@ func TestConvWrapper_ConversionErrorsCarryHint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &fakeReporter{}
-			_, err := New(WithDeprecationReporter(fake)).Render(context.Background(), &Request{
+			_, err := render.New(render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
 				Name: "t", Text: tt.text,
 			})
 			require.Error(t, err)
@@ -245,7 +253,7 @@ func TestBareAliasShims_SprigDisabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &fakeReporter{}
-			out, err := New(WithSprig(false), WithDeprecationReporter(fake)).Render(context.Background(), &Request{
+			out, err := render.New(render.WithSprig(false), render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
 				Name: tt.name, Text: tt.text,
 			})
 			require.NoError(t, err)
@@ -267,7 +275,7 @@ func TestBareAliasShims_SprigEnabled(t *testing.T) {
 	fake := &fakeReporter{}
 	// Sprig's bare "trim" is strings.TrimSpace (single argument), unlike
 	// gomplate v3's two-argument cutset version.
-	out, err := New(WithDeprecationReporter(fake)).Render(context.Background(), &Request{
+	out, err := render.New(render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
 		Name: "t", Text: `{{ trim "  hi  " }}`,
 	})
 	require.NoError(t, err)
@@ -275,7 +283,7 @@ func TestBareAliasShims_SprigEnabled(t *testing.T) {
 	assert.Empty(t, fake.calls)
 
 	fake = &fakeReporter{}
-	out, err = New(WithDeprecationReporter(fake)).Render(context.Background(), &Request{
+	out, err = render.New(render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
 		Name: "t2", Text: `{{ splitN "a,b,c" "," 2 }}`,
 	})
 	require.NoError(t, err)
@@ -295,30 +303,11 @@ func TestBareAliasShims_SliceNeverShadowsBuiltin(t *testing.T) {
 	// bare integer literals used as if they were the list itself, which is
 	// exactly the point: gomplate v3's `slice 1 2 3` (build a list) doesn't
 	// work anymore, and this package must not resurrect it under this name.
-	_, err := New(WithSprig(false), WithDeprecationReporter(fake)).Render(context.Background(), &Request{
+	_, err := render.New(render.WithSprig(false), render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
 		Name: "t", Text: `{{ slice (coll.Slice 1 2 3 4) 1 3 }}`,
 	})
 	require.NoError(t, err)
 	assert.Empty(t, fake.calls, "slice must never be shimmed; it would shadow the text/template builtin")
-}
-
-// TestLogDeprecationReporter_DedupsPerTemplateAndName verifies the default
-// reporter's dedup key is (templateName, deprecated): repeating the same
-// pair is a no-op, but a different template name or a different deprecated
-// name each get their own entry.
-func TestLogDeprecationReporter_DedupsPerTemplateAndName(t *testing.T) {
-	r := newLogDeprecationReporter()
-	r.Deprecated("t", "conv.Bool", "conv.ToBool", "hint")
-	r.Deprecated("t", "conv.Bool", "conv.ToBool", "hint")
-	r.Deprecated("t", "conv.Slice", "coll.Slice", "hint")
-	r.Deprecated("t2", "conv.Bool", "conv.ToBool", "hint")
-
-	count := 0
-	r.seen.Range(func(_, _ any) bool {
-		count++
-		return true
-	})
-	assert.Equal(t, 3, count)
 }
 
 // TestDefaultDeprecationReporter_LogsOncePerTemplate renders the same
@@ -333,7 +322,7 @@ func TestDefaultDeprecationReporter_LogsOncePerTemplate(t *testing.T) {
 
 	name := "TestDefaultDeprecationReporter_LogsOncePerTemplate"
 	for range 2 {
-		_, err := New().Render(context.Background(), &Request{
+		_, err := render.New().Render(context.Background(), &render.Request{
 			Name: name, Text: `{{ conv.Bool "yes" }}`,
 		})
 		require.NoError(t, err)
@@ -348,67 +337,18 @@ func TestDefaultDeprecationReporter_LogsOncePerTemplate(t *testing.T) {
 
 // TestNamespaceShims_ApplyAlongsideDatasources verifies a template that
 // mixes a namespace shim with a datasource read (here, `ds`) still gets the
-// shim: engine.baseFuncs assembles one function map that serves both.
+// shim: the render engine assembles one function map that serves both.
 func TestNamespaceShims_ApplyAlongsideDatasources(t *testing.T) {
 	cfg := writeFixture(t, "cfg.yaml", "name: atmos\n")
 	fake := &fakeReporter{}
 
-	out, err := New(WithDeprecationReporter(fake)).Render(context.Background(), &Request{
+	out, err := render.New(render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
 		Name:        "combo",
 		Text:        `{{ conv.Bool "yes" }}-{{ (ds "cfg").name }}`,
-		Datasources: map[string]Datasource{"cfg": {URL: cfg}},
+		Datasources: map[string]render.Datasource{"cfg": {URL: cfg}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "true-atmos", out)
 	require.Len(t, fake.calls, 1)
 	assert.Equal(t, "conv.Bool", fake.calls[0].deprecated)
-}
-
-// TestNamespaceWrappersCoverUpstreamMethods walks the method set of the real
-// gomplate v5 conv/strings/net/coll namespace objects via reflection and
-// asserts every exported method is present on the corresponding wrapper (or,
-// for coll, on the collNamespace interface this package uses to obtain it).
-// This fails the build if upstream renames, removes, or adds a method this
-// package hasn't accounted for, instead of that method silently
-// disappearing from (or never appearing in) Atmos templates.
-func TestNamespaceWrappersCoverUpstreamMethods(t *testing.T) {
-	gomplateFuncs := GomplateFuncs(context.Background(), nil)
-
-	cases := []struct {
-		key        string
-		wrapperTyp reflect.Type
-	}{
-		{key: "conv", wrapperTyp: reflect.TypeOf(&convWrapper{})},
-		{key: "strings", wrapperTyp: reflect.TypeOf(&stringsWrapper{})},
-		{key: "net", wrapperTyp: reflect.TypeOf(&netWrapper{})},
-		{key: "coll", wrapperTyp: reflect.TypeOf((*collNamespace)(nil)).Elem()},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.key, func(t *testing.T) {
-			real := realNamespace(t, gomplateFuncs, tc.key)
-			realMethods := methodNames(reflect.TypeOf(real))
-			wrapperMethods := methodNames(tc.wrapperTyp)
-
-			for m := range realMethods {
-				assert.Contains(t, wrapperMethods, m,
-					"gomplate v5's %s namespace has method %q with no matching method here", tc.key, m)
-			}
-		})
-	}
-}
-
-func realNamespace(t *testing.T, funcs template.FuncMap, key string) any {
-	t.Helper()
-	factory, ok := funcs[key].(func() any)
-	require.True(t, ok, "missing gomplate namespace factory %q", key)
-	return factory()
-}
-
-func methodNames(typ reflect.Type) map[string]struct{} {
-	out := make(map[string]struct{}, typ.NumMethod())
-	for i := range typ.NumMethod() {
-		out[typ.Method(i).Name] = struct{}{}
-	}
-	return out
 }

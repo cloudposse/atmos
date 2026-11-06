@@ -2,7 +2,7 @@
 
 This suite characterizes **the previous implementation**, then compares actual
 old and candidate Atmos binaries on identical inputs. It does not import
-`pkg/templating` or use the candidate to compute expected answers.
+`pkg/template/render` or use the candidate to compute expected answers.
 
 The baseline is pinned to `4ffd8804d3500b4369e739095174000565b43973`, the main
 commit merged into this PR, which still uses gomplate v3. `baseline.json` records

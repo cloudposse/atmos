@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/templating"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
 // TestRenderMetadataAndFunctions preserves metadata while scoping functions to each render.
@@ -107,7 +107,7 @@ func TestRenderWithWrapsFunctionsWithTheRenderDatasources(t *testing.T) {
 
 	var topLevel, config *url.URL
 	actual, err := RenderWith(&schema.AtmosConfiguration{}, "readme", `{{ name }}|{{ (ds "config").name }}`, data, &Options{
-		WrapFuncs: func(funcs template.FuncMap, sources *templating.Data) (template.FuncMap, error) {
+		WrapFuncs: func(funcs template.FuncMap, sources *render.Data) (template.FuncMap, error) {
 			topLevel, config = sources.Sources["."].URL, sources.Sources["config"].URL
 			funcs["name"] = func() string { return "built" }
 			return funcs, nil
@@ -127,7 +127,7 @@ func TestRenderWithWrapperErrorStopsTheRender(t *testing.T) {
 	t.Parallel()
 	failure := assert.AnError
 	actual, err := RenderWith(&schema.AtmosConfiguration{}, "readme", `unreached`, map[string]any{}, &Options{
-		WrapFuncs: func(template.FuncMap, *templating.Data) (template.FuncMap, error) { return nil, failure },
+		WrapFuncs: func(template.FuncMap, *render.Data) (template.FuncMap, error) { return nil, failure },
 	})
 	require.ErrorIs(t, err, failure)
 	assert.Empty(t, actual)

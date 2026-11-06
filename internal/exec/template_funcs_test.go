@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/templating"
+	"github.com/cloudposse/atmos/pkg/template/render"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -18,7 +18,7 @@ func TestFuncMap(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
 	ctx := context.TODO()
-	gomplateData := &templating.Data{}
+	gomplateData := &render.Data{}
 
 	fm := FuncMap(atmosConfig, configAndStacksInfo, ctx, gomplateData)
 
@@ -47,7 +47,7 @@ func TestAtmosFuncs_Component(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
 	ctx := context.TODO()
-	gomplateData := &templating.Data{}
+	gomplateData := &render.Data{}
 
 	atmosFuncs := &AtmosFuncs{
 		atmosConfig:         atmosConfig,
@@ -65,7 +65,7 @@ func TestAtmosFuncs_GomplateDatasource(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
 	ctx := context.TODO()
-	gomplateData := &templating.Data{}
+	gomplateData := &render.Data{}
 
 	atmosFuncs := &AtmosFuncs{
 		atmosConfig:         atmosConfig,
@@ -87,7 +87,7 @@ func TestAtmosFuncs_GomplateDatasource_CacheKeyIncludesDefinition(t *testing.T) 
 		path := filepath.Join(t.TempDir(), "config.yaml")
 		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 
-		sources := &templating.Data{}
+		sources := &render.Data{}
 		_, err := sources.DefineDatasource("cache-key-config", path)
 		require.NoError(t, err)
 
@@ -106,7 +106,7 @@ func TestAtmosFuncs_Resolve(t *testing.T) {
 		atmosConfig:         &schema.AtmosConfiguration{},
 		configAndStacksInfo: &schema.ConfigAndStacksInfo{},
 		ctx:                 context.TODO(),
-		gomplateData:        &templating.Data{},
+		gomplateData:        &render.Data{},
 	}
 
 	t.Run("plain untagged string is returned unchanged", func(t *testing.T) {
@@ -126,7 +126,7 @@ func TestAtmosFuncs_Resolve(t *testing.T) {
 		funcs := &AtmosFuncs{
 			atmosConfig:  &schema.AtmosConfiguration{},
 			ctx:          context.TODO(),
-			gomplateData: &templating.Data{},
+			gomplateData: &render.Data{},
 		}
 		result, err := funcs.Resolve("plain")
 		require.NoError(t, err)

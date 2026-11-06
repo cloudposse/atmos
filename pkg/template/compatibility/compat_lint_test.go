@@ -1,51 +1,74 @@
-package templating
+package compatibility_test
 
 import (
 	"context"
+	"errors"
+	"net/url"
 	"testing"
 	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/template/compatibility"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
-// parseForLint parses text with the datasource functions bound to an empty
-// Data, so a template calling ds, datasource or include parses.
-// Lint tests call lintDeprecatedUsage directly against the result, never
-// Render, so the datasource cases below never touch the network.
+// errNoDatasource is returned by the stub datasource functions; lint tests
+// only parse templates, so the stubs are never meant to run.
+var errNoDatasource = errors.New("stub datasource")
+
+// parseForLint parses text with stub ds, datasource and include functions,
+// so a template calling them parses. Lint tests call LintDeprecatedUsage
+// directly against the result, never Render, so the datasource cases below
+// never touch the network.
 func parseForLint(t *testing.T, text string) *template.Template {
 	t.Helper()
-	tmpl, err := template.New("t").Funcs(datasourceFuncs(&Data{})).Parse(text)
+	stub := func(string, ...string) (any, error) { return nil, errNoDatasource }
+	tmpl, err := template.New("t").Funcs(template.FuncMap{"ds": stub, "datasource": stub, "include": stub}).Parse(text)
 	require.NoError(t, err)
 	return tmpl
+}
+
+// sourceURLs parses each datasource URL by alias, as the render engine does
+// before linting.
+func sourceURLs(t *testing.T, definitions map[string]string) map[string]*url.URL {
+	t.Helper()
+	sources := make(map[string]*url.URL, len(definitions))
+	for alias, raw := range definitions {
+		parsed, err := url.Parse(raw)
+		require.NoError(t, err)
+		sources[alias] = parsed
+	}
+	return sources
 }
 
 func TestLintDeprecatedUsage(t *testing.T) {
 	tests := []struct {
 		name           string
 		text           string
-		datasources    map[string]Datasource
+		datasources    map[string]string
 		wantDeprecated string
 		wantCount      int
 	}{
 		{
 			name:           "dot value on an aws+smp datasource warns",
 			text:           `{{ (ds "secret").Value }}`,
-			datasources:    map[string]Datasource{"secret": {URL: "aws+smp:///demo/param"}},
+			datasources:    map[string]string{"secret": "aws+smp:///demo/param"},
 			wantDeprecated: `ds "secret" .Value`,
 			wantCount:      1,
 		},
 		{
 			name:           "dot value via the datasource alias also warns",
 			text:           `{{ (datasource "secret").Value }}`,
-			datasources:    map[string]Datasource{"secret": {URL: "aws+smp:///demo/param"}},
+			datasources:    map[string]string{"secret": "aws+smp:///demo/param"},
 			wantDeprecated: `datasource "secret" .Value`,
 			wantCount:      1,
 		},
 		{
 			name:        "dot value on a non-smp datasource is fine",
 			text:        `{{ (ds "cfg").Value }}`,
-			datasources: map[string]Datasource{"cfg": {URL: "file:///tmp/cfg.yaml"}},
+			datasources: map[string]string{"cfg": "file:///tmp/cfg.yaml"},
 			wantCount:   0,
 		},
 		{
@@ -57,59 +80,59 @@ func TestLintDeprecatedUsage(t *testing.T) {
 		{
 			name:        "dot value on a dynamic alias is skipped",
 			text:        `{{ (ds .alias).Value }}`,
-			datasources: map[string]Datasource{"secret": {URL: "aws+smp:///demo/param"}},
+			datasources: map[string]string{"secret": "aws+smp:///demo/param"},
 			wantCount:   0,
 		},
 		{
 			name:           "sub-path without a trailing slash warns",
 			text:           `{{ ds "dir" "a.yaml" }}`,
-			datasources:    map[string]Datasource{"dir": {URL: "file:///tmp/data"}},
+			datasources:    map[string]string{"dir": "file:///tmp/data"},
 			wantDeprecated: `ds "dir" <sub-path>`,
 			wantCount:      1,
 		},
 		{
 			name:        "sub-path with a trailing slash is fine",
 			text:        `{{ ds "dir" "a.yaml" }}`,
-			datasources: map[string]Datasource{"dir": {URL: "file:///tmp/data/"}},
+			datasources: map[string]string{"dir": "file:///tmp/data/"},
 			wantCount:   0,
 		},
 		{
 			name:        "no sub-path argument is fine",
 			text:        `{{ ds "dir" }}`,
-			datasources: map[string]Datasource{"dir": {URL: "file:///tmp/data"}},
+			datasources: map[string]string{"dir": "file:///tmp/data"},
 			wantCount:   0,
 		},
 		{
 			name:           "sub-path supplied through a pipe warns",
 			text:           `{{ "a.yaml" | ds "dir" }}`,
-			datasources:    map[string]Datasource{"dir": {URL: "file:///tmp/data"}},
+			datasources:    map[string]string{"dir": "file:///tmp/data"},
 			wantDeprecated: `ds "dir" <sub-path>`,
 			wantCount:      1,
 		},
 		{
 			name:        "directory URL with a query string is fine",
 			text:        `{{ ds "dir" "a.yaml" }}`,
-			datasources: map[string]Datasource{"dir": {URL: "file:///tmp/data/?type=json"}},
+			datasources: map[string]string{"dir": "file:///tmp/data/?type=json"},
 			wantCount:   0,
 		},
 		{
 			name:           "non-directory URL whose query string ends in a slash warns",
 			text:           `{{ ds "dir" "a.yaml" }}`,
-			datasources:    map[string]Datasource{"dir": {URL: "file:///tmp/data?redirect=/"}},
+			datasources:    map[string]string{"dir": "file:///tmp/data?redirect=/"},
 			wantDeprecated: `ds "dir" <sub-path>`,
 			wantCount:      1,
 		},
 		{
 			name:           "boltdb datasource scheme warns even if unused in the template",
 			text:           `hello`,
-			datasources:    map[string]Datasource{"kv": {URL: "boltdb:///tmp/db.bolt"}},
+			datasources:    map[string]string{"kv": "boltdb:///tmp/db.bolt"},
 			wantDeprecated: "boltdb:// datasource (kv)",
 			wantCount:      1,
 		},
 		{
 			name:        "unrelated datasource scheme is fine",
 			text:        `hello`,
-			datasources: map[string]Datasource{"kv": {URL: "file:///tmp/db.yaml"}},
+			datasources: map[string]string{"kv": "file:///tmp/db.yaml"},
 			wantCount:   0,
 		},
 	}
@@ -118,9 +141,7 @@ func TestLintDeprecatedUsage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			parsed := parseForLint(t, tt.text)
 			fake := &fakeReporter{}
-			plan := &renderPlan{req: &Request{Name: "t", Datasources: tt.datasources}}
-
-			lintDeprecatedUsage(parsed, plan, fake)
+			compatibility.LintDeprecatedUsage(parsed, "t", sourceURLs(t, tt.datasources), fake)
 
 			require.Len(t, fake.calls, tt.wantCount)
 			if tt.wantCount > 0 {
@@ -139,33 +160,40 @@ func TestLintDeprecatedUsage_RunsDuringRender(t *testing.T) {
 	file := writeFixture(t, "a.yaml", "name: atmos\n")
 	fake := &fakeReporter{}
 
-	_, _ = New(WithDeprecationReporter(fake)).Render(context.Background(), &Request{
+	_, _ = render.New(render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
 		Name:        "t",
 		Text:        `{{ include "dir" "a.yaml" }}`,
-		Datasources: map[string]Datasource{"dir": {URL: file}},
+		Datasources: map[string]render.Datasource{"dir": {URL: file}},
 	})
 
 	require.Len(t, fake.calls, 1)
 	assert.Equal(t, `include "dir" <sub-path>`, fake.calls[0].deprecated)
 }
 
+// stubAtmosNamespace stands in for Atmos's `atmos` template namespace, which
+// exposes GomplateDatasource; the lint only inspects the parse tree, so the
+// method is never meant to run.
+type stubAtmosNamespace struct{}
+
+func (stubAtmosNamespace) GomplateDatasource(string, ...string) (any, error) {
+	return nil, errNoDatasource
+}
+
 // TestLintDeprecatedUsage_AtmosGomplateDatasourceValue verifies the
 // `.Value`-on-aws+smp finding also fires for the `atmos.GomplateDatasource`
 // method-chain form, not just the bare `ds`/`datasource` functions:
 // datasourceCallName resolves that chain through its own *parse.ChainNode
-// case, which parseForLint's stub function map can't exercise (it has no
-// "atmos" stub), so this test wires a real "atmos" func and renders instead.
-// The namespace reads from its own empty Data, so the render fails without
-// any AWS access, but the lint warning fires before that, during parsing.
+// case. The render fails on the stub without any AWS access, but the lint
+// warning fires before execution.
 func TestLintDeprecatedUsage_AtmosGomplateDatasourceValue(t *testing.T) {
-	funcs := template.FuncMap{"atmos": func() any { return atmosNamespace{sources: &Data{}, cache: NewDatasourceCache()} }}
+	funcs := template.FuncMap{"atmos": func() any { return stubAtmosNamespace{} }}
 	fake := &fakeReporter{}
 
-	_, _ = New(WithDeprecationReporter(fake)).Render(context.Background(), &Request{
+	_, _ = render.New(render.WithDeprecationReporter(fake)).Render(context.Background(), &render.Request{
 		Name:        "t",
 		Text:        `{{ (atmos.GomplateDatasource "secret").Value }}`,
 		Funcs:       funcs,
-		Datasources: map[string]Datasource{"secret": {URL: "aws+smp:///demo/param"}},
+		Datasources: map[string]render.Datasource{"secret": {URL: "aws+smp:///demo/param"}},
 	})
 
 	require.Len(t, fake.calls, 1)
@@ -177,25 +205,9 @@ func TestLintDeprecatedUsage_AtmosGomplateDatasourceValue(t *testing.T) {
 // which is how a JSON parameter was read under gomplate v3.
 func TestLintDeprecatedUsage_ValueWithNestedField(t *testing.T) {
 	fake := &fakeReporter{}
-	e := New(WithDeprecationReporter(fake))
+	parsed := parseForLint(t, `{{ (ds "secret").Value.host }}`)
 
-	parsed, err := parsePlain(&renderPlan{
-		req: &Request{
-			Name:        "t",
-			Text:        `{{ (ds "secret").Value.host }}`,
-			Datasources: map[string]Datasource{"secret": {URL: "aws+smp:///app/db"}},
-		},
-		funcs:      e.(*engine).baseFuncs(context.Background(), "t", nil, nil),
-		left:       DefaultLeftDelim,
-		right:      DefaultRightDelim,
-		missingKey: MissingKeyError,
-	}, true)
-	require.NoError(t, err)
-
-	lintDeprecatedUsage(parsed, &renderPlan{req: &Request{
-		Name:        "t",
-		Datasources: map[string]Datasource{"secret": {URL: "aws+smp:///app/db"}},
-	}}, fake)
+	compatibility.LintDeprecatedUsage(parsed, "t", sourceURLs(t, map[string]string{"secret": "aws+smp:///app/db"}), fake)
 
 	require.Len(t, fake.calls, 1)
 	assert.Equal(t, `ds "secret" .Value`, fake.calls[0].deprecated)
