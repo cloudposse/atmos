@@ -220,14 +220,12 @@ func processIncludeTagInternal(
 			return false, err
 		}
 	} else {
-		// Local file not found - provide helpful error message.
-		// Prefer BasePathAbsolute for the error since it's more informative.
-		errBasePath := atmosConfig.BasePathAbsolute
-		if errBasePath == "" {
-			errBasePath = atmosConfig.BasePath
+		// Local file not found - explain where this kind of path was looked for.
+		tag := AtmosYamlFuncInclude
+		if forceRaw {
+			tag = AtmosYamlFuncIncludeRaw
 		}
-		return false, fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
-			ErrIncludeYamlFunctionInvalidFile, includeFile, file, errBasePath)
+		return false, includeNotFoundError(tag, includeFile, file, atmosConfig)
 	}
 
 	// Apply YQ expression if provided
