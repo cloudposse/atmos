@@ -13,6 +13,41 @@ import textwrap
 import unittest
 from unittest import mock
 
+sys.path.insert(0, str(Path(__file__).parent))
+from cast_checks import assert_recorded_command  # noqa: E402
+
+
+class RecordedCommandTest(unittest.TestCase):
+    def check(self, header, command):
+        path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "x.cast"
+        path.write_text(json.dumps(header) + "\n")
+        assert_recorded_command(path, command)
+
+    def test_accepts_command_with_program_name(self):
+        self.check({"version": 3, "command": "atmos --help"}, "atmos --help")
+        self.check({"version": 3, "command": "atmos ai ask --help"}, "atmos ai ask --help")
+
+    def test_accepts_widened_help_flag(self):
+        self.check(
+            {"version": 3, "command": "atmos aws cloudformation source pull --help=all"},
+            "atmos aws cloudformation source pull --help",
+        )
+
+    def test_rejects_command_without_program_name(self):
+        with self.assertRaisesRegex(SystemExit, "must be 'atmos --help'"):
+            self.check({"version": 3, "command": "--help"}, "atmos --help")
+        with self.assertRaisesRegex(SystemExit, "must be 'atmos ai --help'"):
+            self.check({"version": 3, "command": "ai --help"}, "atmos ai --help")
+
+    def test_rejects_missing_command(self):
+        with self.assertRaisesRegex(SystemExit, "no recorded command"):
+            self.check({"version": 3, "title": "atmos --help"}, "atmos --help")
+
+    def test_help_widening_does_not_hide_other_mismatches(self):
+        with self.assertRaises(SystemExit):
+            self.check({"version": 3, "command": "atmos plugin --help=all"}, "atmos plan --help")
+
+
 class ScreengrabRecorderTest(unittest.TestCase):
     def setUp(self):
         manifest = Path(__file__).parent / "atmos.d/screengrabs/cli.yaml"
