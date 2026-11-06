@@ -265,7 +265,7 @@ func compareMigration(out io.Writer, expected, actual map[string]observation) bo
 
 func compareDifferences(out io.Writer, expected, actual map[string]observation, approved, changed []string) bool {
 	for _, name := range approved {
-		fmt.Fprintf(out, "APPROVED %s: BoltDB support intentionally removed; unsupported-scheme rejection verified.\n", name)
+		fmt.Fprintf(out, "APPROVED %s: %s\n", name, approvalReason(name))
 	}
 	for _, name := range changed {
 		fmt.Fprintf(out, "--- baseline/%s\n+++ candidate/%s\n", name, name)
@@ -291,9 +291,15 @@ func compareDifferences(out io.Writer, expected, actual map[string]observation, 
 			}
 		}
 	}
+	// A case matches when it is present in both runs and neither approved nor
+	// changed under the comparison mode that produced those lists.
+	differs := map[string]bool{}
+	for _, name := range append(append([]string{}, approved...), changed...) {
+		differs[name] = true
+	}
 	matched := 0
-	for name, a := range expected {
-		if b, ok := actual[name]; ok && canonical(a) == canonical(b) {
+	for name := range expected {
+		if _, ok := actual[name]; ok && !differs[name] {
 			matched++
 		}
 	}

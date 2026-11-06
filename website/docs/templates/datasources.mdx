@@ -96,8 +96,8 @@ The following are the types of data sources are supported by Atmos via [Gomplate
     <dt>`consul://`, `consul+http://`, `consul+https://`</dt>
     <dd>Use HashiCorp Consul provides as a backend key/value store</dd>
 
-    <dt>`env://`</dt>
-    <dd>Environment variables can be used as data sources, although [template functions](/functions/template) might make more sense.</dd>
+    <dt>`env:`</dt>
+    <dd>Environment variables can be used as data sources, although [template functions](/functions/template) might make more sense. Name the variable with `env:NAME` or `env:///NAME`.</dd>
 
     <dt>`file://`</dt>
     <dd>Files can be read in any of the supported formats (JSON, YAML). Directories are also supported, just end the URL path with a `/`.</dd>
@@ -168,6 +168,31 @@ for the full list.
   <dd>
     A `consul://` datasource whose path ends with `/` returns a list of key names under that prefix, rather than a map
     of keys to values.
+  </dd>
+
+  <dt>`env://NAME` is an error</dt>
+  <dd>
+    In `env://NAME`, `NAME` is the URL host, not the variable name. Older releases read no variable for this form and
+    returned empty data; it now fails. Use `env:NAME` or `env:///NAME`.
+  </dd>
+
+  <dt>Vault KV v2 paths omit `/data/`</dt>
+  <dd>
+    A `vault://` datasource detects KV v2 mounts and adds the `/data/` API segment itself. Write the path without it, for
+    example `vault+https://vault.example.com/kv/config` instead of `.../kv/data/config`. The result is the secret's data,
+    without the `data` and `metadata` wrapper the raw API returns, so read fields directly.
+  </dd>
+
+  <dt>S3 checksums are verified</dt>
+  <dd>
+    An `s3://` datasource rejects an object whose checksum does not match, instead of returning its content.
+  </dd>
+
+  <dt>Service requests differ</dt>
+  <dd>
+    Consul, Vault, SSM, and S3 datasources send different requests to those services; for example, Vault reads first
+    check the mount type. The values your templates read do not change, but access policies or proxies that allow only
+    specific requests may need an update. HTTP datasources make one GET request per read.
   </dd>
 
   <dt>BoltDB datasources are not available</dt>

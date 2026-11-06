@@ -1,21 +1,24 @@
-# Migration compatibility comparison — review pending
+# Migration compatibility comparison
 
 Baseline: `4ffd8804d3500b4369e739095174000565b43973` (gomplate v3).
-Candidate implementation: `d18dee6386ddd9da28c60b18b9c49eb11df453d0`.
-Environment: Go 1.27.1, macOS/arm64. Harness: Go, standard library only.
+Candidate: this branch, compared with `runner compare` on macOS/arm64.
 
-The old implementation reproduced **212/212 cases** across repeated runs. The
-candidate matches **85/212 cases**; **3 differences are approved** for BoltDB
-removal and **124 remain unapproved**. In **32 cases**, an old success becomes a
-candidate failure; two of these are the approved BoltDB removal, leaving **30
-unapproved success-to-failure changes**. These numbers count
-cases, not distinct root causes. Warnings, errors, types, and requests are part of
-the comparison, so a difference does not necessarily mean a rendered value broke.
+The old implementation reproduces **212/212 cases** across repeated runs. The
+candidate matches **159/212 cases**; **18 differences are approved** and **35
+remain unapproved**, so the gate still fails. These numbers count cases, not
+distinct root causes.
 
-All 13 frozen catalog-description cases, both dev/prod file-generation cases, and
-the basic docs-generation case match. That alone does **not** establish backward
-compatibility. The migration comparison is currently a failing gate. BoltDB
-removal is the only approved exception. Linux/Windows runs still need CI execution.
+## Comparison rules
+
+Candidate comparisons ignore stderr: error formatting, template line numbers and
+deprecation warnings change between releases without changing behavior. Exit
+codes, stdout, generated files, file notices and service requests must still
+match. Old-source recording, stability checks and replay compare every field,
+including stderr.
+
+An approved change is an exact recorded observation in `approved.json`: exit
+code, stdout and generated files, plus the reason. Requests must match the old
+observation unless the entry records the approved new requests.
 
 ## Approved removal: BoltDB
 
@@ -32,55 +35,43 @@ Users of BoltDB datasources must export their data to a supported datasource,
 such as a JSON/YAML file, before upgrading. This exception applies only to the
 three named cases; other datasource failures remain blocking.
 
-## Unapproved failures of previously successful cases
+## Approved behavior changes
 
-| Cases | Observed difference |
+The migration review accepted these documented v5 changes on 2026-11-06. Each
+appears in the v5 changelog. Entries with recorded requests approve that exact
+traffic; all others require the old requests.
+
+| Cases | Approved difference |
 | --- | --- |
-| `conv-atoi-invalid`, `conv-int-invalid`, `conv-int64-invalid`, `conv-float-invalid` | Invalid conversion previously rendered zero; now raises an error. |
-| `convert-toint64-empty`, `convert-toint64-nil`, `convert-tofloat64-empty`, `convert-tofloat64-nil` | Empty/nil conversions previously succeeded; now raise errors. |
-| `bare-slice-sprig-disabled` | Legacy slice call no longer accepts the old arguments. |
-| `ip-chain-prior`, `ip-method-compare`, `ip-method-less` | Legacy IP method chaining/comparison no longer accepts the old values or method set. |
-| `prefix-contains`, `prefix-method-ip`, `prefix-method-ipnet`, `prefix-method-iszero`, `prefix-method-range`, `prefix-method-valid`, `range-contains` | Prefix/range method names or argument types are incompatible. |
-| `subpath-no-slash` | A datasource directory without a trailing slash resolves differently. |
-| `http-no-head` | A server that supports GET but returns 501 for HEAD is no longer usable. |
-| `env-datasource` | An environment datasource read that succeeds in the old CLI fails. |
-| `ssm-value-field`, `ssm-secure`, `ssm-json`, `ssm-stringlist`, `ssm-session-token` | Existing templates accessing parameter metadata/`.Value` fail against the changed return shape. |
-| `consul-directory-fields` | Access to the old listing's key/value fields fails. |
-| `vault-kv2-raw` | The same raw KV-v2 endpoint expression fails in the candidate. |
-| `s3-corrupt-checksum` | The candidate rejects a corrupt checksum that the old implementation accepts. This may be a desirable integrity improvement, but requires explicit review as an intended difference. |
+| `conv-atoi-invalid`, `conv-int-invalid`, `conv-int64-invalid`, `conv-float-invalid`, `convert-toint64-empty`, `convert-toint64-nil`, `convert-tofloat64-empty`, `convert-tofloat64-nil` | Invalid, empty and nil conversions return an error instead of a silent zero value. |
+| `subpath-no-slash` | A datasource sub-path resolves as a relative URL; directory datasources must end with `/`. |
+| `ssm-string`, `ssm-json`, `ssm-json-type`, `ssm-secure`, `ssm-stringlist`, `ssm-session-token`, `ssm-value-field` | `aws+smp://` returns the parameter value directly instead of an object with `Value` and metadata. |
+| `consul-directory`, `consul-directory-fields` | A `consul://` directory listing returns key names instead of key/value objects; the listing requests also differ. |
+| `consul-denied`, `consul-env-address`, `consul-json`, `consul-missing`, `consul-plain`, `vault-denied`, `vault-directory`, `vault-kv1`, `vault-missing`, `vault-namespace`, `ssm-directory`, `ssm-missing`, `s3-object`, `s3-missing` | Same exit code and output; v5's Consul, Vault and AWS SDK v2 clients send different requests (consistency parameters, Vault mount probing, directory probes, SDK query parameters). The recorded requests are approved. |
+| `s3-corrupt-checksum` | An S3 object whose checksum does not match is rejected instead of returned. |
+| `env-datasource` | `env://NAME` read no variable in v3 (`NAME` parses as the URL host, so v3 read the variable named `""` and returned empty data); v5 fails. Use `env:NAME` or `env:///NAME`. |
+| `vault-kv2-raw` | v5 detects KV v2 mounts and adds `/data/` itself, so a URL that already includes `/data/` fails. Drop `/data/`; v5 returns the secret's data without the metadata envelope. |
+| `coll-jq`, `tmpl-inline`, `tmpl-inline-datasource` | Failed in v3 because the function did not exist; work in v5. |
+| 13 `catalog-*` cases | `describe component` output gains empty `generate`, `provision` and `source` sections from newer Atmos; template-rendered values are unchanged. |
 
-These results characterize the exact fixture expressions and protocols; they do
-not imply that every use of SSM, Vault, or an affected function fails.
+## Restored by compatibility shims
 
-## Other observable differences
-
-- **SSM shape:** `ssm-string` changes from a parameter object containing `Value`,
-  `Name`, `Type`, and metadata to the value string alone. Both exit successfully.
-  The directory fixture also observes additional probes/reads. Requests use
-  verified SigV4 with fixture credentials; no live IAM/KMS behavior is implied.
-- **Consul shape and requests:** a directory previously returned an array of
-  `{key,value}` objects; the candidate returns an array of names. The fixture
-  observes one recursive request become five requests. Other reads also change
-  consistency query parameters. Values that still render correctly can therefore
-  have different backend semantics and latency.
-- **HTTP/S3/Vault access:** additional HEAD/probe/list requests and changed errors
-  remain visible. For the configured one-second HTTP timeout, both versions still
-  complete the two-second fixture response; the candidate adds HEAD. This case
-  characterizes observed timeout behavior, not a guarantee of timeout enforcement.
-- **Network values:** `netaddr.IP`, `netaddr.IPPrefix`, and `netaddr.IPRange` become
-  `templating.legacyIP`, `netip.Prefix`, and `netipx.IPRange`. Matching printed
-  addresses does not establish method or type compatibility. Many network cases
-  also gain deprecation warnings.
-- **Diagnostics:** legacy aliases and docs templates gain warnings. Some negative
-  cases continue to fail but produce different errors. They remain unapproved
-  differences even when exit status stays the same.
+- **Bare `slice` with Sprig disabled:** gomplate v3 registered `coll.Slice` under
+  this name. The shim restores it, with a warning, only when Sprig is disabled.
+- **Network values:** `net.ParseIP`, `net.ParseIPPrefix` and `net.ParseIPRange`
+  return `netaddr.IP`, `netaddr.IPPrefix` and `netaddr.IPRange` again
+  (`pkg/template/compatibility/netaddr`), with v3's method set, so method calls,
+  chaining and `printf "%T"` match.
+- **HTTP datasources:** reads use a single GET, as in v3. Gomplate v5 sent a HEAD
+  first and failed against servers that reject HEAD (`http-no-head`); every other
+  `http-*` case also matches again.
 
 ## Review policy and reproducibility
 
 For every remaining difference, restore the old behavior or review an explicit exception
 with exact old/new observations, user impact, rationale, and migration guidance.
-Do not replace the old baseline with the candidate's answers. The BoltDB rule in
-`exceptions.go` is the sole exception; no blanket warning suppression is applied.
+Do not replace the old baseline with the candidate's answers. Exceptions are the BoltDB rule and the
+recorded observations in `approved.json`; stderr is the only field ignored.
 
 [README.md](README.md) gives reproducible commands, normalization rules, provenance,
 and uncovered paths. `baseline.json` contains the exact old observations. The
@@ -93,137 +84,3 @@ fixture produced identical old and candidate observations. The intentionally
 corrected basic docs fixture now succeeds in both; the old `.Env` expression is
 retained separately as a negative case. No compatibility result was waived during
 the port.
-
-## Unapproved difference inventory
-
-This inventory identifies all 124 remaining differing cases and observation
-fields from the 212-case comparison. The three approved BoltDB cases are above.
-This is a review checklist, not an approved exception list.
-Exit columns show old → candidate status.
-
-| Case | Exit | Changed fields |
-| --- | --- | --- |
-| `atmos-datasource` | 0 → 0 | requests |
-| `atmos-datasource-cached` | 0 → 0 | requests |
-| `bare-slice-sprig-disabled` | 0 → 1 | exit_code, stdout, stderr |
-| `bare-splitn-legacy-sprig-enabled` | 0 → 0 | stderr |
-| `bare-splitn-sprig-disabled` | 0 → 0 | stderr |
-| `coll-jq` | 1 → 0 | exit_code, stdout, stderr |
-| `consul-denied` | 1 → 1 | stderr, requests |
-| `consul-directory` | 0 → 0 | stdout, requests |
-| `consul-directory-fields` | 0 → 1 | exit_code, stdout, stderr, requests |
-| `consul-env-address` | 0 → 0 | requests |
-| `consul-json` | 0 → 0 | requests |
-| `consul-missing` | 1 → 1 | stderr, requests |
-| `consul-plain` | 0 → 0 | requests |
-| `conv-atoi-invalid` | 0 → 1 | exit_code, stdout, stderr |
-| `conv-bool` | 0 → 0 | stderr |
-| `conv-dict` | 0 → 0 | stderr |
-| `conv-dict-odd` | 0 → 0 | stderr |
-| `conv-float-invalid` | 0 → 1 | exit_code, stdout, stderr |
-| `conv-has` | 0 → 0 | stderr |
-| `conv-int-invalid` | 0 → 1 | exit_code, stdout, stderr |
-| `conv-int64-invalid` | 0 → 1 | exit_code, stdout, stderr |
-| `conv-slice` | 0 → 0 | stderr |
-| `convert-tofloat64-empty` | 0 → 1 | exit_code, stdout, stderr |
-| `convert-tofloat64-nil` | 0 → 1 | exit_code, stdout, stderr |
-| `convert-toint64-empty` | 0 → 1 | exit_code, stdout, stderr |
-| `convert-toint64-nil` | 0 → 1 | exit_code, stdout, stderr |
-| `docs-env-context` | 1 → 0 | exit_code, stderr |
-| `docs-legacy` | 0 → 0 | stderr |
-| `env-datasource` | 0 → 1 | exit_code, stdout, stderr |
-| `file-not-found` | 1 → 1 | stderr |
-| `http-authorized` | 0 → 0 | requests |
-| `http-get-only` | 0 → 0 | requests |
-| `http-headers-query` | 0 → 0 | requests |
-| `http-json` | 0 → 0 | requests |
-| `http-no-head` | 0 → 1 | exit_code, stdout, stderr, requests |
-| `http-not-found` | 1 → 1 | stderr, requests |
-| `http-redirect` | 0 → 0 | requests |
-| `http-repeated-read` | 0 → 0 | requests |
-| `http-subpath` | 0 → 0 | requests |
-| `http-timeout` | 0 → 0 | requests |
-| `http-unauthorized` | 1 → 1 | stderr, requests |
-| `http-yaml` | 0 → 0 | requests |
-| `ip-chain-prior` | 0 → 1 | exit_code, stdout, stderr |
-| `ip-method-as16` | 0 → 0 | stderr |
-| `ip-method-as4` | 0 → 0 | stderr |
-| `ip-method-bitlen` | 0 → 0 | stderr |
-| `ip-method-compare` | 0 → 1 | exit_code, stdout, stderr |
-| `ip-method-ipaddr` | 0 → 0 | stderr |
-| `ip-method-is4` | 0 → 0 | stderr |
-| `ip-method-is4in6` | 0 → 0 | stderr |
-| `ip-method-is6` | 0 → 0 | stderr |
-| `ip-method-isglobalunicast` | 0 → 0 | stderr |
-| `ip-method-isinterfacelocalmulticast` | 0 → 0 | stderr |
-| `ip-method-islinklocalmulticast` | 0 → 0 | stderr |
-| `ip-method-islinklocalunicast` | 0 → 0 | stderr |
-| `ip-method-isloopback` | 0 → 0 | stderr |
-| `ip-method-ismulticast` | 0 → 0 | stderr |
-| `ip-method-isprivate` | 0 → 0 | stderr |
-| `ip-method-isunspecified` | 0 → 0 | stderr |
-| `ip-method-isvalid` | 0 → 0 | stderr |
-| `ip-method-iszero` | 0 → 0 | stderr |
-| `ip-method-less` | 0 → 1 | exit_code, stdout, stderr |
-| `ip-method-next` | 0 → 0 | stderr |
-| `ip-method-prior` | 0 → 0 | stderr |
-| `ip-method-string` | 0 → 0 | stderr |
-| `ip-method-stringexpanded` | 0 → 0 | stderr |
-| `ip-method-unmap` | 0 → 0 | stderr |
-| `ip-prefix-method` | 0 → 0 | stderr |
-| `ip-v6-mapped` | 0 → 0 | stderr |
-| `ip-v6-zone` | 0 → 0 | stderr |
-| `malformed-datasource` | 1 → 1 | stderr |
-| `net-ip` | 0 → 0 | stdout, stderr |
-| `net-ip-invalid` | 1 → 1 | stderr |
-| `net-prefix` | 0 → 0 | stdout, stderr |
-| `net-range` | 0 → 0 | stdout, stderr |
-| `prefix-contains` | 0 → 1 | exit_code, stdout, stderr |
-| `prefix-invalid` | 1 → 1 | stderr |
-| `prefix-method-bits` | 0 → 0 | stderr |
-| `prefix-method-ip` | 0 → 1 | exit_code, stdout, stderr |
-| `prefix-method-ipnet` | 0 → 1 | exit_code, stdout, stderr |
-| `prefix-method-issingleip` | 0 → 0 | stderr |
-| `prefix-method-isvalid` | 0 → 0 | stderr |
-| `prefix-method-iszero` | 0 → 1 | exit_code, stdout, stderr |
-| `prefix-method-masked` | 0 → 0 | stderr |
-| `prefix-method-range` | 0 → 1 | exit_code, stdout, stderr |
-| `prefix-method-string` | 0 → 0 | stderr |
-| `prefix-method-valid` | 0 → 1 | exit_code, stdout, stderr |
-| `prefix-overlaps` | 0 → 0 | stderr |
-| `range-contains` | 0 → 1 | exit_code, stdout, stderr |
-| `range-invalid` | 1 → 1 | stderr |
-| `range-method-from` | 0 → 0 | stderr |
-| `range-method-isvalid` | 0 → 0 | stderr |
-| `range-method-iszero` | 0 → 0 | stderr |
-| `range-method-prefixes` | 0 → 0 | stderr |
-| `range-method-string` | 0 → 0 | stderr |
-| `range-method-to` | 0 → 0 | stderr |
-| `range-method-valid` | 0 → 0 | stderr |
-| `range-overlaps` | 0 → 0 | stderr |
-| `s3-corrupt-checksum` | 0 → 1 | exit_code, stdout, stderr, requests |
-| `s3-missing` | 1 → 1 | stderr, requests |
-| `s3-object` | 0 → 0 | requests |
-| `sprig-disabled-aliases` | 0 → 0 | stderr |
-| `ssm-denied` | 1 → 1 | stderr |
-| `ssm-directory` | 0 → 0 | requests |
-| `ssm-invalid-credentials` | 1 → 1 | stderr |
-| `ssm-json` | 0 → 1 | exit_code, stdout, stderr |
-| `ssm-json-type` | 0 → 0 | stdout |
-| `ssm-missing` | 1 → 1 | stderr, requests |
-| `ssm-secure` | 0 → 1 | exit_code, stdout, stderr |
-| `ssm-session-token` | 0 → 1 | exit_code, stdout, stderr |
-| `ssm-string` | 0 → 0 | stdout |
-| `ssm-stringlist` | 0 → 1 | exit_code, stdout, stderr |
-| `ssm-value-field` | 0 → 1 | exit_code, stdout, stderr |
-| `strings-sort` | 0 → 0 | stderr |
-| `subpath-no-slash` | 0 → 1 | exit_code, stdout, stderr |
-| `tmpl-inline` | 1 → 0 | exit_code, stdout, stderr |
-| `tmpl-inline-datasource` | 1 → 0 | exit_code, stdout, stderr |
-| `unknown-datasource` | 1 → 1 | stderr |
-| `vault-denied` | 1 → 1 | stderr, requests |
-| `vault-directory` | 0 → 0 | requests |
-| `vault-kv1` | 0 → 0 | requests |
-| `vault-kv2-raw` | 0 → 1 | exit_code, stdout, stderr, requests |
-| `vault-missing` | 1 → 1 | stderr, requests |
-| `vault-namespace` | 0 → 0 | requests |

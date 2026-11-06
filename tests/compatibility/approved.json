@@ -1,0 +1,1476 @@
+{
+  "catalog-atmos-pro-template-regression": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "vpc",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [
+          "mixins/atmos-pro"
+        ],
+        "metadata": {},
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {
+          "pro": {
+            "enabled": true,
+            "pull_request": {
+              "merged": {
+                "workflows": {
+                  "atmos-terraform-apply.yaml": {
+                    "inputs": {
+                      "component": "vpc",
+                      "github_environment": "test-dev",
+                      "stack": "test-dev"
+                    }
+                  }
+                }
+              },
+              "opened": {
+                "workflows": {
+                  "atmos-terraform-plan.yaml": {
+                    "inputs": {
+                      "component": "vpc",
+                      "stack": "test-dev"
+                    }
+                  }
+                }
+              },
+              "reopened": {
+                "workflows": {
+                  "atmos-terraform-plan.yaml": {
+                    "inputs": {
+                      "component": "vpc",
+                      "stack": "test-dev"
+                    }
+                  }
+                }
+              },
+              "synchronize": {
+                "workflows": {
+                  "atmos-terraform-plan.yaml": {
+                    "inputs": {
+                      "component": "vpc",
+                      "stack": "test-dev"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "source": {},
+        "vars": {
+          "cidr": "10.0.0.0/16",
+          "environment": "dev",
+          "stage": "test"
+        }
+      }
+    }
+  },
+  "catalog-component-1": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {
+          "acl": "bucket-owner-full-control",
+          "bucket": "nonprod-tfstate",
+          "dynamodb_table": "nonprod-tfstate-lock",
+          "encrypt": true,
+          "key": "terraform.tfstate",
+          "region": "us-east-2",
+          "workspace_key_prefix": "mock"
+        },
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {
+          "config": {
+            "a": "component-1-a",
+            "b": "component-1-b",
+            "c": "component-1-c"
+          }
+        },
+        "source": {},
+        "vars": {
+          "bar": "component-1-b",
+          "baz": "component-1-c",
+          "foo": "component-1-a",
+          "stage": "nonprod"
+        }
+      }
+    }
+  },
+  "catalog-import-context": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "service",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [
+          "catalog/v2/service"
+        ],
+        "metadata": {},
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "catalog_version": "v2",
+          "stage": "explicit-context"
+        }
+      }
+    }
+  },
+  "catalog-locals-deep-import-chain": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [
+          "mixins/base",
+          "mixins/layer1",
+          "mixins/layer2"
+        ],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "base_var": "from-base-vars",
+          "computed": "from-final-stack-computed",
+          "final_var": "from-final-vars",
+          "full_chain": "final-value-from-final-stack",
+          "layer1_var": "from-layer1-vars",
+          "layer2_var": "from-layer2-vars",
+          "local_value": "from-final-stack",
+          "shared": "final-value",
+          "stage": "final"
+        }
+      }
+    }
+  },
+  "catalog-stack-name-template": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "c1",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [
+          "catalog/c1",
+          "mixins/region/us-east-2",
+          "mixins/stage/dev",
+          "mixins/tenant/plat",
+          "orgs/acme/_defaults",
+          "orgs/acme/plat/_defaults",
+          "orgs/acme/plat/dev/_defaults"
+        ],
+        "metadata": {},
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "a": "a",
+          "b": "b",
+          "c": "c",
+          "d": "d",
+          "environment": "ue2",
+          "namespace": "acme",
+          "region": "us-east-2",
+          "stage": "dev",
+          "tenant": "plat"
+        }
+      }
+    }
+  },
+  "catalog-template-env-vars": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {
+          "templates": {
+            "settings": {
+              "env": {
+                "TEST_TMPL_STACK_VAR": "from-stack-manifest"
+              }
+            }
+          }
+        },
+        "source": {},
+        "vars": {
+          "foo": "from-atmos-yaml-from-stack-manifest",
+          "stage": "test"
+        }
+      }
+    }
+  },
+  "catalog-test-basic-template": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "empty_json_string": "",
+          "invalid_json": "{this is not valid json}",
+          "json_boolean": true,
+          "json_list": [
+            "item-1",
+            "item-2",
+            "item-3"
+          ],
+          "json_map": {
+            "key1": "value1",
+            "key2": "value2"
+          },
+          "json_nested": {
+            "count": 5,
+            "metadata": {
+              "env": "prod"
+            },
+            "name": "test",
+            "tags": [
+              "tag1",
+              "tag2"
+            ]
+          },
+          "json_null": null,
+          "json_number": 42,
+          "json_string": "hello-world",
+          "simple_string": "hello-world",
+          "stage": "nonprod"
+        }
+      }
+    }
+  },
+  "catalog-test-real-world-scenario": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "combined_config": {
+            "dynamic_metadata": {
+              "env": "test",
+              "version": "1.0.0"
+            },
+            "dynamic_subnets": [
+              "item-1",
+              "item-2",
+              "item-3"
+            ],
+            "static_setting": "fixed-value"
+          },
+          "security_group_rules": {
+            "key1": "value1",
+            "key2": "value2",
+            "key3": "value3"
+          },
+          "stage": "nonprod",
+          "subnet_ids": [
+            "item-1",
+            "item-2",
+            "item-3"
+          ],
+          "vpc_config": {
+            "active": true,
+            "count": 5,
+            "metadata": {
+              "env": "test",
+              "version": "1.0.0"
+            },
+            "name": "nested-test",
+            "tags": [
+              "tag1",
+              "tag2"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "catalog-test-template-edge-cases": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "array_of_objects": [
+            {
+              "id": 1,
+              "name": "first"
+            },
+            {
+              "id": 2,
+              "name": "second"
+            }
+          ],
+          "empty_array": [],
+          "empty_object": {},
+          "escaped_quotes": {
+            "message": "He said \"hello\""
+          },
+          "large_nested": {
+            "level1": {
+              "level2": {
+                "level3": {
+                  "level4": {
+                    "value": "deep"
+                  }
+                }
+              }
+            }
+          },
+          "mixed_types_array": [
+            1,
+            "two",
+            true,
+            null,
+            {
+              "five": 5
+            }
+          ],
+          "stage": "nonprod",
+          "unicode_chars": {
+            "emoji": "\ud83d\ude80",
+            "text": "Hello \u4e16\u754c"
+          },
+          "whitespace_after": [
+            "a",
+            "b"
+          ],
+          "whitespace_before": [
+            "a",
+            "b"
+          ],
+          "whitespace_both": [
+            "a",
+            "b"
+          ]
+        }
+      }
+    }
+  },
+  "catalog-test-template-in-lists": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "component_list_results": [
+            [
+              "item-1",
+              "item-2",
+              "item-3"
+            ],
+            {
+              "key1": "value1",
+              "key2": "value2",
+              "key3": "value3"
+            }
+          ],
+          "mixed_template_list": [
+            "static-value-start",
+            [
+              "dynamic-1",
+              "dynamic-2"
+            ],
+            "static-value-middle",
+            {
+              "dynamic": "map"
+            },
+            "static-value-end"
+          ],
+          "stage": "nonprod",
+          "template_results_list": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            [
+              "x",
+              "y",
+              "z"
+            ],
+            {
+              "key": "value"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "catalog-test-template-in-maps": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "nested_template_structure": {
+            "data": {
+              "list": [
+                "item-1",
+                "item-2"
+              ],
+              "map": {
+                "key1": "val1",
+                "key2": "val2"
+              }
+            },
+            "name": "test-structure",
+            "outputs": {
+              "from_component": [
+                "item-1",
+                "item-2",
+                "item-3"
+              ]
+            },
+            "static_value": "unchanged"
+          },
+          "stage": "nonprod",
+          "template_results_map": {
+            "list_result": [
+              "a",
+              "b",
+              "c"
+            ],
+            "map_result": {
+              "x": 1,
+              "y": 2
+            },
+            "number_result": 42,
+            "string_result": "simple-string"
+          }
+        }
+      }
+    }
+  },
+  "catalog-test-template-with-atmos-component": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "component_list": [
+            "item-1",
+            "item-2",
+            "item-3"
+          ],
+          "component_map": {
+            "key1": "value1",
+            "key2": "value2",
+            "key3": "value3"
+          },
+          "component_nested": {
+            "active": true,
+            "count": 5,
+            "metadata": {
+              "env": "test",
+              "version": "1.0.0"
+            },
+            "name": "nested-test",
+            "tags": [
+              "tag1",
+              "tag2"
+            ]
+          },
+          "component_nested_path": [
+            "tag1",
+            "tag2"
+          ],
+          "component_nested_value": "test",
+          "component_string": "hello-world",
+          "stage": "nonprod"
+        }
+      }
+    }
+  },
+  "catalog-test-template-with-expressions": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "describe component output gains empty generate, provision and source sections from newer Atmos; template-rendered values are unchanged.",
+    "stdout": {
+      "json": {
+        "backend": {},
+        "component": "mock",
+        "env": {},
+        "generate": {},
+        "hooks": {},
+        "imports": [],
+        "metadata": {
+          "component": "mock"
+        },
+        "overrides": {},
+        "providers": {},
+        "provision": {},
+        "settings": {},
+        "source": {},
+        "vars": {
+          "nested_template": {
+            "list": [
+              1,
+              2,
+              3
+            ],
+            "map": {
+              "a": "x",
+              "b": "y"
+            }
+          },
+          "stack_var": "nonprod",
+          "stage": "nonprod",
+          "template_list": [
+            "a",
+            "b",
+            "c"
+          ],
+          "template_map": {
+            "x": 1,
+            "y": 2,
+            "z": 3
+          },
+          "template_string": "hello-world",
+          "trimmed_template_list": [
+            "one",
+            "two"
+          ],
+          "trimmed_template_map": {
+            "key": "value"
+          }
+        }
+      }
+    }
+  },
+  "coll-jq": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "Failed in v3 because the function did not exist there; works in v5. No template that worked before changes.",
+    "stdout": {
+      "json": {
+        "result": "[1,2]",
+        "stage": "dev"
+      }
+    }
+  },
+  "consul-denied": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Consul client sends different requests (no consistency parameter, directory probes); the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/kv/config.json",
+        "service": "consul",
+        "token": "wrong-fixture-token"
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "consul-directory": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "A consul:// directory listing returns key names instead of a key/value map (documented in the v5 changelog). v5's Consul client also sends different listing requests.",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs/?keys=&separator=%2F",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs/?keys=&separator=%2F",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs/app",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs/database",
+        "service": "consul",
+        "token": "compat-token"
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "[\"app\",\"database\"]",
+        "stage": "dev"
+      }
+    }
+  },
+  "consul-directory-fields": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "A consul:// directory listing returns key names instead of a key/value map (documented in the v5 changelog). v5's Consul client also sends different listing requests.",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs/?keys=&separator=%2F",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs/?keys=&separator=%2F",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs/app",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/configs/database",
+        "service": "consul",
+        "token": "compat-token"
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "consul-env-address": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Consul client sends different requests (no consistency parameter, directory probes); the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/kv/config.json",
+        "service": "consul",
+        "token": "compat-token"
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "{\"count\":42,\"name\":\"consul-fixture\"}",
+        "stage": "dev"
+      }
+    }
+  },
+  "consul-json": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Consul client sends different requests (no consistency parameter, directory probes); the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/kv/config.json",
+        "service": "consul",
+        "token": "compat-token"
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "{\"count\":42,\"name\":\"consul-fixture\"}",
+        "stage": "dev"
+      }
+    }
+  },
+  "consul-missing": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Consul client sends different requests (no consistency parameter, directory probes); the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/kv/missing",
+        "service": "consul",
+        "token": "compat-token"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/kv/missing/?keys=&separator=%2F",
+        "service": "consul",
+        "token": "compat-token"
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "consul-plain": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Consul client sends different requests (no consistency parameter, directory probes); the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/kv/plain",
+        "service": "consul",
+        "token": "compat-token"
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "plain-value",
+        "stage": "dev"
+      }
+    }
+  },
+  "conv-atoi-invalid": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "Invalid, empty and nil conversions return an error instead of a silent zero value (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "conv-float-invalid": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "Invalid, empty and nil conversions return an error instead of a silent zero value (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "conv-int-invalid": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "Invalid, empty and nil conversions return an error instead of a silent zero value (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "conv-int64-invalid": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "Invalid, empty and nil conversions return an error instead of a silent zero value (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "convert-tofloat64-empty": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "Invalid, empty and nil conversions return an error instead of a silent zero value (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "convert-tofloat64-nil": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "Invalid, empty and nil conversions return an error instead of a silent zero value (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "convert-toint64-empty": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "Invalid, empty and nil conversions return an error instead of a silent zero value (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "convert-toint64-nil": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "Invalid, empty and nil conversions return an error instead of a silent zero value (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "env-datasource": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "env://NAME read no variable in v3 (NAME parses as the URL host, so v3 read the variable named \"\" and returned empty data); v5 fails instead. Use env:NAME or env:///NAME (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "s3-corrupt-checksum": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5 (AWS SDK for Go v2) rejects an S3 object whose checksum does not match instead of returning it (documented in the v5 changelog).",
+    "requests": [
+      {
+        "method": "HEAD",
+        "path": "/compat-bucket/corrupt.json",
+        "range": null,
+        "service": "s3",
+        "valid_signature": true
+      },
+      {
+        "method": "GET",
+        "path": "/compat-bucket/corrupt.json?x-id=GetObject",
+        "range": null,
+        "service": "s3",
+        "valid_signature": true
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "s3-missing": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5 uses the AWS SDK for Go v2, which sends different S3 requests; the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "HEAD",
+        "path": "/compat-bucket/missing.json",
+        "range": null,
+        "service": "s3",
+        "valid_signature": true
+      },
+      {
+        "method": "GET",
+        "path": "/compat-bucket?delimiter=%2F&list-type=2&max-keys=1&prefix=missing.json",
+        "range": null,
+        "service": "s3",
+        "valid_signature": true
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "s3-object": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5 uses the AWS SDK for Go v2, which sends different S3 requests; the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "HEAD",
+        "path": "/compat-bucket/config.json",
+        "range": null,
+        "service": "s3",
+        "valid_signature": true
+      },
+      {
+        "method": "GET",
+        "path": "/compat-bucket/config.json?x-id=GetObject",
+        "range": null,
+        "service": "s3",
+        "valid_signature": true
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "{\"count\":42,\"name\":\"s3-fixture\"}",
+        "stage": "dev"
+      }
+    }
+  },
+  "ssm-directory": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5 uses the AWS SDK for Go v2, which sends different SSM requests; the rendered result is unchanged.",
+    "requests": [
+      {
+        "body": {
+          "Name": "/compat/list",
+          "WithDecryption": true
+        },
+        "method": "POST",
+        "service": "ssm",
+        "session_token": null,
+        "target": "AmazonSSM.GetParameter",
+        "valid_signature": true
+      },
+      {
+        "body": {
+          "Path": "/compat/list/",
+          "Recursive": true
+        },
+        "method": "POST",
+        "service": "ssm",
+        "session_token": null,
+        "target": "AmazonSSM.GetParametersByPath",
+        "valid_signature": true
+      },
+      {
+        "body": {
+          "Path": "/compat/list/",
+          "Recursive": true,
+          "WithDecryption": true
+        },
+        "method": "POST",
+        "service": "ssm",
+        "session_token": null,
+        "target": "AmazonSSM.GetParametersByPath",
+        "valid_signature": true
+      },
+      {
+        "body": {
+          "Name": "/compat/list/a",
+          "WithDecryption": true
+        },
+        "method": "POST",
+        "service": "ssm",
+        "session_token": null,
+        "target": "AmazonSSM.GetParameter",
+        "valid_signature": true
+      },
+      {
+        "body": {
+          "Name": "/compat/list/b",
+          "WithDecryption": true
+        },
+        "method": "POST",
+        "service": "ssm",
+        "session_token": null,
+        "target": "AmazonSSM.GetParameter",
+        "valid_signature": true
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "[\"a\",\"b\"]",
+        "stage": "dev"
+      }
+    }
+  },
+  "ssm-json": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "aws+smp:// returns the parameter value directly instead of an object with Value and metadata (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "ssm-json-type": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "aws+smp:// returns the parameter value directly instead of an object with Value and metadata (documented in the v5 changelog).",
+    "stdout": {
+      "json": {
+        "result": "{\"count\":42,\"enabled\":true,\"items\":[\"a\",\"b\"]}",
+        "stage": "dev"
+      }
+    }
+  },
+  "ssm-missing": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5 uses the AWS SDK for Go v2, which sends different SSM requests; the rendered result is unchanged.",
+    "requests": [
+      {
+        "body": {
+          "Name": "/compat/missing",
+          "WithDecryption": true
+        },
+        "method": "POST",
+        "service": "ssm",
+        "session_token": null,
+        "target": "AmazonSSM.GetParameter",
+        "valid_signature": true
+      },
+      {
+        "body": {
+          "Path": "/compat/missing/",
+          "Recursive": true
+        },
+        "method": "POST",
+        "service": "ssm",
+        "session_token": null,
+        "target": "AmazonSSM.GetParametersByPath",
+        "valid_signature": true
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "ssm-secure": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "aws+smp:// returns the parameter value directly instead of an object with Value and metadata (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "ssm-session-token": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "aws+smp:// returns the parameter value directly instead of an object with Value and metadata (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "ssm-string": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "aws+smp:// returns the parameter value directly instead of an object with Value and metadata (documented in the v5 changelog).",
+    "stdout": {
+      "json": {
+        "result": "\"fixture-value\"",
+        "stage": "dev"
+      }
+    }
+  },
+  "ssm-stringlist": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "aws+smp:// returns the parameter value directly instead of an object with Value and metadata (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "ssm-value-field": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "aws+smp:// returns the parameter value directly instead of an object with Value and metadata (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "subpath-no-slash": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "A datasource sub-path resolves as a relative URL; directory datasources must end with / (documented in the v5 changelog).",
+    "stdout": {
+      "text": ""
+    }
+  },
+  "tmpl-inline": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "Failed in v3 because the function did not exist there; works in v5. No template that worked before changes.",
+    "stdout": {
+      "json": {
+        "result": "inline-value",
+        "stage": "dev"
+      }
+    }
+  },
+  "tmpl-inline-datasource": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "Failed in v3 because the function did not exist there; works in v5. No template that worked before changes.",
+    "stdout": {
+      "json": {
+        "result": "fixture",
+        "stage": "dev"
+      }
+    }
+  },
+  "vault-denied": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Vault client probes the mount type before reading; the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/sys/internal/ui/mounts",
+        "service": "vault",
+        "token": "invalid-fixture-token"
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "vault-directory": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Vault client probes the mount type before reading; the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/sys/internal/ui/mounts",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/secret",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/secret?list=true",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/sys/internal/ui/mounts",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/secret?list=true",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/sys/internal/ui/mounts",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/secret/config",
+        "service": "vault",
+        "token": "compat-vault-token"
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "[\"config\"]",
+        "stage": "dev"
+      }
+    }
+  },
+  "vault-kv1": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Vault client probes the mount type before reading; the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/sys/internal/ui/mounts",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/secret/config",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/secret/config",
+        "service": "vault",
+        "token": "compat-vault-token"
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "{\"count\":42,\"name\":\"vault-fixture\"}",
+        "stage": "dev"
+      }
+    }
+  },
+  "vault-kv2-raw": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5 detects KV v2 mounts and adds /data/ itself, so a URL that already includes /data/ fails. Drop /data/ from KV v2 URLs; v5 returns the secret's data without the metadata envelope (documented in the v5 changelog).",
+    "requests": [
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/sys/internal/ui/mounts",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/kv/data/data/config?version=0",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/kv/metadata/data/config?list=true",
+        "service": "vault",
+        "token": "compat-vault-token"
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "vault-missing": {
+    "exit_code": 1,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Vault client probes the mount type before reading; the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/sys/internal/ui/mounts",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/secret/missing",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": null,
+        "path": "/v1/secret/missing?list=true",
+        "service": "vault",
+        "token": "compat-vault-token"
+      }
+    ],
+    "stdout": {
+      "text": ""
+    }
+  },
+  "vault-namespace": {
+    "exit_code": 0,
+    "file_notices": [],
+    "files": {},
+    "reason": "v5's Vault client probes the mount type before reading; the rendered result is unchanged.",
+    "requests": [
+      {
+        "method": "GET",
+        "namespace": "compat-namespace",
+        "path": "/v1/sys/internal/ui/mounts",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": "compat-namespace",
+        "path": "/v1/secret/config",
+        "service": "vault",
+        "token": "compat-vault-token"
+      },
+      {
+        "method": "GET",
+        "namespace": "compat-namespace",
+        "path": "/v1/secret/config",
+        "service": "vault",
+        "token": "compat-vault-token"
+      }
+    ],
+    "stdout": {
+      "json": {
+        "result": "{\"count\":42,\"name\":\"vault-fixture\"}",
+        "stage": "dev"
+      }
+    }
+  }
+}

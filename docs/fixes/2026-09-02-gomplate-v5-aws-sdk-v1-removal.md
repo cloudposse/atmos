@@ -151,6 +151,28 @@ The engine first landed as a new `pkg/templating` package beside `pkg/template`.
 Released Atmos used gomplate v3 for rendering; `gomplate/v4` was only a blank import until #3457, which no
 release contains. Users therefore move from v3 directly to v5.
 
+### Compatibility gate
+
+The template compatibility gate compares this branch with a gomplate v3 build on 212 cases. It had
+never passed (124 unapproved differences when it was added, 143 after merging `main`). Changes:
+
+- Candidate comparisons ignore stderr (error formatting, line numbers, deprecation warnings); exit
+  codes, stdout, generated files and requests still must match.
+- `approved.json` records the reviewed new behavior of 51 cases with reasons: conversion errors,
+  datasource sub-paths, SSM value shape, Consul listings, the stricter S3 checksum, the different
+  requests v5's Consul, Vault and AWS SDK v2 clients send, `env://NAME` failing, Vault KV v2 paths,
+  `coll.JQ`/`tmpl.Inline` now working, and empty `describe` sections from newer Atmos. Requests must
+  match the old observation unless an entry records the approved ones.
+- Shims restore v3 behavior: bare `slice` with Sprig disabled; `netaddr.IP`, `netaddr.IPPrefix` and
+  `netaddr.IPRange` from the legacy `net` parse functions (`pkg/template/compatibility/netaddr`);
+  single-GET HTTP datasource reads, replacing gomplate v5's HEAD-then-GET
+  (`compatibility.NewHTTPFS`, installed as `gomplate.DefaultFSProvider`'s http/https handler).
+- The baseline was re-recorded from the same pinned v3 commit because the harness digest covers its
+  source; all 212 old observations are unchanged.
+
+The gate passes: 159/212 cases match and the other 53 differences are approved, listed in
+`tests/compatibility/findings.md`.
+
 ## Validation
 
 ```bash

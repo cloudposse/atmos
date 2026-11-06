@@ -177,6 +177,25 @@ components:
 Consul directory listings (a `consul://` URL ending in `/`) return a list of key names instead of
 a map. BoltDB datasources were removed upstream and are no longer available.
 
+S3 datasources reject an object whose checksum does not match, instead of returning its content.
+
+In `env://NAME`, `NAME` is the URL host, so older releases read no variable and returned empty
+data. That form now fails. Use `env:NAME` or `env:///NAME`.
+
+Vault KV v2 datasources detect the mount and add the `/data/` API segment themselves. Remove
+`/data/` from the URL (`.../kv/config`, not `.../kv/data/config`). The result is the secret's data
+without the `data` and `metadata` wrapper, so read fields directly.
+
+Consul, Vault, SSM, and S3 datasources send different requests to those services. For example,
+Vault reads first check the mount type. The values your templates read do not change, but access
+policies or proxies that allow only specific requests may need an update. HTTP datasources still
+make one GET request per read, as before.
+
+### New: `coll.JQ` and `tmpl`
+
+`coll.JQ` runs a jq expression on a value, and the `tmpl` namespace (`tmpl.Inline`, `tmpl.Exec`)
+renders nested templates. Neither was available in templates before this release.
+
 ### New: semantic version helpers
 
 Gomplate v5 adds a `semver.*` namespace for parsing and comparing versions inside templates, for
