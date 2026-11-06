@@ -76,7 +76,7 @@ package-global metrics map (not safe for concurrent use, while Atmos renders sta
 - Docs: datasource behavior notes and the removed/renamed gomplate function list
   (`website/docs/templates/datasources.mdx`, `website/docs/cli/configuration/templates.mdx`,
   `website/docs/functions/template/atmos.GomplateDatasource.mdx`), changelog post
-  `website/blog/2026-09-02-gomplate-v5.mdx`, roadmap milestone.
+  `website/blog/2026-11-06-gomplate-v5.mdx`, roadmap milestone.
 
 ### Compatibility shims
 

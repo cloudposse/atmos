@@ -1,12 +1,15 @@
 # Migration compatibility comparison
 
 Baseline: `4ffd8804d3500b4369e739095174000565b43973` (gomplate v3).
-Candidate: this branch, compared with `runner compare` on macOS/arm64.
+Candidate: this branch at `ed658cd1`, compared with `runner compare` in CI on
+Linux, macOS and Windows.
 
 The old implementation reproduces **212/212 cases** across repeated runs. The
-candidate matches **159/212 cases**; **18 differences are approved** and **35
-remain unapproved**, so the gate still fails. These numbers count cases, not
-distinct root causes.
+candidate matches **159/212 cases**; the other **53 differences are approved**
+(`boltdb-json` and `boltdb-plain` below, plus the 51 recorded observations in
+`approved.json`; `boltdb-missing` failed before too, so it counts as a match)
+and **0 remain unapproved**, so the gate passes on all three platforms. These
+numbers count cases, not distinct root causes.
 
 ## Comparison rules
 

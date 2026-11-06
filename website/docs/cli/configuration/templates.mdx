@@ -196,7 +196,10 @@ background noise. Each removed function has a direct replacement:
   <dt>`slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, `trim` (bare aliases)</dt>
   <dd>
     Gomplate no longer registers these unqualified names. Use the namespaced forms (`coll.Slice`, `strings.Contains`,
-    `strings.HasPrefix`, `strings.HasSuffix`, `strings.Split`, `strings.SplitN`, `strings.Trim`).
+    `strings.HasPrefix`, `strings.HasSuffix`, `strings.Split`, `strings.SplitN`, `strings.Trim`), and check the
+    argument order when you switch. Gomplate's bare aliases, and the Atmos shims that serve them when Sprig is disabled,
+    take the input first; the `strings.*` functions take it last so they work in pipelines. For example,
+    `contains "alphabet" "pha"` becomes `strings.Contains "pha" "alphabet"`, and `splitN "a,b,c" "," 2` becomes `strings.SplitN "," 2 "a,b,c"`. `coll.Slice` takes the same arguments as `slice`.
 
     When `templates.settings.sprig.enabled` is `true` (the default), the bare `slice`, `contains`, `hasPrefix`,
     `hasSuffix`, `split`, and `trim` names keep working through [Sprig](https://masterminds.github.io/sprig/), which defines functions

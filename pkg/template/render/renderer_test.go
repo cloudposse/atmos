@@ -105,6 +105,26 @@ func TestRender_FastPath(t *testing.T) {
 			opts:     []Option{WithGomplate(false)},
 			expected: "A",
 		},
+		{
+			// The bare aliases were Gomplate v3 names, so the shims must not
+			// define them when Gomplate is disabled.
+			name:    "gomplate and sprig disabled: bare alias shims are undefined",
+			req:     Request{Name: "t", Text: `{{ contains "alphabet" "pha" }}`},
+			opts:    []Option{WithGomplate(false), WithSprig(false)},
+			wantErr: `function "contains" not defined`,
+		},
+		{
+			name:    "gomplate disabled: splitN shim is undefined",
+			req:     Request{Name: "t", Text: `{{ splitN "a,b,c" "," 2 }}`},
+			opts:    []Option{WithGomplate(false)},
+			wantErr: `function "splitN" not defined`,
+		},
+		{
+			name:     "gomplate enabled, sprig disabled: bare alias shim keeps v3 argument order",
+			req:      Request{Name: "t", Text: `{{ contains "alphabet" "pha" }}`},
+			opts:     []Option{WithSprig(false)},
+			expected: "true",
+		},
 	}
 
 	for _, tt := range tests {

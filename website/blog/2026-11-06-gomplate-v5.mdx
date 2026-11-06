@@ -105,7 +105,12 @@ The unqualified aliases `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, 
   that is Gomplate's list builder (`slice "a" "b"`), not Go's builtin.
 - `splitN` has no Sprig equivalent, so a shim always provides it.
 
-Replace shimmed names with their `strings.*` or `coll.*` forms when you get the chance.
+Replace shimmed names with their `strings.*` or `coll.*` forms when you get the chance, and check
+the argument order as you go. With Sprig disabled, the shims keep Gomplate v3's order, with the
+input first, while the `strings.*` functions take the input last so they work in pipelines.
+`contains "alphabet" "pha"` becomes `strings.Contains "pha" "alphabet"`, and
+`splitN "a,b,c" "," 2` becomes `strings.SplitN "," 2 "a,b,c"`. `slice` becomes `coll.Slice` with
+the same arguments.
 
 ### Conversions and regular expressions now fail loudly
 
@@ -113,11 +118,13 @@ Conversion functions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` u
 when handed something they could not convert. They now return an error, which surfaces as a
 template processing failure; Atmos does not paper over this one, since silently returning `0` for
 bad input is exactly the kind of behavior worth losing. The error message spells out the fix. If a
-stack relied on the silent zero, guard the input first:
+stack relied on the silent zero, check that the input is a number before converting it:
 
 ```yaml
-retries: '{{ if .vars.retries }}{{ conv.ToInt64 .vars.retries }}{{ else }}0{{ end }}'
+retries: '{{ $r := conv.ToString .vars.retries }}{{ if regexp.Match "^-?[0-9]+$" $r }}{{ conv.ToInt64 $r }}{{ else }}0{{ end }}'
 ```
+
+A missing, empty, or non-numeric value renders `0`; a whole number converts as before.
 
 Similarly, the `regexp.*` functions return an error for an invalid pattern instead of panicking.
 The failure is the same as before from your point of view, but the message now names the template

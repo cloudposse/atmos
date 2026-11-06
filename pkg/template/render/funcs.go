@@ -49,7 +49,12 @@ func (e *engine) baseFuncs(ctx context.Context, name string, extra template.Func
 			funcs[k] = v
 		}
 	}
-	compatibility.ApplyBareAliasShims(funcs, name, e.reporter)
+	// The bare aliases were Gomplate v3 names, so only restore them when
+	// Gomplate is enabled. The call stays after the Sprig layer so a name
+	// Sprig provides keeps precedence.
+	if e.gomplate {
+		compatibility.ApplyBareAliasShims(funcs, name, e.reporter)
+	}
 	for k, v := range extra {
 		funcs[k] = v
 	}
