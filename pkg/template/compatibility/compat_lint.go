@@ -134,7 +134,14 @@ func lintDatasourceSubPathURL(cmd *parse.CommandNode, extraArgs int, target *lin
 		return
 	}
 	sourceURL := target.sources[alias]
-	if sourceURL == nil || strings.HasSuffix(sourceURL.Path, "/") {
+	// An empty path (a host-only URL, or an opaque URL such as aws+sm:name)
+	// already resolves a sub-path beneath it, and gomplate adds the slash for
+	// git URLs itself, so only other paths without a trailing slash change.
+	if sourceURL == nil || sourceURL.Path == "" || strings.HasSuffix(sourceURL.Path, "/") {
+		return
+	}
+	switch sourceURL.Scheme {
+	case "git", "git+file", "git+http", "git+https", "git+ssh":
 		return
 	}
 	reporter.Deprecated(target.name, callName+" \""+alias+"\" <sub-path>", "a trailing slash on the datasource URL",

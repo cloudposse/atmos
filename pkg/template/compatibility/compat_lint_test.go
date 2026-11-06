@@ -97,6 +97,25 @@ func TestLintDeprecatedUsage(t *testing.T) {
 			wantCount:   0,
 		},
 		{
+			name:        "sub-path on a host-only URL is fine",
+			text:        `{{ ds "api" "a.yaml" }}`,
+			datasources: map[string]string{"api": "https://example.invalid"},
+			wantCount:   0,
+		},
+		{
+			name:        "sub-path on a git URL is fine (gomplate adds the slash)",
+			text:        `{{ ds "repo" "a.yaml" }}`,
+			datasources: map[string]string{"repo": "git+https://example.invalid/org/repo//configs"},
+			wantCount:   0,
+		},
+		{
+			name:           "sub-path on an http URL with a path and no trailing slash warns",
+			text:           `{{ ds "api" "a.yaml" }}`,
+			datasources:    map[string]string{"api": "https://example.invalid/configs"},
+			wantDeprecated: `ds "api" <sub-path>`,
+			wantCount:      1,
+		},
+		{
 			name:        "no sub-path argument is fine",
 			text:        `{{ ds "dir" }}`,
 			datasources: map[string]string{"dir": "file:///tmp/data"},
