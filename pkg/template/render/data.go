@@ -30,10 +30,10 @@ type Source struct {
 
 // Data holds the datasources belonging to a single template evaluation and
 // reads them lazily, the way gomplate's `datasource`/`ds`/`include` functions
-// do. Each read goes through a private gomplate renderer whose only functions
-// capture the native result, so datasource values keep gomplate's types
-// (including integers and EJSON values) and the template being rendered never
-// needs gomplate's renderer itself.
+// do. Reads go through gomplate's own datasource reader, captured once per
+// alias from a private gomplate renderer, so datasource values keep gomplate's
+// types (including integers and EJSON values) and the template being rendered
+// never needs gomplate's renderer itself.
 //
 // Like a gomplate Renderer, a Data value must not be used concurrently.
 type Data struct {
@@ -41,10 +41,16 @@ type Data struct {
 	Sources      map[string]*Source
 	ExtraHeaders map[string]http.Header
 
-	renderers map[string]gomplate.Renderer
-	alias     string
-	args      []string
-	result    any
+	readers map[string]gomplateReader
+}
+
+// gomplateReader is gomplate's datasource namespace, which its renderer exposes
+// as the `_datasource` function. Its methods read through the renderer's source
+// reader and never touch gomplate's package-global metrics, so reads made
+// through it need no lock.
+type gomplateReader interface {
+	Datasource(alias string, args ...string) (any, error)
+	Include(alias string, args ...string) (string, error)
 }
 
 // NewData builds datasources from alias=URL and alias=Header: value definitions.
@@ -173,7 +179,12 @@ func (d *Data) DatasourceReachable(alias string, args ...string) bool {
 	return err == nil
 }
 
-func (d *Data) initRenderer(alias string) error {
+// initReader captures gomplate's datasource reader for alias. A gomplate
+// renderer records timings in package-global metrics when it is created and
+// when it renders, so both happen under rendererMu. The capture render reads
+// nothing; datasource I/O happens later, through the reader, without the lock,
+// so a slow datasource cannot block unrelated renders.
+func (d *Data) initReader(alias string) error {
 	sources := make(map[string]gomplate.DataSource, len(d.Sources))
 	for name, source := range d.Sources {
 		if source == nil || source.URL == nil {
@@ -181,22 +192,38 @@ func (d *Data) initRenderer(alias string) error {
 		}
 		sources[name] = gomplate.DataSource{URL: source.URL, Header: source.Header}
 	}
-	// A capture function preserves Gomplate's native data types, including integers and EJSON values.
-	// Arguments are functions, never template source, so URLs cannot inject template expressions.
-	funcs := template.FuncMap{
-		"capture": func(value any) string { d.result = value; return "" },
-		"alias":   func() string { return d.alias },
-		"arg":     func(i int) string { return d.args[i] },
+	var captured any
+	funcs := template.FuncMap{"capture": func(value any) string { captured = value; return "" }}
+
+	if err := captureReader(d.context(), sources, d.ExtraHeaders, funcs); err != nil {
+		return err
 	}
-	if d.renderers == nil {
-		d.renderers = make(map[string]gomplate.Renderer)
+	reader, ok := captured.(gomplateReader)
+	if !ok {
+		return fmt.Errorf("%w: gomplate datasource reader is unavailable", errInvalidDatasource)
 	}
-	// gomplate.NewRenderer lazily initializes the package-global gomplate.Metrics,
-	// so creating a renderer needs the same lock as using one.
+	if d.readers == nil {
+		d.readers = make(map[string]gomplateReader)
+	}
+	d.readers[alias] = reader
+	return nil
+}
+
+// captureReader creates a gomplate renderer and renders a template that only
+// hands its `_datasource` namespace to the capture function in funcs.
+func captureReader(ctx context.Context, sources map[string]gomplate.DataSource, headers map[string]http.Header, funcs template.FuncMap) error {
 	rendererMu.Lock()
 	defer rendererMu.Unlock()
-	d.renderers[alias] = gomplate.NewRenderer(gomplate.RenderOptions{Datasources: sources, ExtraHeaders: d.ExtraHeaders, Funcs: funcs})
-	return nil
+	renderer := gomplate.NewRenderer(gomplate.RenderOptions{Datasources: sources, ExtraHeaders: headers, Funcs: funcs})
+	return renderer.Render(ctx, "datasource", "{{ capture (_datasource) }}", io.Discard)
+}
+
+// context is the context reads are bound to.
+func (d *Data) context() context.Context {
+	if d.Ctx == nil {
+		return context.Background()
+	}
+	return d.Ctx
 }
 
 func (d *Data) read(function, alias string, args []string) (any, error) {
@@ -209,33 +236,15 @@ func (d *Data) read(function, alias string, args []string) (any, error) {
 			return nil, err
 		}
 	}
-	if d.renderers[alias] == nil {
-		if err := d.initRenderer(alias); err != nil {
+	if d.readers[alias] == nil {
+		if err := d.initReader(alias); err != nil {
 			return nil, err
 		}
 	}
-	d.alias, d.args, d.result = alias, args, nil
-	text := "{{ capture (" + function + " (alias)"
-	for i := range args {
-		text += fmt.Sprintf(" (arg %d)", i)
+	if function == "include" {
+		return d.readers[alias].Include(alias, args...)
 	}
-	text += ") }}"
-	ctx := d.Ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := d.render(ctx, alias, text); err != nil {
-		return nil, err
-	}
-	return d.result, nil
-}
-
-// render runs the alias's private renderer. Gomplate's renderer records
-// timings in a package-global map, so every use is serialized on rendererMu.
-func (d *Data) render(ctx context.Context, alias, text string) error {
-	rendererMu.Lock()
-	defer rendererMu.Unlock()
-	return d.renderers[alias].Render(ctx, "datasource", text, io.Discard)
+	return d.readers[alias].Datasource(alias, args...)
 }
 
 // datasourceFuncs returns the gomplate datasource functions served by d.

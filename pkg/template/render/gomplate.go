@@ -8,13 +8,14 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/template/compatibility"
 )
 
 // rendererMu serializes every use of gomplate's renderer: it records timings
 // in the package-global gomplate.Metrics map, which is not safe for
-// concurrent writes, and Atmos renders stack files concurrently. Templates
-// themselves execute without it; only datasource reads (see Data.render) use
-// gomplate's renderer.
+// concurrent writes, and Atmos renders stack files concurrently. Templates and
+// datasource reads execute without it; only creating a datasource reader (see
+// Data.initReader) uses gomplate's renderer.
 var rendererMu sync.Mutex
 
 // renderWithContext reads the context datasources eagerly, building `.` the
@@ -39,6 +40,9 @@ func (e *engine) renderWithContext(plan *renderPlan) (string, error) {
 	parsed, err := parsePlain(&contextPlan, e.gomplate, req.Name)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", errUtils.ErrRenderTemplate, err)
+	}
+	if e.gomplate {
+		compatibility.LintDeprecatedUsage(parsed, req.Name, planSourceURLs(plan), e.reporter)
 	}
 	out, err := executePlain(parsed, data)
 	if err != nil {
