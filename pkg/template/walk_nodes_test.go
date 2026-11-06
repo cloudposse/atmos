@@ -70,3 +70,20 @@ func TestWalkNodes(t *testing.T) {
 		})
 	}
 }
+
+// Parse trees hold typed-nil pointers for absent parts (the else list of an
+// `if` without `else`, the pipe of `{{ template "x" }}`). WalkNodes must skip
+// them, so a callback can use every node it receives.
+func TestWalkNodesSkipsTypedNilNodes(t *testing.T) {
+	tmpl, err := template.New("t").Parse(`{{ define "x" }}x{{ end }}{{ if .a }}a{{ end }}{{ range .b }}b{{ end }}{{ with .c }}c{{ end }}{{ template "x" }}`)
+	require.NoError(t, err)
+
+	visited := 0
+	require.NotPanics(t, func() {
+		WalkNodes(tmpl, func(n parse.Node) {
+			visited++
+			_ = n.String()
+		})
+	})
+	assert.Positive(t, visited)
+}

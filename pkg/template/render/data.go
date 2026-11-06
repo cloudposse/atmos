@@ -273,7 +273,11 @@ func GomplateFuncs(ctx context.Context, sources *Data) template.FuncMap {
 	if sources == nil {
 		sources = &Data{}
 	}
+	// Readers hold the context they were created with, so binding a new
+	// render context drops them; each render's reads then honor its own
+	// deadline.
 	sources.Ctx = ctx
+	sources.readers = nil
 	funcs := gomplate.CreateFuncs(ctx)
 	if runtime.GOOS == "windows" {
 		funcs["file"] = func() any { return &nativeFileFuncs{} }

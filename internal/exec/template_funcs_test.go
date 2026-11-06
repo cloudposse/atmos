@@ -2,8 +2,9 @@ package exec
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -82,13 +83,21 @@ func TestAtmosFuncs_GomplateDatasource(t *testing.T) {
 // TestAtmosFuncs_GomplateDatasource_CacheKeyIncludesDefinition verifies that two stacks defining
 // the same alias with different URLs each read their own value from the process-wide cache.
 func TestAtmosFuncs_GomplateDatasource_CacheKeyIncludesDefinition(t *testing.T) {
+	// No policy rules, so the read goes through the cache rather than the policy path.
+	t.Setenv("ATMOS_POLICY_DIR", "")
+	t.Chdir(t.TempDir())
+
 	read := func(t *testing.T, content string) any {
 		t.Helper()
-		path := filepath.Join(t.TempDir(), "config.yaml")
-		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+		// An HTTP source keeps this portable: gomplate cannot read file:///C:/... URLs on Windows.
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = io.WriteString(w, content)
+		}))
+		t.Cleanup(server.Close)
 
 		sources := &render.Data{}
-		_, err := sources.DefineDatasource("cache-key-config", path)
+		_, err := sources.DefineDatasource("cache-key-config", server.URL+"/config.yaml")
 		require.NoError(t, err)
 
 		atmosFuncs := &AtmosFuncs{atmosConfig: &schema.AtmosConfiguration{}, ctx: context.TODO(), gomplateData: sources}

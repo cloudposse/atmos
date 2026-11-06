@@ -125,7 +125,9 @@ Only these nondeterministic details are normalized:
   emits them in map iteration order. Duplicates remain significant; other stderr
   stays ordered.
 
-**BoltDB removal is the sole approved compatibility exception**, explicitly
+The gate accepts two kinds of difference; any other difference fails it.
+
+**BoltDB removal is a rule-based exception**, explicitly
 accepted in the migration review on 2026-09-16. The exact cases `boltdb-json`,
 `boltdb-plain`, and `boltdb-missing` remain in the corpus. The candidate must exit
 1, identify the unsupported `boltdb` scheme, and produce no stdout, generated
@@ -138,10 +140,22 @@ data to a supported datasource, such as a JSON/YAML file, before upgrading.
 collection, stability checks, or baseline replay; the original BoltDB behavior
 remains recorded. No BoltDB adapter will be added to restore support.
 
-For all other cases, exit status, stdout, stderr, generated files, and requests
-remain part of the strict contract. Never copy candidate answers into the
-baseline. Additional exceptions require review of the exact old/new behavior,
-impact, rationale, and migration guidance. See [findings.md](findings.md).
+**Reviewed behavior changes are recorded exceptions** in `approved.json`. Each
+entry is the exact candidate observation (exit code, stdout and generated files)
+plus the reason it was accepted; requests must match the old observation unless
+the entry records the approved new requests. A candidate that differs from both
+the old observation and its recorded exception fails the gate.
+
+Candidate comparisons ignore stderr: error formatting, template line numbers and
+deprecation warnings change between releases without changing behavior. The
+BoltDB rule is the one place candidate stderr is checked, because it must name
+the unsupported `boltdb` scheme. Exit status, stdout, generated files, file
+notices and requests stay strict for every case. Old-source collection,
+stability checks and baseline replay compare every field, including stderr.
+
+Never copy candidate answers into the baseline. A new exception requires review
+of the exact old/new behavior, impact, rationale, and migration guidance. See
+[findings.md](findings.md).
 
 ## Limits
 

@@ -108,7 +108,9 @@ func branchOf(node parse.Node) (*parse.BranchNode, bool) {
 // This handles all Go template node types including conditionals, ranges,
 // with blocks, and nested templates.
 func walkAST(node parse.Node, fn func(parse.Node)) {
-	if node == nil {
+	// Parse trees hold typed-nil pointers for absent parts, such as the else
+	// list of an `if` without `else` or the pipe of `{{ template "x" }}`.
+	if node == nil || isNilNode(node) {
 		return
 	}
 
@@ -174,6 +176,12 @@ func walkCommandNode(n *parse.CommandNode, fn func(parse.Node)) {
 	for _, arg := range n.Args {
 		walkAST(arg, fn)
 	}
+}
+
+// isNilNode reports whether node is a typed-nil pointer.
+func isNilNode(node parse.Node) bool {
+	value := reflect.ValueOf(node)
+	return value.Kind() == reflect.Pointer && value.IsNil()
 }
 
 // walkBranchNode traverses branch nodes (if/range/with) with pipe, list, and else-list.

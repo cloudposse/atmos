@@ -142,3 +142,22 @@ func TestRedefiningADatasourceReplacesItsReader(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"name": "second"}, value)
 }
+
+// Binding a new render context replaces the readers, so each render's reads
+// honor its own deadline instead of the context a reader was created with.
+func TestGomplateFuncsRebindsReadersToTheRenderContext(t *testing.T) {
+	server, _ := countingServer(t)
+	d, err := NewData([]string{"api=" + server.URL + "/data.json"}, nil)
+	require.NoError(t, err)
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	GomplateFuncs(canceled, d)
+	_, err = d.Datasource("api")
+	require.ErrorIs(t, err, context.Canceled, "the read uses the bound, canceled context")
+
+	GomplateFuncs(context.Background(), d)
+	value, err := d.Datasource("api")
+	require.NoError(t, err, "a new render context replaces the reader bound to the canceled one")
+	assert.NotNil(t, value)
+}
