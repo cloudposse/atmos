@@ -219,36 +219,57 @@ state moves, and whose base credentials come from the apply environment, not the
 on a PR can fail to apply on merge). (To replay the stored binary directly, use `--from-plan` /
 `--planfile`.) Verification runs on `deploy` only — `apply` stays a thin wrapper.
 
-### Deploying after a pull request merges
+### Deploying across pull requests and merge queues {#deploying-after-a-pull-request-merges}
 
-Stored plans are keyed by the commit they were planned on. A pull request's plan runs on its head
-commit, but a deploy dispatched after the merge (for example, by Atmos Pro on `pull_request.merged`)
-runs on the commit that landed on the base branch. With squash, merge-commit, or rebase merging,
-that commit is not the pull request's head.
+Stored plans are keyed by the commit that was checked out when they were created. That may be a PR
+head, a synthetic PR merge commit, or a merge-queue commit. A subsequent deploy can check out a
+different SHA even when the source files are identical. This applies to ordinary GitHub Actions
+workflows as well as workflows dispatched by Atmos Pro.
 
-`deploy` resolves the stored plan to verify against in this order:
+On GitHub Actions, `deploy` resolves the stored plan in this order:
 
-1. **The plan stored for the deploy's own commit.** Use this when you plan the merged commit before
-   applying it, for example by dispatching your plan workflow on `pull_request.merged` and applying
-   once that plan is approved. That plan reflects the base branch after the merge.
-2. **The plan stored for the merged pull request's head commit.** When nothing is stored for the
-   deploy's commit, Atmos on GitHub Actions looks up the pull request that was merged as that commit
-   and uses the plan from its review. This is what makes a deploy dispatched straight after the merge
-   find the plan the reviewers saw.
+1. **The deploy's exact commit.** An existing plan for that SHA always wins, without additional
+   source or PR lookups.
+2. **The same Git source tree.** Automatic plan uploads also publish a small, repository-scoped
+   reference to the original plan, keyed by the source tree. This lets a plan created on a synthetic
+   PR or queue commit be found after squash, merge, or rebase when the landed commit has identical
+   source contents. The original artifact must still exist; deleting or expiring it invalidates the
+   reference. These references are not additional plans in `atmos terraform planfile list`.
+3. **The associated PR revision.** For a post-merge deploy, Atmos resolves the PR whose
+   `merge_commit_sha` equals the checked-out SHA. For a `merge_group` run, it resolves the PR head
+   only when GitHub's active queue entry still identifies that exact queue commit. For a PR event,
+   it uses the head SHA from the event snapshot only when the checkout matches that head or the
+   event's synthetic merge commit. It does not use an arbitrary PR's latest head.
 
-Either way, verification compares the stored plan with a fresh plan of the merged commit. If the base
-branch changed in a way that alters the plan, the deploy fails verification instead of applying an
-unreviewed change.
+Only an artifact-not-found result permits trying another source. Permission errors, corrupt
+artifacts, and other storage failures do not select another plan. Ambiguous post-merge PR matches
+are rejected. Lookup failures are logged and the existing missing-plan policy applies.
 
-The lookup uses the GitHub API, so the deploy workflow's token needs read access to pull requests:
+Whichever source is selected, deploy generates a fresh plan for its own checkout and compares it
+with the stored plan using the configured plan-diff policy. In `fail` mode, differences block apply;
+`warn`, `off`, and `required` keep their documented behavior. Plan equivalence does not replace any
+workflow approval or deployment authorization requirements.
+
+#### Merge queues with multiple pull requests
+
+A queue commit can contain several PRs. An individual PR plan is usable only if it matches the fresh
+plan for that stack/component in the combined checkout. If several PRs change the same component and
+the combined plan differs, generate and review a plan on the queue commit. Atmos does not combine
+individual planfiles or try different plans until one passes verification.
+
+Rebuilt or removed queue entries cannot supply a newer PR-head plan to an old queue checkout.
+Source-tree references are published by automatic uploads with this version of Atmos; older plans
+remain available through their original commit keys and PR-head fallback. Other CI providers retain
+their existing behavior unless they implement source resolution. Storage-disabled workflows do not
+perform these lookups.
+
+The GitHub token needs read access to source commits and pull requests:
 
 ```yaml
 permissions:
   contents: read
   pull-requests: read
 ```
-
-Without it, Atmos logs a warning and continues as if no stored plan were found.
 
 :::note GitHub Actions runtime token
 With the `github/artifacts` store, the automatic download (like the upload) talks to the GitHub

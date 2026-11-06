@@ -17,7 +17,9 @@ import (
 //  1. The planfile stored under key, the key for the current commit. After a merge, this is the
 //     plan of the landed commit itself, for example from a plan workflow dispatched on
 //     pull_request.merged and applied once approved.
-//  2. The planfile stored under the head commit of the pull request merged as the current commit.
+//  2. A reference to a plan for the identical source tree, if one was published.
+//  3. The planfile stored under the head commit of the pull request merged as the current commit.
+//     Queue runs resolve the head bound to the active queue entry instead.
 //     A deploy dispatched straight after a squash, merge, or rebase merge runs on the landed
 //     commit, while the pull request's reviewed plan was stored under its head commit.
 //
@@ -34,7 +36,20 @@ func (p *Plugin) downloadStoredPlanfile(ctx *plugin.HookContext, store planfile.
 		return results, key, err
 	}
 
-	headKey, merged := p.mergedPullRequestPlanfileKey(ctx)
+	// Equivalent source trees cover PR synthetic commits and queue commits that
+	// land with a different SHA. Never try another source after a storage error.
+	if treeKey := p.planfileTreeKey(ctx); treeKey != "" {
+		treeResults, sourceKey, treeErr := p.downloadTreePlanfile(ctx, store, treeKey)
+		if treeErr == nil {
+			log.Info("Using the plan stored for the same source tree", "key", sourceKey, "sha", ctx.CICtx.SHA)
+			return treeResults, sourceKey, nil
+		}
+		if !errors.Is(treeErr, errUtils.ErrArtifactNotFound) {
+			return nil, treeKey, treeErr
+		}
+	}
+
+	headKey, merged := p.pullRequestPlanfileKey(ctx)
 	if merged == nil || headKey == key {
 		return nil, key, err
 	}
@@ -43,30 +58,42 @@ func (p *Plugin) downloadStoredPlanfile(ctx *plugin.HookContext, store planfile.
 	if headErr != nil {
 		return nil, headKey, errors.Join(err, headErr)
 	}
-	log.Info("Using the plan stored for the merged pull request's head commit",
+	log.Info("Using the plan stored for the pull request's head commit",
 		"pr", merged.Number, "head_sha", merged.HeadSHA, "merge_sha", ctx.CICtx.SHA)
 	return results, headKey, nil
 }
 
-// mergedPullRequestPlanfileKey returns the planfile key for the head commit of the pull request
-// merged as the current commit, and that pull request. It returns a nil pull request when there
+// pullRequestPlanfileKey returns the planfile key for the head commit of the pull request
+// associated with the current checkout, and that pull request. It returns a nil pull request when there
 // is none or it cannot be determined.
-func (p *Plugin) mergedPullRequestPlanfileKey(ctx *plugin.HookContext) (string, *provider.MergedPullRequest) {
-	defer perf.Track(ctx.Config, "terraform.Plugin.mergedPullRequestPlanfileKey")()
+func (p *Plugin) pullRequestPlanfileKey(ctx *plugin.HookContext) (string, *provider.PullRequestRevision) {
+	defer perf.Track(ctx.Config, "terraform.Plugin.pullRequestPlanfileKey")()
 
-	// Pull request and merge-queue runs plan the commit they run on, so there is nothing to map.
-	if ctx.CICtx == nil || ctx.CICtx.SHA == "" || ctx.CICtx.PullRequest != nil || ctx.CICtx.MergeQueue != nil {
+	// Review runs resolve only a revision bound to their event or active queue
+	// entry. Post-merge runs resolve the PR that actually landed as this SHA.
+	if ctx.CICtx == nil || ctx.CICtx.SHA == "" {
 		return "", nil
 	}
-	resolver, ok := ctx.Provider.(provider.MergedPullRequestResolver)
-	if !ok {
-		return "", nil
+	lookupCtx, cancel := context.WithTimeout(context.Background(), planSourceLookupTimeout)
+	defer cancel()
+	var merged *provider.PullRequestRevision
+	var err error
+	if ctx.CICtx.MergeQueue != nil || ctx.CICtx.PullRequest != nil {
+		resolver, ok := ctx.Provider.(provider.ReviewPullRequestResolver)
+		if !ok {
+			return "", nil
+		}
+		merged, err = resolver.ReviewPullRequest(lookupCtx, ctx.CICtx)
+	} else {
+		resolver, ok := ctx.Provider.(provider.MergedPullRequestResolver)
+		if !ok {
+			return "", nil
+		}
+		merged, err = resolver.MergedPullRequest(lookupCtx, ctx.CICtx, ctx.CICtx.SHA)
 	}
-
-	merged, err := resolver.MergedPullRequest(context.Background(), ctx.CICtx, ctx.CICtx.SHA)
 	if err != nil {
 		// The most common cause is a workflow token without the `pull-requests: read` permission.
-		log.Warn("Cannot look up the pull request merged as the current commit; grant the workflow `pull-requests: read` to use its plan",
+		log.Warn("Cannot resolve the pull request plan source; grant the workflow `pull-requests: read` to use its plan",
 			"sha", ctx.CICtx.SHA, "error", err)
 		return "", nil
 	}

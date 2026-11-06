@@ -53,6 +53,13 @@ func WritePlanfileResultsForVerification(results []FileResult, storedPlanPath, c
 			destPath = storedPlanPath
 		case LockFilename:
 			destPath = filepath.Join(canonicalDir, LockFilename)
+			// Verification must use the landed checkout's dependency selections,
+			// not replace them with an older PR's provider lockfile.
+			if _, err := os.Stat(destPath); err == nil {
+				continue
+			} else if !os.IsNotExist(err) {
+				return err
+			}
 		default:
 			continue
 		}

@@ -84,8 +84,8 @@ type LabelReader interface {
 	Labels(ctx context.Context, run *Context) ([]string, error)
 }
 
-// MergedPullRequest identifies the pull request that landed on the base branch as a given commit.
-type MergedPullRequest struct {
+// PullRequestRevision identifies the immutable PR head selected for plan verification.
+type PullRequestRevision struct {
 	// Number is the pull request number.
 	Number int
 
@@ -101,7 +101,7 @@ type MergedPullRequest struct {
 type MergedPullRequestResolver interface {
 	// MergedPullRequest returns the merged pull request whose merge commit is sha. It returns
 	// nil and no error when sha is not the merge commit of any merged pull request.
-	MergedPullRequest(ctx context.Context, run *Context, sha string) (*MergedPullRequest, error)
+	MergedPullRequest(ctx context.Context, run *Context, sha string) (*PullRequestRevision, error)
 }
 
 // DebugModeDetector is an optional capability for providers that expose a

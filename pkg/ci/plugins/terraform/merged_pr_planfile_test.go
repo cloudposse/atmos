@@ -28,12 +28,12 @@ const (
 // resolvingProvider is a CI provider that can map a landed commit to its merged pull request.
 type resolvingProvider struct {
 	*mockProvider
-	merged *provider.MergedPullRequest
+	merged *provider.PullRequestRevision
 	err    error
 	calls  []string
 }
 
-func (r *resolvingProvider) MergedPullRequest(_ context.Context, _ *provider.Context, sha string) (*provider.MergedPullRequest, error) {
+func (r *resolvingProvider) MergedPullRequest(_ context.Context, _ *provider.Context, sha string) (*provider.PullRequestRevision, error) {
 	r.calls = append(r.calls, sha)
 	return r.merged, r.err
 }
@@ -41,7 +41,7 @@ func (r *resolvingProvider) MergedPullRequest(_ context.Context, _ *provider.Con
 func newResolvingProvider() *resolvingProvider {
 	return &resolvingProvider{
 		mockProvider: newMockProvider(),
-		merged:       &provider.MergedPullRequest{Number: 290, HeadSHA: prHeadSHA},
+		merged:       &provider.PullRequestRevision{Number: 290, HeadSHA: prHeadSHA},
 	}
 }
 

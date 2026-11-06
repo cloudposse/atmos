@@ -3,6 +3,7 @@ package planfile
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -158,6 +159,10 @@ func extractOwnerRepo(opts planfile.StoreOptions) (string, string) {
 // renderPlanfileList formats and outputs the planfile list using pkg/list infrastructure.
 // When owner or repo are non-empty, additional OWNER and REPO columns are included.
 func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat, owner, repo string) error {
+	// References are implementation details, not additional reviewed plans.
+	files = slices.DeleteFunc(slices.Clone(files), func(file planfile.PlanfileInfo) bool {
+		return planfile.IsSourceReference(file.Key)
+	})
 	if len(files) == 0 {
 		// No planfiles found - render empty result.
 		return renderWithRenderer([]map[string]any{}, outputFormat, owner, repo)

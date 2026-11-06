@@ -23,7 +23,7 @@ const mergedPullRequestsPerPage = 100
 // merge_commit_sha equals sha landed as this commit. That covers squash merges, merge commits,
 // rebase merges (the last rebased commit), and merge-queue merges. A pull request whose head is
 // sha (a fast-forward merge) is skipped: its plan is already stored under sha.
-func (p *Provider) MergedPullRequest(ctx context.Context, run *provider.Context, sha string) (*provider.MergedPullRequest, error) {
+func (p *Provider) MergedPullRequest(ctx context.Context, run *provider.Context, sha string) (*provider.PullRequestRevision, error) {
 	defer perf.Track(nil, "github.Provider.MergedPullRequest")()
 
 	if run == nil || run.RepoOwner == "" || run.RepoName == "" || sha == "" {
@@ -42,34 +42,42 @@ func (p *Provider) MergedPullRequest(ctx context.Context, run *provider.Context,
 
 // searchMergedAs pages through the pull requests GitHub associates with sha until it finds the
 // one merged as sha.
-func (p *Provider) searchMergedAs(ctx context.Context, owner, repo, sha string) (*provider.MergedPullRequest, error) {
+func (p *Provider) searchMergedAs(ctx context.Context, owner, repo, sha string) (*provider.PullRequestRevision, error) {
 	options := &github.ListOptions{PerPage: mergedPullRequestsPerPage}
+	var found *provider.PullRequestRevision
 	for {
 		page, response, err := p.client.GitHub().PullRequests.ListPullRequestsWithCommit(ctx, owner, repo, sha, options)
 		if err != nil {
 			return nil, err
 		}
-		if merged := findMergedAs(page, sha); merged != nil {
-			return merged, nil
+		for _, pr := range page {
+			merged := findMergedAs([]*github.PullRequest{pr}, sha)
+			if merged == nil {
+				continue
+			}
+			if found != nil && found.Number != merged.Number {
+				return nil, fmt.Errorf("%w: multiple pull requests were merged as %s", errUtils.ErrCIMergedPRLookupFailed, sha)
+			}
+			found = merged
 		}
 		if response == nil || response.NextPage == 0 {
-			return nil, nil
+			return found, nil
 		}
 		options.Page = response.NextPage
 	}
 }
 
 // findMergedAs returns the pull request in prs that was merged as sha, or nil.
-func findMergedAs(prs []*github.PullRequest, sha string) *provider.MergedPullRequest {
+func findMergedAs(prs []*github.PullRequest, sha string) *provider.PullRequestRevision {
 	for _, pr := range prs {
-		if pr.MergedAt == nil || !strings.EqualFold(pr.GetMergeCommitSHA(), sha) {
+		if pr == nil || pr.MergedAt == nil || !strings.EqualFold(pr.GetMergeCommitSHA(), sha) {
 			continue
 		}
 		head := pr.GetHead().GetSHA()
 		if head == "" || strings.EqualFold(head, sha) {
 			continue
 		}
-		return &provider.MergedPullRequest{Number: pr.GetNumber(), HeadSHA: head}
+		return &provider.PullRequestRevision{Number: pr.GetNumber(), HeadSHA: head}
 	}
 	return nil
 }

@@ -61,19 +61,19 @@ func TestProviderMergedPullRequest(t *testing.T) {
 	tests := []struct {
 		name string
 		page string
-		want *provider.MergedPullRequest
+		want *provider.PullRequestRevision
 	}{
 		{
 			name: "squash merge resolves to the pull request head",
 			page: "[" + prJSON(290, true, mergedTestSHA, mergedTestHead) + "]",
-			want: &provider.MergedPullRequest{Number: 290, HeadSHA: mergedTestHead},
+			want: &provider.PullRequestRevision{Number: 290, HeadSHA: mergedTestHead},
 		},
 		{
 			name: "skips pull requests that merely contain the commit",
 			page: "[" + prJSON(301, false, "0000000000000000000000000000000000000001", "aaaa") + "," +
 				prJSON(299, true, "0000000000000000000000000000000000000002", "bbbb") + "," +
 				prJSON(290, true, mergedTestSHA, mergedTestHead) + "]",
-			want: &provider.MergedPullRequest{Number: 290, HeadSHA: mergedTestHead},
+			want: &provider.PullRequestRevision{Number: 290, HeadSHA: mergedTestHead},
 		},
 		{
 			name: "unmerged pull request with a test merge commit is ignored",
@@ -82,6 +82,18 @@ func TestProviderMergedPullRequest(t *testing.T) {
 		{
 			name: "fast-forward merge where the head is the commit is ignored",
 			page: "[" + prJSON(290, true, mergedTestSHA, mergedTestSHA) + "]",
+		},
+		{
+			name: "merged pull request with deleted head metadata is ignored",
+			page: `[{"number":290,"merged_at":"2026-11-05T17:19:00Z","merge_commit_sha":"` + mergedTestSHA + `","head":null}]`,
+		},
+		{
+			name: "merged pull request without head sha is ignored",
+			page: "[" + prJSON(290, true, mergedTestSHA, "") + "]",
+		},
+		{
+			name: "earlier rebased commit is not the landed tip",
+			page: "[" + prJSON(290, true, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", mergedTestHead) + "]",
 		},
 		{
 			name: "commit not associated with any pull request",
@@ -109,7 +121,7 @@ func TestProviderMergedPullRequestPagination(t *testing.T) {
 	)
 	got, err := p.MergedPullRequest(context.Background(), mergedPRRun(), mergedTestSHA)
 	require.NoError(t, err)
-	assert.Equal(t, &provider.MergedPullRequest{Number: 290, HeadSHA: mergedTestHead}, got)
+	assert.Equal(t, &provider.PullRequestRevision{Number: 290, HeadSHA: mergedTestHead}, got)
 	assert.EqualValues(t, 2, calls.Load())
 }
 
@@ -138,6 +150,7 @@ func TestProviderMergedPullRequestIncompleteInputSkipsAPI(t *testing.T) {
 	}{
 		"nil run":       {nil, mergedTestSHA},
 		"missing owner": {&provider.Context{RepoName: "repo"}, mergedTestSHA},
+		"missing repo":  {&provider.Context{RepoOwner: "owner"}, mergedTestSHA},
 		"missing sha":   {mergedPRRun(), ""},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -147,4 +160,17 @@ func TestProviderMergedPullRequestIncompleteInputSkipsAPI(t *testing.T) {
 		})
 	}
 	assert.Zero(t, calls.Load())
+}
+
+func TestProviderMergedPullRequestRejectsAmbiguityAcrossPages(t *testing.T) {
+	var calls atomic.Int32
+	p := mergedPRServer(
+		t, &calls,
+		"["+prJSON(290, true, mergedTestSHA, mergedTestHead)+"]",
+		"["+prJSON(291, true, mergedTestSHA, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")+"]",
+	)
+	got, err := p.MergedPullRequest(context.Background(), mergedPRRun(), mergedTestSHA)
+	require.ErrorIs(t, err, errUtils.ErrCIMergedPRLookupFailed)
+	assert.Nil(t, got)
+	assert.EqualValues(t, 2, calls.Load())
 }

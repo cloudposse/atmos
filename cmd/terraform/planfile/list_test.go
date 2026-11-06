@@ -1,6 +1,9 @@
 package planfile
 
 import (
+	"encoding/json"
+	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -218,4 +221,26 @@ func TestOutputFormatsWithOwnerRepo(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestPlanfileListHidesSourceReferences(t *testing.T) {
+	initTestIO(t)
+	read, write, err := os.Pipe()
+	require.NoError(t, err)
+	previous := os.Stdout
+	os.Stdout = write
+	t.Cleanup(func() { os.Stdout = previous; read.Close(); write.Close() })
+	files := []planfile.PlanfileInfo{
+		{Key: "stack/component/abc.tfplan.tar", Metadata: &planfile.Metadata{}},
+		{Key: "stack/component/tree-repository-tree.tfplan.tar", Metadata: &planfile.Metadata{}},
+	}
+	require.NoError(t, renderPlanfileList(files, "json", "", ""))
+	require.NoError(t, write.Close())
+	os.Stdout = previous
+	output, err := io.ReadAll(read)
+	require.NoError(t, err)
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal(output, &rows))
+	assert.Len(t, rows, 1, "internal references must not appear as duplicate plans")
+	assert.Len(t, files, 2, "rendering must not mutate the caller's artifact list")
 }

@@ -169,3 +169,21 @@ func TestWritePlanfileResultsForVerification(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestVerificationPreservesCheckoutLockfile(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, LockFilename)
+	require.NoError(t, os.WriteFile(lockPath, []byte("landed-provider-selection"), 0o600))
+	storedPath := filepath.Join(dir, StoredPlanPrefix+PlanFilename)
+	results := []FileResult{
+		{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("reviewed-plan"))},
+		{Name: LockFilename, Data: io.NopCloser(strings.NewReader("old-provider-selection"))},
+	}
+	require.NoError(t, WritePlanfileResultsForVerification(results, storedPath, filepath.Join(dir, PlanFilename)))
+	contents, err := os.ReadFile(lockPath)
+	require.NoError(t, err)
+	assert.Equal(t, "landed-provider-selection", string(contents))
+	contents, err = os.ReadFile(storedPath)
+	require.NoError(t, err)
+	assert.Equal(t, "reviewed-plan", string(contents))
+}
