@@ -213,7 +213,11 @@ func (r *runner) buildBaseline(dir string) (string, error) {
 	if closeErr != nil {
 		return "", closeErr
 	}
-	cmd = exec.Command("tar", "-xf", archive.Name(), "-C", source)
+	// Relative paths from the build directory: GNU tar, which Windows CI puts
+	// first on PATH, reads a drive-letter path such as D:\a\tmp\source.tar as
+	// host:file and tries a remote shell.
+	cmd = exec.Command("tar", "-xf", filepath.Base(archive.Name()), "-C", filepath.Base(source))
+	cmd.Dir = dir
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return "", err
