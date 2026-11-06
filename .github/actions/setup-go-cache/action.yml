@@ -63,8 +63,8 @@ outputs:
       include the trusted GoReleaser configuration hash.
     value: ${{ steps.restore.outputs.cache-primary-key || steps.restore-release.outputs.cache-primary-key }}
   go-version:
-    description: The verified actions/setup-go go-version output.
-    value: ${{ steps.verify-go.outputs.go-version }}
+    description: actions/setup-go's go-version output.
+    value: ${{ steps.go.outputs.go-version }}
 
 runs:
   using: composite
@@ -136,7 +136,6 @@ runs:
     # setting go-version. Fail fast so a blank version never reaches the cache
     # keys; re-running the job recovers from the transient download failure.
     - name: Verify Go installation
-      id: verify-go
       shell: bash
       env:
         EXPECTED_GO_VERSION: ${{ steps.go.outputs.go-version }}
@@ -150,7 +149,6 @@ runs:
           echo "::error::Expected Go $EXPECTED_GO_VERSION on PATH, found $actual_version"
           exit 1
         fi
-        echo "go-version=$EXPECTED_GO_VERSION" >> "$GITHUB_OUTPUT"
 
     # GitHub Actions cache scoping isolates this: a pull_request run gets
     # read-only access to the default branch's cache scope, cannot restore
@@ -169,10 +167,10 @@ runs:
         path: |
           ${{ env.GOCACHE }}
           ${{ env.GOMODCACHE }}
-        key: go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        key: go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
         restore-keys: |
-          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
-          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-
+          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-
 
     # Both release consumers and the warmup hash the trusted root configuration,
     # even when the source checkout lives under source/. Dependency changes can
@@ -185,10 +183,10 @@ runs:
         path: |
           ${{ env.GOCACHE }}
           ${{ env.GOMODCACHE }}
-        key: release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        key: release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-${{ hashFiles(inputs.cache-dependency-path) }}
         restore-keys: |
-          release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-${{ hashFiles(inputs.cache-dependency-path) }}-
-          release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-
+          release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-
 
     # The race planner only needs to compile the Mage target and enumerate
     # local packages. Its own cache lineage avoids downloading the full,
@@ -201,7 +199,7 @@ runs:
         path: |
           ${{ env.GOCACHE }}
           ${{ env.GOMODCACHE }}
-        key: race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        key: race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
         restore-keys: |
-          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
-          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-
+          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-

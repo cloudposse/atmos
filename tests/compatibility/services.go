@@ -380,7 +380,8 @@ func (s *fixtureServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name, err := url.PathUnescape(filepath.Base(r.URL.EscapedPath()))
-	if err != nil || strings.ContainsAny(name, "/\\") {
+	// Serve only plain file names from the fixture data directory.
+	if err != nil || strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
 		http.NotFound(w, r)
 		return
 	}
