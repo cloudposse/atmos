@@ -29,7 +29,7 @@ type AIProviderConfig struct {
 	ApiKey    string           `yaml:"api_key,omitempty" json:"api_key,omitempty" mapstructure:"api_key"` //nolint:gosec // G117: not a hardcoded credential, populated from !env YAML function
 	MaxTokens int              `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
 	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"` // For Ollama or custom endpoints
-	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"`   // Token caching settings
+	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`          // Token caching settings
 
 	// CLI provider fields (for claude-code, codex-cli, copilot-cli, gemini-cli).
 	Binary       string   `yaml:"binary,omitempty" json:"binary,omitempty" mapstructure:"binary"`
