@@ -67,23 +67,7 @@ func (p *Plugin) pullRequestPlanfileKey(ctx *plugin.HookContext) (string, *provi
 	if ctx.CICtx == nil || ctx.CICtx.SHA == "" {
 		return "", nil
 	}
-	lookupCtx, cancel := context.WithTimeout(context.Background(), planSourceLookupTimeout)
-	defer cancel()
-	var revision *provider.PullRequestRevision
-	var err error
-	if ctx.CICtx.MergeQueue != nil || ctx.CICtx.PullRequest != nil {
-		resolver, ok := ctx.Provider.(provider.ReviewPullRequestResolver)
-		if !ok {
-			return "", nil
-		}
-		revision, err = resolver.ReviewPullRequest(lookupCtx, ctx.CICtx)
-	} else {
-		resolver, ok := ctx.Provider.(provider.MergedPullRequestResolver)
-		if !ok {
-			return "", nil
-		}
-		revision, err = resolver.MergedPullRequest(lookupCtx, ctx.CICtx, ctx.CICtx.SHA)
-	}
+	revision, err := resolvePullRequestRevision(ctx)
 	if err != nil {
 		// The most common cause is a workflow token without the `pull-requests: read` permission.
 		log.Warn("Cannot resolve the pull request plan source; grant the workflow `pull-requests: read` to use its plan",
@@ -102,4 +86,31 @@ func (p *Plugin) pullRequestPlanfileKey(ctx *plugin.HookContext) (string, *provi
 		return "", nil
 	}
 	return key, revision
+}
+
+// resolvePullRequestRevision asks the provider for the PR revision associated
+// with the checkout. It returns nil when the provider cannot resolve one.
+func resolvePullRequestRevision(ctx *plugin.HookContext) (*provider.PullRequestRevision, error) {
+	lookupCtx, cancel := context.WithTimeout(context.Background(), planSourceLookupTimeout)
+	defer cancel()
+	// Only PR review events bind a revision to their payload. Other events that
+	// carry PR info, such as workflow_run, resolve the PR merged as this SHA.
+	if ctx.CICtx.MergeQueue != nil || (ctx.CICtx.PullRequest != nil && isPullRequestReviewEvent(ctx.CICtx.EventName)) {
+		resolver, ok := ctx.Provider.(provider.ReviewPullRequestResolver)
+		if !ok {
+			return nil, nil
+		}
+		return resolver.ReviewPullRequest(lookupCtx, ctx.CICtx)
+	}
+	resolver, ok := ctx.Provider.(provider.MergedPullRequestResolver)
+	if !ok {
+		return nil, nil
+	}
+	return resolver.MergedPullRequest(lookupCtx, ctx.CICtx, ctx.CICtx.SHA)
+}
+
+// isPullRequestReviewEvent reports whether the event reviews a pull request
+// revision whose head is recorded in the event payload.
+func isPullRequestReviewEvent(eventName string) bool {
+	return eventName == "pull_request" || eventName == "pull_request_target"
 }

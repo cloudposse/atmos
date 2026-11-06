@@ -141,6 +141,7 @@ func TestDownloadPlanfileForVerification_NoFallback(t *testing.T) {
 		{
 			name: "pull request event plans its own commit",
 			setup: func(ctx *plugin.HookContext, _ *resolvingProvider) {
+				ctx.CICtx.EventName = "pull_request"
 				ctx.CICtx.PullRequest = &provider.PRInfo{Number: 290}
 			},
 			storeHeadPlan: true,
@@ -179,4 +180,21 @@ func TestDownloadPlanfileForVerification_NoFallback(t *testing.T) {
 			assert.Len(t, prov.calls, tt.wantLookups)
 		})
 	}
+}
+
+// A workflow_run carries the triggering PR's info but no review payload, so it
+// must resolve the PR merged as the checkout rather than a review revision.
+func TestDownloadPlanfileForVerification_WorkflowRunUsesMergedPR(t *testing.T) {
+	store := newLocalPlanfileStore(t)
+	info := mergedDeployInfo(t)
+	storePlan(t, store, info, prHeadSHA, "reviewed-pr-plan")
+	prov := newResolvingProvider()
+	ctx := mergedDeployContext(info, prov, store)
+	ctx.CICtx.EventName = "workflow_run"
+	ctx.CICtx.PullRequest = &provider.PRInfo{Number: 290}
+
+	require.NoError(t, (&Plugin{}).downloadPlanfileForVerification(ctx))
+
+	assert.Equal(t, "reviewed-pr-plan", readStoredPlan(t, info))
+	assert.Equal(t, []string{mergeCommitSHA}, prov.calls)
 }

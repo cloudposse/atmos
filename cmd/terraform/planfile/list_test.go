@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -230,10 +231,15 @@ func TestPlanfileListHidesSourceReferences(t *testing.T) {
 	previous := os.Stdout
 	os.Stdout = write
 	t.Cleanup(func() { os.Stdout = previous; read.Close(); write.Close() })
+	planMeta := &planfile.Metadata{}
+	planMeta.SHA = "plan-sha"
+	referenceMeta := &planfile.Metadata{}
+	referenceMeta.SHA = "reference-sha"
 	files := []planfile.PlanfileInfo{
-		{Key: "stack/component/abc.tfplan.tar", Metadata: &planfile.Metadata{}},
-		{Key: "stack/component/tree-repository-tree.tfplan.tar", Metadata: &planfile.Metadata{}},
+		{Key: "stack/component/abc.tfplan.tar", Metadata: planMeta},
+		{Key: "stack/component/tree-repository-tree.tfplan.tar", Metadata: referenceMeta},
 	}
+	original := slices.Clone(files)
 	require.NoError(t, renderPlanfileList(files, "json", "", ""))
 	require.NoError(t, write.Close())
 	os.Stdout = previous
@@ -241,6 +247,9 @@ func TestPlanfileListHidesSourceReferences(t *testing.T) {
 	require.NoError(t, err)
 	var rows []map[string]any
 	require.NoError(t, json.Unmarshal(output, &rows))
-	assert.Len(t, rows, 1, "internal references must not appear as duplicate plans")
+	require.Len(t, rows, 1, "internal references must not appear as duplicate plans")
+	assert.Equal(t, "plan-sha", rows[0]["SHA"], "the retained row must be the plan, not the reference")
+	assert.NotContains(t, string(output), "reference-sha")
 	assert.Len(t, files, 2, "rendering must not mutate the caller's artifact list")
+	assert.Equal(t, original, files, "rendering must not reorder or modify the caller's elements")
 }

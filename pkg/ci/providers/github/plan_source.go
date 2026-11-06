@@ -92,6 +92,8 @@ func (p *Provider) QueuedPullRequest(ctx context.Context, run *provider.Context)
 	return result.revision(run), nil
 }
 
+// revision returns the queued PR head only when the PR's live queue entry still
+// identifies the checked-out queue commit. Otherwise it returns nil.
 func (result *queuePlanSourceResponse) revision(run *provider.Context) *provider.PullRequestRevision {
 	pr := result.Data.Repository.PullRequest
 	if pr == nil || pr.Number != run.MergeQueue.PullRequestNumber || pr.HeadRefOID == "" ||
@@ -123,6 +125,8 @@ func (p *Provider) ReviewPullRequest(ctx context.Context, run *provider.Context)
 	return reviewRevisionFromPayload(run, payload), nil
 }
 
+// reviewRevisionFromPayload returns the PR head from the event payload only when
+// the checkout is that head or the event's synthetic merge commit.
 func reviewRevisionFromPayload(run *provider.Context, payload map[string]any) *provider.PullRequestRevision {
 	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
 	head := extractPRHeadSHA(payload)
@@ -134,10 +138,12 @@ func reviewRevisionFromPayload(run *provider.Context, payload map[string]any) *p
 	return &provider.PullRequestRevision{Number: run.PullRequest.Number, HeadSHA: head}
 }
 
+// validPlanSourceContext reports whether run identifies a commit and repository to look up.
 func validPlanSourceContext(run *provider.Context) bool {
 	return run != nil && run.SHA != "" && run.RepoOwner != "" && run.RepoName != ""
 }
 
+// isPlanSourcePREvent reports whether run is a PR review event with a PR number.
 func isPlanSourcePREvent(run *provider.Context) bool {
 	return run.PullRequest != nil && run.PullRequest.Number > 0 &&
 		(run.EventName == "pull_request" || run.EventName == "pull_request_target")

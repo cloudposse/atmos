@@ -69,10 +69,14 @@ const (
 	planSourceSHALength = 40
 )
 
+// planSourceReference is the body of a source-tree reference: the commit whose plan it points to.
 type planSourceReference struct {
 	SHA string `json:"sha"`
 }
 
+// downloadTreePlanfile follows the source-tree reference at treeKey to the original
+// commit-keyed plan and downloads it. It returns the downloaded files and the key
+// they came from. A malformed reference fails rather than selecting another plan.
 func (p *Plugin) downloadTreePlanfile(ctx *plugin.HookContext, store planfile.Store, treeKey string) ([]planfile.FileResult, string, error) {
 	defer perf.Track(ctx.Config, "terraform.Plugin.downloadTreePlanfile")()
 	files, _, err := store.Download(context.Background(), treeKey)
