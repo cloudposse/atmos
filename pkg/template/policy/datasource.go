@@ -140,12 +140,11 @@ func policyDatasourceTarget(d *render.Data, alias string, args []string) (*url.U
 		if err != nil {
 			return nil, nil, errUtils.ErrPolicyInputInvalid
 		}
-		if target.Scheme == "file" {
-			// The file URL path is a URL path, so join it with forward slashes on every OS.
-			target = target.JoinPath(relative.Path)
-		} else {
-			target = target.ResolveReference(relative)
-		}
+		// Resolve the subpath exactly as gomplate's reader does (a relative URL
+		// against the absolute source URL), so the policy checks the same file
+		// or URL that is read. A source without a trailing slash resolves to a
+		// sibling, so directory sources must end with "/".
+		target = target.ResolveReference(relative)
 	}
 	return target, headers, nil
 }

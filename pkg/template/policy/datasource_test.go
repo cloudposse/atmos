@@ -167,7 +167,7 @@ func TestPolicyDatasourceTarget(t *testing.T) {
 		require.Equal(t, "https://example.invalid/base/item.json", target.String())
 	})
 
-	t.Run("file subpath is joined and cleaned", func(t *testing.T) {
+	t.Run("file subpath resolves against the source and is cleaned", func(t *testing.T) {
 		d := newTemplateData(t, []string{"files=" + templateDatasourceURL(dir) + "/"}, nil)
 		target, _, err := policyDatasourceTarget(d, "files", []string{"sub/../x.json"})
 		require.NoError(t, err)
@@ -245,6 +245,10 @@ func TestPolicyDatasourceLocalFiles(t *testing.T) {
 	ejsonFile := write(allowed, "secrets.ejson", `{"_public_key":"abc"}`)
 	badJSON := write(allowed, "bad.json", `{"n": [`)
 	outsideFile := write(root, "secret.json", `{"secret":true}`)
+	// The same name inside and beside the allowed root, so a check and a read
+	// that resolve a subpath differently would disagree on which one is used.
+	write(allowed, "shadow.json", `{"inside":true}`)
+	write(root, "shadow.json", `{"inside":false}`)
 	templatePolicy(t, "source", "input.scheme == 'file' && !input.within_allowed_roots", []string{allowed})
 
 	tests := []struct {
@@ -281,6 +285,26 @@ func TestPolicyDatasourceLocalFiles(t *testing.T) {
 		result, err := Datasource(d, "test", "cfg", false, filepath.Join("..", "secret.json"))
 		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 		require.Nil(t, result)
+	})
+
+	t.Run("subpath of an alias without a trailing slash is checked where it is read", func(t *testing.T) {
+		// Gomplate resolves the subpath as a relative URL, so "shadow.json"
+		// against ".../allowed" reads the sibling ".../shadow.json", which is
+		// outside the allowed root. The policy must check that same file, not
+		// ".../allowed/shadow.json".
+		d := newTemplateData(t, []string{"cfg=" + templateDatasourceURL(allowed)}, nil)
+		result, err := Datasource(d, "test", "cfg", false, "shadow.json")
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		require.Nil(t, result)
+	})
+
+	t.Run("subpath of an alias without a trailing slash is admitted inside the root", func(t *testing.T) {
+		// Negative path: the same resolution must still admit a file that is
+		// inside the allowed root.
+		d := newTemplateData(t, []string{"cfg=" + templateDatasourceURL(jsonFile)}, nil)
+		result, err := Datasource(d, "test", "cfg", false, "config.toml")
+		require.NoError(t, err)
+		require.Equal(t, map[string]any{"k": "v"}, result)
 	})
 
 	t.Run("file outside allowed roots is denied", func(t *testing.T) {

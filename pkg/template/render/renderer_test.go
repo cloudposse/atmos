@@ -336,6 +336,7 @@ func TestRender_Datasource_HTTPHeaders(t *testing.T) {
 func TestRender_ContextSources(t *testing.T) {
 	top := writeFixture(t, "top.json", `{"name":"atmos","Env":{"README_YAML":"x"}}`)
 	cfg := writeFixture(t, "config.json", `{"name":"inner"}`)
+	t.Setenv("ATMOS_RENDER_CONTEXT_TEST", "from-env")
 
 	tests := []struct {
 		name     string
@@ -351,6 +352,33 @@ func TestRender_ContextSources(t *testing.T) {
 				ContextSources: map[string]Datasource{".": {URL: top}, "config": {URL: cfg}},
 			},
 			expected: "atmos/x/inner",
+		},
+		{
+			name: "without '.', each context source is a key and .Env is available",
+			req: Request{
+				Name:           "t",
+				Text:           `{{ .top.name }}/{{ .config.name }}/{{ .Env.ATMOS_RENDER_CONTEXT_TEST }}`,
+				ContextSources: map[string]Datasource{"top": {URL: top}, "config": {URL: cfg}},
+			},
+			expected: "atmos/inner/from-env",
+		},
+		{
+			name: "tmpl.Path reports the template name, as gomplate's renderer did",
+			req: Request{
+				Name:           "stack.yaml",
+				Text:           `{{ tmpl.Path }}`,
+				ContextSources: map[string]Datasource{".": {URL: top}},
+			},
+			expected: "stack.yaml",
+		},
+		{
+			name: "unreadable context source wraps ErrRenderTemplate",
+			req: Request{
+				Name:           "t",
+				Text:           `x`,
+				ContextSources: map[string]Datasource{"missing": {URL: filepath.Join(filepath.Dir(top), "missing.json")}},
+			},
+			wantErr: errUtils.ErrRenderTemplate.Error(),
 		},
 		{
 			name: "missingkey default honored",

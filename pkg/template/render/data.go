@@ -45,11 +45,6 @@ type Data struct {
 	alias     string
 	args      []string
 	result    any
-	// rendererHeld is set while the engine executes a template through
-	// gomplate's renderer with this Data bound to it. The engine holds
-	// rendererMu for that whole render, so reads made from inside it must not
-	// lock rendererMu again.
-	rendererHeld bool
 }
 
 // NewData builds datasources from alias=URL and alias=Header: value definitions.
@@ -198,10 +193,8 @@ func (d *Data) initRenderer(alias string) error {
 	}
 	// gomplate.NewRenderer lazily initializes the package-global gomplate.Metrics,
 	// so creating a renderer needs the same lock as using one.
-	if !d.rendererHeld {
-		rendererMu.Lock()
-		defer rendererMu.Unlock()
-	}
+	rendererMu.Lock()
+	defer rendererMu.Unlock()
 	d.renderers[alias] = gomplate.NewRenderer(gomplate.RenderOptions{Datasources: sources, ExtraHeaders: d.ExtraHeaders, Funcs: funcs})
 	return nil
 }
@@ -238,13 +231,10 @@ func (d *Data) read(function, alias string, args []string) (any, error) {
 }
 
 // render runs the alias's private renderer. Gomplate's renderer records
-// timings in a package-global map, so every use is serialized on rendererMu
-// unless this goroutine already holds it (see rendererHeld).
+// timings in a package-global map, so every use is serialized on rendererMu.
 func (d *Data) render(ctx context.Context, alias, text string) error {
-	if !d.rendererHeld {
-		rendererMu.Lock()
-		defer rendererMu.Unlock()
-	}
+	rendererMu.Lock()
+	defer rendererMu.Unlock()
 	return d.renderers[alias].Render(ctx, "datasource", text, io.Discard)
 }
 

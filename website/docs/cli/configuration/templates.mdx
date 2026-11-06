@@ -176,7 +176,11 @@ For this reason, you can use the `templates.settings.sprig.enabled` and `templat
 Atmos embeds Gomplate v5. Functions that Gomplate deprecated in v3 were removed upstream in v4, so templates written
 against older Atmos releases reference names that no longer exist in Gomplate itself. Atmos keeps every one of them
 working through a compatibility shim: the old name still runs, produces the same result as its replacement, and logs a
-warning (once per stack manifest per function) naming the exact replacement to switch to. The shim is a bridge, not a
+warning naming the exact replacement to switch to. A stack manifest rendered as a whole (for example, an import with
+`context`) is named in the warning, once per manifest per function. Component configuration is rendered after Atmos
+merges every manifest that contributes to it, so there is no single manifest to name: those warnings appear once per
+function per run, under the name of the rendering step. Search your stacks for the function name to find each call.
+The shim is a bridge, not a
 long-term guarantee — it will be removed in a future major release of Atmos, so treat the warning as a to-do, not
 background noise. Each removed function has a direct replacement:
 

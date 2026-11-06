@@ -6,9 +6,9 @@
 // which matters because stack files are rendered concurrently. Gomplate's
 // renderer-only functions are provided without its renderer: Data reads
 // datasources lazily and the `tmpl` namespace is bound to the parsed template.
-// Gomplate's renderer is used only to read datasources and to render
-// templates whose context comes from datasources (Request.ContextSources); it
-// updates package-global metrics, so those uses are serialized.
+// Gomplate's renderer is used only to read datasources, including the context
+// datasources of Request.ContextSources; it updates package-global metrics,
+// so those reads are serialized.
 package render
 
 import (
@@ -67,14 +67,16 @@ type Request struct {
 	// namespace) so they share its definitions. Nil means a fresh Data.
 	Sources *Data
 	// ContextSources are read eagerly before execution and exposed on `.`; the
-	// alias "." replaces the whole context. When set, Data is ignored and the
-	// template is rendered by gomplate's renderer directly. They are also
-	// readable as datasources (for example `ds "config"`).
+	// alias "." replaces the whole context, as in gomplate's renderer. When set,
+	// Data is ignored. They are also readable as datasources (for example
+	// `ds "config"`).
 	ContextSources map[string]Datasource
 	// WrapFuncs, when set, receives the fully assembled function map (Gomplate,
 	// Sprig, compatibility shims and Funcs) and the render's datasources, and
 	// returns the map the template is parsed with. Policy admission uses it to
-	// guard every function call.
+	// guard every function call. Gomplate's `tmpl` namespace and `tpl` alias
+	// need the parsed root, so they are passed through it in a second call of
+	// their own once they are bound.
 	WrapFuncs FuncsWrapper
 	// Prepare, when set, runs on the parsed template before it executes, for
 	// callers that rewrite or guard the parse tree. Gomplate's `tmpl`/`tpl`
@@ -166,10 +168,10 @@ func (e *engine) Render(ctx context.Context, req *Request) (string, error) {
 	}
 
 	if len(req.ContextSources) > 0 {
-		return e.renderWithContext(ctx, plan)
+		return e.renderWithContext(plan)
 	}
 
-	parsed, err := parsePlain(plan, e.gomplate)
+	parsed, err := parsePlain(plan, e.gomplate, "")
 	if err != nil {
 		return "", err
 	}

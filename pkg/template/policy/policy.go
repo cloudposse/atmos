@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"text/template"
 
+	"github.com/hairyhenderson/gomplate/v5/tmpl"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
@@ -124,6 +126,11 @@ func policyNamespace(name string, fn any, file string) any {
 			}
 		}
 		return func() any { return &policyNetFuncs{native: native, file: file} }
+	case "tmpl":
+		if constructor, ok := fn.(func() *tmpl.Template); ok {
+			native := constructor()
+			return func() any { return &policyTmplFuncs{native: native, file: file} }
+		}
 	case "env":
 		if reflect.TypeOf(fn).NumIn() == 0 {
 			native := fn.(func() interface{})().(nativeEnvFuncs)
