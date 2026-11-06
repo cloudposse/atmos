@@ -19,8 +19,8 @@ from the Atmos build entirely.
 ## The Problem
 
 Atmos stack manifests support Go templates, and the Gomplate library supplies most of the
-functions and every datasource behind them. The version Atmos embedded, Gomplate v3, is no longer
-maintained, and neither is v4; both were built on the AWS SDK for Go v1. AWS retired that SDK, and
+functions and every datasource behind them. The version Atmos embedded, Gomplate v4, is no longer
+maintained, and neither is v3; both were built on the AWS SDK for Go v1. AWS retired that SDK, and
 its published vulnerabilities (Go advisories GO-2022-0635 and GO-2022-0646) will never be resolved upstream because there will
 never be another v1 release.
 
@@ -35,7 +35,7 @@ the way.
 
 Atmos now embeds Gomplate v5, which is built on the AWS SDK for Go v2. Upgrading was not optional,
 but breaking your stacks along with it would not have been acceptable either. Despite the sheer
-number of breaking changes between Gomplate v3 and v5, we went through them one by one and kept
+number of breaking changes between Gomplate v4 and v5, we went through them one by one and kept
 backward compatibility everywhere it made sense to: we built a compatibility test suite that runs
 the same templates through the previous release and this one and compares the results, and added a
 shim for every removed function we could restore faithfully. Most stack templates keep working
@@ -59,8 +59,8 @@ Atmos.
 
 ## What to Check in Your Stacks
 
-Gomplate removed functions it had deprecated in v3 and changed a few datasource behaviors between
-v3 and v5. Atmos provides compatibility shims for the legacy function names listed below and
+Gomplate removed functions it had deprecated in v3 and changed a few datasource behaviors in
+v5. Atmos provides compatibility shims for the legacy function names listed below and
 logs migration warnings when they are used. These shims do not guarantee identical behavior:
 conversion errors, network return types, and datasource changes can break existing templates.
 Review the affected calls and test your stack catalogs before upgrading. The shims are planned
@@ -94,14 +94,15 @@ cidr: '{{ net.ParsePrefix .vars.cidr }}'
 ```
 
 The unqualified aliases `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, and
-`trim` are no longer registered by Gomplate. In practice most of them keep working without any
-warning at all: `slice` is a built-in of Go templates, and `contains`, `hasPrefix`, `hasSuffix`,
-`split`, and `trim` are also defined by Sprig, which Atmos enables by default through
-`templates.settings.sprig.enabled`. Be aware that Sprig's argument order differs from Gomplate's
-for some of these. If you have disabled Sprig, Atmos's compatibility shim takes over for those five
-names with Gomplate's original argument order, logging the same kind of warning described above.
-There is no Sprig equivalent for `splitN` at all, so the shim covers it either way. Replace any of
-them with their `strings.*` or `coll.*` forms when you get the chance.
+`trim` are no longer registered by Gomplate, but your templates keep working with no action needed:
+
+- `slice` is a built-in of Go templates.
+- `contains`, `hasPrefix`, `hasSuffix`, `split`, and `trim` resolve to Sprig, as they did before,
+  because Atmos layered Sprig over Gomplate's aliases. If you have disabled Sprig
+  (`templates.settings.sprig.enabled`), an Atmos shim restores Gomplate's original argument order.
+- `splitN` has no Sprig equivalent, so a shim always provides it.
+
+Replace shimmed names with their `strings.*` or `coll.*` forms when you get the chance.
 
 ### Conversions and regular expressions now fail loudly
 
