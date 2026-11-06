@@ -164,13 +164,17 @@ func (r *runner) validateBaseline(results map[string]observation) error {
 	if len(results) != len(r.cases) {
 		return errors.New("baseline does not contain the complete corpus")
 	}
+	unexpected := []string{}
 	for _, c := range r.cases {
 		o, ok := results[c.ID]
 		if !ok {
 			return fmt.Errorf("missing baseline case %s", c.ID)
 		}
 		if o.ExitCode != c.BaselineExit {
-			return fmt.Errorf("unexpected baseline exit for %s: %s", c.ID, canonical(o))
+			// Collect every unexpected exit before failing, so one run on a new
+			// platform shows the full list.
+			unexpected = append(unexpected, fmt.Sprintf("unexpected baseline exit for %s: %s", c.ID, canonical(o)))
+			continue
 		}
 		for name, value := range o.Files {
 			if value == nil {
@@ -188,6 +192,9 @@ func (r *runner) validateBaseline(results map[string]observation) error {
 				return fmt.Errorf("baseline never exercised %s for %s", service, c.ID)
 			}
 		}
+	}
+	if len(unexpected) > 0 {
+		return errors.New(strings.Join(unexpected, "\n"))
 	}
 	return nil
 }

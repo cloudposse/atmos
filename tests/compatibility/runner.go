@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -84,7 +85,20 @@ func envList(env map[string]string) []string {
 	return result
 }
 
+// fileURI returns the datasource reference for a fixture directory on this OS.
 func fileURI(path string) string {
+	return fileURIFor(runtime.GOOS, path)
+}
+
+// fileURIFor returns a file:// URL on POSIX systems and a plain drive path
+// (D:/a/b) on Windows. Gomplate v3's file datasource turns the URL path of
+// file:///D:/a/b into \D:\a\b, which Windows cannot open, while both v3 and v5
+// parse a plain drive path into the correct file URL. Percent-escapes in a
+// suffix (space%20config.json) are decoded the same way in both forms.
+func fileURIFor(goos, path string) string {
+	if goos == "windows" {
+		return strings.ReplaceAll(path, `\`, "/")
+	}
 	path = filepath.ToSlash(path)
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
@@ -178,7 +192,7 @@ func (r *runner) prepare(c testCase, sandbox, endpoint string) (string, testCase
 }
 
 func normalize(text, sandbox, endpoint string) string {
-	for _, source := range []string{fileURI(sandbox), sandbox, filepath.ToSlash(sandbox), strings.TrimLeft(filepath.ToSlash(sandbox), "/")} {
+	for _, source := range []string{fileURIFor("", sandbox), fileURI(sandbox), sandbox, filepath.ToSlash(sandbox), strings.TrimLeft(filepath.ToSlash(sandbox), "/")} {
 		text = strings.ReplaceAll(text, source, "<SANDBOX>")
 	}
 	authority := strings.TrimPrefix(endpoint, "http://")

@@ -168,3 +168,15 @@ func TestMakeSandboxPathsHaveAFixedLength(t *testing.T) {
 		}
 	}
 }
+
+func TestFileURIForUsesPlainDrivePathsOnWindows(t *testing.T) {
+	if got := fileURIFor("windows", `D:\a\tmp\data`); got != "D:/a/tmp/data" {
+		t.Fatalf("windows: %q", got)
+	}
+	if got := fileURIFor("linux", "/tmp/data"); got != "file:///tmp/data" {
+		t.Fatalf("linux: %q", got)
+	}
+	if got := fileURIFor("darwin", "/tmp/space dir"); got != "file:///tmp/space%20dir" {
+		t.Fatalf("darwin escaping: %q", got)
+	}
+}
