@@ -32,6 +32,13 @@ var TestHTTPClient *http.Client
 // targets a single small config file rather than an entire component/template artifact.
 const ociIncludeTimeout = 2 * time.Minute
 
+// bitbucketDetectTimeout bounds go-getter's BitBucketDetector, which makes a live HTTP call to
+// the BitBucket API to disambiguate a git or hg remote and has no timeout of its own (see
+// detect_bitbucket.go in the go-getter module). Without a bound, an unresponsive network call
+// could block local !include resolution indefinitely, since detection runs before the local
+// working-directory fallback in findLocalFile.
+const bitbucketDetectTimeout = 5 * time.Second
+
 // ProcessIncludeTag processes the !include tag with extension-based parsing.
 // It parses files based on their extension, not their content.
 func ProcessIncludeTag(
@@ -403,8 +410,18 @@ func shouldFetchRemote(path string) bool {
 	}
 
 	for _, detector := range detectors {
-		src, ok, err := detector.Detect(path, "")
-		if err != nil || !ok {
+		var src string
+		var ok bool
+		if _, isBitBucket := detector.(*getter.BitBucketDetector); isBitBucket {
+			src, ok = detectWithTimeout(detector, path, bitbucketDetectTimeout)
+		} else {
+			var err error
+			src, ok, err = detector.Detect(path, "")
+			if err != nil {
+				continue
+			}
+		}
+		if !ok {
 			continue
 		}
 		// If any non-file detector matched, treat it as remote
@@ -414,6 +431,31 @@ func shouldFetchRemote(path string) bool {
 	}
 
 	return false
+}
+
+// detectWithTimeout runs a go-getter detector's Detect call bounded by timeout. The go-getter
+// Detector interface takes no context, so the bound is applied with a goroutine and a timer,
+// mirroring the pattern in pkg/terraform/cache/trust_install.go's runTrustOperation. A detector
+// that doesn't return in time is treated as not matching rather than blocking the caller.
+func detectWithTimeout(detector getter.Detector, path string, timeout time.Duration) (string, bool) {
+	type result struct {
+		src string
+		ok  bool
+	}
+	done := make(chan result, 1)
+	go func() {
+		src, ok, err := detector.Detect(path, "")
+		done <- result{src, ok && err == nil}
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case r := <-done:
+		return r.src, r.ok
+	case <-timer.C:
+		return "", false
+	}
 }
 
 // IsRemoteIncludePath reports whether an !include path names a remote source (a URL, or a
