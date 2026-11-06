@@ -141,6 +141,14 @@ func (d *Data) define(alias string, target *url.URL, header http.Header) {
 	delete(d.readers, alias)
 }
 
+// Define registers a configured datasource definition, parsing its URL as
+// Request.Datasources does (including Windows drive-letter file URLs).
+func (d *Data) Define(alias string, source Datasource) error {
+	defer perf.Track(nil, "render.Data.Define")()
+
+	return d.defineAll(map[string]Datasource{alias: source})
+}
+
 // defineAll registers datasource definitions, failing on the first invalid URL.
 func (d *Data) defineAll(sources map[string]Datasource) error {
 	for alias, source := range sources {

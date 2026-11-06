@@ -217,3 +217,32 @@ func TestProcessTmplWithDatasources_GlobalTimeoutIsKeptWhenTheStackSetsNone(t *t
 	require.NoError(t, err, "a stack-level timeout still overrides the global one")
 	assert.Equal(t, "name: slow", result)
 }
+
+// TestNewPassScopeNormalizesDatasourceDefinitions verifies stack datasource definitions parse like
+// render.Request.Datasources: a drive-letter file URL keeps the drive in its path instead of the
+// host, and headers are kept.
+func TestNewPassScopeNormalizesDatasourceDefinitions(t *testing.T) {
+	settings := &schema.TemplatesSettings{}
+	settings.Gomplate.Datasources = map[string]schema.TemplatesSettingsGomplateDatasource{
+		"drive": {Url: "file://D:/data/a.json", Headers: map[string][]string{"X-Test": {"value"}}},
+		"plain": {Url: "/abs/b.json"},
+	}
+	scope, err := newPassScope(&templatePass{templateSettings: settings}, true)
+	require.NoError(t, err)
+	t.Cleanup(scope.cancel)
+
+	drive := scope.sources.Sources["drive"]
+	require.NotNil(t, drive)
+	assert.Empty(t, drive.URL.Host)
+	assert.Equal(t, "D:/data/a.json", drive.URL.Path)
+	assert.Equal(t, "value", drive.Header.Get("X-Test"))
+
+	plain := scope.sources.Sources["plain"]
+	require.NotNil(t, plain)
+	assert.Equal(t, "file:///abs/b.json", plain.URL.String())
+
+	// Negative path: an invalid definition fails the pass.
+	settings.Gomplate.Datasources = map[string]schema.TemplatesSettingsGomplateDatasource{"bad": {Url: "%zz"}}
+	_, err = newPassScope(&templatePass{templateSettings: settings}, true)
+	require.ErrorIs(t, err, errUtils.ErrInvalidDatasourceURL)
+}

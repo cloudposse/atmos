@@ -681,14 +681,12 @@ func newPassScope(pass *templatePass, gomplateEnabled bool) (*passScope, error) 
 	}
 	scope.sources.Ctx = scope.ctx
 
+	// Configured datasources (with their headers) parse like Request.Datasources, so a Windows
+	// drive-letter file URL such as file://D:/data/a.json keeps the drive in its path.
 	for alias, definition := range pass.templateSettings.Gomplate.Datasources {
-		if _, err := scope.sources.DefineDatasource(alias, definition.Url); err != nil {
+		if err := scope.sources.Define(alias, render.Datasource{URL: definition.Url, Headers: definition.Headers}); err != nil {
 			scope.cancel()
 			return nil, err
-		}
-		// Add datasource headers.
-		if len(definition.Headers) > 0 {
-			scope.sources.Sources[alias].Header = definition.Headers
 		}
 	}
 
