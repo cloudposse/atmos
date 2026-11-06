@@ -1,8 +1,9 @@
 # Migration compatibility comparison
 
 Baseline: `4ffd8804d3500b4369e739095174000565b43973` (gomplate v3).
-Candidate: this branch, compared with `runner compare` in CI on Linux, macOS
-and Windows.
+Candidate: this branch, compared in CI with `runner verify` on Linux, macOS and
+Windows, which builds the pinned old source on each OS. `runner compare` gives
+the same result locally against the checked-in macOS baseline.
 
 The old implementation reproduces **212/212 cases** across repeated runs. The
 candidate matches **158/212 cases**; the other **54 differences are approved**
