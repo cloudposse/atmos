@@ -278,7 +278,7 @@ func GomplateFuncs(ctx context.Context, sources *Data) template.FuncMap {
 	// deadline.
 	sources.Ctx = ctx
 	sources.readers = nil
-	funcs := gomplate.CreateFuncs(ctx)
+	funcs := gomplateFuncs(ctx)
 	if runtime.GOOS == "windows" {
 		funcs["file"] = func() any { return &nativeFileFuncs{} }
 	}
@@ -288,30 +288,23 @@ func GomplateFuncs(ctx context.Context, sources *Data) template.FuncMap {
 	return funcs
 }
 
-// WithExperimental enables gomplate's experimental functions for renders bound to ctx.
-func WithExperimental(ctx context.Context) context.Context {
-	defer perf.Track(nil, "render.WithExperimental")()
-
-	return gomplate.SetExperimental(ctx)
-}
-
 // JSON uses Gomplate's native JSON and EJSON decoder.
 func JSON(value string) (map[string]any, error) {
 	defer perf.Track(nil, "render.JSON")()
 
-	return gomplate.CreateFuncs(context.Background())["json"].(func(any) (map[string]any, error))(value)
+	return sharedFuncMap(false)["json"].(func(any) (map[string]any, error))(value)
 }
 
 // CSV uses Gomplate's native CSV decoder.
 func CSV(value string) ([][]string, error) {
 	defer perf.Track(nil, "render.CSV")()
 
-	return gomplate.CreateFuncs(context.Background())["csv"].(func(...string) ([][]string, error))(value)
+	return sharedFuncMap(false)["csv"].(func(...string) ([][]string, error))(value)
 }
 
 // TOML uses Gomplate's native TOML decoder.
 func TOML(value string) (any, error) {
 	defer perf.Track(nil, "render.TOML")()
 
-	return gomplate.CreateFuncs(context.Background())["toml"].(func(any) (any, error))(value)
+	return sharedFuncMap(false)["toml"].(func(any) (any, error))(value)
 }

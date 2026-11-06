@@ -16,13 +16,41 @@ func RestoreTags(node *yaml.Node) {
 	}
 	if node.Kind == yaml.ScalarNode {
 		if source, ok := Decode(node.Value); ok {
-			node.Tag, node.Value = source.Tag, source.Argument
-			node.Style = yaml.TaggedStyle | yaml.DoubleQuotedStyle
+			restoreSource(node, source)
 		}
 	}
 	for _, child := range node.Content {
 		RestoreTags(child)
 	}
+}
+
+// restoreSource rewrites a transported source as its tagged YAML node. A sequence argument
+// is restored as a tagged flow sequence: a quoted scalar would change the argument's YAML
+// kind, which tags that require a sequence (such as !ci.labels) reject when re-parsed.
+func restoreSource(node *yaml.Node, source Source) {
+	if source.Sequence {
+		if sequence, ok := parseSequence(source.Argument); ok {
+			node.Kind, node.Tag, node.Value = yaml.SequenceNode, source.Tag, ""
+			node.Style = yaml.FlowStyle
+			node.Content = sequence.Content
+			return
+		}
+	}
+	node.Tag, node.Value = source.Tag, source.Argument
+	node.Style = yaml.TaggedStyle | yaml.DoubleQuotedStyle
+}
+
+// parseSequence decodes a flow-sequence argument, reporting false for anything else.
+func parseSequence(argument string) (*yaml.Node, bool) {
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(argument), &document); err != nil || len(document.Content) != 1 {
+		return nil, false
+	}
+	sequence := document.Content[0]
+	if sequence.Kind != yaml.SequenceNode {
+		return nil, false
+	}
+	return sequence, true
 }
 
 // Display returns an ordinary representation for output formats without YAML
