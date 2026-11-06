@@ -167,7 +167,8 @@ func (f *httpFile) fetch() error {
 		f.err = err
 		return err
 	}
-	if response.StatusCode >= http.StatusBadRequest {
+	// Gomplate v3 accepted only 200; a 204, 206 or 304 has no full body to parse.
+	if response.StatusCode != http.StatusOK {
 		response.Body.Close()
 		f.err = fmt.Errorf("%w: GET returned status %d", errHTTPStatus, response.StatusCode)
 		return f.err

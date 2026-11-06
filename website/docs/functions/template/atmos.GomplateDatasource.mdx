@@ -98,7 +98,9 @@ The `atmos.GomplateDatasource` function automatically caches results in memory d
 
 1. **First call**: Fetches data from the external source and stores in cache
 2. **Subsequent calls**: Returns cached data without additional external calls
-3. **Cache scope**: Per Atmos execution (cache is cleared between runs)
+3. **Cache scope**: Per Atmos execution (cache is cleared between runs). Within a run, a cached value is reused only
+   for the same datasource definition (URL and headers), arguments, and environment variables, so stacks that set
+   different `templates.settings.env` values (for example `AWS_PROFILE`) each read their own data
 
 This caching mechanism provides several benefits:
 - **Performance**: Dramatically faster stack processing with multiple datasource references

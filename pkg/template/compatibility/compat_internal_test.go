@@ -2,6 +2,7 @@ package compatibility
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"text/template"
@@ -9,6 +10,8 @@ import (
 	"github.com/hairyhenderson/gomplate/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestLogDeprecationReporter_DedupsPerTemplateAndName verifies the default
@@ -79,4 +82,17 @@ func methodNames(typ reflect.Type) map[string]struct{} {
 		out[typ.Method(i).Name] = struct{}{}
 	}
 	return out
+}
+
+// The conversion error keeps both the Atmos sentinel and the original error in
+// its chain, so callers can still match the underlying conversion failure.
+func TestWrapConversionErrorKeepsTheOriginalError(t *testing.T) {
+	original := errors.New("strconv.ParseInt: parsing \"x\": invalid syntax")
+	err := wrapConversionError(original, "conv.ToInt64")
+	require.ErrorIs(t, err, errUtils.ErrTemplateConversion)
+	require.ErrorIs(t, err, original)
+	assert.Contains(t, err.Error(), "guard the call with `if`")
+	assert.Contains(t, err.Error(), original.Error())
+
+	assert.NoError(t, wrapConversionError(nil, "conv.ToInt64"))
 }

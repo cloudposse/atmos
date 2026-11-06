@@ -121,10 +121,10 @@ func wrapConversionError(err error, fn string) error {
 		return nil
 	}
 	hint := fmt.Sprintf(
-		"%s no longer falls back to a zero value on unconvertible input in gomplate v5 (%s); guard the call with `if` (or provide a default) before converting.",
-		fn, err.Error(),
+		"%s no longer falls back to a zero value on unconvertible input in gomplate v5; guard the call with `if` (or provide a default) before converting",
+		fn,
 	)
-	return fmt.Errorf("%w: %s", errUtils.ErrTemplateConversion, hint)
+	return fmt.Errorf("%w: %s: %w", errUtils.ErrTemplateConversion, hint, err)
 }
 
 // namespaceValue looks up a zero-arg gomplate namespace factory function

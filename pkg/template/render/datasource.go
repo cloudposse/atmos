@@ -1,9 +1,12 @@
 package render
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -43,7 +46,11 @@ const cacheKeySep = "\x00"
 // of the key because datasources are defined per stack manifest
 // (settings.templates.settings.gomplate.datasources): two stacks can define
 // the same alias with different URLs or headers, and without the definition
-// in the key one stack's cached value would leak into the other's render.
+// in the key one stack's cached value would leak into the other's render. The
+// process environment is part of the key too, because a read can depend on
+// it: an env datasource reads it directly, and cloud datasources take
+// credentials and regions from it, which `templates.settings.env` sets per
+// stack.
 func cacheKey(alias string, source *Source, args []string) string {
 	var target string
 	var headers map[string][]string
@@ -53,7 +60,8 @@ func cacheKey(alias string, source *Source, args []string) string {
 		}
 		headers = source.Header
 	}
-	return alias + cacheKeySep + target + cacheKeySep + headerKey(headers) + cacheKeySep + strings.Join(args, cacheKeySep)
+	return alias + cacheKeySep + target + cacheKeySep + headerKey(headers) + cacheKeySep + strings.Join(args, cacheKeySep) +
+		cacheKeySep + environmentKey()
 }
 
 // headerKey deterministically renders headers (sorted keys, sorted values per
@@ -79,6 +87,15 @@ func headerKey(headers map[string][]string) string {
 		b.WriteByte(';')
 	}
 	return b.String()
+}
+
+// environmentKey fingerprints the process environment, so reads made under
+// different environments never share a cache entry.
+func environmentKey() string {
+	env := os.Environ()
+	sort.Strings(env)
+	sum := sha256.Sum256([]byte(strings.Join(env, cacheKeySep)))
+	return hex.EncodeToString(sum[:])
 }
 
 // load returns the cached value for key, if any.

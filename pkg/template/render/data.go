@@ -109,6 +109,9 @@ func (d *Data) define(alias string, target *url.URL, header http.Header) {
 		d.Sources = map[string]*Source{}
 	}
 	d.Sources[alias] = &Source{Alias: alias, URL: target, Header: header}
+	// The reader holds the previous definition (and may have cached its
+	// content), so the next read must create a new one.
+	delete(d.readers, alias)
 }
 
 // defineAll registers datasource definitions, failing on the first invalid URL.

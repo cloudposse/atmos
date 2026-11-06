@@ -2,9 +2,11 @@ package render
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,4 +81,64 @@ func TestRender_ContextSourcesRunDeprecationLint(t *testing.T) {
 	defer reporter.mu.Unlock()
 	require.NotEmpty(t, reporter.reports, "the sub-path lint did not run for a context render")
 	assert.Contains(t, reporter.reports[0], "stack.yaml:")
+}
+
+// countingServer serves a JSON body that names the request number, and counts requests.
+func countingServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := count.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"request":%d}`, n)
+	}))
+	t.Cleanup(server.Close)
+	return server, &count
+}
+
+// Reads under the same environment share a cache entry; a different
+// environment (for example a per-stack AWS_PROFILE) never sees another
+// environment's cached value.
+func TestDatasourceCacheIsScopedToTheEnvironment(t *testing.T) {
+	server, count := countingServer(t)
+	cache := NewDatasourceCache()
+	read := func() any {
+		t.Helper()
+		d, err := NewData([]string{"api=" + server.URL + "/data.json"}, nil)
+		require.NoError(t, err)
+		value, err := cache.Read(d, "api")
+		require.NoError(t, err)
+		return value
+	}
+
+	t.Setenv("ATMOS_TEST_DATASOURCE_SCOPE", "one")
+	first := read()
+	assert.Equal(t, first, read(), "the same environment reuses the cached value")
+	assert.Equal(t, int32(1), count.Load())
+
+	t.Setenv("ATMOS_TEST_DATASOURCE_SCOPE", "two")
+	second := read()
+	assert.NotEqual(t, first, second, "a different environment must not reuse the cached value")
+	assert.Equal(t, int32(2), count.Load())
+
+	t.Setenv("ATMOS_TEST_DATASOURCE_SCOPE", "one")
+	assert.Equal(t, first, read(), "returning to the first environment reuses its entry")
+	assert.Equal(t, int32(2), count.Load())
+}
+
+// Redefining an alias replaces the reader, so the next read uses the new
+// definition instead of the previous one.
+func TestRedefiningADatasourceReplacesItsReader(t *testing.T) {
+	first := writeFixture(t, "first.json", `{"name":"first"}`)
+	second := writeFixture(t, "second.json", `{"name":"second"}`)
+	d := &Data{}
+	require.NoError(t, d.defineAll(map[string]Datasource{"cfg": {URL: first}}))
+	value, err := d.Datasource("cfg")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"name": "first"}, value)
+
+	require.NoError(t, d.defineAll(map[string]Datasource{"cfg": {URL: second}}))
+	value, err = d.Datasource("cfg")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"name": "second"}, value)
 }

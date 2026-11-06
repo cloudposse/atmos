@@ -28,6 +28,14 @@ func (l *requestLog) record(r *http.Request) {
 	l.headers = append(l.headers, r.Header.Clone())
 }
 
+// snapshot returns copies of the recorded requests and headers, read under
+// the lock the handler writes them with.
+func (l *requestLog) snapshot() ([]string, []http.Header) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]string(nil), l.requests...), append([]http.Header(nil), l.headers...)
+}
+
 // newServer serves /config.json and rejects HEAD with 501, like the
 // compatibility corpus's no-head fixture.
 func newServer(t *testing.T, log *requestLog) *url.URL {
@@ -36,6 +44,10 @@ func newServer(t *testing.T, log *requestLog) *url.URL {
 		log.record(r)
 		if r.Method == http.MethodHead {
 			w.WriteHeader(http.StatusNotImplemented)
+			return
+		}
+		if r.URL.Path == "/data/empty.json" {
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		if r.URL.Path != "/data/config.json" {
@@ -70,7 +82,8 @@ func TestHTTPFSStatAndReadMakeOneGet(t *testing.T) {
 	assert.Equal(t, fs.FileMode(0o444), info.Mode())
 	assert.Nil(t, info.Sys())
 	assert.Equal(t, "application/json", info.(interface{ ContentType() string }).ContentType())
-	assert.Equal(t, []string{"GET /data/config.json"}, log.requests, "exactly one GET, no HEAD")
+	requests, _ := log.snapshot()
+	assert.Equal(t, []string{"GET /data/config.json"}, requests, "exactly one GET, no HEAD")
 }
 
 func TestHTTPFSReadFileSubAndHeaders(t *testing.T) {
@@ -92,9 +105,10 @@ func TestHTTPFSReadFileSubAndHeaders(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"name":"fixture"}`, string(data))
 
-	require.Len(t, log.requests, 1)
-	assert.Equal(t, "GET /data/config.json?token=base", log.requests[0], "base query parameters are kept")
-	assert.Equal(t, "compatibility", log.headers[0].Get("X-Fixture"))
+	requests, headers := log.snapshot()
+	require.Len(t, requests, 1)
+	assert.Equal(t, "GET /data/config.json?token=base", requests[0], "base query parameters are kept")
+	assert.Equal(t, "compatibility", headers[0].Get("X-Fixture"))
 }
 
 func TestHTTPFSNilOptionsKeepTheFilesystem(t *testing.T) {
@@ -122,7 +136,15 @@ func TestHTTPFSErrors(t *testing.T) {
 	_, err = missing.Read(make([]byte, 1))
 	require.ErrorIs(t, err, errHTTPStatus, "the failed GET is not retried")
 	require.NoError(t, missing.Close())
-	assert.Equal(t, []string{"GET /data/missing.json"}, log.requests)
+	requests, _ := log.snapshot()
+	assert.Equal(t, []string{"GET /data/missing.json"}, requests)
+
+	// Gomplate v3 rejected every status but 200, including success codes with no full body.
+	empty, err := fsys.Open("empty.json")
+	require.NoError(t, err)
+	_, err = empty.Stat()
+	require.ErrorIs(t, err, errHTTPStatus)
+	require.NoError(t, empty.Close())
 
 	unreachable, err := NewHTTPFS(&url.URL{Scheme: "http", Host: "127.0.0.1:1", Path: "/"})
 	require.NoError(t, err)

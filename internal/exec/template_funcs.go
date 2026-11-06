@@ -123,8 +123,9 @@ func (f AtmosFuncs) Component(component string, stack string) (any, error) {
 
 // GomplateDatasource returns data for a gomplate datasource alias. Without
 // source policies, results are cached for the lifetime of the process, keyed
-// by the alias's effective definition, so a datasource referenced from many
-// stacks and components is fetched once.
+// by the alias's effective definition, the arguments and the environment, so
+// a datasource referenced from many stacks and components is fetched once per
+// environment.
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
 	if err := guard.Function(f.ctx, "atmos.GomplateDatasource", templatepolicy.Engine, guard.FileOrigin(f.sourceFile)); err != nil {
 		return nil, err
@@ -135,8 +136,9 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 	}
 	if !sourceRules {
 		// Nothing guards the read, so keep the cache that avoids fetching a datasource again.
-		// The cache key includes the alias's URL and headers, so two stack manifests that
-		// define the same alias differently never see each other's value.
+		// The cache key includes the alias's URL and headers and the environment, so two
+		// stack manifests that define the same alias differently, or that set different
+		// templates.settings.env values, never see each other's value.
 		log.Debug("atmos.GomplateDatasource(): processing datasource", "alias", alias)
 		return render.CachedDatasource(f.gomplateData, alias, args...)
 	}
