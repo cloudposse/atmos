@@ -256,3 +256,38 @@ func TestContextSourcesUseTheRenderContextWithGomplateDisabled(t *testing.T) {
 	require.NoError(t, err, "a later render with a live context is not stuck with the canceled one")
 	assert.NotEmpty(t, out)
 }
+
+// The environment is process-wide, so a concurrent render can change it while
+// a datasource is read. A value read while the environment changed is returned
+// but not cached, so it never lands under the other environment's key.
+func TestDatasourceCacheSkipsValuesReadWhileTheEnvironmentChanged(t *testing.T) {
+	t.Setenv("ATMOS_TEST_DATASOURCE_SCOPE", "before")
+	var changed atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if changed.CompareAndSwap(false, true) {
+			// Simulates another render changing the environment mid-read.
+			t.Setenv("ATMOS_TEST_DATASOURCE_SCOPE", "during")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"name":"value"}`))
+	}))
+	t.Cleanup(server.Close)
+	d, err := NewData([]string{"api=" + server.URL + "/data.json"}, nil)
+	require.NoError(t, err)
+	cache := NewDatasourceCache()
+	entries := func() int {
+		n := 0
+		cache.entries.Range(func(_, _ any) bool { n++; return true })
+		return n
+	}
+
+	value, err := cache.Read(d, "api")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"name": "value"}, value, "the caller still gets what it read")
+	assert.Zero(t, entries(), "a value read while the environment changed is not cached")
+
+	// Negative path: with a stable environment the value is cached.
+	_, err = cache.Read(d, "api")
+	require.NoError(t, err)
+	assert.Equal(t, 1, entries())
+}

@@ -131,7 +131,11 @@ func (c *DatasourceCache) Read(sources *Data, alias string, args ...string) (any
 	if err != nil {
 		return nil, err
 	}
-	if value != nil {
+	// The environment is process-wide, and a concurrent render can change it
+	// (templates.settings.env) during the read. Cache the value only when the
+	// key still names the environment it was read under; otherwise the caller
+	// gets the value, as an uncached read would, but no other render does.
+	if value != nil && cacheKey(alias, sources.effectiveSource(alias), args) == key {
 		c.store(key, value)
 	}
 	// Every caller gets its own copy, so a template that changes the value
