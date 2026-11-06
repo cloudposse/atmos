@@ -32,7 +32,10 @@ func GetLatestRelease(owner string, repo string) (string, error) {
 	ctx := context.Background()
 	client, _ := newGitHubClient(ctx)
 
-	// Get the latest release.
+	return getLatestReleaseWithClient(ctx, client, owner, repo)
+}
+
+func getLatestReleaseWithClient(ctx context.Context, client *github.Client, owner, repo string) (string, error) {
 	release, resp, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
 		return "", handleGitHubAPIError(err, resp)
@@ -102,8 +105,30 @@ func getReleasesWithClient(client *github.Client, authenticated bool, opts Relea
 // auth token` fallback being unavailable, or a repo-scoped token being withheld from a
 // cross-host toolchain client (see tokenForToolchainHost).
 func checkRateLimitBeforeFetch(ctx context.Context, client *github.Client, authenticated bool) error {
+	return checkRateLimitWithPolicy(ctx, client, authenticated, rateLimitPolicy{minimumRemaining: githubAPIMinRateLimitThreshold})
+}
+
+const percentScale = 100
+
+type rateLimitPolicy struct {
+	minimumRemaining int
+	minimumPercent   int
+	strict           bool
+}
+
+func (p rateLimitPolicy) validBudget(limit, remaining int) bool {
+	return !p.strict || (limit > 0 && remaining >= 0 && remaining <= limit)
+}
+
+func checkRateLimitWithPolicy(ctx context.Context, client *github.Client, authenticated bool, policy rateLimitPolicy) error {
 	rateLimits, _, err := client.RateLimit.Get(ctx)
 	if err != nil || rateLimits == nil || rateLimits.Core == nil {
+		if policy.strict {
+			if err != nil {
+				return err
+			}
+			return errUtils.ErrGitHubRateLimitExceeded
+		}
 		return nil //nolint:nilerr // Best-effort rate-limit check: a lookup failure isn't fatal, the actual fetch call surfaces any real API problem.
 	}
 
@@ -117,7 +142,10 @@ func checkRateLimitBeforeFetch(ctx context.Context, client *github.Client, authe
 		"resetAt", rateLimits.Core.Reset.Time,
 	)
 
-	if remaining >= githubAPIMinRateLimitThreshold {
+	if !policy.validBudget(limit, remaining) {
+		return errUtils.ErrGitHubRateLimitExceeded
+	}
+	if remaining >= policy.minimumRemaining && float64(remaining) >= float64(limit)*float64(policy.minimumPercent)/percentScale {
 		return nil
 	}
 

@@ -38,9 +38,9 @@ func TestTerraformPolicyLoading(t *testing.T) {
 	directory := t.TempDir()
 	t.Setenv("ATMOS_POLICY_DIR", directory)
 	_, err = loadTerraformPlanPolicy(&info)
-	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	require.ErrorIs(t, err, errUtils.ErrNoPoliciesConfigured)
 	// Loading happens before Atmos config resolution, even without a usable stack.
-	require.ErrorIs(t, ExecuteTerraform(info), errUtils.ErrPolicyInvalid)
+	require.ErrorIs(t, ExecuteTerraform(info), errUtils.ErrNoPoliciesConfigured)
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(testTerraformPolicyManifest), 0o600))
 	gate, err = loadTerraformPlanPolicy(&info)
 	require.NoError(t, err)

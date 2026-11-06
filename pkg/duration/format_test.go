@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormat(t *testing.T) {
@@ -30,6 +31,35 @@ func TestFormat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, Format(tt.d))
+		})
+	}
+}
+
+func TestFormatApproximate(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ input, want string }{
+		{"0", "0 seconds"},
+		{"-1s", "0 seconds"},
+		{"500ms", "0 seconds"},
+		{"1s", "1 second"},
+		{"59s", "59 seconds"},
+		{"1m", "1 minute"},
+		{"90m", "1 hour"},
+		{"24h", "1 day"},
+		{"6d", "6 days"},
+		{"7d", "1 week"},
+		{"29d", "4 weeks"},
+		{"30d", "1 month"},
+		{"120d", "4 months"},
+		{"149d", "4 months"},
+		{"365d", "1 year"},
+		{"730d", "2 years"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			parsed, err := ParseString(tc.input)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, FormatApproximate(parsed))
 		})
 	}
 }

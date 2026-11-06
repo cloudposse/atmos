@@ -86,7 +86,7 @@ func TestAffectedPolicyGateDiscovery(t *testing.T) {
 	require.NoError(t, os.WriteFile("policy.d", []byte("not a directory"), 0o600))
 	require.ErrorIs(t, enforceAffectedPolicies(nil, nil, nil, "", ""), errUtils.ErrPolicyInvalid)
 	t.Setenv("ATMOS_POLICY_DIR", t.TempDir())
-	require.ErrorIs(t, enforceAffectedPolicies(nil, nil, nil, "", ""), errUtils.ErrPolicyInvalid)
+	require.ErrorIs(t, enforceAffectedPolicies(nil, nil, nil, "", ""), errUtils.ErrNoPoliciesConfigured)
 	directory := t.TempDir()
 	t.Setenv("ATMOS_POLICY_DIR", directory)
 	writeAffectedPolicyGateFixture(t, directory, "operation")

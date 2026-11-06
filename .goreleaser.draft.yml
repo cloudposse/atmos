@@ -27,7 +27,8 @@ builds:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`
       # Commit pins the scaffold catalog's distributable templates to this
       # release's exact commit.
-      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}" -X "github.com/cloudposse/atmos/pkg/version.Commit={{.Commit}}"'
+      # Embed source age deterministically, matching mod_timestamp.
+      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}" -X "github.com/cloudposse/atmos/pkg/version.Commit={{.Commit}}" -X "github.com/cloudposse/atmos/pkg/version.BuildDate={{.CommitDate}}"'
 
 archives:
   - format: binary

@@ -24,7 +24,7 @@ var (
 )
 
 const (
-	// The Go package whose Version/Commit vars get stamped via -ldflags,
+	// The Go package whose Version/Commit/BuildDate vars get stamped via -ldflags,
 	// matching .goreleaser.yml.
 	versionLdflagsPackage = "github.com/cloudposse/atmos/pkg/version"
 	buildOutputDir        = "build"
@@ -83,6 +83,8 @@ func (Build) Binary(target, version string) error {
 	// Best-effort: empty when not building from a git checkout, matching the
 	// previous shell script's `git rev-parse HEAD 2>/dev/null || true`.
 	commit, _ := sh.Output("git", "-C", root, "rev-parse", "HEAD")
+	// Match GoReleaser's CommitDate stamp, preserving reproducibility on rebuilds.
+	buildDate, _ := sh.Output("git", "-C", root, "show", "-s", "--format=%cI", "HEAD")
 
 	if err := runGoModDownload(root, baseEnv); err != nil {
 		return err
@@ -94,8 +96,9 @@ func (Build) Binary(target, version string) error {
 	buildEnv := targetBuildEnv(baseEnv, targetConfig)
 
 	ldflags := fmt.Sprintf(
-		"-X '%s.Version=%s' -X '%s.Commit=%s'",
+		"-X '%s.Version=%s' -X '%s.Commit=%s' -X '%s.BuildDate=%s'",
 		versionLdflagsPackage, version, versionLdflagsPackage, strings.TrimSpace(commit),
+		versionLdflagsPackage, strings.TrimSpace(buildDate),
 	)
 
 	args := []string{"build", "-o", targetConfig.Output, "-v", "-ldflags", ldflags}

@@ -2,8 +2,6 @@
 package policy
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	sigsyaml "sigs.k8s.io/yaml"
@@ -25,7 +23,7 @@ func newCommand() *cobra.Command {
 	root := &cobra.Command{Use: "policy", Short: "Validate, inspect, and test policies offline", PersistentPreRunE: func(*cobra.Command, []string) error { return nil }}
 	root.AddCommand(
 		newCheckCommand(),
-		&cobra.Command{Use: "list", Short: "List loaded policy definitions", Args: cobra.NoArgs, RunE: runList},
+		newListCommand(),
 		&cobra.Command{Use: "schema <input-kind>", Short: "Print the JSON Schema of a supported policy input", Args: cobra.ExactArgs(1), RunE: runSchema},
 		&cobra.Command{Use: "test <cases.json>", Short: "Run offline fixtures against the policy bundle", Args: cobra.ExactArgs(1), RunE: runTest},
 	)
@@ -108,14 +106,6 @@ func writeFileResult(result *policypkg.FileResult) {
 	}
 }
 
-func runList(_ *cobra.Command, _ []string) error {
-	bundle, err := loadBundle()
-	if err != nil {
-		return err
-	}
-	return data.WriteJSON(bundle.Rules)
-}
-
 func runSchema(_ *cobra.Command, args []string) error {
 	schema, err := policypkg.InputSchema(policypkg.InputKind(args[0]))
 	if err != nil {
@@ -147,7 +137,8 @@ func loadBundle() (*policypkg.Bundle, error) {
 		return nil, err
 	}
 	if directory == "" {
-		return nil, fmt.Errorf("%w: no policy directory; create policy.d or set ATMOS_POLICY_DIR", errUtils.ErrPolicyInvalid)
+		return nil, errUtils.Build(errUtils.ErrNoPoliciesConfigured).
+			WithHint("Create policy.d or set ATMOS_POLICY_DIR to a directory containing policies.").Err()
 	}
 	return policypkg.LoadDirectory(directory)
 }

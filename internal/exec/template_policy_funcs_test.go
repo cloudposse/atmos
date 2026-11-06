@@ -309,7 +309,7 @@ func TestAtmosFuncsGomplateDatasourceCaching(t *testing.T) {
 
 		result, err := f.GomplateDatasource("invalid-alias")
 
-		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		require.ErrorIs(t, err, errUtils.ErrNoPoliciesConfigured)
 		require.Nil(t, result)
 	})
 }

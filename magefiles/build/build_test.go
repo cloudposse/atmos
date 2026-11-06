@@ -367,7 +367,7 @@ func TestBuildBinary(t *testing.T) {
 		assert.Equal(t, goModDownloadMaxAttempts, testutil.ReadFakeBinInvocationCount(t, argsFile))
 	})
 
-	t.Run("builds with default CGO/FIPS env, target GOOS, and version/commit ldflags", func(t *testing.T) {
+	t.Run("builds with default CGO/FIPS env, target GOOS, and version/commit/date ldflags", func(t *testing.T) {
 		unsetEnv(t, "GOARCH")
 		root := testutil.InitGitRepoFixture(t)
 		wantCommit, err := testutil.ExecGitOutput(root, "rev-parse", "HEAD")
@@ -377,8 +377,12 @@ func TestBuildBinary(t *testing.T) {
 
 		require.NoError(t, Build{}.Binary("linux", "v1.2.3"))
 
-		wantLdflags := fmt.Sprintf("-X '%s.Version=v1.2.3' -X '%s.Commit=%s'",
-			versionLdflagsPackage, versionLdflagsPackage, wantCommit)
+		wantDate, err := testutil.ExecGitOutput(root, "show", "-s", "--format=%cI", "HEAD")
+		require.NoError(t, err)
+		_, err = time.Parse(time.RFC3339, wantDate)
+		require.NoError(t, err)
+		wantLdflags := fmt.Sprintf("-X '%s.Version=v1.2.3' -X '%s.Commit=%s' -X '%s.BuildDate=%s'",
+			versionLdflagsPackage, versionLdflagsPackage, wantCommit, versionLdflagsPackage, wantDate)
 		assert.Equal(t, []string{"build", "-o", filepath.Join("build", "atmos"), "-v", "-ldflags", wantLdflags},
 			testutil.ReadFakeBinArgs(t, argsFile))
 

@@ -9,11 +9,14 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 func TestCheckForAtmosUpdateNoticeAndDailyCache(t *testing.T) {
 	_ = NewTestKit(t)
+	preserved := telemetry.PreserveCIEnvVars()
+	t.Cleanup(func() { telemetry.RestoreCIEnvVars(preserved) })
 	mock := httpmock.NewGitHubMockServer(t)
 	mock.Setenv(t)
 	for _, key := range []string{"ATMOS_PRO_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN", "ATMOS_GITHUB_CLI"} {

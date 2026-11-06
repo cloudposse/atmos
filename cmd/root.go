@@ -69,7 +69,6 @@ import (
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
 	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
@@ -78,6 +77,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/auth/providers/atmospro/broker"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cistartup "github.com/cloudposse/atmos/pkg/ci/startup"
+	"github.com/cloudposse/atmos/pkg/ci/versionnotice"
 	// Import component providers to register them with the component registry.
 	// The init() function in each package registers the provider.
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
@@ -1496,7 +1496,10 @@ func ExecuteVersion() error {
 	// Set up logger to ensure debug/trace messages appear.
 	SetupLogger(&tmpConfig)
 
-	return e.NewVersionExec(&tmpConfig).Execute(false, "")
+	finishNotice := versionnotice.Start(&tmpConfig)
+	defer finishNotice()
+
+	return version.Execute(&tmpConfig, false, "")
 }
 
 // handleConfigInitError processes config initialization errors and enriches them for display.
@@ -1926,6 +1929,9 @@ func Execute() error {
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 
+	finishNotice := versionnotice.Start(&atmosConfig)
+	defer finishNotice()
+
 	// Invocation-level CI log grouping (Dimension "invocation"): wrap the whole
 	// command run in one collapsible group. A no-op unless ci.groups.mode is
 	// "invocation" (the finer step/phase grouping owns "auto"), and outside CI.
@@ -1942,6 +1948,8 @@ func Execute() error {
 	} else {
 		err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), execute)
 	}
+
+	finishNotice()
 
 	telemetry.CaptureCmd(cmd, err)
 

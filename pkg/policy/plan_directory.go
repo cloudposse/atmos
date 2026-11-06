@@ -187,7 +187,7 @@ func LoadDirectory(directory string) (*Bundle, error) {
 
 func (b *Bundle) validate() error {
 	if len(b.Rules) == 0 {
-		return fmt.Errorf("%w: configured directory contains no policies", errUtils.ErrPolicyInvalid)
+		return errUtils.ErrNoPoliciesConfigured
 	}
 	if err := validateRuleIdentities(b.Rules); err != nil {
 		return err

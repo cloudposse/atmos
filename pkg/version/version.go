@@ -11,6 +11,12 @@ var Version = "test" // Default version; will be overridden during build
 // when the binary was built without them (e.g. `go run`/`go install`).
 var Commit = ""
 
+// BuildDate holds the RFC 3339 source timestamp embedded at build time.
+// Release builds use the commit date so rebuilding the same source preserves
+// reproducibility. It approximates release age without a publication-date lookup.
+// Unstamped builds leave it empty.
+var BuildDate = ""
+
 func init() {
 	if releaseidentity.Value == "" {
 		return // Preserve development builds and existing Version/Commit ldflags.
