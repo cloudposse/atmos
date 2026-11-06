@@ -476,7 +476,12 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 		}
 	}
 
-	// Last resort: relative to the process working directory.
+	// Last resort: relative to the process working directory. Skipped for paths go-getter
+	// recognizes as remote shorthand (e.g. "github.com/org/repo/path"), so a coincidentally
+	// matching local file never shadows the intended remote fetch.
+	if shouldFetchRemote(includeFile) {
+		return ""
+	}
 	return resolveAbsolutePath(includeFile)
 }
 
