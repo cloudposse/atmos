@@ -1,11 +1,13 @@
 package format
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -57,6 +59,57 @@ func TestYAMLFormatter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, output, "stack1:")
 	assert.Contains(t, output, "value: test-value")
+}
+
+// TestDelimitedFormatter_EscapesDelimiters verifies that values containing the delimiter,
+// quotes, or newlines (arrays, maps rendered as JSON, free text) do not corrupt the row structure.
+func TestDelimitedFormatter_EscapesDelimiters(t *testing.T) {
+	data := map[string]interface{}{
+		"stack1": []interface{}{"a", "b"},
+		"stack2": map[string]interface{}{ValueKey: map[string]interface{}{"k": "v", "x": "y"}},
+		"stack3": `say "hi"`,
+	}
+	for name, delimiter := range map[string]string{"CSV": DefaultCSVDelimiter, "TSV": DefaultTSVDelimiter} {
+		t.Run(name, func(t *testing.T) {
+			formatter := &DelimitedFormatter{format: FormatCSV}
+			output, err := formatter.Format(data, FormatOptions{Format: FormatCSV, Delimiter: delimiter})
+			assert.NoError(t, err)
+
+			reader := csv.NewReader(strings.NewReader(output))
+			reader.Comma = rune(delimiter[0])
+			records, err := reader.ReadAll()
+			require.NoError(t, err)
+			require.Len(t, records, 2)
+			assert.Equal(t, []string{"Key", "stack1", "stack2", "stack3"}, records[0])
+			assert.Equal(t, []string{ValueKey, "a,b", `{"k":"v","x":"y"}`, `say "hi"`}, records[1])
+		})
+	}
+}
+
+func TestDelimitedFormatter_UnsupportedCSVDelimitersFallBackToJoin(t *testing.T) {
+	data := map[string]interface{}{
+		"stack1": "a",
+		"stack2": "b",
+	}
+	tests := []struct {
+		name      string
+		delimiter string
+		expected  string
+	}{
+		{"multi-character", " | ", "Key | stack1 | stack2"},
+		{"double character", "||", "Key||stack1||stack2"},
+		{"double quote", `"`, `Key"stack1"stack2`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			formatter := &DelimitedFormatter{format: FormatCSV}
+			output, err := formatter.Format(data, FormatOptions{Format: FormatCSV, Delimiter: tt.delimiter})
+			require.NoError(t, err)
+			require.NotEmpty(t, output)
+			lines := strings.Split(strings.TrimSpace(output), "\n")
+			assert.Equal(t, tt.expected, strings.TrimSuffix(lines[0], "\r"))
+		})
+	}
 }
 
 func TestDelimitedFormatter(t *testing.T) {
