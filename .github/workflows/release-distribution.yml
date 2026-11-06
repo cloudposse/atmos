@@ -88,52 +88,28 @@ jobs:
           # not zero egress. Stays audit until a real run can be sampled.
           egress-policy: audit
 
-      # dawidd6/action-homebrew-bump-formula wraps `brew bump-formula-pr`, but its
-      # Ruby git helper calls Homebrew's `safe_system`, which the Homebrew 5.x now
-      # on GitHub runners no longer exposes to the module scope, so the action dies
-      # with "undefined method 'safe_system' for module Homebrew". Upstream reverted
-      # their Homebrew-5 fix, so bumping the pin to v8 does not help (identical
-      # code). Call the wrapped command directly instead - it is unaffected by the
-      # wrapper bug. atmos lives in Homebrew/homebrew-core; bump-formula-pr forks it
-      # under the bot and opens the version-bump PR.
-      #
-      # bump-formula-pr is a developer command that edits the formula's `.rb` file,
-      # so it needs homebrew/core checked out as a local tap. A fresh runner uses
-      # the formulae API with no tap, so bump-formula-pr fails with "No available
-      # formula with the name atmos" (verified across
-      # v1.228.0/v1.229.0/v1.230.0/v1.230.1/v1.231.0 release runs). Dropping
-      # HOMEBREW_NO_INSTALL_FROM_API never fixed this because the tap was still
-      # absent either way. The step below taps homebrew/core explicitly so the
-      # formula file exists; once tapped, bump-formula-pr resolves and edits atmos
-      # and opens the version-bump PR. Leave HOMEBREW_NO_INSTALL_FROM_API unset - it
-      # is unnecessary once the tap is present.
+      # `brew bump-formula-pr` broke on every stable release in four distinct
+      # ways, each a runner precondition the developer command assumes: brew not
+      # on the non-login shell's PATH (exit 127), homebrew/core not tapped ("No
+      # available formula with the name atmos"), `brew tap homebrew/core` refused
+      # without --force on Homebrew 7.x, and finally `git commit` with no runner
+      # git identity (exit 128). Rather than keep chasing the next brew/runner
+      # precondition, open the homebrew-core PR directly through the GitHub REST
+      # API: the contents API commits with the token's identity server-side, so
+      # none of those preconditions apply. The script forks Homebrew/homebrew-core
+      # under the bot, syncs it, edits only the source url+sha256 in
+      # Formula/a/atmos.rb, and opens the version-bump PR.
+      # See docs/fixes/2026-10-24-homebrew-bump-api-rewrite.md.
+      - name: Checkout Atmos
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
       - name: "Bump Homebrew formula"
         env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
-          HOMEBREW_NO_AUTO_UPDATE: "1"
+          GH_BOT_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -euo pipefail
-          # An unspecified-`shell` Linux `run:` step runs under `bash -e {0}` - a
-          # non-login, non-interactive shell that does not source /etc/profile.d/*,
-          # so the runner-preinstalled Homebrew's PATH entry
-          # (/home/linuxbrew/.linuxbrew/bin) is never loaded and `brew` resolves to
-          # "command not found" (exit 127) - the bump silently failed on every
-          # release. Load Homebrew explicitly here instead of relying on a login
-          # shell (see docs/fixes).
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          # bump-formula-pr edits the formula `.rb`, so homebrew/core must be tapped
-          # (see the comment above). Without this the bump fails "No available
-          # formula with the name atmos" on every release.
-          #
-          # `--force` is required: Homebrew 7.x on the runner now refuses a plain
-          # `brew tap homebrew/core` with "Tapping homebrew/core is no longer
-          # typically necessary. Add --force if you are sure you need it for
-          # contributing to Homebrew." (exit 1), which killed the v1.232.0 bump
-          # before bump-formula-pr even ran. We DO need the tap for contributing
-          # (bump-formula-pr edits the formula), so --force is the sanctioned path.
-          brew tap homebrew/core --force
-          brew bump-formula-pr --no-browse --no-audit --version="${TAG#v}" atmos
+        run: node .github/scripts/homebrew-bump.mjs
 
   docker:
     name: "Build and push Docker image for Atmos CLI"
