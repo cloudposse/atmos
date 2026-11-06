@@ -1580,6 +1580,383 @@
       "type": "object",
       "description": "Ansible defines configuration for Ansible components."
     },
+    "ArtifactConfig": {
+      "properties": {
+        "repositories": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ArtifactRepositoryConfig"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Repositories maps a repository alias to its definition. The alias is case-sensitive and is\nwhat `--repository` and the artifact step `repository` field select."
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactVerificationConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Verification is the global signature verification policy. Repository policies can add\nrequirements but never weaken it."
+        }
+      },
+      "type": "object",
+      "description": "ArtifactConfig is the `artifacts` section of atmos.yaml. It holds the single list of artifact\nrepositories (destinations that are also discovery sources) and the optional global signature\nverification policy."
+    },
+    "ArtifactLockingConfig": {
+      "properties": {
+        "required_scope": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "",
+                "host",
+                "repository"
+              ]
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "RequiredScope is the minimum lock guarantee mutations need: host (the default) or repository."
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Repository delegates locking to another configured repository that advertises repository scope.\nThe delegate keeps its own identity and storage root. Cycles are rejected."
+        }
+      },
+      "type": "object",
+      "description": "ArtifactLockingConfig configures mutation coordination for a repository."
+    },
+    "ArtifactMetadataDefaults": {
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Description is the default artifact description."
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Labels are default exact key/value labels for newly published artifact versions."
+        }
+      },
+      "type": "object",
+      "description": "ArtifactMetadataDefaults is the default description and labels of newly published artifacts.\nLabels belong to each published artifact version, not to the repository itself."
+    },
+    "ArtifactRepositoryConfig": {
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Kind selects the backend: local/dir, local/archive, aws/s3, oci/registry, or oci/layout."
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity names an Atmos auth identity used for this repository. Credentials never belong in\noptions. The identity is resolved lazily, only when an operation needs credentials."
+        },
+        "options": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Options are backend-specific settings, for example `path` for local kinds, `bucket`, `prefix`,\n`region`, `tags`, and `key_pattern` for aws/s3, or `registry` and `prefix` for oci/registry.\nThe `key_pattern` template is never expanded while the configuration is loaded."
+        },
+        "packaging": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "",
+                "none",
+                "tar",
+                "tgz",
+                "zip"
+              ]
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Packaging selects how file payloads are stored: none, tar, tgz, or zip. The supported values\nand the default depend on the repository kind."
+        },
+        "permissions": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-7][0-7][0-7][0-7]?$"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Permissions is the quoted octal mode of the resulting local archive file, for example \"0600\".\nIt is accepted only for local/archive repositories and must be a quoted string."
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Catalog is the optional OCI catalog URI of this repository, for example\noci://ghcr.io/acme/atmos/catalog:stable. It is valid only for oci/registry repositories and\nmust name the repository's own registry host."
+        },
+        "defaults": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRepositoryDefaults"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Defaults supplies defaults for newly published artifacts."
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactVerificationConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Verification is this repository's signature verification policy. It is combined with the\nglobal policy: both must be satisfied."
+        },
+        "locking": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactLockingConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Locking configures mutation coordination for this repository."
+        }
+      },
+      "type": "object",
+      "description": "ArtifactRepositoryConfig defines one artifact repository: a collection root that holds many named\nartifacts of possibly different kinds."
+    },
+    "ArtifactRepositoryDefaults": {
+      "properties": {
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactMetadataDefaults"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Metadata supplies default artifact metadata. Explicit publication metadata overrides matching keys."
+        }
+      },
+      "type": "object",
+      "description": "ArtifactRepositoryDefaults holds defaults applied to artifacts newly published to a repository."
+    },
+    "ArtifactTrustedIdentity": {
+      "properties": {
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity is the expected certificate identity, for example a workflow URL or an email address."
+        },
+        "issuer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Issuer is the expected OIDC issuer URL, for example https://token.actions.githubusercontent.com."
+        }
+      },
+      "type": "object",
+      "description": "ArtifactTrustedIdentity is a trusted signer certificate identity and the OIDC issuer that vouches for it."
+    },
+    "ArtifactVerificationConfig": {
+      "properties": {
+        "require_signature": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "RequireSignature makes a missing or invalid signature a failure. Unset means false for new\ngeneral artifacts. A repository cannot set it to false when the global policy requires it."
+        },
+        "trusted_identities": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ArtifactTrustedIdentity"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "TrustedIdentities are certificate identity and OIDC issuer pairs. Any one of them satisfies\nthis policy level's trust set."
+        },
+        "trusted_keys": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "TrustedKeys are operator-managed public-key file paths. Relative paths resolve against the\nconfiguration file that declared them."
+        }
+      },
+      "type": "object",
+      "description": "ArtifactVerificationConfig is a signature verification policy, allowed globally under\n`artifacts.verification` and per repository."
+    },
     "Artifacts": {
       "properties": {
         "paths": {
@@ -18817,6 +19194,20 @@
         }
       ],
       "description": "LSP settings."
+    },
+    "artifacts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ArtifactConfig"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ],
+      "description": "Artifacts configures artifact repositories and signature verification policy."
     }
   },
   "type": "object",
