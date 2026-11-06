@@ -13,8 +13,9 @@ import (
 // includeNotFoundError explains where a missing local include file was looked for. It mirrors
 // findLocalFile, whose path kinds do not overlap: `./` and `../` paths are relative to the
 // including file only, other relative paths are relative to base_path and then the working
-// directory, and absolute paths are used as-is.
-func includeNotFoundError(tag, includeFile, manifestFile string, atmosConfig *schema.AtmosConfiguration) error {
+// directory, and absolute paths are used as-is. The args parameter is the tag's full argument
+// text, so a suggested replacement keeps its YQ query and `| eval` option.
+func includeNotFoundError(tag, args, includeFile, manifestFile string, atmosConfig *schema.AtmosConfiguration) error {
 	basePath := atmosConfig.BasePathAbsolute
 	if basePath == "" {
 		basePath = atmosConfig.BasePath
@@ -32,7 +33,8 @@ func includeNotFoundError(tag, includeFile, manifestFile string, atmosConfig *sc
 		)).WithHint("Paths starting with `./` or `../` are relative to the file that contains the `" + tag +
 			"`. Paths without that prefix are relative to `base_path`.")
 		if suggestion := baseRelativeIncludeSuggestion(includeFile, basePath); suggestion != "" {
-			builder = builder.WithHintf("`%s` exists under `base_path`. Did you mean `%s %s`?", suggestion, tag, suggestion)
+			builder = builder.WithHintf("`%s` exists under `base_path`. Did you mean `%s %s`?",
+				suggestion, tag, replaceIncludePath(args, includeFile, suggestion))
 		}
 		return builder.Err()
 
@@ -47,6 +49,20 @@ func includeNotFoundError(tag, includeFile, manifestFile string, atmosConfig *sc
 		)).WithHint("Paths without a `./` or `../` prefix are relative to `base_path`. Start the path with `./` or `../` " +
 			"to resolve it relative to the file that contains the `" + tag + "`.").Err()
 	}
+}
+
+// replaceIncludePath swaps the path at the start of an include's argument text for another path,
+// keeping its quoting and everything after it (the YQ query and `| eval`) as written. When the
+// path cannot be located as written, only the new path is returned.
+func replaceIncludePath(args, includeFile, path string) string {
+	trimmed := strings.TrimSpace(args)
+	for _, quote := range []string{"", `"`, "'"} {
+		written := quote + includeFile + quote
+		if strings.HasPrefix(trimmed, written) {
+			return quote + path + quote + trimmed[len(written):]
+		}
+	}
+	return path
 }
 
 // baseRelativeIncludeSuggestion returns the base_path-relative form of a `./` include path when a

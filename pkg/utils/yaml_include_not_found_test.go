@@ -45,6 +45,7 @@ func TestIncludeNotFoundErrorsDescribeWhereEachPathKindWasResolved(t *testing.T)
 		name         string
 		tag          string
 		path         string
+		suffix       string
 		files        map[string]string
 		wantMessage  []string
 		avoidMessage []string
@@ -79,6 +80,15 @@ func TestIncludeNotFoundErrorsDescribeWhereEachPathKindWasResolved(t *testing.T)
 			avoidHint:    "Did you mean",
 		},
 		{
+			name:        "suggestion keeps the query and eval option as written",
+			tag:         AtmosYamlFuncInclude,
+			path:        "./config/data.yaml",
+			suffix:      " '.vars[\"a b\"]' | eval",
+			files:       map[string]string{"config/data.yaml": "src: base_path\n"},
+			wantMessage: []string{"relative to the including file"},
+			wantHint:    "Did you mean `!include config/data.yaml '.vars[\"a b\"]' | eval`?",
+		},
+		{
 			name:        "raw include suggestion uses its own tag",
 			tag:         AtmosYamlFuncIncludeRaw,
 			path:        "./config/script.sh",
@@ -95,10 +105,18 @@ func TestIncludeNotFoundErrorsDescribeWhereEachPathKindWasResolved(t *testing.T)
 			wantHint:     "Paths without a `./` or `../` prefix are relative to `base_path`",
 			avoidHint:    "Did you mean",
 		},
+		{
+			name:         "absolute path reports only the requested path",
+			tag:          AtmosYamlFuncInclude,
+			path:         filepath.Join(t.TempDir(), "missing.yaml"),
+			wantMessage:  []string{"could not find local file"},
+			avoidMessage: []string{"base path '", "including file"},
+			avoidHint:    "relative to",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			basePath, _, err := includeFromManifest(t, tc.tag, tc.path, tc.files)
+			basePath, _, err := includeFromManifest(t, tc.tag, tc.path+tc.suffix, tc.files)
 
 			require.Error(t, err)
 			assert.ErrorIs(t, err, ErrIncludeYamlFunctionInvalidFile)
@@ -115,11 +133,28 @@ func TestIncludeNotFoundErrorsDescribeWhereEachPathKindWasResolved(t *testing.T)
 			if tc.avoidHint != "" {
 				assert.NotContains(t, hints, tc.avoidHint)
 			}
-			if strings.HasPrefix(tc.path, "./") {
+			switch {
+			case filepath.IsAbs(tc.path):
+				assert.Contains(t, err.Error(), tc.path, "the error names the requested absolute path")
+			case strings.HasPrefix(tc.path, "./"):
 				resolved := filepath.Join(basePath, "stacks", "deploy", filepath.FromSlash(strings.TrimPrefix(tc.path, "./")))
 				assert.Contains(t, err.Error(), resolved, "the error names the exact path that was tried")
 			}
 		})
+	}
+}
+
+func TestReplaceIncludePathKeepsQuotingAndOptions(t *testing.T) {
+	tests := []struct{ args, include, path, want string }{
+		{"./data.yaml", "./data.yaml", "data.yaml", "data.yaml"},
+		{"  ./data.yaml .vars | eval ", "./data.yaml", "data.yaml", "data.yaml .vars | eval"},
+		{`"./my data.yaml" ".a b"`, "./my data.yaml", "my data.yaml", `"my data.yaml" ".a b"`},
+		{`'./data.yaml' .vars`, "./data.yaml", "data.yaml", `'data.yaml' .vars`},
+		// A path not written as its parsed form falls back to the bare suggestion.
+		{"./other.yaml .vars", "./data.yaml", "data.yaml", "data.yaml"},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, replaceIncludePath(tc.args, tc.include, tc.path), tc.args)
 	}
 }
 

@@ -40,6 +40,38 @@ func TestRestoreTagsKeepsSequenceArgumentsAsSequences(t *testing.T) {
 	assert.Equal(t, "deploy", restored.Content[1].Value)
 }
 
+// The items of a restored sequence are literal arguments. A label that equals a transported
+// source must stay a plain string, not be restored into a tagged node of its own.
+func TestRestoreTagsLeavesRestoredSequenceItemsLiteral(t *testing.T) {
+	label := (Source{Tag: "!env", Argument: "HOME"}).Encode()
+	encoded := (Source{Tag: "!ci.labels", Argument: mustFlowSequence(t, label, "preview"), Sequence: true}).Encode()
+
+	var node yaml.Node
+	require.NoError(t, node.Encode(map[string]any{"value": encoded}))
+	RestoreTags(&node)
+
+	restored := node.Content[1]
+	require.Equal(t, yaml.SequenceNode, restored.Kind)
+	assert.Equal(t, "!ci.labels", restored.Tag)
+	require.Len(t, restored.Content, 2)
+	assert.Equal(t, "!!str", restored.Content[0].Tag)
+	assert.Equal(t, label, restored.Content[0].Value)
+	assert.Equal(t, "preview", restored.Content[1].Value)
+}
+
+// mustFlowSequence encodes items as a single-line YAML flow sequence.
+func mustFlowSequence(t *testing.T, items ...string) string {
+	t.Helper()
+
+	node := yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
+	for _, item := range items {
+		node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: item, Style: yaml.DoubleQuotedStyle})
+	}
+	out, err := yaml.Marshal(&node)
+	require.NoError(t, err)
+	return string(out[:len(out)-1])
+}
+
 func TestRestoreTagsKeepsScalarArgumentsAsQuotedScalars(t *testing.T) {
 	tests := []struct {
 		name   string

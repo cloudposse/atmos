@@ -3,6 +3,8 @@ package stack
 import (
 	"bytes"
 	stdio "io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -61,5 +63,44 @@ func TestLegacyStackCommandsAreDeprecatedWithoutCobraNotices(t *testing.T) {
 		assert.True(t, command.Hidden, command.Name())
 		assert.Empty(t, command.Deprecated, command.Name())
 		assert.Equal(t, "atmos stack config "+command.Name(), command.Annotations[legacyReplacementAnnotation])
+	}
+}
+
+// Each registered legacy command, run through its real wrapper against an explicit --file manifest,
+// reports the replacement on stderr only: stdout carries just the command's own data.
+func TestRegisteredLegacyStackCommandsReportReplacementOnStderrOnly(t *testing.T) {
+	tests := []struct {
+		command    *cobra.Command
+		args       []string
+		wantStdout string
+	}{
+		{stackGetCmd, []string{"vars.region"}, "us-east-1\n"},
+		{stackSetCmd, []string{"vars.region", "us-west-2"}, ""},
+		{stackDeleteCmd, []string{"vars.region"}, ""},
+		{stackFormatCmd, nil, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.command.Name(), func(t *testing.T) {
+			resetEditFlags(t)
+			chdirToValidAtmosProject(t)
+			streams := splitTestStreams{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
+			ctx, err := iolib.NewContext(iolib.WithStreams(streams))
+			require.NoError(t, err)
+			data.InitWriter(ctx)
+			ui.InitFormatter(ctx)
+			t.Cleanup(data.Reset)
+			t.Cleanup(ui.Reset)
+
+			file := filepath.Join(t.TempDir(), "prod.yaml")
+			manifest := "components:\n  terraform:\n    mycomponent:\n      vars:\n        region: us-east-1\n"
+			require.NoError(t, os.WriteFile(file, []byte(manifest), 0o644))
+			flagStack, flagComponent, flagFile = "nonprod", "mycomponent", file
+
+			require.NoError(t, tt.command.RunE(tt.command, tt.args))
+
+			assert.Equal(t, tt.wantStdout, streams.stdout.String())
+			assert.Contains(t, streams.stderr.String(), `Command "`+tt.command.Name()+`" is deprecated`)
+			assert.Contains(t, streams.stderr.String(), "atmos stack config "+tt.command.Name())
+		})
 	}
 }

@@ -225,7 +225,7 @@ func processIncludeTagInternal(
 		if forceRaw {
 			tag = AtmosYamlFuncIncludeRaw
 		}
-		return false, includeNotFoundError(tag, includeFile, file, atmosConfig)
+		return false, includeNotFoundError(tag, val, includeFile, file, atmosConfig)
 	}
 
 	// Apply YQ expression if provided

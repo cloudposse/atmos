@@ -1,12 +1,18 @@
 package exec
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -49,6 +55,52 @@ func TestProcessYAMLConfigFileCollectionTagsInLocals(t *testing.T) {
 				require.NoError(t, err)
 			})
 		}
+	}
+}
+
+// With a review that carries the requested label, the locals path must keep the argument intact and
+// answer true. The CI-disabled cases above all expect false, so they cannot detect a lost argument.
+func TestExtractLocalsCILabelsMatchesProviderLabels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/repos/owner/repo/issues/42/labels", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `[{"name":"preview"}]`)
+	}))
+	t.Cleanup(server.Close)
+	eventPath := filepath.Join(t.TempDir(), "event.json")
+	require.NoError(t, os.WriteFile(eventPath, []byte(`{"pull_request":{"number":42}}`), 0o600))
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+	t.Setenv("GITHUB_REPOSITORY", "owner/repo")
+	t.Setenv("ATMOS_CI_GITHUB_TOKEN", "labels-test-token")
+	t.Setenv("ATMOS_CI_GITHUB_API_URL", server.URL+"/")
+	t.Cleanup(ci.SwapRegistryForTest())
+	ci.Register(githubprovider.NewProvider())
+	ci.ResetLabelsCache()
+	t.Cleanup(ci.ResetLabelsCache)
+
+	tests := []struct {
+		name     string
+		manifest string
+		want     any
+	}{
+		{"matching label", "vars:\n  stage: dev\nlocals:\n  value: !ci.labels [preview]\n", true},
+		{"other label", "vars:\n  stage: dev\nlocals:\n  value: !ci.labels [deploy]\n", false},
+		{"list mode", "vars:\n  stage: dev\nlocals:\n  value: !ci.labels\n", []any{"preview"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ClearLocalsExtractionCache()
+			ClearFileContentCache()
+			dir := writeStackFixture(t, map[string]string{"dev.yaml": tt.manifest})
+			atmosConfig := &schema.AtmosConfiguration{}
+			atmosConfig.Templates.Settings.Enabled = true
+
+			result, err := extractLocalsFromRawYAML(atmosConfig, tt.manifest, filepath.Join(dir, "dev.yaml"))
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, result.locals["value"])
+		})
 	}
 }
 
