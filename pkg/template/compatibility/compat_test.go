@@ -3,12 +3,14 @@ package compatibility_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -330,7 +332,9 @@ func TestDefaultDeprecationReporter_LogsOncePerTemplate(t *testing.T) {
 	log.SetOutput(&buf)
 	defer log.SetOutput(os.Stderr)
 
-	name := "TestDefaultDeprecationReporter_LogsOncePerTemplate"
+	// The default reporter dedups for the life of the process, so each run
+	// (for example under -count=2) needs a template name of its own.
+	name := fmt.Sprintf("TestDefaultDeprecationReporter_LogsOncePerTemplate-%d", time.Now().UnixNano())
 	for range 2 {
 		_, err := render.New().Render(context.Background(), &render.Request{
 			Name: name, Text: `{{ conv.Bool "yes" }}`,

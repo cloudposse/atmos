@@ -248,6 +248,14 @@ func captureReader(ctx context.Context, sources map[string]gomplate.DataSource, 
 	return renderer.Render(ctx, "datasource", "{{ capture (_datasource) }}", io.Discard)
 }
 
+// bindContext binds reads to a render's context. Readers hold the context they
+// were created with, so binding drops them; each render's reads then honor its
+// own deadline.
+func (d *Data) bindContext(ctx context.Context) {
+	d.Ctx = ctx
+	d.readers = nil
+}
+
 // context is the context reads are bound to.
 func (d *Data) context() context.Context {
 	if d.Ctx == nil {
@@ -300,11 +308,7 @@ func GomplateFuncs(ctx context.Context, sources *Data) template.FuncMap {
 	if sources == nil {
 		sources = &Data{}
 	}
-	// Readers hold the context they were created with, so binding a new
-	// render context drops them; each render's reads then honor its own
-	// deadline.
-	sources.Ctx = ctx
-	sources.readers = nil
+	sources.bindContext(ctx)
 	funcs := gomplateFuncs(ctx)
 	if runtime.GOOS == "windows" {
 		funcs["file"] = func() any { return &nativeFileFuncs{} }

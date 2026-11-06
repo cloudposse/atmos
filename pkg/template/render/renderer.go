@@ -197,6 +197,9 @@ func (e *engine) plan(ctx context.Context, req *Request) (*renderPlan, error) {
 	if sources == nil {
 		sources = &Data{}
 	}
+	// Bind the render context even with Gomplate disabled: ContextSources are
+	// still read, and must honor this render's deadline.
+	sources.bindContext(ctx)
 	if err := sources.defineAll(req.Datasources); err != nil {
 		return nil, err
 	}

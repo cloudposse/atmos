@@ -196,3 +196,27 @@ func TestPolicyDirectoryRecomputesRootsWhenAnAncestorGainsConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), calls.Load())
 }
+
+// A selected config path that changes from a file to a directory moves the
+// project root from its parent to the directory itself, so the roots are
+// recomputed and the directory's policy.d is found.
+func TestPolicyDirectoryRecomputesRootsWhenASelectedConfigPathChangesType(t *testing.T) {
+	isolateDiscovery(t)
+	calls := countSearchDirs(t)
+	root := t.TempDir()
+	selected := filepath.Join(root, "config")
+	require.NoError(t, os.WriteFile(selected, []byte("base_path: .\n"), 0o600))
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", selected)
+	t.Chdir(t.TempDir())
+
+	directory, err := DirectoryFromEnvironment()
+	require.NoError(t, err)
+	require.Empty(t, directory, "a selected file makes its parent, which has no policy.d, the root")
+
+	require.NoError(t, os.Remove(selected))
+	require.NoError(t, os.MkdirAll(filepath.Join(selected, "policy.d"), 0o700))
+	directory, err = DirectoryFromEnvironment()
+	require.NoError(t, err)
+	assert.Equal(t, resolved(t, filepath.Join(selected, "policy.d")), resolved(t, directory))
+	assert.Equal(t, int32(2), calls.Load())
+}

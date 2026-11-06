@@ -124,7 +124,7 @@ func (c *DatasourceCache) Read(sources *Data, alias string, args ...string) (any
 	// registers, so the first and later reads share one entry.
 	key := cacheKey(alias, sources.effectiveSource(alias), args)
 	if value, ok := c.load(key); ok && value != nil {
-		return value, nil
+		return copyDatasourceValue(value), nil
 	}
 
 	value, err := sources.Datasource(alias, args...)
@@ -134,7 +134,39 @@ func (c *DatasourceCache) Read(sources *Data, alias string, args ...string) (any
 	if value != nil {
 		c.store(key, value)
 	}
-	return value, nil
+	// Every caller gets its own copy, so a template that changes the value
+	// (for example with Sprig's `set`) cannot change what later renders read.
+	return copyDatasourceValue(value), nil
+}
+
+// copyDatasourceValue copies the mutable containers gomplate's parsers return
+// (maps and slices, including CSV's [][]string), keeping their types. Other
+// values are immutable or opaque and are returned as they are.
+func copyDatasourceValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key, item := range v {
+			out[key] = copyDatasourceValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = copyDatasourceValue(item)
+		}
+		return out
+	case []string:
+		return append([]string(nil), v...)
+	case [][]string:
+		out := make([][]string, len(v))
+		for i, row := range v {
+			out[i] = append([]string(nil), row...)
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 // CachedDatasource reads a datasource through the process-wide cache that

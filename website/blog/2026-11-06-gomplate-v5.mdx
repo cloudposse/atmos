@@ -121,10 +121,13 @@ bad input is exactly the kind of behavior worth losing. The error message spells
 stack relied on the silent zero, check that the input is a number before converting it:
 
 ```yaml
-retries: '{{ $r := conv.ToString .vars.retries }}{{ if regexp.Match "^-?[0-9]+$" $r }}{{ conv.ToInt64 $r }}{{ else }}0{{ end }}'
+retries: '{{ $r := conv.ToString (index .vars "retries") }}{{ if regexp.Match "^-?[0-9]+$" $r }}{{ conv.ToInt64 $r }}{{ else }}0{{ end }}'
 ```
 
-A missing, empty, or non-numeric value renders `0`; a whole number converts as before.
+An empty or non-numeric value renders `0`, and a whole number converts as before. The example reads
+the key with `index`, which returns nothing for a missing key, so a missing `retries` also renders
+`0`, even where Atmos treats missing values as errors (for example, in an import rendered with
+`context`). Writing `.vars.retries` instead would fail on a missing key there before the check runs.
 
 Similarly, the `regexp.*` functions return an error for an invalid pattern instead of panicking.
 The failure is the same as before from your point of view, but the message now names the template

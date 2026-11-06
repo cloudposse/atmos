@@ -118,22 +118,51 @@ var searchRootsCache struct {
 	sync.Mutex
 	valid bool
 	key   string
-	roots []string
+	// selected are the config paths chosen by flags or environment, parsed
+	// once per key; their type is part of discoveryFingerprint.
+	selected    []string
+	fingerprint string
+	roots       []string
 }
 
 // searchRoots returns the cached project roots for cwd, recomputing them when
 // the working directory, os.Args, the environment or the on-disk discovery
 // inputs have changed.
 func searchRoots(cwd string) []string {
-	key := searchRootsKey(cwd, os.Args, os.Environ()) + "\x00\x02" + discoveryFingerprint(cwd)
+	key := searchRootsKey(cwd, os.Args, os.Environ())
 	searchRootsCache.Lock()
 	defer searchRootsCache.Unlock()
-	if searchRootsCache.valid && searchRootsCache.key == key {
+	sameKey := searchRootsCache.valid && searchRootsCache.key == key
+	if !sameKey {
+		searchRootsCache.selected = selectedConfigPaths(cwd, os.Args)
+	}
+	fingerprint := discoveryFingerprint(cwd, searchRootsCache.selected)
+	if sameKey && searchRootsCache.fingerprint == fingerprint {
 		return searchRootsCache.roots
 	}
 	roots := searchDirs(cwd, os.Args)
-	searchRootsCache.valid, searchRootsCache.key, searchRootsCache.roots = true, key, roots
+	searchRootsCache.valid, searchRootsCache.key, searchRootsCache.fingerprint, searchRootsCache.roots = true, key, fingerprint, roots
 	return roots
+}
+
+// selectedConfigPaths returns the absolute config paths chosen by --config-path,
+// ATMOS_CONFIG_PATH or ATMOS_CLI_CONFIG_PATH. Discovery uses a selected path
+// itself when it is a directory and its parent when it is a file, so its type
+// is a discovery input. Selected config files always resolve to their parent.
+func selectedConfigPaths(cwd string, args []string) []string {
+	selection := projectroot.ParseConfigSelectionFromOsArgs(args)
+	selection.ApplyFallbacks(projectroot.ConfigSelectionFromEnv())
+	paths := append([]string(nil), selection.ConfigPath...)
+	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself, as in projectroot.SearchDirs.
+	if configPath := os.Getenv(projectroot.CliConfigPathEnvVar); configPath != "" {
+		paths = append(paths, configPath)
+	}
+	for i, path := range paths {
+		if !filepath.IsAbs(path) {
+			paths[i] = filepath.Join(cwd, path)
+		}
+	}
+	return paths
 }
 
 // searchRootsKey joins every discovery input with separators that cannot occur
@@ -144,16 +173,35 @@ func searchRootsKey(cwd string, args, environ []string) string {
 }
 
 // discoveryFingerprint captures the on-disk inputs of root discovery that can
-// change while a process runs: configuration in cwd, the nearest ancestor with
-// atmos.yaml, and the nearest ancestor holding .git. Each is a short stat walk,
-// unlike the git root resolution and configuration flag parsing the cache
-// avoids.
-func discoveryFingerprint(cwd string) string {
-	local := "0"
-	if projectroot.HasLocalConfig(cwd) {
-		local = "1"
+// change while a process runs: the type of each selected config path,
+// configuration in cwd, the nearest ancestor with atmos.yaml, and the nearest
+// ancestor holding .git. Each is a stat or a short stat walk, unlike the git
+// root resolution and configuration flag parsing the cache avoids.
+func discoveryFingerprint(cwd string, selected []string) string {
+	var b strings.Builder
+	for _, path := range selected {
+		b.WriteString(pathKind(path))
 	}
-	return local + "\x00" + projectroot.FindConfigInParentDirs(cwd) + "\x00" + nearestGitDirectory(cwd)
+	b.WriteString("\x00")
+	if projectroot.HasLocalConfig(cwd) {
+		b.WriteString("1")
+	}
+	b.WriteString("\x00" + projectroot.FindConfigInParentDirs(cwd) + "\x00" + nearestGitDirectory(cwd))
+	return b.String()
+}
+
+// pathKind reports whether path is a directory ("d"), another file ("f") or
+// missing ("-").
+func pathKind(path string) string {
+	info, err := os.Stat(path)
+	switch {
+	case err != nil:
+		return "-"
+	case info.IsDir():
+		return "d"
+	default:
+		return "f"
+	}
 }
 
 // nearestGitDirectory returns the closest directory at or above dir that

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,9 @@ import (
 func TestDatasourceReadDoesNotHoldRendererLock(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseHandler := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseHandler)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		close(started)
 		<-release
@@ -29,28 +33,40 @@ func TestDatasourceReadDoesNotHoldRendererLock(t *testing.T) {
 	d, err := NewData([]string{"slow=" + server.URL + "/data.json"}, nil)
 	require.NoError(t, err)
 
-	var (
-		wg      sync.WaitGroup
-		result  any
-		readErr error
-	)
-	wg.Add(1)
+	type readResult struct {
+		value any
+		err   error
+	}
+	done := make(chan readResult, 1)
 	go func() {
-		defer wg.Done()
-		result, readErr = d.Datasource("slow")
+		value, err := d.Datasource("slow")
+		done <- readResult{value, err}
 	}()
 
-	<-started
+	// Wait for the request to reach the handler; a read that fails first, or
+	// never arrives, ends the test instead of hanging it.
+	select {
+	case <-started:
+	case result := <-done:
+		t.Fatalf("the read finished before reaching the server: %v", result.err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the read did not reach the server")
+	}
 	locked := rendererMu.TryLock()
 	if locked {
 		rendererMu.Unlock()
 	}
-	close(release)
-	wg.Wait()
+	releaseHandler()
 
+	var result readResult
+	select {
+	case result = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the read did not finish after the server responded")
+	}
 	assert.True(t, locked, "rendererMu was held during the datasource read")
-	require.NoError(t, readErr)
-	assert.Equal(t, map[string]any{"name": "slow"}, result)
+	require.NoError(t, result.err)
+	assert.Equal(t, map[string]any{"name": "slow"}, result.value)
 }
 
 // recordingReporter records deprecation reports.
@@ -186,4 +202,57 @@ func TestDatasourceCacheKeyIsStableForAbsoluteURLAliases(t *testing.T) {
 	// Negative path: a relative, undefined alias has no definition to key on and still fails.
 	_, err = cache.Read(&Data{}, "not-a-url")
 	require.Error(t, err)
+}
+
+// A template that changes a cached datasource value (for example with Sprig's
+// `set`) changes only its own copy: neither the first caller nor later ones
+// can alter what the cache returns.
+func TestDatasourceCacheReturnsCopies(t *testing.T) {
+	cfg := writeFixture(t, "config.json", `{"name":"atmos","list":["a"],"nested":{"key":"value"}}`)
+	csv := writeFixture(t, "table.csv", "k,v\n1,2\n")
+	d, err := NewData([]string{"cfg=" + cfg, "csv=" + csv}, nil)
+	require.NoError(t, err)
+	cache := NewDatasourceCache()
+
+	first, err := cache.Read(d, "cfg")
+	require.NoError(t, err)
+	first.(map[string]any)["name"] = "changed"
+	first.(map[string]any)["list"].([]any)[0] = "changed"
+	first.(map[string]any)["nested"].(map[string]any)["key"] = "changed"
+
+	second, err := cache.Read(d, "cfg")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"name": "atmos", "list": []any{"a"}, "nested": map[string]any{"key": "value"}}, second)
+
+	table, err := cache.Read(d, "csv")
+	require.NoError(t, err)
+	rows, ok := table.([][]string)
+	require.True(t, ok, "CSV keeps its type: %T", table)
+	rows[1][0] = "changed"
+	again, err := cache.Read(d, "csv")
+	require.NoError(t, err)
+	assert.Equal(t, [][]string{{"k", "v"}, {"1", "2"}}, again)
+}
+
+// With Gomplate disabled, context sources are still read under the render's
+// own context, not a stale or background one.
+func TestContextSourcesUseTheRenderContextWithGomplateDisabled(t *testing.T) {
+	server, _ := countingServer(t)
+	sources := &Data{}
+	req := func() *Request {
+		return &Request{
+			Name: "t", Text: `{{ .request }}`, Sources: sources,
+			ContextSources: map[string]Datasource{".": {URL: server.URL + "/data.json"}},
+		}
+	}
+	engine := New(WithGomplate(false))
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := engine.Render(canceled, req())
+	require.ErrorIs(t, err, context.Canceled, "the read uses the render's canceled context")
+
+	out, err := engine.Render(context.Background(), req())
+	require.NoError(t, err, "a later render with a live context is not stuck with the canceled one")
+	assert.NotEmpty(t, out)
 }

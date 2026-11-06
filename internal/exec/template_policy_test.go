@@ -121,12 +121,40 @@ func TestTemplateFunctionProvenance(t *testing.T) {
 	templatePolicy(t, "function", "input.engine == 'go-template' && input.name == 'env' && input.provenance != 'local'", nil)
 	t.Setenv("POLICY_ORIGIN", "local")
 	source := `{{ env "POLICY_ORIGIN" }}`
-	rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, file, source, nil, false)
+	rendered, err := ProcessTmplFromFile(&schema.AtmosConfiguration{}, file, source, nil, false)
 	require.NoError(t, err)
 	require.Equal(t, "local", rendered)
 	guard.RegisterRemote(file, "https://example.com/template.yaml")
-	_, err = ProcessTmpl(&schema.AtmosConfiguration{}, file, source, nil, false)
+	_, err = ProcessTmplFromFile(&schema.AtmosConfiguration{}, file, source, nil, false)
 	require.Error(t, err)
+}
+
+// TestTemplateNameIsNotAPolicySource verifies a template name is only a label: a local file
+// with the same name does not lend the render local provenance, for ProcessTmpl or for the
+// merged component sections ProcessTmplWithDatasources renders.
+func TestTemplateNameIsNotAPolicySource(t *testing.T) {
+	guard.ResetOrigins()
+	t.Cleanup(guard.ResetOrigins)
+	t.Chdir(t.TempDir())
+	const name = "describe-stacks-all-sections"
+	require.NoError(t, os.WriteFile(name, []byte("decoy"), 0o600))
+	templatePolicy(t, "function", "input.engine == 'go-template' && input.name == 'env' && input.provenance != 'local'", nil)
+	t.Setenv("POLICY_ORIGIN", "local")
+
+	_, err := ProcessTmpl(&schema.AtmosConfiguration{}, name, `{{ env "POLICY_ORIGIN" }}`, nil, false)
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied, "the name does not make the render local")
+
+	config := &schema.AtmosConfiguration{}
+	config.Templates.Settings.Enabled = true
+	config.Templates.Settings.Sprig.Enabled = true
+	_, err = ProcessTmplWithDatasources(config, &schema.ConfigAndStacksInfo{}, schema.Settings{}, name,
+		`value: {{ env "POLICY_ORIGIN" }}`, nil, false)
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied, "merged sections have unknown provenance")
+
+	// Negative path: the real source file is still local.
+	rendered, err := ProcessTmplFromFile(&schema.AtmosConfiguration{}, name, `{{ env "POLICY_ORIGIN" }}`, nil, false)
+	require.NoError(t, err)
+	require.Equal(t, "local", rendered)
 }
 
 func TestExplainFlagIsNotForwarded(t *testing.T) {

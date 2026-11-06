@@ -62,6 +62,21 @@ func ProcessTmpl(
 	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, ignoreMissing: ignoreMissingTemplateValues})
 }
 
+// ProcessTmplFromFile is ProcessTmpl for a template read from file: the file names the template
+// and is the source policy admission attributes its function calls to. ProcessTmpl's name is
+// only a label, so its calls have unknown provenance.
+func ProcessTmplFromFile(
+	atmosConfig *schema.AtmosConfiguration,
+	file string,
+	tmplValue string,
+	tmplData any,
+	ignoreMissingTemplateValues bool,
+) (rendered string, renderErr error) {
+	defer perf.Track(atmosConfig, "exec.ProcessTmplFromFile")()
+
+	return processTmpl(atmosConfig, &tmplInput{name: file, sourceFile: file, value: tmplValue, data: tmplData, ignoreMissing: ignoreMissingTemplateValues})
+}
+
 // ProcessStepTmpl is ProcessTmpl for workflow, custom-command, and hook step templates: the text is
 // parsed with the supplied delimiters (see delimiters.ForSteps) instead of the default "{{" and "}}".
 func ProcessStepTmpl(
@@ -153,11 +168,10 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 	}
 
 	// Gomplate, Sprig and Atmos template functions are attributed to the template's source file
-	// for policy guards.
+	// for policy guards. The template name is only a label: resolving it as a path would let a
+	// same-named local file (or the working directory's origin) lend it local provenance, so a
+	// template without a known source file has unknown provenance.
 	sourceFile := in.sourceFile
-	if sourceFile == "" {
-		sourceFile = in.name
-	}
 	sources := &render.Data{}
 
 	effectiveDelims := in.delims.Normalize()
@@ -631,7 +645,9 @@ func renderTemplatePass(pass *templatePass) (string, error) {
 		RightDelim: rightDelimiter,
 		MissingKey: missingKeyOption(pass.ignoreMissingTemplateValues),
 		Sources:    scope.sources,
-		WrapFuncs:  templatepolicy.FuncsWrapper(pass.name),
+		// A pass renders component configuration merged from several manifests, so it has no
+		// single source file: its calls have unknown provenance. pass.name is only a label.
+		WrapFuncs: templatepolicy.FuncsWrapper(""),
 	})
 	if err != nil {
 		return "", err
@@ -751,7 +767,8 @@ func ProcessTmplWithDatasourcesGomplate(
 	}()
 
 	return datasource.RenderWith(atmosConfig, tmplName, authSource, mergedData, &datasource.Options{
-		WrapFuncs:  templatepolicy.FuncsWrapper(tmplName),
+		// tmplName is only a label, not a source file, so the calls have unknown provenance.
+		WrapFuncs:  templatepolicy.FuncsWrapper(""),
 		MissingKey: missingKeyOption(ignoreMissingTemplateValues),
 	})
 }
