@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	yaml "gopkg.in/yaml.v3"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -33,8 +35,8 @@ func includeNotFoundError(tag, args, includeFile, manifestFile string, atmosConf
 		)).WithHint("Paths starting with `./` or `../` are relative to the file that contains the `" + tag +
 			"`. Paths without that prefix are relative to `base_path`.")
 		if suggestion := baseRelativeIncludeSuggestion(includeFile, basePath); suggestion != "" {
-			builder = builder.WithHintf("`%s` exists under `base_path`. Did you mean `%s %s`?",
-				suggestion, tag, replaceIncludePath(args, includeFile, suggestion))
+			builder = builder.WithHintf("`%s` exists under `base_path`. Did you mean `%s`?",
+				suggestion, yamlTaggedScalar(tag, replaceIncludePath(args, includeFile, suggestion)))
 		}
 		return builder.Err()
 
@@ -57,12 +59,32 @@ func includeNotFoundError(tag, args, includeFile, manifestFile string, atmosConf
 func replaceIncludePath(args, includeFile, path string) string {
 	trimmed := strings.TrimSpace(args)
 	for _, quote := range []string{"", `"`, "'"} {
-		written := quote + includeFile + quote
+		written := quoteIncludePath(includeFile, quote)
 		if strings.HasPrefix(trimmed, written) {
-			return quote + path + quote + trimmed[len(written):]
+			return quoteIncludePath(path, quote) + trimmed[len(written):]
 		}
 	}
 	return path
+}
+
+// quoteIncludePath writes path the way the include argument parser reads it back: wrapped in
+// quote, with any quote character inside it doubled. An empty quote leaves the path bare.
+func quoteIncludePath(path, quote string) string {
+	if quote == "" {
+		return path
+	}
+	return quote + strings.ReplaceAll(path, quote, quote+quote) + quote
+}
+
+// yamlTaggedScalar renders a tag and its argument text as a YAML scalar that can be pasted into a
+// manifest as written. The argument is the decoded scalar value, so text that a plain scalar
+// cannot hold (such as an argument starting with a quote) comes back quoted.
+func yamlTaggedScalar(tag, value string) string {
+	out, err := yaml.Marshal(&yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value})
+	if err != nil {
+		return tag + " " + value
+	}
+	return strings.TrimSuffix(string(out), "\n")
 }
 
 // baseRelativeIncludeSuggestion returns the base_path-relative form of a `./` include path when a

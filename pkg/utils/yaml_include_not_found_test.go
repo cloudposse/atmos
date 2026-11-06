@@ -89,6 +89,17 @@ func TestIncludeNotFoundErrorsDescribeWhereEachPathKindWasResolved(t *testing.T)
 			wantHint:    "Did you mean `!include config/data.yaml '.vars[\"a b\"]' | eval`?",
 		},
 		{
+			// The manifest holds `!include '"./my data.yaml" .vars'`; the suggestion must be a YAML
+			// scalar too, not the decoded text `"my data.yaml" .vars` that YAML would misread.
+			name:        "suggestion for a quoted argument is a pasteable YAML scalar",
+			tag:         AtmosYamlFuncInclude,
+			path:        `'"./my data.yaml"`,
+			suffix:      ` .vars'`,
+			files:       map[string]string{"my data.yaml": "src: base_path\n"},
+			wantMessage: []string{"relative to the including file"},
+			wantHint:    "Did you mean `!include '\"my data.yaml\" .vars'`?",
+		},
+		{
 			name:        "raw include suggestion uses its own tag",
 			tag:         AtmosYamlFuncIncludeRaw,
 			path:        "./config/script.sh",
@@ -144,12 +155,32 @@ func TestIncludeNotFoundErrorsDescribeWhereEachPathKindWasResolved(t *testing.T)
 	}
 }
 
+// The suggested replacement must parse back, as YAML, to the tag and argument it was built from.
+func TestYAMLTaggedScalarRoundTrips(t *testing.T) {
+	for _, value := range []string{
+		"config/data.yaml",
+		"config/data.yaml .vars | eval",
+		`"my data.yaml" .vars`,
+		`'data.yaml' '.a["b"]'`,
+		"data.yaml # not a comment",
+	} {
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("value: "+yamlTaggedScalar(AtmosYamlFuncInclude, value)), &node), value)
+		scalar := node.Content[0].Content[1]
+		assert.Equal(t, AtmosYamlFuncInclude, scalar.Tag, value)
+		assert.Equal(t, value, scalar.Value, value)
+	}
+}
+
 func TestReplaceIncludePathKeepsQuotingAndOptions(t *testing.T) {
 	tests := []struct{ args, include, path, want string }{
 		{"./data.yaml", "./data.yaml", "data.yaml", "data.yaml"},
 		{"  ./data.yaml .vars | eval ", "./data.yaml", "data.yaml", "data.yaml .vars | eval"},
 		{`"./my data.yaml" ".a b"`, "./my data.yaml", "my data.yaml", `"my data.yaml" ".a b"`},
 		{`'./data.yaml' .vars`, "./data.yaml", "data.yaml", `'data.yaml' .vars`},
+		// Quote characters inside a quoted path are doubled; the suffix is kept as written.
+		{`"./my ""data"".yaml" .vars | eval`, `./my "data".yaml`, `my "data".yaml`, `"my ""data"".yaml" .vars | eval`},
+		{`'./it''s.yaml' .vars`, "./it's.yaml", "it's.yaml", `'it''s.yaml' .vars`},
 		// A path not written as its parsed form falls back to the bare suggestion.
 		{"./other.yaml .vars", "./data.yaml", "data.yaml", "data.yaml"},
 	}
