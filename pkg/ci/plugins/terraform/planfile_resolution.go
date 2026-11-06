@@ -12,22 +12,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// downloadStoredPlanfile downloads the planfile to verify a deploy against, in this order:
+// downloadStoredPlanfile selects the stored plan to verify a deploy against:
 //
-//  1. The planfile stored under key, the key for the current commit. After a merge, this is the
-//     plan of the landed commit itself, for example from a plan workflow dispatched on
-//     pull_request.merged and applied once approved.
-//  2. A reference to a plan for the identical source tree, if one was published.
-//  3. The planfile stored under the head commit of the pull request merged as the current commit.
-//     Queue runs resolve the head bound to the active queue entry instead.
-//     A deploy dispatched straight after a squash, merge, or rebase merge runs on the landed
-//     commit, while the pull request's reviewed plan was stored under its head commit.
+//  1. The plan for the checked-out commit.
+//  2. A reference to a plan for the identical source tree.
+//  3. The PR-head plan associated with the checkout: resolved from the PR event,
+//     an active queue entry, or the PR merged as the checked-out commit.
 //
-// The second step runs only when nothing is stored under key. Either way, deploy verification
-// compares the stored plan with a fresh plan of the landed commit, so a base branch that has
-// diverged since the plan fails verification instead of applying a stale plan.
-//
-// It returns the downloaded files and the key they came from.
+// Only a missing artifact permits trying another source. Deploy compares the
+// selected plan with a fresh plan of its checkout using the configured policy.
+// This function returns the downloaded files and their source key.
 func (p *Plugin) downloadStoredPlanfile(ctx *plugin.HookContext, store planfile.Store, key string) ([]planfile.FileResult, string, error) {
 	defer perf.Track(ctx.Config, "terraform.Plugin.downloadStoredPlanfile")()
 
@@ -49,8 +43,8 @@ func (p *Plugin) downloadStoredPlanfile(ctx *plugin.HookContext, store planfile.
 		}
 	}
 
-	headKey, merged := p.pullRequestPlanfileKey(ctx)
-	if merged == nil || headKey == key {
+	headKey, revision := p.pullRequestPlanfileKey(ctx)
+	if revision == nil || headKey == key {
 		return nil, key, err
 	}
 
@@ -59,13 +53,12 @@ func (p *Plugin) downloadStoredPlanfile(ctx *plugin.HookContext, store planfile.
 		return nil, headKey, errors.Join(err, headErr)
 	}
 	log.Info("Using the plan stored for the pull request's head commit",
-		"pr", merged.Number, "head_sha", merged.HeadSHA, "merge_sha", ctx.CICtx.SHA)
+		"pr", revision.Number, "head_sha", revision.HeadSHA, "checkout_sha", ctx.CICtx.SHA)
 	return results, headKey, nil
 }
 
-// pullRequestPlanfileKey returns the planfile key for the head commit of the pull request
-// associated with the current checkout, and that pull request. It returns a nil pull request when there
-// is none or it cannot be determined.
+// pullRequestPlanfileKey resolves the PR revision associated with the checkout
+// and its planfile key. An unavailable or invalid revision returns an empty key.
 func (p *Plugin) pullRequestPlanfileKey(ctx *plugin.HookContext) (string, *provider.PullRequestRevision) {
 	defer perf.Track(ctx.Config, "terraform.Plugin.pullRequestPlanfileKey")()
 
@@ -76,20 +69,20 @@ func (p *Plugin) pullRequestPlanfileKey(ctx *plugin.HookContext) (string, *provi
 	}
 	lookupCtx, cancel := context.WithTimeout(context.Background(), planSourceLookupTimeout)
 	defer cancel()
-	var merged *provider.PullRequestRevision
+	var revision *provider.PullRequestRevision
 	var err error
 	if ctx.CICtx.MergeQueue != nil || ctx.CICtx.PullRequest != nil {
 		resolver, ok := ctx.Provider.(provider.ReviewPullRequestResolver)
 		if !ok {
 			return "", nil
 		}
-		merged, err = resolver.ReviewPullRequest(lookupCtx, ctx.CICtx)
+		revision, err = resolver.ReviewPullRequest(lookupCtx, ctx.CICtx)
 	} else {
 		resolver, ok := ctx.Provider.(provider.MergedPullRequestResolver)
 		if !ok {
 			return "", nil
 		}
-		merged, err = resolver.MergedPullRequest(lookupCtx, ctx.CICtx, ctx.CICtx.SHA)
+		revision, err = resolver.MergedPullRequest(lookupCtx, ctx.CICtx, ctx.CICtx.SHA)
 	}
 	if err != nil {
 		// The most common cause is a workflow token without the `pull-requests: read` permission.
@@ -97,16 +90,16 @@ func (p *Plugin) pullRequestPlanfileKey(ctx *plugin.HookContext) (string, *provi
 			"sha", ctx.CICtx.SHA, "error", err)
 		return "", nil
 	}
-	if merged == nil {
+	if revision == nil {
 		return "", nil
 	}
 
 	headCtx := *ctx.CICtx
-	headCtx.SHA = merged.HeadSHA
+	headCtx.SHA = revision.HeadSHA
 	key, err := p.getArtifactKey(ctx.Info, &headCtx)
 	if err != nil {
-		log.Debug("Cannot build the planfile key for the merged pull request's head commit", "pr", merged.Number, "error", err)
+		log.Debug("Cannot build the planfile key for the pull request's head commit", "pr", revision.Number, "error", err)
 		return "", nil
 	}
-	return key, merged
+	return key, revision
 }
