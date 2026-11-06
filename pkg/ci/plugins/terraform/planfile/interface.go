@@ -2,6 +2,7 @@ package planfile
 
 import (
 	"context"
+	"path"
 	"strings"
 	"time"
 
@@ -190,4 +191,11 @@ func NewAtmosConfig(storeType string, options map[string]any, atmosConfig *schem
 		Options:     options,
 		AtmosConfig: atmosConfig,
 	}
+}
+
+// IsSourceReference identifies internal source-tree references rather than plans.
+// The tree- prefix cannot collide with a hexadecimal commit SHA.
+func IsSourceReference(key string) bool {
+	defer perf.Track(nil, "planfile.IsSourceReference")()
+	return strings.HasPrefix(path.Base(key), "tree-") && strings.HasSuffix(key, ".tfplan.tar")
 }
