@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -541,22 +540,6 @@ func TestIsVersionCommand(t *testing.T) {
 			result := isVersionCommand()
 			assert.Equal(t, tt.expected, result)
 		})
-	}
-}
-
-// skipIfPackerNotInstalled skips the test if packer is not available in PATH.
-func skipIfPackerNotInstalled(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("packer"); err != nil {
-		t.Skipf("packer not installed: %v", err)
-	}
-}
-
-// skipIfHelmfileNotInstalled skips the test if helmfile is not available in PATH.
-func skipIfHelmfileNotInstalled(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("helmfile"); err != nil {
-		t.Skipf("helmfile not installed: %v", err)
 	}
 }
 
