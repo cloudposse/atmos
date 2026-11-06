@@ -6,16 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 )
 
 type sourceProvider struct {
 	*resolvingProvider
+	treeErr    error
 	tree       string
 	queue      *provider.PullRequestRevision
 	queueCalls int
@@ -24,7 +25,7 @@ type sourceProvider struct {
 
 func (p *sourceProvider) CommitTree(_ context.Context, _ *provider.Context) (string, error) {
 	p.treeCalls++
-	return p.tree, nil
+	return p.tree, p.treeErr
 }
 
 func (p *sourceProvider) ReviewPullRequest(_ context.Context, _ *provider.Context) (*provider.PullRequestRevision, error) {

@@ -56,10 +56,8 @@ func (p *Plugin) uploadPlanfileTreeAlias(ctx *plugin.HookContext, store planfile
 	if key == "" {
 		return
 	}
-	data, err := json.Marshal(planSourceReference{SHA: ctx.CICtx.SHA})
-	if err != nil {
-		return
-	}
+	// This concrete struct contains only a string; encoding cannot fail.
+	data, _ := json.Marshal(planSourceReference{SHA: ctx.CICtx.SHA})
 	files := []planfile.FileEntry{{Name: planSourceFilename, Data: bytes.NewReader(data), Size: int64(len(data))}}
 	if err := store.Upload(context.Background(), key, files, metadata); err != nil {
 		log.Warn("Cannot store the planfile source-tree reference", "key", key, "error", err)
