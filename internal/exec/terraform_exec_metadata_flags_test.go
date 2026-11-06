@@ -251,3 +251,32 @@ func TestCaptureExecMetadataSync_ParserReceivesResolvedComponent(t *testing.T) {
 
 	assert.Equal(t, "vpc", gotComponent)
 }
+
+// TestCaptureExecMetadataSync_ParserReceivesInstanceNotDirectory verifies the
+// parser is handed the component instance name (the stack key) even when
+// metadata.component points that instance at a different physical directory.
+// Here the instance "network/primary" lives in components/terraform/vpc; the
+// metadata must report the instance, never the directory ("vpc") or its last
+// segment ("primary").
+func TestCaptureExecMetadataSync_ParserReceivesInstanceNotDirectory(t *testing.T) {
+	t.Setenv("CI", "")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:  "network/primary",
+		Component:         "primary",
+		FinalComponent:    "vpc",
+		BaseComponentPath: "vpc",
+		Stack:             "dev",
+	}
+
+	var gotComponent string
+	parser := func(_, component string, _ int, _ string) any {
+		gotComponent = component
+		return nil
+	}
+
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Parser: parser})
+
+	assert.Equal(t, "network/primary", gotComponent)
+}
