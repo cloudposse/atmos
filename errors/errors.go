@@ -1553,6 +1553,7 @@ var (
 	ErrCIStatusContextIncomplete  = errors.New("status context requires all parts to be non-empty")
 	ErrCIStatusFetchFailed        = errors.New("failed to fetch CI status")
 	ErrCILabelsFetchFailed        = errors.New("failed to fetch CI review labels")
+	ErrCIMergedPRLookupFailed     = errors.New("failed to look up the pull request merged as this commit")
 	ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed       = errors.New("failed to write CI summary")
 	ErrCIAnnotationFailed         = errors.New("failed to emit CI annotations")

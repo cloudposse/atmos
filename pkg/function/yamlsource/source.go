@@ -38,6 +38,9 @@ type Source struct {
 	File     string `json:"file,omitempty"`
 	Line     int    `json:"line,omitempty"`
 	Column   int    `json:"column,omitempty"`
+	// Sequence records that the tag was written with a YAML sequence argument, encoded as a
+	// flow sequence in Argument. RestoreTags re-emits it as a sequence, not a quoted scalar.
+	Sequence bool `json:"sequence,omitempty"`
 }
 
 // Encode transports source through existing string fields. The argument stays

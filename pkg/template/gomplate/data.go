@@ -201,7 +201,7 @@ func CreateFuncs(ctx context.Context, d *Data) template.FuncMap {
 	defer perf.Track(nil, "gomplate.CreateFuncs")()
 
 	d.Ctx = ctx
-	funcs := gomplate.CreateFuncs(ctx)
+	funcs := gomplateFuncs(ctx)
 	if runtime.GOOS == "windows" {
 		funcs["file"] = func() any { return &nativeFileFuncs{} }
 	}
@@ -219,19 +219,19 @@ func CreateFuncs(ctx context.Context, d *Data) template.FuncMap {
 func JSON(value string) (map[string]any, error) {
 	defer perf.Track(nil, "gomplate.JSON")()
 
-	return gomplate.CreateFuncs(context.Background())["json"].(func(any) (map[string]any, error))(value)
+	return sharedFuncMap(false)["json"].(func(any) (map[string]any, error))(value)
 }
 
 // CSV uses Gomplate's native CSV decoder.
 func CSV(value string) ([][]string, error) {
 	defer perf.Track(nil, "gomplate.CSV")()
 
-	return gomplate.CreateFuncs(context.Background())["csv"].(func(...string) ([][]string, error))(value)
+	return sharedFuncMap(false)["csv"].(func(...string) ([][]string, error))(value)
 }
 
 // TOML uses Gomplate's native TOML decoder.
 func TOML(value string) (any, error) {
 	defer perf.Track(nil, "gomplate.TOML")()
 
-	return gomplate.CreateFuncs(context.Background())["toml"].(func(any) (any, error))(value)
+	return sharedFuncMap(false)["toml"].(func(any) (any, error))(value)
 }
