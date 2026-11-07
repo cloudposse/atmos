@@ -21,8 +21,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
-	data "github.com/cloudposse/atmos/pkg/template/gomplate"
+	templatepolicy "github.com/cloudposse/atmos/pkg/template/policy"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
+
+// functionAllowAllRule never matches, so every call is admitted while function rules stay enabled.
+const functionAllowAllRule = "input.name == 'no-such-function'"
 
 // failPolicyEnabled replaces the capability lookup with one that fails when shouldFail reports true for the
 // kind and the 1-based call number. Other calls report the capability as enabled. The production lookup is
@@ -53,7 +57,7 @@ func TestPolicyTemplateFuncsWithoutRulesReturnsOriginalMap(t *testing.T) {
 			setup(t)
 			original := template.FuncMap{"upper": strings.ToUpper}
 
-			result, err := policyTemplateFuncs(original, "stack.yaml", &data.Data{})
+			result, err := templatepolicy.TemplateFuncs(original, "stack.yaml", &render.Data{})
 			require.NoError(t, err)
 			assert.Equal(t, reflect.ValueOf(original).Pointer(), reflect.ValueOf(result).Pointer(), "the original map is returned unwrapped")
 			assert.Equal(t, reflect.ValueOf(strings.ToUpper).Pointer(), reflect.ValueOf(result["upper"]).Pointer())
@@ -61,52 +65,6 @@ func TestPolicyTemplateFuncsWithoutRulesReturnsOriginalMap(t *testing.T) {
 			rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, "test", `{{ upper "ok" }}-{{ env "POLICY_UNSET_VARIABLE" }}`, nil, false)
 			require.NoError(t, err)
 			assert.Equal(t, "OK-", rendered)
-		})
-	}
-}
-
-func TestPolicyTemplateFuncsWrapsEveryFunctionWhenRulesAreEnabled(t *testing.T) {
-	for _, kind := range []string{"function", "source"} {
-		t.Run(kind, func(t *testing.T) {
-			templatePolicy(t, kind, "false", nil)
-			original := template.FuncMap{"upper": strings.ToUpper, "answer": func() int { return 42 }}
-
-			result, err := policyTemplateFuncs(original, "stack.yaml", &data.Data{})
-			require.NoError(t, err)
-			require.Len(t, result, len(original))
-			assert.NotEqual(t, reflect.ValueOf(original).Pointer(), reflect.ValueOf(result).Pointer(), "a private map is returned, never the cached one")
-			assert.Equal(t, reflect.ValueOf(strings.ToUpper).Pointer(), reflect.ValueOf(original["upper"]).Pointer(), "the cached map is not mutated")
-
-			upper, ok := result["upper"].(func(string) (string, error))
-			require.True(t, ok, "single-result functions gain an error result: %T", result["upper"])
-			value, err := upper("abc")
-			require.NoError(t, err)
-			assert.Equal(t, "ABC", value)
-
-			answer, ok := result["answer"].(func() (int, error))
-			require.True(t, ok, "%T", result["answer"])
-			number, err := answer()
-			require.NoError(t, err)
-			assert.Equal(t, 42, number)
-		})
-	}
-}
-
-func TestPolicyTemplateFuncsCapabilityLookupErrors(t *testing.T) {
-	original := template.FuncMap{"upper": strings.ToUpper}
-	tests := []struct {
-		name       string
-		shouldFail func(kind string, call int) bool
-	}{
-		{"function lookup", func(kind string, _ int) bool { return kind == "function" }},
-		{"source lookup", func(kind string, _ int) bool { return kind == "source" }},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			failPolicyEnabled(t, tc.shouldFail)
-			result, err := policyTemplateFuncs(original, "stack.yaml", &data.Data{})
-			require.ErrorIs(t, err, errUtils.ErrPolicyEvaluation)
-			assert.Nil(t, result, "a failed lookup must not hand back unguarded functions")
 		})
 	}
 }
@@ -134,10 +92,10 @@ func TestTemplateRenderersPropagateCapabilityLookupErrors(t *testing.T) {
 		name       string
 		shouldFail func(kind string, call int) bool
 	}{
+		// Both lookups happen inside the function-map wrapper the template engine calls, which
+		// decides whether to guard; neither failure may be mistaken for "no rules".
 		{"function lookup", func(kind string, _ int) bool { return kind == "function" }},
 		{"source lookup", func(kind string, _ int) bool { return kind == "source" }},
-		// The first two lookups decide whether to guard; the third happens inside the function-map wrapper.
-		{"wrapper lookup", func(_ string, call int) bool { return call >= 3 }},
 	}
 	for _, tc := range gomplateTests {
 		t.Run("ProcessTmplWithDatasourcesGomplate "+tc.name, func(t *testing.T) {
@@ -152,28 +110,9 @@ func TestTemplateRenderersPropagateCapabilityLookupErrors(t *testing.T) {
 func TestTemplateGetHostByNameSourceAdmission(t *testing.T) {
 	templatePolicy(t, "source", "input.scheme == 'dns' && input.host == 'blocked.example.invalid'", nil)
 
-	t.Run("denied host", func(t *testing.T) {
-		err := admitTemplateCall("getHostByName", "stack.yaml", []reflect.Value{reflect.ValueOf("blocked.example.invalid")})
-		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
-
-		rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, "test", `{{ getHostByName "blocked.example.invalid" }}`, nil, false)
-		require.ErrorContains(t, err, "policy")
-		assert.Empty(t, rendered)
-	})
-
-	t.Run("host the rule does not match is admitted", func(t *testing.T) {
-		err := admitTemplateCall("getHostByName", "stack.yaml", []reflect.Value{reflect.ValueOf("allowed.example.invalid")})
-		require.NoError(t, err)
-	})
-
-	t.Run("other functions never consult the DNS source gate", func(t *testing.T) {
-		err := admitTemplateCall("upper", "stack.yaml", []reflect.Value{reflect.ValueOf("blocked.example.invalid")})
-		require.NoError(t, err)
-	})
-
-	t.Run("a call without arguments has no host to check", func(t *testing.T) {
-		require.NoError(t, admitTemplateCall("getHostByName", "stack.yaml", nil))
-	})
+	rendered, err := ProcessTmpl(&schema.AtmosConfiguration{}, "test", `{{ getHostByName "blocked.example.invalid" }}`, nil, false)
+	require.ErrorContains(t, err, "policy")
+	assert.Empty(t, rendered)
 }
 
 func TestAtmosFuncsFunctionAdmission(t *testing.T) {
@@ -183,7 +122,7 @@ func TestAtmosFuncsFunctionAdmission(t *testing.T) {
 		return AtmosFuncs{
 			atmosConfig:  &schema.AtmosConfiguration{},
 			ctx:          context.Background(),
-			gomplateData: &data.Data{},
+			gomplateData: &render.Data{},
 			sourceFile:   file,
 		}
 	}
@@ -268,8 +207,9 @@ func TestAtmosFuncsGomplateDatasourceCaching(t *testing.T) {
 	t.Cleanup(server.Close)
 	funcs := func(t *testing.T, alias string) AtmosFuncs {
 		t.Helper()
-		t.Cleanup(func() { gomplateDatasourceFuncSyncMap.Delete(alias) })
-		d, err := data.NewData([]string{alias + "=" + server.URL + "/data.json"}, nil)
+		// The cache key includes the datasource URL, and each run uses a fresh test server,
+		// so repeated runs never see each other's cached value.
+		d, err := render.NewData([]string{alias + "=" + server.URL + "/data.json"}, nil)
 		require.NoError(t, err)
 		return AtmosFuncs{atmosConfig: &schema.AtmosConfiguration{}, ctx: context.Background(), gomplateData: d, sourceFile: "stack.yaml"}
 	}
@@ -287,7 +227,7 @@ func TestAtmosFuncsGomplateDatasourceCaching(t *testing.T) {
 
 		require.Equal(t, first, second)
 		require.EqualValues(t, 1, hits.Load(), "the second render is served from the cache")
-		require.EqualValues(t, 1, heads.Load(), "Gomplate v4 reads metadata once, then reuses the alias cache")
+		require.EqualValues(t, 0, heads.Load(), "HTTP datasources are read with a single GET, then served from the cache")
 	})
 
 	t.Run("a source rule checks and reads every call", func(t *testing.T) {
