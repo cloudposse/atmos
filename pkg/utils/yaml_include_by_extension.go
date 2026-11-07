@@ -410,18 +410,21 @@ func shouldFetchRemote(path string) bool {
 	}
 
 	for _, detector := range detectors {
-		var src string
-		var ok bool
 		if _, isBitBucket := detector.(*getter.BitBucketDetector); isBitBucket {
-			src, ok = detectWithTimeout(detector, path, bitbucketDetectTimeout)
-		} else {
-			var err error
-			src, ok, err = detector.Detect(path, "")
-			if err != nil {
-				continue
+			// BitBucketDetector.Detect reports ok=true as soon as the "bitbucket.org/" prefix
+			// matches, even when the live lookup that follows fails (private repo, lookup
+			// error, timeout). Treat that match as remote regardless of the lookup outcome:
+			// a same-named local file must never silently win over an intended BitBucket
+			// shorthand just because the lookup errored. The real fetch that follows surfaces
+			// that error to the caller instead of it being swallowed here.
+			if detectWithTimeout(detector, path, bitbucketDetectTimeout) {
+				return true
 			}
+			continue
 		}
-		if !ok {
+
+		src, ok, err := detector.Detect(path, "")
+		if err != nil || !ok {
 			continue
 		}
 		// If any non-file detector matched, treat it as remote
@@ -433,28 +436,26 @@ func shouldFetchRemote(path string) bool {
 	return false
 }
 
-// detectWithTimeout runs a go-getter detector's Detect call bounded by timeout. The go-getter
-// Detector interface takes no context, so the bound is applied with a goroutine and a timer,
-// mirroring the pattern in pkg/terraform/cache/trust_install.go's runTrustOperation. A detector
-// that doesn't return in time is treated as not matching rather than blocking the caller.
-func detectWithTimeout(detector getter.Detector, path string, timeout time.Duration) (string, bool) {
-	type result struct {
-		src string
-		ok  bool
-	}
-	done := make(chan result, 1)
+// detectWithTimeout reports whether a go-getter detector matches path, bounded by timeout. The
+// go-getter Detector interface takes no context, so the bound is applied with a goroutine and a
+// timer, mirroring the pattern in pkg/terraform/cache/trust_install.go's runTrustOperation. A
+// detector that doesn't return in time is treated as not matching rather than blocking the
+// caller. The match result (ok) is reported independently of any error the detector returns, so
+// a provider-specific lookup failure still counts as a match.
+func detectWithTimeout(detector getter.Detector, path string, timeout time.Duration) bool {
+	done := make(chan bool, 1)
 	go func() {
-		src, ok, err := detector.Detect(path, "")
-		done <- result{src, ok && err == nil}
+		_, ok, _ := detector.Detect(path, "")
+		done <- ok
 	}()
 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case r := <-done:
-		return r.src, r.ok
+	case ok := <-done:
+		return ok
 	case <-timer.C:
-		return "", false
+		return false
 	}
 }
 
