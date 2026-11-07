@@ -69,8 +69,10 @@ func TestBehaviorChangedFollowsJournalReplacement(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, changed, "the oldest transition for a key decides")
 
+	// The replacement has the same length as the previous journal, so only its contents differ.
 	setTestJournal(t, []Entry{
 		{Date: "2025-06-01", Key: "behavior.demo.swap", Kind: KindBehavior, Old: "a", New: "b", Description: "moved", Ref: "https://example.com/3"},
+		{Date: "2025-07-01", Key: "behavior.demo.other", Kind: KindBehavior, Old: "a", New: "b", Description: "other", Ref: "https://example.com/4"},
 	})
 	changed, err = BehaviorChanged("2025-04-01", "behavior.demo.swap")
 	require.NoError(t, err)

@@ -134,8 +134,8 @@ config: !include https://example.com/data.json?v=1#field
 
 ### Local Sources
 
-The `!include` function supports three kinds of local file paths. The kind is decided by how the path is written, and
-each kind resolves in exactly one place — Atmos does not fall back from one kind to another:
+The `!include` function supports three kinds of local file paths. The kind is decided by how the path is
+written, and Atmos never falls back from one kind to another:
 
 | Path | Resolved relative to |
 | --- | --- |
@@ -143,9 +143,10 @@ each kind resolves in exactly one place — Atmos does not fall back from one ki
 | `./file.yaml`, `../file.yaml` | The directory of the file that contains the `!include` |
 | `config/file.yaml` | [`base_path`](/cli/configuration#base-path) |
 
-If the file does not exist there, `!include` fails with an error that names the exact path it tried. A `./` path that
-is missing next to the including file is never replaced by a same-named file under `base_path`; when one exists, the
-error suggests dropping the `./` prefix.
+Each kind has one primary location. If the file does not exist there, `!include` fails with an error that
+names where it looked. The only fallback is for bare paths in stack manifests, which are also checked against the
+directory you run Atmos from (see below). A `./` path that is missing next to the including file is never replaced
+by a same-named file under `base_path`; when one exists, the error suggests dropping the `./` prefix.
 
 1. **Absolute paths** — Used as-is with no resolution needed.
    ```yaml

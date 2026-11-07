@@ -16,7 +16,11 @@ func RestoreTags(node *yaml.Node) {
 	}
 	if node.Kind == yaml.ScalarNode {
 		if source, ok := Decode(node.Value); ok {
+			// A restored node's children are its literal argument, such as the labels of a
+			// !ci.labels sequence: decoding them again would turn a label that happens to equal
+			// a transported source into a tagged node the tag then rejects.
 			restoreSource(node, source)
+			return
 		}
 	}
 	for _, child := range node.Content {
