@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -206,4 +207,61 @@ func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool
 	}
 
 	return true
+}
+
+// recordProviderIterationSkip records in componentInfo that terraform-config-inspect validation was
+// skipped because of OpenTofu provider iteration, so `describe component` reports that reason rather
+// than module source interpolation. It does nothing if providerIteration is empty.
+func recordProviderIterationSkip(componentInfo map[string]any, providerIteration tfconfig.Diagnostics) {
+	if len(providerIteration) == 0 {
+		return
+	}
+	log.Debug("Skipping terraform-config-inspect validation for OpenTofu provider iteration diagnostic", "diagnostic", providerIteration.Err())
+	componentInfo["validation_skipped_provider_iteration"] = true
+}
+
+// recordSensitiveVariableNames records in componentInfo the names of module's variables declared
+// `sensitive = true`. It is used when a static-parser limitation leaves terraform_config nil, so
+// terraformSensitiveVarKeys can still keep those inputs out of the generated varfile. Only the names
+// are recorded, never values. It does nothing if module is nil or declares no sensitive variables.
+func recordSensitiveVariableNames(componentInfo map[string]any, module *tfconfig.Module) {
+	if module == nil {
+		return
+	}
+	var names []string
+	for name, variable := range module.Variables {
+		if variable != nil && variable.Sensitive {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	slices.Sort(names)
+	componentInfo[sensitiveVariablesKey] = names
+}
+
+// recordedSensitiveVariableNames returns the names recordSensitiveVariableNames stored in componentInfo.
+// It accepts []any as well as []string because component sections may be deep-copied.
+func recordedSensitiveVariableNames(componentInfo map[string]any) map[string]bool {
+	var names []string
+	switch v := componentInfo[sensitiveVariablesKey].(type) {
+	case []string:
+		names = v
+	case []any:
+		for _, item := range v {
+			if name, ok := item.(string); ok {
+				names = append(names, name)
+			}
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+
+	keys := make(map[string]bool, len(names))
+	for _, name := range names {
+		keys[name] = true
+	}
+	return keys
 }

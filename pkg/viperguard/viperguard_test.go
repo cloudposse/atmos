@@ -53,6 +53,7 @@ func TestConcurrentBindEnvAndGet(t *testing.T) {
 			_ = viperguard.IsSet("settings.terminal.theme")
 			_ = viperguard.GetStringSlice("some.slice")
 			_ = viperguard.GetFloat64("settings.terminal.speed")
+			_ = viperguard.GetInt("cast.recording.width")
 		}
 	}()
 
@@ -71,6 +72,17 @@ func TestGetFloat64(t *testing.T) {
 	assert.Equal(t, 123.5, viperguard.GetFloat64("settings.terminal.speed"))
 	viperguard.Set("settings.terminal.speed", 2400)
 	assert.Equal(t, float64(2400), viperguard.GetFloat64("settings.terminal.speed"))
+}
+
+func TestGetInt(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	assert.Zero(t, viperguard.GetInt("cast.recording.width"))
+	viperguard.Set("cast.recording.width", "120")
+	assert.Equal(t, 120, viperguard.GetInt("cast.recording.width"))
+	viperguard.Set("cast.recording.width", 80)
+	assert.Equal(t, 80, viperguard.GetInt("cast.recording.width"))
 }
 
 // TestGetBoolAndView covers the package's GetBool and View, plus every
