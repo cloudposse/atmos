@@ -3,6 +3,7 @@ package render
 import (
 	"context"
 	"maps"
+	"reflect"
 	"sync"
 	"text/template"
 
@@ -43,17 +44,45 @@ func SprigFuncMap() template.FuncMap {
 // experimentalKey marks contexts whose function maps include Gomplate experimental functions.
 type experimentalKey struct{}
 
-// WithExperimental enables gomplate's experimental functions for renders bound to ctx.
-// Use it instead of gomplate.SetExperimental: the shared function maps are selected by this
-// marker, because Gomplate's own experimental flag cannot be read outside its module.
+// WithExperimental enables gomplate's experimental functions for renders bound to ctx. Use it
+// instead of gomplate.SetExperimental: it sets both this package's marker (which selects the
+// shared function maps) and Gomplate's own flag. Contexts enabled with gomplate.SetExperimental
+// alone are recognized too, as long as Gomplate's flag can be located (see
+// upstreamExperimentalKey).
 func WithExperimental(ctx context.Context) context.Context {
 	defer perf.Track(nil, "render.WithExperimental")()
 
 	return context.WithValue(gomplate.SetExperimental(ctx), experimentalKey{}, true)
 }
 
+// upstreamExperimentalKey is the context key gomplate.SetExperimental stores its flag under. The
+// key's type is unexported, so it is recovered from a context Gomplate enabled: reflection can read
+// the type of the stored key, and a new value of that type is equal to the key. It is nil when the
+// key cannot be located, in which case only this package's marker is recognized.
+var upstreamExperimentalKey = func() any {
+	value := reflect.ValueOf(gomplate.SetExperimental(context.Background()))
+	if value.Kind() != reflect.Pointer || value.Elem().Kind() != reflect.Struct {
+		return nil
+	}
+	field := value.Elem().FieldByName("key")
+	if !field.IsValid() || field.Kind() != reflect.Interface || field.IsNil() {
+		return nil
+	}
+	key := reflect.New(field.Elem().Type()).Elem()
+	if !key.Type().Comparable() {
+		return nil
+	}
+	return key.Interface()
+}()
+
 func isExperimental(ctx context.Context) bool {
-	enabled, _ := ctx.Value(experimentalKey{}).(bool)
+	if enabled, _ := ctx.Value(experimentalKey{}).(bool); enabled {
+		return true
+	}
+	if upstreamExperimentalKey == nil {
+		return false
+	}
+	enabled, _ := ctx.Value(upstreamExperimentalKey).(bool)
 	return enabled
 }
 

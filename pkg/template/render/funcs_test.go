@@ -127,6 +127,23 @@ func TestGomplateFuncsHonorExperimentalSetting(t *testing.T) {
 	require.ErrorContains(t, err, "experimental mode not enabled")
 }
 
+// A context enabled with Gomplate's own SetExperimental selects the experimental map too, even
+// when it is wrapped by later context values.
+func TestGomplateFuncsHonorUpstreamExperimentalSetting(t *testing.T) {
+	const text = `{{ net.CIDRHost 1 "10.0.0.0/24" }}`
+	require.NotNil(t, upstreamExperimentalKey, "Gomplate's experimental context key must be locatable")
+
+	type otherKey struct{}
+	ctx := context.WithValue(gomplate.SetExperimental(context.Background()), otherKey{}, "value")
+	assert.True(t, isExperimental(ctx))
+
+	result, err := renderWith(t, gomplateFuncs(ctx), text)
+	require.NoError(t, err)
+	assert.Equal(t, "10.0.0.1", result)
+
+	assert.False(t, isExperimental(context.WithValue(context.Background(), otherKey{}, true)))
+}
+
 // BenchmarkGomplateFuncs measures building the function map Atmos creates for every template render.
 func BenchmarkGomplateFuncs(b *testing.B) {
 	ctx := context.Background()
