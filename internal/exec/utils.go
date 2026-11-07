@@ -28,6 +28,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -1185,7 +1186,7 @@ func processStacks(
 		}
 		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
 			templateInput,
-			effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+			delimiters.ForComponent(atmosConfig, &settingsSectionStruct),
 		)
 		if err != nil {
 			return configAndStacksInfo, err

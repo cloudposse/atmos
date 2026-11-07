@@ -276,7 +276,7 @@ func TestRepositoryCoverageWaitsForCompleteSuite(t *testing.T) {
 	require.ElementsMatch(t, []any{"build", "test", "magefiles"}, coverage.Needs)
 	require.Empty(t, coverage.If, "failed prerequisites must prevent a partial upload")
 	upload := pipelineUses(t, coverage.Steps, "codecov/codecov-action")
-	require.ElementsMatch(t, []string{"coverage.out", "magefiles-coverage.out", "noticegen-coverage.out", "sdk-coverage.out", "plugins-coverage.out"}, strings.Split(upload.With["files"], ","))
+	require.ElementsMatch(t, []string{"coverage.out", "magefiles-coverage.out", "noticegen-coverage.out", "gomodcheck-coverage.out", "sdk-coverage.out", "plugins-coverage.out"}, strings.Split(upload.With["files"], ","))
 	require.Equal(t, "true", upload.With["disable_search"], "upload only the explicitly collected reports")
 	require.Equal(t, "unittests", upload.With["flags"])
 	uploadIndex := -1
