@@ -99,23 +99,23 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.47.3/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.47.4/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/aws/protocol/eventstream/v1.7.20/aws/protocol/eventstream/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/aws/protocol/eventstream/v1.7.24/aws/protocol/eventstream/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/config
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/config/v1.33.2/config/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/config/v1.33.10/config/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/credentials
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/credentials/v1.20.2/credentials/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/credentials/v1.20.10/credentials/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/feature/ec2/imds
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/ec2/imds/v1.19.1/feature/ec2/imds/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/ec2/imds/v1.20.4/feature/ec2/imds/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/feature/s3/manager
     License: Apache-2.0
@@ -127,23 +127,23 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/internal/configsources
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/configsources/v1.5.6/internal/configsources/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/configsources/v1.5.7/internal/configsources/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/endpoints/v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.8.6/internal/endpoints/v2/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.8.7/internal/endpoints/v2/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/v4a
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/v4a/v1.5.1/internal/v4a/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/v4a/v1.5.7/internal/v4a/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/bedrockruntime
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/bedrockruntime/v1.60.0/service/bedrockruntime/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/bedrockruntime/v1.63.7/service/bedrockruntime/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/cloudformation
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/cloudformation/v1.76.4/service/cloudformation/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/cloudformation/v1.82.2/service/cloudformation/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/ec2
     License: Apache-2.0
@@ -151,15 +151,15 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/service/ecr
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecr/v1.63.0/service/ecr/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecr/v1.66.6/service/ecr/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/ecrpublic
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecrpublic/v1.45.0/service/ecrpublic/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecrpublic/v1.47.6/service/ecrpublic/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/eks
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/eks/v1.97.0/service/eks/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/eks/v1.104.3/service/eks/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/iam
     License: Apache-2.0
@@ -167,71 +167,71 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/service/inspector2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/inspector2/v1.57.0/service/inspector2/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/inspector2/v1.61.5/service/inspector2/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/accept-encoding/v1.13.19/service/internal/accept-encoding/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/accept-encoding/v1.13.22/service/internal/accept-encoding/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/checksum
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/checksum/v1.11.1/service/internal/checksum/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/checksum/v1.11.8/service/internal/checksum/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/presigned-url
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/presigned-url/v1.14.1/service/internal/presigned-url/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/presigned-url/v1.14.7/service/internal/presigned-url/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/s3shared
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/s3shared/v1.20.1/service/internal/s3shared/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/s3shared/v1.20.7/service/internal/s3shared/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/kms
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/kms/v1.58.0/service/kms/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/kms/v1.61.6/service/kms/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/organizations
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/organizations/v1.58.0/service/organizations/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/organizations/v1.62.2/service/organizations/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/resourcegroupstaggingapi/v1.41.4/service/resourcegroupstaggingapi/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/resourcegroupstaggingapi/v1.41.6/service/resourcegroupstaggingapi/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/s3
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/s3/v1.110.0/service/s3/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/s3/v1.114.5/service/s3/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/secretsmanager
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/secretsmanager/v1.47.0/service/secretsmanager/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/secretsmanager/v1.50.6/service/secretsmanager/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/securityhub
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/securityhub/v1.79.0/service/securityhub/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/securityhub/v1.85.2/service/securityhub/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/signin
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/signin/v1.8.0/service/signin/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/signin/v1.10.5/service/signin/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/ssm
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ssm/v1.76.0/service/ssm/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ssm/v1.81.0/service/ssm/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/sso
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sso/v1.36.0/service/sso/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sso/v1.38.5/service/sso/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/ssooidc
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ssooidc/v1.41.0/service/ssooidc/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ssooidc/v1.43.5/service/ssooidc/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/sts
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sts/v1.48.0/service/sts/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sts/v1.51.5/service/sts/LICENSE.txt
 
   - github.com/aws/smithy-go
     License: Apache-2.0
-    URL: https://github.com/aws/smithy-go/blob/v1.28.5/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.6/LICENSE
 
   - github.com/cloudposse/atmos
     License: Apache-2.0
@@ -956,15 +956,15 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.47.3/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.47.4/internal/sync/singleflight/LICENSE
 
   - github.com/aws/smithy-go/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/smithy-go/blob/v1.28.5/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.6/internal/sync/singleflight/LICENSE
 
   - github.com/aws/smithy-go/transport/http/protocol/internal/json/internal/stdlib
     License: BSD-3-Clause
-    URL: https://github.com/aws/smithy-go/blob/v1.28.5/transport/http/protocol/internal/json/internal/stdlib/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.6/transport/http/protocol/internal/json/internal/stdlib/LICENSE
 
   - github.com/bahlo/generic-list-go
     License: BSD-3-Clause
