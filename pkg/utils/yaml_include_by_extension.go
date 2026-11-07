@@ -32,13 +32,6 @@ var TestHTTPClient *http.Client
 // targets a single small config file rather than an entire component/template artifact.
 const ociIncludeTimeout = 2 * time.Minute
 
-// bitbucketDetectTimeout bounds go-getter's BitBucketDetector, which makes a live HTTP call to
-// the BitBucket API to disambiguate a git or hg remote and has no timeout of its own (see
-// detect_bitbucket.go in the go-getter module). Without a bound, an unresponsive network call
-// could block local !include resolution indefinitely, since detection runs before the local
-// working-directory fallback in findLocalFile.
-const bitbucketDetectTimeout = 5 * time.Second
-
 // ProcessIncludeTag processes the !include tag with extension-based parsing.
 // It parses files based on their extension, not their content.
 func ProcessIncludeTag(
@@ -412,12 +405,12 @@ func shouldFetchRemote(path string) bool {
 	for _, detector := range detectors {
 		if _, isBitBucket := detector.(*getter.BitBucketDetector); isBitBucket {
 			// BitBucketDetector.Detect reports ok=true as soon as the "bitbucket.org/" prefix
-			// matches, even when the live lookup that follows fails (private repo, lookup
-			// error, timeout). Treat that match as remote regardless of the lookup outcome:
-			// a same-named local file must never silently win over an intended BitBucket
-			// shorthand just because the lookup errored. The real fetch that follows surfaces
-			// that error to the caller instead of it being swallowed here.
-			if detectWithTimeout(detector, path, bitbucketDetectTimeout) {
+			// matches, independent of the live Bitbucket API lookup that follows to determine
+			// git vs. hg (which can fail on a private repo, a lookup error, or a timeout).
+			// Checking the prefix directly gets the same classification without making that
+			// live call here; the real fetch that follows still performs the lookup and
+			// surfaces any error to the caller.
+			if strings.HasPrefix(path, "bitbucket.org/") {
 				return true
 			}
 			continue
@@ -434,29 +427,6 @@ func shouldFetchRemote(path string) bool {
 	}
 
 	return false
-}
-
-// detectWithTimeout reports whether a go-getter detector matches path, bounded by timeout. The
-// go-getter Detector interface takes no context, so the bound is applied with a goroutine and a
-// timer, mirroring the pattern in pkg/terraform/cache/trust_install.go's runTrustOperation. A
-// detector that doesn't return in time is treated as not matching rather than blocking the
-// caller. The match result (ok) is reported independently of any error the detector returns, so
-// a provider-specific lookup failure still counts as a match.
-func detectWithTimeout(detector getter.Detector, path string, timeout time.Duration) bool {
-	done := make(chan bool, 1)
-	go func() {
-		_, ok, _ := detector.Detect(path, "")
-		done <- ok
-	}()
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case ok := <-done:
-		return ok
-	case <-timer.C:
-		return false
-	}
 }
 
 // IsRemoteIncludePath reports whether an !include path names a remote source (a URL, or a
