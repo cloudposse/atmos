@@ -331,6 +331,36 @@ func TestRetryMainCommand_PropagatesRetryError(t *testing.T) {
 	assert.Same(t, retryErr, err)
 }
 
+// TestRunTerraformInitSubprocessClassifiesOnlyFinalAttempt verifies that output from an
+// earlier retried init attempt does not reach smart-init recovery classification.
+func TestRunTerraformInitSubprocessClassifiesOnlyFinalAttempt(t *testing.T) {
+	executor := testExecutor(t)
+	attempts := 0
+	executor.services.ExecuteShellCommand = func(_ schema.AtmosConfiguration, _ string, _ []string, _ string, _ []string, _ bool, _ string, opts ...component.ExecutionOption) error {
+		attempts++
+		out, _ := streamingCaptureWriters(opts)
+		require.NotNil(t, out)
+		if attempts == 1 {
+			_, _ = out.Write([]byte("must use terraform init -upgrade; 502 Bad Gateway"))
+			return errors.New("transient")
+		}
+		_, _ = out.Write([]byte("Error: invalid backend configuration"))
+		return errors.New("init failed")
+	}
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand: "plan",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(2),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+
+	output, err := executor.runTerraformInitSubprocess(&schema.AtmosConfiguration{}, info, t.TempDir(), []string{"init"})
+	require.Error(t, err)
+	assert.Equal(t, 2, attempts)
+	assert.Equal(t, "Error: invalid backend configuration", output)
+}
+
 // TestImplicitInitRecoversAndLocksProviders proves the implicit init path retries with
 // the diagnosed flag, records only successful init, and keeps lock failures best-effort.
 func TestImplicitInitRecoversAndLocksProviders(t *testing.T) {
@@ -356,7 +386,15 @@ func TestImplicitInitRecoversAndLocksProviders(t *testing.T) {
 				require.Equal(t, "test-terraform", command)
 				require.Equal(t, dir, gotDir)
 				require.Equal(t, info.ComponentEnvList, env)
-				require.Same(t, t.Context(), component.ContextFromOptions(opts...))
+				gotCtx := component.ContextFromOptions(opts...)
+				if len(calls) <= 2 {
+					require.Same(t, t.Context(), gotCtx)
+				} else {
+					// The after-init hook's deadline must reach the providers-lock subprocess.
+					_, hasDeadline := gotCtx.Deadline()
+					require.True(t, hasDeadline, "providers lock must run under the hook deadline")
+					require.NoError(t, gotCtx.Err())
+				}
 				switch len(calls) {
 				case 1:
 					out, _ := streamingCaptureWriters(opts)

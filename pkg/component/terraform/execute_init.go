@@ -239,6 +239,9 @@ func (e *Executor) runTerraformInitSubprocess(atmosConfig *schema.AtmosConfigura
 		info,
 		"init",
 		func(o ...component.ExecutionOption) error {
+			// Classify only the final attempt: a diagnostic printed by an earlier retried
+			// attempt must not make RecoverInit re-run init with recovery flags.
+			buf.Reset()
 			return e.executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
 				componentPath:  componentPath,
 				args:           args,
@@ -320,6 +323,12 @@ func (e *Executor) executeTerraformInitCommand(atmosConfig *schema.AtmosConfigur
 // "Selected … workspace" lines. Lock completion is best-effort: a failure is logged, not
 // propagated, so it never fails the user's plan/apply.
 func (e *Executor) dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...component.ExecutionOption) {
+	ctx, cancel := context.WithTimeout(component.ContextFromOptions(opts...), 5*time.Minute)
+	defer cancel()
+
+	// The hook deadline must reach the subprocess too, so a hung `providers lock`
+	// cannot block plan/apply past the hook's timeout.
+	runOpts := append(slices.Clone(opts), component.WithProcessContext(ctx))
 	execCtx := &provisioner.TerraformExecContext{
 		WorkingDir: componentPath,
 		Run: func(args []string) error {
@@ -329,13 +338,10 @@ func (e *Executor) dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, inf
 				gatePhase:      subcommandInit,
 				subCommand:     subcommandProvidersLock,
 				redirectStdErr: info.RedirectStdErr,
-				shellOpts:      opts,
+				shellOpts:      runOpts,
 			})
 		},
 	}
-
-	ctx, cancel := context.WithTimeout(component.ContextFromOptions(opts...), 5*time.Minute)
-	defer cancel()
 
 	if err := provisioner.ExecuteProvisioners(
 		ctx,
