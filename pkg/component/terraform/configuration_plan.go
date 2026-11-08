@@ -122,6 +122,13 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	if err != nil {
 		return nil, nil, err
 	}
+	if !retained {
+		// A rebuild that was verified and then failed in init or apply leaves a workdir that no longer
+		// holds only the restored artifacts. It still equals the reviewed rebuild, so a retry may use it.
+		if retained, err = rebuiltWorkdirMatches(info, plan, path); err != nil {
+			return nil, nil, err
+		}
+	}
 	var rebuild *reviewedRebuild
 	if retained {
 		// The retained workdir is verified, so it holds the reviewed bytes of sensitive files. A rebuild

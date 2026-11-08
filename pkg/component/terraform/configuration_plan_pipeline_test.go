@@ -249,6 +249,28 @@ func TestApplyOfRestoredPlanRebuildsWorkdirOnAFreshRunner(t *testing.T) {
 	require.Equal(t, planPath, apply.PlanFile)
 }
 
+// A verified rebuild whose init or apply then failed leaves the rebuilt workdir behind. A retry uses it as
+// it is, because it still equals the reviewed rebuild; a change to it after the rebuild is still rejected.
+func TestApplyOfRestoredPlanRetriesInAVerifiedRebuild(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewInDefaultWorkdir(t)
+	project.freshRunner(t, planPath)
+	_, _, err := project.freshApply(t, planPath, project.prepared())
+	require.NoError(t, err, "the first attempt rebuilds the workdir")
+	// The failed apply left init products behind.
+	require.NoError(t, os.MkdirAll(filepath.Join(project.workdir, ".terraform", "providers"), 0o755))
+
+	apply, execution, err := project.freshApply(t, planPath, project.prepared())
+	require.NoError(t, err, "the retry accepts the verified rebuild")
+	require.NotNil(t, execution)
+	require.True(t, apply.UseTerraformPlan)
+
+	require.NoError(t, os.WriteFile(filepath.Join(project.workdir, "main.tf"), []byte("# changed after the rebuild"), 0o644))
+	_, execution, err = project.freshApply(t, planPath, project.prepared())
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.Nil(t, execution)
+}
+
 func TestApplyOfRestoredPlanRejectsWhatCannotBeReproduced(t *testing.T) {
 	tests := []struct {
 		name   string

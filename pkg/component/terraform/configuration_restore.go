@@ -60,6 +60,28 @@ func newReviewedRebuild(info *schema.ConfigAndStacksInfo, plan *configurationPla
 	return rebuild, nil
 }
 
+// rebuiltWorkdirMatches reports whether the workdir already equals the reviewed rebuild: the files a
+// rebuild regenerates match RebuildDigest and the lock file matches LockDigest. An absent workdir or
+// one that differs does not match; only an unreadable one is an error.
+func rebuiltWorkdirMatches(info *schema.ConfigAndStacksInfo, plan *configurationPlan, planPath string) (bool, error) {
+	if plan.RebuildDigest == "" {
+		return false, nil
+	}
+	rebuild := &reviewedRebuild{plan: plan, planPath: planPath, workdir: plan.WorkingDirectory, transient: transientWorkdirFiles(info)}
+	if only, err := rebuild.holdsOnlyTransport(); err != nil || only {
+		// Nothing was rebuilt yet: the normal rebuild path applies.
+		return false, err
+	}
+	err := rebuild.verify(plan.WorkingDirectory)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errUtils.ErrPlanVerificationFailed), errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	}
+	return false, err
+}
+
 // transientWorkdirFiles names the files each execution rewrites from its inputs. They carry values
 // the plan file already embodies, so they are not part of what a rebuild must reproduce.
 func transientWorkdirFiles(info *schema.ConfigAndStacksInfo) []string {
