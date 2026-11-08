@@ -82,3 +82,38 @@ func TestConfigurationStacksRejectCollisionsAndErrors(t *testing.T) {
 	require.Nil(t, raw)
 	require.Nil(t, deferred)
 }
+
+func TestValidateStacksDiscoveryOnlyChecksSelectedManifests(t *testing.T) {
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true, Discovery: schema.ComponentDiscoveryConfig{Enabled: true}}}
+	provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	provider.EXPECT().Discover(gomock.Any()).Return(map[string]map[string]any{}, nil).AnyTimes()
+	config.ComponentConfigurations = provider
+	// The project root still holds a non-stack file that must never be scanned.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte("not: [a stack manifest"), 0o600))
+	selected := filepath.Join(root, "live.yaml")
+	require.NoError(t, os.WriteFile(selected, []byte("components:\n  terraform:\n    app:\n      metadata:\n        type: bogus\n"), 0o600))
+	config.StackConfigFilesAbsolutePaths = []string{selected}
+
+	err := ValidateStacks(config)
+	require.Error(t, err, "a manifest selected by stacks.included_paths must be schema-validated")
+	require.Contains(t, err.Error(), "live.yaml")
+	require.NotContains(t, err.Error(), "atmos.yaml")
+}
+
+func TestValidateStacksMissingStacksDirStillRunsDiscovery(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(root, "stacks")
+	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: missing, TerraformDirAbsolutePath: filepath.Join(root, "components")}
+	config.Stacks.BasePath = "stacks"
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true, Discovery: schema.ComponentDiscoveryConfig{Enabled: true}}}
+	provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	provider.EXPECT().Discover(gomock.Any()).Return(nil, errUtils.ErrPluginInvalidConfig)
+	config.ComponentConfigurations = provider
+	require.ErrorIs(t, ValidateStacks(config), errUtils.ErrPluginInvalidConfig)
+
+	// Without discovery, a missing stacks directory remains a validation no-op.
+	plain := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: missing}
+	require.NoError(t, ValidateStacks(plain))
+}
