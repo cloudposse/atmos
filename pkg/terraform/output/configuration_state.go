@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -100,7 +101,7 @@ func configurationOutputConfig(config *ComponentConfig, state *schema.ComponentC
 		config.Env = make(map[string]any)
 	}
 	config.Env["TF_DATA_DIR"] = filepath.Join(root, ".terraform")
-	config.BackendType, config.Backend, config.Workspace = state.BackendType, state.Backend, state.Workspace
+	config.BackendType, config.Backend, config.Workspace = state.BackendType, absoluteBackendFiles(state.Backend, state.WorkingDirectory), state.Workspace
 	config.AutoGenerateBackend = true
 	config.AutoProvisionWorkdirForOutputs = false
 	config.Providers, config.Vars = nil, nil
@@ -118,4 +119,52 @@ func configurationEnvironment(managers []any) []string {
 		}
 	}
 	return nil
+}
+
+// backendFileKeys name backend settings that hold file paths. Terraform resolves a relative
+// path against its working directory, which for output reads is the scratch directory.
+var backendFileKeys = []string{
+	"path", "workspace_dir",
+	"shared_credentials_file", "shared_credentials_files", "shared_config_files",
+	"client_certificate_path", "oidc_token_file_path",
+}
+
+// absoluteBackendFiles anchors relative backend file paths at the state working directory,
+// so a scratch reader finds the same files as the unit's own execution. The input is unchanged.
+func absoluteBackendFiles(backend map[string]any, directory string) map[string]any {
+	if directory == "" || len(backend) == 0 {
+		return backend
+	}
+	result := maps.Clone(backend)
+	for _, key := range backendFileKeys {
+		if value, ok := result[key]; ok {
+			result[key] = anchorBackendFile(value, directory)
+		}
+	}
+	return result
+}
+
+// anchorBackendFile anchors one path, or each path of a list, at directory. Absolute and
+// home-relative paths, and values that are not paths, are returned unchanged.
+func anchorBackendFile(value any, directory string) any {
+	switch typed := value.(type) {
+	case string:
+		if typed != "" && !filepath.IsAbs(typed) && !strings.HasPrefix(typed, "~") {
+			return filepath.Join(directory, typed)
+		}
+		return typed
+	case []any:
+		paths := make([]any, len(typed))
+		for i := range typed {
+			paths[i] = anchorBackendFile(typed[i], directory)
+		}
+		return paths
+	case []string:
+		paths := make([]any, len(typed))
+		for i := range typed {
+			paths[i] = anchorBackendFile(typed[i], directory)
+		}
+		return paths
+	}
+	return value
 }

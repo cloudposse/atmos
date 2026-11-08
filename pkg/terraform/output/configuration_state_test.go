@@ -154,3 +154,28 @@ func TestReadOnlyHTTPOutputDoesNotSelectWorkspace(t *testing.T) {
 	err := ensureOutputWorkspace(t.Context(), nil, runner, &ComponentConfig{ReadOnlyState: true, BackendType: "http"}, &workspaceTarget{component: "network", stack: "live"})
 	require.NoError(t, err)
 }
+
+func TestOutputReaderAnchorsRelativeBackendFiles(t *testing.T) {
+	unit := t.TempDir()
+	absolute := filepath.Join(t.TempDir(), "credentials")
+	backend := map[string]any{
+		"bucket":                   "state",
+		"shared_credentials_files": []any{"creds/aws", absolute},
+		"shared_config_files":      []string{"config/aws"},
+		"shared_credentials_file":  "legacy",
+		"client_certificate_path":  "~/cert.pfx",
+	}
+	state := &schema.ComponentConfigurationState{BackendType: "s3", Backend: backend, WorkingDirectory: unit}
+	config := &ComponentConfig{}
+	cleanup, err := configurationOutputConfig(config, state)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	require.NotEqual(t, unit, config.ComponentPath)
+	require.Equal(t, []any{filepath.Join(unit, "creds", "aws"), absolute}, config.Backend["shared_credentials_files"])
+	require.Equal(t, []any{filepath.Join(unit, "config", "aws")}, config.Backend["shared_config_files"])
+	require.Equal(t, filepath.Join(unit, "legacy"), config.Backend["shared_credentials_file"])
+	require.Equal(t, "~/cert.pfx", config.Backend["client_certificate_path"], "home-relative paths are left to Terraform")
+	require.Equal(t, "state", config.Backend["bucket"])
+	require.Equal(t, []any{"creds/aws", absolute}, backend["shared_credentials_files"], "the provider's state is not modified")
+	require.Equal(t, backend, absoluteBackendFiles(backend, ""))
+}

@@ -28,7 +28,10 @@ func trackInputSources(fs afero.Fs, root string, result *model.Resolution) error
 		}
 		file, diagnostics := hclsyntax.ParseConfig(contents, path, hcl.InitialPos)
 		if diagnostics.HasErrors() {
-			return fmt.Errorf("cannot track configuration sources in %s", path)
+			// Files also lists data files that functions read, and a data file may be named
+			// *.hcl without being HCL. Every configuration file already parsed during
+			// evaluation, so one that does not parse is data: it stays a file watch.
+			continue
 		}
 		inputs := file.Body.(*hclsyntax.Body).Attributes["inputs"]
 		if inputs == nil {

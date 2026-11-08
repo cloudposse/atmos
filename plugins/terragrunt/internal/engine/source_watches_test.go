@@ -60,8 +60,12 @@ func TestInputWatchesFailuresAndIncludedInputs(t *testing.T) {
 	result := &model.Resolution{Files: []string{path}}
 	require.Error(t, trackInputSources(fs, root, result))
 	require.NoError(t, fs.MkdirAll(root, 0o700))
+	// A read data file named *.hcl need not be HCL; it remains a file watch instead of
+	// failing the whole inventory.
 	require.NoError(t, afero.WriteFile(fs, path, []byte("inputs = {"), 0o600))
-	require.ErrorContains(t, trackInputSources(fs, root, result), "cannot track")
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Equal(t, []string{path}, result.Files)
+	require.Empty(t, result.Folders)
 	require.NoError(t, afero.WriteFile(fs, path, []byte(`locals { unrelated = "constant" }`), 0o600))
 	require.NoError(t, trackInputSources(fs, root, result))
 	require.Empty(t, result.Folders)

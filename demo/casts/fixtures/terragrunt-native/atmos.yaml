@@ -14,7 +14,8 @@ components:
 logs:
   level: Warning
 
-# Keep the local-development warning, but redact the recorder's checkout path.
+# Keep the local-development warning, but redact the recorder's checkout path wherever the
+# checkout lives (a home directory, a CI runner workspace, or a Windows drive).
 settings:
   metrics:
     enabled: false
@@ -23,4 +24,4 @@ settings:
       enabled: true
       replacement: '[LOCAL_PLUGIN]'
       patterns:
-        - '/(Users|home)/[^[:space:]]+/plugins/terragrunt'
+        - '(/|[A-Za-z]:[\\/])[^[:space:]]*[\\/]plugins[\\/]terragrunt'
