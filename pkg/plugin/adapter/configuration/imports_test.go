@@ -165,7 +165,7 @@ func TestImportValidationAndCancellation(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, handled)
 	}
-	for _, path := range []string{"", "../outside", "/absolute", `live\app`, "live?ref=main", "live#fragment", "live/*", "live/[ab]", "live/{a,b}"} {
+	for _, path := range []string{"", "../outside", "/absolute", `live\app`, "live?ref=main", "live#fragment", "live/*", "live/[ab]", "live/[dev]", "live/{a,b}"} {
 		_, handled, err := session.ImportComponents(t.Context(), "terragrunt://"+path)
 		require.True(t, handled)
 		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)

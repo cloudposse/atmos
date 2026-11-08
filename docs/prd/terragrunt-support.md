@@ -72,7 +72,7 @@ Provide settings for the executable/version in executable mode, project/discover
 - Keep logical coordinates stable across discovery, generated directories, and machines. An imported unit's coordinates are the importing stack and the unit's name.
 - Use one pattern language for `included_paths` and `excluded_paths`: doublestar globs relative to the base path that select the matched path and everything below it. Report an include pattern that selects nothing, a `terragrunt.hcl` without `terraform.source`, and skipped symlinks as warnings.
 - Follow Terragrunt v1.2.1 for symlinks: do not follow directory links, treat a symlinked `terragrunt.hcl` or `terragrunt.stack.hcl` as a unit at the link's location, and report what is skipped.
-- Fail on two units with one component name in one stack, and on a unit that shares its name with a YAML component, naming both definitions.
+- Fail on two different units with one component name in one stack, naming both definitions. A discovered stack that has the name of a stack manifest fails too. This rule does not apply to imported units: an imported unit with a YAML component of the same name merges instead (see above).
 - Do not attribute a plugin-provided component to an unrelated YAML manifest in provenance output.
 - Leave source configuration and state unchanged during listing. Report denied effects.
 

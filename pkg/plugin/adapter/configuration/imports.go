@@ -15,6 +15,9 @@ import (
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 )
 
+// importRejectedCharacters cannot appear in a provider import path.
+const importRejectedCharacters = `\?#*[{`
+
 // ImportComponents resolves an explicit provider import into Terraform components of the
 // importing stack. The provider evaluates only the imported roots; automatic discovery
 // scope (included_paths and excluded_paths) never filters an explicit import. The units
@@ -79,10 +82,10 @@ func (s *Session) importKey(ctx context.Context, scheme, provider, path string) 
 	if err := s.ctx.Err(); err != nil {
 		return "", err
 	}
-	// Glob and bracket characters are rejected here, naming the import, rather than failing
-	// later inside provider discovery with an error that does not identify it.
-	if !filepath.IsLocal(path) || strings.ContainsAny(path, "\\?#*[{") {
-		return "", fmt.Errorf("%w: provider import %s must name a project-relative file or directory", errUtils.ErrPluginInvalidConfig, scheme+"://"+path)
+	// Providers read the path as a pattern root, so glob and escape characters are rejected
+	// here, naming the import and the reason, even inside a literal directory name.
+	if !filepath.IsLocal(path) || strings.ContainsAny(path, importRejectedCharacters) {
+		return "", fmt.Errorf("%w: provider import %s must name a project-relative file or directory without any of the characters %s", errUtils.ErrPluginInvalidConfig, scheme+"://"+path, importRejectedCharacters)
 	}
 	clean := filepath.ToSlash(filepath.Clean(path))
 	key := provider + "://" + clean
