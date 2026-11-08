@@ -4,11 +4,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestWritePlanfileResults(t *testing.T) {
@@ -235,16 +238,56 @@ func TestWritePlanfileResultsForVerificationDoesNotRestoreARecord(t *testing.T) 
 
 func TestOpenBindingFindsOnlyAnExistingRecord(t *testing.T) {
 	planPath := filepath.Join(t.TempDir(), "atmos-key.planfile")
-	_, closer, found := OpenBinding(planPath)
-	assert.False(t, found, "components without a record upload nothing under the record name")
-	assert.Nil(t, closer)
+	_, closer, err := OpenBinding(planPath)
+	require.NoError(t, err)
+	assert.Nil(t, closer, "components without a record upload nothing under the record name")
 
 	require.NoError(t, os.WriteFile(BindingPath(planPath), []byte("record"), 0o600))
-	entry, closer, found := OpenBinding(planPath)
-	require.True(t, found)
+	entry, closer, err := OpenBinding(planPath)
+	require.NoError(t, err)
+	require.NotNil(t, closer)
 	defer closer.Close()
 	assert.Equal(t, BindingFilename, entry.Name)
 	data, err := io.ReadAll(entry.Data)
 	require.NoError(t, err)
 	assert.Equal(t, "record", string(data))
+}
+
+func TestOpenBindingReportsARecordThatCannotBeOpened(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permission bits enforced for the current user")
+	}
+	planPath := filepath.Join(t.TempDir(), "atmos-key.planfile")
+	require.NoError(t, os.WriteFile(BindingPath(planPath), []byte("record"), 0o600))
+	require.NoError(t, os.Chmod(BindingPath(planPath), 0o000))
+	t.Cleanup(func() { _ = os.Chmod(BindingPath(planPath), 0o600) })
+
+	_, closer, err := OpenBinding(planPath)
+	require.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed, "a record that exists is never silently left out")
+	assert.Nil(t, closer)
+}
+
+func TestWritePlanfileResultsKeepsThePlanRecordOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use POSIX permission bits")
+	}
+	planPath := filepath.Join(t.TempDir(), "atmos-key.planfile")
+	// An earlier, looser copy must not keep the replaced record readable by others.
+	require.NoError(t, os.WriteFile(BindingPath(planPath), []byte("old"), 0o644))
+	require.NoError(t, os.Chmod(BindingPath(planPath), 0o644))
+	results := []FileResult{
+		{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("plan data"))},
+		{Name: BindingFilename, Data: io.NopCloser(strings.NewReader("{\"secret\":true}"))},
+	}
+	require.NoError(t, WritePlanfileResults(results, planPath))
+
+	info, err := os.Stat(BindingPath(planPath))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	data, err := os.ReadFile(BindingPath(planPath))
+	require.NoError(t, err)
+	assert.Equal(t, "{\"secret\":true}", string(data))
+	plan, err := os.Stat(planPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), plan.Mode().Perm(), "the plan file keeps its usual mode")
 }

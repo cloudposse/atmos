@@ -570,7 +570,11 @@ func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
 	}
 
 	// Include the plan record when the component keeps one, so another runner can verify and apply the plan.
-	if entry, closer, found := planfile.OpenBinding(planfilePath); found {
+	entry, closer, err := planfile.OpenBinding(planfilePath)
+	if err != nil {
+		return err
+	}
+	if closer != nil {
 		defer closer.Close()
 		files = append(files, entry)
 	}
