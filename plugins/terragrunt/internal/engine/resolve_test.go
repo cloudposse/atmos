@@ -171,6 +171,13 @@ func TestNativeAWSFunctionsUseInvocationIdentity(t *testing.T) {
 	credentials, configFile := filepath.Join(dir, "credentials"), filepath.Join(dir, "config")
 	require.NoError(t, os.WriteFile(credentials, []byte("[atmos-identity]\naws_access_key_id = AKIAENGINE\naws_secret_access_key = secret\n"), 0o600))
 	require.NoError(t, os.WriteFile(configFile, nil, 0o600))
+	// A known, valid process profile, so the test does not depend on the developer's own AWS_PROFILE.
+	processCredentials, processConfig := filepath.Join(dir, "process-credentials"), filepath.Join(dir, "process-config")
+	require.NoError(t, os.WriteFile(processCredentials, []byte("[process-profile]\naws_access_key_id = AKIAPROCESS\naws_secret_access_key = process\n"), 0o600))
+	require.NoError(t, os.WriteFile(processConfig, nil, 0o600))
+	t.Setenv("AWS_PROFILE", "process-profile")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", processCredentials)
+	t.Setenv("AWS_CONFIG_FILE", processConfig)
 	request := nativeUnit(t, "inputs = { account = get_aws_account_id(), arn = get_aws_caller_identity_arn(), user = get_aws_caller_identity_user_id() }\n")
 	request.Environment = map[string]string{
 		"AWS_PROFILE": "atmos-identity", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile,
@@ -184,7 +191,7 @@ func TestNativeAWSFunctionsUseInvocationIdentity(t *testing.T) {
 	require.Equal(t, "arn:aws:iam::210987654321:user/atmos", result.Inputs["arn"])
 	require.Equal(t, "AIDAATMOS", result.Inputs["user"])
 	require.Contains(t, signer.Load(), "Credential=AKIAENGINE/")
-	require.Empty(t, os.Getenv("AWS_PROFILE"))
+	require.Equal(t, "process-profile", os.Getenv("AWS_PROFILE"), "the plugin process keeps its own profile")
 }
 
 // Read-only discovery stays offline even when the invocation names credentials and an endpoint.

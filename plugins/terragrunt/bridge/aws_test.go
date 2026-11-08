@@ -94,6 +94,11 @@ func accountID(t *testing.T, scoped *venv.Venv) (string, error) {
 func TestAWSHonorsProfileFilesAndEndpointFromInvocationOnly(t *testing.T) {
 	server := newSTSServer(t)
 	credentials, configFile := writeProfile(t, "atmos-identity", "AKIAINVOCATION")
+	// A known, valid process profile, so the test does not depend on the developer's own AWS_PROFILE.
+	processCredentials, processConfig := writeProfile(t, "process-profile", "AKIAPROCESS")
+	t.Setenv("AWS_PROFILE", "process-profile")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", processCredentials)
+	t.Setenv("AWS_CONFIG_FILE", processConfig)
 	before := os.Environ()
 	env := map[string]string{
 		"AWS_PROFILE": "atmos-identity", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile,
@@ -108,7 +113,7 @@ func TestAWSHonorsProfileFilesAndEndpointFromInvocationOnly(t *testing.T) {
 	assert.Equal(t, []string{"AKIAINVOCATION"}, signers, "the profile of the invocation signs the call")
 	assert.Equal(t, []string{"GetCallerIdentity"}, actions)
 	assert.Equal(t, before, os.Environ(), "the plugin process environment is unchanged")
-	assert.Empty(t, os.Getenv("AWS_PROFILE"))
+	assert.Equal(t, "process-profile", os.Getenv("AWS_PROFILE"))
 	assert.NotContains(t, env, "AWS_ACCESS_KEY_ID", "the caller's map is never mutated")
 }
 

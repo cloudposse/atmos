@@ -149,12 +149,13 @@ func buildTerragruntPluginPackage(t *testing.T) string {
 		executable += ".exe"
 	}
 	output := filepath.Join(pkg, "bin", runtime.GOOS+"-"+runtime.GOARCH, executable)
+	// A missing Go toolchain is an optional prerequisite; a plugin that does not compile is a failure.
+	RequireExecutable(t, "go", "building the Terragrunt plugin from this checkout")
 	build := exec.Command("go", "build", "-o", output, ".")
 	build.Dir = source
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
-	if combined, err := build.CombinedOutput(); err != nil {
-		t.Skipf("cannot build the Terragrunt plugin: %v\n%s", err, combined)
-	}
+	combined, err := build.CombinedOutput()
+	require.NoError(t, err, "the Terragrunt plugin must compile:\n%s", combined)
 	return pkg
 }
 

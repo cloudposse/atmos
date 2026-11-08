@@ -411,11 +411,14 @@ def real_terragrunt():
     fixtures.write(root, "stacks/consumers.yaml", CONSUMER_STACK)
     lifecycle.write_unit(root, "producer", REAL_UNIT)
 
-    # Installing the pinned executable needs network access; without it the scenario cannot run.
+    # Installing the pinned executable needs network access. A failed install fails the scenario, so an
+    # installation regression cannot pass unnoticed; offline runs opt out explicitly.
     installed = atmos.run(["toolchain", "install", "gruntwork-io/terragrunt@" + TERRAGRUNT_VERSION], working_directory=root, env={"ATMOS_TELEMETRY_ENABLED": "false", "NO_COLOR": "1"}, output="capture", check=False)
     if installed.exit_code != 0:
-        ui.warning("Real Terragrunt could not be installed (no network?); skipped")
-        return
+        if (os.getenv("ATMOS_TERRAGRUNT_TESTS_OFFLINE") or "").lower() == "true":
+            ui.warning("Real Terragrunt could not be installed and ATMOS_TERRAGRUNT_TESTS_OFFLINE is set; skipped")
+            return
+        fail("Real Terragrunt could not be installed (set ATMOS_TERRAGRUNT_TESTS_OFFLINE=true to skip offline): " + str(installed.stdout) + str(installed.stderr))
 
     plan = semantics.terraform(root, "plan", "producer")
     expect(plan, "1 to add", "plan through the real terragrunt")
