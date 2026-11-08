@@ -305,16 +305,22 @@ func TestSortAffectedIsDeterministic(t *testing.T) {
 		for _, index := range arrival {
 			input = append(input, want[index])
 		}
-		// A scrambled arrival may also reorder types; keep the processing order for the check.
+		// Every arrival order produces the same full order, types included.
 		sortAffected(input)
-		require.ElementsMatch(t, want, input)
-		for i := 1; i < len(input); i++ {
-			require.LessOrEqual(t, input[i-1].Stack, input[i].Stack)
-		}
+		require.Equal(t, want, input, "arrival %v", arrival)
 	}
 	input := []schema.Affected{want[5], want[4], want[2], want[0], want[1], want[3]}
 	sortAffected(input)
 	require.Equal(t, want, input)
+
+	// Deleted components arrive after every other type, but still sort by name within their type.
+	deleted := []schema.Affected{
+		{Stack: "a", ComponentType: "terraform", Component: "zeta", Affected: "component"},
+		{Stack: "a", ComponentType: "helmfile", Component: "chart", Affected: "component"},
+		{Stack: "a", ComponentType: "terraform", Component: "alpha", Affected: "deleted"},
+	}
+	sortAffected(deleted)
+	require.Equal(t, []string{"alpha", "zeta", "chart"}, []string{deleted[0].Component, deleted[1].Component, deleted[2].Component})
 }
 
 func TestRemoveOnSignalCleansUpBeforeExit(t *testing.T) {

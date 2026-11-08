@@ -117,21 +117,32 @@ func findAffectedParallel(
 }
 
 // sortAffected makes the order of results independent of goroutine scheduling and map
-// iteration: results are grouped by stack, and components of one type within a stack are
-// ordered by name. The order in which a stack lists its component types is already fixed
-// by the processing order and is preserved.
+// iteration: results are grouped by stack, component types within a stack follow the
+// processing order (deleted components included), and components of one type are ordered
+// by name.
 func sortAffected(affected []schema.Affected) {
-	slices.SortStableFunc(affected, func(a, b schema.Affected) int { return cmp.Compare(a.Stack, b.Stack) })
-	for start := 0; start < len(affected); {
-		end := start + 1
-		for end < len(affected) && affected[end].Stack == affected[start].Stack && affected[end].ComponentType == affected[start].ComponentType {
-			end++
-		}
-		slices.SortStableFunc(affected[start:end], func(a, b schema.Affected) int {
-			return cmp.Or(cmp.Compare(a.Component, b.Component), cmp.Compare(a.Affected, b.Affected))
-		})
-		start = end
+	slices.SortStableFunc(affected, func(a, b schema.Affected) int {
+		return cmp.Or(
+			cmp.Compare(a.Stack, b.Stack),
+			cmp.Compare(affectedTypeRank(a.ComponentType), affectedTypeRank(b.ComponentType)),
+			cmp.Compare(a.ComponentType, b.ComponentType),
+			cmp.Compare(a.Component, b.Component),
+			cmp.Compare(a.Affected, b.Affected),
+		)
+	})
+}
+
+// affectedTypeOrder lists component types in the order processStackAffected processes them.
+var affectedTypeOrder = slices.Concat([]string{cfg.TerraformComponentType}, simpleAffectedComponentTypes,
+	[]string{cfg.KubernetesComponentType, cfg.HelmComponentType, cfg.CloudFormationComponentType})
+
+// affectedTypeRank orders component types by affectedTypeOrder. An unknown type sorts after the
+// known ones.
+func affectedTypeRank(componentType string) int {
+	if index := slices.Index(affectedTypeOrder, componentType); index >= 0 {
+		return index
 	}
+	return len(affectedTypeOrder)
 }
 
 // processStackAffected processes a single stack to find affected components.
