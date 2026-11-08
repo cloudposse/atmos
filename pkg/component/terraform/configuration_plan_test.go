@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -200,6 +201,34 @@ func TestConfigurationPlanRecordHoldsNoInputsOrBackendValues(t *testing.T) {
 	require.Equal(t, "backend-secret-value", prepared.Backend["access_key"])
 }
 
+// A generated backend file can hold credentials, so the record keeps no bytes of a sensitive file;
+// apply reads them back from the verified workdir.
+func TestConfigurationPlanRecordHoldsNoSensitiveGeneratedFiles(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	secret := `terraform { backend "s3" { access_key = "generated-secret-value" } }`
+	require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, "backend.tf"), []byte(secret), 0o600))
+	execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{
+		{Path: "backend.tf", Content: []byte(secret), IfExists: "overwrite", Sensitive: true},
+		{Path: "provider.tf", Content: []byte("provider-content"), IfExists: "overwrite"},
+	}
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+
+	data, err := os.ReadFile(path + configurationPlanSuffix)
+	require.NoError(t, err)
+	var record configurationPlan
+	require.NoError(t, json.Unmarshal(data, &record))
+	require.Len(t, record.Prepared.Files, 2)
+	require.Empty(t, record.Prepared.Files[0].Content, "the decoded record holds no sensitive bytes")
+	require.Equal(t, []byte("provider-content"), record.Prepared.Files[1].Content)
+	require.Equal(t, []byte(secret), execCtx.preparedConfiguration.Files[0].Content, "the caller's preparation is untouched")
+
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.Equal(t, []byte(secret), prepared.Files[0].Content)
+	require.Equal(t, []byte("provider-content"), prepared.Files[1].Content)
+}
+
 // --from-plan=<path> names the same file as the canonical location, so it must verify the same
 // way even when the working directory is spelled relative and the path absolute.
 func TestConfigurationPlanExplicitAbsolutePathVerifiesLikeCanonicalPath(t *testing.T) {
@@ -286,6 +315,13 @@ func TestFinishConfigurationPlan(t *testing.T) {
 		finishConfigurationPlan(config, info)
 		require.FileExists(t, explicit)
 		require.NoFileExists(t, explicit+configurationPlanSuffix)
+	})
+	t.Run("an explicit plan path that names the canonical file keeps it and drops its record", func(t *testing.T) {
+		config, info, canonical := setup(t, "apply")
+		info.PlanFile = canonical
+		finishConfigurationPlan(config, info)
+		require.FileExists(t, canonical)
+		require.NoFileExists(t, canonical+configurationPlanSuffix)
 	})
 	t.Run("a dry run and an ordinary component keep every file", func(t *testing.T) {
 		config, info, canonical := setup(t, "apply")

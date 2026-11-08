@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -89,6 +90,9 @@ func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfigura
 		return nil, fmt.Errorf("%w: plugin, source, engine, workdir, or reviewed artifact changed; create a new plan", errUtils.ErrPlanVerificationFailed)
 	}
 	if err := verifyReviewedBackendAndWorkdir(ctx, config, info, plan, path); err != nil {
+		return nil, err
+	}
+	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files); err != nil {
 		return nil, err
 	}
 	// Terraform runs inside the workdir, so a path relative to the project would not resolve there.
@@ -243,10 +247,47 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	if err != nil {
 		return nil, err
 	}
-	// Inputs and backend values stay out of the record; see configurationPlan.
+	// Inputs and backend values stay out of the record; see configurationPlan. Sensitive generated
+	// files, such as a backend file with credentials, keep only their place: apply reads their bytes
+	// back from the retained workdir, whose digest proves they are the reviewed ones.
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
+	stored.Files = withoutSensitiveContent(stored.Files)
 	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: &stored}, nil
+}
+
+// withoutSensitiveContent copies files, dropping the bytes of every sensitive one.
+func withoutSensitiveContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
+	stored := slices.Clone(files)
+	for i := range stored {
+		if stored[i].Sensitive {
+			stored[i].Content = nil
+		}
+	}
+	return stored
+}
+
+// restoreSensitiveContent reads the bytes of each sensitive file back from the verified workdir.
+func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurationFile) error {
+	if !slices.ContainsFunc(files, func(file schema.ComponentConfigurationFile) bool { return file.Sensitive }) {
+		return nil
+	}
+	root, err := os.OpenRoot(workdir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	for i := range files {
+		if !files[i].Sensitive {
+			continue
+		}
+		content, err := root.ReadFile(files[i].Path)
+		if err != nil {
+			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, err)
+		}
+		files[i].Content = content
+	}
+	return nil
 }
 
 // backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.
@@ -433,7 +474,10 @@ func finishConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Con
 		return
 	}
 	canonical := ConstructTerraformComponentPlanfilePath(config, info)
-	removeTerraformFile(canonical, "Failed to remove consumed plan file")
+	// A plan file the user named is theirs even when it is the canonical path, so it is kept.
+	if info.PlanFile == "" || filepath.Clean(configurationPlanPath(config, info)) != filepath.Clean(canonical) {
+		removeTerraformFile(canonical, "Failed to remove consumed plan file")
+	}
 	removeTerraformFile(canonical+configurationPlanSuffix, "Failed to remove consumed plan record")
 	if info.PlanFile != "" {
 		removeTerraformFile(configurationPlanPath(config, info)+configurationPlanSuffix, "Failed to remove consumed plan record")
