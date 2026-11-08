@@ -26,6 +26,14 @@ func TestComponentConfigurationSerialization(t *testing.T) {
 	require.ErrorIs(t, err, ErrComponentConfigurationCollision)
 	_, err = json.Marshal(ComponentConfiguration{Options: map[string]any{"enabled": false}})
 	require.ErrorIs(t, err, ErrComponentConfigurationCollision)
+	// An empty omitempty field is still reserved and must not be replaced by an option.
+	_, err = json.Marshal(ComponentConfiguration{Options: map[string]any{"mode": "native"}})
+	require.ErrorIs(t, err, ErrComponentConfigurationCollision)
+	_, err = json.Marshal(ComponentConfiguration{Options: map[string]any{"provider": "other"}})
+	require.ErrorIs(t, err, ErrComponentConfigurationCollision)
+	raw, err = json.Marshal(ComponentConfiguration{Enabled: true, Options: map[string]any{"version": "1"}})
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"version":"1"`)
 	_, err = json.Marshal(ComponentConfiguration{Options: map[string]any{"bad": make(chan int)}})
 	require.Error(t, err)
 }

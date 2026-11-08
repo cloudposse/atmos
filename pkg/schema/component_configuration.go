@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 )
 
 // ErrComponentConfigurationCollision prevents dynamic settings from overriding built-in fields.
@@ -94,8 +96,10 @@ func marshalConfiguration[T any](base any, extras map[string]T) ([]byte, error) 
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, err
 	}
+	reserved := jsonFieldNames(reflect.TypeOf(base))
 	for name, value := range extras {
-		if _, exists := result[name]; exists {
+		// Check declared names too: omitempty drops an empty built-in field from result.
+		if _, exists := result[name]; exists || reserved[name] {
 			return nil, fmt.Errorf("%w: configuration key %s", ErrComponentConfigurationCollision, name)
 		}
 		data, err := json.Marshal(value)
@@ -105,4 +109,31 @@ func marshalConfiguration[T any](base any, extras map[string]T) ([]byte, error) 
 		result[name] = data
 	}
 	return json.Marshal(result)
+}
+
+// jsonFieldNames returns the JSON names a struct type declares, including names
+// that omitempty would leave out of an encoded value.
+func jsonFieldNames(t reflect.Type) map[string]bool {
+	names := map[string]bool{}
+	if t.Kind() != reflect.Struct {
+		return names
+	}
+	for i := range t.NumField() {
+		field := t.Field(i)
+		tag := field.Tag.Get("json")
+		name, _, _ := strings.Cut(tag, ",")
+		switch {
+		case name == "-":
+			continue
+		case name == "" && field.Anonymous:
+			for embedded := range jsonFieldNames(field.Type) {
+				names[embedded] = true
+			}
+		case name == "" && field.IsExported():
+			names[field.Name] = true
+		case name != "":
+			names[name] = true
+		}
+	}
+	return names
 }
