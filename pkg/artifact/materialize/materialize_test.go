@@ -50,6 +50,13 @@ func contentOf(t *testing.T, p *artifact.PreparedArtifact) *artifact.Content {
 	return content
 }
 
+// replaceStream swaps a stream's bytes after closing the file the repository opened for it, so the
+// replaced handle never outlives the test (an open handle blocks temp-dir removal on Windows).
+func replaceStream(c *artifact.Content, index int, data []byte) {
+	_ = c.Streams[index].Reader.Close()
+	c.Streams[index].Reader = io.NopCloser(bytes.NewReader(data))
+}
+
 func dest(t *testing.T) string {
 	return filepath.Join(t.TempDir(), "out", "pulled")
 }
@@ -186,15 +193,18 @@ func TestMaterialize_PerFileIntegrityFailures(t *testing.T) {
 		want   error
 	}{
 		{"tampered bytes", func(c *artifact.Content) {
-			c.Streams[0].Reader = io.NopCloser(bytes.NewReader([]byte("xxxx")))
+			replaceStream(c, 0, []byte("xxxx"))
 		}, errUtils.ErrArtifactIntegrityFailed},
 		{"truncated", func(c *artifact.Content) {
-			c.Streams[0].Reader = io.NopCloser(bytes.NewReader([]byte("aa")))
+			replaceStream(c, 0, []byte("aa"))
 		}, errUtils.ErrArtifactIntegrityFailed},
 		{"oversize", func(c *artifact.Content) {
-			c.Streams[0].Reader = io.NopCloser(bytes.NewReader([]byte("aaaaaaaa")))
+			replaceStream(c, 0, []byte("aaaaaaaa"))
 		}, errUtils.ErrArtifactTooLarge},
-		{"missing payload", func(c *artifact.Content) { c.Streams = c.Streams[1:] }, errUtils.ErrArtifactIntegrityFailed},
+		{"missing payload", func(c *artifact.Content) {
+			_ = c.Streams[0].Reader.Close()
+			c.Streams = c.Streams[1:]
+		}, errUtils.ErrArtifactIntegrityFailed},
 		{"extra payload", func(c *artifact.Content) {
 			c.Streams = append(c.Streams, artifact.ContentStream{Role: artifact.BlobPayload, Path: "extra.txt", Reader: io.NopCloser(bytes.NewReader(nil))})
 		}, errUtils.ErrArtifactIntegrityFailed},

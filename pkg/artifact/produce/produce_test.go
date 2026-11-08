@@ -254,7 +254,14 @@ func listTree(t *testing.T, root string) []string {
 		}
 		info, err := d.Info()
 		require.NoError(t, err)
-		out = append(out, path+"|"+info.Mode().String()+"|"+info.ModTime().String())
+		entry := path + "|" + info.Mode().String()
+		// NTFS refreshes a directory's listed modification time lazily when its files are only read,
+		// so directory times drift on Windows without any change. Entries added or removed are still
+		// caught by the path list, and file times are compared exactly.
+		if !info.IsDir() {
+			entry += "|" + info.ModTime().String()
+		}
+		out = append(out, entry)
 		return nil
 	}))
 	return out
