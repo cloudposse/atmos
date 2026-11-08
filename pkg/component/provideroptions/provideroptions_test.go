@@ -64,6 +64,7 @@ func TestParseRejectsInvalidDeclarations(t *testing.T) {
 		"bad env":           declaration(map[string]any{"env": []any{"lower"}}),
 		"bad mode":          declaration(map[string]any{"modes": []any{"fast"}}),
 		"duplicate aliases": declaration(map[string]any{"aliases": []any{"tool-level"}}),
+		"sensitive string":  declaration(map[string]any{"sensitive": "true"}),
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -79,6 +80,25 @@ func TestParseRejectsTwoOptionsWithOneFlag(t *testing.T) {
 		map[string]any{"name": "two", "type": "string", "description": "Two.", "commands": []any{"plan"}, "flag": "same"},
 	})
 	require.ErrorIs(t, err, errUtils.ErrProviderOption)
+}
+
+func TestParseRejectsOneNameDeclaredTwiceForOneCommand(t *testing.T) {
+	_, err := Parse("tool", []any{
+		map[string]any{"name": "level", "type": "string", "description": "One.", "commands": []any{"plan", "apply"}, "flag": "level-one"},
+		map[string]any{"name": "level", "type": "string", "description": "Two.", "commands": []any{"apply"}, "flag": "level-two"},
+	})
+	require.ErrorIs(t, err, errUtils.ErrProviderOption)
+}
+
+func TestParseAcceptsOneNameDeclaredForDisjointCommands(t *testing.T) {
+	options, err := Parse("tool", []any{
+		map[string]any{"name": "level", "type": "string", "description": "One.", "commands": []any{"plan"}, "flag": "level-one"},
+		map[string]any{"name": "level", "type": "string", "description": "Two.", "commands": []any{"apply"}, "flag": "level-two"},
+	})
+	require.NoError(t, err)
+	require.Len(t, options, 2)
+	assert.Equal(t, []string{"plan"}, options[0].Commands)
+	assert.Equal(t, []string{"apply"}, options[1].Commands)
 }
 
 // newTree builds a terraform-like command with two subcommands.
@@ -113,6 +133,31 @@ func TestRegisterAddsFlagsOnlyWhereTheyApply(t *testing.T) {
 	assert.True(t, apply.Flags().Lookup("tool-legacy").Hidden)
 	// Registering again is a no-op, not a collision with itself.
 	require.NoError(t, Register(root, []Provider{provider}))
+}
+
+// A command with children, such as `state rm`, runs through its leaf: the provider flags must reach
+// the leaf, and Resolve on the parent must see what the leaf parsed.
+func TestRegisterReachesTheLeavesOfACompoundCommand(t *testing.T) {
+	root := &cobra.Command{Use: "terraform"}
+	state := &cobra.Command{Use: "state"}
+	rm := &cobra.Command{Use: "rm", RunE: func(*cobra.Command, []string) error { return nil }}
+	state.AddCommand(rm)
+	root.AddCommand(state)
+	provider := providerFor(t, "tool", []any{
+		map[string]any{"name": "feature", "type": "map", "description": "Features.", "commands": []any{"state"}, "aliases": []any{"tool-feat"}},
+		map[string]any{"name": "role", "type": "string", "description": "Role.", "commands": []any{"state"}},
+	})
+	require.NoError(t, Register(root, []Provider{provider}))
+
+	root.SetArgs([]string{"state", "rm", "--tool-feat", "tier=cli", "--tool-role=arn:role"})
+	leaf, err := root.ExecuteC()
+	require.NoError(t, err)
+	require.Same(t, rm, leaf)
+
+	resolved, err := Resolve(state, viper.New())
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"tier": "cli"}, resolved["tool"]["feature"].Value)
+	assert.Equal(t, "arn:role", resolved["tool"]["role"].Value)
 }
 
 func TestRegisterRejectsCollisions(t *testing.T) {
@@ -193,6 +238,26 @@ func TestResolveCommandLineBeatsEnvironment(t *testing.T) {
 	assert.Equal(t, "cli", values["level"].Value)
 	assert.Equal(t, 7, values["retries"].Value)
 	assert.Equal(t, map[string]any{"x": "1", "y": "2"}, values["feature"].Value)
+}
+
+func TestResolveKeepsAnExplicitlyEmptyAtmosVariable(t *testing.T) {
+	raw := []any{map[string]any{"name": "role", "type": "string", "env": []any{"TG_TEST_ROLE"}, "description": "Role.", "commands": []any{"plan"}}}
+	t.Run("empty Atmos variable wins", func(t *testing.T) {
+		resolved, err := resolveWith(t, raw, nil, map[string]string{"ATMOS_TOOL_ROLE": "", "TG_TEST_ROLE": "arn:aws:iam::1:role/other"})
+		require.NoError(t, err)
+		require.Contains(t, resolved["tool"], "role")
+		assert.Equal(t, "", resolved["tool"]["role"].Value)
+	})
+	t.Run("provider-native variable applies when the Atmos one is absent", func(t *testing.T) {
+		resolved, err := resolveWith(t, raw, nil, map[string]string{"TG_TEST_ROLE": "arn:aws:iam::1:role/native"})
+		require.NoError(t, err)
+		assert.Equal(t, "arn:aws:iam::1:role/native", resolved["tool"]["role"].Value)
+	})
+	t.Run("command line beats an empty Atmos variable", func(t *testing.T) {
+		resolved, err := resolveWith(t, raw, []string{"--tool-role=cli"}, map[string]string{"ATMOS_TOOL_ROLE": ""})
+		require.NoError(t, err)
+		assert.Equal(t, "cli", resolved["tool"]["role"].Value)
+	})
 }
 
 func TestResolveRejectsInvalidValuesWithoutEchoingThem(t *testing.T) {

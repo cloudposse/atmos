@@ -3,6 +3,7 @@ package provideroptions
 import (
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -90,7 +91,14 @@ func registerCommand(sub *cobra.Command, provider *Provider, options []Option) e
 		parserOptions = append(parserOptions, flagOptions(provider.Name, option, primary)...)
 	}
 	parser := flags.NewStandardParser(parserOptions...)
-	parser.RegisterFlags(sub)
+	// A command with Cobra children, such as `state` (`state rm`) or `workspace` (`workspace select`),
+	// is run through its leaf, which only parses flags it inherits. Persistent flags reach the leaf, so
+	// the provider flags are honored there instead of being discarded as unknown.
+	if sub.HasSubCommands() {
+		parser.RegisterPersistentFlags(sub)
+	} else {
+		parser.RegisterFlags(sub)
+	}
 	if err := parser.BindToViper(viper.GetViper()); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrProviderOption, err)
 	}
@@ -155,7 +163,11 @@ func flagOptions(provider string, option *Option, name string) []flags.Option {
 
 // decorate groups the flags under their provider in help and adds aliases and deprecation.
 func decorate(sub *cobra.Command, provider string, option *Option) {
-	primary := sub.Flags().Lookup(option.FlagName(provider))
+	set := sub.Flags()
+	if sub.HasSubCommands() {
+		set = sub.PersistentFlags()
+	}
+	primary := set.Lookup(option.FlagName(provider))
 	if primary == nil {
 		return
 	}
@@ -163,11 +175,19 @@ func decorate(sub *cobra.Command, provider string, option *Option) {
 	for _, alias := range option.Aliases {
 		shared := &pflag.Flag{Name: alias, Usage: "Alias of --" + primary.Name, Value: primary.Value, DefValue: primary.DefValue, NoOptDefVal: primary.NoOptDefVal, Hidden: true}
 		mark(shared, provider)
-		sub.Flags().AddFlag(shared)
+		set.AddFlag(shared)
 	}
 	if option.Deprecated != "" {
-		_ = sub.Flags().MarkDeprecated(primary.Name, option.Deprecated)
+		_ = set.MarkDeprecated(primary.Name, option.Deprecated)
 	}
+}
+
+// lookupFlag finds a provider flag whether it was registered as a local or a persistent flag.
+func lookupFlag(cmd *cobra.Command, name string) *pflag.Flag {
+	if flag := cmd.Flags().Lookup(name); flag != nil {
+		return flag
+	}
+	return cmd.PersistentFlags().Lookup(name)
 }
 
 func mark(flag *pflag.Flag, provider string) {
@@ -227,7 +247,7 @@ func (r *registration) read(cmd *cobra.Command, v *viper.Viper, option *Option) 
 
 func (r *registration) explicit(cmd *cobra.Command, option *Option, primary string) bool {
 	for _, name := range append([]string{primary}, option.Aliases...) {
-		if flag := cmd.Flags().Lookup(name); flag != nil && flag.Changed {
+		if flag := lookupFlag(cmd, name); flag != nil && flag.Changed {
 			return true
 		}
 	}
@@ -337,7 +357,7 @@ func SplitFlags(set *pflag.FlagSet) (*pflag.FlagSet, []Section) {
 // primary flag is bound, and otherwise the layered value of the primary flag.
 func (r *registration) raw(cmd *cobra.Command, v *viper.Viper, option *Option, primary string) any {
 	for _, name := range option.Aliases {
-		flag := cmd.Flags().Lookup(name)
+		flag := lookupFlag(cmd, name)
 		if flag == nil || !flag.Changed {
 			continue
 		}
@@ -345,6 +365,16 @@ func (r *registration) raw(cmd *cobra.Command, v *viper.Viper, option *Option, p
 			return slice.GetSlice()
 		}
 		return flag.Value.String()
+	}
+	if flag := lookupFlag(cmd, primary); flag == nil || !flag.Changed {
+		// Viper treats an empty environment variable as unset and falls through to the next name, so an
+		// explicit `ATMOS_<PROVIDER>_<OPTION>=` would lose to a provider-native variable. The first variable
+		// present in the environment wins, even when empty.
+		for _, name := range option.EnvNames(r.provider.Name) {
+			if value, present := os.LookupEnv(name); present {
+				return value
+			}
+		}
 	}
 	return v.Get(primary)
 }

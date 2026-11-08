@@ -135,6 +135,9 @@ func Parse(provider string, raw any) ([]Option, error) {
 		if err := recordFlags(provider, &option, flagsSeen); err != nil {
 			return nil, err
 		}
+		if err := rejectOverlappingName(options, &option); err != nil {
+			return nil, err
+		}
 		options = append(options, option)
 	}
 	return options, nil
@@ -150,6 +153,31 @@ func recordFlags(provider string, option *Option, seen map[string]string) error 
 	return nil
 }
 
+// rejectOverlappingName rejects a second declaration of an option name that can apply to the same command
+// and mode: values reach the provider keyed by name, so only one of the two flags would take effect.
+func rejectOverlappingName(declared []Option, option *Option) error {
+	for index := range declared {
+		previous := &declared[index]
+		if previous.Name == option.Name && overlaps(previous.Commands, option.Commands) && overlaps(previous.Modes, option.Modes) {
+			return declarationError(option.Name, "the option is declared more than once for the same command; give each declaration distinct `commands` or `modes`")
+		}
+	}
+	return nil
+}
+
+// overlaps reports whether two scopes share an entry; an empty scope applies everywhere.
+func overlaps(left, right []string) bool {
+	if len(left) == 0 || len(right) == 0 {
+		return true
+	}
+	for _, entry := range left {
+		if slices.Contains(right, entry) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseOption(provider string, fields map[string]any) (Option, error) {
 	for key := range fields {
 		if !slices.Contains(optionKeys, key) {
@@ -160,8 +188,12 @@ func parseOption(provider string, fields map[string]any) (Option, error) {
 		Name: stringField(fields, "name"), Flag: stringField(fields, "flag"), Type: stringField(fields, "type"),
 		Config: stringField(fields, "config"), Deprecated: stringField(fields, "deprecated"), Description: stringField(fields, "description"),
 	}
-	option.Sensitive, _ = fields["sensitive"].(bool)
 	var err error
+	sensitive, isBool := fields["sensitive"].(bool)
+	if raw, present := fields["sensitive"]; present && raw != nil && !isBool {
+		return Option{}, declarationError(option.Name, fmt.Sprintf("`sensitive` must be true or false, not %T", raw))
+	}
+	option.Sensitive = sensitive
 	for target, key := range map[*[]string]string{&option.Aliases: "aliases", &option.Env: "env", &option.Modes: "modes", &option.Commands: "commands"} {
 		if *target, err = stringList(fields[key]); err != nil {
 			return Option{}, declarationError(option.Name, fmt.Sprintf("`%s` must be a list of strings", key))
