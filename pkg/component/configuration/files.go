@@ -52,7 +52,7 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		names = append(names, key)
 		digest, err := writeFile(root, file, previous[key])
 		if err != nil {
-			return err
+			return errors.Join(err, keepRecordsAfterFailure(root, previous, current))
 		}
 		if digest != "" {
 			current[key] = digest
@@ -62,6 +62,18 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 	// owned and the stale file is retried; then report the removal failure.
 	staleErr := removeStaleFiles(root, previous, names, current)
 	return errors.Join(writeManifest(root, current), staleErr)
+}
+
+// keepRecordsAfterFailure writes the manifest when a batch stops early: the files this run already
+// wrote keep their new digests, and every other file keeps its earlier record, so a retry after the
+// conflict is fixed still recognizes them as this host's.
+func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string) error {
+	for key, digest := range previous {
+		if _, written := current[key]; !written {
+			current[key] = digest
+		}
+	}
+	return writeManifest(root, current)
 }
 
 // writeFile applies one file's policy and returns the digest to record, or empty when the host

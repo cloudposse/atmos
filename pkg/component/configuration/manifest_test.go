@@ -212,3 +212,23 @@ func TestStaleFileRemovalFailureIsReportedAndRetried(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(child, "stale.tf"))
 	require.FileExists(t, filepath.Join(root, "keep.tf"))
 }
+
+// When a later file in a batch conflicts, the files already updated keep their new digests, so a
+// retry after the conflict is fixed still accepts them as this host's.
+func TestBatchFailureKeepsTheRecordsOfFilesItAlreadyWrote(t *testing.T) {
+	root := t.TempDir()
+	first := generated("secret.auto.tfvars", "token = \"a\"\n", "overwrite_terragrunt")
+	second := generated("guarded.tf", "variable \"guarded\" {}\n", "error")
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{first, second}))
+
+	// Someone else replaces the guarded file, and the next run updates the unsigned file first.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "guarded.tf"), []byte("authored\n"), 0o600))
+	first.Content = []byte("token = \"b\"\n")
+	require.ErrorIs(t, WriteFiles(root, []schema.ComponentConfigurationFile{first, second}), errUtils.ErrPluginInvalidConfig)
+	require.Equal(t, "token = \"b\"\n", read(t, root, "secret.auto.tfvars"))
+
+	// After the conflict is fixed, the updated file is still this host's.
+	require.NoError(t, os.Remove(filepath.Join(root, "guarded.tf")))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{first, second}))
+	require.Equal(t, "token = \"b\"\n", read(t, root, "secret.auto.tfvars"))
+}
