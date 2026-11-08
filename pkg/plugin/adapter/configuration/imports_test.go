@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -258,4 +259,26 @@ func TestOwnsComponentRecognizesProviderSections(t *testing.T) {
 	require.True(t, OwnsComponent(owned))
 	require.False(t, OwnsComponent(map[string]any{"settings": map[string]any{"team": "platform"}}))
 	require.False(t, OwnsComponent(nil))
+}
+
+// An explicit import of a configured provider whose settings are invalid reports the setting and
+// its repair hint, instead of falling through to remote import resolution.
+func TestImportOfAProviderWithInvalidSettingsReportsTheSetting(t *testing.T) {
+	config := importOnlyConfig(t)
+	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
+	settings.Mode = "wrapper"
+	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
+	session, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) {
+		t.Fatal("invalid settings must be reported before the provider runs")
+		return nil, nil
+	})
+	require.NoError(t, err)
+	_, handled, err := session.ImportComponents(t.Context(), "terragrunt://live")
+	require.True(t, handled)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.Contains(t, cockroachErrors.FlattenHints(err), "The only supported mode is `native`")
+	// A scheme no section configures is still not handled here.
+	_, handled, err = session.ImportComponents(t.Context(), "other://live")
+	require.NoError(t, err)
+	require.False(t, handled)
 }

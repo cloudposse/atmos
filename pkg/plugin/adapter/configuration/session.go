@@ -57,6 +57,9 @@ type Session struct {
 	// configErr holds a settings problem found while reading configuration. Reading never fails on it,
 	// so `atmos config set` can always repair the file; the first use of the provider reports it.
 	configErr error
+	// settingsErrs holds the settings problem of each enabled section that could not be registered,
+	// by section name, so an explicit import of that scheme reports it instead of falling through.
+	settingsErrs map[string]error
 	// options holds the provider-owned keys of each enabled section, by section name.
 	options map[string]map[string]any
 }
@@ -92,7 +95,7 @@ func (s *Session) addProvider(config *schema.AtmosConfiguration, scheme string, 
 		name = settings.Provider
 	}
 	if seen[name] {
-		s.configErr = errors.Join(s.configErr, errUtils.Build(errUtils.ErrDuplicatePluginExtension).
+		s.rejectSection(scheme, errUtils.Build(errUtils.ErrDuplicatePluginExtension).
 			WithExplanationf("More than one section under `components.terraform` enables the configuration provider `%s`.", name).
 			WithContext("config_key", settingsKey(scheme)).
 			WithHint("Keep one enabled section per provider, or point the other section at a different provider with `provider:`.").Err())
@@ -100,12 +103,12 @@ func (s *Session) addProvider(config *schema.AtmosConfiguration, scheme string, 
 	}
 	seen[name] = true
 	if err := validateSettings(scheme, settings); err != nil {
-		s.configErr = errors.Join(s.configErr, err)
+		s.rejectSection(scheme, err)
 		return
 	}
 	request, err := discoveryRequest(config, settings, name, s.root, s.command)
 	if err != nil {
-		s.configErr = errors.Join(s.configErr, invalidSetting(settingsKey(scheme), "The settings cannot be read", "Remove keys under the section that repeat a built-in setting such as `enabled`, `provider`, `mode`, or `discovery`."))
+		s.rejectSection(scheme, invalidSetting(settingsKey(scheme), "The settings cannot be read", "Remove keys under the section that repeat a built-in setting such as `enabled`, `provider`, `mode`, or `discovery`."))
 		return
 	}
 	s.options[scheme] = settings.Options
@@ -113,6 +116,16 @@ func (s *Session) addProvider(config *schema.AtmosConfiguration, scheme string, 
 	if settings.Discovery.Enabled {
 		s.requests = append(s.requests, request)
 	}
+}
+
+// rejectSection remembers a section's settings problem for the first use of the provider, and for
+// an explicit import of its scheme.
+func (s *Session) rejectSection(scheme string, err error) {
+	s.configErr = errors.Join(s.configErr, err)
+	if s.settingsErrs == nil {
+		s.settingsErrs = make(map[string]error)
+	}
+	s.settingsErrs[scheme] = err
 }
 
 // Discover returns isolated definitions and shares only immutable evaluator results within this invocation.

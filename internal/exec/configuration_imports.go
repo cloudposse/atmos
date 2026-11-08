@@ -3,9 +3,11 @@ package exec
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	configurationadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -45,4 +47,26 @@ func checkProviderImport(config *schema.AtmosConfiguration, scheme string, setti
 		return fmt.Errorf("%w: provider %s has no import runtime", errUtils.ErrPluginUnsupportedExtension, scheme)
 	}
 	return nil
+}
+
+// applyUnitOverrides attaches a manifest's Terraform `overrides` to the units it imports, like the
+// manifest's own components. Each unit section is copied first, so a provider's cached import result
+// is never changed.
+func applyUnitOverrides(fragments []map[string]any, overrides map[string]any) {
+	if len(overrides) == 0 {
+		return
+	}
+	for _, fragment := range fragments {
+		section, _ := fragment[cfg.ComponentsSectionName].(map[string]any)
+		terraform, _ := section[cfg.TerraformSectionName].(map[string]any)
+		for name, component := range terraform {
+			unit, ok := component.(map[string]any)
+			if !ok {
+				continue
+			}
+			unit = maps.Clone(unit)
+			unit[cfg.OverridesSectionName] = overrides
+			terraform[name] = unit
+		}
+	}
 }

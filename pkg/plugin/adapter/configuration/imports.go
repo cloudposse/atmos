@@ -29,6 +29,10 @@ func (s *Session) ImportComponents(ctx context.Context, uri string) (map[string]
 	}
 	template := s.importProviders[name]
 	if template == nil {
+		// A configured provider with invalid settings reports them, not a remote download error.
+		if err := s.settingsErrs[name]; err != nil {
+			return nil, true, err
+		}
 		return nil, false, nil
 	}
 	key, err := s.importKey(ctx, name, template.Provider, path)

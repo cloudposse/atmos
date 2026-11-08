@@ -211,3 +211,39 @@ func TestYAMLImportsRejectProviderImportsThatCannotBeRegistered(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.Len(t, runtime.imports, 1, "the disabled provider is never asked to register the import")
 }
+
+// Two mixins that import different units with one component name conflict in the manifest that
+// imports both, even though that manifest has no provider import of its own.
+func TestUnitsImportedThroughDifferentMixinsConflict(t *testing.T) {
+	root := t.TempDir()
+	first := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: placeholderUnit()}
+	second := placeholderUnit()
+	second["settings"].(map[string]any)["configuration"].(map[string]any)["source"] = "live/other/terragrunt.hcl"
+	require.NoError(t, os.WriteFile(filepath.Join(root, "first.yaml"), []byte("import:\n  - terragrunt://live\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "second.yaml"), []byte("import:\n  - terragrunt://other\n"), 0o600))
+	path := filepath.Join(root, "adopt.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("import:\n  - first\n  - second\n"), 0o600))
+	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: &alternatingRuntime{importRuntime: first, units: []map[string]any{first.unit, second}}}
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
+	_, err := ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
+	require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
+	require.ErrorContains(t, err, "live/app/terragrunt.hcl")
+	require.ErrorContains(t, err, "live/other/terragrunt.hcl")
+}
+
+// A manifest's Terraform overrides reach the units it imports, directly or through a mixin, without
+// changing the provider's import result.
+func TestStackOverridesApplyToImportedUnits(t *testing.T) {
+	root := t.TempDir()
+	unit := placeholderUnit()
+	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: unit}
+	overrides := "terraform:\n  overrides:\n    vars:\n      region: us-west-2\n"
+
+	app := processUnitManifest(t, root, "direct.yaml", "import:\n  - terragrunt://live\n"+overrides, runtime)
+	require.Equal(t, map[string]any{"vars": map[string]any{"region": "us-west-2"}}, app["overrides"])
+	require.NotContains(t, unit, "overrides", "the provider's unit must not be changed")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "mixin.yaml"), []byte("import:\n  - terragrunt://live\n"), 0o600))
+	app = processUnitManifest(t, root, "nested.yaml", "import:\n  - mixin\n"+overrides, runtime)
+	require.Equal(t, map[string]any{"vars": map[string]any{"region": "us-west-2"}}, app["overrides"])
+}

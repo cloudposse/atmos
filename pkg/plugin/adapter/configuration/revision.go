@@ -26,6 +26,7 @@ func (s *Session) ForRevision(root string) (schema.ComponentConfigurationRuntime
 	s.importMu.Lock()
 	defer s.importMu.Unlock()
 	revision := &Session{ctx: s.ctx, root: root, command: s.command, loader: s.loader, done: make(chan struct{}), importResults: make(map[string][]*pluginv1.DiscoveredComponent), imported: make(map[string]*pluginv1.DiscoveredComponent), importProviders: make(map[string]*pluginv1.DiscoverComponentsRequest)}
+	revision.settingsErrs = s.settingsErrs
 	// Explicit imports come from the revision's YAML, not the HEAD inventory.
 	for scheme, request := range s.importProviders {
 		cloned := proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)

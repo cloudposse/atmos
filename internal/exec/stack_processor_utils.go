@@ -2010,12 +2010,14 @@ func processYAMLConfigFileWithContextInternal(
 	}
 
 	// Imported units are the lowest layer, so the imports and the manifest itself deep-merge over
-	// them with the usual rules. Only two different units that share a component name conflict.
+	// them with the usual rules. Only two different units that share a component name conflict,
+	// including units that arrive through different YAML imports, so every manifest checks.
 	if len(unitFragments) > 0 {
+		applyUnitOverrides(unitFragments, finalTerraformOverrides)
 		stackConfigs = append(slices.Clone(unitFragments), stackConfigs...)
-		if err := configurationadapter.CheckImportConflicts(relativeFilePath, stackConfigs); err != nil {
-			return nil, nil, err
-		}
+	}
+	if err := configurationadapter.CheckImportConflicts(relativeFilePath, stackConfigs); err != nil {
+		return nil, nil, err
 	}
 
 	// Deep-merge the stack manifest and all the imports
