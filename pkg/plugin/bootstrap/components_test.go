@@ -295,3 +295,16 @@ func TestComponentOptionsSkipPackagesThatAreNotInstalled(t *testing.T) {
 	require.Len(t, providers, 1)
 	require.Equal(t, "tool", providers[0].Name)
 }
+
+func TestComponentOptionsSurviveAnUnrelatedPackageThatCannotBeRead(t *testing.T) {
+	atmos := optionsFixture(t, "executable", optionsManifest)
+	unrelated := localPackageFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(unrelated, "plugin.yaml"), []byte("apiVersion: atmos/v1\nkind: [unterminated\n"), 0o600))
+	atmos.Plugins.Packages["future"] = schema.PluginPackage{Path: unrelated}
+
+	providers, err := ComponentOptions(t.Context(), atmos)
+	require.NoError(t, err)
+	require.Len(t, providers, 1, "the healthy provider keeps its options")
+	require.Equal(t, "tool", providers[0].Name)
+	require.Equal(t, "level", providers[0].Options[0].Name)
+}

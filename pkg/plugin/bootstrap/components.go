@@ -174,8 +174,14 @@ func declaredComponentBindings(ctx context.Context, atmos *schema.AtmosConfigura
 			continue
 		}
 		bindings, err := discoveryBindings(registry, directory, wanted)
-		if err != nil {
+		switch {
+		case errors.Is(err, errUtils.ErrProviderOption):
 			return nil, err
+		case err != nil:
+			// One unreadable package, such as a cached package that declares a capability this Atmos does
+			// not support, must not take every other provider's flags with it. Activation reports it.
+			log.Debug("Skipped plugin package while reading provider options", "package", alias, "error", err)
+			continue
 		}
 		result = append(result, bindings...)
 	}
