@@ -36,7 +36,10 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.base.ref != github.event.repository.default_branch
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: echo "ref=$(git merge-base HEAD "origin/${DEFAULT_BRANCH}")" >> "$GITHUB_OUTPUT"
+        # Fail rather than fall back to the PR target when the branches share no history.
+        run: |
+          base="$(git merge-base HEAD "origin/${DEFAULT_BRANCH}")"
+          echo "ref=${base}" >> "$GITHUB_OUTPUT"
       - name: Check plugin releases
         env:
           GOCACHE: ${{ runner.temp }}/plugin-go-build
