@@ -78,6 +78,17 @@ func TestDiscoveryRejectsUnrepresentableInventory(t *testing.T) {
 			// A unit that cannot be represented is reported on its own and never hides healthy units.
 			require.NoError(t, err)
 			if name == "dependency outside scope" {
+				// The unit is kept with its out-of-scope dependency; the host fails it, naming the target.
+				require.Empty(t, result.Diagnostics)
+				require.Len(t, result.Components, 1)
+				component := result.Components[0]
+				require.Equal(t, "live", component.Address.Stack)
+				require.Equal(t, "app", component.Address.Component)
+				require.Len(t, component.Dependencies, 1)
+				target := component.Dependencies[0].Target
+				require.Equal(t, "default", target.Stack)
+				require.Equal(t, "other", target.Component)
+				require.Equal(t, "terraform", target.ComponentType)
 				return
 			}
 			require.Empty(t, result.Components)
