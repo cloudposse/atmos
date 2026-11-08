@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,6 +47,8 @@ func TestFailedUnitStaysVisibleAndFailsOnlyItsOwnCommands(t *testing.T) {
 	configuration := components["broken"].(map[string]any)["settings"].(map[string]any)["configuration"].(map[string]any)
 	assert.Equal(t, true, configuration["failed"])
 	assert.Equal(t, "live/broken/terragrunt.hcl", configuration["source"])
+	// The unit's file stays watched, so an edit that leaves it broken still selects it as affected.
+	assert.Equal(t, map[string]any{"files": []any{"live/broken/terragrunt.hcl"}}, components["broken"].(map[string]any)["dependencies"])
 
 	require.NoError(t, session.ComponentFailure(t.Context(), "live", "good"))
 	require.NoError(t, session.ComponentFailure(t.Context(), "live", "unknown"))
@@ -86,8 +89,11 @@ func TestDependentsOfFailedOrMissingUnitsFailToo(t *testing.T) {
 		require.Error(t, session.ComponentFailure(t.Context(), "live", name), name)
 	}
 	require.NoError(t, session.ComponentFailure(t.Context(), "live", "good"))
-	text := session.ComponentFailure(t.Context(), "live", "app").Error() + " " + session.ComponentFailure(t.Context(), "live", "lonely").Error()
-	assert.Contains(t, text, "")
+	// Each dependent's diagnostic names its own dependency.
+	for name, dependency := range map[string]string{"app": "live/broken", "lonely": "other/network"} {
+		failure := session.ComponentFailure(t.Context(), "live", name)
+		assert.Contains(t, strings.Join(errUtils.AllDetails(failure), "\n"), dependency, name)
+	}
 	require.NotEmpty(t, errUtils.AllHints(session.ComponentFailure(t.Context(), "live", "lonely")))
 	require.Contains(t, errUtils.AllDetails(session.ComponentFailure(t.Context(), "live", "db"))[0], "depends on `live/app`")
 }

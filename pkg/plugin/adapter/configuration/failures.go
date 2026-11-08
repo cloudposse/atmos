@@ -110,13 +110,17 @@ func addPlaceholder(definitions map[string]map[string]any, key failedKey, failur
 		definitions[key[0]] = definition
 	}
 	configuration := map[string]any{"provider": failure.provider, "engine": terraformType, "failed": true}
-	if failure.source != "" {
-		configuration["source"] = failure.source
-	}
-	definition[componentsKey].(map[string]any)[terraformType].(map[string]any)[key[1]] = map[string]any{
+	placeholder := map[string]any{
 		"vars":     map[string]any{},
 		"settings": map[string]any{"configuration": configuration},
 	}
+	if failure.source != "" {
+		configuration["source"] = failure.source
+		// Watch the unit's file, so an edit that leaves it broken still selects it as affected and
+		// a bulk run reports its diagnostic.
+		placeholder["dependencies"] = map[string]any{"files": []any{failure.source}}
+	}
+	definition[componentsKey].(map[string]any)[terraformType].(map[string]any)[key[1]] = placeholder
 }
 
 // ComponentFailure returns the diagnostic of a unit that failed discovery, or nil for a healthy
