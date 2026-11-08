@@ -3,6 +3,7 @@ package terragruntexec
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -47,9 +48,18 @@ func splitEnv(entry string) (name, value string, found bool) {
 	return entry, "", false
 }
 
+// unitDir is the absolute unit directory of request(), whose Root is relative.
+func unitDir(t *testing.T) string {
+	t.Helper()
+	directory, err := filepath.Abs(filepath.Join("project", "live", "dev", "app"))
+	require.NoError(t, err)
+	return directory
+}
+
 func TestBuildCommandRunsTheUnitDirectoryWithEngineArgumentsAfterTheSeparator(t *testing.T) {
 	command := BuildCommand(request())
-	directory := filepath.Join("project", "live", "dev", "app")
+	directory := unitDir(t)
+	require.True(t, filepath.IsAbs(command.WorkingDir), "a relative root is never resolved twice from the unit directory")
 	assert.Equal(t, []string{"--working-dir", directory, "run", "--", "plan", "-no-color"}, command.Args)
 	assert.Equal(t, directory, command.WorkingDir)
 	assert.Equal(t, "/tools/terragrunt", command.Binary)
@@ -113,7 +123,7 @@ func TestBuildCommandUsesConfigAndSkipInit(t *testing.T) {
 	r := request()
 	r.Unit, r.SkipInit = "live/dev/app/custom.hcl", true
 	args := BuildCommand(r).Args
-	directory := filepath.Join("project", "live", "dev", "app")
+	directory := unitDir(t)
 	assert.Equal(t, []string{"--working-dir", directory, "run", "--config", filepath.Join(directory, "custom.hcl"), "--no-auto-init", "--"}, args[:7])
 }
 
@@ -143,9 +153,25 @@ func TestBuildCommandOptions(t *testing.T) {
 	assert.Equal(t, "s3cret", token)
 }
 
+func TestBuildCommandMergesEnvironmentFeaturesPerName(t *testing.T) {
+	t.Setenv("ATMOS_TERRAGRUNT_FEATURE", "")
+	os.Unsetenv("ATMOS_TERRAGRUNT_FEATURE")
+	t.Setenv("TG_FEATURE", "tier=environment,region=from-env")
+	r := request()
+	r.Features = map[string]any{"tier": "config", "size": "config"}
+	r.Options = map[string]schema.ComponentProviderOption{"feature": {Value: map[string]any{"region": "from-cli"}}}
+	want := []string{"--feature", "region=from-cli", "--feature", "size=config", "--feature", "tier=environment", "--"}
+	assert.Equal(t, want, BuildCommand(r).Args[3:3+len(want)], "configuration, then environment, then command line")
+
+	// A component `env` entry is the environment Terragrunt sees, so it wins over the process.
+	r.Environment = append(r.Environment, "TG_FEATURE=tier=component")
+	want = []string{"--feature", "region=from-cli", "--feature", "size=config", "--feature", "tier=component", "--"}
+	assert.Equal(t, want, BuildCommand(r).Args[3:3+len(want)])
+}
+
 func TestBuildCommandOmitsAbsentOptions(t *testing.T) {
 	r := request()
-	assert.Equal(t, []string{"--working-dir", filepath.Join("project", "live", "dev", "app"), "run", "--", "plan", "-no-color"}, BuildCommand(r).Args)
+	assert.Equal(t, []string{"--working-dir", unitDir(t), "run", "--", "plan", "-no-color"}, BuildCommand(r).Args)
 	_, found := envValue(BuildCommand(r).Env, "TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN")
 	assert.False(t, found)
 }
@@ -198,6 +224,8 @@ func TestCheckVersion(t *testing.T) {
 		"minimum":        {output: "terragrunt version v1.0.0"},
 		"without prefix": {output: "terragrunt version 2.0.0\n"},
 		"too old":        {output: "terragrunt version v0.99.9", target: errUtils.ErrExecutableVersion},
+		"prerelease":     {output: "terragrunt version v1.0.0-rc1", target: errUtils.ErrExecutableVersion},
+		"newer release":  {output: "terragrunt version v1.1.0-beta.2+abc"},
 		"unreadable":     {output: "unexpected", target: errUtils.ErrExecutableVersion},
 		"missing":        {err: exec.ErrNotFound, target: errUtils.ErrExecutableNotFound},
 		"failing":        {err: errors.New("exit status 1"), target: errUtils.ErrExecutableNotFound},

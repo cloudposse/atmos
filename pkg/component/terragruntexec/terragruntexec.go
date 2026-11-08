@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -88,7 +89,13 @@ var supported = map[string]bool{
 	"validate": true, "workspace": true,
 }
 
-var versionPattern = regexp.MustCompile(`v?(\d+\.\d+\.\d+)`)
+// versionPattern keeps a prerelease and build suffix, so `v1.0.0-rc1` compares below 1.0.0.
+var versionPattern = regexp.MustCompile(`v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)`)
+
+// featureEnvironment lists the variables that set Terragrunt features, in the order the provider
+// option reads them. Terragrunt ignores TG_FEATURE once a `--feature` flag is passed, so Atmos merges
+// the environment into the flags it builds.
+var featureEnvironment = []string{"ATMOS_TERRAGRUNT_FEATURE", "TG_FEATURE"}
 
 // Owns reports whether the component runs through the terragrunt executable. The discovery engine
 // recorded in the component settings decides, so one project section always runs in one mode.
@@ -161,6 +168,9 @@ func BuildCommand(request *Request) *Command {
 	defer perf.Track(nil, "terragruntexec.BuildCommand")()
 
 	directory, config := UnitDirectory(request.Root, request.Unit)
+	// The process starts in the unit directory, so a relative `--working-dir` would be resolved a
+	// second time from there. Absolute paths mean the same unit wherever Terragrunt resolves them.
+	directory, config = absolute(directory), absolute(config)
 	args := []string{"--working-dir", directory, "run"}
 	if config != "" {
 		args = append(args, "--config", config)
@@ -168,7 +178,7 @@ func BuildCommand(request *Request) *Command {
 	if request.SkipInit {
 		args = append(args, "--no-auto-init")
 	}
-	optionArgs, optionEnv := optionFlags(request.Options, request.Features)
+	optionArgs, optionEnv := optionFlags(request.Options, request.Features, request.Environment)
 	args = append(append(args, optionArgs...), "--")
 	args = append(args, engineArguments(request)...)
 	env := slices.Clone(request.Environment)
@@ -207,12 +217,25 @@ func withDefault(env []string, key, value string) []string {
 	return append(env, key+"="+value)
 }
 
-// optionFlags maps provider options to Terragrunt global flags, in a stable order.
-func optionFlags(options map[string]schema.ComponentProviderOption, configured map[string]any) (args, env []string) {
+// absolute returns path as an absolute path; an empty path stays empty.
+func absolute(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if resolved, err := filepath.Abs(path); err == nil {
+		return resolved
+	}
+	return path
+}
+
+// optionFlags maps provider options to Terragrunt global flags, in a stable order. Features merge per
+// name: configuration, then the environment, then the command line.
+func optionFlags(options map[string]schema.ComponentProviderOption, configured map[string]any, environment []string) (args, env []string) {
 	features := maps.Clone(configured)
 	if features == nil {
 		features = map[string]any{}
 	}
+	maps.Copy(features, environmentFeatures(environment))
 	if names, ok := options["feature"].Value.(map[string]any); ok {
 		maps.Copy(features, names)
 	}
@@ -233,6 +256,36 @@ func optionFlags(options map[string]schema.ComponentProviderOption, configured m
 		env = append(env, "TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN="+fmt.Sprint(token.Value))
 	}
 	return args, env
+}
+
+// environmentFeatures reads the features the environment sets: the component `env` first, then the
+// process environment, from the first variable that is present.
+func environmentFeatures(environment []string) map[string]any {
+	for _, name := range featureEnvironment {
+		value, present := lookup(environment, name)
+		if !present {
+			continue
+		}
+		features := map[string]any{}
+		for _, entry := range strings.Split(value, ",") {
+			key, setting, found := strings.Cut(strings.TrimSpace(entry), "=")
+			if found && strings.TrimSpace(key) != "" {
+				features[strings.TrimSpace(key)] = setting
+			}
+		}
+		return features
+	}
+	return nil
+}
+
+// lookup finds a variable in an environment list, where the last entry wins, and then in the process.
+func lookup(environment []string, name string) (string, bool) {
+	for index := len(environment) - 1; index >= 0; index-- {
+		if key, value, found := strings.Cut(environment[index], "="); found && key == name {
+			return value, true
+		}
+	}
+	return os.LookupEnv(name)
 }
 
 // CheckVersion verifies that the executable exists and is not older than MinimumVersion.
