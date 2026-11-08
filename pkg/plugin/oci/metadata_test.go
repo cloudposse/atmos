@@ -3,7 +3,9 @@ package oci_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
@@ -171,4 +173,26 @@ func mustDigest(t *testing.T, index v1.ImageIndex) string {
 	digest, err := index.Digest()
 	require.NoError(t, err)
 	return digest.String()
+}
+
+// A long description is copied into the index and every platform descriptor, so it is bounded there; the
+// complete text stays in the packaged manifest.
+func TestLongDescriptionsAreBoundedInAnnotations(t *testing.T) {
+	directory, descriptors := packageFixture(t)
+	long := strings.Repeat("é", 3<<20)
+	writeMetadata(t, directory, func(definition *manifest.Config) { definition.Metadata.Description = long })
+	index, err := pluginoci.BuildIndex(directory, descriptors)
+	require.NoError(t, err)
+	for _, annotations := range indexAnnotations(t, index) {
+		description := annotations["org.opencontainers.image.description"]
+		require.NotEmpty(t, description)
+		require.LessOrEqual(t, len(description), 1024)
+		require.True(t, utf8.ValidString(description), "the cut never splits a character")
+		require.True(t, strings.HasPrefix(long, description))
+	}
+	_, err = pluginoci.Inspect(index, "")
+	require.NoError(t, err)
+	raw, err := index.RawManifest()
+	require.NoError(t, err)
+	require.Less(t, len(raw), 1<<20, "the index stays far below the inspection limit")
 }

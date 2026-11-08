@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -43,8 +44,11 @@ const (
 	annotationDescription                  = "org.opencontainers.image.description"
 	annotationImageVersion                 = "org.opencontainers.image.version"
 	maxSourceLength                        = 512
-	manifestLabel                          = "dev.atmos.plugin.manifest"
-	maxBundleSize                          = 256 << 20
+	// Bound on a free-text annotation, which is copied into the index and every platform descriptor, so
+	// a long description cannot push the index past the metadata limit inspection and publishing enforce.
+	maxAnnotationText = 1024
+	manifestLabel     = "dev.atmos.plugin.manifest"
+	maxBundleSize     = 256 << 20
 )
 
 // Option adjusts how packing and publishing verify a release.
@@ -232,15 +236,28 @@ func releaseAnnotations(definition *manifest.Config, raw []byte) map[string]stri
 		annotationTitle: definition.Metadata.Name, annotationImageVersion: definition.Metadata.Version,
 	}
 	if definition.Metadata.DisplayName != "" {
-		annotations[annotationTitle] = definition.Metadata.DisplayName
+		annotations[annotationTitle] = boundedText(definition.Metadata.DisplayName)
 	}
 	if definition.Metadata.Description != "" {
-		annotations[annotationDescription] = definition.Metadata.Description
+		annotations[annotationDescription] = boundedText(definition.Metadata.Description)
 	}
 	if source, ok := publishableSource(definition.Metadata.Repository); ok {
 		annotations[annotationSource] = source
 	}
 	return annotations
+}
+
+// boundedText shortens a free-text annotation to maxAnnotationText bytes at a character boundary. The
+// complete text stays in the packaged manifest, which the manifest digest annotation verifies.
+func boundedText(text string) string {
+	if len(text) <= maxAnnotationText {
+		return text
+	}
+	cut := maxAnnotationText
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
 }
 
 // releaseBuild carries the inputs shared by every platform image of one release.
