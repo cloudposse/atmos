@@ -159,17 +159,17 @@ func TestMain(m *testing.M) {
 		_, _ = os.Stderr.WriteString(stderr)
 		wroteOutput = true
 	}
-	if wroteOutput {
-		os.Exit(0)
-	}
-
 	// Subprocess helper: when the test binary is invoked as the "terraform" command,
 	// this env var causes it to exit N immediately, for exit-code-neutralization
-	// tests needing a code other than 0/1 (e.g. -detailed-exitcode's 2).
+	// tests needing a code other than 0/1 (e.g. -detailed-exitcode's 2). It is checked
+	// after the output helpers so a test can combine output with a non-zero exit code.
 	if code := os.Getenv("_ATMOS_TEST_EXIT_CODE"); code != "" {
 		if n, convErr := strconv.Atoi(code); convErr == nil {
 			os.Exit(n)
 		}
+	}
+	if wroteOutput {
+		os.Exit(0)
 	}
 
 	// Isolate the Terraform provider plugin cache for this package's tests.
