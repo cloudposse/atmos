@@ -87,7 +87,8 @@ func installToolchainFixture(t *testing.T, installPath, owner, repo, version, na
 	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
 	executable, err := os.Executable()
 	require.NoError(t, err)
-	if err := os.Link(executable, target); err == nil {
+	// Windows refuses to delete a hard link to the running test binary, which breaks TempDir cleanup, so copy there.
+	if runtime.GOOS != "windows" && os.Link(executable, target) == nil {
 		return target
 	}
 	content, err := os.ReadFile(executable)

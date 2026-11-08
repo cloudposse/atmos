@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -53,7 +54,10 @@ func TestConfigurationPlanRestoresReviewedInputs(t *testing.T) {
 	require.NoError(t, err)
 	stat, err := os.Stat(path + configurationPlanSuffix)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0), stat.Mode().Perm()&0o077)
+	// Windows reports 0666 for every writable file, so POSIX permission bits are only meaningful elsewhere.
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0), stat.Mode().Perm()&0o077)
+	}
 	info.SubCommand = "apply"
 	info.UseTerraformPlan = true
 	info.PlanFile = path

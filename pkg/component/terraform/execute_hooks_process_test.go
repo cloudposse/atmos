@@ -139,7 +139,8 @@ func installHookTool(t *testing.T, dir, name string) {
 	executable, err := os.Executable()
 	require.NoError(t, err)
 	target := filepath.Join(dir, name)
-	if err := os.Link(executable, target); err == nil {
+	// Windows refuses to delete a hard link to the running test binary, which breaks TempDir cleanup, so copy there.
+	if runtime.GOOS != "windows" && os.Link(executable, target) == nil {
 		return
 	}
 	content, err := os.ReadFile(executable)
