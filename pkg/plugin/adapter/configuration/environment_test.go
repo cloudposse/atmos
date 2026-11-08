@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -44,4 +45,25 @@ func TestPreparationEnvironmentPrecedenceAndSanitization(t *testing.T) {
 			require.Equal(t, "must-not-return", os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"))
 		})
 	}
+}
+
+func TestDiscoveredDependenciesKeepProviderSettings(t *testing.T) {
+	app := unit(t, "app")
+	declared := map[string]any{"source": "./modules/unit", "dependencies": map[string]any{"tools": map[string]any{"opentofu": "1.10.0"}, "files": []any{"extra.hcl"}}}
+	value, err := adapter.EncodeObject(declared)
+	require.NoError(t, err)
+	app.Configuration = value
+	definitions := map[string]map[string]any{}
+	require.NoError(t, addInstance(definitions, app))
+	deps := definitions["live"]["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)["dependencies"].(map[string]any)
+	require.Equal(t, map[string]any{"opentofu": "1.10.0"}, deps["tools"], "tool pins must survive discovery")
+	require.Equal(t, []any{"extra.hcl", "root.hcl"}, deps["files"])
+	require.Equal(t, []any{"modules"}, deps["folders"])
+
+	// Without declared dependencies, the discovered set is used as-is.
+	plain := map[string]map[string]any{}
+	require.NoError(t, addInstance(plain, unit(t, "network")))
+	network := plain["live"]["components"].(map[string]any)["terraform"].(map[string]any)["network"].(map[string]any)["dependencies"].(map[string]any)
+	require.Equal(t, []any{"root.hcl"}, network["files"])
+	require.NotContains(t, network, "tools")
 }

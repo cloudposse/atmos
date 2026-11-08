@@ -69,7 +69,7 @@ func addInstance(definitions map[string]map[string]any, instance *pluginv1.Disco
 	}
 	settings["configuration"] = map[string]any{"provider": instance.Provider, "engine": instance.Engine, "source": instance.Source}
 	config["settings"] = settings
-	config["dependencies"] = instanceDependencies(instance)
+	config["dependencies"] = mergeDependencies(config["dependencies"], instanceDependencies(instance))
 	definition := definitions[address.Stack]
 	if definition == nil {
 		definition = map[string]any{"name": address.Stack, componentsKey: map[string]any{terraformType: map[string]any{}}}
@@ -103,6 +103,27 @@ func instanceDependencies(instance *pluginv1.DiscoveredComponent) map[string]any
 		deps[componentsKey] = append(deps[componentsKey].([]any), map[string]any{"name": dependency.Target.Component, "stack": dependency.Target.Stack, "kind": dependency.Target.ComponentType})
 	}
 	return deps
+}
+
+// mergeDependencies keeps provider-declared dependency settings, such as tool
+// pins, and appends the discovered watches and component dependencies to them.
+func mergeDependencies(declared any, discovered map[string]any) map[string]any {
+	existing, ok := declared.(map[string]any)
+	if !ok {
+		return discovered
+	}
+	merged := make(map[string]any, len(existing)+len(discovered))
+	for key, value := range existing {
+		merged[key] = value
+	}
+	for key, value := range discovered {
+		if prior, isList := merged[key].([]any); isList {
+			merged[key] = append(append([]any{}, prior...), value.([]any)...)
+			continue
+		}
+		merged[key] = value
+	}
+	return merged
 }
 
 func addDiscovered(definitions map[string]map[string]any, instances map[[3]string]*pluginv1.DiscoveredComponent, discovered *pluginv1.DiscoverComponentsResponse) error {
