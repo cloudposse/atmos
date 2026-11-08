@@ -139,7 +139,8 @@ def test_mixed_graph(root, configuration):
     fixtures.write(root, "live/prod/network/terragrunt.hcl", unit() + "# changed upstream\n")
     fixtures.commit(root, "change upstream in mixed graph")
 
-    expect_components(affected(root, base), ["network"])
+    changed = affected_result(root, base, "--logs-level=Debug")
+    expect_components(changed.rows, ["network"], "mixed graph\n" + changed.stderr)
     expanded = affected(root, base, "--include-dependents", "--flatten")
     expect_components(expanded, ["api", "app", "native", "network"])
     filtered = affected(root, base, "--stack=live/prod", "--include-dependents", "--flatten")
@@ -157,7 +158,8 @@ def test_project_root(root):
     fixtures.check(not affected(root, base), "Unchanged subdirectory inventory selected")
     fixtures.write(root, "project/modules/unit/main.tf", 'output "vpc_id" { value = "changed" }\n')
     fixtures.commit(root, "change module under base_path")
-    expect_components(affected(root, base), ["network"])
+    changed = affected_result(root, base, "--logs-level=Debug")
+    expect_components(changed.rows, ["network"], "project root\n" + changed.stderr)
 
 
 def main():
@@ -175,8 +177,10 @@ def main():
 
     fixtures.project(work + "/nested", package)
     test_nested_stacks(work + "/nested", package)
+    ui.success("nested-stacks")
     config = fixtures.project(work + "/mixed", package)
     test_mixed_graph(work + "/mixed", config)
+    ui.success("mixed-graph")
     fixtures.project(work + "/subdirectory", package, base_path="project")
     test_project_root(work + "/subdirectory")
-    ui.success("Nested stacks, mixed graphs, and project-relative watches")
+    ui.success("project-relative-watches")
