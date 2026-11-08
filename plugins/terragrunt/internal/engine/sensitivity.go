@@ -24,9 +24,9 @@ const (
 // Terragrunt converts the evaluated inputs to plain values and drops their marks, so the evaluated result
 // cannot tell which inputs were sensitive. The unit's own HCL does: this reads the `inputs` attribute of the
 // unit and of every file it includes, and marks the paths whose value is written as sensitive(...), including
-// through object literals, merge(...), conditionals, and local.* references. Values that become sensitive in
-// other ways, such as the output of a function applied to a sensitive local, are not tracked. Only paths that
-// exist in the evaluated inputs are returned.
+// through object literals, merge(...), conditionals, and local.* references. A value whose sensitive part
+// cannot be addressed by object keys, such as a list element, a for expression, an index, or the result of
+// another function, is marked sensitive as a whole. Only paths that exist in the evaluated inputs are returned.
 //
 //nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func SensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any) [][]string {
@@ -98,7 +98,48 @@ func (s *sensitivityScanner) walk(expression hclsyntax.Expression, prefix []stri
 		s.walk(node.FalseResult, prefix, depth)
 	case *hclsyntax.ScopeTraversalExpr:
 		s.walkLocal(node, prefix, depth)
+	default:
+		// A path is a list of object keys, so a sensitive value inside a list, a for expression, an
+		// index, or a template cannot be addressed on its own. Mark the whole value instead of dropping it.
+		if s.containsSensitive(expression, depth) {
+			s.paths = append(s.paths, slices.Clone(prefix))
+		}
 	}
+}
+
+// containsSensitive reports whether expression calls sensitive(...) anywhere, directly or through the
+// locals it references.
+func (s *sensitivityScanner) containsSensitive(expression hclsyntax.Expression, depth int) bool {
+	if depth >= maxLocalDepth {
+		return false
+	}
+	found := false
+	_ = hclsyntax.VisitAll(expression, func(node hclsyntax.Node) hcl.Diagnostics {
+		if found {
+			return nil
+		}
+		switch typed := node.(type) {
+		case *hclsyntax.FunctionCallExpr:
+			found = typed.Name == "sensitive"
+		case *hclsyntax.ScopeTraversalExpr:
+			found = s.localContainsSensitive(typed, depth)
+		}
+		return nil
+	})
+	return found
+}
+
+// localContainsSensitive reports whether the local a traversal starts from contains sensitive(...).
+func (s *sensitivityScanner) localContainsSensitive(traversal *hclsyntax.ScopeTraversalExpr, depth int) bool {
+	if traversal.Traversal.RootName() != localName || len(traversal.Traversal) < 2 {
+		return false
+	}
+	first, ok := traversal.Traversal[1].(hcl.TraverseAttr)
+	if !ok {
+		return false
+	}
+	current, found := s.locals[first.Name]
+	return found && s.containsSensitive(current, depth+1)
 }
 
 // walkObject records the sensitive paths below each key of an object literal.
@@ -127,6 +168,15 @@ func (s *sensitivityScanner) walkCall(call *hclsyntax.FunctionCallExpr, prefix [
 		for _, argument := range call.Args {
 			s.walk(argument, prefix, depth)
 		}
+	default:
+		// Any other function, such as jsonencode(sensitive(...)), can carry a sensitive argument into its
+		// result; its paths are unknown, so the whole result is sensitive.
+		for _, argument := range call.Args {
+			if s.containsSensitive(argument, depth) {
+				s.paths = append(s.paths, slices.Clone(prefix))
+				return
+			}
+		}
 	}
 }
 
@@ -144,12 +194,16 @@ func (s *sensitivityScanner) walkLocal(traversal *hclsyntax.ScopeTraversalExpr, 
 		return
 	}
 	for _, step := range traversal.Traversal[2:] {
-		attribute, ok := step.(hcl.TraverseAttr)
+		key, ok := traversalKey(step)
 		if !ok {
+			// An index the scan cannot follow: keep the value sensitive if any of it may be.
+			if s.containsSensitive(current, depth+1) {
+				s.paths = append(s.paths, slices.Clone(prefix))
+			}
 			return
 		}
 		var sensitive bool
-		if current, sensitive = descend(current, attribute.Name); sensitive {
+		if current, sensitive = descend(current, key); sensitive {
 			s.paths = append(s.paths, slices.Clone(prefix))
 			return
 		}
@@ -158,6 +212,19 @@ func (s *sensitivityScanner) walkLocal(traversal *hclsyntax.ScopeTraversalExpr, 
 		}
 	}
 	s.walk(current, prefix, depth+1)
+}
+
+// traversalKey returns the object key of local.name.key and local.name["key"].
+func traversalKey(step hcl.Traverser) (string, bool) {
+	switch typed := step.(type) {
+	case hcl.TraverseAttr:
+		return typed.Name, true
+	case hcl.TraverseIndex:
+		if typed.Key.IsKnown() && !typed.Key.IsNull() && typed.Key.Type().Equals(cty.String) {
+			return typed.Key.AsString(), true
+		}
+	}
+	return "", false
 }
 
 // Descend returns the expression of one key of an object literal. A sensitive wrapper call makes every key

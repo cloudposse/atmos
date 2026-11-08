@@ -257,7 +257,8 @@ inputs = {
 	inputs := map[string]any{"shared": "s", "open": "o", "own": json.Number("1"), "looped": "x", "dynamic": map[string]any{"a": json.Number("1")}, "json": "x", "everything": json.Number("1")}
 
 	files := []string{"/unit/terragrunt.hcl", "/root.hcl", "/broken.hcl", "/data.json", "/missing.hcl"}
-	require.Equal(t, [][]string{{"own"}, {"shared"}}, SensitiveInputs(fsys, files, inputs))
+	// A for expression that yields sensitive values is marked as a whole.
+	require.Equal(t, [][]string{{"dynamic"}, {"own"}, {"shared"}}, SensitiveInputs(fsys, files, inputs))
 
 	require.Equal(t, [][]string{nil}, SensitiveInputs(fsys, []string{"/whole.hcl"}, inputs), "sensitive(...) around the whole inputs marks every input")
 	require.Empty(t, SensitiveInputs(fsys, files, map[string]any{"open": "o"}), "a path that is not among the evaluated inputs is dropped")
@@ -287,5 +288,29 @@ inputs = {
 `), 0o644))
 	inputs := map[string]any{"token": "t", "open": "o", "key": "k", "wholekey": "v", "inner": 1, "indexed": "t", "missing": 1, "scalar": 1, "external": 1, "call": "c", "cond": "t"}
 
-	require.Equal(t, [][]string{{"cond"}, {"inner"}, {"key"}, {"token"}, {"wholekey"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
+	// An index with a literal key follows the local like an attribute, and a function applied to a
+	// sensitive value makes its whole result sensitive.
+	require.Equal(t, [][]string{{"call"}, {"cond"}, {"indexed"}, {"inner"}, {"key"}, {"token"}, {"wholekey"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
+}
+
+// A sensitive value that object keys cannot address marks the whole input, so it never reaches a varfile.
+func TestSensitiveInputsMarkValuesTheyCannotAddress(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fsys, "/unit.hcl", []byte(`locals {
+  token  = sensitive("t")
+  tokens = [sensitive("a"), "b"]
+}
+inputs = {
+  passwords = [sensitive("secret")]
+  through   = [local.token]
+  element   = local.tokens[0]
+  encoded   = jsonencode({ key = sensitive("k") })
+  generated = { for k, v in { a = 1 } : k => sensitive(v) }
+  plain     = ["a", "b"]
+  plaincall = upper("x")
+}
+`), 0o644))
+	inputs := map[string]any{"passwords": []any{"secret"}, "through": []any{"t"}, "element": "a", "encoded": "{}", "generated": map[string]any{"a": 1}, "plain": []any{"a", "b"}, "plaincall": "X"}
+
+	require.Equal(t, [][]string{{"element"}, {"encoded"}, {"generated"}, {"passwords"}, {"through"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
 }
