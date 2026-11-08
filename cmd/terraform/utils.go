@@ -184,6 +184,11 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The prompt discovers components, so it must see the same provider options RunE uses: a feature
+	// override can decide which dependencies an imported unit has.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(cmd_, viper.GetViper()); err != nil {
+		return err
+	}
 
 	// resolveAndPromptForArgs is a no-op when not interactive or when both values are
 	// already provided; otherwise it shows the component/stack pickers.
@@ -363,6 +368,10 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	// Honor a component chosen interactively in PreRunE so before-hooks resolve
 	// against the selected component (the stack comes from the persisted --stack flag).
 	applyPreResolvedComponent(&info)
+	// Hooks describe the component through discovery, which must see the provider options RunE uses.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(cmd_, viper.GetViper()); err != nil {
+		return hookContext{info: info}, err
+	}
 
 	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
 		info.AuthContext = authCtx
