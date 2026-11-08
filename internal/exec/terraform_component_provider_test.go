@@ -13,6 +13,7 @@ import (
 	component "github.com/cloudposse/atmos/pkg/component"
 	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	schema "github.com/cloudposse/atmos/pkg/schema"
+	refcache "github.com/cloudposse/atmos/pkg/terraform/refcache"
 	cobra "github.com/spf13/cobra"
 	assert "github.com/stretchr/testify/assert"
 	require "github.com/stretchr/testify/require"
@@ -64,6 +65,31 @@ func TestTerraformRegistryDispatch(t *testing.T) {
 	err := ExecuteTerraform(info, WithProcessContext(t.Context()), WithStdoutCapture(&stdout), WithStderrCapture(&stderr),
 		WithEnvironment([]string{}), WithInvokingCommand(invoking), WithExecMetadataParser(func(command string, _ int, output string) any { return command + ":" + output }))
 	require.ErrorIs(t, err, errUtils.ErrPlanHasDiff)
+}
+
+func TestTerraformDispatchInvalidatesComponentFuncCache(t *testing.T) {
+	provider := replaceTerraformProvider(t)
+	t.Cleanup(func() { componentFuncSyncMap.Clear() })
+
+	target := refcache.Key{Stack: "live", Component: "app"}
+	inspection := refcache.Key{Stack: "live", Component: "app", Inspection: true}
+	byStackArg := refcache.Key{Stack: "live-arg", Component: "app"}
+	other := refcache.Key{Stack: "live", Component: "network"}
+	for _, key := range []refcache.Key{target, inspection, byStackArg, other} {
+		componentFuncSyncMap.Store(key, map[string]any{"outputs": "preflight"})
+	}
+
+	// A failed command can still change outputs, so the snapshot is dropped either way.
+	provider.EXPECT().Execute(gomock.Any()).Return(errUtils.ErrPlanHasDiff)
+	err := ExecuteTerraform(schema.ConfigAndStacksInfo{ComponentFromArg: "app", Stack: "live", StackFromArg: "live-arg", SubCommand: "apply"})
+	require.ErrorIs(t, err, errUtils.ErrPlanHasDiff)
+
+	for _, key := range []refcache.Key{target, inspection, byStackArg} {
+		_, ok := componentFuncSyncMap.Load(key)
+		assert.False(t, ok, "cached target %+v must be invalidated", key)
+	}
+	_, ok := componentFuncSyncMap.Load(other)
+	assert.True(t, ok, "unrelated components must keep their cache")
 }
 
 func TestRegisteredTerraformCancellation(t *testing.T) {

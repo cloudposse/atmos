@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/perf"
 	schema "github.com/cloudposse/atmos/pkg/schema"
+	refcache "github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
 
 // The host wires shared Atmos services into the Terraform component and registers it.
@@ -87,6 +88,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	if !ok {
 		return fmt.Errorf("%w: terraform", errUtils.ErrComponentProviderNotFound)
 	}
+	// A Terraform command can change the target's outputs, even when it fails part-way.
+	// Drop the host's atmos.Component() snapshot of the target so a later dependent
+	// renders its variables from current outputs instead of a preflight value.
+	defer invalidateComponentFuncCache(&info)
 	return provider.Execute(&component.ExecutionContext{
 		Context: shellCommandContext(opts...), Options: opts,
 		ComponentType: "terraform", Component: info.ComponentFromArg,
@@ -94,6 +99,18 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		ComponentConfig: info.ComponentSection, ConfigAndStacksInfo: info,
 		Args: info.AdditionalArgsAndFlags,
 	})
+}
+
+// invalidateComponentFuncCache removes every cached atmos.Component() result for the
+// Terraform target, across auth scopes and inspection modes.
+func invalidateComponentFuncCache(info *schema.ConfigAndStacksInfo) {
+	if info.ComponentFromArg == "" {
+		return
+	}
+	refcache.DeleteTarget(&componentFuncSyncMap, info.Stack, info.ComponentFromArg)
+	if info.StackFromArg != "" && info.StackFromArg != info.Stack {
+		refcache.DeleteTarget(&componentFuncSyncMap, info.StackFromArg, info.ComponentFromArg)
+	}
 }
 
 var terraformExecutor *terraformcomponent.Executor
