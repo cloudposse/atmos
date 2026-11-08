@@ -58,8 +58,10 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 			current[key] = digest
 		}
 	}
-	removeStaleFiles(root, previous, names)
-	return writeManifest(root, current)
+	// Record the manifest even when a stale file cannot be removed, so the files written above stay
+	// owned and the stale file is retried; then report the removal failure.
+	staleErr := removeStaleFiles(root, previous, names, current)
+	return errors.Join(writeManifest(root, current), staleErr)
 }
 
 // writeFile applies one file's policy and returns the digest to record, or empty when the host

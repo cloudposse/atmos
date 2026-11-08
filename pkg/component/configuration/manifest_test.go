@@ -185,3 +185,30 @@ func TestEquivalentPathsKeepTheGeneratedFile(t *testing.T) {
 	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{generated("./provider.tf", content, "overwrite")}))
 	require.FileExists(t, filepath.Join(root, "provider.tf"))
 }
+
+// A stale generated file that cannot be removed is reported and stays recorded, so a later run
+// retries it once permissions are repaired, while the files written in the same run stay owned.
+func TestStaleFileRemovalFailureIsReportedAndRetried(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not prevent removal on Windows")
+	}
+	root := t.TempDir()
+	content := "variable \"stale\" {}\n"
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{
+		generated("child/stale.tf", content, "overwrite"),
+		generated("keep.tf", content, "overwrite"),
+	}))
+	child := filepath.Join(root, "child")
+	require.NoError(t, os.Chmod(child, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(child, 0o755) })
+
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{generated("keep.tf", content, "overwrite")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "child/stale.tf")
+	require.FileExists(t, filepath.Join(child, "stale.tf"))
+
+	require.NoError(t, os.Chmod(child, 0o755))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{generated("keep.tf", content, "overwrite")}))
+	require.NoFileExists(t, filepath.Join(child, "stale.tf"))
+	require.FileExists(t, filepath.Join(root, "keep.tf"))
+}

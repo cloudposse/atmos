@@ -5,10 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // manifestName records, per working directory, the files this host generated and the digest of
@@ -99,8 +102,10 @@ func fileDigest(root *os.Root, path string) (string, bool) {
 
 // removeStaleFiles deletes files an earlier run generated that the current run does not name.
 // A file is removed only while it is still what was written (matching digest) or still carries
-// the Terragrunt signature; anything a user or module changed since stays untouched.
-func removeStaleFiles(root *os.Root, previous map[string]string, current []string) {
+// the Terragrunt signature; anything a user or module changed since stays untouched. A file that
+// cannot be removed stays recorded in kept, so a later run retries it, and the error is returned.
+func removeStaleFiles(root *os.Root, previous map[string]string, current []string, kept map[string]string) error {
+	var failures error
 	for _, path := range slices.Sorted(mapKeys(previous)) {
 		if slices.Contains(current, path) || !filepath.IsLocal(filepath.FromSlash(path)) {
 			continue
@@ -110,10 +115,14 @@ func removeStaleFiles(root *os.Root, previous map[string]string, current []strin
 		if !exists || (digest != previous[path] && verifyTerragruntSignature(root, local) != nil) {
 			continue
 		}
-		if root.Remove(local) == nil {
-			removeEmptyParents(root, filepath.Dir(local))
+		if err := root.Remove(local); err != nil && !errors.Is(err, os.ErrNotExist) {
+			kept[path] = previous[path]
+			failures = errors.Join(failures, fmt.Errorf("%w: remove stale generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err))
+			continue
 		}
+		removeEmptyParents(root, filepath.Dir(local))
 	}
+	return failures
 }
 
 // removeEmptyParents tidies directories that only existed for a removed generated file.
