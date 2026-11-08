@@ -142,9 +142,16 @@ func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.
 // way `plan` did, so the directory is regenerated from the checkout's own configuration instead of
 // from the restored record. The evaluation must reproduce the reviewed backend. The plan file already
 // embodies the inputs, so none are kept.
+//
+// The evaluation runs as the reviewed `plan` operation, so a generate block that depends on
+// get_terraform_command() writes the files that were reviewed. Its hooks, extra arguments, and error
+// policies are not used: the reviewed execution metadata is, exactly as for a retained workdir, so a
+// condition that evaluates differently on this runner cannot skip a reviewed hook. Atmos selects the
+// hooks of the actual command from that metadata.
 func prepareForRebuild(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rebuild *reviewedRebuild) (*schema.PreparedComponentConfiguration, error) {
 	fresh := *info
 	fresh.UseTerraformPlan, fresh.PlanFile, fresh.StoredPlanFile = false, "", ""
+	fresh.SubCommand, fresh.SubCommand2 = reviewedOperation, ""
 	prepared, err := config.ComponentConfigurations.Prepare(ctx, &fresh)
 	if err != nil || prepared == nil {
 		return nil, err
@@ -157,8 +164,12 @@ func prepareForRebuild(ctx context.Context, config *schema.AtmosConfiguration, i
 		return nil, fmt.Errorf("%w: reviewed backend identity changed", errUtils.ErrPlanVerificationFailed)
 	}
 	prepared.Inputs = map[string]any{}
+	prepared.Execution = rebuild.plan.Prepared.Execution
 	return prepared, nil
 }
+
+// reviewedOperation is the command a reviewed plan was evaluated for.
+const reviewedOperation = "plan"
 
 // terragruntCacheDirectory is where Terragrunt keeps its working copies of a unit.
 const terragruntCacheDirectory = ".terragrunt-cache"

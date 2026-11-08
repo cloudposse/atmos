@@ -222,7 +222,8 @@ func (p *reviewedPlanProject) freshApply(t *testing.T, planPath string, prepared
 	cleared := *apply
 	cleared.UseTerraformPlan, cleared.PlanFile = false, ""
 	p.provider.EXPECT().Prepare(gomock.Any(), gomock.Cond(func(info *schema.ConfigAndStacksInfo) bool {
-		return !info.UseTerraformPlan && info.PlanFile == "" && info.SubCommand == "apply"
+		// The rebuild evaluates the unit as the reviewed plan operation.
+		return !info.UseTerraformPlan && info.PlanFile == "" && info.SubCommand == "plan"
 	})).Return(prepared, nil).MaxTimes(1)
 	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, p.config, apply, false)
 	return apply, execution, err
@@ -247,6 +248,34 @@ func TestApplyOfRestoredPlanRebuildsWorkdirOnAFreshRunner(t *testing.T) {
 	require.Empty(t, execution.preparedConfiguration.Inputs, "the plan file carries the inputs")
 	require.True(t, apply.UseTerraformPlan)
 	require.Equal(t, planPath, apply.PlanFile)
+}
+
+// A rebuild regenerates files from a fresh evaluation, but keeps the reviewed hooks: a hook condition that
+// evaluates differently on the new runner cannot skip a hook that was reviewed.
+func TestApplyOfRestoredPlanKeepsTheReviewedExecutionMetadata(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	project.explicitWorkdir = false
+	reviewed := project.prepared()
+	reviewed.Execution = &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{{Name: "reviewed-guard", Commands: []string{"apply"}, Execute: []string{"guard"}}}}
+	info := project.info(t, "plan")
+	project.provider.EXPECT().Prepare(gomock.Any(), info).Return(reviewed, nil)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+	require.NoError(t, err)
+	project.workdir = execution.workingDir
+	planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, info, execution, []string{"-out=" + planPath}))
+	project.freshRunner(t, planPath)
+
+	fresh := project.prepared()
+	fresh.Execution = &schema.ComponentExecution{}
+	apply, execution, err := project.freshApply(t, planPath, fresh)
+
+	require.NoError(t, err)
+	require.NotNil(t, execution.preparedConfiguration.Execution)
+	require.Len(t, execution.preparedConfiguration.Execution.BeforeHooks, 1)
+	require.Equal(t, "reviewed-guard", execution.preparedConfiguration.Execution.BeforeHooks[0].Name)
+	require.Equal(t, "apply", apply.SubCommand, "the invocation itself stays an apply")
 }
 
 // A verified rebuild whose init or apply then failed leaves the rebuilt workdir behind. A retry uses it as
