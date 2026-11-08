@@ -284,3 +284,33 @@ func TestWatchesIgnoreSymlinkTargetsOutsideProject(t *testing.T) {
 	require.NoError(t, trackInputSources(afero.NewOsFs(), root, result))
 	require.Equal(t, []string{link}, result.Folders)
 }
+
+// A computed hook command list is evaluated as a whole, so the script it names is watched; a
+// command that cannot be resolved widens the watch instead of silently watching nothing.
+func TestWatchesResolveComputedHookCommands(t *testing.T) {
+	project := newWatchProject(t)
+	project.write(filepath.Join(project.root, "scripts", "computed.sh"), "echo")
+	result := project.track(`
+locals { command = ["bash", "${get_repo_root()}/scripts/computed.sh"] }
+terraform {
+  source = "../../../modules/m"
+  before_hook "computed" {
+    commands = ["plan"]
+    execute  = local.command
+  }
+}
+`)
+	require.Contains(t, result.Files, filepath.Join(project.root, "scripts", "computed.sh"))
+	require.Empty(t, result.Folders)
+
+	result = project.track(`
+terraform {
+  source = "../../../modules/m"
+  before_hook "unresolved" {
+    commands = ["plan"]
+    execute  = ["bash", "${get_env("HOOK_DIR")}/run.sh"]
+  }
+}
+`)
+	require.Equal(t, []string{project.root}, result.Folders)
+}

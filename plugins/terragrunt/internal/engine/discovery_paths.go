@@ -134,7 +134,9 @@ func discoveryPaths(root string, includes, excludes []string) (pathScan, error) 
 				}
 				return nil
 			}
-			if !selectsAny(includes, rel) {
+			// Only Terragrunt configuration files count, so a pattern that selects ordinary files
+			// still gets the unmatched-pattern warning.
+			if !isTerragruntFile(entry.Name()) || !selectsAny(includes, rel) {
 				return nil
 			}
 			for _, candidate := range includes {
@@ -164,6 +166,11 @@ func discoveryPaths(root string, includes, excludes []string) (pathScan, error) 
 	slices.SortFunc(scan.Warnings, func(a, b model.Warning) int { return strings.Compare(a.Code+a.Path+a.Message, b.Code+b.Path+b.Message) })
 	scan.Warnings = slices.Compact(scan.Warnings)
 	return scan, nil
+}
+
+// isTerragruntFile reports whether a file name is a Terragrunt unit or stack configuration.
+func isTerragruntFile(name string) bool {
+	return name == "terragrunt.hcl" || name == "terragrunt.stack.hcl"
 }
 
 // unmatchedWarnings names included_paths patterns that selected no Terragrunt file.

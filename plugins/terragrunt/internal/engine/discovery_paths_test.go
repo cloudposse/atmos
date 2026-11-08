@@ -243,3 +243,15 @@ func TestLogicalPathKeepsASymlinkedConfigurationFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, filepath.Join(root, "a", "terragrunt.hcl"), canonical)
 }
+
+// A pattern that selects only ordinary files, such as a docs directory, is still reported as
+// matching no Terragrunt configuration.
+func TestIncludePatternMatchingOnlyOrdinaryFilesIsReported(t *testing.T) {
+	root := scanTree(t, "live/dev/vpc/terragrunt.hcl", "docs/README.md", "docs/notes/main.tf")
+	scan, err := discoveryPaths(root, []string{"live/dev", "docs"}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/dev/vpc/terragrunt.hcl"}, relativeUnits(t, root, scan))
+	require.Len(t, scan.Warnings, 1)
+	require.Equal(t, model.WarningPatternUnmatched, scan.Warnings[0].Code)
+	require.Equal(t, "docs", scan.Warnings[0].Path)
+}

@@ -272,9 +272,13 @@ func (t *watchTracker) watchList(scan fileScan, expression hclsyntax.Expression)
 // program found on PATH is not a project file.
 func (t *watchTracker) watchHook(scan fileScan, body *hclsyntax.Body) {
 	if execute := body.Attributes["execute"]; execute != nil {
-		for index, element := range listElements(execute.Expr) {
-			word, ok := stringOf(element, scan.ctx)
-			if !ok || !strings.ContainsAny(word, `/\`) {
+		words, resolved := hookWords(scan, execute.Expr)
+		if !resolved {
+			// An unresolved word may name a project script, so widen the watch.
+			t.fallback()
+		}
+		for index, word := range words {
+			if !strings.ContainsAny(word, `/\`) {
 				continue
 			}
 			path := localPath(t.unit, word)
@@ -288,6 +292,30 @@ func (t *watchTracker) watchHook(scan fileScan, body *hclsyntax.Body) {
 			t.add(t.folders, localPath(t.unit, directory))
 		}
 	}
+}
+
+// hookWords returns the words of a hook's `execute` list, evaluating a computed list such as
+// `execute = local.command` as a whole. It reports false when any word cannot be resolved.
+func hookWords(scan fileScan, expression hclsyntax.Expression) ([]string, bool) {
+	var words []string
+	resolved := true
+	for _, element := range listElements(expression) {
+		if word, ok := stringOf(element, scan.ctx); ok {
+			words = append(words, word)
+			continue
+		}
+		values, diagnostics := element.Value(scan.ctx)
+		if diagnostics.HasErrors() || !values.IsWhollyKnown() || values.IsNull() || !values.CanIterateElements() {
+			resolved = false
+			continue
+		}
+		for _, value := range values.AsValueSlice() {
+			if value.Type() == cty.String && !value.IsNull() {
+				words = append(words, value.AsString())
+			}
+		}
+	}
+	return words, resolved
 }
 
 // add records a watch inside the project; paths outside it cannot appear in the
