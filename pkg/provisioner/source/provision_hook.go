@@ -592,6 +592,9 @@ func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *sche
 		UpdatedAt:     now,
 		LastAccessed:  now,
 		ContentHash:   "", // Content hash is computed separately for local sources.
+		// An explicit pull records the stamp too, so later edits to a local source still refresh
+		// the workdir. Automatic provisioning replaces it with the stamp taken before copying.
+		SourceStamp: localSourceStamp(sourceSpec),
 	}
 	// Use the fetch receipt captured before Git metadata is stripped. Compatibility
 	// callers without one get an honest content digest, never the enclosing repo HEAD.

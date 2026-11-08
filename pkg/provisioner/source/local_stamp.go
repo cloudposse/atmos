@@ -49,6 +49,10 @@ func localSourceStamp(spec *schema.VendorComponentSource) string {
 	if !ok {
 		return ""
 	}
+	// Walk the target of a symlinked source root; WalkDir never descends into a root link.
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
 	hash := fnv.New128a()
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -89,14 +93,21 @@ func stampEntry(hash io.Writer, root, path string, entry fs.DirEntry) error {
 }
 
 // localSourceChanged reports whether a local directory source was edited, or removed, since the
-// workdir recorded its stamp. An explicit TTL stays authoritative, and a workdir without a stamp
-// (remote source, or provisioned before stamps existed) is never reported as changed here; URI,
-// version, and TTL decide for those.
+// workdir recorded its stamp. An explicit TTL stays authoritative. A local workdir without a stamp
+// (provisioned before stamps existed, or a failed stamp write) is refreshed once so it records one;
+// a remote source never has a stamp, and URI, version, and TTL decide for it.
 func localSourceChanged(metadata *workdir.WorkdirMetadata, spec *schema.VendorComponentSource) (bool, string) {
-	if metadata.SourceStamp == "" || spec.TTL != "" {
+	if spec.TTL != "" {
 		return false, ""
 	}
-	if localSourceStamp(spec) == metadata.SourceStamp {
+	stamp := localSourceStamp(spec)
+	if metadata.SourceStamp == "" {
+		if stamp == "" {
+			return false, ""
+		}
+		return true, "Local source has no recorded stamp, refreshing the working directory"
+	}
+	if stamp == metadata.SourceStamp {
 		return false, ""
 	}
 	return true, "Local source changed, refreshing the working directory"

@@ -84,9 +84,21 @@ func TestNeedsProvisioningLocalSourceStamp(t *testing.T) {
 	writeStampFile(t, filepath.Join(target, "main.tf"), "# one")
 	require.NoError(t, writeWorkdirMetadata(target, "app", "dev", spec))
 
-	t.Run("a workdir without a stamp is reused", func(t *testing.T) {
+	t.Run("metadata written by an explicit pull records the stamp and is reused", func(t *testing.T) {
+		metadata, err := workdir.ReadMetadata(target)
+		require.NoError(t, err)
+		assert.Equal(t, localSourceStamp(spec), metadata.SourceStamp)
 		needs, reason := needsProvisioning(target, spec, true)
 		assert.False(t, needs, reason)
+	})
+	t.Run("a local workdir without a stamp is refreshed once", func(t *testing.T) {
+		metadata, err := workdir.ReadMetadata(target)
+		require.NoError(t, err)
+		metadata.SourceStamp = ""
+		require.NoError(t, workdir.WriteMetadata(target, metadata))
+		needs, reason := needsProvisioning(target, spec, true)
+		assert.True(t, needs)
+		assert.Contains(t, reason, "no recorded stamp")
 	})
 
 	recordSourceStamp(target, localSourceStamp(spec), ui.New(nil))
@@ -106,9 +118,11 @@ func TestNeedsProvisioningLocalSourceStamp(t *testing.T) {
 		assert.False(t, needs, reason)
 	})
 	t.Run("a removed source is refreshed so the failure names it", func(t *testing.T) {
-		missing := &schema.VendorComponentSource{Uri: filepath.Join(sourceDir, "gone")}
-		needs, _ := needsProvisioning(target, missing, true)
+		// Keep the same spec, so URI-change detection cannot be what reports it.
+		require.NoError(t, os.RemoveAll(sourceDir))
+		needs, reason := needsProvisioning(target, spec, true)
 		assert.True(t, needs)
+		assert.Contains(t, reason, "Local source changed")
 	})
 }
 
@@ -169,4 +183,21 @@ func TestAutoProvisionSourceLocalEditDetection(t *testing.T) {
 	assert.True(t, refreshed.UpdatedAt.After(metadata.UpdatedAt))
 	assert.NotEqual(t, metadata.SourceStamp, refreshed.SourceStamp)
 	assert.FileExists(t, marker, "a refresh must preserve files the source does not own")
+}
+
+// A source that is a directory symlink is stamped through its target, so an edit beneath the
+// target refreshes the workdir.
+func TestLocalSourceStampFollowsASymlinkedRoot(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "modules", "unit")
+	writeStampFile(t, filepath.Join(target, "main.tf"), "# one")
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks are unavailable: %v", err)
+	}
+	spec := &schema.VendorComponentSource{Uri: link}
+	before := localSourceStamp(spec)
+	require.NotEmpty(t, before)
+	writeStampFile(t, filepath.Join(target, "nested", "extra.tf"), "# extra")
+	assert.NotEqual(t, before, localSourceStamp(spec))
 }
