@@ -34,11 +34,14 @@ func (s *Session) RegisterImport(ctx context.Context, uri string) (bool, error) 
 	if err := s.ctx.Err(); err != nil {
 		return true, err
 	}
-	if !filepath.IsLocal(path) || strings.ContainsAny(path, "\\?#*") {
-		return true, fmt.Errorf("%w: provider import must name a project-relative file or directory", errUtils.ErrPluginInvalidConfig)
+	// Glob and bracket characters are rejected here, naming the import, rather than failing
+	// later inside provider discovery with an error that does not identify it.
+	if !filepath.IsLocal(path) || strings.ContainsAny(path, "\\?#*[{") {
+		return true, fmt.Errorf("%w: provider import %s must name a project-relative file or directory", errUtils.ErrPluginInvalidConfig, uri)
 	}
 	path = filepath.ToSlash(filepath.Clean(path))
-	key := name + "://" + path
+	// The scheme may be a configuration alias; the provider only recognizes its own name.
+	key := request.Provider + "://" + path
 	if s.imports[key] {
 		return true, nil
 	}

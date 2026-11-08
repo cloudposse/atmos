@@ -121,7 +121,7 @@ func importPaths(request *pluginv1.DiscoverComponentsRequest) ([]string, error) 
 			return nil, err
 		}
 		if info.IsDir() {
-			path = strings.TrimSuffix(filepath.ToSlash(path), "/") + "/**"
+			path = directoryPattern(path)
 		} else if info.Name() != "terragrunt.hcl" && info.Name() != "terragrunt.stack.hcl" {
 			return nil, ErrUnsupported
 		}
@@ -131,4 +131,15 @@ func importPaths(request *pluginv1.DiscoverComponentsRequest) ([]string, error) 
 		return nil, ErrUnsupported
 	}
 	return paths, nil
+}
+
+// directoryPattern matches every unit below an imported directory. The project root
+// ("terragrunt://." or "terragrunt://./") has no prefix: "./**" would not match the
+// project-relative unit paths discovery compares against.
+func directoryPattern(path string) string {
+	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
+	if clean == "." {
+		return "**"
+	}
+	return clean + "/**"
 }

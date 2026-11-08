@@ -59,10 +59,11 @@ func TestImportValidationCancellationAndRevision(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, handled)
 	}
-	for _, path := range []string{"", "../outside", "/absolute", `live\app`, "live?ref=main", "live#fragment", "live/*"} {
+	for _, path := range []string{"", "../outside", "/absolute", `live\app`, "live?ref=main", "live#fragment", "live/*", "live/[ab]", "live/{a,b}"} {
 		handled, err := session.RegisterImport(t.Context(), "terragrunt://"+path)
 		require.True(t, handled)
-		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+		require.ErrorContains(t, err, "terragrunt://"+path)
 	}
 	_, err = session.RegisterImport(t.Context(), "terragrunt://live")
 	require.NoError(t, err)
@@ -102,4 +103,21 @@ func TestConcurrentImportRegistrationDeduplicates(t *testing.T) {
 	require.Len(t, session.requests, 1)
 	require.Equal(t, []string{"terragrunt://live"}, session.requests[0].Imports)
 	var _ schema.ComponentConfigurationImportRuntime = session
+}
+
+func TestAliasedImportSchemeUsesTheProviderName(t *testing.T) {
+	config := enabledConfig(t)
+	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
+	settings.Provider = "terragrunt"
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"tg": settings}
+	session, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+	require.NoError(t, err)
+	for _, uri := range []string{"tg://live", "tg://live/."} {
+		handled, err := session.RegisterImport(t.Context(), uri)
+		require.NoError(t, err)
+		require.True(t, handled)
+	}
+	require.Len(t, session.requests, 1)
+	require.Equal(t, "terragrunt", session.requests[0].Provider)
+	require.Equal(t, []string{"terragrunt://live"}, session.requests[0].Imports)
 }
