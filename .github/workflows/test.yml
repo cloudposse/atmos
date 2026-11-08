@@ -1290,6 +1290,9 @@ jobs:
         env:
           CGO_ENABLED: "0"
           GOWORK: "off"
+          # Each package module pins its own Go version; plugins/terragrunt needs a newer
+          # toolchain than the root go.mod this job installs.
+          GOTOOLCHAIN: auto
         run: |
           # Each official package is a separate module with an independent version.
           printf 'mode: set\n' > plugins-coverage.out
