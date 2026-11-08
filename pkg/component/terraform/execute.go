@@ -211,7 +211,8 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 
 	// Executable mode runs the unit through the pinned terragrunt executable instead of native adaptation.
 	if terragruntexec.Owns(&info) {
-		return e.executeTerragruntUnit(component.ContextFromOptions(opts...), &atmosConfig, &info, shouldProcess, opts...)
+		// Test hooks already ran before authentication to bootstrap their fixtures.
+		return e.executeTerragruntUnit(component.ContextFromOptions(opts...), &atmosConfig, &info, terragruntUnitRun{shouldProcess: shouldProcess, runHooks: fixtureState == nil}, opts...)
 	}
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.

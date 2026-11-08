@@ -48,20 +48,38 @@ func (h *terragruntHost) Execute(_ context.Context, command *terragruntexec.Comm
 	return h.executor.services.ExecuteShellCommand(*h.atmosConfig, command.Binary, command.Args, command.WorkingDir, command.Env, command.DryRun, h.info.RedirectStdErr, opts...)
 }
 
+// terragruntUnitRun carries how ExecuteTerraform reached executable mode.
+type terragruntUnitRun struct {
+	// shouldProcess reports whether stacks were processed for the component.
+	shouldProcess bool
+	// runHooks runs the before-hooks that wait for preparation; false when test fixtures already ran them.
+	runHooks bool
+}
+
 // executeTerragruntUnit runs a unit in executable mode: one pinned `terragrunt` command in the unit
 // directory, with the authentication, toolchain, and environment Atmos resolved for the component.
 // Native preparation, generated files, varfiles, and backend files do not apply; Terragrunt owns
 // hooks, error handling, excludes, and IAM roles here.
-func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool, opts ...component.ExecutionOption) error {
+func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, run terragruntUnitRun, opts ...component.ExecutionOption) error {
 	if err := terragruntexec.CheckSupported(info); err != nil {
 		return err
 	}
 	if err := checkComponentRestrictions(info); err != nil {
 		return err
 	}
-	tenv, err := e.prepareConfigurationEnvironment(ctx, atmosConfig, info, shouldProcess)
+	tenv, err := e.prepareConfigurationEnvironment(ctx, atmosConfig, info, run.shouldProcess)
 	if err != nil {
 		return err
+	}
+	// Persist the auth context so PostRunE hooks, such as store hooks that read outputs, use the
+	// identity this unit ran with instead of ambient credentials.
+	SetLastAuthContext(info.AuthContext, info.AuthManager)
+	// Before-hooks that wait for preparation (init, destroy, test) run here, as in native mode, so a
+	// hook that rejects the operation stops Terragrunt from running.
+	if run.runHooks {
+		if err := runPreparedTerraformHooks(atmosConfig, info, opts...); err != nil {
+			return err
+		}
 	}
 	binary := terragruntTool
 	if tenv != nil {

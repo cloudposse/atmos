@@ -556,6 +556,9 @@ func unitHarness(t *testing.T) (*toolchainHarness, *schema.ConfigAndStacksInfo, 
 	return harness, info, pinned
 }
 
+// unitRun is how ExecuteTerraform reaches executable mode for a component without test fixtures.
+var unitRun = terragruntUnitRun{shouldProcess: true, runHooks: true}
+
 // Executable mode runs the pinned terragrunt in the unit directory, with the identity and toolchain Atmos
 // resolved, and never touches native preparation.
 func TestExecuteTerragruntUnitRunsThePinnedExecutableInTheUnit(t *testing.T) {
@@ -569,7 +572,7 @@ func TestExecuteTerragruntUnitRunsThePinnedExecutableInTheUnit(t *testing.T) {
 		"terragrunt": {Enabled: true, Mode: "executable", Options: map[string]any{"features": map[string]any{"beta": "from-config"}}},
 	}
 
-	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, true))
+	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun))
 
 	probes := readToolchainProbes(t, probePath)
 	require.Len(t, probes, 2, "one version probe and one unit command")
@@ -592,7 +595,7 @@ func TestExecuteTerragruntUnitRunsThePinnedExecutableInTheUnit(t *testing.T) {
 func TestExecuteTerragruntUnitPropagatesTheUnitExitCode(t *testing.T) {
 	harness, info, _ := unitHarness(t)
 	info.ComponentEnvSection[testEnvProbeExit] = "3"
-	err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, true)
+	err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun)
 	var exit errUtils.ExitCodeError
 	require.ErrorAs(t, err, &exit)
 	require.Equal(t, 3, exit.Code)
@@ -602,14 +605,14 @@ func TestExecuteTerragruntUnitRejectsWhatItCannotHonorBeforeRunning(t *testing.T
 	harness, info, _ := unitHarness(t)
 	probePath := info.ComponentEnvSection[testEnvToolchainProbe].(string)
 	info.ComponentVarsSection = map[string]any{"region": "us-east-1"}
-	require.ErrorIs(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, true), errUtils.ErrExecutableModeUnsupported)
+	require.ErrorIs(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun), errUtils.ErrExecutableModeUnsupported)
 	require.Empty(t, readToolchainProbes(t, probePath), "nothing ran")
 }
 
 func TestExecuteTerragruntUnitExplainsAMissingExecutable(t *testing.T) {
 	harness, info, _ := unitHarness(t)
 	delete(info.ComponentSection["dependencies"].(map[string]any)["tools"].(map[string]any), "terragrunt")
-	err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, true)
+	err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun)
 	require.ErrorIs(t, err, errUtils.ErrExecutableNotFound)
 }
 
@@ -617,7 +620,7 @@ func TestExecuteTerragruntUnitDryRunRunsNothing(t *testing.T) {
 	harness, info, _ := unitHarness(t)
 	probePath := info.ComponentEnvSection[testEnvToolchainProbe].(string)
 	info.DryRun = true
-	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, true))
+	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun))
 	require.Empty(t, readToolchainProbes(t, probePath))
 }
 
