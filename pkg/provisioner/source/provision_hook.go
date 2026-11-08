@@ -150,7 +150,7 @@ func AutoProvisionSource(
 			return err
 		}
 		// No provisioning needed - touch LastAccessed and return.
-		logProvisionMessage(ctx, writers, out, floatingRefNotice(sourceSpec, component, stack))
+		logProvisionMessage(ctx, writers, out, floatingRefNotice(sourceSpec, componentType, component, stack))
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
 				// Non-critical error - log and continue.
