@@ -176,9 +176,27 @@ func checkSourcesInRoot(ctx context.Context, root string, sources []schema.Compo
 		if !filepath.IsLocal(source.Path) {
 			return errUtils.ErrPluginInvalidConfig
 		}
-		if err := checkSourceTree(ctx, root, filepath.Join(root, filepath.FromSlash(source.Path))); err != nil {
+		top := filepath.Join(root, filepath.FromSlash(source.Path))
+		if err := checkSourcePath(root, top); err != nil {
 			return err
 		}
+		if err := checkSourceTree(ctx, root, top); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkSourcePath rejects a watched path whose own location leaves the project root through a
+// symlinked parent directory, such as `shared/inputs.hcl` when `shared` links outside. A missing
+// path is left for the first read to report.
+func checkSourcePath(root, top string) error {
+	real, err := filepath.EvalSymlinks(top)
+	if err != nil {
+		return nil //nolint:nilerr // A missing or dangling path is not a boundary violation.
+	}
+	if relative, err := filepath.Rel(root, real); err != nil || !filepath.IsLocal(relative) {
+		return sourceOutsideRoot(root, top, real)
 	}
 	return nil
 }

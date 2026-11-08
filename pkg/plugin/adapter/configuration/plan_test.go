@@ -303,3 +303,18 @@ func TestSourceThatLeavesTheProjectIsNamedBeforeAnythingRuns(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(outside, "victim.tf"), filepath.Join(root, "modules", "app", ".terraform", "provider")))
 	require.NoError(t, checkSourcesInRoot(t.Context(), root, sources))
 }
+
+// A watched file reached through a symlinked parent directory that leaves the project is rejected
+// before anything runs, although the file itself is not a symlink.
+func TestWatchedFileUnderASymlinkedParentThatLeavesTheProjectIsRejected(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "inputs.hcl"), []byte("x"), 0o644))
+	if err := os.Symlink(outside, filepath.Join(root, "shared")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	err := checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "shared/inputs.hcl"}})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "shared/inputs.hcl")
+	require.ErrorContains(t, err, "leaves the project root")
+}
