@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
@@ -74,7 +75,8 @@ func checkSourceOverride(info *schema.ConfigAndStacksInfo, instance *pluginv1.Di
 	if want == "" || got == "" || want == got {
 		return nil
 	}
-	return errUtils.Build(fmt.Errorf("%w: the Terraform module of component %q in stack %q is owned by its unit, so `source.uri: %s` cannot replace `%s`", errUtils.ErrConfigurationOverrideUnsupported, info.ComponentFromArg, info.Stack, got, want)).
+	// Either URI can carry credentials, so the error shows only their redacted forms.
+	return errUtils.Build(fmt.Errorf("%w: the Terraform module of component %q in stack %q is owned by its unit, so `source.uri: %s` cannot replace `%s`", errUtils.ErrConfigurationOverrideUnsupported, info.ComponentFromArg, info.Stack, downloader.RedactSource(got), downloader.RedactSource(want))).
 		WithContext("component", info.ComponentFromArg).
 		WithContext("stack", info.Stack).
 		WithHint("Change `terraform { source = ... }` in the unit's `terragrunt.hcl`, or define a regular component with its own `source`").

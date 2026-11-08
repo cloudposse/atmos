@@ -122,9 +122,10 @@ func TestPreparedExecutionRejectsNilEntriesInEveryList(t *testing.T) {
 
 func TestPrepareRejectsAnotherModuleSourceButAllowsOtherSourceSettings(t *testing.T) {
 	for _, test := range []struct {
-		name   string
-		source any
-		want   bool
+		name     string
+		source   any
+		want     bool
+		redacted []string
 	}{
 		{name: "no source in the section"},
 		{name: "same string", source: "./modules/unit"},
@@ -133,6 +134,7 @@ func TestPrepareRejectsAnotherModuleSourceButAllowsOtherSourceSettings(t *testin
 		{name: "another uri", source: map[string]any{"uri": "./modules/other"}, want: true},
 		{name: "another string", source: "./modules/other", want: true},
 		{name: "unsupported shape", source: 42},
+		{name: "credentials in another uri", source: "git::https://user:token-4f2a@example.com/org/modules.git?ref=v1&sshkey=key-9c1e", want: true, redacted: []string{"token-4f2a", "key-9c1e"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			session, provider, info := preparationSession(t)
@@ -141,7 +143,12 @@ func TestPrepareRejectsAnotherModuleSourceButAllowsOtherSourceSettings(t *testin
 				_, err := session.Prepare(t.Context(), info)
 				require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
 				require.ErrorContains(t, err, "./modules/unit")
-				require.ErrorContains(t, err, "./modules/other")
+				for _, secret := range test.redacted {
+					require.NotContains(t, err.Error(), secret)
+				}
+				if test.redacted == nil {
+					require.ErrorContains(t, err, "./modules/other")
+				}
 				return
 			}
 			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil)
