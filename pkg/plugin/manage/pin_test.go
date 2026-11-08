@@ -161,11 +161,37 @@ func TestExplicitAliasMayReplaceAnotherSource(t *testing.T) {
 	require.Equal(t, other, locked.Spec.Packages["example-fixture"].Source)
 }
 
-func TestDefaultAliasUsesProductName(t *testing.T) {
+func TestDefaultAliasFollowsEdition(t *testing.T) {
+	for _, tc := range []struct {
+		pin, want, not string
+	}{
+		{"", "fixture", "example-fixture"},
+		{"2026-10-29", "fixture", "example-fixture"},
+		{"2026-10-28", "example-fixture", "fixture"},
+	} {
+		t.Run("pin="+tc.pin, func(t *testing.T) {
+			manager, source, _ := setup(t)
+			manager.Config.Edition = tc.pin
+			require.NoError(t, manager.Add(t.Context(), manage.AddOptions{Source: source}))
+			locked, err := pluginlock.Load(manager.Project)
+			require.NoError(t, err)
+			require.Contains(t, locked.Spec.Packages, tc.want)
+			require.NotContains(t, locked.Spec.Packages, tc.not)
+		})
+	}
+}
+
+func TestDefaultAliasRejectsInvalidEdition(t *testing.T) {
 	manager, source, _ := setup(t)
-	require.NoError(t, manager.Add(t.Context(), manage.AddOptions{Source: source}))
+	manager.Config.Edition = "not-a-date"
+	require.Error(t, manager.Add(t.Context(), manage.AddOptions{Source: source}))
+}
+
+func TestExplicitAliasIgnoresEdition(t *testing.T) {
+	manager, source, _ := setup(t)
+	manager.Config.Edition = "2026-10-28"
+	require.NoError(t, manager.Add(t.Context(), manage.AddOptions{Alias: "custom", Source: source}))
 	locked, err := pluginlock.Load(manager.Project)
 	require.NoError(t, err)
-	require.Contains(t, locked.Spec.Packages, "fixture")
-	require.NotContains(t, locked.Spec.Packages, "example-fixture")
+	require.Contains(t, locked.Spec.Packages, "custom")
 }

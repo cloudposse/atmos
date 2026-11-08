@@ -150,8 +150,9 @@ use `publisher/package` to identify an integration. For example,
 `cloudposse/terragrunt` identifies Cloud Posse's Atmos integration.
 
 The `plugins.packages.<alias>` key is a project-local name. Use
-[`plugin install --as terragrunt`](/cli/commands/plugin/install) to select the
-product alias explicitly. New declarations default to the product name. Editions
+[`atmos plugin install <source> --as terragrunt`](/cli/commands/plugin/install) to
+select the alias explicitly, where `<source>` is the plugin's OCI repository or a
+configured registry selector. New declarations default to the product name. Editions
 before `2026-10-29` retain the publisher-qualified default, such as
 `cloudposse-terragrunt`. Existing declarations keep their aliases across upgrades.
 A collision with another source requires an explicit alias.

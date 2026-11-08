@@ -3,6 +3,13 @@
 # Quote dates and string values such as "true" and "false".
 # The CLI embeds this file; the website generates its index from the same file.
 - date: "2026-10-29"
+  key: plugins.default_alias
+  kind: behavior
+  old: derive the publisher-qualified alias (publisher-product) when atmos plugin install has no --as
+  new: derive the product-only alias when atmos plugin install has no --as
+  description: New plugin declarations use the short product name as their alias; aliases already recorded in atmos.yaml are unchanged, and --as remains authoritative.
+  ref: https://github.com/cloudposse/atmos/pull/3576
+- date: "2026-10-29"
   key: list.instances.engine_columns
   kind: behavior
   old: show Component and Stack as the default instance columns
