@@ -42,7 +42,12 @@ func readManifest(root *os.Root) map[string]string {
 	if json.Unmarshal(data, &stored) != nil || stored.Files == nil {
 		return map[string]string{}
 	}
-	return stored.Files
+	// Clean recorded paths, so a manifest written before keys were cleaned still matches.
+	files := make(map[string]string, len(stored.Files))
+	for path, digest := range stored.Files {
+		files[filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))] = digest
+	}
+	return files
 }
 
 func writeManifest(root *os.Root, files map[string]string) error {

@@ -173,3 +173,15 @@ func TestCorruptManifestOnlyCostsCleanup(t *testing.T) {
 	require.Equal(t, "a\n", read(t, root, "a.tf"))
 	require.Contains(t, read(t, root, ".atmos/generated-files.json"), "a.tf")
 }
+
+// Equivalent spellings of one path name the same generated file, so switching from ./provider.tf
+// to provider.tf keeps the file instead of removing it as stale.
+func TestEquivalentPathsKeepTheGeneratedFile(t *testing.T) {
+	root := t.TempDir()
+	content := "variable \"provider\" {}\n"
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{generated("./provider.tf", content, "overwrite")}))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{generated("provider.tf", content, "overwrite")}))
+	require.FileExists(t, filepath.Join(root, "provider.tf"))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{generated("./provider.tf", content, "overwrite")}))
+	require.FileExists(t, filepath.Join(root, "provider.tf"))
+}

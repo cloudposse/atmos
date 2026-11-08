@@ -47,7 +47,8 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 	current := make(map[string]string, len(files))
 	names := make([]string, 0, len(files))
 	for _, file := range files {
-		key := filepath.ToSlash(file.Path)
+		// Clean the key, so ./provider.tf and provider.tf name the same recorded file.
+		key := filepath.ToSlash(filepath.Clean(file.Path))
 		names = append(names, key)
 		digest, err := writeFile(root, file, previous[key])
 		if err != nil {
@@ -75,9 +76,17 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded s
 		}
 		return "", err
 	}
+	// Register sensitive bytes even when the file is kept, so a hook that prints it is masked.
+	if file.Sensitive {
+		atmosio.RegisterSecretValue(string(file.Content))
+	}
 	digest := contentDigest(file.Content)
 	existing, exists := fileDigest(root, file.Path)
 	if exists && existing == digest {
+		if file.IfExists == "skip" && recorded != existing {
+			// A file the module already ships stays the module's, so removing the block keeps it.
+			return "", nil
+		}
 		// Already what would be written, so even if_exists = "error" has nothing to protect.
 		return digest, ensureMode(root, file.Path)
 	}
@@ -125,9 +134,6 @@ func ensureMode(root *os.Root, path string) error {
 // replaceFile writes the bytes. Generated files can embed backend credentials, so they are
 // private to the owner, like the backend file Atmos writes itself.
 func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists bool) error {
-	if file.Sensitive {
-		atmosio.RegisterSecretValue(string(file.Content))
-	}
 	if err := root.MkdirAll(filepath.Dir(file.Path), directoryMode); err != nil {
 		return err
 	}
