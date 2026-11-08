@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -438,6 +439,46 @@ func TestSourceExplicitTargetOwnershipHoldsWhenAnotherInstancePublishesFirst(t *
 	assert.Equal(t, "first", metadata.Component)
 }
 
+// TestSourceExplicitTargetOwnershipRecheckedOnInvocationReuse covers the in-invocation reuse path:
+// after a successful provision, another instance claims the explicit target once the initial owner
+// check has passed. The reuse must be rejected instead of reporting the claimed directory as ready.
+func TestSourceExplicitTargetOwnershipRecheckedOnInvocationReuse(t *testing.T) {
+	src := t.TempDir()
+	refreshWrite(t, src, "main.tf", "# module")
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	target := filepath.Join(config.BasePath, "explicit")
+	component := func() map[string]any {
+		return map[string]any{
+			"component": "module", "atmos_component": "first", "atmos_stack": "dev",
+			"source":    map[string]any{"uri": src},
+			"settings":  map[string]any{"working_directory": target},
+			"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		}
+	}
+	ctx := workdir.WithOutputSuppressed(t.Context())
+	restore := BeginInvocation()
+	t.Cleanup(restore)
+	require.NoError(t, AutoProvisionSource(ctx, config, "terraform", component(), nil, provisioner.OutputWriters{}))
+
+	// Prerequisite: without interference the same instance reuses the provisioned target.
+	require.NoError(t, AutoProvisionSource(ctx, config, "terraform", component(), nil, provisioner.OutputWriters{}))
+
+	var claimed bool
+	afterTargetOwnerCheck = func(dir string) {
+		metadata, err := workdir.ReadMetadata(dir)
+		require.NoError(t, err)
+		require.NotNil(t, metadata)
+		metadata.Component = "second"
+		require.NoError(t, workdir.WriteMetadata(dir, metadata))
+		claimed = true
+	}
+	t.Cleanup(func() { afterTargetOwnerCheck = func(string) {} })
+
+	err := AutoProvisionSource(ctx, config, "terraform", component(), nil, provisioner.OutputWriters{})
+	require.True(t, claimed, "the interleaving hook must have run")
+	require.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
+}
+
 func TestSourceReceiptPublicationFailureRollsBackCode(t *testing.T) {
 	source, target := t.TempDir(), t.TempDir()
 	refreshWrite(t, source, "main.tf", "# next")
@@ -550,4 +591,16 @@ func TestSourceRefreshRetainsBackupWhenRollbackFails(t *testing.T) {
 	previous, err := os.ReadFile(filepath.Join(backups[0], "main.tf"))
 	require.NoError(t, err)
 	assert.Equal(t, "# previous", string(previous))
+}
+
+// TestSafeSourceRelativeRejectsVolumeQualifiedNames covers manifest entries joined to the target.
+// On Windows "C:state" addresses the "state" stream of file "C", so it must be rejected there;
+// on Unix a colon is an ordinary filename character and stays accepted.
+func TestSafeSourceRelativeRejectsVolumeQualifiedNames(t *testing.T) {
+	assert.True(t, safeSourceRelative("modules/main.tf"))
+	assert.True(t, safeSourceRelative("plugin..exe"))
+	assert.False(t, safeSourceRelative("../escape"))
+	assert.False(t, safeSourceRelative("/abs"))
+	assert.Equal(t, runtime.GOOS != "windows", safeSourceRelative("C:state"))
+	assert.Equal(t, runtime.GOOS != "windows", safeSourceRelative("dir/NUL"))
 }

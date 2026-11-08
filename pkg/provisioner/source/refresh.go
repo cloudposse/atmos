@@ -249,8 +249,11 @@ func sourceInventory(root string) (sourceFiles, error) {
 	return inventory, err
 }
 
+// The safeSourceRelative check accepts only canonical, slash-separated paths that stay inside the target.
+// Requiring filepath.IsLocal also rejects volume-qualified names such as "C:state" and reserved device names
+// on Windows, where joining them to the target would address an alternate data stream or device.
 func safeSourceRelative(name string) bool {
-	return name != "" && name != "." && !filepath.IsAbs(name) && filepath.ToSlash(filepath.Clean(name)) == name && name != ".." && !strings.HasPrefix(name, "../")
+	return name != "" && name != "." && !filepath.IsAbs(name) && filepath.IsLocal(name) && filepath.ToSlash(filepath.Clean(name)) == name && name != ".." && !strings.HasPrefix(name, "../")
 }
 
 func rejectSourceSymlinkAncestors(target, relative string) error {

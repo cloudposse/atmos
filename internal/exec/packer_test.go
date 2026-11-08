@@ -1038,8 +1038,7 @@ func TestExecutePacker_DryRunAcceptsColdSourceComponent(t *testing.T) {
 		Stack: "dev", ComponentType: "packer", ComponentFromArg: "cold", SubCommand: "validate",
 		ProcessTemplates: true, ProcessFunctions: true, DryRun: true,
 	}
-	err := ExecutePacker(&info, &PackerFlags{})
-	assert.NotErrorIs(t, err, errUtils.ErrInvalidComponent)
+	require.NoError(t, ExecutePacker(&info, &PackerFlags{}))
 }
 
 // Without --dry-run the same component is provisioned (and the download fails here), proving the

@@ -123,6 +123,11 @@ func AutoProvisionSource(
 	}
 	reused, finish := beginProvision(key, targetDir)
 	if reused {
+		// beginProvision may have waited for an in-process peer; another process can claim an
+		// explicit target in that window, so confirm ownership before reusing the directory.
+		if err := validateTargetOwner(target, stack); err != nil {
+			return err
+		}
 		if isWorkdir {
 			setProvisionedWorkdir(componentConfig, targetDir)
 		}
