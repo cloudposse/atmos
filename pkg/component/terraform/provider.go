@@ -160,8 +160,44 @@ var _ Runtime = (*Executor)(nil)
 // Execute preserves caller options while making the provider request's context authoritative.
 func (e *Executor) Execute(ctx *component.ExecutionContext) error {
 	defer perf.Track(nil, "terraform.Executor.Execute")()
+	info, err := reconcileExecutionRequest(ctx)
+	if err != nil {
+		return err
+	}
 	opts := append(slices.Clone(ctx.Options), component.WithProcessContext(ctx.GoContext()))
-	return e.execute(ctx.ConfigAndStacksInfo, opts...)
+	return e.execute(info, opts...)
+}
+
+// reconcileExecutionRequest folds the provider request's top-level metadata into the
+// execution info, so a caller can name the component, stack, and subcommand once on the
+// request. A field set in both places must agree; a mismatch is rejected rather than
+// silently preferring either side.
+func reconcileExecutionRequest(ctx *component.ExecutionContext) (schema.ConfigAndStacksInfo, error) {
+	info := ctx.ConfigAndStacksInfo
+	fields := []struct {
+		name    string
+		request string
+		target  *string
+	}{
+		{"component", ctx.Component, &info.ComponentFromArg},
+		{"stack", ctx.Stack, &info.Stack},
+		{"command", ctx.Command, &info.Command},
+		{"subcommand", ctx.SubCommand, &info.SubCommand},
+	}
+	for _, field := range fields {
+		switch {
+		case field.request == "":
+		case *field.target == "":
+			*field.target = field.request
+		case *field.target != field.request:
+			return info, fmt.Errorf("%w: request %s %q conflicts with execution info %s %q",
+				errUtils.ErrComponentConfigInvalid, field.name, field.request, field.name, *field.target)
+		}
+	}
+	if info.AdditionalArgsAndFlags == nil && len(ctx.Args) > 0 {
+		info.AdditionalArgsAndFlags = slices.Clone(ctx.Args)
+	}
+	return info, nil
 }
 
 // GenerateArtifacts writes configuration in the prepared component working directory.

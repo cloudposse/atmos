@@ -87,6 +87,48 @@ func TestProviderRejectsIncompleteRequests(t *testing.T) {
 	require.ErrorIs(t, p.GenerateArtifacts(&component.ExecutionContext{AtmosConfig: &schema.AtmosConfiguration{}}), errUtils.ErrComponentConfigInvalid)
 }
 
+func TestReconcileExecutionRequestFillsInfoFromRequest(t *testing.T) {
+	info, err := reconcileExecutionRequest(&component.ExecutionContext{
+		Component: "app", Stack: "dev", Command: "tofu", SubCommand: "plan", Args: []string{"-lock=false"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "app", info.ComponentFromArg)
+	assert.Equal(t, "dev", info.Stack)
+	assert.Equal(t, "tofu", info.Command)
+	assert.Equal(t, "plan", info.SubCommand)
+	assert.Equal(t, []string{"-lock=false"}, info.AdditionalArgsAndFlags)
+}
+
+func TestReconcileExecutionRequestKeepsMatchingInfo(t *testing.T) {
+	request := &component.ExecutionContext{
+		Component: "app", Stack: "dev", SubCommand: "plan", Args: []string{"-input=false"},
+		ConfigAndStacksInfo: schema.ConfigAndStacksInfo{
+			ComponentFromArg: "app", Stack: "dev", SubCommand: "plan", Command: "terraform",
+			AdditionalArgsAndFlags: []string{"-refresh=false"},
+		},
+	}
+	info, err := reconcileExecutionRequest(request)
+	require.NoError(t, err)
+	assert.Equal(t, "terraform", info.Command)
+	assert.Equal(t, []string{"-refresh=false"}, info.AdditionalArgsAndFlags)
+	// The caller's request is not mutated.
+	assert.Empty(t, request.Command)
+}
+
+func TestReconcileExecutionRequestRejectsConflicts(t *testing.T) {
+	for name, request := range map[string]*component.ExecutionContext{
+		"component":  {Component: "app", ConfigAndStacksInfo: schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}},
+		"stack":      {Stack: "dev", ConfigAndStacksInfo: schema.ConfigAndStacksInfo{Stack: "prod"}},
+		"subcommand": {SubCommand: "plan", ConfigAndStacksInfo: schema.ConfigAndStacksInfo{SubCommand: "apply"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := reconcileExecutionRequest(request)
+			require.ErrorIs(t, err, errUtils.ErrComponentConfigInvalid)
+			assert.Contains(t, err.Error(), name)
+		})
+	}
+}
+
 func TestOperationsKeepInjectedHostsIndependent(t *testing.T) {
 	t.Parallel()
 
