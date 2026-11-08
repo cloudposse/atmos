@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 )
 
@@ -58,4 +59,33 @@ func TestErrorSeverityDiagnosticFailsAndWarningDoesNot(t *testing.T) {
 
 func TestMissingDetailFallsBackToSentinel(t *testing.T) {
 	require.ErrorIs(t, DetailError(nil, 0), errUtils.ErrPluginAPI)
+}
+
+// A legacy diagnostic keeps its message as unsafe detail: never shown, but pointed at by the debug hint.
+func TestLegacyDiagnosticKeepsItsMessageForDebugLogging(t *testing.T) {
+	err := DiagnosticError(&pluginv1.Diagnostic{Field: "region", Message: "region ghp_LEGACY is invalid"})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	rendered := err.Error() + strings.Join(errUtils.AllDetails(err), "\n")
+	assert.NotContains(t, rendered, "ghp_LEGACY")
+	hints := errUtils.AllHints(err)
+	require.NotEmpty(t, hints)
+	assert.Contains(t, hints[len(hints)-1], "ATMOS_LOGS_LEVEL=Debug")
+	var failure *Failure
+	require.ErrorAs(t, err, &failure)
+	assert.Equal(t, "region ghp_LEGACY is invalid", failure.Detail.Detail)
+	assert.False(t, failure.Detail.UserSafe)
+}
+
+// The attached location is masked before annotation escaping can hide a mask literal from the
+// final masker.
+func TestDiagnosticLocationIsMaskedBeforeItIsAttached(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+	atmosio.RegisterSecret("tok,en-7d3a")
+	err := DetailError(&pluginv1.ErrorDetail{Code: "bad", Summary: "Bad", Location: &pluginv1.SourceLocation{File: "live/tok,en-7d3a/terragrunt.hcl", Line: 3}}, 0)
+	location, found := errUtils.GetLocation(err)
+	require.True(t, found)
+	assert.NotContains(t, location.File, "tok,en-7d3a")
+	assert.Equal(t, 3, location.Line)
 }

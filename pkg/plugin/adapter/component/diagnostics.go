@@ -91,17 +91,27 @@ func DetailError(detail *pluginv1.ErrorDetail, class codes.Code) error {
 	for _, hint := range detail.Hints {
 		builder.WithHint(mask(hint))
 	}
-	if !detail.UserSafe && detail.Detail != "" {
-		log.Debug("Plugin diagnostic", "code", detail.Code, "unit", detail.Unit, "stack", detail.Stack, "operation", detail.Operation, "detail", mask(detail.Detail))
+	if logUnsafeDetail(detail) {
 		builder.WithHint(debugHint)
 	}
 	if location := detail.GetLocation(); location.GetFile() != "" {
-		builder.WithLocation(location.File, int(location.Line))
+		// Mask before attaching: annotation escaping can hide a mask literal from the final masker.
+		builder.WithLocation(mask(location.File), int(location.Line))
 	}
 	return builder.WithContext("plugin_error_code", detail.Code).Err()
 }
 
 func mask(text string) string { return atmosio.MaskString(text) }
+
+// logUnsafeDetail logs a detail the plugin did not mark safe at Debug level, masked, and reports
+// whether it did, so the caller can point at the debug log.
+func logUnsafeDetail(detail *pluginv1.ErrorDetail) bool {
+	if detail.UserSafe || detail.Detail == "" {
+		return false
+	}
+	log.Debug("Plugin diagnostic", "code", detail.Code, "unit", detail.Unit, "stack", detail.Stack, "operation", detail.Operation, "detail", mask(detail.Detail))
+	return true
+}
 
 // describeWhere states where the problem is, using only the always-safe fields.
 func describeWhere(detail *pluginv1.ErrorDetail) string {
@@ -142,8 +152,9 @@ func DiagnosticError(diagnostic *pluginv1.Diagnostic) error {
 
 	detail := diagnostic.GetDetail()
 	if detail == nil {
-		// The legacy form carries a field and a message the plugin may not have vetted.
-		detail = &pluginv1.ErrorDetail{Code: "invalid_configuration", Summary: "Plugin rejected the configuration", ConfigKey: diagnostic.GetField()}
+		// The legacy form carries a field and a message the plugin may not have vetted, so the
+		// message is kept as unsafe detail: logged masked at Debug level, never shown.
+		detail = &pluginv1.ErrorDetail{Code: "invalid_configuration", Summary: "Plugin rejected the configuration", ConfigKey: diagnostic.GetField(), Detail: diagnostic.GetMessage()}
 	}
 	if detail.Severity == pluginv1.Severity_SEVERITY_WARNING {
 		return nil
@@ -185,5 +196,8 @@ func WarnDiagnostic(diagnostic *pluginv1.Diagnostic) {
 	ui.Warning(mask(text))
 	for _, hint := range detail.Hints {
 		ui.Hint(mask(hint))
+	}
+	if logUnsafeDetail(detail) {
+		ui.Hint(debugHint)
 	}
 }
