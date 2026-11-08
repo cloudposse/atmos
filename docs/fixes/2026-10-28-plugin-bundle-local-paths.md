@@ -12,7 +12,7 @@ CodeQL reported archive entry names flowing through the bundle inventory to file
 
 ## Changes
 
-Add an explicit local-path guard at the archive reader boundary. Keep the stricter canonical-path, hidden-file, entry-type, and credential-material checks. Preserve legal filenames containing consecutive dots. The bundle guard test is a build input of `auth-secrets`; it ships with the package's 1.1.0 version bump, which satisfies the plugin release gate.
+Add an explicit local-path guard at the archive reader boundary. Keep the stricter canonical-path, hidden-file, entry-type, and credential-material checks. Preserve legal filenames containing consecutive dots. The bundle guard test is a build input of `auth-secrets`; it ships with the package's 1.1.1 version bump, which satisfies the plugin release gate.
 
 ## Validation
 
