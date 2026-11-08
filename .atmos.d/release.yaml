@@ -59,9 +59,10 @@ commands:
                       "RELEASE_CONFIRMED": "true",
                       "RELEASE_APPROVED_PLAN": plan_json,
                   })
-                  steps.shell(
-                      command = "go tool mage release:cut cloudposse/atmos",
-                      interactive = True,
+                  # exec.run passes env values verbatim. steps.shell would render them as Go
+                  # templates, and the plan's release notes quote literal template syntax.
+                  exec.run(
+                      ["go", "tool", "mage", "release:cut", "cloudposse/atmos"],
                       env = release_env,
                   )
 
