@@ -407,6 +407,26 @@ func TestPrepareAsksForTheAtmosLogLevelAndRendersEngineLogsScoped(t *testing.T) 
 	require.NotContains(t, output.String(), "very detailed", "the Atmos level still decides what is visible")
 }
 
+// A debug event can quote a sensitive input, for example the output of sensitive(run_cmd(...)). The input
+// is registered for masking before the events of the same response are rendered.
+func TestPrepareMasksSensitiveInputsInTheLogsOfTheSameResponse(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	inputs, err := adapter.EncodeObject(map[string]any{"token": "prep-log-secret-9f3c"})
+	require.NoError(t, err)
+	inputs.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{
+		Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{BackendType: "local"},
+		Logs: []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "run_cmd output: prep-log-secret-9f3c", Fields: map[string]string{"stdout": "prep-log-secret-9f3c"}}},
+	}, nil)
+	output := captureAtmosLogs(t, charm.DebugLevel)
+
+	_, err = session.Prepare(t.Context(), info)
+
+	require.NoError(t, err)
+	require.Contains(t, output.String(), "run_cmd output")
+	require.NotContains(t, output.String(), "prep-log-secret-9f3c")
+}
+
 func TestPrepareNamesAnUnknownInput(t *testing.T) {
 	session, provider, info := preparationSession(t)
 	inputs := &pluginv1.ComponentValue{TypeJson: []byte(`["object",{"zone":"string"}]`), Msgpack: []byte{0x81, 0xa4, 'z', 'o', 'n', 'e', 0xd4, 0x00, 0x00}}

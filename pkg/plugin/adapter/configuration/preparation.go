@@ -74,6 +74,9 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 	if err != nil {
 		return nil, err
 	}
+	// The log events of the same response can quote a sensitive input, for example the output of
+	// sensitive(run_cmd(...)) at debug level, so the inputs are registered for masking first.
+	adapter.RegisterSensitiveValues(result.GetInputs())
 	adapter.RenderLogs(logScope(selected.request, info), result.GetLogs())
 	// An error diagnostic fails the preparation; warnings are printed below.
 	for _, diagnostic := range result.Diagnostics {

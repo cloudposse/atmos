@@ -176,6 +176,24 @@ func TestRenderLogsShowsAWarningOncePerComponentAndStack(t *testing.T) {
 	assert.Equal(t, 3, strings.Count(output.String(), "evaluating again"), "debug events are not deduplicated")
 }
 
+func TestRenderLogsKeepsWarningsThatDifferInTheirFields(t *testing.T) {
+	output := captureLogs(t, charm.DebugLevel)
+	scope := LogScope{Provider: "terragrunt", Component: "app", Stack: "dev"}
+	for range 2 {
+		RenderLogs(scope, []*pluginv1.LogEntry{
+			logEntry(pluginv1.LogLevel_LOG_LEVEL_WARN, "dependency has no outputs", map[string]string{"dependency": "network"}),
+			logEntry(pluginv1.LogLevel_LOG_LEVEL_WARN, "dependency has no outputs", map[string]string{"dependency": "database"}),
+		})
+	}
+	RenderLogs(LogScope{Provider: "other", Component: "app", Stack: "dev"}, []*pluginv1.LogEntry{
+		logEntry(pluginv1.LogLevel_LOG_LEVEL_WARN, "dependency has no outputs", map[string]string{"dependency": "network"}),
+	})
+
+	assert.Equal(t, 3, strings.Count(output.String(), "dependency has no outputs"), "each dependency once, and once more for another provider")
+	assert.Contains(t, output.String(), "dependency=network")
+	assert.Contains(t, output.String(), "dependency=database")
+}
+
 func TestWarnDiagnosticShowsTheSameWarningOncePerInvocation(t *testing.T) {
 	captureLogs(t, charm.WarnLevel)
 	warning := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "remote_state_encryption_not_generated", Summary: "Encryption is not generated", Unit: "app", Stack: "dev", UserSafe: true, Severity: pluginv1.Severity_SEVERITY_WARNING}}

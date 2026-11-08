@@ -81,10 +81,13 @@ func RenderLogs(scope LogScope, entries []*pluginv1.LogEntry) {
 			continue
 		}
 		message := atmosio.MaskString(entry.GetMessage())
-		if level >= charm.WarnLevel && !firstTime("log", scope.Component, scope.Stack, entry.GetLevel().String(), entry.GetUnit(), message) {
+		fields := logFields(scope, entry)
+		// The key covers the provider and the fields, so warnings that share a message but name a
+		// different dependency or file are each shown; only an identical repeat is suppressed.
+		if level >= charm.WarnLevel && !firstTime(append([]string{"log", entry.GetLevel().String(), message}, fieldStrings(fields)...)...) {
 			continue
 		}
-		log.Log(level, message, logFields(scope, entry)...)
+		log.Log(level, message, fields...)
 	}
 }
 
@@ -102,6 +105,16 @@ func logLevel(level pluginv1.LogLevel) (charm.Level, bool) {
 		return charm.ErrorLevel, true
 	}
 	return 0, false
+}
+
+// fieldStrings renders logger key/value pairs as strings for a deduplication key.
+func fieldStrings(fields []any) []string {
+	parts := make([]string, 0, len(fields))
+	for _, field := range fields {
+		value, _ := field.(string)
+		parts = append(parts, value)
+	}
+	return parts
 }
 
 // logFields lists the scope first, then the event's own fields in key order, all masked.
