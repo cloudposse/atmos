@@ -22,7 +22,9 @@ func instanceEngine(config *schema.AtmosConfiguration, kind string, component ma
 	if command == "" {
 		command = config.Components.Terraform.Command
 	}
-	if strings.TrimSuffix(filepath.Base(command), ".exe") == "tofu" {
+	// Match execution's executable-name detection (pkg/component/terraform/detection.go),
+	// which treats any basename containing "tofu", case-insensitively, as OpenTofu.
+	if strings.Contains(strings.ToLower(filepath.Base(command)), "tofu") {
 		return "opentofu"
 	}
 	return "terraform"

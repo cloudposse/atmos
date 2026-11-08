@@ -23,6 +23,8 @@ func TestInstanceEngineSelection(t *testing.T) {
 	}{
 		{"configured tofu", "terraform", nil, "opentofu"},
 		{"unit terraform overrides default", "terraform", map[string]any{"command": "terraform"}, "terraform"},
+		{"versioned tofu binary", "terraform", map[string]any{"command": "tofu-1.8"}, "opentofu"},
+		{"mixed-case OpenTofu binary", "terraform", map[string]any{"command": "OpenTofu.EXE"}, "opentofu"},
 		{"absolute Windows binary", "terraform", map[string]any{"command": filepath.Join(t.TempDir(), "tofu.exe")}, "opentofu"},
 		{"native HCL remains tofu", "terraform", map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt", "engine": "opentofu"}}}, "opentofu"},
 		{"external engine metadata", "terraform", map[string]any{"settings": map[string]any{"configuration": map[string]any{"engine": "terragrunt"}}}, "terragrunt"},
