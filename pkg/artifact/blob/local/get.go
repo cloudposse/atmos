@@ -37,7 +37,7 @@ func (s *Store) Get(ctx context.Context, key string, opts blob.GetOptions) (*blo
 		return nil, err
 	}
 	target := s.path(key)
-	file, err := os.Open(target)
+	file, err := openFile(target)
 	if err != nil {
 		return nil, wrapIO(blob.OpGet, key, err)
 	}
@@ -83,7 +83,7 @@ func (s *Store) Stat(ctx context.Context, key string, opts blob.StatOptions) (*b
 		return nil, err
 	}
 	target := s.path(key)
-	file, err := os.Open(target)
+	file, err := openFile(target)
 	if err != nil {
 		return nil, wrapIO(blob.OpStat, key, err)
 	}

@@ -21,7 +21,7 @@ func etagOf(path string, info os.FileInfo) (string, error) {
 	if info.Size() > contentETagLimit {
 		return weakETag(info), nil
 	}
-	file, err := os.Open(path)
+	file, err := openFile(path)
 	if err != nil {
 		return "", err
 	}
