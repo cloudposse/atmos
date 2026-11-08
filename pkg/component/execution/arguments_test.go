@@ -182,3 +182,29 @@ func TestApplyExtraArgumentsSavedPlanDropsVariableValuesGivenAsSeparateArguments
 	require.NoError(t, err)
 	require.Equal(t, []string{"apply", "-parallelism=1", "-lock=false", "plan.tfplan"}, result.Args)
 }
+
+func TestApplyExtraArgumentsSavedPlanDropsDoubleDashVariableArguments(t *testing.T) {
+	item := extra("apply")
+	item.Arguments = []string{"--var-file=x.tfvars", "--var", "name=value", "--var-file", "y.tfvars", "-variable-like=keep", "--lock=false"}
+	args := []string{"apply", "plan.tfplan"}
+
+	result, err := ApplyExtraArguments([]schema.ComponentExtraArguments{item}, &ArgumentsRequest{Command: "apply", Args: args, InsertAt: 1, PlanFileArgument: true})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"apply", "-variable-like=keep", "--lock=false", "plan.tfplan"}, result.Args)
+}
+
+func TestCheckRequiredVarFilesMatchesOnlyTheCommand(t *testing.T) {
+	dir := t.TempDir()
+	plan := extra("plan")
+	plan.RequiredVarFiles = []string{"required.tfvars"}
+	items := []schema.ComponentExtraArguments{plan}
+
+	err := CheckRequiredVarFiles(items, "plan", dir)
+	require.ErrorIs(t, err, errUtils.ErrComponentVarFileMissing)
+	require.ErrorContains(t, err, "required.tfvars")
+	require.NoError(t, CheckRequiredVarFiles(items, "apply", dir))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "required.tfvars"), nil, 0o600))
+	require.NoError(t, CheckRequiredVarFiles(items, "plan", dir))
+}

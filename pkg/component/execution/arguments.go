@@ -13,10 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const (
-	varFileFlag   = "-var-file="
-	varFlagPrefix = "-var"
-)
+const varFileFlag = "-var-file="
 
 // ArgumentsRequest describes one Terraform invocation for ApplyExtraArguments.
 type ArgumentsRequest struct {
@@ -64,6 +61,23 @@ func ApplyExtraArguments(items []schema.ComponentExtraArguments, request *Argume
 	return ArgumentsResult{Args: args, Environment: sortedEnvironment(environment)}, nil
 }
 
+// CheckRequiredVarFiles verifies the required variable files of every block that lists the
+// command, without building any arguments. It lets a caller reject a missing file before
+// implicit init or workspace subprocesses, and their hooks, run for that command.
+func CheckRequiredVarFiles(items []schema.ComponentExtraArguments, command, workingDirectory string) error {
+	defer perf.Track(nil, "execution.CheckRequiredVarFiles")()
+
+	for i := range items {
+		if !slices.Contains(items[i].Commands, command) {
+			continue
+		}
+		if _, err := requiredVarFiles(items[i].RequiredVarFiles, workingDirectory); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func blockArguments(item *schema.ComponentExtraArguments, request *ArgumentsRequest) ([]string, error) {
 	arguments := slices.Clone(item.Arguments)
 	if request.PlanFileArgument {
@@ -84,21 +98,41 @@ func blockArguments(item *schema.ComponentExtraArguments, request *ArgumentsRequ
 	return arguments, nil
 }
 
-// dropVariableArguments removes -var and -var-file options. A bare option takes the next
+// dropVariableArguments removes -var and -var-file options in either dash form (Terraform's
+// flag parser accepts "--var-file" as well as "-var-file"). A bare option takes the next
 // argument as its value ("-var", "name=value"), so that value goes with it; otherwise it
 // would be left behind as an unexpected positional argument.
 func dropVariableArguments(arguments []string) []string {
 	var kept []string
 	for i := 0; i < len(arguments); i++ {
-		if !strings.HasPrefix(arguments[i], varFlagPrefix) {
+		name, hasValue := variableOption(arguments[i])
+		if name == "" {
 			kept = append(kept, arguments[i])
 			continue
 		}
-		if !strings.Contains(arguments[i], "=") {
+		if !hasValue {
 			i++
 		}
 	}
 	return kept
+}
+
+// variableOption reports whether argument is a -var or -var-file option, returning its name
+// and whether the value is attached with "=". Other options, such as -variable-foo, are not
+// variable options.
+func variableOption(argument string) (name string, hasValue bool) {
+	option, found := strings.CutPrefix(argument, "--")
+	if !found {
+		option, found = strings.CutPrefix(argument, "-")
+	}
+	if !found {
+		return "", false
+	}
+	option, _, hasValue = strings.Cut(option, "=")
+	if option != "var" && option != "var-file" {
+		return "", false
+	}
+	return option, hasValue
 }
 
 func requiredVarFiles(files []string, directory string) ([]string, error) {

@@ -459,3 +459,29 @@ func TestSavedPlanBindingKeepsExecution(t *testing.T) {
 	require.NoError(t, decoder.Decode(&decoded))
 	require.Equal(t, plan.Prepared.Execution, decoded.Prepared.Execution)
 }
+
+func TestImplicitInitMissingRequiredVarFileFailsBeforeAnyProcess(t *testing.T) {
+	shell := &fakeShell{}
+	info := hookInfo("plan", &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, RequiredVarFiles: []string{"missing.tfvars"}}},
+		BeforeHooks:    []schema.ComponentHook{execHook("init-hook", "init"), execHook("plan-hook", "plan")},
+	})
+	dir := t.TempDir()
+	_, err := hookExecutor(shell).executeTerraformInitPhase(&schema.AtmosConfiguration{}, info, dir, "")
+	require.ErrorIs(t, err, errUtils.ErrComponentVarFileMissing)
+	require.ErrorContains(t, err, "missing.tfvars")
+	require.Empty(t, shell.calls, "neither init nor its hooks may run")
+}
+
+func TestPreflightRequiredVarFiles(t *testing.T) {
+	missing := &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"apply", "plan"}, RequiredVarFiles: []string{"missing.tfvars"}}}}
+	dir := t.TempDir()
+	require.ErrorIs(t, preflightRequiredVarFiles(hookInfo("plan", missing), dir), errUtils.ErrComponentVarFileMissing)
+	require.NoError(t, preflightRequiredVarFiles(hookInfo("destroy", missing), dir), "only blocks listing the command apply")
+	require.NoError(t, preflightRequiredVarFiles(hookInfo("plan", nil), dir), "no provider execution")
+	savedPlan := hookInfo("apply", missing)
+	savedPlan.UseTerraformPlan = true
+	require.NoError(t, preflightRequiredVarFiles(savedPlan, dir), "saved plans never take variable files")
+	workspace := hookInfo("workspace", missing)
+	require.NoError(t, preflightRequiredVarFiles(workspace, dir), "workspace management runs no main command")
+}

@@ -226,6 +226,11 @@ func (e *Executor) executeTerraformInitPhase(atmosConfig *schema.AtmosConfigurat
 	if err != nil {
 		return componentPath, err
 	}
+	// Check the requested command's required variable files in the provisioned directory
+	// before implicit init and its hooks run, so a fresh unit fails without side effects.
+	if err = preflightRequiredVarFiles(info, newPath); err != nil {
+		return newPath, err
+	}
 
 	if err = e.executeTerraformInitCommand(atmosConfig, info, newPath, varFile, opts...); err != nil {
 		return newPath, err

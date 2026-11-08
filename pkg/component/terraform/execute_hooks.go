@@ -75,6 +75,21 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 	})
 }
 
+// preflightRequiredVarFiles checks the requested command's required variable files in the
+// provisioned module directory. A saved-plan apply is exempt: Terraform rejects variable
+// options beside a plan file, so runExecutionPhase never adds them.
+func preflightRequiredVarFiles(info *schema.ConfigAndStacksInfo, componentPath string) error {
+	config := info.ComponentExecution
+	if config.IsEmpty() || !shouldRunMainTerraformCommand(info) {
+		return nil
+	}
+	if info.SubCommand == subcommandApply && info.UseTerraformPlan {
+		return nil
+	}
+	command := execution.CommandName(info.SubCommand, info.AdditionalArgsAndFlags)
+	return execution.CheckRequiredVarFiles(config.ExtraArguments, command, componentPath)
+}
+
 // phaseAction runs the wrapped Terraform subprocess with the phase's arguments, environment, and options.
 type phaseAction func(info *schema.ConfigAndStacksInfo, args []string, opts []component.ExecutionOption) error
 

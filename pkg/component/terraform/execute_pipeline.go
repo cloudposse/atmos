@@ -217,6 +217,11 @@ func (e *Executor) executeCommandPipeline(
 		return err
 	}
 
+	// A missing required variable file must fail before workspace selection runs a subprocess.
+	if err = preflightRequiredVarFiles(info, componentPath); err != nil {
+		return err
+	}
+
 	if err = e.runWorkspaceSetupPhase(atmosConfig, info, componentPath, opts...); err != nil {
 		return errUtils.AsPrerequisiteError(err)
 	}
