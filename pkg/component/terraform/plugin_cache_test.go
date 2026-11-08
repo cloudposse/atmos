@@ -234,6 +234,19 @@ func TestDisableTerraformPluginCacheForExecutionFiltersProcessEnvWhenUnsanitized
 	assert.True(t, envListContainsKey(info.SanitizedEnv, "ATMOS_TEST_KEEP_ENV"))
 }
 
+func TestDisableTerraformPluginCacheForExecutionKeepsCallerEnvSlice(t *testing.T) {
+	// A provider caller may reuse one SanitizedEnv across executions; filtering must not
+	// rewrite the caller's backing array.
+	shared := []string{terraformPluginCacheDirEnv + "=/shared/cache", "KEEP_SHARED=1"}
+	original := append([]string(nil), shared...)
+	info := &schema.ConfigAndStacksInfo{DisablePluginCache: true, SanitizedEnv: shared}
+
+	disableTerraformPluginCacheForExecution(&schema.AtmosConfiguration{Env: map[string]string{}}, info)
+
+	assert.Equal(t, original, shared)
+	assert.Equal(t, []string{"KEEP_SHARED=1"}, info.SanitizedEnv)
+}
+
 func TestDisableTerraformPluginCacheForExecutionNoopWithoutFlag(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Components: schema.Components{

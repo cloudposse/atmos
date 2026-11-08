@@ -11,6 +11,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/component"
@@ -164,6 +165,19 @@ func TestCheckTTYRequirement_NilStdin_NonApply_NoError(t *testing.T) {
 		err := checkTTYRequirement(&info)
 		assert.NoError(t, err, "subcommand %q should not require TTY", sub)
 	}
+}
+
+// TestCheckTTYRequirement_NilStdin_ProcessStreamStdin_NoError verifies that an interactive
+// stream supplied through WithProcessStreams satisfies apply even when os.Stdin is nil.
+func TestCheckTTYRequirement_NilStdin_ProcessStreamStdin_NoError(t *testing.T) {
+	origStdin := os.Stdin
+	os.Stdin = nil
+	t.Cleanup(func() { os.Stdin = origStdin })
+
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply"}
+	require.NoError(t, checkTTYRequirement(&info, component.WithProcessStreams(process.Streams{Stdin: strings.NewReader("yes\n")})))
+	// Streams without stdin fall back to os.Stdin, which is still nil here.
+	require.ErrorIs(t, checkTTYRequirement(&info, component.WithProcessStreams(process.Streams{})), errUtils.ErrNoTty)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

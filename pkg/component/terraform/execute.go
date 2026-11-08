@@ -106,7 +106,7 @@ func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *sc
 // execute runs the Terraform component lifecycle behind the registered provider.
 // Optional ShellCommandOption values are forwarded to the final ExecuteShellCommand call.
 //
-//nolint:revive,cyclop,funlen,gocritic,gocognit // Existing pipeline complexity; reporting adds only a deferred snapshot.
+//nolint:revive,cyclop,funlen,gocritic // Existing pipeline complexity; reporting adds only a deferred snapshot.
 func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.ExecutionOption) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 	defer e.services.AttachComponentReporting(&resultErr, &info, "terraform", info.SubCommand)
@@ -147,7 +147,7 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 
 	// Short-circuit for `terraform version` – no stack processing required.
 	if info.SubCommand == "version" {
-		return e.handleVersionSubcommand(&atmosConfig, &info)
+		return e.handleVersionSubcommand(&atmosConfig, &info, opts...)
 	}
 
 	// Test fixtures may start the emulator that authentication needs. Provision
@@ -202,23 +202,17 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 		defer closeCache()
 	}
 
+	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
+	// pipeline (init, workspace, plan/apply) completes. Registered before preparation,
+	// which creates the file, so it is also removed when a later preparation step fails.
+	defer cleanupTerraformRC(&info)
+
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := e.prepareComponentExecution(component.ContextFromOptions(opts...), executionOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
 	}
 	execCtx.planPolicy = planPolicy
-
-	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
-	// pipeline (init, workspace, plan/apply) completes. Registered here, not inside the
-	// pipeline, so the file survives every subprocess and is cleaned up on early errors.
-	if info.RCCleanup != nil {
-		defer func() {
-			if cleanupErr := info.RCCleanup(); cleanupErr != nil {
-				log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
-			}
-		}()
-	}
 
 	// Persist auth context so PostRunE hooks (e.g. store hooks that read
 	// terraform outputs) can reuse the credentials established during this
@@ -236,12 +230,11 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, component.WithEnvironment(info.SanitizedEnv))
 	err = e.executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
-	if err == nil {
-		// A successful Terraform command can create, change, or remove state. Drop
-		// any preflight snapshot so a dependent graph node reads the current outputs.
-		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
-		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
-	}
+	// A Terraform command can create, change, or remove state, and a failed apply can
+	// still persist partial changes. Drop any preflight snapshot either way so a later
+	// graph node (including one in a keep-going run) reads the current outputs.
+	invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
+	tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
 
 	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
 		Cmd:    component.InvokingCommandFromOptions(opts...),
@@ -421,7 +414,9 @@ func removeEnvKeys(env []string, keys ...string) []string {
 		skip[key] = struct{}{}
 	}
 
-	filtered := env[:0]
+	// Allocate: callers may share the input slice (e.g. a reused SanitizedEnv),
+	// and filtering in place would corrupt it for later or concurrent executions.
+	filtered := make([]string, 0, len(env))
 	for _, entry := range env {
 		key := envKey(entry)
 		if _, ok := skip[key]; ok {

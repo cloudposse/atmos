@@ -154,6 +154,17 @@ func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	return nil
 }
 
+// cleanupTerraformRC removes the temporary Terraform CLI config, if one was generated.
+// It reads info.RCCleanup when it runs, so callers can defer it before preparation.
+func cleanupTerraformRC(info *schema.ConfigAndStacksInfo) {
+	if info == nil || info.RCCleanup == nil {
+		return
+	}
+	if cleanupErr := info.RCCleanup(); cleanupErr != nil {
+		log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
+	}
+}
+
 // mergeCacheContribution merges the registry cache's CLI-config directives into
 // rcMap. The cache owns provider_installation (it must be the single network-mirror
 // egress); host overrides are merged per-host so user-declared hosts are preserved.
@@ -246,7 +257,7 @@ func resolveTerraformCommand(atmosConfig *schema.AtmosConfiguration, info *schem
 // handleVersionSubcommand executes the `terraform version` command and returns the result.
 // It resolves the toolchain binary and delegates directly to the shell, bypassing
 // full stack processing.
-func (e *Executor) handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+func (e *Executor) handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, baseOpts ...component.ExecutionOption) error {
 	tenv, err := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
 	if err != nil {
 		return err
@@ -262,7 +273,7 @@ func (e *Executor) handleVersionSubcommand(atmosConfig *schema.AtmosConfiguratio
 			info.RedirectStdErr,
 			opts...,
 		)
-	})
+	}, baseOpts...)
 }
 
 func (e *Executor) setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {

@@ -509,6 +509,56 @@ func TestResolveAndProvisionComponentPathPropagatesOutputSuppression(t *testing.
 	require.True(t, observedSuppression.Load())
 }
 
+// TestResolveAndProvisionComponentPath_RechecksPathAfterAutoGeneration verifies that a
+// missing component directory created by auto-generation is accepted on the same run.
+func TestResolveAndProvisionComponentPath_RechecksPathAfterAutoGeneration(t *testing.T) {
+	originalProvisioner := provisionAndResolveTerraformComponentPath
+	t.Cleanup(func() { provisionAndResolveTerraformComponentPath = originalProvisioner })
+
+	componentDir := filepath.Join(t.TempDir(), "generated")
+	provisionAndResolveTerraformComponentPath = func(_ context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, _ string) (string, bool, error) {
+		return componentDir, false, nil
+	}
+
+	var generatedIn string
+	executor := NewExecutor(Services{
+		GenerateFilesForComponent: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, workingDir string) error {
+			generatedIn = workingDir
+			return nil
+		},
+	})
+	atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir()}
+	atmosConfig.Components.Terraform.AutoGenerateFiles = true
+	info := schema.ConfigAndStacksInfo{
+		FinalComponent:   "generated",
+		ComponentSection: map[string]any{"generate": map[string]any{"main.tf": "# generated"}},
+	}
+
+	path, err := executor.resolveAndProvisionComponentPath(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info)
+	require.NoError(t, err)
+	assert.Equal(t, componentDir, path)
+	assert.Equal(t, componentDir, generatedIn)
+	assert.DirExists(t, componentDir)
+}
+
+// TestResolveAndProvisionComponentPath_MissingWithoutGenerationFails verifies the recheck
+// does not mask a component directory that is still missing after preparation.
+func TestResolveAndProvisionComponentPath_MissingWithoutGenerationFails(t *testing.T) {
+	originalProvisioner := provisionAndResolveTerraformComponentPath
+	t.Cleanup(func() { provisionAndResolveTerraformComponentPath = originalProvisioner })
+
+	componentDir := filepath.Join(t.TempDir(), "missing")
+	provisionAndResolveTerraformComponentPath = func(_ context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, _ string) (string, bool, error) {
+		return componentDir, false, nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := schema.ConfigAndStacksInfo{FinalComponent: "missing"}
+
+	_, err := NewExecutor(Services{}).resolveAndProvisionComponentPath(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info)
+	require.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // handleDeploySubcommand
 // ──────────────────────────────────────────────────────────────────────────────

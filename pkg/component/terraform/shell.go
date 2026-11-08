@@ -176,19 +176,14 @@ func (e *Executor) ExecuteTerraformShell(opts *tf.ShellOptions, atmosConfig *sch
 func (e *Executor) runShellSession(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cfg *shellConfig, withSecrets bool) error {
 	defer perf.Track(atmosConfig, "exec.runShellSession")()
 
-	if err := e.prepareShellExecution(atmosConfig, info, cfg, withSecrets); err != nil {
-		return err
-	}
-
 	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after init, workspace, and
 	// the whole interactive shell session complete. Deferred here (not in prepareShellExecution)
-	// so the file survives every subprocess and the shell.
-	if info.RCCleanup != nil {
-		defer func() {
-			if cleanupErr := info.RCCleanup(); cleanupErr != nil {
-				log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
-			}
-		}()
+	// so the file survives every subprocess and the shell, and registered before preparation
+	// (which creates the file) so it is also removed when a later preparation step fails.
+	defer cleanupTerraformRC(info)
+
+	if err := e.prepareShellExecution(atmosConfig, info, cfg, withSecrets); err != nil {
+		return err
 	}
 
 	return e.executeShellLifecycle(atmosConfig, info, cfg)

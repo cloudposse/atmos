@@ -59,6 +59,11 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 		return "", err
 	}
 
+	// Auto-generation may have just created a missing component directory.
+	if !componentPathExists {
+		componentPathExists = u.FileOrDirExists(componentPath)
+	}
+
 	if !componentPathExists {
 		basePath, _ := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
 		return "", fmt.Errorf(

@@ -26,9 +26,11 @@ import (
 )
 
 // checkTTYRequirement returns an error when `terraform apply` is invoked without
-// -auto-approve in a non-interactive environment (stdin is nil).
-func checkTTYRequirement(info *schema.ConfigAndStacksInfo) error {
-	if os.Stdin != nil {
+// -auto-approve in a non-interactive environment (the subprocess stdin is nil).
+// The subprocess stdin is the stream supplied through component.WithProcessStreams,
+// falling back to os.Stdin, matching how the shell command runner resolves it.
+func checkTTYRequirement(info *schema.ConfigAndStacksInfo, opts ...component.ExecutionOption) error {
+	if effectiveSubprocessStdin(opts...) != nil {
 		return nil
 	}
 	if info.SubCommand == subcommandApply && !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
@@ -39,6 +41,21 @@ func checkTTYRequirement(info *schema.ConfigAndStacksInfo) error {
 		)
 	}
 	return nil
+}
+
+// effectiveSubprocessStdin returns the stdin the Terraform subprocess will read.
+func effectiveSubprocessStdin(opts ...component.ExecutionOption) io.Reader {
+	var probe component.ExecutionOptions
+	for _, opt := range opts {
+		opt(&probe)
+	}
+	if probe.Streams != nil && probe.Streams.Stdin != nil {
+		return probe.Streams.Stdin
+	}
+	if os.Stdin == nil {
+		return nil
+	}
+	return os.Stdin
 }
 
 // addRegionEnvVarForImport appends AWS_REGION to the component env list when the
@@ -236,6 +253,11 @@ func (e *Executor) uploadCommandStatus(
 // Failures are logged at Trace level and not propagated, since cleanup errors should
 // not mask the result of the main command.
 func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	// A dry run consumes nothing, so it must not delete a plan or varfile saved by an earlier run.
+	if info.DryRun {
+		return
+	}
+
 	// Only a completed apply/destroy consumes the default plan. Inspection commands
 	// also pass through this pipeline and must preserve plans saved for later use.
 	if (info.SubCommand == subcommandApply || info.SubCommand == "destroy") && info.PlanFile == "" {

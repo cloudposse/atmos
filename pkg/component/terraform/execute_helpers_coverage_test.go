@@ -510,6 +510,35 @@ func TestCleanupTerraformFiles_ApplyRemovesVarfileForReal(t *testing.T) {
 	assert.NoFileExists(t, varfilePath)
 }
 
+// TestCleanupTerraformFiles_DryRunKeepsPlanAndVarfile verifies that a dry-run apply
+// does not consume (and so must not delete) a plan or varfile saved by an earlier run.
+func TestCleanupTerraformFiles_DryRunKeepsPlanAndVarfile(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:    "apply",
+		ContextPrefix: "ctx",
+		Component:     "mycomp",
+		DryRun:        true,
+	}
+
+	planfilePath := ConstructTerraformComponentPlanfilePath(&atmosConfig, &info)
+	varfilePath := ConstructTerraformComponentVarfilePath(&atmosConfig, &info)
+	for _, path := range []string{planfilePath, varfilePath} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte("saved"), 0o644))
+	}
+
+	cleanupTerraformFiles(&atmosConfig, &info)
+	assert.FileExists(t, planfilePath)
+	assert.FileExists(t, varfilePath)
+
+	// The same apply without dry-run consumes both files.
+	info.DryRun = false
+	cleanupTerraformFiles(&atmosConfig, &info)
+	assert.NoFileExists(t, planfilePath)
+	assert.NoFileExists(t, varfilePath)
+}
+
 // TestCleanupTerraformFiles_NonPlanShow_RemovesPlanfile creates an actual planfile
 // and verifies it is removed after cleanupTerraformFiles for a destroy command.
 func TestCleanupTerraformFiles_NonPlanShow_RemovesPlanfile(t *testing.T) {

@@ -190,7 +190,7 @@ func (e *Executor) executeCommandPipeline(
 		return err
 	}
 
-	if err = checkTTYRequirement(info); err != nil {
+	if err = checkTTYRequirement(info, opts...); err != nil {
 		return err
 	}
 
