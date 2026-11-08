@@ -149,12 +149,14 @@ func missingSourceProblem(path string) *model.Problem {
 	}
 }
 
+// sourceDirectoryProblem keeps the evaluated source out of the shown detail, because it can hold a
+// value that is not registered for masking. The cause still carries it for local debugging.
 func sourceDirectoryProblem(path, source string) *model.Problem {
 	return &model.Problem{
 		Code: model.CodeInvalidSource, Summary: "The module `source` is not an existing local directory",
-		Detail: fmt.Sprintf("`terraform.source` resolves to %q, which does not exist or is not a directory.", source),
+		Detail: "`terraform.source` resolves to a local path that does not exist or is not a directory.",
 		Hints:  []string{"Point `terraform.source` at a module directory relative to the unit, or use a Git or HTTPS module source."},
-		File:   path, Key: "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
+		File:   path, Key: "terraform.source", Safe: true, Err: fmt.Errorf("%w: local source %q is not a directory", ErrUnsupportedExecution, source),
 	}
 }
 

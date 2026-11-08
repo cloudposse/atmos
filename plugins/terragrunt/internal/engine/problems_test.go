@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -104,3 +105,26 @@ func TestProblemForPassesCancellationAndWrapsUnknownErrors(t *testing.T) {
 }
 
 func errContextCanceled() error { return context.Canceled }
+
+// A missing local module is rejected during discovery, so bulk preflight stops before any unit
+// runs, and the shown detail never repeats the evaluated source.
+func TestMissingLocalSourceFailsDiscoveryWithoutShowingTheSource(t *testing.T) {
+	for _, phase := range []string{"discover", ""} {
+		t.Run("phase="+phase, func(t *testing.T) {
+			request := nativeUnit(t, "")
+			missing := filepath.Join(filepath.Dir(request.Path), "secret-token-value")
+			source, err := json.Marshal(filepath.ToSlash(missing))
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(source)+" }\n"), 0o644))
+			request.Phase = phase
+			_, err = Resolve(t.Context(), request)
+			problem := asProblem(t, err)
+			require.Equal(t, model.CodeInvalidSource, problem.Code)
+			require.Equal(t, "terraform.source", problem.Key)
+			require.True(t, problem.Safe)
+			require.NotContains(t, problem.Detail, "secret-token-value")
+			require.NotContains(t, problem.Summary, "secret-token-value")
+			require.ErrorIs(t, err, ErrUnsupportedExecution)
+		})
+	}
+}

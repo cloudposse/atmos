@@ -148,6 +148,10 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 			result.Source = *cfg.Terraform.Source
 			if plainLocalSource(result.Source) {
 				result.Source = localPath(filepath.Dir(path), result.Source)
+				// A missing local module fails discovery, so a bulk run stops before any unit runs.
+				if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
+					return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
+				}
 				result.Folders = []string{result.Source}
 			}
 		}
