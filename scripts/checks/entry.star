@@ -6,9 +6,10 @@ DEFAULT_BASE = "origin/main"
 
 # Resolve the branch comparison base. A layer in a PR stack compares against its parent
 # branch, so an explicit base wins, then ATMOS_BRANCH_BASE_REF, then the per-branch Git
-# config key branch.<name>.stackbase, and finally origin/main.
+# config key branch.<name>.stackbase, and finally origin/main. An empty base means the
+# caller supplied none, so even an explicit origin/main is honored instead of replaced.
 def resolve_base(base):
-    if base != DEFAULT_BASE:
+    if base:
         return base
     override = os.getenv("ATMOS_BRANCH_BASE_REF")
     if override:
@@ -19,10 +20,10 @@ def resolve_base(base):
         configured = exec.run(["git", "config", "--get", "branch." + name + ".stackbase"], output = "capture", check = False)
         if configured.exit_code == 0 and configured.stdout.strip():
             return configured.stdout.strip()
-    return base
+    return DEFAULT_BASE
 
 # Run the shared suite in a Git sandbox with read-only checks or unstaged fixes.
-def run(scope, mode, base = DEFAULT_BASE, only = "", skip = ""):
+def run(scope, mode, base = "", only = "", skip = ""):
     if mode not in ["check", "format", "commit"]:
         fail("Unknown check mode: " + mode)
     base = resolve_base(base)
