@@ -1,6 +1,7 @@
 package step
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -106,6 +107,9 @@ func (s *artifactSession) finish(key string, succeeded bool) {
 	delete(s.operations, key)
 }
 
+// artifactOperationLabel domain-separates operation keys; it is a public label, not a secret.
+var artifactOperationLabel = []byte("atmos.artifact.step.operation.v1")
+
 // artifactOperationKey identifies a logical operation by the step and its fully resolved input.
 // Explicit user metadata participates in the identity; the execution fields do not.
 func artifactOperationKey(stepName string, params *invoke.Params) string {
@@ -119,6 +123,10 @@ func artifactOperationKey(stepName string, params *invoke.Params) string {
 		// back to the step name still yields a stable, if coarser, identity.
 		return stepName
 	}
-	sum := sha256.Sum256(append([]byte(stepName+"\x00"), encoded...))
-	return hex.EncodeToString(sum[:])
+	// The key only names an in-memory operation. A fixed public label keys the digest so it is not
+	// mistaken for hashing a credential that the encoded parameters may carry.
+	mac := hmac.New(sha256.New, artifactOperationLabel)
+	mac.Write([]byte(stepName + "\x00"))
+	mac.Write(encoded)
+	return hex.EncodeToString(mac.Sum(nil))
 }
