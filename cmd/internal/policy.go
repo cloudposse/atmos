@@ -120,7 +120,7 @@ func PolicyCommandPath(cmd *cobra.Command) []string {
 func checkCommandAdmission(root, cmd *cobra.Command, args []string) error {
 	path := policyCommandPath(root, cmd)
 	fields := strings.Fields(path)
-	data, err := json.Marshal(policy.CommandInput{Path: fields, Command: path, Destroy: policy.IsDestroyInvocation(fields, args)})
+	data, err := json.Marshal(policy.CommandInput{CommandPath: fields, Path: fields, Command: path, Destroy: policy.IsDestroyInvocation(fields, args)})
 	if err != nil {
 		return err
 	}

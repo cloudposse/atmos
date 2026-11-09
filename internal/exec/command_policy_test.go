@@ -358,7 +358,7 @@ spec:
     guard:
       on: component.command
       action: deny
-      rule: input.command == 'shell' && input.path == ['secret', 'shell']
+      rule: input.command == 'shell' && input.command_path == ['secret', 'shell']
 `), 0o600))
 		describe := func(path []string) error {
 			_, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{

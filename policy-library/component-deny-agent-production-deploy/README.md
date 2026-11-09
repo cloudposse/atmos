@@ -50,7 +50,7 @@ and on `atmos secret shell` and `atmos secret exec`, which are admitted as `shel
 `shell` is included because a component shell starts with the production identity already
 authenticated, so an agent could run `terraform apply` inside it without passing through Atmos admission again.
 `secret shell` and `secret exec` put production secret values in the environment of the shell or command they start.
-To target only some of these commands, match `input.path`, such as `['secret', 'shell']`.
+To target only some of these commands, match `input.command_path`, such as `['secret', 'shell']`.
 Production plans and diffs, non-production applies, and invocations without either marker do not match.
 It deliberately also denies `apply --dry-run` from a recognized agent on a production stack.
 
