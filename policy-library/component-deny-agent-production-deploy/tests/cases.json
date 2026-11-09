@@ -384,6 +384,144 @@
     "status": "deny"
   },
   {
+    "name": "claude-code secret shell prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "shell",
+        "path": [
+          "secret",
+          "shell"
+        ],
+        "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex secret shell acme-ue2-prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "shell",
+        "path": [
+          "secret",
+          "shell"
+        ],
+        "stack": "acme-ue2-prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code secret exec prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "exec",
+        "path": [
+          "secret",
+          "exec"
+        ],
+        "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex secret exec acme-ue2-prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "exec",
+        "path": [
+          "secret",
+          "exec"
+        ],
+        "stack": "acme-ue2-prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "human production secret exec",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "exec",
+        "path": [
+          "secret",
+          "exec"
+        ],
+        "stack": "prod"
+      },
+      "context": {
+        "env": {}
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "agent development secret exec",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "exec",
+        "path": [
+          "secret",
+          "exec"
+        ],
+        "stack": "dev"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "agent production secret get",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "get",
+        "path": [
+          "secret",
+          "get"
+        ],
+        "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
     "name": "human production shell",
     "request": {
       "kind": "component.command",

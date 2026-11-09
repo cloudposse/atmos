@@ -328,3 +328,47 @@ func TestComponentAdmissionRunsBeforeWorkspaceTemplate(t *testing.T) {
 	require.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
 	require.Contains(t, err.Error(), "store requires login")
 }
+
+// TestComponentAdmissionCommandPath verifies that component admission carries the
+// CLI command path: executors fall back to the component type and subcommands, and
+// describe callers such as `secret shell` name their own command.
+func TestComponentAdmissionCommandPath(t *testing.T) {
+	t.Run("fallback and explicit paths", func(t *testing.T) {
+		require.Equal(t, []string{"terraform", "shell"}, componentCommandPath(&schema.ConfigAndStacksInfo{ComponentType: "terraform", SubCommand: "shell"}))
+		require.Equal(t, []string{"terraform", "providers", "lock"}, componentCommandPath(&schema.ConfigAndStacksInfo{
+			ComponentType: "terraform", SubCommand: "providers", SubCommand2: "lock",
+		}))
+		require.Equal(t, []string{"terraform", "apply"}, componentCommandPath(&schema.ConfigAndStacksInfo{
+			ComponentType: "terraform", SubCommand: "apply", CliArgs: []string{"terraform", "apply", ""},
+		}))
+		require.Equal(t, []string{"secret", "shell"}, componentCommandPath(&schema.ConfigAndStacksInfo{
+			ComponentType: "terraform", SubCommand: "shell", CliArgs: []string{"secret", "shell"},
+		}))
+	})
+
+	t.Run("describe callers name their command", func(t *testing.T) {
+		atmosConfig := setupSharedCacheFixture(t)
+		dir := t.TempDir()
+		t.Setenv("ATMOS_POLICY_DIR", dir)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "guard.yaml"), []byte(`apiVersion: atmos/v1
+kind: Policy
+metadata: {name: no-secret-shell}
+spec:
+  policies:
+    guard:
+      on: component.command
+      action: deny
+      rule: input.command == 'shell' && input.path == ['secret', 'shell']
+`), 0o600))
+		describe := func(path []string) error {
+			_, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+				AtmosConfig: &atmosConfig, Component: "vpc", Stack: "my-explicit-stack", CommandPath: path,
+			})
+			return err
+		}
+
+		require.ErrorIs(t, describe([]string{"secret", "shell"}), errUtils.ErrPolicyDenied)
+		require.NoError(t, describe([]string{"secret", "get"}))
+		require.NoError(t, describe(nil), "plain describe component is not a shell")
+	})
+}

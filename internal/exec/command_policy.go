@@ -51,7 +51,7 @@ func enforceComponentAdmission(config *schema.AtmosConfiguration, info *schema.C
 	args := slices.Concat(info.CliArgs, info.AdditionalArgsAndFlags)
 	data, err := json.Marshal(policy.ComponentCommandInput{
 		Agents:  admission.AgentNames(),
-		Command: info.SubCommand, ComponentType: info.ComponentType, Component: info.ComponentFromArg, Stack: info.Stack, DryRun: info.DryRun,
+		Command: info.SubCommand, Path: componentCommandPath(info), ComponentType: info.ComponentType, Component: info.ComponentFromArg, Stack: info.Stack, DryRun: info.DryRun,
 		Destroy:      policy.IsDestroyInvocation([]string{info.ComponentType, info.SubCommand}, args),
 		Capabilities: componentPolicyCapabilities(info.ComponentType),
 	})
@@ -59,6 +59,18 @@ func enforceComponentAdmission(config *schema.AtmosConfiguration, info *schema.C
 		return err
 	}
 	return admission.Check(context.Background(), &policy.Request{Kind: policy.ComponentCommand, Subject: subject, Input: data})
+}
+
+// componentCommandPath returns the CLI command path of a component invocation. Callers
+// that set CliArgs (executors, describe, secret commands) name it explicitly; component
+// commands admitted before their executor runs fall back to the component type and
+// subcommands, which is the same path their executor records.
+func componentCommandPath(info *schema.ConfigAndStacksInfo) []string {
+	path := info.CliArgs
+	if len(path) == 0 {
+		path = []string{info.ComponentType, info.SubCommand, info.SubCommand2}
+	}
+	return slices.DeleteFunc(slices.Clone(path), func(s string) bool { return s == "" })
 }
 
 func componentPolicyCapabilities(componentType string) []string {

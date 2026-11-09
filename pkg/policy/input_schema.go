@@ -22,8 +22,11 @@ type CommandInput struct {
 
 // ComponentCommandInput describes shared component admission.
 type ComponentCommandInput struct {
-	Agents        []string `json:"agents"`
-	Command       string   `json:"command"`
+	Agents  []string `json:"agents"`
+	Command string   `json:"command"`
+	// Path is the canonical CLI command path, such as ["terraform", "shell"] or
+	// ["secret", "shell"], matching the `command` input's path.
+	Path          []string `json:"path"`
 	ComponentType string   `json:"component_type"`
 	Component     string   `json:"component"`
 	Stack         string   `json:"stack"`

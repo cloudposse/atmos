@@ -17,7 +17,7 @@ restrictions to component instances using literal tags and labels.
 |---|---|---|---|
 | `function` | Before YAML function execution and Go-template calls, including configuration loading | `name`: canonical YAML name without `!` or template function/namespace; `engine`: `yaml` or `go-template` | No; instance metadata may not exist yet |
 | `command` | Before a runnable CLI command's argument validator and pre-run hooks | `command`: command path string; `path`: array of command names, excluding `atmos`; `destroy`: boolean, see [Destroy detection](#destroy-detection) | No |
-| `component.command` | During shared stack resolution, before component template/function evaluation and tool execution | `command`, `component_type`, `component`, `stack`, `dry_run`, `destroy` (see [Destroy detection](#destroy-detection)), `capabilities`, `agents` | Yes; literal inherited metadata |
+| `component.command` | During shared stack resolution, before component template/function evaluation and tool execution | `command`: the subcommand, such as `apply` or `shell`; `path`: array of command names, excluding `atmos`, such as `["terraform", "apply"]` or `["secret", "shell"]`; `component_type`, `component`, `stack`, `dry_run`, `destroy` (see [Destroy detection](#destroy-detection)), `capabilities`, `agents` | Yes; literal inherited metadata |
 | `auth` | Before auth-manager authentication and credential cache access | `identity`, `provider`, `identities` (the complete resolved identity chain) | No |
 
 These gates do not require `--affected`. Function arguments and CLI argument/flag values are not
@@ -134,6 +134,16 @@ container, emulator, and custom component integrations using that resolver. Comm
 instance still receive CLI admission, not fabricated component metadata. An integration bypassing
 shared stack resolution must add instance admission before advertising that capability.
 
+Commands that resolve a component without running its tool also pass this gate under their own
+command. `atmos secret shell -c vpc -s prod` is admitted with `command: "shell"` and
+`path: ["secret", "shell"]`, and `atmos describe component` with an empty `command` and
+`path: ["describe", "component"]`. Match `command` to cover every command with that name, or `path`
+to target one:
+
+```yaml
+rule: input.path == ['secret', 'shell'] || input.path == ['secret', 'exec']
+```
+
 Metadata used by selectors must be literal: unresolved templates/functions or malformed metadata
 produce an error, not a non-match. `capabilities` always includes `component.command`, `function`, and `source`;
 Terraform also supplies `terraform.plan` and `operation`, while Helmfile, Helm, and Kubernetes supply
@@ -192,7 +202,7 @@ confinement, and [policy commands](/cli/commands/policy) for offline checks and 
 ## Block coding-agent production deployments
 
 The [agent deployment policy](/policies/library/component-deny-agent-production-deploy)
-uses the shared `env` context to deny production `apply` and `deploy` commands. Atmos captures
+uses the shared `env` context to deny production `apply`, `deploy`, `shell`, and `exec` commands. Atmos captures
 process environment before configuration loading can change it. The example checks
 `CLAUDECODE=1` or a nonempty `CODEX_THREAD_ID`. Environment values can contain secrets;
 do not include them in diagnostics. See [shared context](/policies/context) for all engines.

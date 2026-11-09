@@ -261,3 +261,15 @@ func TestCommandAdmissionDestroyInputDuringExecution(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 	})
 }
+
+func TestPolicyCommandPath(t *testing.T) {
+	root := &cobra.Command{Use: "atmos"}
+	secret := &cobra.Command{Use: "secret"}
+	shell := &cobra.Command{Use: "shell"}
+	alias := &cobra.Command{Use: "tf-plan", Annotations: map[string]string{"policy-command": "terraform plan"}}
+	secret.AddCommand(shell)
+	root.AddCommand(secret, alias)
+
+	require.Equal(t, []string{"secret", "shell"}, PolicyCommandPath(shell))
+	require.Equal(t, []string{"terraform", "plan"}, PolicyCommandPath(alias), "aliases use the canonical path")
+}

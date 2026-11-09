@@ -1,6 +1,6 @@
 ---
 title: Block agent deployments to production
-description: Deny production apply, deploy, and shell commands launched by Claude Code or Codex.
+description: Deny production apply, deploy, shell, and exec commands launched by Claude Code or Codex.
 command: atmos terraform apply app -s acme-ue2-prod
 tags:
   - Admission
@@ -13,7 +13,7 @@ related_docs:
 
 # Block agent deployments to production
 
-Deny production apply, deploy, and shell commands launched by Claude Code or Codex.
+Deny production apply, deploy, shell, and exec commands launched by Claude Code or Codex.
 
 ## Contract
 
@@ -22,7 +22,7 @@ Deny production apply, deploy, and shell commands launched by Claude Code or Cod
 | Input | `component.command` |
 | Engines | `cel`, `starlark` |
 | Action | `deny` |
-| Selects when | A recognized agent, an `apply`, `deploy`, or `shell` command, and a production stack name. |
+| Selects when | A recognized agent, an `apply`, `deploy`, `shell`, or `exec` command, and a production stack name. |
 | Required data | Captured admission metadata; no cloud credentials required for evaluation. |
 
 ## Configuration
@@ -36,7 +36,7 @@ Deny production apply, deploy, and shell commands launched by Claude Code or Cod
 
 The shared context exposes environment values to every engine; do not include them in diagnostics.
 [Claude Code also sets `CLAUDECODE=1` in IDE-integrated terminals](https://code.claude.com/docs/en/env-vars),
-so this policy denies human-run production applies, deployments, and shells from those terminals too.
+so this policy denies human-run production applies, deployments, shells, and `exec` commands from those terminals too.
 For a reviewed manual deployment or production shell, use a terminal without the marker.
 [Codex sets `CODEX_THREAD_ID` in its shell environment](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/shell_environment.rs).
 The presence of a CLI executable, an API key, or a configured home directory does not identify an agent invocation.
@@ -45,9 +45,12 @@ The rule treats `prod` or `production` as a case-insensitive name segment separa
 Examples: `prod`, `acme-ue2-prod`, `production/us`. `product-dev` does not match.
 Adapt the stack naming condition to your organization, or use literal inherited component labels in a `match` selector.
 
-The rule covers `apply`, `deploy`, and `shell` on component types that use shared stack admission.
+The rule covers `apply`, `deploy`, `shell`, and `exec` on component types that use shared stack admission,
+and on `atmos secret shell` and `atmos secret exec`, which are admitted as `shell` and `exec`.
 `shell` is included because a component shell starts with the production identity already
 authenticated, so an agent could run `terraform apply` inside it without passing through Atmos admission again.
+`secret shell` and `secret exec` put production secret values in the environment of the shell or command they start.
+To target only some of these commands, match `input.path`, such as `['secret', 'shell']`.
 Production plans and diffs, non-production applies, and invocations without either marker do not match.
 It deliberately also denies `apply --dry-run` from a recognized agent on a production stack.
 

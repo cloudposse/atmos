@@ -242,7 +242,7 @@ func initEntries(facet secretScope, entries []scopeEntry, opts initOptions, prog
 	targets := make([]initTarget, 0, len(entries))
 	for index, entry := range entries {
 		progress.Update(fmt.Sprintf("Preparing secret backend for %s/%s (%d/%d)", entry.Stack, entry.Component, index+1, len(entries)))
-		scope := secretScope{Stack: entry.Stack, Component: entry.Component, Identity: facet.Identity}
+		scope := secretScope{Stack: entry.Stack, Component: entry.Component, Identity: facet.Identity, CommandPath: facet.CommandPath}
 		svc, loadErr := loadServiceFn(scope)
 		if loadErr != nil {
 			progress.Error(initPreparationFailed)
