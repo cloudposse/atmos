@@ -121,6 +121,10 @@ go-vulnerability-db:
   - vuln.go.dev:443
 semgrep:
   - semgrep.dev:443
+# Trivy's installer (aquasecurity/setup-trivy) fetches the binary through
+# get.trivy.dev, which redirects to the GitHub release asset.
+trivy:
+  - get.trivy.dev:443
 installer-packages:
   - azure.archive.ubuntu.com:80
   - crl.sectigo.com:443
