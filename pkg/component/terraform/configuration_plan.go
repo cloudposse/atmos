@@ -118,25 +118,8 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	if err := verifyReviewedArtifacts(ctx, config, info, plan, path); err != nil {
 		return nil, nil, err
 	}
-	retained, err := workdirMatches(plan, path)
+	rebuild, err := restoreReviewedWorkdir(info, plan, path)
 	if err != nil {
-		return nil, nil, err
-	}
-	if !retained {
-		// A rebuild that was verified and then failed in init or apply leaves a workdir that no longer
-		// holds only the restored artifacts. It still equals the reviewed rebuild, so a retry may use it.
-		if retained, err = rebuiltWorkdirMatches(info, plan, path); err != nil {
-			return nil, nil, err
-		}
-	}
-	var rebuild *reviewedRebuild
-	if retained {
-		// The retained workdir is verified, so it holds the reviewed bytes of sensitive files. A rebuild
-		// instead writes them again from a fresh preparation.
-		if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files); err != nil {
-			return nil, nil, err
-		}
-	} else if rebuild, err = newReviewedRebuild(info, plan, path); err != nil {
 		return nil, nil, err
 	}
 	// Terraform runs inside the workdir, so a path relative to the project would not resolve there.
@@ -147,6 +130,36 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	info.UseTerraformPlan = true
 	info.PlanFile = absolute
 	return plan.Prepared, rebuild, nil
+}
+
+// restoreReviewedWorkdir settles the reviewed plan's working directory. A retained workdir gets the
+// reviewed bytes of its sensitive files back and needs no rebuild; any other workdir must be rebuilt.
+func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path string) (*reviewedRebuild, error) {
+	retained, err := reviewedWorkdirRetained(info, plan, path)
+	if err != nil {
+		return nil, err
+	}
+	if !retained {
+		return newReviewedRebuild(info, plan, path)
+	}
+	// The retained workdir is verified, so it holds the reviewed bytes of sensitive files. A rebuild
+	// instead writes them again from a fresh preparation.
+	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+// reviewedWorkdirRetained reports whether the working directory still equals the reviewed one, either
+// as the workdir the plan ran in or as a verified rebuild of it.
+func reviewedWorkdirRetained(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path string) (bool, error) {
+	retained, err := workdirMatches(plan, path)
+	if err != nil || retained {
+		return retained, err
+	}
+	// A rebuild that was verified and then failed in init or apply leaves a workdir that no longer
+	// holds only the restored artifacts. It still equals the reviewed rebuild, so a retry may use it.
+	return rebuiltWorkdirMatches(info, plan, path)
 }
 
 // restoresConfigurationPlan reports whether the invocation applies a reviewed artifact. The downloaded
