@@ -320,6 +320,100 @@
     "status": "deny"
   },
   {
+    "name": "claude-code shell prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "shell",
+        "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "claude-code shell acme-ue2-prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "shell",
+        "stack": "acme-ue2-prod"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex shell prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "shell",
+        "stack": "prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "codex shell acme-ue2-prod denied",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "shell",
+        "stack": "acme-ue2-prod"
+      },
+      "context": {
+        "env": {
+          "CODEX_THREAD_ID": "fixture"
+        }
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "human production shell",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "shell",
+        "stack": "prod"
+      },
+      "context": {
+        "env": {}
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "agent development shell",
+    "request": {
+      "kind": "component.command",
+      "input": {
+        "command": "shell",
+        "stack": "dev"
+      },
+      "context": {
+        "env": {
+          "CLAUDECODE": "1"
+        }
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
     "name": "human production apply",
     "request": {
       "kind": "component.command",

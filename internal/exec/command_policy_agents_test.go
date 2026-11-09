@@ -21,7 +21,7 @@ func TestComponentAdmissionAgentProductionPolicy(t *testing.T) {
 					t.Setenv("CLAUDECODE", "")
 					t.Setenv("CODEX_THREAD_ID", "")
 					t.Setenv(marker, "1")
-					for _, command := range []string{"apply", "deploy"} {
+					for _, command := range []string{"apply", "deploy", "shell"} {
 						info := &schema.ConfigAndStacksInfo{ComponentType: "terraform", SubCommand: command, ComponentFromArg: "app", Stack: "acme-ue2-prod"}
 						require.ErrorIs(t, enforceComponentAdmission(&schema.AtmosConfiguration{}, info), errUtils.ErrPolicyDenied)
 						info.Stack = "acme-ue2-dev"

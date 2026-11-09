@@ -1,6 +1,6 @@
 ---
 title: Block agent deployments to production
-description: Deny production apply and deploy commands launched by Claude Code or Codex.
+description: Deny production apply, deploy, and shell commands launched by Claude Code or Codex.
 command: atmos terraform apply app -s acme-ue2-prod
 tags:
   - Admission
@@ -13,7 +13,7 @@ related_docs:
 
 # Block agent deployments to production
 
-Deny production apply and deploy commands launched by Claude Code or Codex.
+Deny production apply, deploy, and shell commands launched by Claude Code or Codex.
 
 ## Contract
 
@@ -22,7 +22,7 @@ Deny production apply and deploy commands launched by Claude Code or Codex.
 | Input | `component.command` |
 | Engines | `cel`, `starlark` |
 | Action | `deny` |
-| Selects when | A recognized agent, an `apply` or `deploy` command, and a production stack name. |
+| Selects when | A recognized agent, an `apply`, `deploy`, or `shell` command, and a production stack name. |
 | Required data | Captured admission metadata; no cloud credentials required for evaluation. |
 
 ## Configuration
@@ -45,7 +45,9 @@ The rule treats `prod` or `production` as a case-insensitive name segment separa
 Examples: `prod`, `acme-ue2-prod`, `production/us`. `product-dev` does not match.
 Adapt the stack naming condition to your organization, or use literal inherited component labels in a `match` selector.
 
-The rule covers `apply` and `deploy` on component types that use shared stack admission.
+The rule covers `apply`, `deploy`, and `shell` on component types that use shared stack admission.
+`shell` is included because a component shell starts with the production identity already
+authenticated, so an agent could run `terraform apply` inside it without passing through Atmos admission again.
 Production plans and diffs, non-production applies, and invocations without either marker do not match.
 It deliberately also denies `apply --dry-run` from a recognized agent on a production stack.
 
