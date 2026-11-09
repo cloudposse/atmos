@@ -464,17 +464,14 @@ func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
 		processBedrockContentBlock(&apiResponse.Content[i], result)
 	}
 
-	// Extract usage information.
-	if apiResponse.Usage.InputTokens > 0 || apiResponse.Usage.OutputTokens > 0 {
-		result.Usage = &types.Usage{
-			InputTokens:  apiResponse.Usage.InputTokens,
-			OutputTokens: apiResponse.Usage.OutputTokens,
-			TotalTokens:  apiResponse.Usage.InputTokens + apiResponse.Usage.OutputTokens,
-			// Claude on Bedrock reports cache usage in the same fields as the Anthropic API.
-			CacheReadTokens:     apiResponse.Usage.CacheReadInputTokens,
-			CacheCreationTokens: apiResponse.Usage.CacheCreationInputTokens,
-		}
-	}
+	// Extract usage information. Claude on Bedrock reports cache usage in the same fields as the Anthropic API,
+	// and InputTokens includes cache reads and writes, as for the other providers.
+	result.Usage = base.UsageFromAnthropic(
+		apiResponse.Usage.InputTokens,
+		apiResponse.Usage.OutputTokens,
+		apiResponse.Usage.CacheReadInputTokens,
+		apiResponse.Usage.CacheCreationInputTokens,
+	)
 
 	return result, nil
 }

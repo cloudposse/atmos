@@ -193,6 +193,8 @@ Output:
 }
 ```
 
+`tokens.prompt` counts every input token, including tokens read from or written to the prompt cache, for every provider that reports token usage. `tokens.cached` (tokens read from the cache) and `tokens.cache_creation` (tokens written to the cache) are parts of `tokens.prompt` and are left out when zero.
+
 ### Markdown Format
 
 Formatted output with tool execution summaries:

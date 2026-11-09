@@ -17,7 +17,8 @@ type Response struct {
 
 // Usage contains token usage statistics from the AI provider.
 type Usage struct {
-	// InputTokens is the number of tokens in the request/prompt.
+	// InputTokens is the number of tokens in the request/prompt, including tokens read from or written to
+	// the prompt cache.
 	InputTokens int64
 
 	// OutputTokens is the number of tokens in the response/completion.
@@ -26,10 +27,12 @@ type Usage struct {
 	// TotalTokens is the sum of input and output tokens.
 	TotalTokens int64
 
-	// CacheReadTokens is the number of tokens read from prompt cache (if supported).
+	// CacheReadTokens is the number of prompt tokens read from prompt cache (if supported).
+	// They are included in InputTokens.
 	CacheReadTokens int64
 
-	// CacheCreationTokens is the number of tokens used to create cache (if supported).
+	// CacheCreationTokens is the number of prompt tokens written to the prompt cache (if supported).
+	// They are included in InputTokens.
 	CacheCreationTokens int64
 }
 

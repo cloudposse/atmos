@@ -321,16 +321,13 @@ func parseAnthropicResponse(response *anthropic.Message) (*types.Response, error
 		}
 	}
 
-	// Extract usage information.
-	if response.Usage.InputTokens > 0 || response.Usage.OutputTokens > 0 {
-		result.Usage = &types.Usage{
-			InputTokens:         response.Usage.InputTokens,
-			OutputTokens:        response.Usage.OutputTokens,
-			TotalTokens:         response.Usage.InputTokens + response.Usage.OutputTokens,
-			CacheReadTokens:     response.Usage.CacheReadInputTokens,
-			CacheCreationTokens: response.Usage.CacheCreationInputTokens,
-		}
-	}
+	// Extract usage information. InputTokens includes cache reads and writes, as for the other providers.
+	result.Usage = base.UsageFromAnthropic(
+		response.Usage.InputTokens,
+		response.Usage.OutputTokens,
+		response.Usage.CacheReadInputTokens,
+		response.Usage.CacheCreationInputTokens,
+	)
 
 	return result, nil
 }
