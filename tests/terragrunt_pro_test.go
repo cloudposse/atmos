@@ -153,7 +153,10 @@ func buildTerragruntPluginPackage(t *testing.T) string {
 	RequireExecutable(t, "go", "building the Terragrunt plugin from this checkout")
 	build := exec.Command("go", "build", "-o", output, ".")
 	build.Dir = source
-	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	// The plugin is its own module and may require a newer Go than the root module. CI runs the root's Go
+	// with GOTOOLCHAIN=local, so let the go command fetch the toolchain the plugin's go.mod declares, and
+	// keep any workspace from pulling the root module into the plugin's build. Later entries win.
+	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOTOOLCHAIN=auto", "GOWORK=off")
 	combined, err := build.CombinedOutput()
 	require.NoError(t, err, "the Terragrunt plugin must compile:\n%s", combined)
 	return pkg
