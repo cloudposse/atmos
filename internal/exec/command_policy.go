@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -64,13 +65,18 @@ func enforceComponentAdmission(config *schema.AtmosConfiguration, info *schema.C
 // componentCommandPath returns the CLI command path of a component invocation. Callers
 // that set CliArgs (executors, describe, secret commands) name it explicitly; component
 // commands admitted before their executor runs fall back to the component type and
-// subcommands, which is the same path their executor records.
+// subcommands, which is the same path their executor records. Compound subcommands
+// such as "state list" are split into separate elements, and empty elements dropped.
 func componentCommandPath(info *schema.ConfigAndStacksInfo) []string {
 	path := info.CliArgs
 	if len(path) == 0 {
 		path = []string{info.ComponentType, info.SubCommand, info.SubCommand2}
 	}
-	return slices.DeleteFunc(slices.Clone(path), func(s string) bool { return s == "" })
+	var out []string
+	for _, element := range path {
+		out = append(out, strings.Fields(element)...)
+	}
+	return out
 }
 
 func componentPolicyCapabilities(componentType string) []string {

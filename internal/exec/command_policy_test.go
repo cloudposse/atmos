@@ -341,6 +341,12 @@ func TestComponentAdmissionCommandPath(t *testing.T) {
 		require.Equal(t, []string{"terraform", "apply"}, componentCommandPath(&schema.ConfigAndStacksInfo{
 			ComponentType: "terraform", SubCommand: "apply", CliArgs: []string{"terraform", "apply", ""},
 		}))
+		require.Equal(t, []string{"terraform", "state", "list"}, componentCommandPath(&schema.ConfigAndStacksInfo{
+			ComponentType: "terraform", SubCommand: "state list",
+		}))
+		require.Equal(t, []string{"terraform", "providers", "lock"}, componentCommandPath(&schema.ConfigAndStacksInfo{
+			ComponentType: "terraform", SubCommand: "providers lock", CliArgs: []string{"terraform", "providers lock", ""},
+		}))
 		require.Equal(t, []string{"secret", "shell"}, componentCommandPath(&schema.ConfigAndStacksInfo{
 			ComponentType: "terraform", SubCommand: "shell", CliArgs: []string{"secret", "shell"},
 		}))
