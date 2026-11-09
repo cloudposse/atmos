@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -99,6 +100,54 @@ func TestAffectedConfigurationForkErrors(t *testing.T) {
 		require.ErrorIs(t, rebaseConfigurationDiscovery(config), failure)
 		require.Same(t, runtime, config.ComponentConfigurations)
 	}
+}
+
+// TestAffectedConfigurationWatchRootSpelling reproduces the Windows runner, where
+// base_path resolves to the long form of TEMP (runneradmin) while changed files
+// are joined to the 8.3 form the CLI's working directory uses (RUNNER~1). A
+// symlinked repository root gives the same two spellings of one directory.
+func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
+	temp, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	repo := filepath.Join(temp, "repo")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "project", "modules", "unit"), 0o755))
+	link := filepath.Join(temp, "link")
+	if err := os.Symlink(repo, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	config := &schema.AtmosConfiguration{BasePathAbsolute: filepath.Join(repo, "project")}
+	settings := map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}
+	watches := func() []schema.ComponentDependency {
+		deps := []schema.ComponentDependency{{Kind: "folder", Path: "modules/unit"}}
+		require.True(t, configurationWatchPaths(config, settings, deps))
+		return deps
+	}
+
+	match := func(index *changedFilesIndex, deps []schema.ComponentDependency, provider bool) (bool, string, string) {
+		resolvedIndex, matched := configurationMatchInputs(index, deps, provider)
+		changed, kind, path, err := isComponentDependentFolderOrFileChangedIndexed(resolvedIndex, matched)
+		require.NoError(t, err)
+		return changed, kind, configuredDependencyPath(deps, matched, path)
+	}
+
+	deps := watches()
+	index := newChangedFilesIndex(config, []string{"project/modules/unit/main.tf"}, link)
+	changed, _, _, err := isComponentDependentFolderOrFileChangedIndexed(index, deps)
+	require.NoError(t, err)
+	require.False(t, changed, "precondition: the two spellings differ")
+
+	changed, kind, path := match(index, deps, true)
+	require.True(t, changed)
+	require.Equal(t, "folder", kind)
+	require.Equal(t, filepath.Join(repo, "project", "modules", "unit"), path, "report the configured spelling")
+
+	other := newChangedFilesIndex(config, []string{"project/modules/other/main.tf"}, link)
+	changed, _, _ = match(other, watches(), true)
+	require.False(t, changed, "a change outside the watch must not select the unit")
+
+	// YAML dependencies keep exact matching.
+	changed, _, _ = match(index, watches(), false)
+	require.False(t, changed)
 }
 
 func TestAffectedConfigurationWatchRoot(t *testing.T) {
