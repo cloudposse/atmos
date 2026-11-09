@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/stretchr/testify/require"
 )
 
 func TestComponentAdmissionAttachments(t *testing.T) {
@@ -172,4 +174,97 @@ spec:
 			}
 		})
 	}
+}
+
+const componentAdmissionDenyDestroyManifest = `apiVersion: atmos/v1
+kind: Policy
+metadata: {name: no-destroy}
+spec:
+  policies:
+    guard:
+      on: component.command
+      action: deny
+      rule: input.destroy
+`
+
+// TestComponentAdmissionRunsBeforeAuthentication verifies that a denied command
+// fails before Atmos resolves or logs in to any identity. Before the fix,
+// `terraform destroy` authenticated first, so an expired SSO session masked the
+// denial and a valid one logged in to production before the policy ran.
+func TestComponentAdmissionRunsBeforeAuthentication(t *testing.T) {
+	newInfo := func(subCommand string, args ...string) schema.ConfigAndStacksInfo {
+		return schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc", Stack: "my-explicit-stack", ComponentType: cfg.TerraformComponentType,
+			SubCommand: subCommand, AdditionalArgsAndFlags: args,
+		}
+	}
+	countAuth := func(t *testing.T) *int {
+		t.Helper()
+		calls := 0
+		orig := defaultAuthManagerCreator
+		t.Cleanup(func() { defaultAuthManagerCreator = orig })
+		defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
+			calls++
+			return nil, nil
+		}
+		return &calls
+	}
+	setup := func(t *testing.T) schema.AtmosConfiguration {
+		t.Helper()
+		atmosConfig := setupSharedCacheFixture(t)
+		dir := t.TempDir()
+		t.Setenv("ATMOS_POLICY_DIR", dir)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "guard.yaml"), []byte(componentAdmissionDenyDestroyManifest), 0o600))
+		return atmosConfig
+	}
+
+	for _, tc := range []struct {
+		name string
+		info schema.ConfigAndStacksInfo
+	}{
+		{name: "destroy", info: newInfo("destroy")},
+		{name: "plan -destroy", info: newInfo("plan", "-destroy")},
+	} {
+		t.Run("setupTerraformAuth denies "+tc.name+" without logging in", func(t *testing.T) {
+			atmosConfig := setup(t)
+			calls := countAuth(t)
+			info := tc.info
+			_, err := setupTerraformAuth(&atmosConfig, &info)
+			require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+			require.Zero(t, *calls, "auth must not run for a denied command")
+		})
+		t.Run("createAndAuthenticateAuthManager denies "+tc.name+" without logging in", func(t *testing.T) {
+			atmosConfig := setup(t)
+			calls := countAuth(t)
+			info := tc.info
+			_, err := createAndAuthenticateAuthManager(&atmosConfig, &info)
+			require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+			require.Zero(t, *calls, "auth must not run for a denied command")
+		})
+	}
+
+	t.Run("admitted command still authenticates", func(t *testing.T) {
+		atmosConfig := setup(t)
+		calls := countAuth(t)
+		info := newInfo("plan")
+		_, err := setupTerraformAuth(&atmosConfig, &info)
+		require.NoError(t, err)
+		require.Equal(t, 1, *calls)
+	})
+}
+
+func TestAdmitComponentLeavesNonPolicyErrorsToExecutor(t *testing.T) {
+	atmosConfig := setupSharedCacheFixture(t)
+	dir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "guard.yaml"), []byte(componentAdmissionDenyDestroyManifest), 0o600))
+
+	// Without a stack there is no subject to admit yet.
+	require.NoError(t, AdmitComponent(&atmosConfig, &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc", ComponentType: cfg.TerraformComponentType, SubCommand: "destroy",
+	}, nil))
+	// A component that does not resolve is reported by the executor, not here.
+	require.NoError(t, AdmitComponent(&atmosConfig, &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "does-not-exist", Stack: "my-explicit-stack", ComponentType: cfg.TerraformComponentType, SubCommand: "destroy",
+	}, nil))
 }
