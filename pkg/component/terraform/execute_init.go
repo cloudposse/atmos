@@ -272,7 +272,7 @@ func (e *Executor) runTerraformInitSubprocess(atmosConfig *schema.AtmosConfigura
 // prerequisiteOutputOptions keeps initialization diagnostics out of a data command's stdout.
 // Explicit init and ordinary plan/apply retain their existing terminal and capture behavior.
 func prerequisiteOutputOptions(info *schema.ConfigAndStacksInfo, opts []component.ExecutionOption) []component.ExecutionOption {
-	if info.SubCommand != "output" && info.SubCommand != "show" && (info.SubCommand != "state" || info.SubCommand2 != "pull") {
+	if !isDataSubcommand(info) {
 		return opts
 	}
 	var options component.ExecutionOptions
@@ -296,6 +296,18 @@ func prerequisiteOutputOptions(info *schema.ConfigAndStacksInfo, opts []componen
 	}
 	return append(slices.Clone(opts), component.WithProcessStreams(streams),
 		component.WithStdoutOverride(streams.Stderr), component.WithStdoutCapture(capture), component.WithStderrCapture(capture))
+}
+
+// isDataSubcommand reports whether the main command writes data to stdout. The CLI parser stores
+// `state pull` as the single subcommand "state pull"; the split form is accepted as well.
+func isDataSubcommand(info *schema.ConfigAndStacksInfo) bool {
+	switch info.SubCommand {
+	case "output", "show", "state pull":
+		return true
+	case "state":
+		return info.SubCommand2 == "pull"
+	}
+	return false
 }
 
 // executeTerraformInitCommand is the "smart init" decision point: it fingerprints this

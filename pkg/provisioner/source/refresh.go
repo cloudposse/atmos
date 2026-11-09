@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -288,18 +289,36 @@ func rejectActiveStateLock(target string) error {
 
 // runtimePaths accounts for nested module roots and custom local backend locations.
 func runtimePaths(target string, config map[string]any) map[string]bool {
-	roots := []string{target}
-	if component := extractComponentName(config); component != "" {
-		roots = append(roots, filepath.Join(target, component))
-	}
 	protected := map[string]bool{}
-	for _, root := range roots {
+	for _, root := range moduleRoots(target, config) {
 		for _, name := range []string{".terraform", "terraform.tfstate", "terraform.tfstate.backup", "terraform.tfstate.d"} {
 			protected[filepath.Join(root, name)] = true
 		}
 		protectLocalBackendPaths(protected, root, config)
 	}
 	return protected
+}
+
+// moduleRoots lists every directory Terraform may run in under target: the target itself, the
+// component name and the metadata.component subpath joined onto it, and an already-resolved
+// workdir path. The subpath candidates are included before they exist, because refresh runs
+// before the module root is resolved against the downloaded tree.
+func moduleRoots(target string, config map[string]any) []string {
+	roots := []string{target}
+	candidates := []string{extractComponentName(config)}
+	if metadata, ok := config["metadata"].(map[string]any); ok {
+		subpath, _ := metadata["component"].(string)
+		candidates = append(candidates, subpath)
+	}
+	for _, candidate := range candidates {
+		if candidate != "" && filepath.IsLocal(candidate) {
+			roots = append(roots, filepath.Join(target, candidate))
+		}
+	}
+	if resolved, ok := config[workdir.WorkdirPathKey].(string); ok && resolved != "" && isWithinBase(resolved, target) {
+		roots = append(roots, filepath.Clean(resolved))
+	}
+	return roots
 }
 
 // protectLocalBackendPaths marks custom local backend locations as runtime-owned. The state reader

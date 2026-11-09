@@ -121,7 +121,10 @@ func AutoProvisionSource(
 		}
 		return nil
 	}
-	reused, finish := beginProvision(key, targetDir)
+	reused, finish, err := beginProvision(ctx, key, targetDir)
+	if err != nil {
+		return err
+	}
 	if reused {
 		// beginProvision may have waited for an in-process peer; another process can claim an
 		// explicit target in that window, so confirm ownership before reusing the directory.

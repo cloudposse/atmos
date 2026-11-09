@@ -64,7 +64,7 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 		componentPathExists = u.FileOrDirExists(componentPath)
 	}
 
-	if !componentPathExists && !info.DryRun {
+	if !componentPathExists && !dryRunCreatesComponentPath(atmosConfig, info) {
 		basePath, _ := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
 		return "", fmt.Errorf(
 			"%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
@@ -76,6 +76,19 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 	}
 
 	return componentPath, nil
+}
+
+// dryRunCreatesComponentPath reports whether a dry run skipped the step that would have created a
+// missing component directory: JIT source download, workdir provisioning, or file generation.
+// A plain local component with no such step must still exist during a dry run.
+func dryRunCreatesComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	if !info.DryRun {
+		return false
+	}
+	if component.DryRunDefersMissingPath(info) || provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		return true
+	}
+	return atmosConfig.Components.Terraform.AutoGenerateFiles && tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection) != nil
 }
 
 // autoGenerateComponentFiles creates the component directory and generates source files

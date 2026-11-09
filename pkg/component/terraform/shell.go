@@ -104,6 +104,10 @@ func (e *Executor) ExecuteTerraformShell(opts *tf.ShellOptions, atmosConfig *sch
 
 	info := shellInfoFromOptions(opts)
 	if info.AuthDisabled {
+		// Callers such as the interactive UI reuse one configuration across shells. Keep the
+		// disabled-auth manager on an invocation-local copy so a later authenticated shell is unaffected.
+		localConfig := *atmosConfig
+		atmosConfig = &localConfig
 		authdeferred.ConfigureAuth(atmosConfig, info.Identity)
 	}
 
