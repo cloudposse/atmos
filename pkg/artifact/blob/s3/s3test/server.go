@@ -199,7 +199,8 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request, key, op string) 
 	writeError(w, http.StatusNotImplemented, "NotImplemented", "operation is not supported by the fake")
 }
 
-// statusWriter remembers the status code written.
+// statusWriter remembers the status code written. It deliberately has no Write method of its own:
+// the embedded writer's Write is promoted, and status reports 200 when no header was written.
 type statusWriter struct {
 	http.ResponseWriter
 	code    int
@@ -213,15 +214,6 @@ func (w *statusWriter) WriteHeader(code int) {
 		w.code = code
 	}
 	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *statusWriter) Write(p []byte) (int, error) {
-	defer perf.Track(nil, "s3test.statusWriter.Write")()
-
-	if w.code == 0 {
-		w.code = http.StatusOK
-	}
-	return w.ResponseWriter.Write(p)
 }
 
 func (w *statusWriter) status() int {
