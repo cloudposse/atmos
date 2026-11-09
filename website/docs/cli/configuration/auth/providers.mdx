@@ -211,6 +211,9 @@ For job token and AWS trust configuration, follow [GitLab's AWS OIDC guide](http
 :::info Credential persistence
 Atmos never caches the token or derived AWS credentials in the keyring. AWS credentials
 may be reused within one invocation and are written to managed credential files for external tools.
+The [`atmos auth exec`](/cli/commands/auth/exec) command removes the GitLab-backed chain's AWS
+credential and config profiles when the command finishes, including when it fails. Other profiles
+are preserved. A separate `atmos auth login` keeps its managed files until [logout](/cli/commands/auth/logout).
 :::
 
 </TabItem>

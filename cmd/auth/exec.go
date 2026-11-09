@@ -71,7 +71,7 @@ func init() {
 }
 
 // executeAuthExecCommand is the main execution function for auth exec command.
-func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
+func executeAuthExecCommand(cmd *cobra.Command, args []string) (resultErr error) {
 	defer perf.Track(nil, "auth.executeAuthExecCommand")()
 
 	handleHelpRequest(cmd, args)
@@ -99,6 +99,14 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// Remove GitLab-derived credential files after the child finishes, preserving
+	// its exit status while also reporting any cleanup failure.
+	defer func() {
+		if cleanupErr := cleanupGitLabAuthExec(execCtx); cleanupErr != nil {
+			resultErr = errors.Join(resultErr, cleanupErr)
+		}
+	}()
 
 	// Revoke ephemeral (github/sts) tokens at command-end so brokered credentials
 	// don't outlive the command. Gated on CI and revoke_on_exit (default true);
@@ -130,7 +138,7 @@ func revokeEphemeralAuthExec(execCtx *authExecContext) {
 // environment. Returns the sanitized env list (os.Environ + global env + auth
 // vars, with credential leaks removed) for direct use as the child process's
 // Env so order is preserved and no duplicate-key collisions are introduced.
-func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecContext, error) {
+func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (execCtx *authExecContext, resultErr error) {
 	defer perf.Track(nil, "auth.exec.prepareAuthenticatedEnv")()
 
 	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
@@ -161,6 +169,21 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecConte
 		return nil, maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
 	}
 
+	execCtx = &authExecContext{
+		authManager:         authManager,
+		identity:            identityName,
+		revokeOnExitDefault: revokeOnExitDefault,
+	}
+	// Authentication can write credentials before shell setup fails. Capture
+	// the context now because an error return sets the named execCtx to nil.
+	defer func(cleanupCtx *authExecContext) {
+		if resultErr != nil {
+			if cleanupErr := cleanupGitLabAuthExec(cleanupCtx); cleanupErr != nil {
+				resultErr = errors.Join(resultErr, cleanupErr)
+			}
+		}
+	}(execCtx)
+
 	_, err = authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
@@ -185,12 +208,8 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecConte
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPrepareShellEnvironment, err)
 	}
 
-	return &authExecContext{
-		envList:             envList,
-		authManager:         authManager,
-		identity:            identityName,
-		revokeOnExitDefault: revokeOnExitDefault,
-	}, nil
+	execCtx.envList = envList
+	return execCtx, nil
 }
 
 // resolveIdentityNameForExec resolves the identity name from flags, viper, or prompts for selection.

@@ -28,6 +28,14 @@ Use `exec` for single commands or automation. Use [`shell`](/cli/commands/auth/s
 atmos auth exec [--identity <name>] -- <command> [args...]
 ```
 
+:::info GitLab OIDC credential cleanup
+For identities rooted at [`gitlab/oidc`](/cli/configuration/auth/providers#gitlab-cicd-oidc), Atmos
+removes the AWS credential and config profiles for the selected identity and its chain when the
+command finishes, including when it fails. Credentials remain usable throughout the command,
+and unrelated profiles are preserved. Cleanup also runs if authentication or shell setup fails
+after writing credentials.
+:::
+
 :::note Justification for privileged identities
 Authenticating an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity activates the role and requires a justification. Supply it with the [`--justification`](/cli/global-flags#authentication-flags) global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable (resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt). In a non-interactive context with none supplied, the command fails fast.
 :::

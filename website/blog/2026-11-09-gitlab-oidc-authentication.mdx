@@ -23,6 +23,8 @@ Configuration validation does not require a live job token. Authentication fails
 
 Atmos does not cache the GitLab token or derived AWS credentials in the keyring. AWS credentials can be reused within one Atmos invocation and are written to Atmos-managed credential files for external tools.
 
+The [`atmos auth exec`](/cli/commands/auth/exec) command removes the GitLab-backed identity chain's AWS credential and config profiles when the command finishes, including when it fails. Other profiles are preserved. A separate `atmos auth login` keeps its managed files until [logout](/cli/commands/auth/logout).
+
 ## How to Use It
 
 First, configure an AWS IAM OIDC provider for your GitLab instance and a role that trusts the intended project and branch or tag. Follow [GitLab's AWS OIDC guide](https://docs.gitlab.com/ci/cloud_services/aws/) for the provider, audience, and role trust policy. The Atmos provider consumes the job token; it does not create these AWS resources.
