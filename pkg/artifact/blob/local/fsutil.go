@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,9 @@ import (
 const (
 	renameAttempts = 8
 	renameBackoff  = 5 * time.Millisecond
+
+	// The openAttempts constant bounds the Windows retry for reads that race a concurrent rename-over.
+	openAttempts = 20
 )
 
 func mkdirAll(dir string, perm os.FileMode) error {
@@ -68,6 +72,40 @@ func renameReplace(src, dst string) error {
 		}
 	}
 	return err
+}
+
+// openFile opens path for reading. Windows refuses to open a file with a sharing violation while a
+// concurrent writer is renaming over it, so it retries briefly there. A missing file is reported
+// immediately because absence is a normal answer.
+func openFile(path string) (*os.File, error) {
+	attempts := 1
+	if runtime.GOOS == "windows" {
+		attempts = openAttempts
+	}
+	var (
+		file *os.File
+		err  error
+	)
+	for i := range attempts {
+		file, err = os.Open(path)
+		if err == nil || errors.Is(err, os.ErrNotExist) {
+			return file, err
+		}
+		if i < attempts-1 {
+			time.Sleep(renameBackoff)
+		}
+	}
+	return nil, err
+}
+
+// readFile returns the contents of path, retrying a transient Windows sharing violation like openFile.
+func readFile(path string) ([]byte, error) {
+	file, err := openFile(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return io.ReadAll(file)
 }
 
 // removeEmptyDirs removes empty directories from dir up to, but never including, root.
