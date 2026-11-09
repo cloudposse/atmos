@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -29,6 +30,10 @@ const (
 	// The separator splits the hashed parts of a key; no part may contain it.
 	separator = "\x00"
 )
+
+// hashLabel domain-separates the cache hashes. It is a fixed public label, not a secret: the hashes
+// only name cache files and scopes, and nothing here protects or stores a credential.
+var hashLabel = []byte("atmos.artifact.discovery.cache.v1")
 
 // Header is the metadata every snapshot starts with. Embed it first in a snapshot struct so the
 // serialized keys keep their order: version, source, kind, fetched_at.
@@ -148,12 +153,14 @@ func Scope(parts ...any) (string, error) {
 	return Hash(raw), nil
 }
 
-// Hash returns the lowercase hexadecimal SHA-256 of raw.
+// Hash returns the lowercase hexadecimal HMAC-SHA-256 of raw under the cache's fixed label. Equal
+// input always yields equal output, which is what names a cache file or scope.
 func Hash(raw []byte) string {
 	defer perf.Track(nil, "cache.Hash")()
 
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, hashLabel)
+	mac.Write(raw)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // Key derives the file stem of a source within a scope.

@@ -241,11 +241,15 @@ repositories:
 }
 
 func TestDecodedPRDDocumentValidatesWithAnchoredPaths(t *testing.T) {
-	root := t.TempDir()
-	// The document's trusted key is absolute on POSIX hosts but has no drive letter on Windows.
-	document := strings.ReplaceAll(prdDocument, "/etc/atmos/cosign.pub", filepath.ToSlash(filepath.Join(root, "cosign.pub")))
+	// A rooted Unix path such as /etc/atmos has no volume on Windows, so it is not absolute there.
+	// Build the trusted key path and the declaring file from a platform-absolute directory instead.
+	dir := t.TempDir()
+	keyPath := filepath.ToSlash(filepath.Join(dir, "cosign.pub"))
+	document := strings.Replace(prdDocument, "/etc/atmos/cosign.pub", keyPath, 1)
+	require.NotEqual(t, prdDocument, document, "the PRD document must contain the trusted key path being replaced")
+
 	cfg, _ := decodeYAMLDocument(t, document)
-	origin := NewOrigin(filepath.Join(root, "atmos.yaml"), false)
+	origin := NewOrigin(filepath.Join(dir, "atmos.yaml"), false)
 	for alias, repo := range cfg.Repositories {
 		repo.PathOrigin = origin
 		cfg.Repositories[alias] = repo

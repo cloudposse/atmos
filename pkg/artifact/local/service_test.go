@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -26,17 +25,17 @@ func newConfiguredService(t *testing.T) (*service.Service, string) {
 	root := t.TempDir()
 	registry := artifact.NewRepositoryRegistry()
 	require.NoError(t, RegisterWith(registry))
-	// Windows cannot enforce POSIX file modes, so an explicit permissions request is refused there.
-	permissions := "0600"
-	if runtime.GOOS == "windows" {
-		permissions = ""
+	packed := schema.ArtifactRepositoryConfig{
+		Kind: artifact.RepositoryKindLocalArchive, Packaging: "tgz",
+		Options: map[string]any{"path": filepath.Join(root, "packed")},
+	}
+	// Windows cannot enforce archive file modes, and the repository rejects the setting there.
+	if fixtures.POSIXModes() {
+		packed.Permissions = "0600"
 	}
 	cfg := &schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
-		"files": {Kind: artifact.RepositoryKindLocalDir, Options: map[string]any{"path": filepath.Join(root, "files")}},
-		"packed": {
-			Kind: artifact.RepositoryKindLocalArchive, Packaging: "tgz", Permissions: permissions,
-			Options: map[string]any{"path": filepath.Join(root, "packed")},
-		},
+		"files":  {Kind: artifact.RepositoryKindLocalDir, Options: map[string]any{"path": filepath.Join(root, "files")}},
+		"packed": packed,
 	}}
 	svc, err := service.New(service.FromConfig(cfg, registry), nil,
 		service.WithStagingRoot(t.TempDir()), service.WithRetry(2, time.Millisecond), service.WithSleep(func(context.Context, time.Duration) error { return nil }))

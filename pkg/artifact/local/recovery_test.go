@@ -189,9 +189,6 @@ func TestInterruptedForceReplacement(t *testing.T) {
 func TestReplacementNeverServesNewBytesUnderOldDigest(t *testing.T) {
 	for _, spec := range allSpecs {
 		t.Run(specName(spec), func(t *testing.T) {
-			if runtime.GOOS == "windows" && spec.kind == artifact.RepositoryKindLocalDir {
-				t.Skip("Windows cannot rename a directory that holds open files, so a replacement fails while a reader is mid-stream")
-			}
 			repo := newRepo(t, spec)
 			publish(t, repo, &prepareSpec{files: map[string]string{"data.txt": "v1\n"}}, artifact.PublishOptions{})
 			old := resolve(t, repo, defaultRef())
@@ -199,11 +196,21 @@ func TestReplacementNeverServesNewBytesUnderOldDigest(t *testing.T) {
 			require.NoError(t, err)
 			defer content.Close()
 
+			// Windows cannot rename a directory that contains open files, so a directory replacement
+			// cannot land under a mid-stream reader there. Close the reader first and keep the
+			// old-digest assertions; the mid-stream guard is exercised on POSIX hosts.
+			midStream := runtime.GOOS != "windows" || spec.kind != artifact.RepositoryKindLocalDir
+			if !midStream {
+				require.NoError(t, content.Close())
+			}
+
 			publish(t, repo, &prepareSpec{files: map[string]string{"data.txt": "v2\n"}, opID: "op-2"}, artifact.PublishOptions{Force: true, ExpectedPrior: &old})
 
-			err = readAll(t, content)
-			require.Error(t, err, "a reader that was open when the reference moved must not report success")
-			assert.True(t, errorsIsAny(err, errUtils.ErrArtifactPublicationUnavailable, errUtils.ErrArtifactIntegrityFailed, errUtils.ErrArtifactNotFound), "%v", err)
+			if midStream {
+				err = readAll(t, content)
+				require.Error(t, err, "a reader that was open when the reference moved must not report success")
+				assert.True(t, errorsIsAny(err, errUtils.ErrArtifactPublicationUnavailable, errUtils.ErrArtifactIntegrityFailed, errUtils.ErrArtifactNotFound), "%v", err)
+			}
 
 			_, err = repo.Read(context.Background(), old)
 			require.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
