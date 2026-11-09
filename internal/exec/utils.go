@@ -1128,6 +1128,12 @@ func processStacks(
 	configAndStacksInfo.ComponentSection["deps"] = componentDeps
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
+	// Admission runs before workspace and Spacelift/Atlantis name templates: a template
+	// can read an identity-backed store, and a failure there must not mask a denial.
+	if err := enforceComponentAdmission(atmosConfig, &configAndStacksInfo); err != nil {
+		return configAndStacksInfo, err
+	}
+
 	// Terraform workspace.
 	workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 	if err != nil {
@@ -1143,10 +1149,6 @@ func processStacks(
 	// is a snapshot of ComponentSection taken before templates run. Computing them
 	// here (instead of after templates) doesn't lose any information.
 	if err := computeSpaceliftAndAtlantisNames(atmosConfig, &configAndStacksInfo); err != nil {
-		return configAndStacksInfo, err
-	}
-
-	if err := enforceComponentAdmission(atmosConfig, &configAndStacksInfo); err != nil {
 		return configAndStacksInfo, err
 	}
 

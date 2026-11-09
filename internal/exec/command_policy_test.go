@@ -268,3 +268,63 @@ func TestAdmitComponentLeavesNonPolicyErrorsToExecutor(t *testing.T) {
 		ComponentFromArg: "does-not-exist", Stack: "my-explicit-stack", ComponentType: cfg.TerraformComponentType, SubCommand: "destroy",
 	}, nil))
 }
+
+// writeAdmissionWorkspaceFixture writes a project whose `vpc` component renders
+// metadata.terraform_workspace_template with a template that always fails, standing
+// in for a template that reads an identity-backed store before any login.
+func writeAdmissionWorkspaceFixture(t *testing.T) schema.AtmosConfiguration {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "components", "terraform", "vpc"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`base_path: "."
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths: ["**/*"]
+  name_pattern: "{stage}"
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "prod.yaml"), []byte(`vars:
+  stage: prod
+components:
+  terraform:
+    vpc:
+      metadata:
+        terraform_workspace_template: '{{ fail "store requires login" }}'
+`), 0o600))
+	t.Chdir(dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", dir)
+	t.Setenv("ATMOS_BASE_PATH", dir)
+	ClearFindStacksMapCache()
+	t.Cleanup(ClearFindStacksMapCache)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	return atmosConfig
+}
+
+// TestComponentAdmissionRunsBeforeWorkspaceTemplate verifies that a workspace
+// template failure cannot mask a denial: AdmitComponent ignores non-policy errors,
+// so a template evaluated before admission would let the caller log in first.
+func TestComponentAdmissionRunsBeforeWorkspaceTemplate(t *testing.T) {
+	atmosConfig := writeAdmissionWorkspaceFixture(t)
+	policyDir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", policyDir)
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc", Stack: "prod", ComponentType: cfg.TerraformComponentType, SubCommand: "shell",
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "guard.yaml"), []byte(componentAdmissionDenyManifest), 0o600))
+	_, err := ProcessStacks(&atmosConfig, info, true, false, false, nil, nil)
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	require.ErrorIs(t, AdmitComponent(&atmosConfig, &info, nil), errUtils.ErrPolicyDenied)
+
+	// An admitted invocation still reaches the workspace template and reports its failure.
+	other := strings.ReplaceAll(componentAdmissionDenyManifest, "'vpc'", "'not-vpc'")
+	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "guard.yaml"), []byte(other), 0o600))
+	_, err = ProcessStacks(&atmosConfig, info, true, false, false, nil, nil)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+	require.Contains(t, err.Error(), "store requires login")
+}

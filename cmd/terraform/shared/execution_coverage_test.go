@@ -758,3 +758,61 @@ func TestParseRunOptions_ScalarLabelsPreserveSpaces(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"team": "platform", "owner": "platform engineering"}, opts.Labels)
 }
+
+// TestHandleInteractiveIdentitySelectionAdmitsBeforeSelecting verifies that a bare
+// --identity cannot select and authenticate an identity for a command that policy
+// denies. Headless, identity selection fails with ErrFailedToInitializeAuthManager,
+// so reaching it instead of ErrPolicyDenied means admission ran too late.
+func TestHandleInteractiveIdentitySelectionAdmitsBeforeSelecting(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(`
+base_path: ""
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths: ["**/*"]
+  name_pattern: "{stage}"
+auth:
+  identities:
+    dev:
+      kind: "ambient"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "stacks", "prod.yaml"), []byte(`
+vars:
+  stage: prod
+components:
+  terraform:
+    vpc: {}
+`), 0o644))
+	t.Chdir(tmpDir)
+	policyDir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", policyDir)
+	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "guard.yaml"), []byte(`apiVersion: atmos/v1
+kind: Policy
+metadata: {name: no-destroy}
+spec:
+  policies:
+    guard:
+      on: component.command
+      action: deny
+      rule: input.command == 'destroy'
+`), 0o600))
+	newInfo := func(subCommand string) *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{
+			AtmosConfigDirsFromArg: []string{tmpDir}, ComponentFromArg: "vpc", Stack: "prod",
+			ComponentType: cfg.TerraformComponentType, SubCommand: subCommand, Identity: cfg.IdentityFlagSelectValue,
+		}
+	}
+
+	err := HandleInteractiveIdentitySelection(newInfo("destroy"))
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	assert.NotErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
+
+	// An admitted command proceeds to identity selection.
+	err = HandleInteractiveIdentitySelection(newInfo("plan"))
+	require.ErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
+	assert.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+}
