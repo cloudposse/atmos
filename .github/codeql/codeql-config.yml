@@ -1,7 +1,0 @@
-name: "Atmos CodeQL configuration"
-
-# Test doubles that run only under `go test` and are never linked into the atmos binary.
-# The fake S3 server deliberately returns stored request bodies and client-chosen content
-# types, which the reflected-XSS query reports for any HTTP handler.
-paths-ignore:
-  - pkg/artifact/blob/s3/s3test
