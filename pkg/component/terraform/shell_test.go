@@ -272,6 +272,20 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 				"Terraform workspace: ",
 			},
 		},
+		{
+			name: "Unverified cold source path",
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"},
+			cfg: &shellConfig{
+				componentPath:  "/.workdir/terraform/dev-vpc",
+				workingDir:     "/.workdir/terraform/dev-vpc",
+				varFile:        "dev-vpc.terraform.tfvars.json",
+				unverifiedPath: true,
+			},
+			expectedOutput: []string{
+				"Component path: /.workdir/terraform/dev-vpc" + unverifiedPathNote,
+				"Working directory: /.workdir/terraform/dev-vpc" + unverifiedPathNote,
+			},
+		},
 	}
 
 	for _, tt := range tests {

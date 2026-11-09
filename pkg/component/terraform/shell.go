@@ -26,16 +26,26 @@ type shellConfig struct {
 	componentPath string
 	workingDir    string
 	varFile       string
+	// unverifiedPath marks a dry-run path for a JIT source that has not been downloaded yet, so the
+	// metadata.component subpath could not be resolved against the source tree.
+	unverifiedPath bool
 }
+
+// unverifiedPathNote explains why a dry-run component path may not be the final module root.
+const unverifiedPathNote = " (unverified: source not downloaded yet; metadata.component may select a subfolder)"
 
 // printShellDryRunInfo prints the shell configuration in dry-run mode.
 func printShellDryRunInfo(info *schema.ConfigAndStacksInfo, cfg *shellConfig) {
 	ui.Writeln("Dry run mode: shell would be started with the following configuration:")
 	ui.Writeln("  Component: " + info.ComponentFromArg)
 	ui.Writeln("  Stack: " + info.Stack)
-	ui.Writeln("  Working directory: " + cfg.workingDir)
+	note := ""
+	if cfg.unverifiedPath {
+		note = unverifiedPathNote
+	}
+	ui.Writeln("  Working directory: " + cfg.workingDir + note)
 	ui.Writeln("  Terraform workspace: " + info.TerraformWorkspace)
-	ui.Writeln("  Component path: " + cfg.componentPath)
+	ui.Writeln("  Component path: " + cfg.componentPath + note)
 	ui.Writeln("  Varfile: " + cfg.varFile)
 }
 
@@ -143,11 +153,14 @@ func (e *Executor) ExecuteTerraformShell(opts *tf.ShellOptions, atmosConfig *sch
 	// This handles the workdir provisioner which may copy component files to an isolated directory.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	unverifiedPath := false
 	if info.DryRun {
-		componentPath, _, err = component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, &info, config.TerraformComponentType, componentPath)
+		var exists bool
+		componentPath, exists, err = component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, &info, config.TerraformComponentType, componentPath)
 		if err != nil {
 			return err
 		}
+		unverifiedPath = !exists && component.DryRunDefersMissingPath(&info)
 	}
 
 	err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), atmosConfig, info.ComponentSection, info.AuthContext, provisioner.OutputWriters{}, &provisioner.TerraformExecContext{DryRun: info.DryRun})
@@ -173,9 +186,10 @@ func (e *Executor) ExecuteTerraformShell(opts *tf.ShellOptions, atmosConfig *sch
 	componentPath = resolveWorkdirPath(info.ComponentSection, componentPath)
 
 	cfg := &shellConfig{
-		componentPath: componentPath,
-		workingDir:    ConstructTerraformComponentWorkingDir(atmosConfig, &info),
-		varFile:       ConstructTerraformComponentVarfileName(&info),
+		componentPath:  componentPath,
+		workingDir:     ConstructTerraformComponentWorkingDir(atmosConfig, &info),
+		varFile:        ConstructTerraformComponentVarfileName(&info),
+		unverifiedPath: unverifiedPath,
 	}
 
 	if info.DryRun {
