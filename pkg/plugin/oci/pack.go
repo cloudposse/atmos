@@ -35,15 +35,18 @@ const (
 	// ConfigMediaType identifies a plugin platform image's static configuration.
 	ConfigMediaType types.MediaType = "application/vnd.atmos.plugin.config.v1+json"
 	// BundleMediaType identifies a bounded, uncompressed package archive.
-	BundleMediaType        types.MediaType = "application/vnd.atmos.plugin.bundle.v1+tar"
-	annotationName                         = "dev.atmos.plugin.name"
-	annotationVersion                      = "dev.atmos.plugin.version"
-	annotationManifest                     = "dev.atmos.plugin.manifest.digest"
-	annotationSource                       = "org.opencontainers.image.source"
-	annotationTitle                        = "org.opencontainers.image.title"
-	annotationDescription                  = "org.opencontainers.image.description"
-	annotationImageVersion                 = "org.opencontainers.image.version"
-	maxSourceLength                        = 512
+	BundleMediaType types.MediaType = "application/vnd.atmos.plugin.bundle.v1+tar"
+)
+
+const (
+	annotationName         = "dev.atmos.plugin.name"
+	annotationVersion      = "dev.atmos.plugin.version"
+	annotationManifest     = "dev.atmos.plugin.manifest.digest"
+	annotationSource       = "org.opencontainers.image.source"
+	annotationTitle        = "org.opencontainers.image.title"
+	annotationDescription  = "org.opencontainers.image.description"
+	annotationImageVersion = "org.opencontainers.image.version"
+	maxSourceLength        = 512
 	// Bound on a free-text annotation, which is copied into the index and every platform descriptor, so
 	// a long description cannot push the index past the metadata limit inspection and publishing enforce.
 	maxAnnotationText = 1024
