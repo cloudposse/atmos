@@ -57,7 +57,7 @@ require (
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v1.0.0
-	github.com/charmbracelet/x/ansi v0.11.8
+	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/cockroachdb/errors v1.13.0
 	github.com/creack/pty v1.1.24
@@ -98,7 +98,7 @@ require (
 	github.com/kubescape/go-git-url v0.0.31
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/mattn/go-isatty v0.0.23
-	github.com/mattn/go-runewidth v0.0.24
+	github.com/mattn/go-runewidth v0.0.27
 	github.com/mikefarah/yq/v4 v4.52.4
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
@@ -331,7 +331,7 @@ require (
 	github.com/lestrrat-go/httprc/v3 v3.0.5 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.1.1 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
-	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
+	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/marshallbrekka/go-u2fhost v0.0.0-20210111072507-3ccdec8c8105 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
