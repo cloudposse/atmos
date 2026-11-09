@@ -127,8 +127,9 @@ func HandleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error 
 }
 
 // admitBeforeIdentitySelection runs component admission (policy `component.command`)
-// for a single-component invocation without credentials. Configuration errors are
-// left to the executor, which reports them authoritatively.
+// for a single-component invocation without credentials. A configuration error
+// fails here too, so the user never selects and authenticates an identity for a
+// command that cannot run.
 func admitBeforeIdentitySelection(info *schema.ConfigAndStacksInfo) error {
 	if info.ComponentFromArg == "" || info.Stack == "" {
 		return nil
@@ -137,10 +138,11 @@ func admitBeforeIdentitySelection(info *schema.ConfigAndStacksInfo) error {
 	if err != nil || !enabled {
 		return err
 	}
-	if atmosConfig, cfgErr := initCliConfig(*info, true); cfgErr == nil {
-		return e.AdmitComponent(&atmosConfig, info, nil)
+	atmosConfig, err := initCliConfig(*info, true)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
 	}
-	return nil
+	return e.AdmitComponent(&atmosConfig, info, nil)
 }
 
 // ResolveAndPromptForArgs handles path resolution and interactive prompts for component/stack.

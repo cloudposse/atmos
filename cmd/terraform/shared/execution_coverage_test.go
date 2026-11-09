@@ -815,4 +815,19 @@ spec:
 	err = HandleInteractiveIdentitySelection(newInfo("plan"))
 	require.ErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
 	assert.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+
+	// A configuration error that prevents admission fails before identity selection.
+	previousInit := initCliConfig
+	t.Cleanup(func() { initCliConfig = previousInit })
+	configErr := errors.New("broken stack config")
+	initCliConfig = func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		if processStacks {
+			return schema.AtmosConfiguration{}, configErr
+		}
+		return previousInit(info, processStacks)
+	}
+	err = HandleInteractiveIdentitySelection(newInfo("plan"))
+	require.ErrorIs(t, err, errUtils.ErrInitializeCLIConfig)
+	require.ErrorIs(t, err, configErr)
+	assert.NotErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
 }
