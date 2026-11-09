@@ -83,6 +83,12 @@ func TestNewProvider_Registry(t *testing.T) {
 			expectError:  false,
 		},
 		{
+			name:         "gitlab-oidc-valid",
+			providerName: "gitlab-oidc",
+			config:       &schema.Provider{Kind: "gitlab/oidc"},
+			expectError:  false,
+		},
+		{
 			name:         "gcp-adc-valid",
 			providerName: "gcp-adc",
 			config: &schema.Provider{

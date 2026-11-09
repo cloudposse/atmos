@@ -47,6 +47,9 @@ const (
 
 	// GitHub provider kinds.
 	ProviderKindGitHubOIDC = "github/oidc"
+
+	// GitLab provider kinds.
+	ProviderKindGitLabOIDC = "gitlab/oidc"
 )
 
 // EmulatorIdentityKinds lists the identity kinds that bind to a running emulator.

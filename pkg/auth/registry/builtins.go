@@ -10,6 +10,7 @@ import (
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
 	azureProviders "github.com/cloudposse/atmos/pkg/auth/providers/azure"
 	githubProviders "github.com/cloudposse/atmos/pkg/auth/providers/github"
+	gitlabProviders "github.com/cloudposse/atmos/pkg/auth/providers/gitlab"
 	mockProviders "github.com/cloudposse/atmos/pkg/auth/providers/mock"
 	mockawsProviders "github.com/cloudposse/atmos/pkg/auth/providers/mock/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -26,6 +27,7 @@ func builtinProviders() map[string]ProviderConfigConstructor {
 		"azure/interactive":       providerConstructor(azureProviders.NewInteractiveProvider),
 		"azure/oidc":              providerConstructor(azureProviders.NewOIDCProvider),
 		"github/oidc":             providerConstructor(githubProviders.NewOIDCProvider),
+		"gitlab/oidc":             providerConstructor(gitlabProviders.NewOIDCProvider),
 		"atmos/pro":               providerConstructor(atmosproProviders.NewProvider),
 		"mock": func(name string, config *schema.Provider) (types.Provider, error) {
 			return mockProviders.NewProvider(name, config), nil

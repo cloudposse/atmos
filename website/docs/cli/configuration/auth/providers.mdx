@@ -182,6 +182,37 @@ than once per identity. A request that times out, fails on the network, or gets 
 is retried with exponential backoff, up to four attempts in total.
 :::
 
+## GitLab CI/CD OIDC
+
+For GitLab CI/CD jobs that provide an OIDC ID token.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    gitlab:
+      kind: gitlab/oidc
+      spec:
+        token_environment_variable: ATMOS_OIDC_TOKEN
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gitlab/oidc`.</dd>
+
+  <dt>`spec.token_environment_variable`</dt>
+  <dd>Optional. Name of the environment variable containing the job's ID token. Defaults to `ATMOS_OIDC_TOKEN`. The variable must contain a nonempty token when authenticating.</dd>
+</dl>
+
+Use this provider with an [`aws/assume-role` identity](/cli/configuration/auth/identities).
+For job token and AWS trust configuration, follow [GitLab's AWS OIDC guide](https://docs.gitlab.com/ci/cloud_services/aws/).
+
+:::info Credential persistence
+Atmos never caches the token or derived AWS credentials in the keyring. AWS credentials
+may be reused within one invocation and are written to managed credential files for external tools.
+:::
+
 </TabItem>
 <TabItem value="azure" label="Azure">
 

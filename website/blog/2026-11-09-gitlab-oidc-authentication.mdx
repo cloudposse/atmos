@@ -1,0 +1,65 @@
+---
+slug: gitlab-oidc-authentication
+title: "Native GitLab CI/CD OIDC Authentication"
+authors: [knmiguel]
+tags: [feature, security]
+---
+
+Using GitLab job ID tokens with Atmos has required pipeline scripts to exchange tokens for AWS credentials or prepare web identity token files. The new [GitLab OIDC provider](/cli/configuration/auth/providers#gitlab-cicd-oidc) connects those tokens directly to Atmos identities, so jobs can assume AWS roles without that extra credential setup.
+
+<!--truncate-->
+
+## The Problem
+
+GitLab CI/CD can issue a short-lived OIDC ID token for each job. Using that token outside the Atmos authentication model means maintaining separate credential setup in the pipeline, even when the project already defines its AWS roles and identity chains in Atmos.
+
+## The Fix
+
+The new `gitlab/oidc` provider reads the job's ID token from an environment variable. It defaults to `ATMOS_OIDC_TOKEN`, with an optional `spec.token_environment_variable` setting for pipelines that use another name.
+
+An [`aws/assume-role` identity](/cli/configuration/auth/identities#assume-role) exchanges the token for temporary AWS credentials through `AssumeRoleWithWebIdentity`. Existing [identity chains](/cli/configuration/auth/identities#identity-chaining) can then assume additional roles, including roles in other AWS accounts.
+
+Configuration validation does not require a live job token. Authentication fails with a clear error if the configured environment variable is missing or empty.
+
+Atmos does not cache the GitLab token or derived AWS credentials in the keyring. AWS credentials can be reused within one Atmos invocation and are written to Atmos-managed credential files for external tools.
+
+## How to Use It
+
+First, configure an AWS IAM OIDC provider for your GitLab instance and a role that trusts the intended project and branch or tag. Follow [GitLab's AWS OIDC guide](https://docs.gitlab.com/ci/cloud_services/aws/) for the provider, audience, and role trust policy. The Atmos provider consumes the job token; it does not create these AWS resources.
+
+Define the provider and an AWS identity:
+
+```yaml title="atmos.yaml"
+auth:
+  providers:
+    gitlab:
+      kind: gitlab/oidc
+
+  identities:
+    deploy:
+      kind: aws/assume-role
+      via:
+        provider: gitlab
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/GitLabDeployRole
+        region: eu-west-1
+```
+
+In a GitLab job with Atmos and the AWS CLI installed, request the token and run a command through [`atmos auth exec`](/cli/commands/auth/exec):
+
+```yaml title=".gitlab-ci.yml"
+verify-identity:
+  id_tokens:
+    ATMOS_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  script:
+    - atmos auth exec --identity=deploy -- aws sts get-caller-identity
+```
+
+The `aud` value must match the audience configured in the AWS IAM OIDC provider. Replace the example account ID and role name with your own.
+
+If the job already exposes its token as `AWS_ID_TOKEN`, set `spec.token_environment_variable: AWS_ID_TOKEN` on the Atmos provider and use that same name under the job's `id_tokens` configuration.
+
+## Get Involved
+
+This feature addresses [#3207](https://github.com/cloudposse/atmos/issues/3207). See the [GitLab provider reference](/cli/configuration/auth/providers#gitlab-cicd-oidc) for configuration details, and [open an issue](https://github.com/cloudposse/atmos/issues) if your pipeline needs additional support.
