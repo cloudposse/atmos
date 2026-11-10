@@ -82,7 +82,7 @@ Atmos removes a generated file when its `generate` block is removed, but only wh
 
 A unit without a stable `remote_state` path keeps local state under `.terragrunt-cache`, which moves with the checkout path and disappears when the cache is deleted. Atmos keeps that location, to preserve existing state identity, and warns when it applies.
 
-`dependencies.tools` is read from stack manifests and component sections, not from `atmos.yaml`. Units have no stack manifest, so a unit takes its tool pins from `.tool-versions`.
+`dependencies.tools` is read from stack manifests and component sections, not from `atmos.yaml`. An imported unit takes `dependencies.tools` from the importing stack's configuration, and those pins take precedence over `.tool-versions`. A discovered unit has no stack manifest, so it takes its tool pins from `.tool-versions`.
 
 Unsupported semantics fail before any infrastructure command and never switch executors. Currently rejected: `terraform_binary`; `errors`, `exclude`, feature flags, and IAM role or web-identity settings; `remote_state` with `disable_init` or encryption; inline modules without `terraform.source`; output dependencies with a non-default workspace during discovery; the `read-config`, `terragrunt-read-config`, and `init-from-module` hook lifecycles; hooks that run a built-in integration such as `tflint`; and an invalid `on_errors` expression. Executable mode, typed provider flags and help, exact cty types and sensitivity, scoped Terragrunt logging, migration and setup generation, and Atmos Pro integration remain in the PRDs.
 
