@@ -153,13 +153,10 @@ func (p *Provider) PostComment(ctx context.Context, opts *provider.PostCommentOp
 func (p *Provider) readChecks(ctx context.Context, opts provider.StatusOptions, branch *provider.BranchStatus) error {
 	latest := map[string]int64{}
 	indices := map[string]int{}
-	for page := 1; ; page++ {
-		var statuses []commitStatus
-		path := repoPath(opts.Owner, opts.Repo) + "/commits/" + url.PathEscape(opts.SHA) + "/statuses?sort=recentupdate&limit=50&page=" + strconv.Itoa(page)
-		if err := p.request(ctx, http.MethodGet, path, nil, &statuses); err != nil {
-			return err
-		}
-		for _, s := range statuses {
+	path := repoPath(opts.Owner, opts.Repo) + "/commits/" + url.PathEscape(opts.SHA) + "/statuses?sort=recentupdate"
+	statuses := listing[commitStatus]{path: path, id: func(s commitStatus) int64 { return s.ID }, limitErr: errUtils.ErrCIStatusFetchFailed}
+	return forEachPage(ctx, p, statuses, func(page []commitStatus) error {
+		for _, s := range page {
 			if id, exists := latest[s.Context]; exists && s.ID <= id {
 				continue
 			}
@@ -172,11 +169,8 @@ func (p *Provider) readChecks(ctx context.Context, opts provider.StatusOptions, 
 				branch.Checks = append(branch.Checks, check)
 			}
 		}
-		if len(statuses) < pageSize {
-			break
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func (p *Provider) findComment(ctx context.Context, path, marker string) (*comment, error) {
@@ -188,30 +182,20 @@ func (p *Provider) findComment(ctx context.Context, path, marker string) (*comme
 		return nil, errUtils.ErrCICommentListFailed
 	}
 	var match *comment
-	seen := map[int64]struct{}{}
-	for page := 1; page <= maxCommentPages; page++ {
-		var comments []comment
-		if err := p.request(ctx, http.MethodGet, path+"?limit=50&page="+strconv.Itoa(page), nil, &comments); err != nil {
-			return nil, err
-		}
-		unseen := 0
-		for _, c := range comments {
-			if _, dup := seen[c.ID]; dup {
-				continue
-			}
-			seen[c.ID] = struct{}{}
-			unseen++
+	comments := listing[comment]{path: path, id: func(c comment) int64 { return c.ID }, limitErr: errUtils.ErrCICommentListFailed}
+	err := forEachPage(ctx, p, comments, func(page []comment) error {
+		for _, c := range page {
 			if c.User.ID == user.ID && strings.Contains(c.Body, marker) {
 				copy := c
 				match = &copy
 			}
 		}
-		// Stop on a short page, or when the server repeats a page it already returned.
-		if len(comments) < pageSize || unseen == 0 {
-			return match, nil
-		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("%w: more than %d pages of comments", errUtils.ErrCICommentListFailed, maxCommentPages)
+	return match, nil
 }
 
 func checkStatus(s commitStatus) *provider.CheckStatus {

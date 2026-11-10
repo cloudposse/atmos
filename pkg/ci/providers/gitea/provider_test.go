@@ -174,7 +174,7 @@ func TestCommentPaginationIsCapped(t *testing.T) {
 	})
 	_, err := NewProvider().findComment(context.Background(), "/repos/org/repo/issues/1/comments", "<!-- marker -->")
 	require.ErrorIs(t, err, errUtils.ErrCICommentListFailed)
-	require.Equal(t, maxCommentPages, pages)
+	require.Equal(t, maxPages, pages)
 }
 
 func TestAPIRejectsUnsafeConfigAndRedirects(t *testing.T) {

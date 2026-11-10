@@ -3,8 +3,8 @@ package gitea
 import (
 	"context"
 	"net/http"
-	"strconv"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
@@ -26,20 +26,19 @@ func (p *Provider) addPullRequests(ctx context.Context, opts provider.StatusOpti
 	if err := p.request(ctx, http.MethodGet, "/user", nil, &user); err != nil {
 		return err
 	}
-	for page := 1; ; page++ {
-		var prs []pullRequest
-		if err := p.request(ctx, http.MethodGet, repoPath(opts.Owner, opts.Repo)+"/pulls?state=open&limit=50&page="+strconv.Itoa(page), nil, &prs); err != nil {
-			return err
-		}
+	open := listing[pullRequest]{
+		path:     repoPath(opts.Owner, opts.Repo) + "/pulls?state=open",
+		id:       func(pr pullRequest) int64 { return int64(pr.Number) },
+		limitErr: errUtils.ErrCIStatusFetchFailed,
+	}
+	return forEachPage(ctx, p, open, func(prs []pullRequest) error {
 		for i := range prs {
 			if err := p.addPullRequest(ctx, opts, result, &prs[i], user.ID); err != nil {
 				return err
 			}
 		}
-		if len(prs) < pageSize {
-			return nil
-		}
-	}
+		return nil
+	})
 }
 
 func (p *Provider) addPullRequest(ctx context.Context, opts provider.StatusOptions, result *provider.Status, pr *pullRequest, userID int64) error {
