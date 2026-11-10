@@ -16,7 +16,7 @@
   border: 1px solid rgba(128, 128, 128, 0.25);
   border-radius: 0.875rem;
   color: var(--ifm-font-color-base);
-  background: var(--ifm-card-background-color);
+  background: var(--ifm-background-color);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
 }
 .dialog::backdrop {

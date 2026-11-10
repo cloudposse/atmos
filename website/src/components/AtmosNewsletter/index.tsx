@@ -14,7 +14,7 @@ export default function AtmosNewsletter(): JSX.Element {
     >
       <h2>Keep up with Atmos</h2>
       <p className={styles.description}>
-        Five released updates at a time, delivered weekly. No updates, no email.
+        Up to five released updates, delivered weekly. No updates, no email.
       </p>
       <iframe
         src={src}
