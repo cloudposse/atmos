@@ -76,7 +76,7 @@ var (
 	// Matches apply summary: "Apply complete! Resources: X added, Y changed, Z destroyed."
 	// Used as fallback when JSON is not available.
 	// The optional "N imported," prefix appears when the configuration has import blocks.
-	applySummaryRe = regexp.MustCompile(`Apply complete!\s*Resources:\s*(?:\d+\s+imported,\s*)?(\d+)\s+added,\s*(\d+)\s+changed,\s*(\d+)\s+destroyed`)
+	applySummaryRe = regexp.MustCompile(`Apply complete!\s*Resources:\s*(?:(\d+)\s+imported,\s*)?(\d+)\s+added,\s*(\d+)\s+changed,\s*(\d+)\s+destroyed`)
 
 	// Matches destroy summary: "Destroy complete! Resources: X destroyed."
 	// Used as fallback when JSON is not available.
@@ -89,9 +89,9 @@ var (
 	planSummaryRe = regexp.MustCompile(`Plan:\s*(?:(\d+)\s+to import,\s*)?(\d+)\s+to add,\s*(\d+)\s+to change,\s*(\d+)\s+to destroy`)
 
 	// NoChangesRe matches "No changes. Your infrastructure matches the configuration.".
-	// "No changes." is anchored to the start of a line (allowing leading color codes) so
+	// Both phrases are anchored to the start of a line (allowing leading color codes) so
 	// the same words inside a planned attribute value do not read as an empty plan.
-	noChangesRe = regexp.MustCompile(`(?m)^(?:\x1b\[[0-9;]*m)*No changes\.|Your infrastructure matches the configuration`)
+	noChangesRe = regexp.MustCompile(`(?m)^(?:\x1b\[[0-9;]*m)*(?:No changes\.|Your infrastructure matches the configuration)`)
 
 	// Matches resource action lines in terraform plan output:
 	//   # resource_type.name will be created
@@ -533,11 +533,15 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 	}
 
 	// Parse apply summary.
-	if matches := applySummaryRe.FindStringSubmatch(output); len(matches) == 4 {
-		data.ResourceCounts.Create = parseIntOrZero(matches[1])
-		data.ResourceCounts.Change = parseIntOrZero(matches[2])
-		data.ResourceCounts.Destroy = parseIntOrZero(matches[3])
-		result.HasChanges = data.ResourceCounts.Create > 0 ||
+	if matches := applySummaryRe.FindStringSubmatch(output); len(matches) == applySummaryRe.NumSubexp()+1 {
+		// The completed import count comes from the summary, not from "Importing..."
+		// progress lines, which also appear for imports that failed.
+		imported := parseIntOrZero(matches[1])
+		data.ResourceCounts.Create = parseIntOrZero(matches[2])
+		data.ResourceCounts.Change = parseIntOrZero(matches[3])
+		data.ResourceCounts.Destroy = parseIntOrZero(matches[4])
+		result.HasChanges = imported > 0 ||
+			data.ResourceCounts.Create > 0 ||
 			data.ResourceCounts.Change > 0 ||
 			data.ResourceCounts.Destroy > 0
 		data.ChangedResult = matches[0]

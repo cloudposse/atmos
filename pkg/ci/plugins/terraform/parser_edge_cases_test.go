@@ -155,6 +155,19 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 		assert.Equal(t, []string{"aws_ssm_parameter.p"}, data.CreatedResources)
 	})
 
+	t.Run("infrastructure phrase inside an attribute value is not an empty plan", func(t *testing.T) {
+		result, data := planData(t, `
+  # aws_ssm_parameter.p will be created
+  + resource "aws_ssm_parameter" "p" {
+      + description = "Your infrastructure matches the configuration"
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+`)
+		assert.True(t, result.HasChanges)
+		assert.Equal(t, plugin.ResourceCounts{Create: 1}, data.ResourceCounts)
+	})
+
 	t.Run("real no-changes line still reads as empty", func(t *testing.T) {
 		for _, output := range []string{
 			"\nNo changes. Your infrastructure matches the configuration.\n",
@@ -200,6 +213,23 @@ aws_s3_bucket.b: Import complete [id=example-data]
 Apply complete! Resources: 1 imported, 0 added, 0 changed, 0 destroyed.
 `)
 		assert.Equal(t, []string{"aws_s3_bucket.b"}, data.ImportedResources)
+	})
+
+	t.Run("import-only apply is a change", func(t *testing.T) {
+		result := ParseApplyOutput("\nApply complete! Resources: 2 imported, 0 added, 0 changed, 0 destroyed.\n")
+		assert.True(t, result.HasChanges)
+		data, ok := result.Data.(*plugin.TerraformOutputData)
+		require.True(t, ok)
+		assert.Equal(t, plugin.ResourceCounts{}, data.ResourceCounts)
+	})
+
+	t.Run("failed import attempt alone is not a change", func(t *testing.T) {
+		result := ParseApplyOutput(`
+aws_s3_bucket.b: Importing... [id=example-data]
+
+Apply complete! Resources: 0 imported, 0 added, 0 changed, 0 destroyed.
+`)
+		assert.False(t, result.HasChanges)
 	})
 
 	t.Run("provisioner output is not a resource action", func(t *testing.T) {

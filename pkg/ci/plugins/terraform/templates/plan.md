@@ -1,7 +1,7 @@
 {{- $target := .Target -}}
 {{- if .Result.HasErrors }}
 ## Plan Failed for `{{.Component}}` in `{{.Stack}}`
-{{- else if .HasResourceChanges }}
+{{- else if or .HasResourceChanges .HasStateChanges }}
 ## Resource Changes Found for `{{.Component}}` in `{{.Stack}}`
 {{- else if .HasOutputChanges }}
 ## Output Changes Found for `{{.Component}}` in `{{.Stack}}`
@@ -26,6 +26,11 @@
 {{- if gt .Resources.Replace 0 }}[![replace](https://shields.io/badge/PLAN-REPLACE-critical?style=for-the-badge)](#replace-{{$target}})
 {{- end -}}
 {{- if gt .Resources.Destroy 0 }}[![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#destroy-{{$target}})
+{{- end -}}
+{{- else if .HasStateChanges -}}
+{{- if gt (len .ImportedResources) 0 }}[![import](https://shields.io/badge/PLAN-IMPORT-success?style=for-the-badge)](#import-{{$target}})
+{{- end -}}
+{{- if gt (len .MovedResources) 0 }}[![move](https://shields.io/badge/PLAN-MOVE-informational?style=for-the-badge)](#result-{{$target}})
 {{- end -}}
 {{- else if .HasOutputChanges }}[![output changes](https://shields.io/badge/PLAN-OUTPUT_CHANGE-blue?style=for-the-badge)](#result-{{$target}})
 {{- else }}[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-{{$target}})

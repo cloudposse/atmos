@@ -159,6 +159,14 @@ func (c *TerraformTemplateContext) HasResourceChanges() bool {
 		c.Resources.Destroy > 0
 }
 
+// HasStateChanges returns true if resources are imported or moved. Such a plan
+// rewrites state even when it adds, changes and destroys nothing.
+func (c *TerraformTemplateContext) HasStateChanges() bool {
+	defer perf.Track(nil, "terraform.TerraformTemplateContext.HasStateChanges")()
+
+	return len(c.ImportedResources) > 0 || len(c.MovedResources) > 0
+}
+
 // TotalChanges returns the total number of resource changes.
 func (c *TerraformTemplateContext) TotalChanges() int {
 	defer perf.Track(nil, "terraform.TerraformTemplateContext.TotalChanges")()
