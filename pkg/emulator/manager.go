@@ -484,7 +484,7 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 	}
 	return Endpoint{
 		Target:     target,
-		Host:       reachableHostForPublishedPorts(),
+		Host:       publishedPortsHost(spec, ports),
 		Ports:      ports,
 		NetworkIPs: info.NetworkIPs,
 		Region:     spec.Region,

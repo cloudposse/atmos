@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestReachableHostForPublishedPorts_HostNativeUsesLocalhost(t *testing.T) {
@@ -145,6 +146,48 @@ func TestParseLinuxDefaultGateway(t *testing.T) {
 
 	assert.Equal(t, "192.168.2.1", parseLinuxDefaultGateway(routeTable))
 	assert.Empty(t, parseLinuxDefaultGateway("Iface Destination Gateway\neth0 00000001 0102A8C0\n"))
+}
+
+func TestPublishedPortsHost(t *testing.T) {
+	spec := func(ports ...schema.ContainerPort) *Spec {
+		return &Spec{Driver: "localstack", Container: &schema.ContainerRunStep{Ports: ports}}
+	}
+	published := map[int]int{4566: 34566, 4571: 34571}
+
+	tests := []struct {
+		name        string
+		override    string
+		inContainer bool
+		spec        *Spec
+		want        string
+	}{
+		{name: "IPv6 bind on primary port", spec: spec(schema.ContainerPort{Bind: "::1", Container: 4566}), want: "::1"},
+		{name: "bracketed IPv6 bind", spec: spec(schema.ContainerPort{Bind: "[::1]", Container: 4566}), want: "::1"},
+		{name: "IPv4 interface bind", spec: spec(schema.ContainerPort{Bind: "192.168.1.5", Container: 4566}), want: "192.168.1.5"},
+		{name: "no bind keeps localhost", spec: spec(schema.ContainerPort{Container: 4566}), want: "localhost"},
+		{name: "wildcard IPv4 bind keeps localhost", spec: spec(schema.ContainerPort{Bind: "0.0.0.0", Container: 4566}), want: "localhost"},
+		{name: "wildcard IPv6 bind keeps localhost", spec: spec(schema.ContainerPort{Bind: "::", Container: 4566}), want: "localhost"},
+		{name: "bind on non-primary port ignored", spec: spec(schema.ContainerPort{Container: 4566}, schema.ContainerPort{Bind: "::1", Container: 4571}), want: "localhost"},
+		{name: "operator override wins", override: "emulator.internal", spec: spec(schema.ContainerPort{Bind: "::1", Container: 4566}), want: "emulator.internal"},
+		{name: "in-container host wins", inContainer: true, spec: spec(schema.ContainerPort{Bind: "::1", Container: 4566}), want: "192.168.2.1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(envEmulatorEndpointHost, tt.override)
+			restore := stubEndpointHostDetection(t, tt.inContainer, "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n"+
+				"eth0\t00000000\t0102A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0\n")
+			defer restore()
+			origLookup := lookupHost
+			lookupHost = func(context.Context, string) ([]string, error) { return nil, errors.New("no such host") }
+			defer func() { lookupHost = origLookup }()
+
+			assert.Equal(t, tt.want, publishedPortsHost(tt.spec, published))
+		})
+	}
+}
+
+func TestPrimaryBindAddress_NoPorts(t *testing.T) {
+	assert.Empty(t, primaryBindAddress(&Spec{Driver: "localstack"}, nil))
 }
 
 // stubEndpointHostDetection fakes containerization detection (now delegated to

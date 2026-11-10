@@ -19,7 +19,7 @@ Every container port mapping now has an optional `bind` field. When it's set, At
 
 ## How to Use It
 
-Add `bind` to any entry under [`run.ports`](/components/container#port-bindings):
+Add `bind` to any entry under [`run.ports`](/stacks/components/container#port-bindings):
 
 ```yaml
 components:
@@ -37,7 +37,14 @@ components:
 - Leaving `host` empty (or `0`) still lets the runtime assign a free host port. It's assigned only on the bound interface.
 - The same field works in container workflow steps, background container services, and emulators.
 
-Port bindings are fixed when a container is created. After you change one, recreate the container with `atmos container down` followed by `atmos container up`.
+Binding to loopback narrows where the runtime listens, but it isn't a firewall. Docker Engine versions before 28.0.0 can expose localhost-published ports to hosts on the same network segment, and some network configurations allow direct routing to container ports. See Docker's [port publishing](https://docs.docker.com/engine/network/port-publishing/) documentation for details.
+
+Port bindings are fixed when a container is created. After you change one, recreate just that container:
+
+```shell
+atmos container down portal -s <stack>
+atmos container up portal -s <stack>
+```
 
 ## Get Involved
 
