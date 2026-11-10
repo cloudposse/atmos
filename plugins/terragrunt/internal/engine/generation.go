@@ -46,6 +46,7 @@ func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.Terragru
 		if !generated.Disable && declaresBackend(path, result.Generated[path]) {
 			// A generate block that writes a backend replaces Atmos's own backend file.
 			result.BackendGenerated = true
+			markSensitive(result, path)
 		}
 	}
 	if err := unitLockFile(result); err != nil {
@@ -79,5 +80,14 @@ func generatedBackend(ctx context.Context, logger log.Logger, cfg *config.Terrag
 	result.Generated[path] = string(content)
 	result.GeneratedPolicies[path] = generated.IfExists
 	result.BackendGenerated = true
+	markSensitive(result, path)
 	return nil
+}
+
+// markSensitive records a generated file whose bytes can hold backend credentials.
+func markSensitive(result *model.Resolution, path string) {
+	if result.SensitiveGenerated == nil {
+		result.SensitiveGenerated = map[string]bool{}
+	}
+	result.SensitiveGenerated[path] = true
 }

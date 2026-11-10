@@ -49,6 +49,7 @@ func TestRemoteBackendGenerationRetainsPathAndPolicy(t *testing.T) {
 	require.True(t, result.BackendGenerated)
 	path := filepath.Join("custom", "backend.tf")
 	require.Equal(t, "overwrite_terragrunt", result.GeneratedPolicies[path])
+	require.True(t, result.SensitiveGenerated[path], "a generated backend can hold credentials")
 	require.Contains(t, result.Generated[path], `backend "s3"`)
 	require.Contains(t, result.Generated[path], `assume_role = {`)
 	require.NotContains(t, result.Generated[path], "skip_bucket_versioning")

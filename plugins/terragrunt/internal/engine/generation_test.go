@@ -142,6 +142,7 @@ func TestPlainGenerateBlockThatWritesABackendReplacesTheHostBackend(t *testing.T
 			result, err := Resolve(t.Context(), request)
 			require.NoError(t, err)
 			require.Equal(t, test.want, result.BackendGenerated)
+			require.Equal(t, test.want, result.SensitiveGenerated[test.path], "only a backend file is sensitive")
 		})
 	}
 }
