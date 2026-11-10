@@ -88,6 +88,16 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 		}
 		return resolve(ctx, req, overlay)
 	}
+	// A generated child that fails is recorded at its own address so its siblings stay usable.
+	// The generation root is kept to drop failures of stacks that turn out to be templates.
+	type childFailure struct {
+		generationRoot string
+		failure        model.UnitFailure
+	}
+	var childFailures []childFailure
+	recordChild := func(stack, name, generationRoot, path string, err error) {
+		childFailures = append(childFailures, childFailure{generationRoot, model.UnitFailure{Stack: stack, Name: filepath.ToSlash(name), Err: problemFor(err, path)}})
+	}
 	var visit func(string, string, string, string, []string, []string, int) error
 	visit = func(path, stack, name, generationRoot string, files, folders []string, depth int) error {
 		if depth > 32 {
@@ -102,15 +112,17 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 			for child, childPath := range resolved.StackConfigs {
 				source := resolved.StackSources[child]
 				templates[source] = true
-				if err := visit(childPath, stack, filepath.Join(name, resolved.Stacks[child]), generationRoot, files, append(append([]string{}, folders...), source), depth+1); err != nil {
-					return err
+				childName := filepath.Join(name, resolved.Stacks[child])
+				if err := visit(childPath, stack, childName, generationRoot, files, append(append([]string{}, folders...), source), depth+1); err != nil {
+					recordChild(stack, childName, generationRoot, childPath, err)
 				}
 			}
 			for child, childPath := range resolved.UnitConfigs {
 				source := resolved.UnitSources[child]
 				templates[source] = true
-				if err := visit(childPath, stack, filepath.Join(name, child), generationRoot, files, append(append([]string{}, folders...), source), depth+1); err != nil {
-					return err
+				childName := filepath.Join(name, child)
+				if err := visit(childPath, stack, childName, generationRoot, files, append(append([]string{}, folders...), source), depth+1); err != nil {
+					recordChild(stack, childName, generationRoot, childPath, err)
 				}
 			}
 			return nil
@@ -164,6 +176,11 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 	}
 	// A template that parsed independently is still a template, not another live stack.
 	result.Inventory = slices.DeleteFunc(result.Inventory, func(unit model.DiscoveredUnit) bool { return skipped(unit.GenerationRoot) })
+	for _, child := range childFailures {
+		if !skipped(child.generationRoot) {
+			result.Failures = append(result.Failures, child.failure)
+		}
+	}
 	for _, path := range units {
 		if skipped(path) {
 			continue

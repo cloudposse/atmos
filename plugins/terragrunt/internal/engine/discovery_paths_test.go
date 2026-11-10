@@ -255,3 +255,37 @@ func TestIncludePatternMatchingOnlyOrdinaryFilesIsReported(t *testing.T) {
 	require.Equal(t, model.WarningPatternUnmatched, scan.Warnings[0].Code)
 	require.Equal(t, "docs", scan.Warnings[0].Path)
 }
+
+// A generated child that fails is reported at its own address; its siblings are still discovered.
+func TestDiscoveryKeepsSiblingsOfAFailedGeneratedUnit(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	write := func(name, content string) {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	write("modules/unit/main.tf", "")
+	write("catalog/good/terragrunt.hcl", "terraform { source = \"${get_repo_root()}/modules/unit\" }\n")
+	write("catalog/broken/terragrunt.hcl", "terraform { source = \"${get_repo_root()}/modules/unit\" }\nterraform_binary = \"tofu\"\n")
+	write(".git/HEAD", "ref: refs/heads/main\n")
+	write("live/terragrunt.stack.hcl", `
+unit "a_broken" {
+  source = "../catalog/broken"
+  path   = "a_broken"
+}
+unit "z_good" {
+  source = "../catalog/good"
+  path   = "z_good"
+}
+`)
+	result, err := Resolve(t.Context(), model.Request{BasePath: root, Phase: "inventory", Command: "plan", Tofu: "must-not-execute", Environment: map[string]string{}, IncludedPaths: []string{"live"}})
+	require.NoError(t, err)
+	require.Len(t, result.Inventory, 1)
+	require.Equal(t, "z_good", result.Inventory[0].Name)
+	require.Len(t, result.Failures, 1)
+	require.Equal(t, "live", result.Failures[0].Stack)
+	require.Equal(t, "a_broken", result.Failures[0].Name)
+	problem := asProblem(t, result.Failures[0].Err)
+	require.Equal(t, "terraform_binary", problem.Key)
+}

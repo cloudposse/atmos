@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -148,8 +147,9 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 			result.Source = *cfg.Terraform.Source
 			if plainLocalSource(result.Source) {
 				result.Source = localPath(filepath.Dir(path), result.Source)
-				// A missing local module fails discovery, so a bulk run stops before any unit runs.
-				if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
+				// A missing local module fails discovery, so a bulk run stops before any unit runs. The
+				// active filesystem also sees modules that a generated stack unit names in the overlay.
+				if info, err := environment.FS.Stat(result.Source); err != nil || !info.IsDir() {
 					return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
 				}
 				result.Folders = []string{result.Source}
@@ -242,7 +242,7 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	result := &model.Resolution{Execution: execution, Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(path), result.Source)
-		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
+		if info, err := environment.FS.Stat(result.Source); err != nil || !info.IsDir() {
 			return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
 		}
 		result.Folders = []string{result.Source}
