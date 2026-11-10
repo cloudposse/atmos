@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
 // TestLiveGitea is an opt-in integration test against a disposable repository.

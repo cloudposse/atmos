@@ -20,6 +20,8 @@ const (
 	apiTimeout       = 30 * time.Second
 	maxResponseBytes = 4 << 20
 	pageSize         = 50
+	// The comment pagination cap: 200 pages of 50 is 10,000 comments.
+	maxCommentPages = 200
 )
 
 func apiURL() (*url.URL, error) {

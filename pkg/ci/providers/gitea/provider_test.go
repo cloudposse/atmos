@@ -11,9 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
-	"github.com/stretchr/testify/require"
 )
 
 func testAPI(t *testing.T, handler http.HandlerFunc) {
@@ -131,6 +132,49 @@ func TestCommentUpsertPaginationAndOwnership(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, c.Created)
 	require.EqualValues(t, 51, c.ID)
+}
+
+func fullCommentPage(firstID int64, userID int64) []comment {
+	comments := make([]comment, pageSize)
+	for i := range comments {
+		comments[i].ID = firstID + int64(i)
+		comments[i].Body = "<!-- marker -->"
+		comments[i].User.ID = userID
+	}
+	return comments
+}
+
+func TestCommentPaginationStopsOnRepeatedPage(t *testing.T) {
+	pages := 0
+	testAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/user" {
+			fmt.Fprint(w, `{"id":7}`)
+			return
+		}
+		pages++
+		// A server that ignores the page parameter returns the same full page forever.
+		require.NoError(t, json.NewEncoder(w).Encode(fullCommentPage(1, 7)))
+	})
+	match, err := NewProvider().findComment(context.Background(), "/repos/org/repo/issues/1/comments", "<!-- marker -->")
+	require.NoError(t, err)
+	require.NotNil(t, match)
+	require.EqualValues(t, pageSize, match.ID)
+	require.Equal(t, 2, pages)
+}
+
+func TestCommentPaginationIsCapped(t *testing.T) {
+	pages := 0
+	testAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/user" {
+			fmt.Fprint(w, `{"id":7}`)
+			return
+		}
+		pages++
+		require.NoError(t, json.NewEncoder(w).Encode(fullCommentPage(int64(pages*pageSize), 99)))
+	})
+	_, err := NewProvider().findComment(context.Background(), "/repos/org/repo/issues/1/comments", "<!-- marker -->")
+	require.ErrorIs(t, err, errUtils.ErrCICommentListFailed)
+	require.Equal(t, maxCommentPages, pages)
 }
 
 func TestAPIRejectsUnsafeConfigAndRedirects(t *testing.T) {

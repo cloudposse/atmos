@@ -188,21 +188,30 @@ func (p *Provider) findComment(ctx context.Context, path, marker string) (*comme
 		return nil, errUtils.ErrCICommentListFailed
 	}
 	var match *comment
-	for page := 1; ; page++ {
+	seen := map[int64]struct{}{}
+	for page := 1; page <= maxCommentPages; page++ {
 		var comments []comment
 		if err := p.request(ctx, http.MethodGet, path+"?limit=50&page="+strconv.Itoa(page), nil, &comments); err != nil {
 			return nil, err
 		}
+		unseen := 0
 		for _, c := range comments {
+			if _, dup := seen[c.ID]; dup {
+				continue
+			}
+			seen[c.ID] = struct{}{}
+			unseen++
 			if c.User.ID == user.ID && strings.Contains(c.Body, marker) {
 				copy := c
 				match = &copy
 			}
 		}
-		if len(comments) < pageSize {
+		// Stop on a short page, or when the server repeats a page it already returned.
+		if len(comments) < pageSize || unseen == 0 {
 			return match, nil
 		}
 	}
+	return nil, fmt.Errorf("%w: more than %d pages of comments", errUtils.ErrCICommentListFailed, maxCommentPages)
 }
 
 func checkStatus(s commitStatus) *provider.CheckStatus {
