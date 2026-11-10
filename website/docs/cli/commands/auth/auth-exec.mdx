@@ -36,13 +36,16 @@ its directory when the command returns, including on errors or failed authentica
 cleanup preserves existing login profiles and does not log out linked integrations such as Docker
 ECR authentication. Existing configured ephemeral-token revocation still applies.
 
+If directory removal fails, Atmos reports a cleanup error and unexpired credentials may remain.
+Resolve the error and remove the affected invocation's private directory and any remaining files.
+
 On `SIGINT` or `SIGTERM`, Atmos waits for the child to stop before removing its credential files.
 Children that do not stop gracefully are forcibly terminated after a bounded shutdown grace period.
 
 Uncatchable termination of Atmos (`SIGKILL`), a process crash, or loss of the runner can prevent cleanup and
 leave unexpired credentials on disk. Later Atmos invocations do not discover these private files.
-On persistent runners, use a job-owned `TMPDIR` and arrange independent cleanup of that directory,
-or run jobs on disposable filesystems.
+On persistent runners, use a job-owned temporary directory (`TMPDIR` on Unix, `TMP` or `TEMP` on
+Windows) and arrange independent cleanup of that directory, or run jobs on disposable filesystems.
 :::
 
 :::note Justification for privileged identities

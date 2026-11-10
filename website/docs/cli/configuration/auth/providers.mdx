@@ -217,10 +217,14 @@ It removes that directory when the command returns, including on errors. A separ
 keeps its managed files until [logout](/cli/commands/auth/logout); `auth exec` still requires authentication
 with the current job token rather than reusing those persisted files.
 
+If directory removal fails, Atmos reports a cleanup error and unexpired credentials may remain.
+Resolve the error and remove the affected invocation's private directory and any remaining files.
+
 On `SIGINT` or `SIGTERM`, `auth exec` stops and waits for its child before cleaning up the private files.
 Uncatchable termination (`SIGKILL`), a process crash, or loss of the runner can skip cleanup and leave
 unexpired credentials on disk. Later Atmos invocations do not discover the private files. Use a
-job-owned `TMPDIR` with independent cleanup on persistent runners, or disposable job filesystems.
+job-owned temporary directory (`TMPDIR` on Unix, `TMP` or `TEMP` on Windows) with independent
+cleanup on persistent runners, or disposable job filesystems.
 :::
 
 </TabItem>
