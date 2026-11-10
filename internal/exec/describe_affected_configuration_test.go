@@ -353,3 +353,36 @@ func TestRemoveOnSignalStopReleasesWatcher(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	require.Equal(t, int32(0), cleaned.Load())
 }
+
+// The BASE policy inventory resolves provider imports with a session of its own checkout; the
+// HEAD inventory keeps the invocation's session, which is never replaced.
+func TestAffectedPolicyInventoryUsesARevisionSession(t *testing.T) {
+	headRoot, _ := affectedPolicyRepo(t, map[string]string{"README": "unchanged"})
+	baseRoot, _ := affectedPolicyRepo(t, map[string]string{"README": "unchanged"})
+	config := affectedPolicyTestConfig(headRoot)
+	ctrl := gomock.NewController(t)
+	current := NewMockComponentConfigurationRuntime(ctrl)
+	previous := NewMockComponentConfigurationRuntime(ctrl)
+	forkedAt := ""
+	runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: current, revision: func(root string) (schema.ComponentConfigurationRuntime, error) {
+		forkedAt = root
+		return previous, nil
+	}}
+	config.ComponentConfigurations = runtime
+
+	base, err := affectedPolicyConfig(config, headRoot, baseRoot)
+	require.NoError(t, err)
+	require.Same(t, previous, base.ComponentConfigurations)
+	require.Equal(t, base.BasePathAbsolute, forkedAt)
+	require.Same(t, runtime, config.ComponentConfigurations, "the caller's session is not replaced")
+
+	forkedAt = ""
+	head, err := affectedPolicyConfig(config, headRoot, headRoot)
+	require.NoError(t, err)
+	require.Same(t, runtime, head.ComponentConfigurations)
+	require.Empty(t, forkedAt)
+
+	runtime.revision = func(string) (schema.ComponentConfigurationRuntime, error) { return nil, context.Canceled }
+	_, err = affectedPolicyConfig(config, headRoot, baseRoot)
+	require.ErrorIs(t, err, context.Canceled)
+}
