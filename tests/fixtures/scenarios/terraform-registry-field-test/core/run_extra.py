@@ -144,7 +144,13 @@ def terminal(c):
             status = value
             break
     if status is None:
+        # EOF on the PTY can arrive before the child is reapable; give it a short grace
+        # period so a clean exit is not misrecorded as a forced kill.
+        grace = time.time() + 5
         exited, value = os.waitpid(pid, os.WNOHANG)
+        while not exited and time.time() < grace:
+            time.sleep(.05)
+            exited, value = os.waitpid(pid, os.WNOHANG)
         if not exited:
             # pty.fork makes the child a session leader, so its pid is the process group of
             # Atmos and the engine processes it started; kill the whole group, then reap.
@@ -154,6 +160,18 @@ def terminal(c):
                 pass
             _, value = os.waitpid(pid, 0)
         status = value
+    # Drain any output buffered after the loop stopped so chunks are not undercounted.
+    while True:
+        ready, _, _ = select.select([master], [], [], 0)
+        if not ready:
+            break
+        try:
+            data = os.read(master, 65536)
+        except OSError:
+            break
+        if not data:
+            break
+        chunks.append((time.time()-start, data))
     os.close(master)
     code = os.waitstatus_to_exitcode(status)
     (c.root / "terminal.raw").write_bytes(b"".join(data for _, data in chunks))
