@@ -14,6 +14,7 @@ export default function AtmosNewsletter(): JSX.Element {
       : 'https://cloudposse.com';
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState<number>();
+  const [readySrc, setReadySrc] = useState<string>();
   useEffect(() => {
     const resize = (event: MessageEvent) => {
       const element = frame.current;
@@ -26,13 +27,17 @@ export default function AtmosNewsletter(): JSX.Element {
         Number.isFinite(event.data.height) &&
         event.data.height >= 40 &&
         event.data.height <= 600
-      )
+      ) {
         setHeight(Math.ceil(event.data.height));
+        setReadySrc(element.src);
+      }
     };
     window.addEventListener('message', resize);
     return () => window.removeEventListener('message', resize);
   }, []);
   const src = `${embedOrigin}/embed/newsletter?list=atmos_newsletter&variant=compact&theme=${colorMode}&bg=transparent&utm_source=atmos.tools&utm_medium=embed&utm_campaign=atmos-newsletter`;
+
+  const ready = readySrc === src;
 
   return (
     <section
@@ -43,15 +48,24 @@ export default function AtmosNewsletter(): JSX.Element {
       <p className={styles.description}>
         A weekly roundup of new features, improvements, and fixes.
       </p>
-      <iframe
-        ref={frame}
-        style={height === undefined ? undefined : { height }}
-        src={src}
-        title="Subscribe to Atmos updates"
-        className={styles.frame}
-        loading="lazy"
-        sandbox="allow-same-origin allow-scripts allow-forms"
-      />
+      <div className={styles.formContainer}>
+        {!ready && (
+          <div className={styles.loading} role="status">
+            <span className={styles.spinner} aria-hidden="true" />
+            <span>Loading signup form…</span>
+          </div>
+        )}
+        <iframe
+          ref={frame}
+          style={{ height, visibility: ready ? 'visible' : 'hidden' }}
+          aria-busy={!ready}
+          src={src}
+          title="Subscribe to Atmos updates"
+          className={styles.frame}
+          loading="lazy"
+          sandbox="allow-same-origin allow-scripts allow-forms"
+        />
+      </div>
       <p className={styles.feeds}>
         Prefer a feed reader? <a href="/changelog/rss.xml">RSS</a>
         {' · '}
