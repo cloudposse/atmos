@@ -1571,6 +1571,8 @@ var (
 	ErrCIMaskFailed               = errors.New("failed to register CI mask value")
 	ErrCIPullRequestUnknown       = errors.New("CI pull request number is unknown")
 	ErrCITemplateNotFound         = errors.New("CI report template not found")
+	ErrGiteaTokenNotFound         = errors.New("gitea token not found")
+	ErrGiteaAPIFailed             = errors.New("gitea API request failed")
 	ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
 
 	// Planfile storage errors.
