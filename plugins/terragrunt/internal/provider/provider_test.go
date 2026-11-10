@@ -90,6 +90,13 @@ func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 	cancel()
 	_, err := p.Validate(ctx, componentRequest(t))
 	require.Equal(t, codes.Canceled, status.Code(err))
+	// Prepare and Resolve keep the validation status instead of re-mapping it to InvalidArgument.
+	_, err = p.Prepare(ctx, componentRequest(t))
+	require.Equal(t, codes.Canceled, status.Code(err))
+	unsupported := componentRequest(t)
+	unsupported.Operation.Mode = "cli"
+	_, err = p.Resolve(t.Context(), unsupported)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
 }
 
 func TestEvaluatorErrorsDoNotExposePayloads(t *testing.T) {

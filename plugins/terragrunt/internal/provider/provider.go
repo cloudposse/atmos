@@ -166,14 +166,19 @@ func rpcError(err error) error {
 
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
 func (p *Provider) Validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, rpcError(err)
-	}
-	if _, err := operation(request.GetRootDirectory(), request.GetProvider(), request.GetOperation(), request.GetInvocation()); err != nil {
-		return nil, rpcError(err)
-	}
-	if err := settings(request.GetProviderConfiguration()); err != nil {
+	if err := validate(ctx, request); err != nil {
 		return nil, rpcError(err)
 	}
 	return &pluginv1.ValidateResponse{}, nil
+}
+
+// validate returns the unconverted cause so callers map it to a status code exactly once.
+func validate(ctx context.Context, request *pluginv1.ComponentRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := operation(request.GetRootDirectory(), request.GetProvider(), request.GetOperation(), request.GetInvocation()); err != nil {
+		return err
+	}
+	return settings(request.GetProviderConfiguration())
 }

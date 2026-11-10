@@ -11,7 +11,7 @@ import (
 )
 
 func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.ComponentRequest) (model.Request, error) {
-	if _, err := p.Validate(ctx, request); err != nil {
+	if err := validate(ctx, request); err != nil {
 		return model.Request{}, err
 	}
 	req, err := operation(request.RootDirectory, request.Provider, request.Operation, request.Invocation)
