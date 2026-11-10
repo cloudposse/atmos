@@ -1,72 +1,23 @@
 ---
 slug: gomplate-v5
-title: "Template Engine Upgrade Drops the End-of-Life AWS SDK from Atmos"
+title: "Gomplate v5: What Changed and What to Check"
 authors: [osterman]
 tags: [security, breaking-change]
 ---
 
-Most security findings are fixed with a patch or minor release of the affected dependency. Some
-need a major version upgrade instead: when a dependency's major release line stops being
-maintained, its CVEs stay open forever, and every project that pulls it in inherits them. That is
-where Atmos was: the template engine it embeds, Gomplate, had moved on from the release line Atmos
-used, and that line depended on the AWS SDK for Go v1, which has reached end of support and carries
-CVEs no v1 release will ever fix. Atmos never executed the affected code, but no patch or minor
-release could clear the findings. The CVEs forced our hand: the template engine now runs on
-Gomplate v5, two major versions ahead, and the end-of-life SDK is gone from the Atmos build
-entirely.
+Atmos now uses **Gomplate v5**, upgraded from v3. Some template functions and datasource
+behaviors changed, so existing templates may need updates.
+
+We added compatibility shims to keep old function names working and warnings to help you
+migrate. Below are the known changes, what we did to reduce the impact, and why we had to upgrade.
 
 <!--truncate-->
 
-## The Problem
+## What Might Break
 
-Atmos uses Go templates in many places: stack manifests, vendor manifests, scaffolding,
-`atmos docs generate`, Helm and Kubernetes component templates, and generated backend and varfile
-paths. Gomplate supplies most of the template functions and all of the datasources.
-
-Atmos releases used Gomplate v3. Gomplate v3 and v4 are no longer maintained, and both use the
-AWS SDK for Go v1. AWS no longer supports that SDK, so its vulnerabilities (GO-2022-0635 and
-GO-2022-0646) will never get a fix.
-
-Dependency scanners and OpenSSF Scorecard report a vulnerable library even when your code never
-calls it. So every Atmos release showed these findings. The only supported fix was Gomplate v5.
-Atmos goes straight from v3 to v5, so this one upgrade brings the breaking changes of
-v3 → v4 → v5 together.
-
-## The Fix
-
-Atmos now embeds Gomplate v5, which is built on the AWS SDK for Go v2. Upgrading was not optional,
-but breaking your stacks along with it would not have been acceptable either. Despite the sheer
-number of breaking changes across Gomplate v3 → v4 → v5, we went through them one by one and kept
-backward compatibility everywhere it made sense to: we built a compatibility test suite that runs
-the same templates through the previous release and this one and compares the results, and added a
-shim for every removed function we could restore faithfully. Most stack templates keep working
-unchanged, and Sprig functions are still layered on top by default. Each shim logs a warning naming
-the replacement the first time a stack manifest calls a removed function, so you can migrate on
-your own schedule. A handful of datasource behaviors changed in
-ways Atmos cannot paper over with a shim — [what to check in your stacks](#what-to-check-in-your-stacks)
-below covers each one. What changed unconditionally is what ships inside the binary: the AWS SDK for
-Go v1 is no longer present in any form.
-
-One HashiCorp Vault authentication library still pulled the old SDK in its latest tagged release,
-even though its development branch had already been ported to v2. Atmos pins that library to the
-ported development revision until HashiCorp tags a release. That pin is temporary. Dependabot will
-propose the bump automatically as soon as a tagged release exists, and nothing about how you use
-Vault datasources changes in the meantime.
-
-The same upgrade moved the Go cryptography library to a release that closes two SSH-related
-denial-of-service advisories (GO-2026-6354 and GO-2026-6355). This is preventative hygiene, not a
-response to an exploited issue, but it is one more finding that will no longer appear on a scan of
-Atmos.
-
-## What to Check in Your Stacks
-
-Gomplate v5 removed functions it had deprecated in v3 and changed some datasource behavior.
-Atmos keeps the removed names working through compatibility shims. Each shim logs a warning that
-names its replacement. A compatibility test suite runs the same templates through a v3 build and
-this release and compares the results; the sections below list the differences it found. The
-shims will be removed in a future major release, so replace the old names now. The
-[templates configuration reference](/cli/configuration/templates) and the
-[datasources reference](/templates/datasources) carry the same list.
+Check templates that use numeric conversions or datasources first. Removed function names
+still work through Atmos compatibility shims, but those shims will be removed in a future
+major release.
 
 ### Renamed functions
 
@@ -114,32 +65,25 @@ the same arguments.
 
 ### Conversions and regular expressions now fail loudly
 
-Conversion functions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` used to return `0`
-when handed something they could not convert. They now return an error, which surfaces as a
-template processing failure; Atmos does not paper over this one, since silently returning `0` for
-bad input is exactly the kind of behavior worth losing. The error message spells out the fix. If a
-stack relied on the silent zero, check that the input is a number before converting it:
+Numeric conversions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` now return
+an error for invalid input instead of silently returning `0`. If your template relies on
+that fallback, validate the input first:
 
 ```yaml
 retries: '{{ $r := conv.ToString (index .vars "retries") }}{{ if regexp.Match "^-?[0-9]+$" $r }}{{ conv.ToInt64 $r }}{{ else }}0{{ end }}'
 ```
 
-An empty or non-numeric value renders `0`, and a whole number converts as before. The example reads
-the key with `index`, which returns nothing for a missing key, so a missing `retries` also renders
-`0`, even where Atmos treats missing values as errors (for example, in an import rendered with
-`context`). Writing `.vars.retries` instead would fail on a missing key there before the check runs.
+This renders `0` for a missing, empty, or non-numeric value. Using `index` also handles
+missing keys where Atmos would reject `.vars.retries`.
 
-Similarly, the `regexp.*` functions return an error for an invalid pattern instead of panicking.
-The failure is the same as before from your point of view, but the message now names the template
-and the pattern.
+Invalid `regexp.*` patterns now return an error instead of panicking, with the template
+and pattern identified in the message.
 
 ### Datasource subpaths are relative URLs
 
-A second argument to `datasource` is resolved as a relative URL against the datasource's `url`.
-Directory datasources must end with a trailing `/`, and a subpath that begins with `/` replaces
-the base path rather than appending to it. Atmos warns when it sees a datasource used this way
-without a trailing slash on its URL, but it cannot know whether you meant the old or the new
-resolution, so the warning is a prompt to check the stack, not an automatic fix:
+The second argument to `datasource` is now a relative URL. Directory URLs must end in
+`/`; a subpath starting with `/` replaces the base path. Atmos warns about a missing
+trailing slash but cannot fix the URL automatically.
 
 ```yaml
 settings:
@@ -159,11 +103,9 @@ components:
 
 ### AWS Parameter Store values are returned directly
 
-An `aws+smp://` datasource returns the parameter's value itself rather than an object with a
-`.Value` field. Drop the field access, and if the parameter holds a JSON document, tell the
-datasource to parse it with the `type` query parameter. Atmos recognizes a configured `aws+smp://`
-datasource read with `.Value` still attached and warns about it, without guessing at what the
-parameter actually contains:
+An `aws+smp://` datasource now returns the value directly. Remove `.Value` and use
+`?type=application/json` to parse JSON. Atmos warns when a configured Parameter Store
+datasource is still accessed through `.Value`.
 
 ```yaml
 settings:
@@ -196,32 +138,55 @@ Vault KV v2 datasources detect the mount and add the `/data/` API segment themse
 `/data/` from the URL (`.../kv/config`, not `.../kv/data/config`). The result is the secret's data
 without the `data` and `metadata` wrapper, so read fields directly.
 
-Consul, Vault, SSM, and S3 datasources send different requests to those services. For example,
-Vault reads first check the mount type. The values your templates read do not change, but access
-policies or proxies that allow only specific requests may need an update. HTTP datasources still
-make one GET request per read, as before.
+Consul, Vault, SSM, and S3 clients send different requests, so restrictive access policies
+or proxies may need updates. HTTP datasources still make one GET per read.
 
-The datasource timeout in `atmos.yaml` (`templates.settings.gomplate.timeout`) now applies. Older
-releases replaced it with the 5-second default whenever a stack manifest did not set its own
-timeout, so a shorter global timeout was ignored. If a datasource takes longer than your global
-timeout, raise the timeout in `atmos.yaml` or in that stack's settings.
+The global datasource timeout (`templates.settings.gomplate.timeout` in `atmos.yaml`)
+now applies even when the stack has no timeout override. Previously, those stacks used
+the 5-second default. Raise the configured timeout if reads start timing out.
 
-### New: `coll.JQ` and `tmpl`
+## What We Did to Reduce the Impact
+
+- **Restored removed functions.** Compatibility shims preserve old names and, for the
+  legacy `net` functions, their return types. Sprig remains enabled by default.
+- **Added migration warnings.** Shims name their replacements. Datasource checks flag
+  missing trailing slashes, Parameter Store `.Value` access, and removed BoltDB sources.
+- **Compared old and new behavior.** Our compatibility suite runs the same templates
+  against Gomplate v3 and this release, comparing exit codes, output, generated files, and
+  datasource requests. The remaining differences are documented above.
+
+See the [templates configuration reference](/cli/configuration/templates) and
+[datasources reference](/templates/datasources) for migration details.
+
+## Why We Had to Upgrade
+
+Gomplate v3 and v4 depended on the unsupported AWS SDK for Go v1. Its security findings
+(GO-2022-0635 and GO-2022-0646) could not be fixed with a v1 update. Atmos did not call the
+affected code, but dependency scanners still flagged the SDK in every build.
+
+Gomplate v5 uses AWS SDK v2. This upgrade removes SDK v1 from Atmos entirely. We also
+pinned Vault's AWS authentication library to its SDK v2 revision until a tagged release
+is available.
+
+The same update upgraded Go's cryptography library to address two SSH denial-of-service
+advisories, GO-2026-6354 and GO-2026-6355.
+
+## New Functions
+
+### `coll.JQ` and `tmpl`
 
 `coll.JQ` runs a jq expression on a value, and the `tmpl` namespace (`tmpl.Inline`, `tmpl.Exec`)
 renders nested templates. Neither was available in templates before this release.
 
-### New: semantic version helpers
+### Semantic version helpers
 
 Gomplate v5 adds a `semver.*` namespace for parsing and comparing versions inside templates, for
 example `{{ semver.CheckConstraint ">= 1.5.0" .vars.version }}`. See the
 [Gomplate semver reference](https://docs.gomplate.ca/functions/semver/) for the full list.
 
-## Get Involved
+## Found Another Compatibility Issue?
 
-We will fix forward. If a template that worked before this release fails after it, or quietly
-renders a different value, and the cause is not on the list above,
-[open an issue](https://github.com/cloudposse/atmos/issues) with the template expression and the
-error. Where a gap can be closed with another compatibility shim, we will close it in a patch
-release. The goal of this upgrade was to change what ships in the binary, not what your stacks can
-do.
+If a previously working template fails or produces a different value that is not covered
+here, [open an issue](https://github.com/cloudposse/atmos/issues) with the expression and
+error or unexpected output. Where we can restore compatibility, we will ship a fix in a
+patch release.
