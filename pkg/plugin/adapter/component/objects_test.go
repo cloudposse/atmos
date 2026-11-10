@@ -23,12 +23,14 @@ func objectWireValue(t *testing.T, value cty.Value) *pluginv1.ComponentValue {
 }
 
 func TestObjectRoundTrip(t *testing.T) {
-	value := map[string]any{"large": json.Number("9007199254740993"), "nested": []any{nil, true, "literal"}}
+	value := map[string]any{"large": json.Number("9007199254740993"), "ratio": json.Number("0.5"), "precise": json.Number("0.1000000000000000000001"), "nested": []any{nil, true, "literal", json.Number("3")}}
 	encoded, err := EncodeObject(value)
 	require.NoError(t, err)
 	decoded, err := DecodeObject(encoded)
 	require.NoError(t, err)
-	require.Equal(t, value, decoded)
+	// Exact numbers become native so YAML renders them unquoted; others keep full precision.
+	want := map[string]any{"large": int64(9007199254740993), "ratio": 0.5, "precise": json.Number("0.1000000000000000000001"), "nested": []any{nil, true, "literal", int64(3)}}
+	require.Equal(t, want, decoded)
 	decoded, err = DecodeObject(nil)
 	require.NoError(t, err)
 	require.Empty(t, decoded)
@@ -54,7 +56,7 @@ func TestObjectSensitivePaths(t *testing.T) {
 		encoded.SensitivePaths = []*pluginv1.ComponentValuePath{path}
 		decoded, err := DecodeObject(encoded)
 		require.NoError(t, err)
-		require.Equal(t, []any{"masked-value", json.Number("12345")}, decoded["items"])
+		require.Equal(t, []any{"masked-value", int64(12345)}, decoded["items"])
 	}
 	for _, path := range []*pluginv1.ComponentValuePath{nil, {Steps: []*pluginv1.ComponentValueStep{nil}}, {Steps: []*pluginv1.ComponentValueStep{index}}, {Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Index{Index: objectWireValue(t, cty.True)}}}}, {Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Index{}}}}} {
 		encoded.SensitivePaths = []*pluginv1.ComponentValuePath{path}

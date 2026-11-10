@@ -75,7 +75,7 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 	})
 	prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", Command: "tofu", SubCommand: "apply", TerraformWorkspace: "stage", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvList: []string{"FROM_COMPONENT=original", "FROM_COMPONENT=override"}, ComponentEnvSection: map[string]any{"FROM_COMPONENT": "override"}})
 	require.NoError(t, err)
-	require.Equal(t, json.Number("9007199254740993"), prepared.Inputs["large"])
+	require.Equal(t, int64(9007199254740993), prepared.Inputs["large"])
 	require.Equal(t, filepath.Join(config.BasePathAbsolute, "state.tfstate"), prepared.Backend["path"])
 	require.Equal(t, "{{ literal }}", string(prepared.Files[0].Content))
 }

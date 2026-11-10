@@ -3,6 +3,7 @@ package component
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
@@ -67,11 +68,37 @@ func DecodeObject(input *pluginv1.ComponentValue) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	object, ok := result.(map[string]any)
+	object, ok := nativeNumbers(result).(map[string]any)
 	if !ok {
 		return nil, errUtils.ErrPluginProtocol
 	}
 	return object, nil
+}
+
+// Float64Bits is the bit size strconv uses for float64 formatting.
+const float64Bits = 64
+
+// nativeNumbers converts JSON numbers to int64 or float64 when that is exact, so YAML
+// output keeps them numeric. A number neither type can hold exactly stays a json.Number.
+func nativeNumbers(value any) any {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, child := range value {
+			value[key] = nativeNumbers(child)
+		}
+	case []any:
+		for i, child := range value {
+			value[i] = nativeNumbers(child)
+		}
+	case json.Number:
+		if integer, err := value.Int64(); err == nil {
+			return integer
+		}
+		if float, err := value.Float64(); err == nil && strconv.FormatFloat(float, 'g', -1, float64Bits) == value.String() {
+			return float
+		}
+	}
+	return value
 }
 
 func decodePlain(input *pluginv1.ComponentValue) (cty.Value, error) {
