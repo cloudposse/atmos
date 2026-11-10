@@ -150,6 +150,35 @@ func TestSessionCancellationAndFailure(t *testing.T) {
 	require.True(t, errors.Is(err, errUtils.ErrPluginUnsupportedExtension))
 }
 
+func TestSessionCallerCancellationDoesNotStopSharedDiscovery(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+	session, err := New(t.Context(), enabledConfig(t), "list", func(ctx context.Context, _ []string) (map[string]Provider, error) {
+		close(started)
+		select {
+		case <-release:
+			return nil, errUtils.ErrPluginInvalidConfig
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	})
+	require.NoError(t, err)
+	caller, cancel := context.WithCancel(t.Context())
+	first := make(chan error, 1)
+	go func() {
+		_, err := session.Discover(caller)
+		first <- err
+	}()
+	<-started
+	cancel()
+	require.ErrorIs(t, <-first, context.Canceled)
+	close(release)
+	// The other waiter sees discovery's own result, not the first caller's cancellation.
+	_, err = session.Discover(t.Context())
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.NotErrorIs(t, err, context.Canceled)
+}
+
 func TestSessionRejectsConflictingDiscovery(t *testing.T) {
 	for _, test := range []struct {
 		name      string
