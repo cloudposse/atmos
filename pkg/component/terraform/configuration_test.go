@@ -71,6 +71,13 @@ func TestConfigurationArtifactNames(t *testing.T) {
 	info.Stack = "live/dev"
 	info.ComponentFromArg = "other/app"
 	require.NotEqual(t, first, ConstructTerraformComponentVarfileName(info))
+	// Without ComponentFromArg the component identity still keeps names distinct.
+	info.ComponentFromArg, info.Component = "", "region/app"
+	app := ConstructTerraformComponentPlanfileName(info)
+	info.Component = "region/other"
+	require.NotEqual(t, app, ConstructTerraformComponentPlanfileName(info))
+	info.ComponentFromArg, info.Component = "region/app", "ignored"
+	require.Equal(t, app, ConstructTerraformComponentPlanfileName(info), "ComponentFromArg keeps precedence")
 	info.ComponentSettingsSection = nil
 	_, owned := configurationArtifactName(info, ".plan")
 	require.False(t, owned)

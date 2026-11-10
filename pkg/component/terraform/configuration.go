@@ -63,7 +63,12 @@ func configurationArtifactName(info *schema.ConfigAndStacksInfo, suffix string) 
 	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
 		return "", false
 	}
-	return "atmos-" + configurationIdentity(info.Stack, info.ComponentFromArg) + suffix, true
+	component := info.ComponentFromArg
+	if component == "" {
+		// Callers that resolve a component without CLI arguments still name distinct files.
+		component = info.Component
+	}
+	return "atmos-" + configurationIdentity(info.Stack, component) + suffix, true
 }
 
 // configurationIdentity names a stack and component pair for artifact files. The name must be the same in
