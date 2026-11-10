@@ -63,6 +63,9 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 	if !componentPathExists {
 		componentPathExists = u.FileOrDirExists(componentPath)
 	}
+	if componentPathExists {
+		refreshTerraformModuleInfo(info, componentPath)
+	}
 
 	if !componentPathExists {
 		basePath, _ := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
@@ -322,6 +325,28 @@ func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool
 	return keys
 }
 
+// refreshTerraformModuleInfo reloads component_info.terraform_config from the provisioned
+// component directory when stack processing inspected a different or missing directory, as
+// happens for JIT sources and workdirs. Sensitive-variable detection then reflects the module
+// Terraform will actually run. A module that cannot be inspected leaves the existing value.
+func refreshTerraformModuleInfo(info *schema.ConfigAndStacksInfo, componentPath string) {
+	componentInfo, ok := info.ComponentSection["component_info"].(map[string]any)
+	if !ok {
+		return
+	}
+	module, _ := componentInfo["terraform_config"].(*tfconfig.Module)
+	recordedPath, _ := componentInfo[cfg.ComponentPathSectionName].(string)
+	if module != nil && filepath.Clean(recordedPath) == filepath.Clean(componentPath) {
+		return
+	}
+	refreshed, diags := tfconfig.LoadModule(componentPath)
+	if diags.HasErrors() || refreshed == nil {
+		log.Debug("Could not inspect the provisioned Terraform module", "path", componentPath, "error", diags.Err())
+		return
+	}
+	componentInfo["terraform_config"] = refreshed
+}
+
 // RejectComputedTerraformVars ensures display-only degraded values cannot cross
 // into Terraform through either tfvars JSON or TF_VAR_ environment variables.
 func RejectComputedTerraformVars(vars map[string]any) error {
@@ -443,22 +468,36 @@ func HasTerraformTestVars(info *schema.ConfigAndStacksInfo) bool {
 func DiskSafeTerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	defer perf.Track(nil, "terraform.DiskSafeTerraformTestVars")()
 
-	vars := TerraformTestVars(info)
-	if len(vars) == 0 {
-		return nil
-	}
-	safe, _ := tfvars.Partition(vars, atmosio.ContainsSecret)
+	safe, _ := partitionTerraformTestVars(info)
 	return safe
 }
 
 // terraformTestSecretVars selects test variables that must be passed through the subprocess environment.
 func terraformTestSecretVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	_, secret := partitionTerraformTestVars(info)
+	return secret
+}
+
+// partitionTerraformTestVars splits test.vars into varfile-safe and environment-only values.
+// Values containing a registered secret are environment-only, and so are values for root
+// variables declared `sensitive = true`, matching ComputeTerraformSecretVarKeys (including
+// its masking-disabled compatibility behavior).
+func partitionTerraformTestVars(info *schema.ConfigAndStacksInfo) (map[string]any, map[string]any) {
 	vars := TerraformTestVars(info)
 	if len(vars) == 0 {
-		return nil
+		return nil, nil
 	}
-	_, secret := tfvars.Partition(vars, atmosio.ContainsSecret)
-	return secret
+	safe, secret := tfvars.Partition(vars, atmosio.ContainsSecret)
+	if !atmosio.MaskingEnabled() {
+		return safe, secret
+	}
+	for k := range terraformSensitiveVarKeys(info) {
+		if v, supplied := safe[k]; supplied {
+			secret[k] = v
+			delete(safe, k)
+		}
+	}
+	return safe, secret
 }
 
 // TerraformTestSecretVarEnv encodes secret-bearing test variables as TF_VAR_ environment entries.
