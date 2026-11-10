@@ -507,6 +507,12 @@ type Terminal struct {
 	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
 	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
 	Help               HelpSettings       `yaml:"help,omitempty" json:"help,omitempty" mapstructure:"help"`
+	// Links selects how a URL too long for a dialog box (such as an AWS SSO
+	// sign-in link) is delivered: `auto` (default) uses a clickable OSC 8
+	// hyperlink when the terminal is known to support one and the raw URL
+	// otherwise, `osc8` always uses the hyperlink, `clipboard` copies the URL to
+	// the clipboard, and `raw` always prints the full URL.
+	Links string `yaml:"links,omitempty" json:"links,omitempty" mapstructure:"links" jsonschema:"enum=,enum=auto,enum=osc8,enum=clipboard,enum=raw"`
 }
 
 // HelpSettings controls how `--help` output is rendered.

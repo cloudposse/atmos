@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/link"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -25,9 +26,12 @@ import (
 // model to check for token-exchange results between bubbletea ticks.
 const webflowSpinnerPollInterval = 100 * time.Millisecond
 
-// maxWebflowDialogURLWidth keeps browser-auth dialogs compact while allowing
-// short device-code URLs to remain with their verification instructions.
-const maxWebflowDialogURLWidth = 80
+const (
+	// Clickable text shown when the sign-in URL is delivered as a terminal hyperlink.
+	webflowSignInLinkLabel = "Open AWS sign-in"
+	// Lead-in that says when the user needs the sign-in URL.
+	webflowSignInLinkHint = "If the browser doesn't open"
+)
 
 // webflowIsTTY checks if stderr is a terminal.
 func webflowIsTTY() bool {
@@ -51,13 +55,9 @@ func displayWebflowDialog(authURL string) {
 		return
 	}
 
-	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
-	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
-		Italic(true)
-
-	ui.Writef("%s\n%s\n", instructionStyle.Render("If the browser doesn't open, visit:"), urlStyle.Render(authURL))
+	// A URL too long for the dialog is delivered below it, outside the border,
+	// in the form `settings.terminal.links` selects.
+	ui.WriteLinkPrompt(ui.LinkPrompt{URL: authURL, Label: webflowSignInLinkLabel, Hint: webflowSignInLinkHint})
 }
 
 // renderWebflowDialog builds the browser sign-in prompt and reports whether the URL fits inside it.
@@ -83,7 +83,7 @@ func renderWebflowDialog(authURL string) (string, bool) {
 	content.WriteString("\n\n")
 	content.WriteString(instructionStyle.Render("Opening browser for authentication..."))
 
-	containsURL := authURL != "" && lipgloss.Width(authURL) <= maxWebflowDialogURLWidth
+	containsURL := link.FitsInline(authURL)
 	if containsURL {
 		urlStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).

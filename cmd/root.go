@@ -612,6 +612,10 @@ var RootCmd = &cobra.Command{
 		// (tables, help output). Zero leaves the detected width unclamped.
 		templates.SetTerminalWidthLimit(tmpConfig.Settings.Terminal.MaxWidth)
 
+		// Honor settings.terminal.links wherever a long URL (such as an AWS SSO
+		// sign-in link) is handed to the user outside a dialog box.
+		ui.SetLinkMode(resolveLinksSetting(cmd, tmpConfig.Settings.Terminal.Links))
+
 		// Configure lipgloss color profile based on terminal capabilities.
 		// Forced color is intentionally honored even when stdout is non-TTY,
 		// which is how deterministic asciicast generation runs in CI.

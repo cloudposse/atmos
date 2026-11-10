@@ -20,6 +20,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/link"
 )
 
 type webflowDialogTestStreams struct {
@@ -173,13 +174,13 @@ func TestRenderWebflowDialog_URLPlacement(t *testing.T) {
 	}{
 		{
 			name:             "80-column URL stays in dialog",
-			authURL:          urlWithWidth(maxWebflowDialogURLWidth),
+			authURL:          urlWithWidth(link.MaxInlineWidth),
 			containsURL:      true,
 			wantFallbackHint: false,
 		},
 		{
 			name:             "81-column URL stays outside dialog",
-			authURL:          urlWithWidth(maxWebflowDialogURLWidth + 1),
+			authURL:          urlWithWidth(link.MaxInlineWidth + 1),
 			containsURL:      false,
 			wantFallbackHint: true,
 		},

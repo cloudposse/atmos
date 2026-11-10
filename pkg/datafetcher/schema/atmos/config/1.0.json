@@ -13090,6 +13090,27 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "links": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "",
+                "auto",
+                "osc8",
+                "clipboard",
+                "raw"
+              ]
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Links selects how a URL too long for a dialog box (such as an AWS SSO\nsign-in link) is delivered: `auto` (default) uses a clickable OSC 8\nhyperlink when the terminal is known to support one and the raw URL\notherwise, `osc8` always uses the hyperlink, `clipboard` copies the URL to\nthe clipboard, and `raw` always prints the full URL."
         }
       },
       "type": "object"
