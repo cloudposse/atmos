@@ -22,6 +22,7 @@ type awsFilesBasePathReceiver interface {
 	SetAWSFilesBasePath(string)
 }
 
+// usesScopedAWSFiles reports whether an identity belongs to a GitLab chain with invocation-owned AWS storage.
 func (m *manager) usesScopedAWSFiles(identityName string) bool {
 	if m.awsFilesBasePath == "" {
 		return false
@@ -30,6 +31,8 @@ func (m *manager) usesScopedAWSFiles(identityName string) bool {
 	return provider != nil && provider.Kind() == types.ProviderKindGitLabOIDC
 }
 
+// applyManagerOptions configures a newly constructed manager and propagates its final file scope to AWS
+// identities.
 func applyManagerOptions(authManager types.AuthManager, options ...ManagerOption) types.AuthManager {
 	// These options are only applied to managers constructed by NewAuthManager.
 	m := authManager.(*manager)
@@ -40,6 +43,8 @@ func applyManagerOptions(authManager types.AuthManager, options ...ManagerOption
 	return m
 }
 
+// configureScopedAWSFiles applies invocation-owned paths to GitLab identities and preserves shared storage
+// for other providers.
 func (m *manager) configureScopedAWSFiles() {
 	for name, identity := range m.identities {
 		if receiver, ok := identity.(awsFilesBasePathReceiver); ok {

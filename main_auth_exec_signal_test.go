@@ -102,6 +102,8 @@ func TestAuthExecSignalHelper(t *testing.T) {
 	}
 }
 
+// runAuthExecSignalChild publishes its credential paths, handles or ignores shutdown signals, and exits with
+// the configured child status.
 func runAuthExecSignalChild(t *testing.T) {
 	t.Helper()
 	dir := os.Getenv(authExecSignalDirEnv)
@@ -138,6 +140,8 @@ func runAuthExecSignalChild(t *testing.T) {
 	os.Exit(exitCode)
 }
 
+// waitAuthExecSignalRelease keeps checking credential availability while the child waits for permission to
+// finish its signal handler.
 func waitAuthExecSignalRelease(t *testing.T, dir string, ready authExecSignalReady) {
 	t.Helper()
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -157,6 +161,8 @@ func waitAuthExecSignalRelease(t *testing.T, dir string, ready authExecSignalRea
 	}
 }
 
+// startAuthExecSignalProcess starts an isolated Atmos subprocess with mock STS and arranges bounded cleanup
+// of the test processes.
 func startAuthExecSignalProcess(t *testing.T, exitCode int, ignore bool) (string, *authExecSignalProcess, *atomic.Int32) {
 	t.Helper()
 	dir := t.TempDir()
@@ -188,6 +194,8 @@ func startAuthExecSignalProcess(t *testing.T, exitCode int, ignore bool) (string
 	return dir, process, requests
 }
 
+// serveAuthExecSignalSTS serves synthetic role credentials and writes an Atmos configuration pointing
+// exclusively to the local server.
 func serveAuthExecSignalSTS(t *testing.T, dir string) *atomic.Int32 {
 	t.Helper()
 	requests := &atomic.Int32{}
@@ -230,6 +238,8 @@ auth:
 	return requests
 }
 
+// authExecSignalEnvironment builds a subprocess environment with isolated configuration, credential storage,
+// and temporary directories.
 func authExecSignalEnvironment(t *testing.T, dir string, exitCode int, ignore bool) []string {
 	t.Helper()
 	environ := make([]string, 0)
@@ -275,6 +285,7 @@ func readAuthExecSignalReady(t *testing.T, dir string, process *authExecSignalPr
 	return ready
 }
 
+// awaitAuthExecSignalFile waits for a helper marker and fails promptly if Atmos exits before creating it.
 func awaitAuthExecSignalFile(t *testing.T, path string, process *authExecSignalProcess) {
 	t.Helper()
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -295,6 +306,8 @@ func awaitAuthExecSignalFile(t *testing.T, path string, process *authExecSignalP
 	}
 }
 
+// assertAuthExecSignalStillRunning checks that Atmos has not exited while its child is still handling
+// shutdown.
 func assertAuthExecSignalStillRunning(t *testing.T, process *authExecSignalProcess) {
 	t.Helper()
 	select {
@@ -304,6 +317,7 @@ func assertAuthExecSignalStillRunning(t *testing.T, process *authExecSignalProce
 	}
 }
 
+// waitAuthExecSignalProcess bounds shutdown waiting and verifies that Atmos preserves the child exit status.
 func waitAuthExecSignalProcess(t *testing.T, process *authExecSignalProcess, wantExitCode int) {
 	t.Helper()
 	select {
@@ -315,6 +329,8 @@ func waitAuthExecSignalProcess(t *testing.T, process *authExecSignalProcess, wan
 	assert.Equal(t, wantExitCode, process.command.ProcessState.ExitCode(), "Atmos must preserve the waited child status")
 }
 
+// assertAuthExecSignalFiles verifies that both AWS files exist inside the invocation-owned directory during
+// child shutdown.
 func assertAuthExecSignalFiles(t *testing.T, ready authExecSignalReady) {
 	t.Helper()
 	for _, path := range []string{ready.CredentialsFile, ready.ConfigFile} {
@@ -328,6 +344,7 @@ func assertAuthExecSignalFiles(t *testing.T, ready authExecSignalReady) {
 	}
 }
 
+// assertAuthExecSignalRemoved verifies credential cleanup and waits for the child process to be reaped.
 func assertAuthExecSignalRemoved(t *testing.T, ready authExecSignalReady) {
 	t.Helper()
 	assert.NoDirExists(t, ready.PrivateDir)
@@ -343,6 +360,8 @@ func assertAuthExecSignalRemoved(t *testing.T, ready authExecSignalReady) {
 	}, 5*time.Second, 10*time.Millisecond, "the child must be reaped before Atmos exits")
 }
 
+// killAuthExecSignalChild best-effort terminates a helper identified by its ready marker after a test
+// failure.
 func killAuthExecSignalChild(dir string) {
 	payload, err := os.ReadFile(filepath.Join(dir, "ready"))
 	if err != nil {

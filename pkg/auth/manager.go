@@ -320,6 +320,8 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	return result, err
 }
 
+// authenticateResolvedIdentity authenticates the resolved chain, prepares identity files and integrations,
+// and removes superseded legacy credentials.
 func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)

@@ -92,6 +92,8 @@ func waitForChild(pid int, grouped bool) bool {
 	return true
 }
 
+// cancelSignal forwards shutdown to the child or process group, avoids duplicate terminal interrupts, and
+// waits for bounded cleanup.
 func (g *childGroup) cancelSignal(sig os.Signal) error {
 	value, ok := sig.(syscall.Signal)
 	if !ok {

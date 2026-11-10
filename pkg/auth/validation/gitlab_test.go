@@ -13,6 +13,8 @@ import (
 // Compile-time sentinel for the provider configuration fields used below.
 var _ = schema.Provider{Kind: types.ProviderKindGitLabOIDC, Spec: map[string]any{}}
 
+// TestValidateGitLabOIDCProvider checks registry-backed configuration validation without requiring a runtime
+// GitLab token.
 func TestValidateGitLabOIDCProvider(t *testing.T) {
 	t.Setenv("ATMOS_OIDC_TOKEN", "")
 	tests := []struct {

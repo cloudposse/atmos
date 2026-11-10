@@ -17,6 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 )
 
+// TestManagerAWSFileScope covers inherited and explicit GitLab scopes while preserving other providers'
+// storage behavior.
 func TestManagerAWSFileScope(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

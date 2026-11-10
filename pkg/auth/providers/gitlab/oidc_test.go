@@ -16,6 +16,7 @@ import (
 // Compile-time sentinel for the provider configuration fields used below.
 var _ = schema.Provider{Kind: types.ProviderKindGitLabOIDC, Spec: map[string]any{}}
 
+// TestNewOIDCProvider rejects missing provider names and configurations.
 func TestNewOIDCProvider(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -30,6 +31,7 @@ func TestNewOIDCProvider(t *testing.T) {
 	}
 }
 
+// TestOIDCProvider_Validate checks token-source configuration independently of runtime token availability.
 func TestOIDCProvider_Validate(t *testing.T) {
 	t.Setenv(defaultTokenEnvironmentVariable, "")
 	tests := []struct {
@@ -65,6 +67,8 @@ func TestOIDCProvider_Validate(t *testing.T) {
 	}
 }
 
+// TestOIDCProvider_Authenticate covers default and custom token variables, whitespace trimming, and missing-
+// token failures.
 func TestOIDCProvider_Authenticate(t *testing.T) {
 	// An explicitly configured token source also works outside a GitLab runner.
 	t.Setenv("GITLAB_CI", "false")
@@ -106,6 +110,8 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 	}
 }
 
+// TestOIDCProvider_ReadsCurrentToken verifies that authentication reads token changes rather than caching an
+// earlier value.
 func TestOIDCProvider_ReadsCurrentToken(t *testing.T) {
 	provider, err := NewOIDCProvider("gitlab", &schema.Provider{Kind: types.ProviderKindGitLabOIDC})
 	require.NoError(t, err)

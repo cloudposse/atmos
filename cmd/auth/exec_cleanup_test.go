@@ -20,6 +20,8 @@ import (
 
 var _ = schema.Identity{Kind: "aws/assume-role"}
 
+// TestPrepareGitLabAuthExecScope verifies that only GitLab identities receive private AWS storage, including
+// mixed-case identity names.
 func TestPrepareGitLabAuthExecScope(t *testing.T) {
 	for _, kind := range []string{types.ProviderKindGitLabOIDC, "github/oidc", "aws/iam-identity-center"} {
 		t.Run(kind, func(t *testing.T) {
@@ -106,6 +108,8 @@ func TestPrepareGitLabAuthExecUnknownIdentity(t *testing.T) {
 	assert.Empty(t, execCtx.credentialDir, "unresolved identities must reach the existing profile fallback")
 }
 
+// TestPrepareGitLabAuthExecSetupErrors covers provider lookup and temporary-directory failures before
+// authentication begins.
 func TestPrepareGitLabAuthExecSetupErrors(t *testing.T) {
 	for _, lookupFailure := range []bool{false, true} {
 		t.Run(fmt.Sprint(lookupFailure), func(t *testing.T) {

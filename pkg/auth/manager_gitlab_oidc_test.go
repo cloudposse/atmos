@@ -26,6 +26,8 @@ var (
 	_ = schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{}, Principal: map[string]any{}, Spec: map[string]any{}}
 )
 
+// TestGitLabOIDCAuthenticationChain covers direct and chained AWS roles using the current GitLab token
+// instead of ambient AWS credentials.
 func TestGitLabOIDCAuthenticationChain(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -60,6 +62,8 @@ func TestGitLabOIDCAuthenticationChain(t *testing.T) {
 	}
 }
 
+// runGitLabOIDCChain exercises mock STS authentication, process-local reuse, token rotation, and explicit
+// logout of managed AWS files.
 func runGitLabOIDCChain(t *testing.T, target string, wantActions, wantChain []string) {
 	t.Helper()
 	actions := []string{}
@@ -111,6 +115,8 @@ func runGitLabOIDCChain(t *testing.T, target string, wantActions, wantChain []st
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+// checkGitLabSTSRequest verifies that initial role assumption sends the GitLab token anonymously and chained
+// requests use the preceding role.
 func checkGitLabSTSRequest(t *testing.T, r *http.Request, action string, tokens *[]string) string {
 	t.Helper()
 	if action == "AssumeRoleWithWebIdentity" {
@@ -160,6 +166,8 @@ func gitlabChainConfig(endpoint string) *schema.AuthConfig {
 	}
 }
 
+// assertGitLabToolCredentials checks the returned AWS identity and managed tool credentials without
+// persisting the GitLab token.
 func assertGitLabToolCredentials(t *testing.T, info *types.WhoamiInfo, target string, expiration time.Time) {
 	t.Helper()
 	key := "runner-key"

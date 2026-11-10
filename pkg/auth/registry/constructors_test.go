@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestNewProvider_Registry covers built-in provider construction and rejects invalid provider configurations.
 func TestNewProvider_Registry(t *testing.T) {
 	tests := []struct {
 		name         string

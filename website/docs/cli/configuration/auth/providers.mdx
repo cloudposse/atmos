@@ -214,8 +214,9 @@ may be reused within one invocation and are written to managed credential files 
 The [`atmos auth exec`](/cli/commands/auth/exec) command uses a private temporary directory for AWS
 credential and config files, separate from existing login profiles and overlapping invocations.
 It removes that directory when the command returns, including on errors. A separate `atmos auth login`
-keeps its managed files until [logout](/cli/commands/auth/logout); `auth exec` still requires authentication
-with the current job token rather than reusing those persisted files.
+also uses a private temporary directory and removes its AWS files before returning, including on failure.
+Login validates authentication; it does not prepare credentials for a later command. Use `auth exec`
+to run external tools with credentials from the current job token.
 
 If directory removal fails, Atmos reports a cleanup error and unexpired credentials may remain.
 Resolve the error and remove the affected invocation's private directory and any remaining files.

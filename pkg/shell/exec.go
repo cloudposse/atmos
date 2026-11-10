@@ -88,6 +88,8 @@ func RunCommandContext(ctx context.Context, args []string, env []string) error {
 	return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrSubcommandFailed, result.Err)
 }
 
+// commandPath validates command arguments and resolves the executable, returning a structured command-not-
+// found error when lookup fails.
 func commandPath(args []string) (string, error) {
 	if len(args) == 0 {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)

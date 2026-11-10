@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/signals"
 )
 
+// main installs coordinated shutdown handling and exits with the application result after cleanup.
 func main() {
 	// Set up signal handling for graceful shutdown.
 	sigChan := make(chan os.Signal, 1)

@@ -67,6 +67,7 @@ func init() {
 	)
 }
 
+// executeAuthLoginCommand authenticates a provider or identity and displays its principal.
 func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
@@ -91,6 +92,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
+	authManager = &loginAuthManager{AuthManager: authManager, config: &atmosConfig}
 
 	// Check if --provider flag was provided.
 	providerName := v.GetString("provider")

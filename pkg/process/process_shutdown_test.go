@@ -20,6 +20,8 @@ import (
 
 const shutdownHelperDirEnv = "_ATMOS_TEST_SHUTDOWN_HELPER_DIR"
 
+// TestRun_OwnedTerminalShutdown verifies signal forwarding, waits for child cleanup, and preserves the child
+// exit status.
 func TestRun_OwnedTerminalShutdown(t *testing.T) {
 	skipOnWindows(t)
 	for _, sig := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
@@ -64,6 +66,8 @@ func TestRun_OwnedTerminalShutdown(t *testing.T) {
 	}
 }
 
+// TestOwnedShutdownHelper runs the subprocess signal handler and detects duplicate signal delivery before
+// exiting.
 func TestOwnedShutdownHelper(t *testing.T) {
 	dir := os.Getenv(shutdownHelperDirEnv)
 	if dir == "" {

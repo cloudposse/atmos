@@ -63,6 +63,8 @@ func TestShutdownCommittedBeforeRegistration(t *testing.T) {
 	assert.Equal(t, syscall.SIGTERM, CancellationSignal(ctx))
 }
 
+// TestShutdownRegistrationRace verifies that concurrent registration and signal handling always cancel the
+// operation with the original signal.
 func TestShutdownRegistrationRace(t *testing.T) {
 	for range 20 {
 		t.Run("registration races signal", func(t *testing.T) {

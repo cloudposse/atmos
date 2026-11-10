@@ -90,6 +90,8 @@ func (p *oidcProvider) Validate() error {
 	return err
 }
 
+// tokenEnvironmentVariable resolves the configured token source and rejects empty, non-string, or invalid
+// environment variable names.
 func (p *oidcProvider) tokenEnvironmentVariable() (string, error) {
 	value, exists := p.config.Spec["token_environment_variable"]
 	if !exists {
