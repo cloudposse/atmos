@@ -365,6 +365,7 @@ func portBindings(ports []schema.ContainerPort) []container.PortBinding {
 			protocol = defaultProtocol
 		}
 		bindings = append(bindings, container.PortBinding{
+			Bind:          port.Bind,
 			HostPort:      port.Host, // 0 -> auto-assigned.
 			ContainerPort: port.Container,
 			Protocol:      protocol,

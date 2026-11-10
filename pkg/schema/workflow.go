@@ -101,6 +101,8 @@ type ContainerMount struct {
 
 // ContainerPort represents a port mapping for container steps.
 type ContainerPort struct {
+	// Bind binds the published port to a host interface; empty uses the runtime default.
+	Bind      string `yaml:"bind,omitempty" json:"bind,omitempty" mapstructure:"bind"`
 	Host      int    `yaml:"host,omitempty" json:"host,omitempty" mapstructure:"host"`
 	Container int    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
 	Protocol  string `yaml:"protocol,omitempty" json:"protocol,omitempty" mapstructure:"protocol"`

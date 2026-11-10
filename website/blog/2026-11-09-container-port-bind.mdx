@@ -1,0 +1,44 @@
+---
+slug: container-port-bind
+title: "Bind Published Container Ports to a Specific Interface"
+authors: [osterman]
+tags: [enhancement]
+---
+
+Publishing a container port usually exposes it on every network interface of the host. For a local database, an admin portal, or a cloud emulator, that means anything on the same network can reach a service that was only ever meant for your own machine. Container port mappings in Atmos now accept a `bind` address, so you can keep a published port on loopback, or on any single interface you choose.
+
+<!--truncate-->
+
+## The Problem
+
+A port mapping such as `host: 3000` / `container: 3000` asks the container runtime to listen on `0.0.0.0:3000`. On a laptop connected to shared Wi-Fi, or on a CI runner, that service becomes reachable from other machines. Restricting it meant dropping down to raw `docker run -p 127.0.0.1:3000:3000` invocations outside of Atmos.
+
+## The Fix
+
+Every container port mapping now has an optional `bind` field. When it's set, Atmos publishes the port only on that host address. When it's omitted, the runtime's default binding applies as before, so existing configuration is unchanged.
+
+## How to Use It
+
+Add `bind` to any entry under [`run.ports`](/components/container#port-bindings):
+
+```yaml
+components:
+  container:
+    portal:
+      image: my-portal:local
+      run:
+        ports:
+          - bind: 127.0.0.1
+            host: 3000
+            container: 3000
+```
+
+- IPv6 addresses such as `::1` work too.
+- Leaving `host` empty (or `0`) still lets the runtime assign a free host port. It's assigned only on the bound interface.
+- The same field works in container workflow steps, background container services, and emulators.
+
+Port bindings are fixed when a container is created. After you change one, recreate the container with `atmos container down` followed by `atmos container up`.
+
+## Get Involved
+
+Questions or ideas for container components? Join us in the [Cloud Posse community](https://cloudposse.com/slack) or open an issue on [GitHub](https://github.com/cloudposse/atmos).

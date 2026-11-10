@@ -275,10 +275,11 @@ func TestConvertWorkflowMounts_ExpandsHome(t *testing.T) {
 
 func TestConvertWorkflowPorts(t *testing.T) {
 	ports := convertWorkflowPorts([]schema.ContainerPort{
-		{Host: 8080, Container: 80},
+		{Bind: "127.0.0.1", Host: 8080, Container: 80},
 		{Host: 53, Container: 53, Protocol: "udp"},
 	})
 	require.Len(t, ports, 2)
+	assert.Equal(t, "127.0.0.1", ports[0].Bind)
 	assert.Equal(t, "tcp", ports[0].Protocol) // defaulted.
 	assert.Equal(t, 8080, ports[0].HostPort)
 	assert.Equal(t, "udp", ports[1].Protocol)

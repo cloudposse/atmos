@@ -146,9 +146,21 @@ func addMetadata(args []string, config *CreateConfig) []string {
 
 // publishArg returns the `-p` publish value for a port binding. A HostPort of 0
 // means "auto-assign": the container engine picks a free host port (read back
-// later via inspect). We omit the host side in that case — passing a literal `0`
+// later via inspect). We leave out the host port in that case — passing a literal `0`
 // makes Podman reject the spec ("port numbers must be between 1 and 65535").
 func publishArg(port PortBinding) string {
+	if port.Bind != "" {
+		bind := port.Bind
+		// IPv6 addresses need brackets to distinguish address colons from ports.
+		if strings.Contains(bind, ":") && !strings.HasPrefix(bind, "[") {
+			bind = "[" + bind + "]"
+		}
+		hostPort := ""
+		if port.HostPort != 0 {
+			hostPort = strconv.Itoa(port.HostPort)
+		}
+		return fmt.Sprintf("%s:%s:%d/%s", bind, hostPort, port.ContainerPort, port.Protocol)
+	}
 	if port.HostPort == 0 {
 		return fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol)
 	}

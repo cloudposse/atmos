@@ -77,6 +77,33 @@ components:
 
 Inheritance (`metadata.inherits`), catalogs, mixins, and deep-merge work exactly like other component kinds — define an abstract base component with shared `run`/`build` defaults and inherit it.
 
+## Port Bindings
+
+Use `run.ports` to publish container ports. `host` is the host port, `container`
+is the container port, and optional `bind` restricts the binding to a host
+interface. `protocol` defaults to `tcp`.
+
+```yaml
+components:
+  container:
+    portal:
+      image: my-portal:local
+      run:
+        ports:
+          - bind: 127.0.0.1
+            host: 3000
+            container: 3000
+```
+
+Omitting `bind` preserves the container runtime's default interface binding.
+Omitting `host` (or setting it to `0`) requests an automatically assigned host
+port; `bind` still restricts the interface. IPv6 addresses such as `::1` are
+also supported. The same port mapping fields work in container workflow steps,
+workflow sandboxes, and emulators.
+
+Changes to port bindings require removing and recreating the container with
+`atmos container down` followed by `atmos container up`.
+
 ## Component-Type Defaults
 
 Define defaults for all container components:

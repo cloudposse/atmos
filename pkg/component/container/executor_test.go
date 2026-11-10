@@ -66,7 +66,7 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 
 	section := map[string]any{
 		"image": "localhost:5001/api:abc",
-		"run":   map[string]any{"command": "./api", "ports": []any{map[string]any{"host": 8080, "container": 8080}}},
+		"run":   map[string]any{"command": "./api", "ports": []any{map[string]any{"bind": "127.0.0.1", "host": 8080, "container": 8080}}},
 	}
 	withStubs(t, section, []string{"PORT=8080"}, rt)
 
@@ -77,6 +77,7 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 				assert.Equal(t, "atmos-dev-container-api", c.Name)
 				assert.Equal(t, []string{"./api"}, c.Command)
 				require.Len(t, c.Ports, 1)
+				assert.Equal(t, "127.0.0.1", c.Ports[0].Bind)
 				assert.Equal(t, 8080, c.Ports[0].HostPort)
 				assert.Equal(t, 8080, c.Ports[0].ContainerPort)
 				assert.Equal(t, "8080", c.Env["PORT"])

@@ -191,6 +191,7 @@ func (s *ContainerSpec) Ports() []ctr.PortBinding {
 			protocol = defaultProtocol
 		}
 		ports = append(ports, ctr.PortBinding{
+			Bind:          p.Bind,
 			HostPort:      p.Host,
 			ContainerPort: p.Container,
 			Protocol:      protocol,

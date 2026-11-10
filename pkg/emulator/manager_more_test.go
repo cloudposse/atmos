@@ -513,3 +513,10 @@ func TestNewManagerNoRecovery_SkipsRecoveryDetection(t *testing.T) {
 	assert.True(t, noRecoveryCalled, "expected detectRuntimeWithPreference to be invoked")
 	assert.False(t, recoveryCalled, "Podman auto-recovery must never be invoked when noRecovery is set")
 }
+
+func TestPortBindings_HostInterface(t *testing.T) {
+	t.Parallel()
+
+	ports := portBindings([]schema.ContainerPort{{Bind: "127.0.0.1", Container: 4566}})
+	require.Equal(t, []container.PortBinding{{Bind: "127.0.0.1", ContainerPort: 4566, Protocol: "tcp"}}, ports)
+}

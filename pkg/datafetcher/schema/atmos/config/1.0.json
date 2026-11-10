@@ -4802,6 +4802,17 @@
     },
     "ContainerPort": {
       "properties": {
+        "bind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Bind binds the published port to a host interface; empty uses the runtime default."
+        },
         "host": {
           "anyOf": [
             {

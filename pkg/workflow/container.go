@@ -460,6 +460,7 @@ func convertWorkflowPorts(ports []schema.ContainerPort) []container.PortBinding 
 			protocol = "tcp"
 		}
 		result = append(result, container.PortBinding{
+			Bind:          port.Bind,
 			HostPort:      port.Host,
 			ContainerPort: port.Container,
 			Protocol:      protocol,
