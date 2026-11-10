@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -129,7 +130,7 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	var changesPresent error
 	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (string, error) {
 		output, actionErr := runObservedAction(&phaseInfo, applied.Args, opts, config, action)
-		if isDetailedExitCodeChanges(applied.Args, actionErr) {
+		if isDetailedExitCodeChanges(phase.command, applied.Args, phaseInfo.ComponentEnvList, actionErr) {
 			changesPresent = actionErr
 			return output, nil
 		}
@@ -158,13 +159,50 @@ const detailedExitCodeChanges = 2
 
 // isDetailedExitCodeChanges reports whether err is exit status 2 of a command run with
 // -detailed-exitcode, which Terragrunt treats as success for hooks and the success of the unit.
-func isDetailedExitCodeChanges(args []string, err error) bool {
+func isDetailedExitCodeChanges(command string, args, env []string, err error) bool {
 	if err == nil || errUtils.GetExitCode(err) != detailedExitCodeChanges {
 		return false
 	}
-	return slices.ContainsFunc(args, func(arg string) bool {
-		return arg == "-detailed-exitcode" || arg == "--detailed-exitcode"
-	})
+	return detailedExitCodeEnabled(command, args, env)
+}
+
+// detailedExitCodeEnabled reports whether -detailed-exitcode is in effect for the command.
+// Terraform inserts TF_CLI_ARGS_<command>, then TF_CLI_ARGS, before the command-line arguments,
+// and the last setting of a flag wins, so an explicit command-line setting takes precedence.
+func detailedExitCodeEnabled(command string, args, env []string) bool {
+	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(command)
+	words := slices.Concat(
+		strings.Fields(environmentValue(env, "TF_CLI_ARGS_"+suffix)),
+		strings.Fields(environmentValue(env, "TF_CLI_ARGS")),
+		args,
+	)
+	enabled := false
+	for _, word := range words {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(word, "-"), "=")
+		if !strings.HasPrefix(word, "-") || name != "detailed-exitcode" {
+			continue
+		}
+		if !hasValue {
+			enabled = true
+			continue
+		}
+		if parsed, err := strconv.ParseBool(value); err == nil {
+			enabled = parsed
+		}
+	}
+	return enabled
+}
+
+// environmentValue returns the value of key the subprocess sees: the component environment is
+// appended to the inherited process environment, so its last entry wins.
+func environmentValue(env []string, key string) string {
+	merged := slices.Concat(os.Environ(), env)
+	for i := len(merged) - 1; i >= 0; i-- {
+		if name, value, found := strings.Cut(merged[i], "="); found && name == key {
+			return value
+		}
+	}
+	return ""
 }
 
 // hookOptions carries over only what a hook shares with the command: cancellation, the process

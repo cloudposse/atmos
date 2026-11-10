@@ -522,6 +522,7 @@ func TestDetailedExitCodeIsOnlyToleratedWhereTerraformDefinesIt(t *testing.T) {
 		{"status 2 without the flag is a failure", []string{"plan"}, 2},
 		{"status 1 with the flag is a failure", []string{"plan", "-detailed-exitcode"}, 1},
 		{"double dash flag", []string{"plan", "--detailed-exitcode"}, 2},
+		{"explicit true value", []string{"plan", "-detailed-exitcode=true"}, 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			shell := &fakeShell{run: func(call *shellCall) error {
@@ -532,7 +533,7 @@ func TestDetailedExitCodeIsOnlyToleratedWhereTerraformDefinesIt(t *testing.T) {
 			}}
 			err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, detailedExitCodeInfo(), test.args, t.TempDir())
 			require.Equal(t, test.code, errUtils.GetExitCode(err))
-			tolerated := test.args[len(test.args)-1] == "--detailed-exitcode" || (test.code == 2 && len(test.args) > 1)
+			tolerated := test.code == 2 && len(test.args) > 1
 			if tolerated {
 				require.Equal(t, []string{"terraform plan", "hook-after arg"}, shell.names())
 				return
@@ -579,4 +580,34 @@ func TestHooksMatchTheTerraformCommandNotItsSubcommand(t *testing.T) {
 	info := hookInfo("state list", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{execHook("state-hook", "state")}})
 	require.NoError(t, hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"state", "list"}, t.TempDir()))
 	require.Equal(t, []string{"hook-state-hook arg", "terraform state"}, shell.names())
+}
+
+// The flag can come from TF_CLI_ARGS_plan or TF_CLI_ARGS, and a command-line setting takes precedence.
+func TestDetailedExitCodeEnabledFollowsTerraformPrecedence(t *testing.T) {
+	t.Setenv("TF_CLI_ARGS_plan", "")
+	t.Setenv("TF_CLI_ARGS", "")
+	for _, test := range []struct {
+		name string
+		args []string
+		env  []string
+		want bool
+	}{
+		{"absent", []string{"plan"}, nil, false},
+		{"bare flag", []string{"plan", "-detailed-exitcode"}, nil, true},
+		{"explicit true", []string{"plan", "-detailed-exitcode=true"}, nil, true},
+		{"explicit false", []string{"plan", "-detailed-exitcode=false"}, nil, false},
+		{"command environment", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-input=false -detailed-exitcode"}, true},
+		{"global environment", []string{"plan"}, []string{"TF_CLI_ARGS=-detailed-exitcode"}, true},
+		{"global wins over command environment", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS=-detailed-exitcode=false"}, false},
+		{"command line disables environment", []string{"plan", "-detailed-exitcode=false"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode"}, false},
+		{"command line enables over environment", []string{"plan", "-detailed-exitcode"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode=false"}, true},
+		{"other command environment", []string{"plan"}, []string{"TF_CLI_ARGS_apply=-detailed-exitcode"}, false},
+		{"later component value wins", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS_plan="}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, detailedExitCodeEnabled("plan", test.args, test.env))
+		})
+	}
+	t.Setenv("TF_CLI_ARGS_plan", "-detailed-exitcode")
+	require.True(t, detailedExitCodeEnabled("plan", []string{"plan"}, nil), "the inherited process environment applies")
 }
