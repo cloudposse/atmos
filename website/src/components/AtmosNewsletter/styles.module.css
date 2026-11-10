@@ -1,6 +1,6 @@
 .newsletter {
-  max-width: 42rem;
-  margin: 2.5rem auto;
+  width: 100%;
+  margin: 2rem 0;
   padding: 1.5rem;
   border: 1px solid rgba(128, 128, 128, 0.2);
   border-radius: 0.75rem;
@@ -22,12 +22,12 @@
   display: block;
   width: calc(100% + 8px);
   margin-left: -4px;
-  height: 100px;
+  height: 56px;
   border: 0;
   color-scheme: normal;
 }
 .feeds {
-  margin: 0;
+  margin: 1rem 0 0;
   font-size: 0.8125rem;
   color: var(--ifm-color-emphasis-600);
 }
@@ -36,6 +36,6 @@
     padding: 1.25rem;
   }
   .frame {
-    height: 174px;
+    height: 120px;
   }
 }
