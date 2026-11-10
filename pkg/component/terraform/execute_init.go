@@ -173,7 +173,7 @@ func (e *Executor) executeTerraformInitForced(atmosConfig *schema.AtmosConfigura
 func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !isWorkdir {
-		cleanTerraformWorkspace(*atmosConfig, componentPath)
+		cleanTerraformWorkspace(*atmosConfig, componentPath, info.ComponentEnvList)
 	}
 
 	if ctx == nil {
@@ -555,25 +555,23 @@ func (e *Executor) createWorkspaceFallback(atmosConfig *schema.AtmosConfiguratio
 // helping Terraform identify the active workspace context for managing your infrastructure.
 // We delete the file to prevent the Terraform prompt asking to select the default or the
 // previously used workspace. This happens when different backends are used for the same component.
-//
-//nolint:nestif // Preserve workspace cleanup and Windows retry behavior during extraction.
 func CleanTerraformWorkspace(componentPath string) {
 	defer perf.Track(nil, "terraform.CleanTerraformWorkspace")()
 
-	// Get `TF_DATA_DIR` ENV variable, default to `.terraform` if not set
-	//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos configuration variable.
-	tfDataDir := os.Getenv("TF_DATA_DIR")
-	if tfDataDir == "" {
-		tfDataDir = ".terraform"
-	}
+	CleanTerraformWorkspaceWithEnv(componentPath, nil)
+}
 
-	// Convert relative path to absolute
-	if !filepath.IsAbs(tfDataDir) {
-		tfDataDir = filepath.Join(componentPath, tfDataDir)
-	}
+// CleanTerraformWorkspaceWithEnv is CleanTerraformWorkspace for a subprocess environment:
+// a TF_DATA_DIR in envList (typically info.ComponentEnvList) wins over this process's own
+// environment, so the cleanup targets the data directory Terraform will actually use.
+//
+//nolint:nestif // Preserve workspace cleanup and Windows retry behavior during extraction.
+func CleanTerraformWorkspaceWithEnv(componentPath string, envList []string) {
+	defer perf.Track(nil, "terraform.CleanTerraformWorkspaceWithEnv")()
 
-	// Ensure the path is cleaned properly
-	tfDataDir = filepath.Clean(tfDataDir)
+	// Resolve TF_DATA_DIR from envList, then this process's environment, defaulting to
+	// `.terraform`; a relative value is joined to componentPath and cleaned.
+	tfDataDir := autoinit.DataDir(componentPath, envListLookup(envList))
 
 	// Construct the full file path
 	filePath := filepath.Join(tfDataDir, "environment")
@@ -596,5 +594,20 @@ func CleanTerraformWorkspace(componentPath string) {
 		log.Debug("Terraform environment file not found. No action needed.", "file", filePath)
 	} else {
 		log.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
+	}
+}
+
+// envListLookup looks keys up in a subprocess environment list. The last entry for a key wins,
+// as it does for the launched process, and an explicit empty value is reported as present.
+func envListLookup(envList []string) func(string) (string, bool) {
+	return func(key string) (string, bool) {
+		prefix := key + "="
+		value, found := "", false
+		for _, entry := range envList {
+			if strings.HasPrefix(entry, prefix) {
+				value, found = entry[len(prefix):], true
+			}
+		}
+		return value, found
 	}
 }

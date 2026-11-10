@@ -329,7 +329,7 @@ func (s *Operations) runTerraformInit(atmosConfig *schema.AtmosConfiguration, di
 	}
 
 	// Clean terraform workspace to prevent workspace selection prompt
-	CleanTerraformWorkspace(dir)
+	CleanTerraformWorkspaceWithEnv(dir, info.ComponentEnvList)
 
 	// Create a copy of the info struct with init subcommand
 	initInfo := *info
