@@ -323,6 +323,13 @@ func TestFinishConfigurationPlan(t *testing.T) {
 		require.FileExists(t, canonical)
 		require.NoFileExists(t, canonical+configurationPlanSuffix)
 	})
+	t.Run("a failed apply keeps the plan and its record even when its exit code is mapped to success", func(t *testing.T) {
+		config, info, canonical := setup(t, "apply")
+		info.ExecMetadataRawExitCode = 1
+		finishConfigurationPlan(config, info)
+		require.FileExists(t, canonical)
+		require.FileExists(t, canonical+configurationPlanSuffix)
+	})
 	t.Run("a dry run and an ordinary component keep every file", func(t *testing.T) {
 		config, info, canonical := setup(t, "apply")
 		info.DryRun = true

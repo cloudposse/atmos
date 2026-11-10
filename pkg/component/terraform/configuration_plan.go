@@ -470,6 +470,11 @@ func finishConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Con
 	if !ownsConfigurationPlan(info) || info.DryRun {
 		return
 	}
+	// A CI exit-code mapping can report a failed apply as success. The subprocess's own status
+	// decides, so a plan whose apply failed (for example on a state lock) can be applied again.
+	if info.ExecMetadataRawExitCode != 0 {
+		return
+	}
 	if _, changes := stateChangingSubcommands[info.SubCommand]; !changes {
 		return
 	}
