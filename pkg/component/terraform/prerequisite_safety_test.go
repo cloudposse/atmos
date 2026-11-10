@@ -51,9 +51,17 @@ func TestDryRunInitPreservesWorkspaceAndMarker(t *testing.T) {
 func TestPrerequisiteInitRoutesDataCommandDiagnostics(t *testing.T) {
 	executable, err := os.Executable()
 	require.NoError(t, err)
-	// "state pull" is the representation the CLI parser produces (compound subcommand, empty SubCommand2).
+	// "state pull"/"state list" are the representations the CLI parser produces (compound subcommand,
+	// empty SubCommand2); the split forms are covered too.
 	for _, tc := range []struct{ command, command2 string }{
-		{"output", ""}, {"show", ""}, {"state pull", ""}, {"state", "pull"}, {"plan", ""}, {"init", ""},
+		{"output", ""},
+		{"show", ""},
+		{"state pull", ""},
+		{"state", "pull"},
+		{"state list", ""},
+		{"state", "list"},
+		{"plan", ""},
+		{"init", ""},
 	} {
 		command := tc.command
 		t.Run(command+" "+tc.command2, func(t *testing.T) {

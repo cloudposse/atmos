@@ -93,6 +93,14 @@ func TestSourceRefreshRejectsFileDirectoryTypeChange(t *testing.T) {
 			content, readErr := os.ReadFile(filepath.Join(target, "main.tf"))
 			require.NoError(t, readErr)
 			assert.Equal(t, "# first", string(content))
+			assert.NotContains(t, err.Error(), "source delete")
+
+			// The documented recovery moves only the conflicting path aside; refresh then succeeds.
+			require.NoError(t, os.Rename(filepath.Join(target, tc.conflict), filepath.Join(t.TempDir(), "aside")))
+			require.NoError(t, VendorSource(t.Context(), nil, &schema.VendorComponentSource{Uri: second}, target, WithRuntimePreservation(nil)))
+			content, readErr = os.ReadFile(filepath.Join(target, tc.after))
+			require.NoError(t, readErr)
+			assert.Equal(t, "# after", string(content))
 		})
 	}
 }

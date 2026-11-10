@@ -52,12 +52,20 @@ processes sharing one mutable directory.
 When `auto_generate_backend_file` is enabled, a source that ships `backend.tf.json` in a module root
 is rejected before publication: the source copy and the generated backend would otherwise overwrite
 each other. A source update that changes a path between a file and a directory is also rejected
-before publication, naming the path and directing the user to delete and re-provision the source;
-refresh replaces files in place and cannot change a path's type transactionally.
+before publication, because refresh replaces files in place and cannot change a path's type
+transactionally. The error names the conflicting path. To recover, move only that path out of the
+component directory, keeping anything it holds that is still needed, and refresh again. Do not delete
+the whole component directory or run `source delete`: that also removes local state, `.terraform`,
+and saved plans.
 
 Legacy workdirs have no source ownership inventory. Their unknown files are retained, ordinary
 incoming Terraform configuration is adopted as source, and ambiguous non-Terraform collisions
-fail safely. This intentionally cannot prove that an unmatched legacy file is stale. Once an
+fail safely. This intentionally cannot prove that an unmatched legacy file is stale. Incoming `.tf`
+and `.tf.json` files are adopted without comparing contents, so on the first refresh of a legacy
+workdir a source file with the same name as a hook-generated or hand-written configuration file
+(for example `generated.tf`) replaces it. Before that first refresh, back up any generated
+configuration that shares a name with a source file, or change the generator to write a name the
+source does not ship. Once an
 inventory has been recorded, subsequent refreshes remove obsolete source-owned files. A source
 fixture named `examples/terraform.tfstate` remains ordinary source content unless it is the
 configured runtime location or contains actual state; the filename alone does not protect it.

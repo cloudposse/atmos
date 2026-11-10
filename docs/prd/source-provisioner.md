@@ -113,8 +113,9 @@ Source refresh holds a cross-process lock on the target directory while it stage
 A second process refreshing the same directory waits for that lock (bounded by the caller's
 provisioning timeout) and warns while it is blocked, instead of failing.
 
-**Remaining work (required before this feature is complete):** the refresh lock covers only
-publication. Without workdir provisioning, every stack that uses a component shares its directory
+**Remaining work (required before this feature is complete):** the refresh lock covers only the
+source refresh itself (staging and publication), not the rest of the command: backend generation,
+init, plan and apply run after it is released. Without workdir provisioning, every stack that uses a component shares its directory
 for the whole command: generated `backend.tf.json`, varfiles and provider overrides, `.terraform`
 (init, provider installation and its incomplete-package cleanup, the selected workspace), the
 planfile, and plan/apply. Parallel atmos processes on such a directory can still interleave those

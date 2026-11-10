@@ -431,7 +431,7 @@ func checkSourceDestination(target, name string, install bool) error {
 // change a path's type transactionally, so the error names the path and how to recover. An empty
 // directory is still replaced by publication, as before.
 func rejectSourceTypeChange(target, name string) error {
-	const recovery = "; refresh cannot change a path between a file and a directory in place. Delete the component source (atmos terraform source delete --force) and provision it again"
+	const recovery = "; refresh cannot change a path between a file and a directory in place. Move only that path out of the component directory (keep anything it holds that you still need), then refresh again; do not delete the whole directory, which would also remove local state, `.terraform` and saved plans"
 	local := filepath.FromSlash(name)
 	if entries, err := os.ReadDir(filepath.Join(target, local)); err == nil && len(entries) > 0 {
 		return fmt.Errorf("%w: source file %s conflicts with a nonempty directory in the target%s",

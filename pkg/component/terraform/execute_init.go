@@ -299,13 +299,13 @@ func prerequisiteOutputOptions(info *schema.ConfigAndStacksInfo, opts []componen
 }
 
 // isDataSubcommand reports whether the main command writes data to stdout. The CLI parser stores
-// `state pull` as the single subcommand "state pull"; the split form is accepted as well.
+// `state pull` and `state list` as single compound subcommands; the split forms are accepted as well.
 func isDataSubcommand(info *schema.ConfigAndStacksInfo) bool {
 	switch info.SubCommand {
-	case "output", "show", "state pull":
+	case "output", "show", "state pull", "state list":
 		return true
 	case "state":
-		return info.SubCommand2 == "pull"
+		return info.SubCommand2 == "pull" || info.SubCommand2 == "list"
 	}
 	return false
 }
