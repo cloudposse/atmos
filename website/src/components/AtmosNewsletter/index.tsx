@@ -1,10 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import { useColorMode } from '@docusaurus/theme-common';
 import styles from './styles.module.css';
 
 /** Subscribe to the Atmos list using the shared Cloud Posse signup form. */
 export default function AtmosNewsletter(): JSX.Element {
   const { colorMode } = useColorMode();
+  const { siteConfig } = useDocusaurusContext();
+  const configuredOrigin = siteConfig.customFields?.newsletterEmbedOrigin;
+  const embedOrigin =
+    typeof configuredOrigin === 'string'
+      ? configuredOrigin.replace(/\/$/, '')
+      : 'https://cloudposse.com';
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState<number>();
   useEffect(() => {
@@ -25,7 +32,7 @@ export default function AtmosNewsletter(): JSX.Element {
     window.addEventListener('message', resize);
     return () => window.removeEventListener('message', resize);
   }, []);
-  const src = `https://cloudposse.com/embed/newsletter?list=atmos_newsletter&variant=compact&theme=${colorMode}&bg=transparent&utm_source=atmos.tools&utm_medium=embed&utm_campaign=atmos-newsletter`;
+  const src = `${embedOrigin}/embed/newsletter?list=atmos_newsletter&variant=compact&theme=${colorMode}&bg=transparent&utm_source=atmos.tools&utm_medium=embed&utm_campaign=atmos-newsletter`;
 
   return (
     <section
@@ -34,7 +41,7 @@ export default function AtmosNewsletter(): JSX.Element {
     >
       <h2>Keep up with Atmos</h2>
       <p className={styles.description}>
-        A weekly digest of what’s new in Atmos.
+        A weekly roundup of new features, improvements, and fixes.
       </p>
       <iframe
         ref={frame}
