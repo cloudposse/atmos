@@ -469,7 +469,9 @@ func guardForkCheckout(ref, uri string, opts *cloneOptions) error {
 	if opts.Ref != "" && ciCtx.ElevatedEvent && ciCtx.PullRequest != nil && ciCtx.PullRequest.Fork {
 		return errUtils.Build(errUtils.ErrUnsafeForkCheckout).
 			WithExplanation("An explicit detached ref in an elevated fork event may select untrusted code.").
-			WithHint("Use a pull_request event, or --allow-unsafe-fork only for intentionally trusted workflows.").Err()
+			WithHint("Use a pull_request event, or --allow-unsafe-fork only for intentionally trusted workflows.").
+			WithExitCode(2).
+			Err()
 	}
 
 	verdict := ci.EvaluateForkCheckout(ciCtx, ci.CloneRequest{Ref: ref, URI: uri})

@@ -52,6 +52,25 @@ func TestCloneExactCommit(t *testing.T) {
 	require.Equal(t, first, strings.TrimSpace(gitRun(t, env, opts.Workdir, "rev-parse", "HEAD")))
 }
 
+func TestCloneExactCommitNonDefaultRemote(t *testing.T) {
+	requireGitBinary(t)
+	env := gitTestEnv(t)
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin")
+	gitRun(t, env, "", "init", origin)
+	writeFile(t, filepath.Join(origin, "file"), "first")
+	gitRun(t, env, origin, "add", ".")
+	gitRun(t, env, origin, "-c", "commit.gpgsign=false", "commit", "-m", "first")
+	first := strings.TrimSpace(gitRun(t, env, origin, "rev-parse", "HEAD"))
+	opts := &atmosgit.CloneOptions{
+		URI: "file://" + origin, Ref: first,
+		RepoContext: atmosgit.RepoContext{Workdir: filepath.Join(root, "checkout"), Remote: "upstream", Env: env},
+	}
+	require.NoError(t, New().Clone(context.Background(), opts))
+	require.Equal(t, first, strings.TrimSpace(gitRun(t, env, opts.Workdir, "rev-parse", "HEAD")))
+	require.Equal(t, "upstream", strings.TrimSpace(gitRun(t, env, opts.Workdir, "remote")))
+}
+
 func TestCheckoutRefFailureAndSubmodules(t *testing.T) {
 	for _, failing := range []string{"fetch", "checkout", "submodule"} {
 		t.Run(failing, func(t *testing.T) {

@@ -117,6 +117,11 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 	if opts.Submodules {
 		args = append(args, "--recurse-submodules")
 	}
+	// Name the remote as configured so later fetches by name (checkoutRef,
+	// reconcile) find it; git clone otherwise always creates "origin".
+	if remote := remoteOrDefault(opts.Remote); remote != atmosgit.DefaultRemote {
+		args = append(args, "--origin", remote)
+	}
 	// Native passthrough args are flags for git clone, so they must precede
 	// the "--" separating flags from the URI/workdir positionals.
 	args = append(args, opts.ExtraArgs...)
