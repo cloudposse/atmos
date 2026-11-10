@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/samber/lo"
@@ -312,6 +313,7 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 		AuthManager:          params.AuthManager,
 		AuthDisabled:         params.AuthDisabled,
 		ErrorOptions:         params.ErrorOptions,
+		CommandPath:          params.CommandPath,
 	})
 	if err != nil {
 		return nil, err
@@ -476,6 +478,9 @@ type DescribeComponentContextParams struct {
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management.
 	AuthDisabled         bool
 	ErrorOptions         DescribeStacksErrorOptions
+	// CommandPath names the CLI command that needs the component for admission.
+	// Empty means `describe component`.
+	CommandPath []string
 }
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
@@ -597,6 +602,11 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	configAndStacksInfo.ComponentFromArg = params.Component
 	configAndStacksInfo.Stack = params.Stack
 	configAndStacksInfo.CliArgs = []string{"describe", "component"}
+	if len(params.CommandPath) > 0 {
+		// Admission sees the command that needs the component, not `describe component`.
+		configAndStacksInfo.CliArgs = slices.Clone(params.CommandPath)
+		configAndStacksInfo.SubCommand = params.CommandPath[len(params.CommandPath)-1]
+	}
 	configAndStacksInfo.ComponentSection = make(map[string]any)
 	configAndStacksInfo.AuthDisabled = params.AuthDisabled
 	configAndStacksInfo.UseMocks = params.UseMocks

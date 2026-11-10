@@ -222,23 +222,25 @@ type Services struct {
 	NewDependencyParserWithDelimiter              func(builder *dependency.GraphBuilder, nodeMap map[string]string, targetStates map[string]string, leftDelim string) DependencyParser
 	ProcessStacks                                 func(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo, checkStack bool, processTemplates bool, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error)
 	ValidateComponent                             func(atmosConfig *schema.AtmosConfiguration, componentName string, componentSection map[string]any, schemaPath string, schemaType string, modulePaths []string, timeoutSeconds int) (bool, error)
-	AttachComponentReporting                      func(result *error, info *schema.ConfigAndStacksInfo, componentType string, command string)
-	CreateAndAuthenticateAuthManager              func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error)
-	DefaultAuthManagerCreator                     func(string, *schema.AuthConfig, string, *schema.AtmosConfiguration, auth.ReExecContext) (auth.AuthManager, error)
-	DefaultMergedAuthConfigGetter                 func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error)
-	DeferredTargetAuth                            func(ac *schema.AtmosConfiguration, component string, stack string, parents ...auth.AuthManager) (auth.AuthManager, error)
-	DeferredTargetAuthAndCache                    func(ac *schema.AtmosConfiguration, component string, stack string, parents ...auth.AuthManager) (auth.AuthManager, *deferred.ValueCache, error)
-	EnvVarFromList                                func(env []string, key string) string
-	ExecTerraformShellCommand                     func(atmosConfig *schema.AtmosConfiguration, component string, stack string, componentEnvList []string, varFile string, workingDir string, workspaceName string, componentPath string) error
-	GetMergedAuthConfig                           func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error)
-	HasYqDefault                                  func(yqExpr string) bool
-	IsComponentEnabled                            func(metadataSection map[string]any, componentName string) bool
-	MapCIExitCode                                 func(atmosConfig *schema.AtmosConfiguration, exitCode int) int
-	ResolveIdentityConfigError                    func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, err error, wrapSentinel error) error
-	ResolvedTargetAuthContext                     func(ac *schema.AtmosConfiguration, manager auth.AuthManager, fallback *schema.AuthContext, disabled bool) *schema.AuthContext
-	ShouldUploadStatus                            func(info *schema.ConfigAndStacksInfo) bool
-	StoreAutoDetectedIdentity                     func(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo)
-	UploadStatus                                  func(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error
+	// AdmitComponent evaluates component admission policy before any identity is resolved.
+	AdmitComponent                   func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager) error
+	AttachComponentReporting         func(result *error, info *schema.ConfigAndStacksInfo, componentType string, command string)
+	CreateAndAuthenticateAuthManager func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error)
+	DefaultAuthManagerCreator        func(string, *schema.AuthConfig, string, *schema.AtmosConfiguration, auth.ReExecContext) (auth.AuthManager, error)
+	DefaultMergedAuthConfigGetter    func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error)
+	DeferredTargetAuth               func(ac *schema.AtmosConfiguration, component string, stack string, parents ...auth.AuthManager) (auth.AuthManager, error)
+	DeferredTargetAuthAndCache       func(ac *schema.AtmosConfiguration, component string, stack string, parents ...auth.AuthManager) (auth.AuthManager, *deferred.ValueCache, error)
+	EnvVarFromList                   func(env []string, key string) string
+	ExecTerraformShellCommand        func(atmosConfig *schema.AtmosConfiguration, component string, stack string, componentEnvList []string, varFile string, workingDir string, workspaceName string, componentPath string) error
+	GetMergedAuthConfig              func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error)
+	HasYqDefault                     func(yqExpr string) bool
+	IsComponentEnabled               func(metadataSection map[string]any, componentName string) bool
+	MapCIExitCode                    func(atmosConfig *schema.AtmosConfiguration, exitCode int) int
+	ResolveIdentityConfigError       func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, err error, wrapSentinel error) error
+	ResolvedTargetAuthContext        func(ac *schema.AtmosConfiguration, manager auth.AuthManager, fallback *schema.AuthContext, disabled bool) *schema.AuthContext
+	ShouldUploadStatus               func(info *schema.ConfigAndStacksInfo) bool
+	StoreAutoDetectedIdentity        func(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo)
+	UploadStatus                     func(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error
 }
 
 // Executor owns Terraform's execution pipeline and reference lookups.
