@@ -29,6 +29,7 @@ func TestDiscoveryRejectsUnsupportedSettingsNamingTheKey(t *testing.T) {
 		"errors":           {"errors {\n retry \"x\" {\n retryable_errors = [\".*\"]\n max_attempts = 2\n sleep_interval_sec = 1\n }\n}", "errors"},
 		"exclude":          {"exclude {\n if = true\n actions = [\"plan\"]\n}", "exclude"},
 		"iam":              {`iam_role = "arn:aws:iam::1:role/x"`, "iam_role"},
+		"web identity":     {`iam_web_identity_token = "token"`, "iam_web_identity_token"},
 		"feature":          {"feature \"flag\" {\n default = true\n}", "feature"},
 	} {
 		t.Run(name, func(t *testing.T) {

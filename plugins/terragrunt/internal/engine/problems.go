@@ -20,11 +20,12 @@ const readOnlyDenial = "read-only discovery cannot"
 
 // unsupportedSettingHints maps each setting the native adaptation rejects to its remedy.
 var unsupportedSettingHints = map[string]string{
-	"terraform_binary": "Select the executable with `components.terraform.command` in atmos.yaml, for example `tofu`, and remove `terraform_binary` from the unit.",
-	"errors":           "Remove the `errors` block. Retry failing steps with a workflow step `retry:` setting instead.",
-	"exclude":          "Remove the `exclude` block and leave the unit out with `discovery.excluded_paths` in atmos.yaml.",
-	"iam_role":         "Remove the IAM setting and authenticate with an Atmos identity, for example `atmos terraform plan --identity <name>`.",
-	"feature":          "Remove the `feature` blocks and pass the values as Atmos stack variables instead.",
+	"terraform_binary":       "Select the executable with `components.terraform.command` in atmos.yaml, for example `tofu`, and remove `terraform_binary` from the unit.",
+	"errors":                 "Remove the `errors` block. Retry failing steps with a workflow step `retry:` setting instead.",
+	"exclude":                "Remove the `exclude` block and leave the unit out with `discovery.excluded_paths` in atmos.yaml.",
+	"iam_role":               "Remove the IAM setting and authenticate with an Atmos identity, for example `atmos terraform plan --identity <name>`.",
+	"iam_web_identity_token": "Remove `iam_web_identity_token` and authenticate with an Atmos identity, for example `atmos terraform plan --identity <name>`.",
+	"feature":                "Remove the `feature` blocks and pass the values as Atmos stack variables instead.",
 }
 
 // unsupportedSetting reports a Terragrunt setting the native adaptation does not implement.
