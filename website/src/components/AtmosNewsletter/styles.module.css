@@ -48,27 +48,37 @@
   inset: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 0.625rem;
-  color: var(--ifm-color-emphasis-600);
-  font-size: 0.875rem;
 }
-.spinner {
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid var(--ifm-color-emphasis-300);
-  border-top-color: var(--ifm-color-primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.progressBar {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--ifm-color-emphasis-200);
 }
-@keyframes spin {
+.progressBar::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--ifm-color-primary);
+  animation: progress 1.3s ease-in-out infinite;
+}
+@keyframes progress {
+  from {
+    transform: translateX(-100%);
+  }
   to {
-    transform: rotate(360deg);
+    transform: translateX(286%);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .spinner {
+  .progressBar::after {
     animation: none;
+    left: 32.5%;
   }
 }
 

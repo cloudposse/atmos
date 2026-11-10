@@ -51,7 +51,7 @@ export default function AtmosNewsletter(): JSX.Element {
       <div className={styles.formContainer}>
         {!ready && (
           <div className={styles.loading} role="status">
-            <span className={styles.spinner} aria-hidden="true" />
+            <span className={styles.progressBar} aria-hidden="true" />
             <span className={styles.srOnly}>Loading signup form…</span>
           </div>
         )}
