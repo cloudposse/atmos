@@ -1,27 +1,41 @@
 .newsletter {
-  max-width: 48rem;
-  margin: 3rem auto 2rem;
-  padding: 1rem;
-  border: 1px solid var(--ifm-color-emphasis-300);
+  max-width: 42rem;
+  margin: 2.5rem auto;
+  padding: 1.5rem;
+  border: 1px solid rgba(128, 128, 128, 0.2);
   border-radius: 0.75rem;
-  scroll-margin-top: calc(var(--ifm-navbar-height) + 1rem);
+  background: var(--ifm-card-background-color);
+  text-align: left;
 }
-
-.frame {
-  display: block;
-  width: 100%;
-  height: 480px;
-  border: 0;
+.newsletter h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.375rem;
+  letter-spacing: -0.02em;
 }
-
-.feeds {
-  margin: 0.5rem 0 0;
-  text-align: center;
-  font-size: 0.875rem;
+.description {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
   color: var(--ifm-color-emphasis-700);
 }
-
-@media (max-width: 480px) {
-  .newsletter { padding: 0.5rem; }
-  .frame { height: 540px; }
+.frame {
+  display: block;
+  width: calc(100% + 8px);
+  margin-left: -4px;
+  height: 100px;
+  border: 0;
+  color-scheme: normal;
+}
+.feeds {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--ifm-color-emphasis-600);
+}
+@media (max-width: 600px) {
+  .newsletter {
+    padding: 1.25rem;
+  }
+  .frame {
+    height: 174px;
+  }
 }

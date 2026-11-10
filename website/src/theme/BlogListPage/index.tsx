@@ -13,7 +13,6 @@ import {
 import Layout from '@theme/Layout';
 import SearchMetadata from '@theme/SearchMetadata';
 import type { Props } from '@theme/BlogListPage';
-import AtmosNewsletter from '@site/src/components/AtmosNewsletter';
 import ChangelogTimeline from '@site/src/components/ChangelogTimeline';
 import ProductUpdatesHeader from '@site/src/components/ProductUpdatesHeader';
 import styles from './styles.module.css';
@@ -42,7 +41,6 @@ function BlogListPageContent({ items }: Props): ReactNode {
       <ProductUpdatesHeader activeView="changelog" />
       <div className={styles.changelogContainer}>
         <ChangelogTimeline items={items} />
-        <AtmosNewsletter />
       </div>
     </Layout>
   );

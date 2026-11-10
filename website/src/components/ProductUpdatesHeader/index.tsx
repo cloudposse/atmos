@@ -1,5 +1,5 @@
 import React from 'react';
-import Link from '@docusaurus/Link';
+import SubscribeButton from '../AtmosNewsletter/SubscribeButton';
 import ProductUpdatesNav, { type ProductUpdatesNavProps } from '../ProductUpdatesNav';
 import styles from './styles.module.css';
 
@@ -10,7 +10,7 @@ export default function ProductUpdatesHeader({ activeView }: ProductUpdatesNavPr
       <h1 className={styles.title}>Atmos Updates</h1>
       <p className={styles.description}>What's new and what's next for Atmos.</p>
       <nav className={styles.subscriptions} aria-label="Subscribe to Atmos updates">
-        <Link to={activeView === 'changelog' ? '#subscribe' : '/changelog#subscribe'}>Subscribe</Link>
+        <SubscribeButton />
         <a href="/changelog/rss.xml">RSS</a>
         <a href="/changelog/atom.xml">Atom</a>
       </nav>
