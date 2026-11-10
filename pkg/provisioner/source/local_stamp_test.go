@@ -201,3 +201,21 @@ func TestLocalSourceStampFollowsASymlinkedRoot(t *testing.T) {
 	writeStampFile(t, filepath.Join(target, "nested", "extra.tf"), "# extra")
 	assert.NotEqual(t, before, localSourceStamp(spec))
 }
+
+// An unstamped workdir of a local source that is gone is refreshed, so provisioning names the
+// missing source instead of reusing stale configuration. A remote source is unaffected.
+func TestLocalSourceChangedReportsAMissingUnstampedSource(t *testing.T) {
+	missing := &schema.VendorComponentSource{Uri: filepath.Join(t.TempDir(), "absent")}
+	changed, reason := localSourceChanged(&workdir.WorkdirMetadata{}, missing)
+	assert.True(t, changed)
+	assert.Contains(t, reason, "missing")
+
+	remote := &schema.VendorComponentSource{Uri: "git::https://example.com/org/repo.git//module?ref=v1"}
+	changed, reason = localSourceChanged(&workdir.WorkdirMetadata{}, remote)
+	assert.False(t, changed, reason)
+
+	present := t.TempDir()
+	writeStampFile(t, filepath.Join(present, "main.tf"), "# one")
+	changed, _ = localSourceChanged(&workdir.WorkdirMetadata{SourceStamp: localSourceStamp(&schema.VendorComponentSource{Uri: present})}, &schema.VendorComponentSource{Uri: present})
+	assert.False(t, changed)
+}

@@ -102,15 +102,44 @@ func localSourceChanged(metadata *workdir.WorkdirMetadata, spec *schema.VendorCo
 	}
 	stamp := localSourceStamp(spec)
 	if metadata.SourceStamp == "" {
-		if stamp == "" {
-			return false, ""
+		if stamp != "" {
+			return true, "Local source has no recorded stamp, refreshing the working directory"
 		}
-		return true, "Local source has no recorded stamp, refreshing the working directory"
+		if localSourceMissing(spec) {
+			// Reusing the copy would hide that the source is gone; refreshing reports it by name.
+			return true, "Local source is missing or unreadable, refreshing the working directory"
+		}
+		return false, ""
 	}
 	if stamp == metadata.SourceStamp {
 		return false, ""
 	}
 	return true, "Local source changed, refreshing the working directory"
+}
+
+// localSourceMissing reports whether a local source names a path that does not exist or cannot
+// be read. It reports false for remote sources.
+func localSourceMissing(spec *schema.VendorComponentSource) bool {
+	uri := vendor.NormalizeURI(resolveSourceURI(spec))
+	switch {
+	case vendor.IsFileURI(uri):
+		path, err := fileURIPath(uri)
+		if err != nil || path == "" {
+			return true
+		}
+		uri = path
+	case !vendor.IsLocalPath(uri):
+		return false
+	}
+	if !filepath.IsAbs(uri) {
+		absolute, err := resolveLocalSourcePath(uri, "")
+		if err != nil {
+			return true
+		}
+		uri = absolute
+	}
+	_, err := os.Stat(uri)
+	return err != nil
 }
 
 // recordSourceStamp stores the stamp taken before the local source was copied. A failure only
