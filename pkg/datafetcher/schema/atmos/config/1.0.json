@@ -114,7 +114,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Cache system prompt (Anthropic only)"
+          "description": "Cache system prompt (Anthropic and Bedrock)"
         },
         "cache_project_instructions": {
           "anyOf": [
@@ -128,7 +128,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Cache ATMOS.md content (Anthropic only)"
+          "description": "Cache ATMOS.md content (Anthropic and Bedrock)"
         }
       },
       "type": "object",

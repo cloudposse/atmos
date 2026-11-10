@@ -1,30 +1,32 @@
 name: Quality Gate
 
 # Per-PR reports only. Repository-wide true-ups (schedule, merges, milestone and
-# release changes, manual runs) live in quality-reconcile.yml, so a long true-up
+# release changes, manual true-ups) live in quality-reconcile.yml, so a long true-up
 # never holds or cancels a queued report for one PR.
 on:
   # CI Timing Summary calls this once a PR's CI completes.
   workflow_call:
-  # A PR's release label or milestone can change without a new commit. Always
-  # run trusted default-branch code; these events never execute pull request source.
-  pull_request_target:
-    types: [labeled, unlabeled, milestoned, demilestoned]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to refresh from current GitHub evidence.
+        required: true
+        type: string
 
 permissions: {}
 
 jobs:
   report:
-    # Our readiness labels must not recursively trigger this reporter.
+    # Dispatch from the default branch so both workflow and tooling are trusted.
     if: >-
-      github.event_name != 'pull_request_target' ||
-      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-      contains(fromJSON('["major","minor","patch","no-release"]'), github.event.label.name)
-    # Serialize reports per PR; the true-up has its own group. Job-level, so a
-    # skipped label event never enters the group and replaces a queued report.
+      github.event_name != 'workflow_dispatch' ||
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    # Serialize reports per PR; keep replacement of pending automatic reports.
+    # A global queue: max previously overflowed and delayed reports for hours (#3367).
     concurrency:
       group: >-
         atmos-quality-report-${{
+          inputs.pr_number ||
           github.event.pull_request.number ||
           github.event.workflow_run.pull_requests[0].number ||
           github.event.workflow_run.head_sha ||
@@ -61,5 +63,6 @@ jobs:
       - name: Report quality gates for this PR
         uses: ./.github/actions/quality-gate
         with:
-          operation: report
+          operation: ${{ github.event_name == 'workflow_dispatch' && 'reportPR' || 'report' }}
+          pr-number: ${{ inputs.pr_number }}
           github-token: ${{ github.token }}

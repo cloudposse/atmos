@@ -231,7 +231,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/smithy-go
     License: Apache-2.0
-    URL: https://github.com/aws/smithy-go/blob/v1.28.5/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.6/LICENSE
 
   - github.com/cloudposse/atmos
     License: Apache-2.0
@@ -960,11 +960,11 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/aws/smithy-go/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/smithy-go/blob/v1.28.5/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.6/internal/sync/singleflight/LICENSE
 
   - github.com/aws/smithy-go/transport/http/protocol/internal/json/internal/stdlib
     License: BSD-3-Clause
-    URL: https://github.com/aws/smithy-go/blob/v1.28.5/transport/http/protocol/internal/json/internal/stdlib/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.6/transport/http/protocol/internal/json/internal/stdlib/LICENSE
 
   - github.com/bahlo/generic-list-go
     License: BSD-3-Clause
@@ -1694,7 +1694,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/ansi
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.8/ansi/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.9/ansi/LICENSE
 
   - github.com/charmbracelet/x/cellbuf
     License: MIT
@@ -2078,7 +2078,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/lucasb-eyer/go-colorful
     License: MIT
-    URL: https://github.com/lucasb-eyer/go-colorful/blob/v1.4.0/LICENSE
+    URL: https://github.com/lucasb-eyer/go-colorful/blob/v1.4.1/LICENSE
 
   - github.com/marshallbrekka/go-u2fhost
     License: MIT
@@ -2098,7 +2098,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mattn/go-runewidth
     License: MIT
-    URL: https://github.com/mattn/go-runewidth/blob/v0.0.24/LICENSE
+    URL: https://github.com/mattn/go-runewidth/blob/v0.0.27/LICENSE
 
   - github.com/mattn/go-shellwords
     License: MIT

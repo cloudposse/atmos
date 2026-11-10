@@ -232,7 +232,7 @@ func (e *Executor) executeShellLifecycle(atmosConfig *schema.AtmosConfiguration,
 		// Mirror prepareInitExecution's non-workdir cleanup of .terraform/environment so
 		// Terraform doesn't prompt for workspace selection. Skipped for workdir components.
 		if _, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); !isWorkdir {
-			cleanTerraformWorkspace(*atmosConfig, cfg.componentPath)
+			cleanTerraformWorkspace(*atmosConfig, cfg.componentPath, info.ComponentEnvList)
 		}
 		if err := e.shellInitFn(atmosConfig, info, cfg.componentPath, cfg.varFile); err != nil {
 			return err
