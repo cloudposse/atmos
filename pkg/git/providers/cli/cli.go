@@ -83,6 +83,9 @@ func (p *Provider) runQuiet(ctx context.Context, dir string, env []string, args 
 // be stale).
 func (p *Provider) Clone(ctx context.Context, opts *atmosgit.CloneOptions) error {
 	defer perf.Track(nil, "cli.Provider.Clone")()
+	if opts.Ref != "" && opts.Branch != "" {
+		return fmt.Errorf("%w: clone ref and branch are mutually exclusive", errUtils.ErrInvalidConfig)
+	}
 
 	if isGitWorktree(opts.Workdir) {
 		return p.reconcile(ctx, opts)
@@ -106,7 +109,9 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 	if opts.SingleBranch {
 		args = append(args, "--single-branch")
 	}
-	if opts.Branch != "" {
+	if opts.Ref != "" {
+		args = append(args, "--no-checkout")
+	} else if opts.Branch != "" {
 		args = append(args, "--branch", opts.Branch)
 	}
 	if opts.Submodules {
@@ -121,6 +126,9 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 	if err != nil {
 		return classify(err, result, "clone")
 	}
+	if opts.Ref != "" {
+		return p.checkoutRef(ctx, opts)
+	}
 	return nil
 }
 
@@ -134,6 +142,10 @@ func (p *Provider) reconcile(ctx context.Context, opts *atmosgit.CloneOptions) e
 
 	if err := p.syncRemoteURL(ctx, opts); err != nil {
 		return err
+	}
+
+	if opts.Ref != "" {
+		return p.checkoutRef(ctx, opts)
 	}
 
 	if err := p.fetch(ctx, opts); err != nil {

@@ -44,6 +44,7 @@ func viperKey(prefix, flagName string) string {
 const (
 	flagRepoURI    = "repo-uri"
 	flagBranch     = "branch"
+	flagRef        = "ref"
 	flagRemote     = "remote"
 	flagWorkdir    = "workdir"
 	flagDepth      = "depth"
@@ -100,6 +101,7 @@ func newCloneParser() *flags.StandardParser {
 		flags.WithViperPrefix(cloneViperPrefix),
 		flags.WithStringFlag(flagRepoURI, "", "", "Remote repository URI (overrides configured URI)"),
 		flags.WithStringFlag(flagBranch, branchShorthand, "", "Branch to clone"),
+		flags.WithStringFlag(flagRef, "", "", "Branch, tag, or commit SHA to check out detached"),
 		flags.WithStringFlag(flagRemote, "", "", "Remote name (default: origin)"),
 		flags.WithStringFlag(flagWorkdir, "", "", "Override destination directory"),
 		flags.WithIntFlag(flagDepth, "", 0, "Shallow clone depth (0 = full history)"),
@@ -111,6 +113,7 @@ func newCloneParser() *flags.StandardParser {
 		flags.WithBoolFlag(flagAllowUnsafeFork, "", false, "Allow cloning untrusted fork content in pull_request_target/workflow_run events (unsafe)"),
 		flags.WithEnvVars(flagRepoURI, "ATMOS_GIT_REPO_URI"),
 		flags.WithEnvVars(flagBranch, envGitBranch),
+		flags.WithEnvVars(flagRef, "ATMOS_GIT_REF"),
 		flags.WithEnvVars(flagRemote, "ATMOS_GIT_REMOTE"),
 		flags.WithEnvVars(flagWorkdir, "ATMOS_GIT_WORKDIR"),
 		flags.WithEnvVars(flagDepth, "ATMOS_GIT_DEPTH"),
