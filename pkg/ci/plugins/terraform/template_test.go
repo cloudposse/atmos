@@ -91,6 +91,26 @@ func TestTemplateRendering(t *testing.T) {
 			wantNotContains: []string{"No Changes", "NO_CHANGE", "0 to add"},
 		},
 		{
+			name:         "import-only summary without addresses shows changes",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component: "bucket",
+					Stack:     "dev",
+					Command:   "plan",
+					Result:    &plugin.OutputResult{HasChanges: true},
+				},
+				Resources:     plugin.ResourceCounts{Import: 3},
+				ChangedResult: "3 resources to import",
+			},
+			wantContains: []string{
+				"Resource Changes Found",
+				"PLAN-IMPORT-success",
+				"#result-dev-bucket",
+			},
+			wantNotContains: []string{"No Changes", "NO_CHANGE", "### <a id=\"import-"},
+		},
+		{
 			name:         "move-only plan shows changes",
 			templateName: "plan",
 			context: &TerraformTemplateContext{
@@ -788,6 +808,13 @@ func TestTerraformTemplateContextHelpers(t *testing.T) {
 		assert.False(t, (&TerraformTemplateContext{}).HasStateChanges())
 		assert.True(t, (&TerraformTemplateContext{ImportedResources: []string{"a.b"}}).HasStateChanges())
 		assert.True(t, (&TerraformTemplateContext{MovedResources: []plugin.MovedResource{{From: "a.b", To: "a.c"}}}).HasStateChanges())
+		assert.True(t, (&TerraformTemplateContext{Resources: plugin.ResourceCounts{Import: 2}}).HasStateChanges())
+	})
+
+	t.Run("ImportCount", func(t *testing.T) {
+		assert.Equal(t, 0, (&TerraformTemplateContext{}).ImportCount())
+		assert.Equal(t, 2, (&TerraformTemplateContext{Resources: plugin.ResourceCounts{Import: 2}}).ImportCount())
+		assert.Equal(t, 1, (&TerraformTemplateContext{ImportedResources: []string{"a.b"}}).ImportCount())
 	})
 
 	t.Run("TotalChanges", func(t *testing.T) {

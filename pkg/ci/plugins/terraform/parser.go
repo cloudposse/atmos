@@ -252,6 +252,7 @@ func processResourceChange(rc *tfjson.ResourceChange, data *plugin.TerraformOutp
 	}
 
 	if rc.Change.Importing != nil {
+		data.ResourceCounts.Import++
 		data.ImportedResources = append(data.ImportedResources, addr)
 	}
 }
@@ -488,10 +489,14 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 		data.ChangedResult = "Output values will change. No infrastructure changes."
 	}
 
+	// Keep the summary's import count even when no import addresses were
+	// extracted, so templates can still report the imports.
+	data.ResourceCounts.Import = max(importCount, len(data.ImportedResources))
+
 	// A plan that only imports or moves resources adds, changes and destroys
 	// nothing, yet applying it still rewrites state, so it is not a no-op.
 	if !result.HasChanges {
-		if summary := buildStateOnlySummary(max(importCount, len(data.ImportedResources)), len(data.MovedResources)); summary != "" {
+		if summary := buildStateOnlySummary(data.ResourceCounts.Import, len(data.MovedResources)); summary != "" {
 			result.HasChanges = true
 			data.ChangedResult = summary
 		}
@@ -536,11 +541,11 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 	if matches := applySummaryRe.FindStringSubmatch(output); len(matches) == applySummaryRe.NumSubexp()+1 {
 		// The completed import count comes from the summary, not from "Importing..."
 		// progress lines, which also appear for imports that failed.
-		imported := parseIntOrZero(matches[1])
+		data.ResourceCounts.Import = parseIntOrZero(matches[1])
 		data.ResourceCounts.Create = parseIntOrZero(matches[2])
 		data.ResourceCounts.Change = parseIntOrZero(matches[3])
 		data.ResourceCounts.Destroy = parseIntOrZero(matches[4])
-		result.HasChanges = imported > 0 ||
+		result.HasChanges = data.ResourceCounts.Import > 0 ||
 			data.ResourceCounts.Create > 0 ||
 			data.ResourceCounts.Change > 0 ||
 			data.ResourceCounts.Destroy > 0

@@ -43,7 +43,7 @@ func TestParsePlanOutput_ImportsAndMoves(t *testing.T) {
 Plan: 2 to import, 0 to add, 1 to change, 0 to destroy.
 `)
 		assert.True(t, result.HasChanges)
-		assert.Equal(t, plugin.ResourceCounts{Change: 1}, data.ResourceCounts)
+		assert.Equal(t, plugin.ResourceCounts{Change: 1, Import: 2}, data.ResourceCounts)
 		assert.Equal(t, []string{"aws_s3_bucket.default[0]"}, data.UpdatedResources)
 		assert.ElementsMatch(t, []string{"aws_s3_bucket.default[0]", "aws_s3_bucket_policy.default[0]"}, data.ImportedResources)
 	})
@@ -59,9 +59,19 @@ Plan: 1 to import, 0 to add, 0 to change, 0 to destroy.
 `)
 		assert.True(t, result.HasChanges)
 		assert.False(t, data.HasOutputChanges)
-		assert.Equal(t, plugin.ResourceCounts{}, data.ResourceCounts)
+		assert.Equal(t, plugin.ResourceCounts{Import: 1}, data.ResourceCounts)
 		assert.Equal(t, []string{"aws_s3_bucket.b"}, data.ImportedResources)
 		assert.Equal(t, "1 resource to import", data.ChangedResult)
+	})
+
+	t.Run("import-only summary without addresses keeps the count", func(t *testing.T) {
+		result, data := planData(t, `
+Plan: 3 to import, 0 to add, 0 to change, 0 to destroy.
+`)
+		assert.True(t, result.HasChanges)
+		assert.Empty(t, data.ImportedResources)
+		assert.Equal(t, plugin.ResourceCounts{Import: 3}, data.ResourceCounts)
+		assert.Equal(t, "3 resources to import", data.ChangedResult)
 	})
 
 	t.Run("moved-only plan is a change", func(t *testing.T) {
@@ -220,7 +230,7 @@ Apply complete! Resources: 1 imported, 0 added, 0 changed, 0 destroyed.
 		assert.True(t, result.HasChanges)
 		data, ok := result.Data.(*plugin.TerraformOutputData)
 		require.True(t, ok)
-		assert.Equal(t, plugin.ResourceCounts{}, data.ResourceCounts)
+		assert.Equal(t, plugin.ResourceCounts{Import: 2}, data.ResourceCounts)
 	})
 
 	t.Run("failed import attempt alone is not a change", func(t *testing.T) {

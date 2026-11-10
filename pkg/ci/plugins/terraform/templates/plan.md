@@ -29,6 +29,7 @@
 {{- end -}}
 {{- else if .HasStateChanges -}}
 {{- if gt (len .ImportedResources) 0 }}[![import](https://shields.io/badge/PLAN-IMPORT-success?style=for-the-badge)](#import-{{$target}})
+{{- else if gt .ImportCount 0 }}[![import](https://shields.io/badge/PLAN-IMPORT-success?style=for-the-badge)](#result-{{$target}})
 {{- end -}}
 {{- if gt (len .MovedResources) 0 }}[![move](https://shields.io/badge/PLAN-MOVE-informational?style=for-the-badge)](#result-{{$target}})
 {{- end -}}
