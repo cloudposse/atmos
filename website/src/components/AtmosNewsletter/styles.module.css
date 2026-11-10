@@ -1,0 +1,27 @@
+.newsletter {
+  max-width: 48rem;
+  margin: 3rem auto 2rem;
+  padding: 1rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 0.75rem;
+  scroll-margin-top: calc(var(--ifm-navbar-height) + 1rem);
+}
+
+.frame {
+  display: block;
+  width: 100%;
+  height: 390px;
+  border: 0;
+}
+
+.feeds {
+  margin: 0.5rem 0 0;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+@media (max-width: 480px) {
+  .newsletter { padding: 0.5rem; }
+  .frame { height: 460px; }
+}
