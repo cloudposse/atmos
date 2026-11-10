@@ -74,9 +74,12 @@ func (s *Service) afterFailure(ctx context.Context, pub *publication, cur *curre
 	}
 }
 
-// isDefinitive reports errors that prove nothing was committed, so reconciliation is unnecessary.
+// isDefinitive reports errors that prove nothing was committed, so reconciliation is unnecessary. A
+// publication-unavailable rejection (a reference pending for another operation) is definitive even
+// when the error also carries the ambiguous sentinel.
 func isDefinitive(err error) bool {
 	for _, sentinel := range []error{
+		errUtils.ErrArtifactPublicationUnavailable,
 		errUtils.ErrArtifactConflict, errUtils.ErrArtifactUnsupportedCapability, errUtils.ErrArtifactRecordInvalid,
 		errUtils.ErrArtifactTooLarge, errUtils.ErrArtifactRefInvalid, errUtils.ErrArtifactUnsafePath,
 		errUtils.ErrArtifactPackagingInvalid, errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactVerificationFailed,
@@ -115,6 +118,9 @@ func reconcile(ctx context.Context, tgt *target, in *incoming, cur *current) rec
 	case err != nil:
 		return reconciliation{err: fmt.Errorf("reconcile %s: %w", ref, err)}
 	}
+	if in.recordDigest == "" {
+		return reconcileGraph(ref, &pinned, in, cur)
+	}
 	if pinned.RecordDigest == in.recordDigest {
 		inspection, inspectErr := tgt.repo.Inspect(ctx, pinned)
 		if inspectErr != nil {
@@ -129,6 +135,18 @@ func reconcile(ctx context.Context, tgt *target, in *incoming, cur *current) rec
 		return reconciliation{state: reconcileNotCommitted, pinned: pinned}
 	}
 	return reconciliation{pinned: pinned, err: fmt.Errorf("%w: %s now resolves to %s, which is neither the prior state nor the expected content", errUtils.ErrArtifactConflict, ref, pinned.ResolvedDigest)}
+}
+
+// reconcileGraph classifies a native OCI graph without a Record. Empty record digests prove nothing,
+// so success requires the destination root to be exactly the pinned source root.
+func reconcileGraph(ref artifact.Ref, pinned *artifact.PinnedReference, in *incoming, cur *current) reconciliation {
+	if in.rootDigest != "" && pinned.ResolvedDigest == in.rootDigest {
+		return reconciliation{state: reconcileCommitted, pinned: *pinned, inspection: in.inspection}
+	}
+	if cur.pinned != nil && pinned.ResolvedDigest == cur.pinned.ResolvedDigest {
+		return reconciliation{state: reconcileNotCommitted, pinned: *pinned}
+	}
+	return reconciliation{pinned: *pinned, err: fmt.Errorf("%w: %s now resolves to %s, not the source graph root %s", errUtils.ErrArtifactConflict, ref, pinned.ResolvedDigest, in.rootDigest)}
 }
 
 // matchesExpected verifies the stored Record and, when both sides describe them, the payload

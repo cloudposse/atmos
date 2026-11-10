@@ -3,6 +3,7 @@ package signature
 import (
 	"context"
 	"crypto"
+	"fmt"
 	"time"
 
 	"github.com/sigstore/sigstore-go/pkg/root"
@@ -37,7 +38,8 @@ type KeyVerifier struct {
 	LoadRoot func(context.Context, bool) (root.TrustedMaterial, error)
 }
 
-// Verify checks raw against the independently supplied subject digest.
+// Verify checks raw against the independently supplied subject digest. When several configured keys
+// share a hint, each of them is tried; the first that verifies the bundle wins.
 func (v KeyVerifier) Verify(ctx context.Context, raw []byte, digest string, offline bool) (*KeyResult, error) {
 	defer perf.Track(nil, "signature.KeyVerifier.Verify")()
 
@@ -51,29 +53,40 @@ func (v KeyVerifier) Verify(ctx context.Context, raw []byte, digest string, offl
 	if err != nil {
 		return nil, err
 	}
-	verifier, err := v.trustedVerifier(ctx, offline)
+	rounds, err := v.keyRounds()
 	if err != nil {
 		return nil, err
 	}
-	result, err := verifier.Verify(signed, verify.NewPolicy(verify.WithArtifactDigest("sha256", hash), verify.WithKey()))
+	logs, err := v.loadLogs(ctx, offline)
 	if err != nil {
-		return nil, fail(errUtils.ErrSignatureInvalid, err)
-	}
-	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if result.Signature == nil || result.Signature.PublicKeyID == nil {
-		return nil, fail(errUtils.ErrSignatureInvalid, nil)
+	policy := verify.NewPolicy(verify.WithArtifactDigest("sha256", hash), verify.WithKey())
+	var last error
+	for _, keys := range rounds {
+		verifier, err := verify.NewVerifier(root.TrustedMaterialCollection{keys, logs}, verify.WithTransparencyLog(1), verify.WithObserverTimestamps(1))
+		if err != nil {
+			return nil, fail(errUtils.ErrSignatureInvalid, err)
+		}
+		result, err := verifier.Verify(signed, policy)
+		if err != nil {
+			last = err
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if result.Signature == nil || result.Signature.PublicKeyID == nil {
+			return nil, fail(errUtils.ErrSignatureInvalid, nil)
+		}
+		return &KeyResult{Hint: string(*result.Signature.PublicKeyID)}, nil
 	}
-	return &KeyResult{Hint: string(*result.Signature.PublicKeyID)}, nil
+	return nil, fail(errUtils.ErrSignatureInvalid, last)
 }
 
-// trustedVerifier combines the configured keys with transparency-log trust.
-func (v KeyVerifier) trustedVerifier(ctx context.Context, offline bool) (*verify.Verifier, error) {
-	keys, err := v.keyMaterial()
-	if err != nil {
-		return nil, err
-	}
+// loadLogs loads transparency-log trust and strips any public keys it carries, so only the
+// configured keys can authenticate a key-signed bundle.
+func (v KeyVerifier) loadLogs(ctx context.Context, offline bool) (root.TrustedMaterial, error) {
 	loader := v.LoadRoot
 	if loader == nil {
 		loader = LoadPublicRoot
@@ -82,17 +95,24 @@ func (v KeyVerifier) trustedVerifier(ctx context.Context, offline bool) (*verify
 	if err != nil {
 		return nil, fail(errUtils.ErrSignatureInvalid, err)
 	}
-	verifier, err := verify.NewVerifier(root.TrustedMaterialCollection{keys, logs}, verify.WithTransparencyLog(1), verify.WithObserverTimestamps(1))
-	if err != nil {
-		return nil, fail(errUtils.ErrSignatureInvalid, err)
-	}
-	return verifier, nil
+	return transparencyOnly{TrustedMaterial: logs}, nil
 }
 
-// keyMaterial exposes only the configured keys. Certificate authorities from other trust
-// material cannot validate a key-signed bundle.
-func (v KeyVerifier) keyMaterial() (root.TrustedMaterial, error) {
-	verifiers := make(map[string]*root.ExpiringKey, len(v.Keys))
+// transparencyOnly exposes transparency-log and timestamp trust but never resolves a signer key.
+type transparencyOnly struct{ root.TrustedMaterial }
+
+//nolint:lintroller // Constant rejection with no work to track.
+func (transparencyOnly) PublicKeyVerifier(hint string) (root.TimeConstrainedVerifier, error) {
+	return nil, fmt.Errorf("%w: key %q is not a configured trusted key", errUtils.ErrSignatureInvalid, hint)
+}
+
+// keyRounds groups the configured keys so each round holds at most one key per hint. A bundle names
+// a single hint, so trying every round tries every configured key for that hint, and a key never
+// overwrites another that shares its hint. Certificate authorities from other trust material cannot
+// validate a key-signed bundle.
+func (v KeyVerifier) keyRounds() ([]root.TrustedMaterial, error) {
+	var rounds []map[string]*root.ExpiringKey
+	seen := make(map[string]int, len(v.Keys))
 	for _, key := range v.Keys {
 		if key.Hint == "" || key.PublicKey == nil {
 			return nil, fail(errUtils.ErrSignatureConfigInvalid, nil)
@@ -101,7 +121,16 @@ func (v KeyVerifier) keyMaterial() (root.TrustedMaterial, error) {
 		if err != nil {
 			return nil, fail(errUtils.ErrSignatureConfigInvalid, err)
 		}
-		verifiers[key.Hint] = root.NewExpiringKey(loaded, time.Time{}, time.Time{})
+		round := seen[key.Hint]
+		seen[key.Hint]++
+		if round == len(rounds) {
+			rounds = append(rounds, make(map[string]*root.ExpiringKey))
+		}
+		rounds[round][key.Hint] = root.NewExpiringKey(loaded, time.Time{}, time.Time{})
 	}
-	return root.NewTrustedPublicKeyMaterialFromMapping(verifiers), nil
+	materials := make([]root.TrustedMaterial, 0, len(rounds))
+	for _, keys := range rounds {
+		materials = append(materials, root.NewTrustedPublicKeyMaterialFromMapping(keys))
+	}
+	return materials, nil
 }

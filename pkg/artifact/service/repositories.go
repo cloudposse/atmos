@@ -28,6 +28,10 @@ type RepositoryInfo struct {
 	// RequiredLockScope is locking.required_scope; empty means host.
 	RequiredLockScope artifact.LockScope
 
+	// LockProvider is the alias of the repository that locking.repository delegates locks to. Empty
+	// (or the repository's own alias) means the repository locks for itself.
+	LockProvider string
+
 	// Policy is the effective verification policy: the global and repository trust sets, both of
 	// which must be satisfied.
 	Policy artifact.VerificationPolicy
