@@ -10,7 +10,7 @@
 .frame {
   display: block;
   width: 100%;
-  height: 390px;
+  height: 480px;
   border: 0;
 }
 
@@ -23,5 +23,5 @@
 
 @media (max-width: 480px) {
   .newsletter { padding: 0.5rem; }
-  .frame { height: 460px; }
+  .frame { height: 540px; }
 }
