@@ -159,7 +159,7 @@ func nativeCopyWriter(plan *copyPlan) (*copyWrite, error) {
 	if err != nil {
 		return nil, err
 	}
-	in := &incoming{ref: ref, inspection: plan.inspection}
+	in := &incoming{ref: ref, inspection: plan.inspection, rootDigest: plan.pinned.ResolvedDigest}
 	if record := plan.inspection.Record; record != nil {
 		if err := in.bindRecord(record, plan.inspection); err != nil {
 			return nil, err

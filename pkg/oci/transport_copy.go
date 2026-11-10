@@ -176,10 +176,45 @@ func ExtendedCopy(ctx context.Context, src GraphSource, dst Destination, options
 	graph := guardedGraphSource{guardedSource: guardedSource{ReadOnlyStore: src.Store}, graph: src.Store}
 	root, err := oras.ExtendedCopy(ctx, graph, src.Reference, guardedStore{Store: dst.Store}, dst.Reference,
 		oras.ExtendedCopyOptions{ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{CopyGraphOptions: config.graphOptions()}})
-	if err != nil {
-		return reconcile(ctx, err, src.Store, src.Reference, dst)
+	if err == nil {
+		return root, nil
 	}
-	return root, nil
+	want, reconcileErr := reconcile(ctx, err, src.Store, src.Reference, dst)
+	if reconcileErr != nil {
+		return want, reconcileErr
+	}
+	// The root alone does not prove an extended copy finished: every referrer must be there too.
+	if !referrersPresent(ctx, src.Store, dst.Store, want) {
+		return ocispec.Descriptor{}, classifyCopyError(err)
+	}
+	return want, nil
+}
+
+// referrersPresent reports whether every predecessor of root in the source (signatures, SBOMs, and
+// their own referrers) also exists at the destination. Any lookup failure counts as missing.
+func referrersPresent(ctx context.Context, src ReadOnlyGraphStore, dst Store, root ocispec.Descriptor) bool {
+	visited := map[string]bool{root.Digest.String(): true}
+	pending := []ocispec.Descriptor{root}
+	for len(pending) > 0 {
+		node := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		predecessors, err := src.Predecessors(ctx, node)
+		if err != nil {
+			return false
+		}
+		for i := range predecessors {
+			key := predecessors[i].Digest.String()
+			if visited[key] {
+				continue
+			}
+			visited[key] = true
+			if exists, err := dst.Exists(ctx, predecessors[i]); err != nil || !exists {
+				return false
+			}
+			pending = append(pending, predecessors[i])
+		}
+	}
+	return true
 }
 
 // reconcile decides the outcome of a failed copy by looking at the destination.
@@ -284,6 +319,10 @@ func (g guardedStore) pushReference(ctx context.Context, expected ocispec.Descri
 		return pusher.PushReference(ctx, expected, content, reference)
 	}
 	if err := g.Store.Push(ctx, expected, content); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		return err
+	}
+	// The push may have taken long enough for the copy to be canceled; never start the tag then.
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	return g.Tag(ctx, expected, reference)

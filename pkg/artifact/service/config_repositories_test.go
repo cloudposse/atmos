@@ -60,6 +60,7 @@ func TestConfigRepositories_DescribeIsOfflineAndCombinesPolicyDefaultsAndLocking
 	assert.Equal(t, artifact.PackagingNone, info.Packaging)
 	assert.Equal(t, artifact.LockScopeRepository, info.RequiredLockScope)
 	assert.True(t, info.Capabilities.HasLockScope(artifact.LockScopeRepository), "the delegate's scope is advertised")
+	assert.Equal(t, "coordination", info.LockProvider, "locks are routed to the delegate")
 	assert.Equal(t, "default description", info.Defaults.Description)
 	assert.Equal(t, map[string]string{"team": "platform"}, info.Defaults.Labels)
 	assert.True(t, info.Policy.RequireSignature)
@@ -69,6 +70,7 @@ func TestConfigRepositories_DescribeIsOfflineAndCombinesPolicyDefaultsAndLocking
 	require.NoError(t, err)
 	assert.Equal(t, artifact.PackagingTgz, coordination.Packaging)
 	assert.Equal(t, artifact.LockScopeHost, coordination.RequiredLockScope)
+	assert.Empty(t, coordination.LockProvider, "a repository without delegation locks for itself")
 	assert.Len(t, coordination.Policy.TrustSets, 1)
 }
 

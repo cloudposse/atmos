@@ -28,15 +28,25 @@ const legacyRoot = "root"
 type legacyGraph struct {
 	root  ocispec.Descriptor
 	blobs map[digest.Digest]func() (io.ReadCloser, error)
+
+	// indexes holds the descriptors of indexes whose children were already added, so a subgraph
+	// shared by several parents is traversed once.
+	indexes map[digest.Digest]ocispec.Descriptor
 }
 
 var _ ReadOnlyStore = (*legacyGraph)(nil)
 
 func newLegacyGraph() *legacyGraph {
-	return &legacyGraph{blobs: make(map[digest.Digest]func() (io.ReadCloser, error))}
+	return &legacyGraph{
+		blobs:   make(map[digest.Digest]func() (io.ReadCloser, error)),
+		indexes: make(map[digest.Digest]ocispec.Descriptor),
+	}
 }
 
-func legacyImageGraph(image v1.Image) (*legacyGraph, error) {
+func legacyImageGraph(ctx context.Context, image v1.Image) (*legacyGraph, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	graph := newLegacyGraph()
 	root, err := graph.addImage(image)
 	if err != nil {
@@ -46,9 +56,9 @@ func legacyImageGraph(image v1.Image) (*legacyGraph, error) {
 	return graph, nil
 }
 
-func legacyIndexGraph(index v1.ImageIndex) (*legacyGraph, error) {
+func legacyIndexGraph(ctx context.Context, index v1.ImageIndex) (*legacyGraph, error) {
 	graph := newLegacyGraph()
-	root, err := graph.addIndex(index)
+	root, err := graph.addIndex(ctx, index)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +105,12 @@ func (g *legacyGraph) addImage(image v1.Image) (ocispec.Descriptor, error) {
 	return g.addBytes(string(mediaType), raw), nil
 }
 
-func (g *legacyGraph) addIndex(index v1.ImageIndex) (ocispec.Descriptor, error) {
+// addIndex records an index and, once per distinct index digest, every child below it. Cancellation
+// is checked before each accessor call and child, so a canceled write stops preparing the graph.
+func (g *legacyGraph) addIndex(ctx context.Context, index v1.ImageIndex) (ocispec.Descriptor, error) {
+	if err := ctx.Err(); err != nil {
+		return ocispec.Descriptor{}, err
+	}
 	raw, err := index.RawManifest()
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
@@ -104,27 +119,39 @@ func (g *legacyGraph) addIndex(index v1.ImageIndex) (ocispec.Descriptor, error) 
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
 	}
+	if done, found := g.indexes[digest.FromBytes(raw)]; found {
+		return done, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return ocispec.Descriptor{}, err
+	}
 	manifest, err := index.IndexManifest()
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
 	}
 	for i := range manifest.Manifests {
-		if err := g.addChild(index, &manifest.Manifests[i]); err != nil {
+		if err := ctx.Err(); err != nil {
+			return ocispec.Descriptor{}, err
+		}
+		if err := g.addChild(ctx, index, &manifest.Manifests[i]); err != nil {
 			return ocispec.Descriptor{}, err
 		}
 	}
-	return g.addBytes(string(mediaType), raw), nil
+	// The index is marked complete only after every child was added successfully.
+	desc := g.addBytes(string(mediaType), raw)
+	g.indexes[desc.Digest] = desc
+	return desc, nil
 }
 
 // addChild records one child manifest or nested index of a legacy index.
-func (g *legacyGraph) addChild(index v1.ImageIndex, child *v1.Descriptor) error {
+func (g *legacyGraph) addChild(ctx context.Context, index v1.ImageIndex, child *v1.Descriptor) error {
 	switch {
 	case child.MediaType.IsIndex():
 		nested, err := index.ImageIndex(child.Digest)
 		if err != nil {
 			return errors.Join(errUtils.ErrOCIIntegrity, err)
 		}
-		_, err = g.addIndex(nested)
+		_, err = g.addIndex(ctx, nested)
 		return err
 	case child.MediaType.IsImage():
 		nested, err := index.Image(child.Digest)

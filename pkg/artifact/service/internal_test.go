@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -167,6 +169,30 @@ func TestIsDefinitiveAndTemporary(t *testing.T) {
 	assert.True(t, isDefinitive(errUtils.ErrArtifactUnsupportedCapability))
 	assert.False(t, isDefinitive(context.Canceled))
 	assert.False(t, isTemporary(context.Canceled))
+	assert.True(t, isDefinitive(errUtils.ErrArtifactPublicationUnavailable))
+	assert.True(t, isDefinitive(errors.Join(errUtils.ErrArtifactPublicationAmbiguous, errUtils.ErrArtifactPublicationUnavailable)),
+		"an unavailable rejection stays definitive even when it also carries the ambiguous sentinel")
+	assert.False(t, isDefinitive(errUtils.ErrArtifactPublicationAmbiguous))
+}
+
+func TestReconcileGraphComparesTheSourceRoot(t *testing.T) {
+	ref := artifact.Ref{Name: "pkg/graph", Version: "1"}
+	root := digest.FromString("source root")
+	prior := artifact.PinnedReference{ResolvedDigest: digest.FromString("prior root")}
+	other := artifact.PinnedReference{ResolvedDigest: digest.FromString("someone else")}
+
+	found := reconcileGraph(ref, &artifact.PinnedReference{ResolvedDigest: root}, &incoming{rootDigest: root}, &current{})
+	assert.Equal(t, reconcileCommitted, found.state, "the destination root is the pinned source root")
+
+	found = reconcileGraph(ref, &other, &incoming{rootDigest: root}, &current{})
+	assert.Equal(t, reconcileUnknown, found.state, "empty record digests on both sides never prove success")
+	require.ErrorIs(t, found.err, errUtils.ErrArtifactConflict)
+
+	found = reconcileGraph(ref, &prior, &incoming{rootDigest: root}, &current{pinned: &prior})
+	assert.Equal(t, reconcileNotCommitted, found.state)
+
+	found = reconcileGraph(ref, &other, &incoming{}, &current{})
+	assert.Equal(t, reconcileUnknown, found.state, "without a source root nothing can be proven")
 }
 
 var ocispecRoot = ocispecDescriptor()

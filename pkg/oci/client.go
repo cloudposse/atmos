@@ -144,7 +144,7 @@ func (c *Client) WriteImage(ctx context.Context, ref name.Reference, img v1.Imag
 	if err != nil {
 		return err
 	}
-	graph, err := legacyImageGraph(img)
+	graph, err := legacyImageGraph(ctx, img)
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func (c *Client) WriteIndex(ctx context.Context, ref name.Reference, index v1.Im
 	if err != nil {
 		return err
 	}
-	graph, err := legacyIndexGraph(index)
+	graph, err := legacyIndexGraph(ctx, index)
 	if err != nil {
 		return err
 	}

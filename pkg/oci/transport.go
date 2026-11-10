@@ -21,6 +21,9 @@ import (
 type Repository struct {
 	Registry string
 	Path     string
+	// Insecure selects plain HTTP for a registry that name.Insecure marked, so every operation on
+	// the repository uses the same scheme. Loopback registries use plain HTTP without it.
+	Insecure bool
 }
 
 // ParseRepository validates "registry/path" using the same rules as the legacy client,
@@ -36,7 +39,7 @@ func ParseRepository(value string) (Repository, error) {
 }
 
 func repositoryOf(repository name.Repository) Repository {
-	return Repository{Registry: repository.RegistryStr(), Path: repository.RepositoryStr()}
+	return Repository{Registry: repository.RegistryStr(), Path: repository.RepositoryStr(), Insecure: repository.Scheme() == "http"}
 }
 
 // String returns "registry/path".
@@ -46,7 +49,11 @@ func (r Repository) String() string { return r.Registry + "/" + r.Path }
 
 // legacy converts back to the type used for credential resolution.
 func (r Repository) legacy() (name.Repository, error) {
-	parsed, err := name.NewRepository(r.String())
+	var options []name.Option
+	if r.Insecure {
+		options = append(options, name.Insecure)
+	}
+	parsed, err := name.NewRepository(r.String(), options...)
 	if err != nil {
 		return name.Repository{}, wrapRegistry(err)
 	}

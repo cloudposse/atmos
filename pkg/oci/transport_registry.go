@@ -2,6 +2,7 @@
 package oci
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"io"
@@ -21,6 +22,9 @@ import (
 )
 
 const (
+	// The largest manifest pushed under a reference: the 4 MiB limit registries commonly enforce.
+	maxPushedManifest = 4 << 20
+
 	userAgent         = "atmos"
 	dockerHubLegacy   = "index.docker.io"
 	dockerHubRegistry = "docker.io"
@@ -43,6 +47,12 @@ func (c *Client) Repository(ctx context.Context, repository Repository) (Reposit
 	}
 	authenticator, err := c.authentication(ctx, resource)
 	if err != nil {
+		return nil, err
+	}
+	// Resolve the bound credential once before any request, so a failing identity stops here
+	// instead of surfacing mid-operation or degrading to anonymous access. The callback below still
+	// re-invokes the authenticator on every challenge, so refreshing tokens keep refreshing.
+	if _, err := credentialFrom(authenticator); err != nil {
 		return nil, err
 	}
 	repo, err := c.remoteRepository(resource, authenticator)
@@ -169,8 +179,18 @@ func (s *registryStore) Push(ctx context.Context, expected ocispec.Descriptor, c
 	return wrapRegistry(s.repo.Push(ctx, expected, content))
 }
 
+// PushReference verifies the manifest bytes against expected before anything is sent, then pushes
+// them under reference. A registry that omits Docker-Content-Digest therefore can never tag content
+// other than the expected manifest.
 func (s *registryStore) PushReference(ctx context.Context, expected ocispec.Descriptor, content io.Reader, reference string) error {
-	return wrapRegistry(s.repo.PushReference(ctx, expected, content, reference))
+	if expected.Size < 0 || expected.Size > maxPushedManifest {
+		return errUtils.ErrOCIIntegrity
+	}
+	raw, err := readVerified(content, expected, maxPushedManifest)
+	if err != nil {
+		return err
+	}
+	return wrapRegistry(s.repo.PushReference(ctx, expected, bytes.NewReader(raw), reference))
 }
 
 func (s *registryStore) Resolve(ctx context.Context, reference string) (ocispec.Descriptor, error) {

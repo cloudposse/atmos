@@ -30,6 +30,10 @@ type incoming struct {
 	size         int64
 	prepared     *artifact.PreparedArtifact
 	inspection   *artifact.Inspection
+
+	// rootDigest is the pinned source root of a native graph copy; reconciliation compares it when
+	// there is no Record digest to compare.
+	rootDigest digest.Digest
 }
 
 func newIncoming(prepared *artifact.PreparedArtifact) (*incoming, error) {
