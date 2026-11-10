@@ -146,7 +146,12 @@ def terminal(c):
     if status is None:
         exited, value = os.waitpid(pid, os.WNOHANG)
         if not exited:
-            os.kill(pid, signal.SIGKILL)
+            # pty.fork makes the child a session leader, so its pid is the process group of
+            # Atmos and the engine processes it started; kill the whole group, then reap.
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             _, value = os.waitpid(pid, 0)
         status = value
     os.close(master)
