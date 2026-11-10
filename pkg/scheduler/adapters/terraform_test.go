@@ -3723,3 +3723,23 @@ func TestSkippedResultNamesNameTheComponents(t *testing.T) {
 	require.Equal(t, []string{"`app` in `dev`", "`database` in `dev`", "unknown-node"}, skippedResultNames(result, graph))
 	require.Nil(t, skippedResultNames(nil, graph))
 }
+
+func TestExecuteTerraformExcludeDependenciesIgnoresContractedEdges(t *testing.T) {
+	stacks := excludeStacks(map[string]map[string]any{"app": {"actions": []any{"plan"}, "exclude_dependencies": true}})
+	components := stacks["dev"].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.TerraformSectionName].(map[string]any)
+	for _, name := range []string{"app", "vpc"} {
+		components[name].(map[string]any)[cfg.MetadataSectionName].(map[string]any)["tags"] = []any{"edge"}
+	}
+	// The tag filter drops database, so app's ordering edge is contracted onto vpc. vpc is still
+	// two levels away from app and must not be excluded as if it were a direct dependency.
+	var executed []string
+	require.NoError(t, ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{}, Info: &schema.ConfigAndStacksInfo{Tags: []string{"edge"}, SubCommand: "plan"}, Stacks: stacks,
+		Selection: &TerraformSelection{NodeIDs: []string{"vpc-dev"}, IncludeDependents: true},
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component)
+			return TerraformExecutionResult{}, nil
+		},
+	}))
+	require.Equal(t, []string{"vpc"}, executed)
+}

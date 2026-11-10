@@ -70,8 +70,11 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if err = applyStackOverrides(config, info, prepared); err != nil {
 		return nil, err
 	}
-	if err = applyIAMRole(ctx, info, prepared.IAM); err != nil {
-		return nil, err
+	// An operation the provider excludes never runs, so it must not need the unit's role.
+	if !excludedFromOperation(info, prepared) {
+		if err = applyIAMRole(ctx, info, prepared.IAM); err != nil {
+			return nil, err
+		}
 	}
 	info.ComponentVarsSection = prepared.Inputs
 	info.ComponentExecution = prepared.Execution
@@ -212,6 +215,9 @@ func applyIAMRole(ctx context.Context, info *schema.ConfigAndStacksInfo, iam *sc
 			return iamRoleError(info, iam, fmt.Errorf("%w: web identity token file: %w", errUtils.ErrAuthenticationFailed, err))
 		}
 		role.WebIdentityToken = strings.TrimSpace(string(token))
+		if role.WebIdentityToken == "" {
+			return iamRoleError(info, iam, fmt.Errorf("%w: web identity token file %s is empty", errUtils.ErrAuthenticationFailed, iam.WebIdentityTokenFile))
+		}
 	}
 	if iam.WebIdentityTokenLiteral && role.WebIdentityToken == "" {
 		return iamRoleError(info, iam, fmt.Errorf("%w: the web identity token is not stored with a saved plan", errUtils.ErrAuthenticationFailed))

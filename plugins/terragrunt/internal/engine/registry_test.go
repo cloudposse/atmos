@@ -93,6 +93,27 @@ func TestRegistrySourceStaysUnresolvedWithoutNetwork(t *testing.T) {
 	}
 }
 
+func TestRegistrySourceIsNotResolvedForAnExcludedOperation(t *testing.T) {
+	host, requests := registryServer(t)
+	source := "tfr://" + host + "/acme/vpc/aws?version=1.0.0"
+	request := registryUnit(t, `source = "`+source+`"
+}
+exclude {
+  if      = true
+  actions = ["plan"]
+  no_run  = true`)
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), requests.Load(), "a prevented plan must not contact the registry")
+	assert.Equal(t, source, result.Source)
+
+	request.Command = "apply"
+	result, err = Resolve(t.Context(), request)
+	require.NoError(t, err)
+	assert.Positive(t, requests.Load(), "an operation the block does not prevent resolves the source")
+	assert.NotEqual(t, source, result.Source)
+}
+
 func TestRegistrySourceFailureIsAnActionableProblem(t *testing.T) {
 	host, _ := registryServer(t)
 	_, err := Resolve(t.Context(), registryUnit(t, `source = "tfr://`+host+`/acme/missing/aws?version=1.0.0"`))
@@ -105,11 +126,12 @@ func TestRegistrySourceFailureIsAnActionableProblem(t *testing.T) {
 
 func TestNormalizeGetterURL(t *testing.T) {
 	for source, want := range map[string]string{
-		"github.com/acme/repo?ref=v1":          "git::https://github.com/acme/repo.git?ref=v1",
-		"github.com/acme/repo.git//sub?ref=v1": "git::https://github.com/acme/repo.git//sub?ref=v1",
-		"bitbucket.org/acme/repo":              "git::https://bitbucket.org/acme/repo.git",
-		"git::https://example.test/repo.git":   "git::https://example.test/repo.git",
-		"https://example.test/module.tar.gz":   "https://example.test/module.tar.gz",
+		"github.com/acme/repo?ref=v1":             "git::https://github.com/acme/repo.git?ref=v1",
+		"github.com/acme/repo.git//sub?ref=v1":    "git::https://github.com/acme/repo.git//sub?ref=v1",
+		"bitbucket.org/acme/repo":                 "git::https://bitbucket.org/acme/repo.git",
+		"github.com/acme/repo/modules/vpc?ref=v1": "git::https://github.com/acme/repo.git//modules/vpc?ref=v1",
+		"git::https://example.test/repo.git":      "git::https://example.test/repo.git",
+		"https://example.test/module.tar.gz":      "https://example.test/module.tar.gz",
 	} {
 		assert.Equal(t, want, normalizeGetterURL(source))
 	}
@@ -149,6 +171,22 @@ inputs = { account = "kept" }`)
 	require.NoError(t, err)
 	require.Equal(t, &model.IAM{Role: "arn:aws:iam::123456789012:role/deploy", SessionName: "session-ci", DurationSeconds: 7200, WebIdentityToken: "token-value"}, result.IAM)
 	require.Equal(t, "kept", result.Inputs["account"], "iam settings do not disturb the rest of the unit")
+}
+
+func TestIAMWebIdentityTokenFileIsAnchoredAtTheUnit(t *testing.T) {
+	request := iamUnit(t, `iam_role = "arn:aws:iam::123456789012:role/deploy"
+iam_web_identity_token = "token.jwt"`)
+	unitDir := filepath.Dir(request.Path)
+	require.NoError(t, os.WriteFile(filepath.Join(unitDir, "token.jwt"), []byte("jwt"), 0o600))
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "token.jwt", filepath.Base(result.IAM.WebIdentityToken))
+	require.True(t, filepath.IsAbs(result.IAM.WebIdentityToken), "a relative token file resolves against the unit directory")
+
+	require.Equal(t, "literal-token", unitTokenFile("literal-token", unitDir), "a token that names no file is kept")
+	absolute := filepath.Join(unitDir, "token.jwt")
+	require.Equal(t, absolute, unitTokenFile(absolute, t.TempDir()))
+	require.Empty(t, unitTokenFile("", unitDir))
 }
 
 func TestIAMRoleIsEvaluatedBeforeInputs(t *testing.T) {

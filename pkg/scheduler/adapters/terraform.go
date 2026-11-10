@@ -167,6 +167,9 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
+	// Exclusions follow the direct dependency edges; contracted edges only preserve ordering and
+	// must not make an indirect dependency look direct to exclude_dependencies.
+	excluded := terraformExclusions(graph, opts.Info)
 	addContractedTerraformEdges(graph, filtered)
 
 	if graph.Size() == 0 {
@@ -183,7 +186,6 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		defer restoreSpinners()
 		ctx = provWorkdir.WithOutputSuppressed(ctx)
 	}
-	excluded := terraformExclusions(graph, opts.Info)
 	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
 		return err
 	}

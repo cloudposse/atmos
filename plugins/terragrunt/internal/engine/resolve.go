@@ -277,8 +277,11 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 			return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
 		}
 		identity, result.Folders = result.Source, []string{result.Source}
-	} else if err := prepareRemoteSource(ctx, logger, &request, cfg, result); err != nil {
-		return nil, err
+	} else if !PreventsRun(result.Exclude, OperationCommand(request.Command, request.Arguments)) {
+		// An operation the exclude block prevents never runs, so its registry source is not resolved.
+		if err := prepareRemoteSource(ctx, logger, &request, cfg, result); err != nil {
+			return nil, err
+		}
 	}
 	download := pctx.DownloadDir
 	if cfg.DownloadDir != "" {

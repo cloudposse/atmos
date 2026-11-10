@@ -280,6 +280,16 @@ func TestErrorsBlockRejectsInvalidPolicies(t *testing.T) {
     max_attempts = 1
     sleep_interval_sec = -1
   }`, `errors.retry "x"`, "sleep_interval_sec"},
+		"attempts out of range": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 4294967296
+    sleep_interval_sec = 1
+  }`, `errors.retry "x"`, "too large"},
+		"sleep out of range": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 1
+    sleep_interval_sec = 4294967296
+  }`, `errors.retry "x"`, "too large"},
 		"bad retry pattern": {`retry "x" {
     retryable_errors = ["("]
     max_attempts = 1
@@ -651,12 +661,30 @@ func TestFinalizeExecutionHandlesAbsentAndFailingHooks(t *testing.T) {
 func TestTflintVariablesFromExtraArguments(t *testing.T) {
 	existing := filepath.Join(t.TempDir(), "optional.tfvars")
 	require.NoError(t, os.WriteFile(existing, nil, 0o644))
-	hook := &model.Hook{Commands: []string{"plan"}}
 	execution := &model.Execution{ExtraArguments: []model.ExtraArguments{
 		{Commands: []string{"apply"}, Arguments: []string{"-var=ignored=1"}},
-		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
+		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false", "-var", "c=3", "-var-file", "d.tfvars"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
 	}}
-	require.Equal(t, []string{"--var=b=2", "--var-file=a.tfvars", "--var-file=" + existing}, tflintExtraVariables(hook, execution))
+	require.Equal(t, []string{"--var=b=2", "--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", "--var-file=" + existing}, tflintExtraVariables("plan", execution))
+	require.Equal(t, []string{"--var=ignored=1"}, tflintExtraVariables("apply", execution))
+}
+
+func TestTflintHookScopesExtraArgumentsToEachCommand(t *testing.T) {
+	unit := filepath.Join(t.TempDir(), "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(unit), ".tflint.hcl"), nil, 0o644))
+	execution := &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Arguments: []string{"-var=only=plan"}},
+		{Commands: []string{"apply"}, Arguments: []string{"-var=only=apply"}},
+	}}
+	hooks, err := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan", "apply"}, Execute: []string{"tflint"}}, execution, unit, nil)
+	require.NoError(t, err)
+	require.Len(t, hooks, 4)
+	require.Equal(t, []string{"plan"}, hooks[1].Commands)
+	require.Contains(t, hooks[1].Execute, "--var=only=plan")
+	require.NotContains(t, hooks[1].Execute, "--var=only=apply")
+	require.Equal(t, []string{"apply"}, hooks[3].Commands)
+	require.Contains(t, hooks[3].Execute, "--var=only=apply")
+	require.NotContains(t, hooks[3].Execute, "--var=only=plan")
 }
 
 func TestExcludeFromConfigWithoutBlock(t *testing.T) {

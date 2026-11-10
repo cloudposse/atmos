@@ -362,7 +362,8 @@ func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {
 	filtered, err := configurationWatchIndex(config, settings, index)
 	require.NoError(t, err)
 	require.Equal(t, []string{filepath.Join(root, "live", "new.yaml")}, filtered.getAllFiles())
-	require.Len(t, index.getAllFiles(), 2)
+	require.ElementsMatch(t, []string{filepath.Join(root, "live", ".terragrunt-cache", "generated.tf"), filepath.Join(root, "live", "new.yaml")}, index.getAllFiles(),
+		"the shared index keeps both changed files, each once")
 	unchanged, err := configurationWatchIndex(config, nil, index)
 	require.NoError(t, err)
 	require.Same(t, index, unchanged)
@@ -382,6 +383,17 @@ func TestConfigurationWatchExclusionsFailClosedOnPathsOutsideTheProject(t *testi
 	filtered, err := configurationWatchIndex(config, settings, index)
 	require.Error(t, err)
 	require.Nil(t, filtered)
+
+	// With an absolute project root, a changed file in a sibling directory is outside the project:
+	// project-relative exclusions cannot describe it, so it stays watched instead of disappearing.
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	sibling := filepath.Join(parent, "sibling", "main.tf")
+	config = &schema.AtmosConfiguration{BasePathAbsolute: root}
+	index = newChangedFilesIndex(config, []string{sibling, filepath.Join(root, "live", "main.tf")}, "")
+	filtered, err = configurationWatchIndex(config, settings, index)
+	require.NoError(t, err)
+	require.Equal(t, []string{sibling}, filtered.getAllFiles())
 }
 
 func TestDependencyChangeCheckReportsInvalidWatchExclusions(t *testing.T) {

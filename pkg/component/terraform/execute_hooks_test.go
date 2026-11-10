@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -802,4 +803,13 @@ func TestSourceFetchFollowsTheErrorsPolicyInsideTheHooks(t *testing.T) {
 
 	// An errors policy alone is enough to wrap the fetch.
 	require.NotNil(t, e.initFromModuleWrapper(&schema.AtmosConfiguration{}, hookInfo("plan", &schema.ComponentExecution{Errors: policy})))
+}
+
+func TestOnlyRunIgnoredKeepsIndependentHookFailures(t *testing.T) {
+	require.True(t, onlyRunIgnored(errUtils.ErrComponentRunIgnored))
+	require.True(t, onlyRunIgnored(fmt.Errorf("fetch: %w", errUtils.ErrComponentRunIgnored)))
+	require.False(t, onlyRunIgnored(nil))
+	hookFailure := fmt.Errorf("%w: after_hook %q", errUtils.ErrComponentHookFailed, "fetch-after")
+	require.False(t, onlyRunIgnored(errors.Join(errUtils.ErrComponentRunIgnored, hookFailure)),
+		"an init-from-module hook that failed beside the ignored fetch still fails the command")
 }

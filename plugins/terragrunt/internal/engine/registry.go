@@ -67,6 +67,11 @@ func normalizeGetterURL(source string) string {
 		}
 		location, query, hasQuery := strings.Cut(source, "?")
 		repository, subdir, hasSubdir := strings.Cut(location, "//")
+		// Like go-getter, a shorthand names the repository with its first three path segments
+		// (host/owner/name); anything after them is a subdirectory of that repository.
+		if segments := strings.SplitN(repository, "/", 4); !hasSubdir && len(segments) == 4 {
+			repository, subdir, hasSubdir = strings.Join(segments[:3], "/"), segments[3], true
+		}
 		if !strings.HasSuffix(repository, ".git") {
 			repository += ".git"
 		}

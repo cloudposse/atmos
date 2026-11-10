@@ -260,6 +260,7 @@ func TestApplyIAMRoleFailuresNameTheRoleAndLeakNothing(t *testing.T) {
 		"STS rejects the role":           {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"}, errUtils.ErrAuthenticationFailed},
 		"missing token file":             {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", WebIdentityTokenFile: filepath.Join(t.TempDir(), "absent")}, nil},
 		"literal token lost with a plan": {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", WebIdentityTokenLiteral: true}, nil},
+		"empty token file":               {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", WebIdentityTokenFile: emptyTokenFile(t)}, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			fakeAssume(t, test.assume)
@@ -278,4 +279,11 @@ func TestComponentIAMNeverSerializesALiteralToken(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(record), "super-secret-token")
 	require.Contains(t, string(record), "WebIdentityTokenLiteral")
+}
+
+func emptyTokenFile(t *testing.T) string {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(file, []byte(" \n"), 0o600))
+	return file
 }

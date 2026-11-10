@@ -273,7 +273,8 @@ variable "marker" {
 }
 resource "terraform_data" "flaky" {
   provisioner "local-exec" {
-    command = "test -f '${var.marker}' || { touch '${var.marker}'; echo transient-failure >&2; exit 1; }"
+    interpreter = ["sh", "-c"]
+    command     = "test -f '${var.marker}' || { touch '${var.marker}'; echo transient-failure >&2; exit 1; }"
   }
 }
 output "value" {
@@ -284,7 +285,8 @@ output "value" {
 FAILING_MODULE = """
 resource "terraform_data" "broken" {
   provisioner "local-exec" {
-    command = "echo known-problem >&2; exit 1"
+    interpreter = ["sh", "-c"]
+    command     = "echo known-problem >&2; exit 1"
   }
 }
 output "value" {
@@ -506,7 +508,9 @@ def tflint_hook():
     fixtures.write(root, ".tflint.hcl", "# test configuration\n")
     unit = 'terraform {\n  source = "../../../modules/unit"\n\n  before_hook "lint" {\n    commands = ["plan"]\n    execute  = ["tflint", "--terragrunt-external-tflint", "--minimum-failure-severity=error"]\n  }\n}\ninputs = { greeting = "hi" }\n'
     lifecycle.write_unit(root, "linted", unit)
-    result = terraform(root, "plan", "linted", path=path_dir + ":/usr/bin:/bin")
+    windows = exec.run(["go", "env", "GOOS"], output="capture").stdout.strip() == "windows"
+    system = [echo.replace("\\", "/").rsplit("/", 1)[0]] if windows else ["/usr/bin", "/bin"]
+    result = terraform(root, "plan", "linted", path=(";" if windows else ":").join([path_dir] + system))
     lifecycle.expect_count(result.stderr, "Executing before hook: lint", 2, "plan with a tflint hook")
     lines = fs.read_file(path_dir + "/invocations.log").splitlines()
     fixtures.check(len(lines) == 2, "tflint should run twice (init and lint): " + str(lines))

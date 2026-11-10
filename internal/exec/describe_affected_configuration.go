@@ -79,8 +79,14 @@ func filterWatchedFiles(root string, all, patterns []string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		// A file outside the project cannot match a project-relative exclusion; keep it watched
+		// rather than letting a pattern such as `**` swallow a `../` path.
 		excluded := false
+		outside := relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator))
 		for _, pattern := range patterns {
+			if outside {
+				break
+			}
 			matched, _ := doublestar.Match(pattern, filepath.ToSlash(relative))
 			excluded = excluded || matched
 		}

@@ -454,13 +454,22 @@ func TestRecovererStopsWhenCanceledDuringTheSleep(t *testing.T) {
 	defer cancel()
 	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 5, SleepInterval: time.Hour}}}
 	run := &recoveryRun{failures: []error{errExit, errExit}, texts: []string{"timeout", "timeout"}}
+	sleeping := make(chan struct{})
+	sleep := func(ctx context.Context, d time.Duration) error {
+		close(sleeping)
+		return sleepContext(ctx, d)
+	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := NewRecoverer(policy).Run(ctx, run.attempt)
+		_, err := NewRecoverer(policy, WithSleep(sleep)).Run(ctx, run.attempt)
 		done <- err
 	}()
 	// The first attempt fails and the run sleeps for an hour; cancellation must end it at once.
-	require.Eventually(t, func() bool { return run.count() >= 1 }, 5*time.Second, time.Millisecond)
+	select {
+	case <-sleeping:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the recoverer never started sleeping")
+	}
 	cancel()
 	require.ErrorIs(t, <-done, context.Canceled)
 	require.Equal(t, 1, run.count())

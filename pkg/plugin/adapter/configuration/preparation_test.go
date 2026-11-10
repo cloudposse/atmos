@@ -216,8 +216,13 @@ func TestTerraformBinaryMustMatchDiscovery(t *testing.T) {
 	require.NoError(t, err)
 	discovered := &pluginv1.DiscoveredComponent{Configuration: configuration}
 
-	require.NoError(t, checkTerraformBinary(info, discovered, ""), "a unit without terraform_binary has nothing to compare")
 	require.NoError(t, checkTerraformBinary(info, discovered, "tofu"))
+	plain, err := adapter.EncodeObject(map[string]any{})
+	require.NoError(t, err)
+	require.NoError(t, checkTerraformBinary(info, &pluginv1.DiscoveredComponent{Configuration: plain}, ""), "a unit without terraform_binary has nothing to compare")
+	removed := checkTerraformBinary(info, discovered, "")
+	require.ErrorIs(t, removed, errUtils.ErrComponentBinaryChanged, "removing terraform_binary after discovery is a change")
+	require.ErrorContains(t, removed, `discovered with "tofu"`)
 	err = checkTerraformBinary(info, discovered, "terraform")
 	require.ErrorIs(t, err, errUtils.ErrComponentBinaryChanged)
 	require.ErrorContains(t, err, `now selects "terraform"`)
