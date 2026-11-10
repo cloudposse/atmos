@@ -33,6 +33,9 @@ type TaskSpec struct {
 	// Steps that report their own result, such as shell and atmos steps, set it so running them
 	// through the runner does not add a "Total for this invocation" line they never printed.
 	SkipMetrics bool
+	// ForwardSignals preserves an owned shutdown signal during context cancellation.
+	// Callers must retain signal ownership until the child and their cleanup finish.
+	ForwardSignals bool
 }
 
 // Streams contains the standard streams passed to a subprocess.
@@ -116,6 +119,9 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	// Run the child in its own process group (unless it needs the terminal) so
 	// cancellation and Atmos being signalled terminate its whole process tree.
 	group := newChildGroup(cmd)
+	if spec.ForwardSignals {
+		group.forwardCancellationSignal(executionCtx)
+	}
 
 	if err := cmd.Start(); err != nil {
 		result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
@@ -129,6 +135,12 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	err = group.tolerateWaitDelay(ctx, cmd.Wait())
 	group.finished()
 	recordWaitOutcome(ctx, cmd, &result, err, !spec.SkipMetrics)
+	// CommandContext may report cancellation after a signal handler exits zero.
+	// The waited child's actual status wins for an operation that owns shutdown.
+	if spec.ForwardSignals && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		result.ExitCode = 0
+		result.Err = nil
+	}
 	return result
 }
 

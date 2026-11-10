@@ -23,7 +23,9 @@ Configuration validation does not require a live job token. Authentication fails
 
 Atmos does not cache the GitLab token or derived AWS credentials in the keyring. AWS credentials can be reused within one Atmos invocation and are written to Atmos-managed credential files for external tools.
 
-The [`atmos auth exec`](/cli/commands/auth/exec) command removes the GitLab-backed identity chain's AWS credential and config profiles when the command finishes, including when it fails. Other profiles are preserved. A separate `atmos auth login` keeps its managed files until [logout](/cli/commands/auth/logout).
+The [`atmos auth exec`](/cli/commands/auth/exec) command writes AWS credential and config files to a private temporary directory for each invocation, preserving existing login profiles and allowing overlapping commands to run independently. It removes that directory when the command returns, including on errors. A separate `atmos auth login` keeps its managed files until [logout](/cli/commands/auth/logout); `auth exec` requires authentication with the current job token instead of reusing those persisted files.
+
+Cleanup also runs on `SIGINT` or `SIGTERM`, after the child has stopped. Uncatchable termination (`SIGKILL`), a process crash, or loss of the runner can prevent cleanup and leave unexpired credentials on disk. Later Atmos invocations do not discover these private files. On persistent runners, use a job-owned `TMPDIR` with independent cleanup, or use disposable job filesystems.
 
 ## How to Use It
 

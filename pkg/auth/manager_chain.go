@@ -365,7 +365,7 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 	// owns them) skip it so a stale entry written by an older version is never reused.
 	keyringErr := credentials.ErrCredentialsNotFound
 	var keyringCreds types.ICredentials
-	if m.identityPersistsCredentials(identityName) {
+	if m.identityPersistsCredentials(identityName) && !m.usesScopedAWSFiles(identityName) {
 		keyringCreds, keyringErr = m.credentialStore.Retrieve(identityName, m.realm.Value)
 	}
 	if keyringErr == nil {

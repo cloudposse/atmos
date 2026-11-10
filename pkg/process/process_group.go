@@ -74,6 +74,18 @@ func newChildGroup(cmd *exec.Cmd) *childGroup {
 	return g
 }
 
+// forwardCancellationSignal opts into the signal owner's graceful shutdown path.
+// Other cancellations retain the runner's existing behavior.
+func (g *childGroup) forwardCancellationSignal(ctx context.Context) {
+	fallback := g.cmd.Cancel
+	g.cmd.Cancel = func() error {
+		if sig := signals.CancellationSignal(ctx); sig != nil {
+			return g.cancelSignal(sig)
+		}
+		return fallback()
+	}
+}
+
 // started registers the running child with the exit-cleanup registry.
 // It must be called after a successful cmd.Start().
 func (g *childGroup) started(cancel context.CancelFunc) {

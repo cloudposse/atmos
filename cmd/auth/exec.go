@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -21,12 +22,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
+// revokeOnExitTimeout bounds command-end revocation across all linked integrations.
+const revokeOnExitTimeout = 30 * time.Second
+
 // authExecContext bundles what command-end teardown needs after running the command.
 type authExecContext struct {
 	envList             []string
 	authManager         auth.AuthManager
 	identity            string
 	revokeOnExitDefault *bool
+	credentialDir       string
+	ctx                 context.Context
+	releaseSignals      func()
 }
 
 // execParser handles flags for the exec command.
@@ -114,6 +121,9 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) (resultErr error)
 	defer revokeEphemeralAuthExec(execCtx)
 
 	// Execute the command with authentication environment.
+	if execCtx.credentialDir != "" {
+		return shell.RunCommandContext(execCtx.ctx, commandArgs, execCtx.envList)
+	}
 	return shell.RunCommand(commandArgs, execCtx.envList)
 }
 
@@ -129,7 +139,11 @@ func revokeEphemeralAuthExec(execCtx *authExecContext) {
 	if !telemetry.IsCI() {
 		return
 	}
-	if err := execCtx.authManager.RevokeEphemeralIntegrations(context.Background(), execCtx.identity, execCtx.revokeOnExitDefault); err != nil {
+	// Revocation must still reach the broker after the command was interrupted,
+	// but must not outlive a bounded window while signal ownership is held.
+	revokeCtx, cancel := context.WithTimeout(context.Background(), revokeOnExitTimeout)
+	defer cancel()
+	if err := execCtx.authManager.RevokeEphemeralIntegrations(revokeCtx, execCtx.identity, execCtx.revokeOnExitDefault); err != nil {
 		log.Debug("Command-end ephemeral revoke encountered errors", "identity", execCtx.identity, "error", err)
 	}
 }
@@ -158,9 +172,6 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (execCtx *authE
 
 	// Capture the global revoke_on_exit default for command-end teardown.
 	revokeOnExitDefault := atmosConfig.Settings.Pro.GitSTS.RevokeOnExit
-
-	// Try to use cached credentials first (passive check, no prompts).
-	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
 
 	// Get identity from flag or use default.
@@ -173,29 +184,18 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (execCtx *authE
 		authManager:         authManager,
 		identity:            identityName,
 		revokeOnExitDefault: revokeOnExitDefault,
+		ctx:                 ctx,
 	}
-	// Authentication can write credentials before shell setup fails. Capture
-	// the context now because an error return sets the named execCtx to nil.
-	defer func(cleanupCtx *authExecContext) {
-		if resultErr != nil {
-			if cleanupErr := cleanupGitLabAuthExec(cleanupCtx); cleanupErr != nil {
-				resultErr = errors.Join(resultErr, cleanupErr)
-			}
-		}
-	}(execCtx)
+	// Capture setup state now: an error return sets the named execCtx to nil.
+	defer cleanupFailedGitLabAuthExec(execCtx, &resultErr)
 
-	_, err = authManager.GetCachedCredentials(ctx, identityName)
-	if err != nil {
-		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
-		// No valid cached credentials - perform full authentication.
-		_, err = authManager.Authenticate(ctx, identityName)
-		if err != nil {
-			// Check for user cancellation - return clean error without wrapping.
-			if errors.Is(err, errUtils.ErrUserAborted) {
-				return nil, errUtils.ErrUserAborted
-			}
-			return nil, errUtils.EnsureAuthenticationFailed(err)
-		}
+	if err = prepareGitLabAuthExec(execCtx, &atmosConfig); err != nil {
+		return nil, errUtils.EnsureAuthenticationFailed(err)
+	}
+	identityName, authManager, ctx = execCtx.identity, execCtx.authManager, execCtx.ctx
+
+	if err := authenticateForExec(ctx, execCtx); err != nil {
+		return nil, err
 	}
 
 	// Prepare shell environment with file-based credentials.
@@ -209,7 +209,35 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (execCtx *authE
 	}
 
 	execCtx.envList = envList
+	if execCtx.credentialDir != "" {
+		execCtx.envList = envpkg.UpdateEnvVar(envList, auth.AuthExecAWSFilesBasePathEnv, execCtx.credentialDir)
+	}
 	return execCtx, nil
+}
+
+// authenticateForExec keeps other providers' passive cache lookup while requiring
+// GitLab to authenticate through the current invocation's credential chain.
+func authenticateForExec(ctx context.Context, execCtx *authExecContext) error {
+	var err error
+
+	// GitLab must authenticate with the current job token, never a previous job's files.
+	// Authenticate still permits credential reuse within this process.
+	if execCtx.credentialDir == "" {
+		_, err = execCtx.authManager.GetCachedCredentials(ctx, execCtx.identity)
+	}
+	if execCtx.credentialDir != "" || err != nil {
+		log.Debug("Authenticating identity", "identity", execCtx.identity)
+		_, err = execCtx.authManager.Authenticate(ctx, execCtx.identity)
+		if err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return errUtils.ErrUserAborted
+			}
+			return errUtils.EnsureAuthenticationFailed(err)
+		}
+	}
+
+	return nil
 }
 
 // resolveIdentityNameForExec resolves the identity name from flags, viper, or prompts for selection.

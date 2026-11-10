@@ -33,7 +33,7 @@ func enableProcessGroup(cmd *exec.Cmd) bool {
 		err := syscall.Kill(-pid, syscall.SIGTERM)
 		switch {
 		case err == nil:
-			finishGroupCancellation(pid)
+			finishChildCancellation(pid, true)
 			return nil
 		case errors.Is(err, syscall.ESRCH):
 			return os.ErrProcessDone
@@ -65,29 +65,49 @@ func childAlive(pid int, grouped bool) bool {
 	return signalChild(pid, false, 0) == nil
 }
 
-// finishGroupCancellation gives the signalled group time to exit before killing
+// finishChildCancellation gives the signalled child/group time to exit before killing
 // survivors. It returns as soon as the group disappears and leaves no delayed
 // signal behind after Cmd.Wait completes. Unix group signaling uses numeric PGIDs;
 // probing and signaling a group cannot provide an atomic identity guarantee. The leader may exit before children
 // that ignore SIGTERM, so its Wait result cannot decide whether cleanup is done.
-func finishGroupCancellation(pid int) {
-	if waitForProcessGroup(pid) {
+func finishChildCancellation(pid int, grouped bool) {
+	if waitForChild(pid, grouped) {
 		return
 	}
-	_ = killChild(pid, true)
+	_ = killChild(pid, grouped)
 	// SIGKILL delivery is asynchronous. Allow survivors to exit before releasing
 	// the runner result, but bound the wait for zombies awaiting an external reaper.
-	waitForProcessGroup(pid)
+	waitForChild(pid, grouped)
 }
 
-// waitForProcessGroup reports whether the group disappears within the grace period.
-func waitForProcessGroup(pid int) bool {
+// waitForChild reports whether the child/group disappears within the grace period.
+func waitForChild(pid int, grouped bool) bool {
 	deadline := time.Now().Add(childShutdownGrace)
-	for childAlive(pid, true) {
+	for childAlive(pid, grouped) {
 		if !time.Now().Before(deadline) {
 			return false
 		}
 		time.Sleep(childPollInterval)
 	}
 	return true
+}
+
+func (g *childGroup) cancelSignal(sig os.Signal) error {
+	value, ok := sig.(syscall.Signal)
+	if !ok {
+		return g.cmd.Process.Kill()
+	}
+	pid := g.cmd.Process.Pid
+	// A foreground terminal already sends Ctrl-C to the child. Forwarding it
+	// again could interrupt the child's own shutdown handler a second time.
+	if value != syscall.SIGINT || g.grouped || !stdinIsTerminal(g.cmd.Stdin) {
+		if err := signalChild(pid, g.grouped, value); err != nil {
+			if errors.Is(err, syscall.ESRCH) {
+				return os.ErrProcessDone
+			}
+			return g.cmd.Process.Kill()
+		}
+	}
+	finishChildCancellation(pid, g.grouped)
+	return nil
 }

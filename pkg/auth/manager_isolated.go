@@ -32,6 +32,7 @@ func (m *manager) AuthenticateIsolated(ctx context.Context, identityName string)
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
+	isolated = applyManagerOptions(isolated, WithAWSFilesBasePath(m.awsFilesBasePath))
 	if _, err := isolated.Authenticate(ctx, identityName); err != nil {
 		return nil, err
 	}

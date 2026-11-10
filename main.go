@@ -26,6 +26,9 @@ func main() {
 			if !shouldExitOnSignal(sig) {
 				continue
 			}
+			if signals.HandleShutdownSignal(sig) {
+				continue
+			}
 			// Run registered exit cleanups (e.g. restore the terminal from raw
 			// mode) - os.Exit below skips deferred functions.
 			signals.RunExitCleanups()
