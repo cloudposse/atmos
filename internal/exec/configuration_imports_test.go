@@ -77,9 +77,21 @@ func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{filepath.Join(root, "live", "new.yaml")}, filtered.getAllFiles())
 	require.Len(t, index.getAllFiles(), 2)
+	again, err := configurationWatchIndex(config, settings, index)
+	require.NoError(t, err)
+	require.Same(t, filtered, again, "components sharing exclusions must reuse one filtered index")
+	other, err := configurationWatchIndex(config, map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/*.yaml"}}}, index)
+	require.NoError(t, err)
+	require.NotSame(t, filtered, other)
+	require.Equal(t, []string{filepath.Join(root, "live", ".terragrunt-cache", "generated.tf")}, other.getAllFiles())
 	unchanged, err := configurationWatchIndex(config, nil, index)
 	require.NoError(t, err)
 	require.Same(t, index, unchanged)
+	empty, err := configurationWatchIndex(config, map[string]any{"configuration": map[string]any{"watch_excludes": []any{}}}, index)
+	require.NoError(t, err)
+	require.Same(t, index, empty)
+	_, err = configurationWatchIndex(config, map[string]any{"configuration": map[string]any{"watch_excludes": "**/.terragrunt-cache/**"}}, index)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	for _, invalid := range []any{"[", 42} {
 		settings["configuration"].(map[string]any)["watch_excludes"] = []any{invalid}
 		_, err = configurationWatchIndex(config, settings, index)
@@ -94,7 +106,7 @@ func TestConfigurationWatchExclusionsFailClosedOnPathsOutsideTheProject(t *testi
 	index := newChangedFilesIndex(config, []string{absolute}, "")
 	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/*.tf"}}}
 	filtered, err := configurationWatchIndex(config, settings, index)
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.Nil(t, filtered)
 }
 

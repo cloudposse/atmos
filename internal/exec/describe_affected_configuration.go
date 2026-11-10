@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -33,10 +34,37 @@ func rebaseConfigurationDiscovery(config *schema.AtmosConfiguration) error {
 // configurationWatchIndex applies provider-declared cache exclusions only to its
 // file watches. It never changes YAML dependencies or the shared Git change set.
 func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[string]any, original *changedFilesIndex) (*changedFilesIndex, error) {
-	provider, _ := settings["configuration"].(map[string]any)
-	excludes, _ := provider["watch_excludes"].([]any)
-	if len(excludes) == 0 {
+	patterns, err := configurationWatchExcludes(settings)
+	if err != nil {
+		return nil, err
+	}
+	if len(patterns) == 0 {
 		return original, nil
+	}
+	key := config.BasePathAbsolute + "\x00" + strings.Join(patterns, "\x00")
+	if view := lastConfigurationWatchIndex.Load(); view != nil && view.source == original && view.key == key {
+		return view.filtered, nil
+	}
+	files, err := unexcludedWatchFiles(config.BasePathAbsolute, original.getAllFiles(), patterns)
+	if err != nil {
+		return nil, err
+	}
+	filtered := newChangedFilesIndex(config, files, config.BasePathAbsolute)
+	lastConfigurationWatchIndex.Store(&configurationWatchIndexView{source: original, key: key, filtered: filtered})
+	return filtered, nil
+}
+
+// configurationWatchExcludes reads and validates the provider's watch_excludes.
+// An absent or empty setting yields no patterns; any other shape is rejected.
+func configurationWatchExcludes(settings map[string]any) ([]string, error) {
+	provider, _ := settings["configuration"].(map[string]any)
+	raw := provider["watch_excludes"]
+	if raw == nil {
+		return nil, nil
+	}
+	excludes, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: watch_excludes must be a list of patterns", errUtils.ErrPluginInvalidConfig)
 	}
 	patterns := make([]string, 0, len(excludes))
 	for _, value := range excludes {
@@ -46,11 +74,16 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 		}
 		patterns = append(patterns, pattern)
 	}
-	files := make([]string, 0, len(original.getAllFiles()))
-	for _, path := range original.getAllFiles() {
-		relative, err := filepath.Rel(config.BasePathAbsolute, path)
+	return patterns, nil
+}
+
+// unexcludedWatchFiles returns the files under root that match none of the patterns.
+func unexcludedWatchFiles(root string, all []string, patterns []string) ([]string, error) {
+	files := make([]string, 0, len(all))
+	for _, path := range all {
+		relative, err := filepath.Rel(root, path)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: watch path %q is not under %q: %w", errUtils.ErrPluginInvalidConfig, path, root, err)
 		}
 		excluded := false
 		for _, pattern := range patterns {
@@ -61,8 +94,19 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 			files = append(files, path)
 		}
 	}
-	return newChangedFilesIndex(config, files, config.BasePathAbsolute), nil
+	return files, nil
 }
+
+// configurationWatchIndexView pairs a change-set index and exclusion set with its filtered copy.
+type configurationWatchIndexView struct {
+	source, filtered *changedFilesIndex
+	key              string
+}
+
+// lastConfigurationWatchIndex holds the most recent filtered index, so provider
+// components that share exclusions reuse one index (and its resolved view)
+// instead of rebuilding it per component. Indexes are immutable after construction.
+var lastConfigurationWatchIndex atomic.Pointer[configurationWatchIndexView]
 
 // configurationWatchPaths resolves provider-owned watches against the project
 // root without putting checkout-specific absolute paths into stack comparisons.
