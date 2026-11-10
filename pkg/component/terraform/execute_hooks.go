@@ -122,16 +122,38 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	}
 
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts)}
-	return execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (string, error) {
-		if len(config.ErrorHooks) == 0 {
-			return "", action(&phaseInfo, applied.Args, opts)
+	// A detailed plan exit code of 2 reports changes, not a failure: ordinary after hooks run and
+	// error hooks do not. The status itself is returned unchanged once the hooks have run.
+	var detailedResult error
+	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (string, error) {
+		output, err := runPhaseAction(&phaseInfo, applied.Args, opts, len(config.ErrorHooks) > 0, action)
+		if isDetailedPlanChanges(phase, applied.Args, err) {
+			detailedResult = err
+			return output, nil
 		}
-		// Error hooks match against the failed command's output, which the caller may also be capturing.
-		var output bytes.Buffer
-		stdout, stderr := composeRetryCaptureWriters(opts, &output)
-		err := action(&phaseInfo, applied.Args, append(slices.Clone(opts), component.WithStdoutCapture(stdout), component.WithStderrCapture(stderr)))
-		return output.String(), err
+		return output, err
 	})
+	if err == nil {
+		return detailedResult
+	}
+	return err
+}
+
+// runPhaseAction runs the wrapped subprocess. Error hooks match against the failed command's
+// output, which the caller may also be capturing, so it is captured only when they exist.
+func runPhaseAction(info *schema.ConfigAndStacksInfo, args []string, opts []component.ExecutionOption, capture bool, action phaseAction) (string, error) {
+	if !capture {
+		return "", action(info, args, opts)
+	}
+	var output bytes.Buffer
+	stdout, stderr := composeRetryCaptureWriters(opts, &output)
+	err := action(info, args, append(slices.Clone(opts), component.WithStdoutCapture(stdout), component.WithStderrCapture(stderr)))
+	return output.String(), err
+}
+
+// isDetailedPlanChanges reports whether err is plan's "-detailed-exitcode" status for changes present.
+func isDetailedPlanChanges(phase *executionPhase, args []string, err error) bool {
+	return err != nil && phase.command == "plan" && slices.Contains(args, "-detailed-exitcode") && resolveExitCode(err) == detailedExitCodeChangesDetected
 }
 
 // hookOptions carries over only what a hook shares with the command: cancellation, the process

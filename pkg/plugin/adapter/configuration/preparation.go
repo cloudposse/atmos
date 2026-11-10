@@ -34,10 +34,24 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
-	if result.Engine != selected.instance.Engine {
+	if result.Engine != expectedEngine(info, selected.instance) {
 		return nil, errUtils.ErrPluginProtocol
 	}
 	return preparedConfiguration(result)
+}
+
+// expectedEngine is the engine of the command this invocation runs. Discovery records the engine of
+// the globally configured command, but --command or a component command may select another one,
+// and the provider prepares for the binary it is given. Any other engine is a protocol violation.
+func expectedEngine(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent) string {
+	if info.Command == "" {
+		return instance.Engine
+	}
+	// Match execution's executable-name detection (pkg/component/terraform/detection.go).
+	if strings.Contains(strings.ToLower(filepath.Base(info.Command)), "tofu") {
+		return "opentofu"
+	}
+	return "terraform"
 }
 
 // selectedComponent bundles the request, owning provider, and discovered instance for one component.

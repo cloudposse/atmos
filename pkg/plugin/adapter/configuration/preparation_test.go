@@ -90,6 +90,30 @@ func TestPrepareFailsClosed(t *testing.T) {
 	}
 }
 
+func TestPrepareAcceptsTheEngineOfTheSelectedCommand(t *testing.T) {
+	for _, test := range []struct {
+		name, command, engine string
+		want                  error
+	}{
+		{"command override selects OpenTofu", "/opt/bin/tofu", "opentofu", nil},
+		{"versioned OpenTofu binary", "/opt/bin/TOFU-1.8", "opentofu", nil},
+		{"command override selects Terraform", "/opt/bin/terraform", "terraform", nil},
+		{"provider disagrees with the command", "/opt/bin/terraform", "opentofu", errUtils.ErrPluginProtocol},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session, provider, info := preparationSession(t)
+			info.Command = test.command
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: test.engine, State: &pluginv1.ComponentStateIdentity{}}, nil)
+			_, err := session.Prepare(t.Context(), info)
+			if test.want == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, test.want)
+		})
+	}
+}
+
 func TestPreparedExecutionRejectsNilEntriesInEveryList(t *testing.T) {
 	for _, test := range []struct {
 		name      string

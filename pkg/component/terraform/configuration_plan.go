@@ -19,6 +19,9 @@ import (
 
 const configurationPlanSuffix = ".atmos.json"
 
+// planBindingSuffix names the binding of a default saved plan, which Atmos writes as "*.planfile".
+const planBindingSuffix = ".planfile" + configurationPlanSuffix
+
 type configurationPlan struct {
 	Version                                                                               int
 	Stack, Component, Identity, EngineDigest, PlanDigest, WorkingDirectory, WorkingDigest string
@@ -294,9 +297,12 @@ func skipWorkdirDirectory(root, path, name string) bool {
 	return path != root && (name == ".terraform" || name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
 }
 
-// ignoredWorkdirFile reports whether a file is the plan itself, its binding, or mutable state.
+// ignoredWorkdirFile reports whether a file is the plan itself, a plan binding, or mutable state.
+// Only actual bindings are skipped: this plan's own, or one beside a default ".planfile" plan.
+// An ordinary file such as settings.atmos.json is configuration and stays in the digest.
 func ignoredWorkdirFile(path, planPath, name string) bool {
-	return path == planPath || strings.HasSuffix(name, configurationPlanSuffix) || strings.HasPrefix(name, ".atmos-plan-") || strings.HasPrefix(name, "terraform.tfstate")
+	return path == planPath || path == planPath+configurationPlanSuffix || strings.HasSuffix(name, planBindingSuffix) ||
+		strings.HasPrefix(name, ".atmos-plan-") || strings.HasPrefix(name, "terraform.tfstate")
 }
 
 // recordWorkdirFile digests one retained file by its slash-separated path relative to the root.

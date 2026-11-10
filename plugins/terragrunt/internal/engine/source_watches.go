@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,13 +19,25 @@ import (
 // trackInputSources inspects syntax, not values. Partial discovery intentionally
 // leaves inputs unevaluated; syntax watches include conditional and optional reads
 // without reading state, decrypting secrets, or invoking user commands.
+//
+// Configuration that inputs read (read_terragrunt_config) is scanned the same way, transitively,
+// so a change to its own inputs' sources affects the unit. Each file is scanned once.
 func trackInputSources(fs afero.Fs, root string, result *model.Resolution) error {
-	for _, path := range slices.Clone(result.Files) {
-		if !strings.HasSuffix(path, ".hcl") {
+	evaluated := len(result.Files)
+	scanned := map[string]bool{}
+	for i := 0; i < len(result.Files); i++ {
+		path := result.Files[i]
+		if scanned[path] || !strings.HasSuffix(path, ".hcl") {
 			continue
 		}
+		scanned[path] = true
 		contents, err := afero.ReadFile(fs, path)
 		if err != nil {
+			// A file found only by this scan may be an optional read that does not exist yet;
+			// it stays a watch. Every evaluated file must be readable.
+			if i >= evaluated && errors.Is(err, os.ErrNotExist) {
+				continue
+			}
 			return fmt.Errorf("track configuration sources %s: %w", path, err)
 		}
 		file, diagnostics := hclsyntax.ParseConfig(contents, path, hcl.InitialPos)

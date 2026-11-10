@@ -177,5 +177,23 @@ func TestOutputReaderAnchorsRelativeBackendFiles(t *testing.T) {
 	require.Equal(t, "~/cert.pfx", config.Backend["client_certificate_path"], "home-relative paths are left to Terraform")
 	require.Equal(t, "state", config.Backend["bucket"])
 	require.Equal(t, []any{"creds/aws", absolute}, backend["shared_credentials_files"], "the provider's state is not modified")
-	require.Equal(t, backend, absoluteBackendFiles(backend, ""))
+	require.Equal(t, backend, absoluteBackendFiles("s3", backend, ""))
+}
+
+func TestOutputReaderAnchorsPathOnlyForLocalBackend(t *testing.T) {
+	unit := t.TempDir()
+	consul := map[string]any{"path": "live/vpc", "address": "consul:8500"}
+	require.Equal(t, "live/vpc", absoluteBackendFiles("consul", consul, unit)["path"], "a remote key is not a file")
+	local := map[string]any{"path": "state/terraform.tfstate", "workspace_dir": "ws"}
+	anchored := absoluteBackendFiles("local", local, unit)
+	require.Equal(t, filepath.Join(unit, "state", "terraform.tfstate"), anchored["path"])
+	require.Equal(t, filepath.Join(unit, "ws"), anchored["workspace_dir"])
+}
+
+func TestConfigurationStateSectionsNamedWorkspaceWithoutBackendSettings(t *testing.T) {
+	root := t.TempDir()
+	state := &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: root}
+	resolved := ConfigurationStateSections(map[string]any{}, state)
+	require.Equal(t, filepath.Join(root, "terraform.tfstate.d", "prod", "terraform.tfstate"), resolved["backend"].(map[string]any)["path"])
+	require.Nil(t, state.Backend)
 }

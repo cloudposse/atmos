@@ -72,6 +72,10 @@ func ConfigurationStateSections(sections map[string]any, state *schema.Component
 	result := maps.Clone(sections)
 	backend := maps.Clone(state.Backend)
 	if state.BackendType == "local" && state.Workspace != "" && state.Workspace != "default" {
+		// A local backend may declare no settings at all; maps.Clone keeps that nil.
+		if backend == nil {
+			backend = make(map[string]any)
+		}
 		root, _ := backend["workspace_dir"].(string)
 		if root == "" {
 			root = filepath.Join(state.WorkingDirectory, "terraform.tfstate.d")
@@ -101,7 +105,7 @@ func configurationOutputConfig(config *ComponentConfig, state *schema.ComponentC
 		config.Env = make(map[string]any)
 	}
 	config.Env["TF_DATA_DIR"] = filepath.Join(root, ".terraform")
-	config.BackendType, config.Backend, config.Workspace = state.BackendType, absoluteBackendFiles(state.Backend, state.WorkingDirectory), state.Workspace
+	config.BackendType, config.Backend, config.Workspace = state.BackendType, absoluteBackendFiles(state.BackendType, state.Backend, state.WorkingDirectory), state.Workspace
 	config.AutoGenerateBackend = true
 	config.AutoProvisionWorkdirForOutputs = false
 	config.Providers, config.Vars = nil, nil
@@ -124,19 +128,26 @@ func configurationEnvironment(managers []any) []string {
 // backendFileKeys name backend settings that hold file paths. Terraform resolves a relative
 // path against its working directory, which for output reads is the scratch directory.
 var backendFileKeys = []string{
-	"path", "workspace_dir",
 	"shared_credentials_file", "shared_credentials_files", "shared_config_files",
 	"client_certificate_path", "oidc_token_file_path",
 }
 
+// localBackendFileKeys hold file paths only for the local backend. Other backends use the
+// same names for remote keys (Consul's "path" is a KV key), which must not be anchored.
+var localBackendFileKeys = []string{"path", "workspace_dir"}
+
 // absoluteBackendFiles anchors relative backend file paths at the state working directory,
 // so a scratch reader finds the same files as the unit's own execution. The input is unchanged.
-func absoluteBackendFiles(backend map[string]any, directory string) map[string]any {
+func absoluteBackendFiles(backendType string, backend map[string]any, directory string) map[string]any {
 	if directory == "" || len(backend) == 0 {
 		return backend
 	}
 	result := maps.Clone(backend)
-	for _, key := range backendFileKeys {
+	keys := backendFileKeys
+	if backendType == "local" {
+		keys = append(slices.Clone(localBackendFileKeys), backendFileKeys...)
+	}
+	for _, key := range keys {
 		if value, ok := result[key]; ok {
 			result[key] = anchorBackendFile(value, directory)
 		}

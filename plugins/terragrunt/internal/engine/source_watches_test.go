@@ -73,3 +73,31 @@ func TestInputWatchesFailuresAndIncludedInputs(t *testing.T) {
 	require.NoError(t, trackInputSources(fs, root, result))
 	require.Contains(t, result.Files, filepath.Join(root, "shared-input.hcl"))
 }
+
+func TestInputWatchesFollowNestedConfigurationReads(t *testing.T) {
+	root := t.TempDir()
+	fs := afero.NewMemMapFs()
+	require.NoError(t, fs.MkdirAll(filepath.Join(root, "shared"), 0o700))
+	unit := filepath.Join(root, "terragrunt.hcl")
+	write := func(path, contents string) {
+		t.Helper()
+		require.NoError(t, afero.WriteFile(fs, path, []byte(contents), 0o600))
+	}
+	write(unit, `inputs = { common = read_terragrunt_config("shared/common.hcl") }`)
+	// The nested configuration reads data and, cyclically, the unit; both are followed once.
+	write(filepath.Join(root, "shared", "common.hcl"), `inputs = {
+  data   = file("data.json")
+  again  = read_terragrunt_config("../terragrunt.hcl")
+  deeper = read_terragrunt_config("absent.hcl")
+}`)
+	result := &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	for _, path := range []string{
+		filepath.Join(root, "shared", "common.hcl"),
+		filepath.Join(root, "shared", "data.json"),
+		filepath.Join(root, "shared", "absent.hcl"),
+	} {
+		require.Contains(t, result.Files, path, "a transitive read is watched, even before it exists")
+	}
+	require.Empty(t, result.Folders)
+}

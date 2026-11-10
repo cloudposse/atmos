@@ -116,6 +116,8 @@ func importPaths(request *pluginv1.DiscoverComponentsRequest) ([]string, error) 
 		if !found || !filepath.IsLocal(path) || strings.ContainsAny(path, "\\?#*[{") {
 			return nil, ErrUnsupported
 		}
+		// Match the engine's clean relative unit paths, whatever spelling the import used.
+		path = filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
 		info, err := os.Stat(filepath.Join(request.RootDirectory, filepath.FromSlash(path)))
 		if err != nil {
 			return nil, err

@@ -113,8 +113,10 @@ func digestSourceDirectory(ctx context.Context, root, sourcePath string, result 
 	return err
 }
 
+// excludedPlanSource skips mutable data, saved plans, and their bindings. Ordinary *.atmos.json
+// configuration, such as settings.atmos.json, is a source and is digested.
 func excludedPlanSource(name string) bool {
-	return name == ".atmos" || name == ".git" || name == ".terraform" || name == ".terragrunt-cache" || name == ".terragrunt-stack" || strings.HasPrefix(name, "terraform.tfstate") || strings.HasSuffix(name, ".planfile") || strings.HasSuffix(name, ".atmos.json")
+	return name == ".atmos" || name == ".git" || name == ".terraform" || name == ".terragrunt-cache" || name == ".terragrunt-stack" || strings.HasPrefix(name, "terraform.tfstate") || strings.HasSuffix(name, ".planfile") || strings.HasSuffix(name, ".planfile.atmos.json")
 }
 
 func digestSource(ctx context.Context, root, path string, result map[string]string) error {
