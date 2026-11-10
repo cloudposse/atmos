@@ -95,11 +95,28 @@ def verify_one_bad_unit_does_not_break_the_project(root):
     fixtures.run(root, ["terraform", "plan", "good", "-s", STACK, "--", "-no-color"])
 
 
-def verify_bulk_runs_validate_before_running(root):
+def probe(work, real):
+    # The project's executable is a probe that records every invocation in invocations.log beside
+    # itself and then runs the real tool, so a test can prove that no infrastructure command ran.
+    suffix = exec.run(["go", "env", "GOEXE"], output="capture").stdout.strip()
+    name = "tofu" if "tofu" in real.replace("\\", "/").rsplit("/", 1)[-1] else "terraform"
+    directory = work + "/probe"
+    fs.mkdir(directory, parents=True)
+    exec.run(["go", "build", "-o", directory + "/" + name + suffix, "./fixtures/toolprobe"], working_directory=fs.resolve("."), output="capture")
+    fs.write_file(directory + "/real-tool.txt", real)
+    return directory + "/" + name + suffix, directory + "/invocations.log"
+
+
+def verify_bulk_runs_validate_before_running(root, invocations):
+    # Earlier scenarios ran the healthy unit; only what the bulk runs invoke counts here.
+    if fs.exists(invocations):
+        fs.remove(invocations)
     for operation in ["plan", "apply", "destroy"]:
         arguments = ["terraform", operation, "--all", "-s", STACK, "--"] + (["-auto-approve"] if operation != "plan" else []) + ["-no-color"]
         output = output_of(fixtures.run_failing(root, arguments))
         expect(output, ["no infrastructure command was run", "Component syntax", "Component binary"], operation + " --all")
+        ran = fs.read_file(invocations) if fs.exists(invocations) else ""
+        fixtures.check(ran.strip() == "", operation + " --all ran the engine before rejecting the broken units:\n" + ran)
         fixtures.check(not fs.exists(root + "/live/dev/good/state/terraform.tfstate"), operation + " --all ran a healthy unit before rejecting the broken ones")
 
 
@@ -119,11 +136,14 @@ def diagnostics():
         "escape": unit("") + 'generate "x" {\n  path      = "../escape.tf"\n  if_exists = "overwrite"\n  contents  = ""\n}\n',
         "secret": unit("") + 'inputs = {\n  a = tonumber("hunter2")\n}\n',
     }
-    root = project("atmos-terragrunt-diagnostics-", binary, units)
+    work = fixtures.workspace("atmos-terragrunt-diagnostics-probe-")
+    probed, invocations = probe(work, binary)
+    root = project("atmos-terragrunt-diagnostics-", probed, units)
     verify_rejections_name_file_unit_and_setting(root)
     verify_secrets_stay_out_of_errors(root)
     verify_one_bad_unit_does_not_break_the_project(root)
-    verify_bulk_runs_validate_before_running(root)
+    fixtures.check(fs.exists(invocations), "the healthy plan did not run through the probe, so its absence later proves nothing")
+    verify_bulk_runs_validate_before_running(root, invocations)
     ui.success("Diagnostics: rich unit errors, redaction, isolation, bulk pre-flight")
 
 
