@@ -51,8 +51,14 @@ export default function AtmosNewsletter(): JSX.Element {
       <div className={styles.formContainer}>
         {!ready && (
           <div className={styles.loading} role="status">
-            <span className={styles.spinner} aria-hidden="true" />
-            <span>Loading signup form…</span>
+            <span className={styles.loadingField} aria-hidden="true">
+              Enter your email
+            </span>
+            <span className={styles.loadingButton} aria-hidden="true">
+              <span className={styles.spinner} />
+              Subscribe
+            </span>
+            <span className={styles.srOnly}>Loading signup form…</span>
           </div>
         )}
         <iframe
