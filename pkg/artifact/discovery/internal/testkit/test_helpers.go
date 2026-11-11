@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -77,6 +79,18 @@ func NewRegistry(t *testing.T) *Registry {
 	rec := &recorder{}
 	client := atmosoci.NewClient(nil, atmosoci.WithTransport(rec))
 	return &Registry{Host: server.Host, Transport: client, server: server, recorder: rec}
+}
+
+// TagExisting gives a second tag to an existing OCI manifest.
+func (r *Registry) TagExisting(t *testing.T, artifactName, existing, alias string) {
+	t.Helper()
+	from, err := name.NewTag(r.Host + "/" + Prefix + "/" + artifactName + ":" + existing)
+	require.NoError(t, err)
+	to, err := name.NewTag(r.Host + "/" + Prefix + "/" + artifactName + ":" + alias)
+	require.NoError(t, err)
+	image, err := remote.Image(from)
+	require.NoError(t, err)
+	require.NoError(t, remote.Write(to, image))
 }
 
 // Reset forgets the recorded requests.

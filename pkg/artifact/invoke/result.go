@@ -161,7 +161,7 @@ func OutputPairs(op *artifact.OperationResult) []Pair {
 		{OutputContentDigest, string(op.ContentDigest)},
 		{OutputRepresentationDigest, string(op.RepresentationDigest)},
 	}
-	if op.Size > 0 {
+	if op.SizeMeasured || op.Size > 0 {
 		candidates = append(candidates, Pair{OutputSize, fmt.Sprintf("%d", op.Size)})
 	}
 	pairs := make([]Pair, 0, len(candidates))

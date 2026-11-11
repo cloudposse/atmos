@@ -93,6 +93,7 @@ func (s *Service) showDocument(ctx context.Context, op *operation, request *arti
 	result.Document, result.Content = stream.Document, content
 	op.result.Outcome = artifact.OutcomeRead
 	op.result.Size = int64(len(content))
+	op.result.SizeMeasured = true
 	return nil
 }
 

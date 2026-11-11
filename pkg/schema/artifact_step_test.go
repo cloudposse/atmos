@@ -9,6 +9,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var _ = WorkflowStep{
+	Name: "", Type: "", Action: "", Source: nil, Repository: "", ArtifactName: "", ArtifactKind: "", Version: "",
+	Force: false, ArtifactDryRun: false, Readme: "", Changelog: "", Output: "", Metadata: nil, Artifacts: nil,
+	Ref: "", Destination: "", From: "", To: "", Document: "", SearchQuery: "", Query: nil, Refresh: false, Labels: nil,
+}
+
 const publishStepYAML = `
 name: publish-vpc
 type: artifact

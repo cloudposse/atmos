@@ -557,3 +557,30 @@ func TestWrapperRetriesStep(t *testing.T) {
 		assert.False(t, WrapperRetriesStep(other), other)
 	}
 }
+
+func TestArtifactHandler_RetryRetainsResolvedInputs(t *testing.T) {
+	env := newArtifactEnv(t)
+	var requests []artifact.PublishRequest
+	env.service.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, r artifact.PublishRequest) (*artifact.OperationResult, error) {
+		requests = append(requests, r)
+		if len(requests) == 1 {
+			return nil, errors.New("transient")
+		}
+		return completeOperation(artifact.ActionPublish, artifact.OutcomeCreated), nil
+	}).Times(2)
+	step := artifactStepWith(artifact.ActionPublish, invoke.FieldSource, invoke.FieldRepository, invoke.FieldVersion, invoke.FieldMetadata)
+	step.Version = "{{ .env.VERSION }}"
+	step.Metadata.Labels["team"] = "{{ .env.TEAM }}"
+	env.vars.SetEnv("VERSION", "1")
+	env.vars.SetEnv("TEAM", "first")
+	_, err := env.run(step)
+	require.Error(t, err)
+	env.vars.SetEnv("VERSION", "2")
+	env.vars.SetEnv("TEAM", "second")
+	_, err = env.run(step)
+	require.NoError(t, err)
+	require.Len(t, requests, 2)
+	assert.Equal(t, requests[0].Version, requests[1].Version)
+	assert.Equal(t, requests[0].Metadata.Labels, requests[1].Metadata.Labels)
+	assert.Equal(t, requests[0].Execution.OperationID, requests[1].Execution.OperationID)
+}

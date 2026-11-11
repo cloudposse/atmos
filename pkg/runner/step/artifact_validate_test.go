@@ -118,6 +118,8 @@ func TestArtifactHandler_ValidateRejectsMalformedSteps(t *testing.T) {
 		{"pin is not a step action", func(s *schema.WorkflowStep) { s.Action = "pin" }, errUtils.ErrArtifactStepInvalidAction},
 		{"source map", func(s *schema.WorkflowStep) { s.Source = map[string]any{"uri": "git::https://example.com/repo.git"} }, errUtils.ErrArtifactStepInvalidSource},
 		{"source number", func(s *schema.WorkflowStep) { s.Source = 3 }, errUtils.ErrArtifactStepInvalidSource},
+		{"http URL", func(s *schema.WorkflowStep) { s.URL = "https://example.com" }, errUtils.ErrArtifactStepFieldForbidden},
+		{"shell command", func(s *schema.WorkflowStep) { s.Command = "echo x" }, errUtils.ErrArtifactStepFieldForbidden},
 		{"http query mapping", func(s *schema.WorkflowStep) { s.Query = map[string]string{"a": "b"} }, errUtils.ErrArtifactStepInvalidField},
 	}
 	for _, tc := range tests {

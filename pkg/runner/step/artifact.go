@@ -67,9 +67,15 @@ func UseArtifactServiceFactory(factory invoke.ServiceFactory) (restore func()) {
 func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.ArtifactHandler.Execute")()
 
-	params, err := h.artifactParams(step, vars)
-	if err != nil {
-		return nil, err
+	session := vars.artifactSession()
+	stepKey := artifactStepKey(step)
+	params, retained := session.retainedInput(stepKey)
+	if !retained {
+		var err error
+		params, err = h.artifactParams(step, vars)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := checkResolvedArtifactParams(step, params); err != nil {
 		return nil, err
@@ -96,7 +102,13 @@ func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 	}
 	defer deadline.Stop()
 
+	if !retained {
+		session.retainInput(stepKey, params)
+	}
 	result, runErr := h.runOperation(deadline.Context(), step, vars, svc, params)
+	if runErr == nil {
+		session.forgetInput(stepKey)
+	}
 	return result, deadline.Wrap(runErr)
 }
 

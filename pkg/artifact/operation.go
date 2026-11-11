@@ -117,6 +117,9 @@ type OperationResult struct {
 	// Size is the transferred or described payload size in bytes.
 	Size int64 `json:"size,omitempty"`
 
+	// SizeMeasured distinguishes a measured empty payload from an unavailable size.
+	SizeMeasured bool `json:"-"`
+
 	// Duration is the wall-clock duration of the operation.
 	Duration time.Duration `json:"duration_ns,omitempty"`
 
