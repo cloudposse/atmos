@@ -99,7 +99,10 @@ func (r *Recoverer) Run(ctx context.Context, attempt Attempt) (ignored bool, err
 		if r == nil || r.policy == nil || ctx.Err() != nil {
 			return false, runErr
 		}
-		retry, ignored, err := r.decide(ctx, cleanErrorText(text+"\n"+runErr.Error()), runErr, current)
+		if strings.TrimSpace(text) == "" {
+			text = runErr.Error()
+		}
+		retry, ignored, err := r.decide(ctx, cleanErrorText(text), runErr, current)
 		if !retry {
 			return ignored, err
 		}

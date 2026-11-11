@@ -371,6 +371,28 @@ func TestRecovererDoesNotRetryUnmatchedErrors(t *testing.T) {
 	require.Empty(t, run.pauses)
 }
 
+func TestRecovererMatchesStderrOrFallsBackToError(t *testing.T) {
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "exit", Patterns: []string{"exit status"}}}}
+	for _, tc := range []struct {
+		name, stderr string
+		ignored      bool
+	}{
+		{name: "stderr takes precedence", stderr: "permission denied", ignored: false},
+		{name: "empty stderr falls back", stderr: "", ignored: true},
+		{name: "blank stderr falls back", stderr: " \n", ignored: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ignored, err := NewRecoverer(policy).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{tc.stderr}}).attempt)
+			require.Equal(t, tc.ignored, ignored)
+			if tc.ignored {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errExit)
+			}
+		})
+	}
+}
+
 func TestRecovererIgnorePolicyWinsOverRetryAndWritesSignals(t *testing.T) {
 	signalsFile := filepath.Join(t.TempDir(), SignalsFileName)
 	reporter := &fakeReporter{}
