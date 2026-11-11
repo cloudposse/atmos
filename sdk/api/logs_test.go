@@ -191,8 +191,9 @@ func TestLogStreamReturnsEntriesWhenTheServiceIsUnavailable(t *testing.T) {
 func TestLogStreamDoesNotRepeatEntriesCutOffInFlight(t *testing.T) {
 	t.Parallel()
 	for name, failure := range map[string]error{
-		"internal": status.Error(codes.Internal, "boom"),
-		"unknown":  errors.New("unknown"),
+		"internal":    status.Error(codes.Internal, "boom"),
+		"unavailable": status.Error(codes.Unavailable, "connection lost"),
+		"unknown":     errors.New("unknown"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

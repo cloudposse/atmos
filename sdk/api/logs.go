@@ -72,7 +72,8 @@ func WithLogFlush(wait time.Duration) LogOption {
 // capacity for Close to return in the response; further entries are counted as omitted. The default capacity
 // is 1,024 entries and WithLogQueue changes it. Entries delivered live are
 // never returned, so nothing is shown twice. An entry whose delivery was cut off in flight, by cancellation or
-// an optional flush cap, is counted as omitted rather than returned: it may already be on screen.
+// an optional flush cap or an ambiguous transport failure, is counted as omitted rather than returned: it
+// may already be on screen.
 type LogStream struct {
 	sink     pluginv1.LogClient
 	ctx      context.Context
@@ -294,7 +295,7 @@ func (s *LogStream) deliver(batch []*pluginv1.LogEntry) {
 // the response instead.
 func notDelivered(err error) bool {
 	switch status.Code(err) {
-	case codes.Unavailable, codes.PermissionDenied, codes.Unimplemented, codes.FailedPrecondition, codes.InvalidArgument, codes.ResourceExhausted:
+	case codes.PermissionDenied, codes.Unimplemented, codes.FailedPrecondition, codes.InvalidArgument, codes.ResourceExhausted:
 		return true
 	default:
 		return false
