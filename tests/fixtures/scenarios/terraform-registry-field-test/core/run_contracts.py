@@ -90,7 +90,11 @@ def shared_callers(c):
     config = yaml.safe_load((c.project / "atmos.yaml").read_text())
     config["components"]["helmfile"] = {"base_path": "components/helmfile", "use_eks": False}
     stub = c.root / "packer-controlled"
-    stub.write_text("#!" + sys.executable + "\nimport json,os,sys\nprint(json.dumps({'argv':sys.argv[1:],'cwd':os.getcwd()}))\n")
+    stub.write_text("#!" + sys.executable + "\nimport json,os,sys\n"
+                    "args=sys.argv[1:]\n"
+                    "if '-var-file' in args:\n"
+                    "    open(os.environ['PACKER_VARFILE_CAPTURE'],'w').write(open(args[args.index('-var-file')+1]).read())\n"
+                    "print(json.dumps({'argv':args,'cwd':os.getcwd()}))\n")
     stub.chmod(0o755)
     config["components"]["packer"] = {"base_path": "components/packer", "command": str(stub)}
     (c.project / "atmos.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
@@ -104,8 +108,17 @@ def shared_callers(c):
     packer = c.project / "components/packer/smoke"
     packer.mkdir(parents=True)
     (packer / "main.pkr.hcl").write_text("variable \"field_marker\" { type = string }\n")
-    c.command("helmfile-template", ["helmfile", "template", "smoke", "-s", "dev"], [0])
-    c.command("packer-controlled-validate", ["packer", "validate", "smoke", "-s", "dev"], [0])
+    _, stdout, _ = c.command("helmfile-template", ["helmfile", "template", "smoke", "-s", "dev"], [0])
+    c.check("helmfile renders scope marker", "helmfile-scope" in stdout, stdout)
+    capture = c.root / "packer-varfile.json"
+    c.command("packer-controlled-validate", ["packer", "validate", "smoke", "-s", "dev"], [0],
+              env={"PACKER_VARFILE_CAPTURE": str(capture)})
+    try:
+        packer_vars = json.loads(capture.read_text())
+    except (OSError, ValueError) as error:
+        packer_vars = {}
+        c.check("packer varfile readable JSON", False, str(error))
+    c.check("packer receives scope marker", packer_vars.get("field_marker") == "packer-scope", packer_vars)
     c.save()
 
 

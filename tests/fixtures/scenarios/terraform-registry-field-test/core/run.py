@@ -131,6 +131,9 @@ def lifecycle(case):
     c.command("config", ["describe", "config", "-f", "json"], [0])
     c.command("explicit-init", ["terraform", "init", "producer", "-s", "dev"], [0])
     initial, _, _ = c.command("initial-plan", ["terraform", "plan", "producer", "-s", "dev", "-detailed-exitcode"], [2])
+    c.check("initial plan records before and after hooks", all(
+        any(event.startswith(name + " ") for event in initial["hooks"])
+        for name in ("before-plan", "after-plan")), initial["hooks"])
     if initial["exit_code"] != 2:
         raise RuntimeError("Initial fixture plan failed; inspect evidence before continuing")
     c.command("apply-saved", ["terraform", "apply", "producer", "-s", "dev", "--from-plan"], [0])
@@ -158,8 +161,18 @@ def lifecycle(case):
                  "tags-dependencies": ["--tags=data", "--include-dependencies"],
                  "all-tags": ["--all", "--tags=other"], "stack-only": [],
                  "all-parallel": ["--all", "--max-concurrency=2", "--log-order=grouped"]}
+    expected_selectors = {
+        "tags": {"independent"}, "labels": {"producer", "consumer", "state-consumer"},
+        "query": {"consumer", "state-consumer"}, "components": {"consumer", "producer"},
+        "tags-labels": {"independent"}, "tags-dependencies": {"consumer", "state-consumer", "producer"},
+        "all-tags": {"independent"}, "stack-only": {"producer", "consumer", "state-consumer", "independent"},
+        "all-parallel": {"producer", "consumer", "state-consumer", "independent"}}
     for label, flags in selectors.items():
-        c.command("select-" + label, ["terraform", "plan", "-s", "dev", *flags], [0])
+        result, _, _ = c.command("select-" + label, ["terraform", "plan", "-s", "dev", *flags], [0])
+        plans = [entry["argv"] for entry in result["trace"] if entry["argv"] and entry["argv"][0] == "plan"]
+        selected = {component for component in expected_selectors["stack-only"]
+                    if any(any("dev-" + component + ".terraform.tfvars.json" in arg for arg in argv) for argv in plans)}
+        c.check("select-" + label + " components", selected == expected_selectors[label] and len(plans) == len(selected), plans)
     c.command("saved-v2", ["terraform", "plan", "producer", "-s", "dev"], [0])
     dev.write_text(dev.read_text().replace("dev-producer-v2", "dev-producer-v3"))
     c.command("apply-old-saved", ["terraform", "apply", "producer", "-s", "dev", "--from-plan"], [0])
