@@ -274,7 +274,7 @@ func configurationWorkdirDigest(root, planPath string) (string, error) {
 			}
 			return nil
 		}
-		if ignoredWorkdirFile(path, planPath, entry.Name()) {
+		if path == planPath || path == planPath+configurationPlanSuffix || insideTerraformCacheOutsideModules(root, path) || (!insideTerraformModules(root, path) && ignoredWorkdirFile(path, planPath, entry.Name())) {
 			return nil
 		}
 		return recordWorkdirFile(root, path, entry, files)
@@ -294,7 +294,37 @@ func configurationWorkdirDigest(root, planPath string) (string, error) {
 // The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
 // that even a read-only lookup of the retained directory creates), never executed content.
 func skipWorkdirDirectory(root, path, name string) bool {
-	return path != root && (name == ".terraform" || name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
+	return path != root && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || insideTerraformCacheOutsideModules(root, path))
+}
+
+// Terraform's downloaded modules can contain scripts executed during apply. Other cache
+// content, including providers and state, remains mutable and is excluded.
+func insideTerraformCacheOutsideModules(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(relative, string(filepath.Separator))
+	for i, part := range parts {
+		if part == ".terraform" && i+1 < len(parts) && parts[i+1] != "modules" {
+			return true
+		}
+	}
+	return false
+}
+
+func insideTerraformModules(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(relative, string(filepath.Separator))
+	for i, part := range parts {
+		if part == ".terraform" && i+1 < len(parts) && parts[i+1] == "modules" {
+			return true
+		}
+	}
+	return false
 }
 
 // ignoredWorkdirFile reports whether a file is the plan itself, a plan binding, or mutable state.

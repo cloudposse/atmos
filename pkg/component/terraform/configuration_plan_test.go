@@ -70,9 +70,14 @@ func TestConfigurationPlanRestoresReviewedInputs(t *testing.T) {
 }
 
 func TestConfigurationPlanRejectsChangedBinding(t *testing.T) {
-	for _, change := range []string{"plan", "engine", "provider", "workdir", "backend", "workspace", "coordinates", "missing binding", "corrupt binding", "missing plan", "runtime error", "unsupported operation", "stored plan"} {
+	for _, change := range []string{"plan", "engine", "provider", "workdir", "downloaded module", "backend", "workspace", "coordinates", "missing binding", "corrupt binding", "missing plan", "runtime error", "unsupported operation", "stored plan"} {
 		t.Run(change, func(t *testing.T) {
 			config, info, execCtx, runtime, path := planFixture(t)
+			module := filepath.Join(execCtx.workingDir, ".terraform", "modules", "child", "script.sh")
+			if change == "downloaded module" {
+				require.NoError(t, os.MkdirAll(filepath.Dir(module), 0o700))
+				require.NoError(t, os.WriteFile(module, []byte("reviewed"), 0o600))
+			}
 			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out=" + path}))
 			info.SubCommand = "apply"
 			info.UseTerraformPlan = true
@@ -86,6 +91,8 @@ func TestConfigurationPlanRejectsChangedBinding(t *testing.T) {
 				runtime.identity = "other provider"
 			case "workdir":
 				require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, "main.tf"), []byte("modified"), 0o600))
+			case "downloaded module":
+				require.NoError(t, os.WriteFile(module, []byte("changed"), 0o600))
 			case "backend":
 				runtime.state.Backend = map[string]any{"path": "other"}
 			case "workspace":
@@ -171,4 +178,17 @@ func TestConfigurationWorkdirDigestIgnoresMutableFiles(t *testing.T) {
 	}
 	_, err = configurationWorkdirDigest(root, plan)
 	require.True(t, errors.Is(err, errUtils.ErrPluginUnsupportedExtension))
+}
+
+func TestConfigurationWorkdirDigestIncludesDownloadedModules(t *testing.T) {
+	root := t.TempDir()
+	module := filepath.Join(root, ".terraform", "modules", "child", "script.sh")
+	require.NoError(t, os.MkdirAll(filepath.Dir(module), 0o755))
+	require.NoError(t, os.WriteFile(module, []byte("before"), 0o600))
+	before, err := configurationWorkdirDigest(root, "")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(module, []byte("after"), 0o600))
+	after, err := configurationWorkdirDigest(root, "")
+	require.NoError(t, err)
+	require.NotEqual(t, before, after)
 }
