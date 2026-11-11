@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sigstore/sigstore-go/pkg/bundle"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/verify"
 	sigstore "github.com/sigstore/sigstore/pkg/signature"
@@ -62,6 +63,12 @@ func (v KeyVerifier) Verify(ctx context.Context, raw []byte, digest string, offl
 		return nil, err
 	}
 	policy := verify.NewPolicy(verify.WithArtifactDigest("sha256", hash), verify.WithKey())
+	return verifyRounds(ctx, rounds, logs, signed, policy)
+}
+
+// verifyRounds tries each key round in order and returns the hint of the first key that verifies
+// the bundle. When no round verifies it, the last verification error is reported.
+func verifyRounds(ctx context.Context, rounds []root.TrustedMaterial, logs root.TrustedMaterial, signed *bundle.Bundle, policy verify.PolicyBuilder) (*KeyResult, error) {
 	var last error
 	for _, keys := range rounds {
 		verifier, err := verify.NewVerifier(root.TrustedMaterialCollection{keys, logs}, verify.WithTransparencyLog(1), verify.WithObserverTimestamps(1))

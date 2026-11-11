@@ -122,19 +122,25 @@ func reconcile(ctx context.Context, tgt *target, in *incoming, cur *current) rec
 		return reconcileGraph(ref, &pinned, in, cur)
 	}
 	if pinned.RecordDigest == in.recordDigest {
-		inspection, inspectErr := tgt.repo.Inspect(ctx, pinned)
-		if inspectErr != nil {
-			return reconciliation{pinned: pinned, err: fmt.Errorf("reconcile %s: %w", ref, inspectErr)}
-		}
-		if matchErr := matchesExpected(in, inspection); matchErr != nil {
-			return reconciliation{pinned: pinned, inspection: inspection, err: matchErr}
-		}
-		return reconciliation{state: reconcileCommitted, pinned: pinned, inspection: inspection}
+		return reconcileRecord(ctx, tgt, &pinned, in)
 	}
 	if cur.pinned != nil && pinned.ResolvedDigest == cur.pinned.ResolvedDigest {
 		return reconciliation{state: reconcileNotCommitted, pinned: pinned}
 	}
 	return reconciliation{pinned: pinned, err: fmt.Errorf("%w: %s now resolves to %s, which is neither the prior state nor the expected content", errUtils.ErrArtifactConflict, ref, pinned.ResolvedDigest)}
+}
+
+// reconcileRecord inspects a reference whose Record digest matches the expected one and confirms
+// that the stored content is the expected content.
+func reconcileRecord(ctx context.Context, tgt *target, pinned *artifact.PinnedReference, in *incoming) reconciliation {
+	inspection, err := tgt.repo.Inspect(ctx, *pinned)
+	if err != nil {
+		return reconciliation{pinned: *pinned, err: fmt.Errorf("reconcile %s: %w", in.ref, err)}
+	}
+	if matchErr := matchesExpected(in, inspection); matchErr != nil {
+		return reconciliation{pinned: *pinned, inspection: inspection, err: matchErr}
+	}
+	return reconciliation{state: reconcileCommitted, pinned: *pinned, inspection: inspection}
 }
 
 // reconcileGraph classifies a native OCI graph without a Record. Empty record digests prove nothing,
