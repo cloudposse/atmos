@@ -55,9 +55,17 @@ def affected(c):
     subprocess.run(["git", "add", "."], cwd=c.project, env=c.env, check=True, capture_output=True)
     subprocess.run(["git", "-c", "commit.gpgsign=false", "-c", "user.name=Field Test", "-c", "user.email=field@example.invalid", "commit", "-qm", "producer change"],
                    cwd=c.project, env=c.env, check=True, capture_output=True)
-    c.command("describe-affected", ["describe", "affected", "--ref=" + base, "--format=json"], [0])
-    c.command("plan-affected", ["terraform", "plan", "--affected", "--ref=" + base, "-s", "dev"], [0])
-    c.command("plan-affected-tags", ["terraform", "plan", "--affected", "--ref=" + base, "--tags=foundation", "-s", "dev"], [0])
+    _, stdout, _ = c.command("describe-affected", ["describe", "affected", "--ref=" + base, "--format=json"], [0])
+    try:
+        affected_components = json.loads(stdout)
+    except ValueError:
+        affected_components = []
+    c.check("affected includes dev producer", isinstance(affected_components, list) and any(
+        item.get("component") == "producer" and item.get("stack") == "dev" for item in affected_components), affected_components)
+    for label, flags in (("plan-affected", []), ("plan-affected-tags", ["--tags=foundation"])):
+        result, _, _ = c.command(label, ["terraform", "plan", "--affected", "--ref=" + base, *flags, "-s", "dev"], [0])
+        plans = [entry["argv"] for entry in result["trace"] if entry["argv"] and entry["argv"][0] == "plan"]
+        c.check(label + " plans producer", any(any("dev-producer.terraform.tfvars.json" in arg for arg in argv) for argv in plans), plans)
     c.command("invalid-all-affected", ["terraform", "plan", "--affected", "--all", "--ref=" + base, "-s", "dev"], [1])
     c.save()
 

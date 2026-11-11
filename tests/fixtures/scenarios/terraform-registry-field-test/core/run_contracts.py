@@ -69,6 +69,15 @@ def failure(c):
     for mode in ("fail-fast", "keep-going"):
         c.command(mode, ["terraform", "plan", "--all", "-s", "dev", "--failure-mode=" + mode,
                          "--max-concurrency=1", "--execution-summary-file=" + str(c.root / (mode + ".json"))], [1])
+        try:
+            summary = json.loads((c.root / (mode + ".json")).read_text())
+            statuses = {entry["component"]: entry["status"] for entry in summary["results"]}
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            statuses = {}
+            c.check(mode + " summary readable", False, str(error))
+        c.check(mode + " bad fails", statuses.get("bad") == "failed", statuses)
+        expected = "skipped" if mode == "fail-fast" else "succeeded"
+        c.check(mode + " producer status", statuses.get("producer") == expected, statuses)
     c.save()
 
 
