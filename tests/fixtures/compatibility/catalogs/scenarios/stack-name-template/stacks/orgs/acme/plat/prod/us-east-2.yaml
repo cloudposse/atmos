@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - orgs/acme/plat/prod/_defaults
+  - mixins/region/us-east-2
+  - catalog/c1

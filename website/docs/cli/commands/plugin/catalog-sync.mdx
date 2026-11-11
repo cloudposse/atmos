@@ -51,8 +51,8 @@ or check version bumps. It does not build or publish plugin packages. Package ve
   <dd>Skip release references that return not found, allowing another accepted package to finish publishing.
   Authentication, integrity, and other failures still fail the operation.</dd>
   <dt><code>--verify-public</code></dt>
-  <dd>Require public GHCR organization packages, verify release content anonymously, and verify the
-  published catalog anonymously.</dd>
+  <dd>Verify each selected release anonymously before listing it, then upload the catalog and verify its
+  published digest and payloads anonymously. Disabled by default; does not change registry visibility.</dd>
 </dl>
 
 ## Examples
@@ -76,3 +76,13 @@ The referenced `plugins/repo-tools/plugin.yaml` must be committed at the selecte
 
 Publication and catalog reconciliation are independent operations. A catalog failure does not
 remove a successfully published immutable release. Rerun reconciliation after resolving the failure.
+
+With `--verify-public`, a release that fails anonymous verification prevents the catalog update;
+`--skip-missing` does not suppress verification failures. If verification of the uploaded catalog
+fails, the catalog remains published and the command reports an error.
+
+GHCR creates a new catalog package private, independently of its plugins and source repository.
+After the first upload, select **Package settings → Danger Zone → Change visibility → Public** for
+that catalog, then rerun the same sync command. Reconciliation preserves existing versions and yank
+metadata. See [Public packages on GHCR](publish.mdx#public-packages-on-ghcr) for setup details and
+GitHub's API limitation.

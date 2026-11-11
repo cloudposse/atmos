@@ -661,6 +661,34 @@ func TestSetTokenLimit_MaxTokens(t *testing.T) {
 	assert.False(t, params.MaxCompletionTokens.Valid())
 }
 
+func TestSetDeploymentTokenLimit(t *testing.T) {
+	tests := []struct {
+		deployment            string
+		expectCompletionLimit bool
+	}{
+		{"gpt-5", true},
+		{"o1-preview", true},
+		{"chatgpt-4o-latest", true},
+
+		// A deployment name says nothing about the model behind it.
+		{"o3-backend", false},
+		{"o3-mini", false},
+		{"gpt-6-luna", false},
+		{"gpt-4o", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.deployment, func(t *testing.T) {
+			params := &openai.ChatCompletionNewParams{}
+
+			openaicompat.SetDeploymentTokenLimit(params, tt.deployment, 4096)
+
+			assert.Equal(t, tt.expectCompletionLimit, params.MaxCompletionTokens.Valid())
+			assert.Equal(t, !tt.expectCompletionLimit, params.MaxTokens.Valid())
+		})
+	}
+}
+
 func TestRequiresMaxCompletionTokens(t *testing.T) {
 	tests := []struct {
 		model    string
@@ -680,7 +708,7 @@ func TestRequiresMaxCompletionTokens(t *testing.T) {
 		{"gpt-4-turbo", false},
 		{"gpt-3.5-turbo", false},
 		{"gpt-4o-mini", false},
-		{"o1", false}, // Only o1-preview and o1-mini.
+		{"ollama", false},
 		{"llama3", false},
 		{"", false},
 	}

@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 
+	"github.com/cloudposse/atmos/internal/ci/releasenotes"
 	"github.com/cloudposse/atmos/magefiles/release/milestone"
 )
 
@@ -14,7 +15,9 @@ var ErrMilestonePolicy = milestone.ErrMilestonePolicy
 
 type milestoneClient struct {
 	*milestone.Client
-	watcher releaseWatcher
+	watcher       releaseWatcher
+	summaryHTTP   releasenotes.HTTPClient
+	summaryParams releasenotes.SummarizeParams
 }
 
 func newMilestoneClient(ctx context.Context, repo string) (*milestoneClient, error) {

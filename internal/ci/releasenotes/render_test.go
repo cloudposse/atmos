@@ -35,7 +35,7 @@ func TestRenderBody_KeepsDetailsBlocksWithSummarizedBodies(t *testing.T) {
 	// categories, gets the Other Changes heading so it does not read as a
 	// missing chapter.
 	assert.Equal(t, 1, strings.Count(got, "## 🚀 Enhancements"))
-	assert.True(t, strings.HasPrefix(got, uncategorizedHeading+"\n\n<details>"), got[:60])
+	assert.True(t, strings.HasPrefix(got, UncategorizedHeading+"\n\n<details>"), got[:60])
 	assert.Less(t, strings.Index(got, "(#101)"), strings.Index(got, "## 🚀 Enhancements"))
 	assert.Less(t, strings.Index(got, "## 🚀 Enhancements"), strings.Index(got, "(#102)"))
 }
@@ -63,7 +63,7 @@ func TestRenderBody_RoundTripsThroughParseDraftedBody(t *testing.T) {
 	for i := range entries {
 		wantCategory := entries[i].Category
 		if wantCategory == "" {
-			wantCategory = uncategorizedHeading // Rendered with the fallback heading.
+			wantCategory = UncategorizedHeading // Rendered with the fallback heading.
 		}
 		assert.Equal(t, wantCategory, parsed[i].Category, "entry %d category", i)
 		assert.Equal(t, entries[i].Summary, parsed[i].Summary, "entry %d summary line", i)

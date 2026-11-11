@@ -38,6 +38,10 @@ opentofu:
   - registry.opentofu.org:443
 helm:
   - get.helm.sh:443
+# Trivy's install.sh (v0.70+) fetches the tarball via get.trivy.dev, which
+# redirects to GitHub release assets (covered by github-releases).
+trivy:
+  - get.trivy.dev:443
 docker-hub:
   - auth.docker.io:443
   - production.cloudfront.docker.com:443
@@ -132,10 +136,8 @@ installer-packages:
   - packages.microsoft.com:443
 terraform-policy-scanners:
   - api0.prismacloud.io:443
-  - check.trivy.dev:443
   - pypi.org:443
 terraform-scanner-cache:
-  - check.trivy.dev:443
   - pypi.org:443
 scorecard:
   - api.deps.dev:443
@@ -167,9 +169,6 @@ acceptance-cloud-services:
   - management.azure.com:443
   - secretmanager.googleapis.com:443
   - sts.us-east-1.amazonaws.com:443
-trivy:
-  - check.trivy.dev:443
-  - get.trivy.dev:443
 floci-registry:
   - d2glxqk2uabbnd.cloudfront.net:443
   - d5l0dvt14r5h8.cloudfront.net:443

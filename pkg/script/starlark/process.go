@@ -108,8 +108,12 @@ type processCall struct {
 }
 
 func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starlark.Value, error) {
+	env := s.tools.Environment(call.env)
+	if s.spec.ChildEnvironment != nil {
+		env = s.spec.ChildEnvironment(env, call.stream)
+	}
 	process := &script.ProcessCall{
-		Stdin: call.stdin, Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
+		Stdin: call.stdin, Argv: call.argv, Dir: call.dir, Env: env,
 		Check: call.check, Stream: call.stream, AllowPlanChanges: call.allowPlanChanges,
 		Stdout: s.writer(thread, stdoutStream), Stderr: s.writer(thread, stderrStream),
 		Policy: call.policy, Label: call.label, NestedAtmos: call.atmos,

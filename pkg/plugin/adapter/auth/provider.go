@@ -32,14 +32,16 @@ type Services struct {
 
 // Definition binds a statically validated export to its immutable package executable.
 type Definition struct {
-	Package     string
-	Expected    *pluginv1.DescribeResponse
-	Executable  string
-	Directory   string
-	Outputs     []string
-	Schema      func(any) error
-	Services    Services
-	Credentials *credential.Registry
+	Package    string
+	Expected   *pluginv1.DescribeResponse
+	Executable string
+	Directory  string
+	Outputs    []string
+	Schema     func(any) error
+	// SchemaTarget selects principal or spec for identity validation; empty preserves principal.
+	SchemaTarget string
+	Services     Services
+	Credentials  *credential.Registry
 	// Timeout bounds every call into the plugin; zero means no deadline.
 	Timeout time.Duration
 }

@@ -2,9 +2,39 @@ package edition
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// behaviorIndex maps each behavior key to its first transition in Journal order, for one journal.
+type behaviorIndex struct {
+	source      []Entry
+	transitions map[string]Entry
+}
+
+// behaviorIndexCache holds the index for the current journal. BehaviorChanged runs for every
+// evaluated YAML value, so copying and sorting the journal on each call dominated stack
+// processing time. The journal is immutable in production; tests that swap it get a new index.
+var behaviorIndexCache atomic.Pointer[behaviorIndex]
+
+func sameEntries(a, b []Entry) bool {
+	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
+}
+
+func behaviorTransitions() map[string]Entry {
+	if cached := behaviorIndexCache.Load(); cached != nil && sameEntries(cached.source, journal) {
+		return cached.transitions
+	}
+	index := &behaviorIndex{source: journal, transitions: map[string]Entry{}}
+	for _, entry := range Journal() {
+		if _, seen := index.transitions[entry.Key]; entry.Kind == KindBehavior && !seen {
+			index.transitions[entry.Key] = entry
+		}
+	}
+	behaviorIndexCache.Store(index)
+	return index.transitions
+}
 
 // BehaviorChanged reports whether a named behavior transition applies at raw's
 // edition pin. An empty pin selects the new behavior; a dated pin selects it on
@@ -23,10 +53,9 @@ func BehaviorChanged(raw, key string) (bool, error) {
 		}
 		anchor = &parsed
 	}
-	for _, entry := range Journal() {
-		if entry.Kind == KindBehavior && entry.Key == key {
-			return anchor == nil || !entryDate(&entry).After(anchor.Date), nil
-		}
+	entry, ok := behaviorTransitions()[key]
+	if !ok {
+		return false, fmt.Errorf("%w: %q", ErrUnknownBehavior, key)
 	}
-	return false, fmt.Errorf("%w: %q", ErrUnknownBehavior, key)
+	return anchor == nil || !entryDate(&entry).After(anchor.Date), nil
 }

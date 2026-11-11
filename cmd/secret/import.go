@@ -54,14 +54,18 @@ func init() {
 func runSecretImport(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretImport")()
 
-	scope, err := parseScope(cmd, args)
-	if err != nil {
-		return err
-	}
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	if importFromStoreMode(cmd) {
+		scope, err := parseScopeForName(cmd, args, args[0], "import")
+		if err != nil {
+			return err
+		}
 		return runSecretImportFromStore(cmd, scope, args[0], dryRun)
+	}
+	scope, err := parseScopeForStack(cmd, args, "import")
+	if err != nil {
+		return err
 	}
 	return runSecretImportFile(cmd, scope, args[0], dryRun)
 }

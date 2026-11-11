@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/script"
 	_ "github.com/cloudposse/atmos/pkg/script/starlark" // Register the embedded interpreter.
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // ScriptHandler executes inline scripts with an explicit interpreter.
@@ -179,6 +180,12 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 				Steps:        NewAutomationLibrary(vars, workflow),
 				Parallel:     vars.automationParallel,
 				OwnsTerminal: scriptOwnsTerminal(writer, vars),
+				ChildEnvironment: func(env []string, stream bool) []string {
+					if !stream {
+						return terminal.ChildColorEnv(env, nil)
+					}
+					return writer.ChildEnvironment(env)
+				},
 				InstallTools: ScriptToolInstaller(vars.AtmosConfig),
 				CI:           ci.NewReporter(vars.AtmosConfig),
 				Name:         step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,

@@ -47,7 +47,7 @@ func init() {
 func runSecretExec(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretExec")()
 
-	scope, err := parseScope(cmd, args)
+	scope, err := parseScopeForStack(cmd, args, "run a command with")
 	if err != nil {
 		return err
 	}

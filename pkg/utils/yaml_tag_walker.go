@@ -465,6 +465,9 @@ func handleCILabelsTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
+	// Recorded before the node becomes a scalar, so YAML template passes can restore the
+	// argument as a sequence instead of a quoted scalar that !ci.labels rejects.
+	sequence := node.Kind == yaml.SequenceNode
 	node.Kind = yaml.ScalarNode
 	node.Tag = "!!str"
 	strict, err := ExplicitYAMLTags(ctx.AtmosConfig)
@@ -473,7 +476,14 @@ func handleCILabelsTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) 
 	}
 	node.Value = expression
 	if strict {
-		node.Value = (yamlsource.Source{Tag: AtmosYamlFuncCILabels, Argument: strings.TrimSpace(strings.TrimPrefix(expression, AtmosYamlFuncCILabels)), File: ctx.File, Line: node.Line, Column: node.Column}).Encode()
+		node.Value = (yamlsource.Source{
+			Tag:      AtmosYamlFuncCILabels,
+			Argument: strings.TrimSpace(strings.TrimPrefix(expression, AtmosYamlFuncCILabels)),
+			File:     ctx.File,
+			Line:     node.Line,
+			Column:   node.Column,
+			Sequence: sequence,
+		}).Encode()
 	}
 	node.Content = nil
 	return true, nil

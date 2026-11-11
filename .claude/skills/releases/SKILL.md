@@ -57,6 +57,8 @@ and artifact links. A skipped job cannot write a summary.
   changes cannot go into a patch milestone; major changes need a major milestone.
 - Run `atmos release milestones ensure` to maintain the next three minor slots.
 - Patch and major versions are explicit: `atmos release milestones create vX.Y.Z`.
+- Milestone titles are the bare version (`1.236.0`); tags carry the `v`. Creation
+  accepts either form and stores the bare one; existing `v` titles still parse.
 - Run `atmos release milestones check` to reconcile statuses. The `Release milestone`
   status must be required by repository protection at cutover.
 - Stable milestone preview issues are informational. Their hidden marker is an

@@ -8,8 +8,8 @@ commands:
         flags:
           - name: base-ref
             type: string
-            default: origin/main
-            description: Base branch or commit for PR comparisons
+            default: ""
+            description: Base branch or commit for PR comparisons (default is the branch's stackbase, then origin/main)
           - name: only
             type: string
             default: ""
@@ -27,8 +27,8 @@ commands:
         flags:
           - name: base-ref
             type: string
-            default: origin/main
-            description: Base branch or commit for PR comparisons
+            default: ""
+            description: Base branch or commit for PR comparisons (default is the branch's stackbase, then origin/main)
           - name: only
             type: string
             default: ""
@@ -46,8 +46,8 @@ commands:
         flags:
           - name: base-ref
             type: string
-            default: origin/main
-            description: Base branch or commit for PR comparisons
+            default: ""
+            description: Base branch or commit for PR comparisons (default is the branch's stackbase, then origin/main)
           - name: only
             type: string
             default: ""
