@@ -106,6 +106,18 @@ func configurationOutputConfig(config *ComponentConfig, state *schema.ComponentC
 	}
 	config.Env["TF_DATA_DIR"] = filepath.Join(root, ".terraform")
 	config.BackendType, config.Backend, config.Workspace = state.BackendType, absoluteBackendFiles(state.BackendType, state.Backend, state.WorkingDirectory), state.Workspace
+	if state.BackendType == "local" && state.WorkingDirectory != "" {
+		config.Backend = maps.Clone(config.Backend)
+		if config.Backend == nil {
+			config.Backend = make(map[string]any)
+		}
+		if path, _ := config.Backend["path"].(string); path == "" {
+			config.Backend["path"] = filepath.Join(state.WorkingDirectory, "terraform.tfstate")
+		}
+		if dir, _ := config.Backend["workspace_dir"].(string); dir == "" {
+			config.Backend["workspace_dir"] = filepath.Join(state.WorkingDirectory, "terraform.tfstate.d")
+		}
+	}
 	config.AutoGenerateBackend = true
 	config.AutoProvisionWorkdirForOutputs = false
 	config.Providers, config.Vars = nil, nil

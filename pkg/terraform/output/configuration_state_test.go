@@ -98,7 +98,7 @@ func TestPluginOutputUsesBackendOnlyScratchDirectory(t *testing.T) {
 			config := validAtmosConfig(t)
 			stateRoot := t.TempDir()
 			config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-				return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate"), "workspace_dir": filepath.Join(stateRoot, "workspaces")}, Workspace: "prod", WorkingDirectory: stateRoot}, nil
+				return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate")}, Workspace: "prod", WorkingDirectory: stateRoot}, nil
 			}}
 			sections := validSections()
 			sections["settings"] = map[string]any{"configuration": true}
@@ -115,6 +115,12 @@ func TestPluginOutputUsesBackendOnlyScratchDirectory(t *testing.T) {
 				require.NoError(t, err)
 				require.Len(t, files, 1)
 				require.Equal(t, "backend.tf.json", files[0].Name())
+				data, err := os.ReadFile(filepath.Join(dir, "backend.tf.json"))
+				require.NoError(t, err)
+				var backend map[string]any
+				require.NoError(t, json.Unmarshal(data, &backend))
+				local := backend["terraform"].(map[string]any)["backend"].(map[string]any)["local"].(map[string]any)
+				require.Equal(t, filepath.Join(stateRoot, "terraform.tfstate.d"), local["workspace_dir"])
 				return runner, nil
 			}))
 			result, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true)
@@ -188,6 +194,18 @@ func TestOutputReaderAnchorsPathOnlyForLocalBackend(t *testing.T) {
 	anchored := absoluteBackendFiles("local", local, unit)
 	require.Equal(t, filepath.Join(unit, "state", "terraform.tfstate"), anchored["path"])
 	require.Equal(t, filepath.Join(unit, "ws"), anchored["workspace_dir"])
+}
+
+func TestOutputReaderDefaultsLocalBackendPaths(t *testing.T) {
+	unit := t.TempDir()
+	state := &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{}, WorkingDirectory: unit}
+	config := &ComponentConfig{}
+	cleanup, err := configurationOutputConfig(config, state)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	require.Equal(t, filepath.Join(unit, "terraform.tfstate"), config.Backend["path"])
+	require.Equal(t, filepath.Join(unit, "terraform.tfstate.d"), config.Backend["workspace_dir"])
+	require.Empty(t, state.Backend)
 }
 
 func TestConfigurationStateSectionsNamedWorkspaceWithoutBackendSettings(t *testing.T) {
