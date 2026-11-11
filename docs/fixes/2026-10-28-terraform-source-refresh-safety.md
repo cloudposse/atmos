@@ -35,7 +35,9 @@ expanded target options by pointer rather than copying them.
 Terraform `source:` refresh and `terraform source pull --force` stage the complete download
 before changing the live source. A `.atmos/source-files.json` receipt identifies files owned by
 the fetched source. Refresh removes obsolete owned files, installs the new source, and preserves
-files created by Terraform, Atmos, or hooks. The component directory and runtime artifacts stay
+files created by Terraform, Atmos, or hooks, provided those paths are not recorded as source-owned.
+Generators must avoid inventoried source paths: rewriting one does not transfer its ownership, and a
+later refresh can replace or remove it. The component directory and runtime artifacts stay
 in place. Publication journals each touched source file and its provenance receipts; a copy,
 publication, metadata, or cancellation failure rolls back the changed files. A rollback that
 itself fails retains its journal and reports its location.
@@ -54,7 +56,10 @@ is rejected before publication: the source copy and the generated backend would 
 each other. A source update that changes a path between a file and a directory is also rejected
 before publication, because refresh replaces files in place and cannot change a path's type
 transactionally. The error names the conflicting path. To recover, move only that path out of the
-component directory, keeping anything it holds that is still needed, and refresh again. Do not delete
+component directory, keeping anything it holds that is still needed, and refresh again. Back up and
+migrate local state, saved plans, and other runtime artifacts in that path, and update their configured
+paths before running Terraform again. If the source replaces a directory with a file, its former
+contents cannot be restored at their original paths. Do not delete
 the whole component directory or run `source delete`: that also removes local state, `.terraform`,
 and saved plans.
 

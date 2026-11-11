@@ -390,7 +390,8 @@ func protectLocalBackendPaths(protected map[string]bool, root string, config map
 }
 
 func runtimeOwned(path, relative string, protected map[string]bool) (bool, error) {
-	if _, err := os.Lstat(path); os.IsNotExist(err) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
 		return false, nil
 	} else if err != nil {
 		return false, err
@@ -399,6 +400,9 @@ func runtimeOwned(path, relative string, protected map[string]bool) (bool, error
 		return true, nil
 	}
 	state, err := isTerraformState(path)
+	if info.Mode()&os.ModeSymlink != 0 && os.IsNotExist(err) {
+		return false, nil
+	}
 	if err != nil || state {
 		return state, err
 	}

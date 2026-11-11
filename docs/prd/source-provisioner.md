@@ -109,9 +109,11 @@ editions; they do not retain destructive behavior behind an edition pin.
 
 ### Concurrent use of a shared component directory
 
-Source refresh holds a cross-process lock on the target directory while it stages and publishes.
-A second process refreshing the same directory waits for that lock (bounded by the caller's
-provisioning timeout) and warns while it is blocked, instead of failing.
+Terraform source refresh holds a cross-process lock while it stages and publishes. The lock file
+lives under the process temporary directory, so it coordinates only processes using the same temporary
+directory on the same host; separate hosts or temporary directories need external coordination.
+A second process waits under the caller's context and warns while blocked. The context may have no
+deadline; the vendor download timeout begins after the lock is acquired.
 
 **Remaining work (required before this feature is complete):** the refresh lock covers only the
 source refresh itself (staging and publication), not the rest of the command: backend generation,
