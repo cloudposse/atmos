@@ -559,7 +559,14 @@ func TestExecuteShellLifecycle_WorkdirComponent_SkipsWorkspaceClean(t *testing.T
 	info.ComponentSection = map[string]any{provWorkdir.WorkdirPathKey: tmpDir}
 	cfg := &shellConfig{componentPath: tmpDir, workingDir: tmpDir, varFile: "dev-vpc.tfvars.json"}
 
+	t.Setenv("TF_DATA_DIR", "")
+	marker := filepath.Join(tmpDir, ".terraform", "environment")
+	require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
+	require.NoError(t, os.WriteFile(marker, []byte("myworkspace"), 0o600))
 	require.NoError(t, testExecutor(t).executeShellLifecycle(atmosConfig, &info, cfg))
+	data, err := os.ReadFile(marker)
+	require.NoError(t, err)
+	assert.Equal(t, "myworkspace", string(data))
 	assert.Equal(t, []string{"init", "workspace", "shell"}, *calls,
 		"workdir components still run init, workspace, and shell in order")
 }

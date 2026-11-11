@@ -239,3 +239,20 @@ func setupTerraformYamlFunctionSandbox(t *testing.T, workDir string) {
 		t.Setenv(k, v)
 	}
 }
+
+func TestInvalidateTerraformExecutionCaches_StackAlias(t *testing.T) {
+	canonical := refcache.NewKey(nil, "canonical", "target")
+	alias := refcache.NewKey(nil, "alias", "target")
+	other := refcache.NewKey(nil, "other", "target")
+	for _, key := range []refcache.Key{canonical, alias, other} {
+		terraformStateCache.Store(key, "cached")
+		t.Cleanup(func() { terraformStateCache.Delete(key) })
+	}
+	invalidateTerraformExecutionCaches(&schema.ConfigAndStacksInfo{Stack: "canonical", StackFromArg: "alias", ComponentFromArg: "target"})
+	_, found := terraformStateCache.Load(canonical)
+	assert.False(t, found)
+	_, found = terraformStateCache.Load(alias)
+	assert.False(t, found)
+	_, found = terraformStateCache.Load(other)
+	assert.True(t, found)
+}
