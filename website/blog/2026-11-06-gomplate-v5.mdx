@@ -1,192 +1,111 @@
 ---
 slug: gomplate-v5
-title: "Gomplate v5: What Changed and What to Check"
+title: "Upgraded to Gomplate v5"
 authors: [osterman]
 tags: [security, breaking-change]
 ---
 
-Atmos now uses **Gomplate v5**, upgraded from v3. Some template functions and datasource
-behaviors changed, so existing templates may need updates.
-
-We added compatibility shims to keep old function names working and warnings to help you
-migrate. Below are the known changes, what we did to reduce the impact, and why we had to upgrade.
+Atmos now uses **Gomplate v5**, upgraded from v3. Most templates keep working unchanged. This post
+lists what still works with a warning, what changed and needs your attention, and how to report
+anything we missed.
 
 <!--truncate-->
 
-## What Might Break
+## Still works, with a warning
 
-Check templates that use numeric conversions or datasources first. Removed function names
-still work through Atmos compatibility shims, but those shims will be removed in a future
-major release.
+Gomplate v5 removed the functions below. Atmos keeps them working through compatibility shims, so
+these templates do not break. Each use logs a warning that names the replacement. Please switch to
+the new name soon, because the shims will be removed in a future major release.
 
-### Renamed functions
+| Old (still works) | New |
+|---|---|
+| `conv.Bool` | `conv.ToBool` |
+| `conv.Slice` | `coll.Slice` |
+| `conv.Dict` | `coll.Dict` |
+| `conv.Has` | `coll.Has` |
+| `strings.Sort` | `coll.Sort` |
+| `net.ParseIP` | `net.ParseAddr` |
+| `net.ParseIPPrefix` | `net.ParsePrefix` |
+| `net.ParseIPRange` | `net.ParseRange` |
+| `splitN s sep n` | `strings.SplitN sep n s` (input moves last) |
 
-Deprecated function names were removed. Replace them with their namespaced equivalents:
+When you switch the `net` functions, also check any method calls on the result. The new
+functions return different types, so a call such as `.Contains` or `.Prior` may need to change.
 
-```yaml
-# Before
-enabled: '{{ conv.Bool .vars.flag }}'
-names: '{{ conv.Slice "a" "b" }}'
-cfg: '{{ conv.Dict "k" "v" }}'
-has: '{{ conv.Has .vars "key" }}'
-sorted: '{{ strings.Sort .vars.list }}'
-ip: '{{ net.ParseIP .vars.addr }}'
-cidr: '{{ net.ParseIPPrefix .vars.cidr }}'
+The short names `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, and `trim` also keep
+working with no change needed. They come from Sprig, as before. If you turned Sprig off
+(`templates.settings.sprig.enabled: false`), Atmos provides them and logs a warning instead.
 
-# After
-enabled: '{{ conv.ToBool .vars.flag }}'
-names: '{{ coll.Slice "a" "b" }}'
-cfg: '{{ coll.Dict "k" "v" }}'
-has: '{{ coll.Has .vars "key" }}'
-sorted: '{{ coll.Sort .vars.list }}'
-ip: '{{ net.ParseAddr .vars.addr }}'
-cidr: '{{ net.ParsePrefix .vars.cidr }}'
-```
+## Changed, and you need to update your templates
 
-The old `net` functions still return their v3 types (`netaddr.IP`, `netaddr.IPPrefix`, and
-`netaddr.IPRange`), so method calls such as `.Contains` and `.Prior` keep working. The
-replacements return `net/netip` types, which have different methods.
+Atmos cannot restore the old behavior for these. Where it can detect the problem, it logs a
+warning, and the item below says so.
 
-The unqualified aliases `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, and
-`trim` are no longer registered by Gomplate, but your templates keep working with no action needed:
+- **Bad numbers now fail.** `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` return an error for
+  non-numeric input instead of `0`. If you relied on the `0`, check the value first:
 
-- `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, and `trim` resolve to Sprig, as they did
-  before, because Atmos layered Sprig over Gomplate's aliases. If you have disabled Sprig
-  (`templates.settings.sprig.enabled`), an Atmos shim restores Gomplate's versions. For `slice`,
-  that is Gomplate's list builder (`slice "a" "b"`), not Go's builtin.
-- `splitN` has no Sprig equivalent, so a shim always provides it.
+  ```yaml
+  retries: '{{ $r := conv.ToString (index .vars "retries") }}{{ if regexp.Match "^-?[0-9]+$" $r }}{{ conv.ToInt64 $r }}{{ else }}0{{ end }}'
+  ```
 
-Replace shimmed names with their `strings.*` or `coll.*` forms when you get the chance, and check
-the argument order as you go. With Sprig disabled, the shims keep Gomplate v3's order, with the
-input first, while the `strings.*` functions take the input last so they work in pipelines.
-`contains "alphabet" "pha"` becomes `strings.Contains "pha" "alphabet"`, and
-`splitN "a,b,c" "," 2` becomes `strings.SplitN "," 2 "a,b,c"`. `slice` becomes `coll.Slice` with
-the same arguments.
+- **Bad regular expressions fail with a clear error.** An invalid `regexp.*` pattern used to crash
+  Atmos. It now returns an error naming the template and the pattern.
 
-### Conversions and regular expressions now fail loudly
+- **Datasource directory URLs need a trailing slash.** The second argument to `datasource` is now
+  resolved like a relative link, so a directory URL must end in `/`. *Atmos warns.*
 
-Numeric conversions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` now return
-an error for invalid input instead of silently returning `0`. If your template relies on
-that fallback, validate the input first:
+  ```yaml
+  url: "file:///configs/"   # then (datasource "configs" "app.yaml") reads /configs/app.yaml
+  ```
 
-```yaml
-retries: '{{ $r := conv.ToString (index .vars "retries") }}{{ if regexp.Match "^-?[0-9]+$" $r }}{{ conv.ToInt64 $r }}{{ else }}0{{ end }}'
-```
+- **AWS Parameter Store (`aws+smp://`) no longer wraps values in `.Value`.** Remove `.Value`, and
+  add `?type=application/json` to the URL if the parameter holds JSON. *Atmos warns.*
 
-This renders `0` for a missing, empty, or non-numeric value. Using `index` also handles
-missing keys where Atmos would reject `.vars.retries`.
+  ```yaml
+  # Before: '{{ (datasource "database").Value.host }}'
+  db_host: '{{ (datasource "database").host }}'
+  ```
 
-Invalid `regexp.*` patterns now return an error instead of panicking, with the template
-and pattern identified in the message.
+- **BoltDB datasources are gone.** Gomplate dropped them. Move that data to another datasource.
+  *Atmos warns.*
 
-### Datasource subpaths are relative URLs
+- **`env://NAME` now fails.** It always returned empty data. Use `env:NAME` or `env:///NAME`.
 
-The second argument to `datasource` is now a relative URL. Directory URLs must end in
-`/`; a subpath starting with `/` replaces the base path. Atmos warns about a missing
-trailing slash but cannot fix the URL automatically.
+- **Vault KV v2: drop `/data/` from the URL.** Use `.../kv/config`, not `.../kv/data/config`, and
+  read fields directly. The result no longer has the `data` and `metadata` wrapper.
 
-```yaml
-settings:
-  templates:
-    settings:
-      gomplate:
-        datasources:
-          configs:
-            url: "file:///configs/"   # trailing slash marks a directory
+- **Consul directory listings return a list of key names**, not a map.
 
-components:
-  terraform:
-    app:
-      vars:
-        name: '{{ (datasource "configs" "app.yaml").name }}'   # reads /configs/app.yaml
-```
+- **S3 rejects objects whose checksum does not match** instead of returning them.
 
-### AWS Parameter Store values are returned directly
+- **The global datasource timeout now applies everywhere.** `templates.settings.gomplate.timeout`
+  in `atmos.yaml` now applies to stacks that don't set their own. Those stacks previously used
+  5 seconds. If reads start timing out, raise the timeout.
 
-An `aws+smp://` datasource now returns the value directly. Remove `.Value` and use
-`?type=application/json` to parse JSON. Atmos warns when a configured Parameter Store
-datasource is still accessed through `.Value`.
-
-```yaml
-settings:
-  templates:
-    settings:
-      gomplate:
-        datasources:
-          database:
-            url: "aws+smp:///myapp/database/config?type=application/json"
-
-components:
-  terraform:
-    app:
-      vars:
-        # Before: '{{ (datasource "database").Value.host }}'
-        db_host: '{{ (datasource "database").host }}'
-```
-
-### Smaller datasource changes
-
-Consul directory listings (a `consul://` URL ending in `/`) return a list of key names instead of
-a map. BoltDB datasources were removed upstream and are no longer available.
-
-S3 datasources reject an object whose checksum does not match, instead of returning its content.
-
-In `env://NAME`, `NAME` is the URL host, so older releases read no variable and returned empty
-data. That form now fails. Use `env:NAME` or `env:///NAME`.
-
-Vault KV v2 datasources detect the mount and add the `/data/` API segment themselves. Remove
-`/data/` from the URL (`.../kv/config`, not `.../kv/data/config`). The result is the secret's data
-without the `data` and `metadata` wrapper, so read fields directly.
-
-Consul, Vault, SSM, and S3 clients send different requests, so restrictive access policies
-or proxies may need updates. HTTP datasources still make one GET per read.
-
-The global datasource timeout (`templates.settings.gomplate.timeout` in `atmos.yaml`)
-now applies even when the stack has no timeout override. Previously, those stacks used
-the 5-second default. Raise the configured timeout if reads start timing out.
-
-## What We Did to Reduce the Impact
-
-- **Restored removed functions.** Compatibility shims preserve old names and, for the
-  legacy `net` functions, their return types. Sprig remains enabled by default.
-- **Added migration warnings.** Shims name their replacements. Datasource checks flag
-  missing trailing slashes, Parameter Store `.Value` access, and removed BoltDB sources.
-- **Compared old and new behavior.** Our compatibility suite runs the same templates
-  against Gomplate v3 and this release, comparing exit codes, output, generated files, and
-  datasource requests. The remaining differences are documented above.
+- **Consul, Vault, SSM, and S3 send different requests.** Strict access policies or proxies may
+  need updating.
 
 See the [templates configuration reference](/cli/configuration/templates) and
-[datasources reference](/templates/datasources) for migration details.
+[datasources reference](/templates/datasources) for details.
 
-## Why We Had to Upgrade
+## Found something else?
 
-Gomplate v3 and v4 depended on the unsupported AWS SDK for Go v1. Its security findings
-(GO-2022-0635 and GO-2022-0646) could not be fixed with a v1 update. Atmos did not call the
-affected code, but dependency scanners still flagged the SDK in every build.
+If a template that used to work now fails or renders a different value, and it is not listed
+here, [open an issue](https://github.com/cloudposse/atmos/issues) with the template and the
+error or output. If we can restore compatibility, we will ship the fix in a patch release.
 
-Gomplate v5 uses AWS SDK v2. This upgrade removes SDK v1 from Atmos entirely. We also
-pinned Vault's AWS authentication library to its SDK v2 revision until a tagged release
-is available.
+## Why we upgraded
 
-The same update upgraded Go's cryptography library to address two SSH denial-of-service
-advisories, GO-2026-6354 and GO-2026-6355.
+Gomplate v3 and v4 depend on AWS SDK for Go v1, which is no longer supported. Its security
+findings (GO-2022-0635 and GO-2022-0646) cannot be fixed. Atmos never called the affected code,
+but scanners flagged it in every build. Gomplate v5 uses AWS SDK v2, so SDK v1 is now gone from
+Atmos. The same update also fixes two SSH denial-of-service advisories in Go's cryptography
+library (GO-2026-6354 and GO-2026-6355).
 
-## New Functions
+## New in Gomplate v5
 
-### `coll.JQ` and `tmpl`
-
-`coll.JQ` runs a jq expression on a value, and the `tmpl` namespace (`tmpl.Inline`, `tmpl.Exec`)
-renders nested templates. Neither was available in templates before this release.
-
-### Semantic version helpers
-
-Gomplate v5 adds a `semver.*` namespace for parsing and comparing versions inside templates, for
-example `{{ semver.CheckConstraint ">= 1.5.0" .vars.version }}`. See the
-[Gomplate semver reference](https://docs.gomplate.ca/functions/semver/) for the full list.
-
-## Found Another Compatibility Issue?
-
-If a previously working template fails or produces a different value that is not covered
-here, [open an issue](https://github.com/cloudposse/atmos/issues) with the expression and
-error or unexpected output. Where we can restore compatibility, we will ship a fix in a
-patch release.
+- `coll.JQ` runs a jq expression on a value.
+- `tmpl.Inline` and `tmpl.Exec` render nested templates.
+- `semver.*` parses and compares versions, for example
+  `{{ semver.CheckConstraint ">= 1.5.0" .vars.version }}`. See the
+  [Gomplate semver reference](https://docs.gomplate.ca/functions/semver/).
