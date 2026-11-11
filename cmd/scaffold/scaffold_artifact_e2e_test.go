@@ -124,6 +124,8 @@ func TestScaffoldGenerate_PublishedScaffoldMatchesGeneratingFromTheDirectory(t *
 	record, err := config.LoadProjectRecord(fromArtifact)
 	require.NoError(t, err)
 	require.NotNil(t, record, "the generation still writes its project record")
+	assert.Equal(t, reg.URI(publishedScaffoldName, publishedScaffoldVersion), record.Spec.Source)
+	assert.Equal(t, publishedScaffoldVersion, record.Metadata.Version)
 }
 
 // TestScaffoldGenerate_PublishedScaffoldUpdateFlow runs the existing rendered-strategy update flow

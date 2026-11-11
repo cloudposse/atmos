@@ -3,6 +3,7 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -67,4 +68,28 @@ func TestProcessGoneRecognizesUnreapedChild(t *testing.T) {
 	// Do not call Wait until cleanup: the exit status must remain unreaped here.
 	require.Eventually(t, func() bool { return processGone(pid) }, goneWait, 25*time.Millisecond,
 		"a killed, unreaped child must not be mistaken for a running process")
+}
+
+func TestRunShellSession_CancellationKillsDescendants(t *testing.T) {
+	dir := t.TempDir()
+	killAtCleanup(t, dir, "parent", "child")
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- RunShellSession(ctx, &ShellSessionSpec{Command: shellQuoteArg(exe), Env: append(os.Environ(), helperModeEnv+"="+modeStubbornParent, helperPIDDirEnv+"="+dir)})
+	}()
+	parent := waitForPID(t, dir, "parent")
+	child := waitForPID(t, dir, "child")
+	cancel()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(childExitCleanupWait + 5*time.Second):
+		t.Fatal("session did not stop after cancellation")
+	}
+	requireGone(t, parent, "session child")
+	require.True(t, processGone(child), "stubborn descendant must stop before the session returns")
 }
