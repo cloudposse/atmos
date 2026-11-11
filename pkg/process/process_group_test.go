@@ -84,6 +84,9 @@ func runProcessHelper(mode string) {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 	case modeDetach:
 		spawnGrandchild(modeSleep, true)
+		writePIDFile(dir, "parent")
+		// Wait for the test to release us after both processes have started.
+		_, _ = io.Copy(io.Discard, os.Stdin)
 	case "script-output":
 		for range 100 {
 			_, _ = io.WriteString(os.Stdout, "STDOUT\n")
@@ -495,13 +498,24 @@ func TestRun_BackgroundedOutputHolderDoesNotHangOrFail(t *testing.T) {
 	killAtCleanup(t, dir, "child")
 
 	var out bytes.Buffer
-	start := time.Now()
-	res := awaitRun(t, runAsync(context.Background(), ptr(helperSpec(t, modeDetach, dir, &out))))
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	spec := helperSpec(t, modeDetach, dir, &out)
+	spec.Streams.Stdin = reader
+	done := runAsync(ctx, &spec)
+	waitForPID(t, dir, "parent")
+	child := waitForPID(t, dir, "child")
 
+	// Measure the bounded pipe drain after both helpers start, not process startup under load.
+	start := time.Now()
+	require.NoError(t, writer.Close())
+	res := awaitRun(t, done)
 	assert.True(t, res.Success(), "exit 0 must stay a success even if a grandchild holds stdout: %v", res.Err)
 	assert.Less(t, time.Since(start), childShutdownGrace+3*time.Second)
 	// The deliberately detached grandchild is left alone on a normal exit.
-	child := waitForPID(t, dir, "child")
 	assert.False(t, processGone(child))
 }
 
