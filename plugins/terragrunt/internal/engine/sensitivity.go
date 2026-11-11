@@ -111,7 +111,9 @@ func (s *sensitivityScanner) walk(expression hclsyntax.Expression, prefix []stri
 // locals it references.
 func (s *sensitivityScanner) containsSensitive(expression hclsyntax.Expression, depth int) bool {
 	if depth >= maxLocalDepth {
-		return false
+		// The remaining expression may depend on a sensitive local. Fail closed
+		// when the bound (including a cycle) prevents us from inspecting it.
+		return true
 	}
 	found := false
 	_ = hclsyntax.VisitAll(expression, func(node hclsyntax.Node) hcl.Diagnostics {
@@ -147,6 +149,9 @@ func (s *sensitivityScanner) walkObject(object *hclsyntax.ObjectConsExpr, prefix
 	for _, item := range object.Items {
 		if key, ok := staticKey(item.KeyExpr); ok {
 			s.walk(item.ValueExpr, append(slices.Clone(prefix), key), depth)
+		} else {
+			// A computed key cannot be represented in a sensitivity path.
+			s.paths = append(s.paths, slices.Clone(prefix))
 		}
 	}
 }
@@ -182,7 +187,11 @@ func (s *sensitivityScanner) walkCall(call *hclsyntax.FunctionCallExpr, prefix [
 
 // walkLocal follows local.name and local.name.key.key to the expression that defines it.
 func (s *sensitivityScanner) walkLocal(traversal *hclsyntax.ScopeTraversalExpr, prefix []string, depth int) {
-	if depth >= maxLocalDepth || traversal.Traversal.RootName() != localName || len(traversal.Traversal) < 2 {
+	if traversal.Traversal.RootName() != localName || len(traversal.Traversal) < 2 {
+		return
+	}
+	if depth >= maxLocalDepth {
+		s.paths = append(s.paths, slices.Clone(prefix))
 		return
 	}
 	first, ok := traversal.Traversal[1].(hcl.TraverseAttr)
@@ -202,14 +211,20 @@ func (s *sensitivityScanner) walkLocal(traversal *hclsyntax.ScopeTraversalExpr, 
 			}
 			return
 		}
-		var sensitive bool
-		if current, sensitive = descend(current, key); sensitive {
+		child, sensitive := descend(current, key)
+		if sensitive {
 			s.paths = append(s.paths, slices.Clone(prefix))
 			return
 		}
-		if current == nil {
+		if child == nil {
+			// Composed locals cannot always be descended by key. Their selected
+			// result may still carry sensitivity from any of their arguments.
+			if s.containsSensitive(current, depth+1) {
+				s.paths = append(s.paths, slices.Clone(prefix))
+			}
 			return
 		}
+		current = child
 	}
 	s.walk(current, prefix, depth+1)
 }

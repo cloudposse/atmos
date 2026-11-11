@@ -258,7 +258,7 @@ inputs = {
 
 	files := []string{"/unit/terragrunt.hcl", "/root.hcl", "/broken.hcl", "/data.json", "/missing.hcl"}
 	// A for expression that yields sensitive values is marked as a whole.
-	require.Equal(t, [][]string{{"dynamic"}, {"own"}, {"shared"}}, SensitiveInputs(fsys, files, inputs))
+	require.Equal(t, [][]string{{"dynamic"}, {"looped"}, {"own"}, {"shared"}}, SensitiveInputs(fsys, files, inputs))
 
 	require.Equal(t, [][]string{nil}, SensitiveInputs(fsys, []string{"/whole.hcl"}, inputs), "sensitive(...) around the whole inputs marks every input")
 	require.Empty(t, SensitiveInputs(fsys, files, map[string]any{"open": "o"}), "a path that is not among the evaluated inputs is dropped")
@@ -290,7 +290,33 @@ inputs = {
 
 	// An index with a literal key follows the local like an attribute, and a function applied to a
 	// sensitive value makes its whole result sensitive.
-	require.Equal(t, [][]string{{"call"}, {"cond"}, {"indexed"}, {"inner"}, {"key"}, {"token"}, {"wholekey"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
+	require.Equal(t, [][]string{{"call"}, {"cond"}, {"indexed"}, {"inner"}, {"key"}, {"missing"}, {"token"}, {"wholekey"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
+}
+
+func TestSensitiveInputsFailClosedWhenPathsCannotBeResolved(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fsys, "/unit.hcl", []byte(`locals {
+  a = local.b
+  b = local.c
+  c = local.d
+  d = local.e
+  e = local.f
+  f = local.g
+  g = local.h
+  h = local.i
+  i = sensitive("secret")
+  config = merge({ token = sensitive("secret") }, { open = "visible" })
+}
+inputs = {
+  dynamic = { (local.key) = sensitive("secret") }
+  chain = local.a
+  wrapped = upper(local.a)
+  composed = local.config.token
+  plain = "visible"
+}
+`), 0o644))
+	inputs := map[string]any{"dynamic": map[string]any{"key": "secret"}, "chain": "secret", "wrapped": "SECRET", "composed": "secret", "plain": "visible"}
+	require.Equal(t, [][]string{{"chain"}, {"composed"}, {"dynamic"}, {"wrapped"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
 }
 
 // A sensitive value that object keys cannot address marks the whole input, so it never reaches a varfile.
