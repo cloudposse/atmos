@@ -122,7 +122,11 @@ func (r *Repository) page(ctx context.Context, candidates []listCandidate, query
 	}
 	page := &artifact.ListPage{}
 	for len(candidates) > 0 {
-		batch := candidates[:min(len(candidates), size+1)]
+		batchSize := len(candidates)
+		if size < batchSize {
+			batchSize = size + 1
+		}
+		batch := candidates[:batchSize]
 		candidates = candidates[len(batch):]
 		entries, matched, err := r.loadEntries(ctx, batch, query.Labels)
 		if err != nil {
