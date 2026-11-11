@@ -291,3 +291,23 @@ func TestOptions_OwnerAndPartSize(t *testing.T) {
 	assert.GreaterOrEqual(t, fake.CompletedUploads(), 1, "the configured part size forced multipart uploads")
 	assert.NotEmpty(t, defaultOwner())
 }
+
+func TestReplacementRetainsRecoveryMetadataUntilCleanupSucceeds(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	first := publish(t, repo, &prepareSpec{files: map[string]string{"old.txt": "old"}}, artifact.PublishOptions{})
+	spec.fake.Inject(s3test.Fault{Op: s3test.OpDeleteObject, KeyPrefix: "team/app/1.0.0/old.txt", Status: 403, Code: "AccessDenied", Times: -1})
+	prep := &prepareSpec{files: map[string]string{"new.txt": "new"}, opID: "replacement"}
+	second := publish(t, repo, prep, artifact.PublishOptions{Force: true, ExpectedPrior: &first.Pinned})
+	_, ok := spec.fake.Object(layout.RecordPath(first.Pinned.RecordDigest))
+	require.True(t, ok, "the old Record is needed to retry cleanup")
+	_, ok = spec.fake.Object(layout.OperationPath("replacement"))
+	require.True(t, ok, "the journal identifies the old location")
+	spec.fake.ClearFaults()
+	_, err := repo.Publish(context.Background(), prepare(t, repo, prep), artifact.PublishOptions{ExpectedPrior: &second.Pinned})
+	require.NoError(t, err)
+	_, ok = spec.fake.Object(layout.RecordPath(first.Pinned.RecordDigest))
+	assert.False(t, ok)
+	_, ok = spec.fake.Object(layout.OperationPath("replacement"))
+	assert.False(t, ok)
+}
