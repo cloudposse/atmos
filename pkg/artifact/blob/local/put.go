@@ -197,6 +197,13 @@ func matchETag(root *os.Root, op, key string, state fileState, want string) erro
 // commit moves the staged files into place: attributes first, so an object is only ever visible
 // together with its attributes or with stale ones until the data rename lands.
 func (s *Store) commit(root *os.Root, key, target string, pending *staged, noAttrs bool) error {
+	info, err := root.Stat(target)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return wrapIO(blob.OpPut, key, err)
+	}
+	if err == nil && info.IsDir() {
+		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: key is also a prefix of other objects", errUtils.ErrBlobInvalid))
+	}
 	switch {
 	case pending.attrsTemp != "":
 		if err := rootRenameReplace(root, pending.attrsTemp, attrsPath(target)); err != nil {
@@ -207,9 +214,6 @@ func (s *Store) commit(root *os.Root, key, target string, pending *staged, noAtt
 		if err := root.Remove(attrsPath(target)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return wrapIO(blob.OpPut, key, err)
 		}
-	}
-	if info, err := root.Stat(target); err == nil && info.IsDir() {
-		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: key is also a prefix of other objects", errUtils.ErrBlobInvalid))
 	}
 	if err := rootRenameReplace(root, pending.tempPath, target); err != nil {
 		return wrapIO(blob.OpPut, key, err)
