@@ -74,6 +74,9 @@ func (w *walker) step() (done, ok bool) {
 		return true, false
 	}
 	if info.Mode()&fs.ModeSymlink == 0 {
+		if !info.IsDir() && len(w.pending) > 0 {
+			return true, false
+		}
 		w.resolved = next
 		return false, true
 	}
