@@ -62,3 +62,22 @@ func TestPushAppendsExtraArgs(t *testing.T) {
 	require.Len(t, runner.calls, 1)
 	assert.Equal(t, []string{"push", "origin", "main", "--follow-tags"}, runner.calls[0].args)
 }
+
+func TestCloneRefRejectsRemotePassthrough(t *testing.T) {
+	for _, args := range [][]string{{"--origin", "upstream"}, {"--origin=upstream"}, {"--ori=upstream"}, {"-o", "upstream"}, {"-oupstream"}, {"-qoupstream"}} {
+		t.Run(args[0], func(t *testing.T) {
+			runner := newFakeRunner()
+			workdir := filepath.Join(t.TempDir(), "parent", "checkout")
+			err := New(WithRunner(runner)).Clone(context.Background(), &atmosgit.CloneOptions{URI: "repo", Ref: "v1", ExtraArgs: args, RepoContext: atmosgit.RepoContext{Workdir: workdir}})
+			require.ErrorContains(t, err, "remote passthrough")
+			require.Empty(t, runner.calls)
+			require.NoDirExists(t, filepath.Dir(workdir))
+		})
+	}
+}
+
+func TestCloneRemoteShortOption(t *testing.T) {
+	require.False(t, cloneRemoteShortOption("-btopic"))
+	require.False(t, cloneRemoteShortOption("--no-tags"))
+	require.True(t, cloneRemoteShortOption("-vqoother"))
+}

@@ -24,8 +24,15 @@ func gitTestEnv(t *testing.T) []string {
 	cfg := "[init]\n\tdefaultBranch = main\n[user]\n\tname = Global User\n\temail = global@example.com\n"
 	require.NoError(t, os.WriteFile(globalCfg, []byte(cfg), 0o600))
 
+	env := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "GIT_DIR=") || strings.HasPrefix(entry, "GIT_INDEX_FILE=") || strings.HasPrefix(entry, "GIT_WORK_TREE=") || strings.HasPrefix(entry, "GIT_COMMON_DIR=") {
+			continue
+		}
+		env = append(env, entry)
+	}
 	return append(
-		os.Environ(),
+		env,
 		"GIT_CONFIG_GLOBAL="+globalCfg,
 		"GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_CONFIG_NOSYSTEM=1",
