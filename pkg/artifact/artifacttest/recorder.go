@@ -91,6 +91,9 @@ func (r *Recorder) PublishDetailed(ctx context.Context, request artifact.Publish
 			outcome.Operation = *result
 		}
 	}
+	if outcome == nil {
+		outcome = &service.PublishOutcome{}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.results = append(r.results, outcome.Operation)
