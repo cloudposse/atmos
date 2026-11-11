@@ -119,7 +119,11 @@ func TestLockDelegation_CoversEveryMutatingOperation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, artifact.LockScopeRepository, deleted.LockScope)
 
-	assert.Len(t, d.coord.recorded(), base+2, "sign and delete each lock through the delegate")
+	requests := d.coord.recorded()
+	require.Len(t, requests, base+3, "sign locks the subject and delete locks both the subject and reference")
+	assert.Equal(t, "work/subject:tools/example", requests[base].Resource)
+	assert.Equal(t, "work/subject:tools/example", requests[base+1].Resource)
+	assert.Equal(t, "work/tools/example:1.0.0", requests[base+2].Resource)
 	assert.Zero(t, d.work.Calls("Lock"))
 	assert.Empty(t, d.coord.HeldLocks())
 }
