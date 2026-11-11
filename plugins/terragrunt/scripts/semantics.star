@@ -283,10 +283,14 @@ output "value" {
 """
 
 FAILING_MODULE = """
+variable "marker" {
+  type    = string
+  default = ""
+}
 resource "terraform_data" "broken" {
   provisioner "local-exec" {
     interpreter = ["sh", "-c"]
-    command     = "echo known-problem >&2; exit 1"
+    command     = "test -z '${var.marker}' || echo attempt >> '${var.marker}'; echo known-problem >&2; exit 1"
   }
 }
 output "value" {
@@ -326,11 +330,13 @@ def errors_block():
     unmatched = terraform(root, "apply", "unmatched", ["-auto-approve"], failing=True)
     expect_absent(unmatched, "Retryable error matched", "apply of an unmatched failure")
     always = 'errors {\n  retry "always" {\n    retryable_errors   = [".*known-problem.*"]\n    max_attempts       = 2\n    sleep_interval_sec = 0\n  }\n}\n'
-    lifecycle.write_unit(root, "exhausted", errors_unit("failing", always))
+    exhausted_marker = root + "/exhausted.attempts"
+    lifecycle.write_unit(root, "exhausted", errors_unit("failing", always, exhausted_marker))
     exhausted = terraform(root, "apply", "exhausted", ["-auto-approve"], failing=True)
     expect(exhausted, "attempt 1 of 2", "apply with a retry policy that never succeeds")
     expect(exhausted, "maximum retry attempts reached", "apply with a retry policy that never succeeds")
     lifecycle.expect_count(output_of(exhausted), "attempt 1 of 2", 1, "exhausted retry policy")
+    lifecycle.expect_count(fs.read_file(exhausted_marker), "attempt", 2, "failing provisioner invocations")
 
     # A negative pattern vetoes the policy.
     veto = 'errors {\n  retry "vetoed" {\n    retryable_errors   = [".*known-problem.*", "!.*known-problem.*"]\n    max_attempts       = 3\n    sleep_interval_sec = 0\n  }\n}\n'
