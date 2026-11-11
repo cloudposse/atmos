@@ -7,9 +7,8 @@ import (
 	"slices"
 	"sync/atomic"
 
-	"github.com/bmatcuk/doublestar/v4"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,7 +33,7 @@ func rebaseConfigurationDiscovery(config *schema.AtmosConfiguration) error {
 // configurationWatchIndex applies provider-declared cache exclusions only to its
 // file watches. It never changes YAML dependencies or the shared Git change set.
 func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[string]any, original *changedFilesIndex) (*changedFilesIndex, error) {
-	patterns, err := configurationWatchExcludes(settings)
+	patterns, err := configuration.WatchExcludes(settings)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +50,7 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 	if filtered := original.watchIndexes[key]; filtered != nil {
 		return filtered, nil
 	}
-	files, err := unexcludedWatchFiles(config.BasePathAbsolute, original.getAllFiles(), patterns)
+	files, err := configuration.UnexcludedWatchFiles(config.BasePathAbsolute, original.getAllFiles(), patterns)
 	if err != nil {
 		return nil, err
 	}
@@ -61,49 +60,6 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 	}
 	original.watchIndexes[key] = filtered
 	return filtered, nil
-}
-
-// configurationWatchExcludes reads and validates the provider's watch_excludes.
-// An absent or empty setting yields no patterns; any other shape is rejected.
-func configurationWatchExcludes(settings map[string]any) ([]string, error) {
-	provider, _ := settings["configuration"].(map[string]any)
-	raw := provider["watch_excludes"]
-	if raw == nil {
-		return nil, nil
-	}
-	excludes, ok := raw.([]any)
-	if !ok {
-		return nil, fmt.Errorf("%w: watch_excludes must be a list of patterns", errUtils.ErrPluginInvalidConfig)
-	}
-	patterns := make([]string, 0, len(excludes))
-	for _, value := range excludes {
-		pattern, ok := value.(string)
-		if !ok || !doublestar.ValidatePattern(pattern) {
-			return nil, errUtils.ErrPluginInvalidConfig
-		}
-		patterns = append(patterns, pattern)
-	}
-	return patterns, nil
-}
-
-// unexcludedWatchFiles returns the files under root that match none of the patterns.
-func unexcludedWatchFiles(root string, all []string, patterns []string) ([]string, error) {
-	files := make([]string, 0, len(all))
-	for _, path := range all {
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return nil, fmt.Errorf("%w: watch path %q is not under %q: %w", errUtils.ErrPluginInvalidConfig, path, root, err)
-		}
-		excluded := false
-		for _, pattern := range patterns {
-			matched, _ := doublestar.Match(pattern, filepath.ToSlash(relative))
-			excluded = excluded || matched
-		}
-		if !excluded {
-			files = append(files, path)
-		}
-	}
-	return files, nil
 }
 
 // configurationWatchPaths resolves provider-owned watches against the project

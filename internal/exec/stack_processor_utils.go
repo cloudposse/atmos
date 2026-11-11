@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/condition"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
@@ -1634,7 +1635,7 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, impErr
 		}
 		imp = renderedImp
-		if handled, importErr := registerConfigurationImport(atmosConfig, imp, &importStruct); handled || importErr != nil {
+		if handled, importErr := configuration.RegisterImport(atmosConfig, imp, &importStruct); handled || importErr != nil {
 			if importErr != nil {
 				return nil, nil, importErr
 			}

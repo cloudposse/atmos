@@ -2,7 +2,6 @@ package exec
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,37 +22,6 @@ type importRuntime struct {
 func (r *importRuntime) RegisterImport(_ context.Context, uri string) (bool, error) {
 	r.imports = append(r.imports, uri)
 	return true, r.err
-}
-
-func TestConfigurationImportRouting(t *testing.T) {
-	config := &schema.AtmosConfiguration{}
-	for _, uri := range []string{"ordinary", "https://example.com/config.yaml"} {
-		handled, err := registerConfigurationImport(config, uri, &schema.StackImport{})
-		require.NoError(t, err)
-		require.False(t, handled)
-	}
-	handled, err := registerConfigurationImport(nil, "terragrunt://live", &schema.StackImport{})
-	require.NoError(t, err)
-	require.False(t, handled)
-	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {}}
-	_, err = registerConfigurationImport(config, "terragrunt://live", &schema.StackImport{})
-	require.ErrorContains(t, err, "disabled")
-	config.Components.Terraform.ConfigurationProviders["terragrunt"] = schema.ComponentConfiguration{Enabled: true}
-	_, err = registerConfigurationImport(config, "terragrunt://live", &schema.StackImport{})
-	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
-	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t))}
-	config.ComponentConfigurations = runtime
-	for _, declaration := range []schema.StackImport{{Context: map[string]any{"stage": "dev"}}, {SkipIfMissing: true}, {TTL: "1h"}, {NestedImports: "local"}} {
-		_, err := registerConfigurationImport(config, "terragrunt://live", &declaration)
-		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
-	}
-	handled, err = registerConfigurationImport(config, "terragrunt://live", &schema.StackImport{})
-	require.NoError(t, err)
-	require.True(t, handled)
-	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
-	runtime.err = errors.New("registration failed")
-	_, err = registerConfigurationImport(config, "terragrunt://live", &schema.StackImport{})
-	require.ErrorIs(t, err, runtime.err)
 }
 
 func TestYAMLImportsRegisterBeforeDiscovery(t *testing.T) {
