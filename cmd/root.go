@@ -1496,9 +1496,6 @@ func ExecuteVersion() error {
 	// Set up logger to ensure debug/trace messages appear.
 	SetupLogger(&tmpConfig)
 
-	finishNotice := versionnotice.Start(&tmpConfig)
-	defer finishNotice()
-
 	return version.Execute(&tmpConfig, false, "")
 }
 

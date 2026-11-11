@@ -860,6 +860,7 @@ func bindEnv(v *viper.Viper, key ...string) {
 // journal entry — only regenerate the snapshot. Projects pinned to an earlier
 // edition get pre-change values re-applied by applyEditionDefaults.
 func setDefaultConfiguration(v *viper.Viper) {
+	v.SetDefault("version.check.enabled", true)
 	v.SetDefault("version.check.ci.enabled", true)
 	v.SetDefault("version.check.minor_threshold", 10)
 	v.SetDefault("init.repository", schema.DefaultInitRepository)

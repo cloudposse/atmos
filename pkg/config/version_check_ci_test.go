@@ -20,13 +20,13 @@ var _ = schema.VersionCheckCI{Enabled: true}
 func TestCIVersionCheckConfig(t *testing.T) {
 	for _, tc := range []struct {
 		name, yaml, enabled, threshold string
-		wantEnabled                    bool
+		wantEnabled, wantMaster        bool
 		wantThreshold                  int
 	}{
-		{name: "defaults", wantEnabled: true, wantThreshold: 10},
-		{name: "yaml", yaml: "version:\n  check:\n    ci:\n      enabled: false\n    minor_threshold: 20", wantThreshold: 20},
-		{name: "env overrides yaml", yaml: "version:\n  check:\n    ci:\n      enabled: true\n    minor_threshold: 20", enabled: "false", threshold: "15", wantThreshold: 15},
-		{name: "env enables", enabled: "true", threshold: "3", wantEnabled: true, wantThreshold: 3},
+		{name: "defaults", wantEnabled: true, wantMaster: true, wantThreshold: 10},
+		{name: "yaml", yaml: "version:\n  check:\n    enabled: false\n    ci:\n      enabled: false\n    minor_threshold: 20", wantThreshold: 20},
+		{name: "env overrides yaml", yaml: "version:\n  check:\n    ci:\n      enabled: true\n    minor_threshold: 20", enabled: "false", threshold: "15", wantMaster: true, wantThreshold: 15},
+		{name: "env enables", enabled: "true", threshold: "3", wantEnabled: true, wantMaster: true, wantThreshold: 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ATMOS_VERSION_CHECK_CI_ENABLED", tc.enabled)
@@ -39,6 +39,7 @@ func TestCIVersionCheckConfig(t *testing.T) {
 			var config schema.AtmosConfiguration
 			require.NoError(t, v.Unmarshal(&config))
 			assert.Equal(t, tc.wantEnabled, config.Version.Check.CI.Enabled)
+			assert.Equal(t, tc.wantMaster, config.Version.Check.Enabled)
 			assert.Equal(t, tc.wantThreshold, config.Version.Check.MinorThreshold)
 		})
 	}
