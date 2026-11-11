@@ -27,6 +27,9 @@ func NewKindData(v any) (KindData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: kind data: %w", errUtils.ErrArtifactRecordInvalid, err)
 	}
+	if string(raw) == "null" {
+		return nil, nil
+	}
 	canonical, err := CanonicalizeJSON(raw)
 	if err != nil {
 		return nil, err
