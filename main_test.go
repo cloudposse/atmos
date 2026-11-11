@@ -37,11 +37,11 @@ func TestShouldExitOnSignal(t *testing.T) {
 	}
 }
 
-func TestSignalsDeferImmediateExitUntilCredentialCleanupCompletes(t *testing.T) {
+func TestSignalsRetainExitIntentDuringCredentialCleanup(t *testing.T) {
 	_, release := signals.DeferExitForCleanup(t.Context())
 	t.Cleanup(release)
-	assert.False(t, shouldExitOnSignal(os.Interrupt))
-	assert.False(t, shouldExitOnSignal(syscall.SIGTERM))
+	assert.True(t, shouldExitOnSignal(os.Interrupt))
+	assert.True(t, shouldExitOnSignal(syscall.SIGTERM))
 	release()
 	assert.True(t, shouldExitOnSignal(os.Interrupt))
 	assert.True(t, shouldExitOnSignal(syscall.SIGTERM))

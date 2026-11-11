@@ -2,7 +2,10 @@ package auth
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -10,6 +13,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 func TestScopedAuthenticationPreservesParentAndRemovesOwnedCredentials(t *testing.T) {
@@ -46,11 +50,12 @@ func TestScopedAuthenticationPreservesParentAndRemovesOwnedCredentials(t *testin
 	}
 }
 
-func TestScopedCleanupIsReverseOrderedAndPreservesProvider(t *testing.T) {
+func TestScopedCleanupPreservesAncestorsAndProvider(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	provider := types.NewMockProvider(ctrl)
 	first, second := types.NewMockIdentity(ctrl), types.NewMockIdentity(ctrl)
 	credentialStore := types.NewMockCredentialStore(ctrl)
+	scope := &identityOperationScope{target: "second", realm: "operation-test"}
 	m := &manager{
 		config: &schema.AuthConfig{
 			Providers: map[string]schema.Provider{"root": {Kind: "mock/aws"}},
@@ -61,15 +66,79 @@ func TestScopedCleanupIsReverseOrderedAndPreservesProvider(t *testing.T) {
 		},
 		providers:       map[string]types.Provider{"root": provider},
 		identities:      map[string]types.Identity{"first": first, "second": second},
-		credentialStore: credentialStore,
+		credentialStore: &operationCredentialStore{CredentialStore: credentialStore, scope: scope},
+		operationScope:  scope,
 		chain:           []string{"root", "first", "second"},
 	}
-	credentialStore.EXPECT().Delete(gomock.Any(), "").Return(nil).Times(2)
-	gomock.InOrder(
-		second.EXPECT().Logout(gomock.Any()).Return(assert.AnError),
-		first.EXPECT().Logout(gomock.Any()).Return(nil),
-	)
-	err := m.releaseIsolatedIdentities(t.Context(), m.chain)
+	credentialStore.EXPECT().Delete("second", "operation-test").Return(nil)
+	second.EXPECT().Logout(gomock.Any()).Return(assert.AnError)
+	err := m.releaseOperationIdentity(t.Context())
 	require.ErrorIs(t, err, assert.AnError)
-	// No provider.Logout expectation: an accidental provider logout fails here.
+	// No ancestor/provider logout expectation: either would fail this test.
+}
+
+func TestScopedAuthenticationKeepsExistingTargetFilesAndKeyring(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+	parent := isolatedTestManager(t).(*manager)
+	_, err := parent.Authenticate(t.Context(), "automation")
+	require.NoError(t, err)
+	before := snapshotParent(parent)
+	// Mock AWS session credentials normally use files rather than the keyring.
+	// Seed an existing keyring session too, so both storage boundaries are checked.
+	previous := &types.AWSCredentials{AccessKeyID: "synthetic-previous-session", SecretAccessKey: "synthetic-previous-secret", Expiration: time.Now().Add(time.Hour).Format(time.RFC3339)}
+	require.NoError(t, parent.credentialStore.Store("automation", previous, parent.realm.Value))
+	require.NoError(t, parent.credentialStore.Store("mock", previous, ""))
+	legacyPath := filepath.Join(xdg.LookupXDGConfigDir(""), "aws", "legacy-provider", "credentials")
+	require.NoError(t, os.MkdirAll(filepath.Dir(legacyPath), 0o700))
+	require.NoError(t, os.WriteFile(legacyPath, []byte("synthetic-legacy-session"), 0o600))
+	cached, err := parent.credentialStore.Retrieve("automation", parent.realm.Value)
+	require.NoError(t, err)
+	originalPath := parent.stackInfo.AuthContext.AWS.CredentialsFile
+	original, err := os.ReadFile(originalPath)
+	require.NoError(t, err)
+	err = parent.WithIsolatedIdentity(t.Context(), "automation", func(_ context.Context, auth *schema.AuthContext) error {
+		require.NotEqual(t, originalPath, auth.AWS.CredentialsFile)
+		_, err := os.Stat(auth.AWS.CredentialsFile)
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+	preserved, err := parent.credentialStore.Retrieve("automation", parent.realm.Value)
+	require.NoError(t, err)
+	assert.Equal(t, cached, preserved)
+	after, err := os.ReadFile(originalPath)
+	require.NoError(t, err)
+	assert.Equal(t, original, after)
+	_, err = parent.credentialStore.Retrieve("mock", "")
+	require.NoError(t, err, "legacy ancestor sessions must survive")
+	legacy, err := os.ReadFile(legacyPath)
+	require.NoError(t, err)
+	assert.Equal(t, "synthetic-legacy-session", string(legacy))
+	assertParentUnchanged(t, parent, before)
+}
+
+func TestScopedTargetBypassesProcessCredentialReuse(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+	parent := isolatedTestManager(t).(*manager)
+	_, err := parent.Authenticate(t.Context(), "automation")
+	require.NoError(t, err)
+	previous := &types.AWSCredentials{AccessKeyID: "synthetic-previous-session", SecretAccessKey: "synthetic-previous-secret", SessionToken: "synthetic-previous-token", Expiration: time.Now().Add(time.Hour).Format(time.RFC3339)}
+	oldKey := parent.chainCacheKey()
+	processCredentialCache.Store(oldKey, &processCachedCreds{credentials: previous})
+	t.Cleanup(func() { processCredentialCache.Delete(oldKey) })
+	isolated, _, err := parent.newOperationManager("automation")
+	require.NoError(t, err)
+	chain, err := isolated.buildAuthenticationChain("automation")
+	require.NoError(t, err)
+	isolated.chain = chain
+	require.NotEqual(t, oldKey, isolated.chainCacheKey())
+	acquired, err := isolated.authenticateChain(t.Context(), "automation")
+	require.NoError(t, err)
+	assert.NotSame(t, previous, acquired)
+	require.NoError(t, isolated.releaseOperationIdentity(t.Context()))
+	preserved, ok := processCredentialCache.Load(oldKey)
+	require.True(t, ok)
+	assert.Same(t, previous, preserved.(*processCachedCreds).credentials)
 }
