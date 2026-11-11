@@ -82,6 +82,47 @@ func TestSignalCleanupWaitIsBounded(t *testing.T) {
 	require.Equal(t, 130, ResolveExitCode(0))
 }
 
+func TestShutdownWaitsShareTheFirstRequestDeadline(t *testing.T) {
+	t.Cleanup(func() { pendingExitCode.Store(0) })
+	_, release := DeferExitForCleanup(t.Context())
+	t.Cleanup(release)
+	RequestExit(syscall.SIGTERM)
+	cleanupScopes.Lock()
+	// Shorten the one shutdown budget without releasing the stalled owner.
+	deadline := time.Now().Add(20 * time.Millisecond)
+	cleanupScopes.deadline = deadline
+	cleanupScopes.Unlock()
+	RequestExit(os.Interrupt)
+	late, releaseLate := DeferExitForCleanup(t.Context())
+	t.Cleanup(releaseLate)
+	require.ErrorIs(t, late.Err(), context.Canceled)
+	cleanupScopes.Lock()
+	retained := cleanupScopes.deadline
+	cleanupScopes.Unlock()
+	require.Equal(t, deadline, retained, "neither a later signal nor a new owner may extend shutdown")
+	type outcome struct {
+		waits [2]bool
+		code  int
+	}
+	results := make(chan outcome, 2)
+	for range 2 {
+		go func() {
+			results <- outcome{waits: [2]bool{WaitForCleanup(), WaitForCleanup()}, code: ResolveExitCode(0)}
+		}()
+	}
+	bound := time.After(time.Second)
+	for range 2 {
+		select {
+		case result := <-results:
+			require.Equal(t, [2]bool{false, false}, result.waits)
+			require.Equal(t, 143, result.code)
+		case <-bound:
+			t.Fatal("a repeated or concurrent shutdown wait extended the first request's budget")
+		}
+	}
+	require.True(t, CleanupExitDeferred(), "deadline expiry must not pretend the stalled owner finished")
+}
+
 func TestUninterruptedExitKeepsCommandStatus(t *testing.T) {
 	require.False(t, ExitRequested())
 	require.Equal(t, 7, ResolveExitCode(7))

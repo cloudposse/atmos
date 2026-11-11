@@ -19,9 +19,10 @@ var (
 
 var cleanupScopes = struct {
 	sync.Mutex
-	next    uint64
-	cancel  map[uint64]context.CancelFunc
-	drained chan struct{}
+	next     uint64
+	cancel   map[uint64]context.CancelFunc
+	drained  chan struct{}
+	deadline time.Time
 }{cancel: make(map[uint64]context.CancelFunc)}
 
 const (
@@ -97,8 +98,10 @@ func RequestExit(received os.Signal) {
 	if value, ok := received.(syscall.Signal); ok {
 		code = signalExitCodeBase + int(value)
 	}
-	pendingExitCode.CompareAndSwap(0, int32(code))
 	cleanupScopes.Lock()
+	if pendingExitCode.CompareAndSwap(0, int32(code)) {
+		cleanupScopes.deadline = time.Now().Add(maxCleanupShutdownWait)
+	}
 	cancel := make([]context.CancelFunc, 0, len(cleanupScopes.cancel))
 	for _, stop := range cleanupScopes.cancel {
 		cancel = append(cancel, stop)
@@ -122,7 +125,10 @@ func WaitForCleanup() bool {
 	if !ExitRequested() {
 		return true
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), maxCleanupShutdownWait)
+	cleanupScopes.Lock()
+	deadline := cleanupScopes.deadline
+	cleanupScopes.Unlock()
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
 	return waitForCleanup(ctx)
 }

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -75,6 +77,45 @@ func TestScopedCleanupPreservesAncestorsAndProvider(t *testing.T) {
 	err := m.releaseOperationIdentity(t.Context())
 	require.ErrorIs(t, err, assert.AnError)
 	// No ancestor/provider logout expectation: either would fail this test.
+}
+
+func TestScopedCleanupToleratesAbsentKeyringAndPreservesFailures(t *testing.T) {
+	notFound := errors.Join(credentials.ErrCredentialStore, credentials.ErrCredentialsNotFound)
+	for _, tt := range []struct {
+		name                    string
+		deletion, logout, wantErr error
+	}{
+		{name: "no keyring entry", deletion: notFound},
+		{name: "logout failure", deletion: notFound, logout: assert.AnError, wantErr: assert.AnError},
+		{name: "deletion failure", deletion: assert.AnError, wantErr: assert.AnError},
+		{name: "existing keyring entry"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			identity, storage := types.NewMockIdentity(ctrl), types.NewMockCredentialStore(ctrl)
+			scope := &identityOperationScope{target: "owned", realm: "operation-test"}
+			m := &manager{
+				identities: map[string]types.Identity{"owned": identity},
+				credentialStore: &operationCredentialStore{CredentialStore: storage, scope: scope},
+				operationScope: scope,
+				chain: []string{"root", "owned"},
+			}
+			key := m.chainCacheKey()
+			processCredentialCache.Store(key, &processCachedCreds{})
+			t.Cleanup(func() { processCredentialCache.Delete(key) })
+			storage.EXPECT().Delete("owned", scope.realm).Return(tt.deletion)
+			identity.EXPECT().Logout(gomock.Any()).Return(tt.logout)
+			err := m.releaseOperationIdentity(t.Context())
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.wantErr)
+			}
+			require.NotErrorIs(t, err, credentials.ErrCredentialsNotFound)
+			_, cached := processCredentialCache.Load(key)
+			require.False(t, cached, "cleanup must discard its operation cache even on failure")
+		})
+	}
 }
 
 func TestScopedAuthenticationKeepsExistingTargetFilesAndKeyring(t *testing.T) {

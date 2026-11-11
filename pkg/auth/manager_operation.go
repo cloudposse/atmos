@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -52,6 +53,9 @@ func (m *manager) releaseOperationIdentity(ctx context.Context) error {
 		logout = nil
 	}
 	removed := m.credentialStore.Delete(name, m.realm.Value)
+	if errors.Is(removed, credentials.ErrCredentialsNotFound) {
+		removed = nil
+	}
 	processCredentialCache.Delete(m.chainCacheKey())
 	return errors.Join(logout, removed)
 }
