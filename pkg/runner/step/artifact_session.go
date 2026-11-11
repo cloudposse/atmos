@@ -121,6 +121,16 @@ func (v *Variables) artifactScopeOrRoot() *artifactScope {
 	return v.artifactSession().root
 }
 
+// BeginArtifactStep reserves a distinct scope for one scheduled step and returns a
+// restore function. Call it around the entire retry loop, not each attempt.
+func (v *Variables) BeginArtifactStep() func() {
+	defer perf.Track(nil, "step.Variables.BeginArtifactStep")()
+
+	previous := v.artifactScope
+	v.artifactScope = &artifactScope{path: v.artifactScopeOrRoot().reserve()}
+	return func() { v.artifactScope = previous }
+}
+
 // ScheduledGroup is one parallel group whose position in the scope of its parent has been reserved.
 // The branches forked from it are positioned under the group, in branch order, whatever order they
 // finish in.

@@ -18,6 +18,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/artifact/report"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
+	star "github.com/cloudposse/atmos/pkg/script/starlark"
 )
 
 // summaryRecorder is a ci.Reporter that records what the report session writes. It embeds the
@@ -456,4 +458,43 @@ func TestArtifactReport_ExecStepWritesTheReportBeforeReplacingTheProcess(t *test
 	assert.Equal(t, []string{"team/app:1.0.0"}, refsOf(recorder.summaries[0]))
 	flush()
 	assert.Len(t, recorder.summaries, 1, "the deferred flush adds nothing after the early write")
+}
+
+func TestArtifactReport_StarlarkParallelFollowsSchedule(t *testing.T) {
+	env := newArtifactEnv(t)
+	expectPublishes(env)
+	recorder := &summaryRecorder{}
+	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
+	_, err := star.New().Execute(t.Context(), script.Spec{Source: `
+def publish(version):
+    steps.artifact(action="publish", source="dist", repository="dir", artifact_name="team/app", version=version)
+steps.parallel(tasks=[steps.task(name=v, function=publish, args=[v]) for v in ["1.0.0", "2.0.0", "3.0.0"]])
+`, WorkingDirectory: env.dir, Steps: NewAutomationLibrary(env.vars, nil)})
+	require.NoError(t, err)
+	flush()
+	require.Len(t, recorder.summaries, 1)
+	assert.Equal(t, []string{"team/app:1.0.0", "team/app:2.0.0", "team/app:3.0.0"}, refsOf(recorder.summaries[0]))
+}
+
+func TestArtifactReport_ScheduledIdenticalFailuresKeepSeparateIdentities(t *testing.T) {
+	env := newArtifactEnv(t)
+	var ids []string
+	env.service.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, r artifact.PublishRequest) (*artifact.OperationResult, error) {
+		ids = append(ids, r.Execution.OperationID)
+		return &artifact.OperationResult{OperationID: r.Execution.OperationID, Action: artifact.ActionPublish}, errors.New("failed")
+	}).Times(4)
+	step := publishStep("", "1.0.0")
+	step.Retry = &schema.RetryConfig{}
+	for range 2 {
+		restore := env.vars.BeginArtifactStep()
+		for range 2 {
+			_, err := env.run(step)
+			require.Error(t, err)
+		}
+		restore()
+	}
+	require.Len(t, ids, 4)
+	assert.Equal(t, ids[0], ids[1])
+	assert.Equal(t, ids[2], ids[3])
+	assert.NotEqual(t, ids[0], ids[2])
 }

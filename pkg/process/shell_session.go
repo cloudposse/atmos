@@ -105,14 +105,16 @@ func RunShellSession(ctx context.Context, spec *ShellSessionSpec) error {
 	}
 	env = append(append([]string{}, env...), fmt.Sprintf("ATMOS_SHLVL=%d", shellLevel))
 
-	cmd := NewShellCommand(ctx, spec.Command)
+	executionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := NewShellCommand(executionCtx, spec.Command)
 	cmd.Dir = spec.Dir
 	cmd.Env = env
 
 	if spec.TTY && pty.IsSupported() {
 		return sessionExitError(runSessionPTY(ctx, cmd, spec))
 	}
-	return sessionExitError(runSessionAttached(cmd, spec))
+	return sessionExitError(runSessionAttached(ctx, cmd, spec, cancel))
 }
 
 // sessionShell returns the system shell and its command flag used to
@@ -140,7 +142,7 @@ func runSessionPTY(ctx context.Context, cmd *exec.Cmd, spec *ShellSessionSpec) e
 // runSessionAttached runs the command with the real standard streams
 // inherited directly (no PTY). Used on platforms without PTY support.
 // Masking cannot be applied to inherited file descriptors.
-func runSessionAttached(cmd *exec.Cmd, spec *ShellSessionSpec) error {
+func runSessionAttached(ctx context.Context, cmd *exec.Cmd, spec *ShellSessionSpec, cancel context.CancelFunc) error {
 	if spec.EnableMasking {
 		if spec.TTY {
 			// A PTY was requested but is unavailable on this platform - the
@@ -160,10 +162,14 @@ func runSessionAttached(cmd *exec.Cmd, spec *ShellSessionSpec) error {
 		cmd.Stdin = os.Stdin
 	}
 
+	group := newChildGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
 	}
-	return cmd.Wait()
+	group.started(cancel)
+	err := group.tolerateWaitDelay(ctx, cmd.Wait())
+	group.finished()
+	return err
 }
 
 // sessionExitError normalizes session errors: non-zero exits become
