@@ -153,8 +153,11 @@ func flagValue(arg, name string, args []string, i *int) (string, bool) {
 	if arg != prefix {
 		return "", false // A longer flag that merely shares the prefix.
 	}
-	// Space-separated form: consume the next token as the value unless it is itself a flag.
-	if *i+1 < len(args) && !strings.HasPrefix(args[*i+1], "-") {
+	// Space-separated form: a string flag consumes the next token as its value unconditionally,
+	// exactly as cobra/pflag do — even when that token is "--" or itself looks like a flag (so
+	// "--logs-file -- --logs-level=Debug" takes "--" as the file value and still honors the later
+	// "--logs-level", rather than treating "--" as the end-of-options delimiter).
+	if *i+1 < len(args) {
 		*i++
 		return args[*i], true
 	}

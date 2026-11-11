@@ -79,13 +79,16 @@ func TestLogsConfigFromArgs(t *testing.T) {
 		{name: "logs-level space separated", args: []string{"version", "--logs-level", "Info"}, wantLevel: "Info", wantFile: "/dev/stderr"},
 		// A dangling --logs-level with no value (end of args) is ignored, keeping the default.
 		{name: "logs-level with no value ignored", args: []string{"version", "--logs-level"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
-		// A following flag is not consumed as the value; the next flag is still honored.
-		{name: "logs-level followed by flag not consumed", args: []string{"version", "--logs-level", "--verbose"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
-		// A bare "--" ends option scanning: logging flags after it are positional and ignored (so no
-		// unexpected log file is opened).
+		// A space-separated string flag consumes the next token as its value unconditionally (cobra
+		// semantics), even when that token itself looks like a flag.
+		{name: "logs-level consumes following flag-like token as value", args: []string{"version", "--logs-level", "--verbose"}, wantLevel: "--verbose", wantFile: "/dev/stderr"},
+		// A bare "--" that is NOT a flag value ends option scanning: logging flags after it are
+		// positional and ignored (so no unexpected log file is opened).
 		{name: "logs-file after -- is ignored", args: []string{"version", "--", "--logs-file=unexpected.log"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
 		{name: "logs-level after -- is ignored", args: []string{"version", "--", "--logs-level=Debug"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
 		{name: "options before -- still honored", args: []string{"version", "--logs-level=Debug", "--", "--logs-level=Off"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
+		// A "--" consumed as a string flag's value is NOT the delimiter: the later flag is honored.
+		{name: "-- consumed as logs-file value then later flag honored", args: []string{"version", "--logs-file", "--", "--logs-level=Debug"}, wantLevel: "Debug", wantFile: "--"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
