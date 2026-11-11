@@ -64,6 +64,7 @@ func TestAdaptersRejectUnserializableConfigurationBeforeStarting(t *testing.T) {
 	i.config.Spec = invalid
 	_, err = i.Authenticate(t.Context(), upstream)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, i.Logout(t.Context()), errUtils.ErrPluginInvalidConfig)
 	i.accepts = []string{"oidc/v1"}
 	_, err = i.Authenticate(t.Context(), upstream)
 	require.Error(t, err)

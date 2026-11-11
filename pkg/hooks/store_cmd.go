@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -89,6 +90,13 @@ func (c *StoreCommand) processStoreCommand(hook *Hook, event HookEvent) error {
 	log.Debug("Executing store hook", "hook", hook.Name, "kind", hook.Kind)
 	for key, value := range hook.Outputs {
 		outputKey, outputValue, err := c.getOutputValue(hook.Name, event, value)
+		if errors.Is(err, errUtils.ErrTerraformOutputNotFound) && isTerraformDestroyEvent(event) {
+			// Outputs are read when the hook runs and Atmos keeps no record of earlier values. They are
+			// absent after a successful destroy and before a retried destroy, so a missing output must
+			// not fail the destroy. A failed read is still an error: it doesn't show the output is gone.
+			log.Warn("Skipping store output because the Terraform output no longer exists", "hook", hook.Name, "event", event, "output", value, "key", key)
+			continue
+		}
 		if err != nil {
 			return err
 		}
@@ -99,6 +107,16 @@ func (c *StoreCommand) processStoreCommand(hook *Hook, event HookEvent) error {
 		}
 	}
 	return nil
+}
+
+// isTerraformDestroyEvent reports whether the event belongs to a Terraform destroy.
+func isTerraformDestroyEvent(event HookEvent) bool {
+	switch event.Normalize() {
+	case BeforeTerraformDestroy, AfterTerraformDestroy, BeforeTerraformDestroyAggregate, AfterTerraformDestroyAggregate:
+		return true
+	default:
+		return false
+	}
 }
 
 // getOutputValue gets an output from terraform or returns a literal value.

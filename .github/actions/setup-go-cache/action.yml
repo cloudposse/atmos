@@ -132,6 +132,24 @@ runs:
         # Caching is handled by the restore step below (see the description).
         cache: false
 
+    # A stalled setup-go download can report success without installing Go or
+    # setting go-version. Fail fast so a blank version never reaches the cache
+    # keys; re-running the job recovers from the transient download failure.
+    - name: Verify Go installation
+      shell: bash
+      env:
+        EXPECTED_GO_VERSION: ${{ steps.go.outputs.go-version }}
+      run: |
+        if [ -z "$EXPECTED_GO_VERSION" ]; then
+          echo "::error::setup-go reported success without a Go version; re-run the job"
+          exit 1
+        fi
+        actual_version=$(GOTOOLCHAIN=local go env GOVERSION)
+        if [ "$actual_version" != "go$EXPECTED_GO_VERSION" ]; then
+          echo "::error::Expected Go $EXPECTED_GO_VERSION on PATH, found $actual_version"
+          exit 1
+        fi
+
     # GitHub Actions cache scoping isolates this: a pull_request run gets
     # read-only access to the default branch's cache scope, cannot restore
     # caches from sibling PRs, and cannot write into the default branch's

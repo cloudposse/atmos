@@ -160,3 +160,66 @@ func TestNestedShellErrorsPreserveRenderingMaskingAndExitCode(t *testing.T) {
 		})
 	}
 }
+
+func TestNestedStarlarkErrorsPreserveRendering(t *testing.T) {
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name                    string
+		tty, noColor, force, ci bool
+	}{
+		{"terminal", true, false, false, false},
+		{"redirected", false, false, false, false},
+		{"CI redirected", false, false, false, true},
+		{"CI forced", false, false, true, true},
+		{"CI terminal", true, false, false, true},
+		{"opt-out", true, true, true, false},
+		{"CI opt-out", true, true, true, true},
+		{"explicit-force", false, false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, key := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "ATMOS_FORCE_COLOR", "ATMOS_FORCE_TTY", "CI"} {
+				t.Setenv(key, "")
+			}
+			if tc.ci {
+				t.Setenv("CI", "1")
+			}
+			t.Setenv("TERM", "xterm-256color")
+			t.Setenv("COLORTERM", "truecolor")
+			viper.Reset()
+			viper.Set("no-color", tc.noColor)
+			viper.Set("force-color", tc.force)
+			iolib.Reset()
+			require.NoError(t, iolib.Initialize())
+			t.Cleanup(func() { viper.Reset(); iolib.Reset(); _ = iolib.Initialize() })
+			var buffer bytes.Buffer
+			var destination io.Writer = &buffer
+			if tc.tty {
+				master, slave, err := pty.Open()
+				require.NoError(t, err)
+				drained := make(chan struct{})
+				go func() { _, _ = io.Copy(io.Discard, master); close(drained) }()
+				t.Cleanup(func() { _ = slave.Close(); _ = master.Close(); <-drained })
+				destination = slave
+			}
+			vars := NewVariables()
+			vars.OutputWriters = OutputWriters{Stdout: destination, Stderr: destination}
+			result, err := (&ScriptHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+				Name: "nested", Interpreter: "starlark", Output: "raw",
+				Show:   &schema.ShowConfig{Labels: BoolPtr(false)},
+				Env:    map[string]string{"_ATMOS_NESTED_ERROR_HELPER": "1"},
+				Script: fmt.Sprintf(`exec.run([%q, "-test.run=^TestNestedErrorChild$"])`, executable),
+			}, vars)
+			captured, _ := result.Metadata["stderr"].(string)
+			require.Error(t, err)
+			require.Equal(t, (tc.tty || tc.force) && !tc.noColor, strings.Contains(captured, "\x1b["))
+			require.Contains(t, captured, fmt.Sprintf("nested-color=%t", (tc.tty || tc.force) && !tc.noColor))
+			if tc.ci {
+				require.Contains(t, captured, "nested-ci=1")
+			}
+			require.NotContains(t, captured, "# Error")
+			require.NotContains(t, captured, "**Error:**")
+			require.Equal(t, 1, strings.Count(captured, "💡"))
+		})
+	}
+}

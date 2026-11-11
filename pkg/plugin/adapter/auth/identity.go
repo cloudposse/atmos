@@ -79,6 +79,16 @@ func (i *identity) Validate() error {
 	if i.config.Via == nil || (i.config.Via.Provider == "" && i.config.Via.Identity == "") {
 		return errUtils.ErrInvalidIdentityConfig
 	}
+	if i.definition.SchemaTarget == "spec" {
+		if i.Kind() == "secrets/env" {
+			if _, legacy := i.config.Principal["environment"]; legacy {
+				return errUtils.Build(errUtils.ErrPluginInvalidConfig).
+					WithExplanation("principal.environment is no longer supported for secrets/env.").
+					WithHint("Use spec.env with explicit .credentials templates.").Err()
+			}
+		}
+		return i.definition.Schema(i.config.Spec)
+	}
 	return i.definition.Schema(i.config.Principal)
 }
 
@@ -133,8 +143,12 @@ func (i *identity) Logout(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	spec, err := toStruct(i.config.Spec)
+	if err != nil {
+		return err
+	}
 	logoutErr := i.definition.logout(ctx, i.name, i.realm, i.sessionSettings(), func(call *invocation) error {
-		_, err := call.handle.Identity.Logout(ctx, &pluginv1.IdentityRequest{Invocation: call.request, Kind: i.Kind(), Name: i.name, Principal: principal, Realm: i.realm})
+		_, err := call.handle.Identity.Logout(ctx, &pluginv1.IdentityRequest{Invocation: call.request, Kind: i.Kind(), Name: i.name, Principal: principal, Spec: spec, Realm: i.realm})
 		return err
 	})
 	return errors.Join(logoutErr, i.materializer.Logout(context.WithoutCancel(ctx)))

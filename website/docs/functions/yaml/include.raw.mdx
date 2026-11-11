@@ -188,18 +188,29 @@ vars:
 
 ### Local Files
 
-The `!include.raw` function supports the following local file sources. Atmos resolves local file paths using the following
-strategies in order, finding the **first match** that points to an existing file:
+The `!include.raw` function supports three kinds of local file paths. The kind is decided by how the path is
+written, and Atmos never falls back from one kind to another:
+
+| Path | Resolved relative to |
+| --- | --- |
+| `/abs/script.sh` | Nothing — used as written |
+| `./script.sh`, `../script.sh` | The directory of the file that contains the `!include.raw` |
+| `scripts/script.sh` | [`base_path`](/cli/configuration#base-path) |
+
+Each kind has one primary location. If the file does not exist there, `!include.raw` fails with an error that
+names where it looked. The only fallback is for bare paths in stack manifests, which are also checked against the
+directory you run Atmos from (see below). A `./` path that is missing next to the including file is never replaced
+by a same-named file under `base_path`; when one exists, the error suggests dropping the `./` prefix.
 
 1. **Absolute paths** — Used as-is with no resolution needed.
    ```yaml
    vars: !include.raw /Users/me/Documents/policy.rego
    ```
 
-2. **Stack Manifest-relative paths (`./` or `../`)** — Paths that start with `./` or `../` are resolved relative to the
-   directory containing the manifest file where the `!include.raw` function is used. Atmos rewrites the path by
-   joining it with the manifest's directory before checking if the file exists. For example, if the manifest is at
-   `stacks/deploy/dev.yaml`, then `../config/policy.rego` resolves to `stacks/config/policy.rego`.
+2. **Paths relative to the including file (`./` or `../`)** — Paths that start with `./` or `../` are resolved
+   relative to the directory of the file that contains the `!include.raw` — the stack manifest, or the imported catalog
+   file, where the tag is written. For example, if the manifest is at `stacks/deploy/dev.yaml`, then
+   `../config/policy.rego` resolves to `stacks/config/policy.rego`. Only that location is checked.
    ```yaml
    # Resolved relative to the directory of the current manifest file
    vars: !include.raw ../config/policy.rego
@@ -226,6 +237,9 @@ strategies in order, finding the **first match** that points to an existing file
    base_path: "./"
    ```
    The path `config/README.md` in any manifest resolves to `<repo-root>/config/README.md`.
+
+   For stack manifests, a bare path that does not exist under `base_path` is checked against the directory you run
+   Atmos from as a last resort. Don't rely on it: the result then depends on where Atmos is invoked.
 
 ### Remote Files
 

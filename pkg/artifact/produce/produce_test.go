@@ -395,6 +395,13 @@ func TestFilesProducer_ReservedDirectoryConflicts(t *testing.T) {
 			fixtures.WriteFile(t, dir, fixtures.ReservedDir+"/sub/README.md", "x", 0o644)
 			return true
 		}},
+		{"regular file named .atmos", func(t *testing.T, dir string) bool {
+			fixtures.WriteFile(t, dir, ".atmos", "not a directory", 0o644)
+			return true
+		}},
+		{"symlink named .atmos", func(t *testing.T, dir string) bool {
+			return fixtures.Symlink(t, dir, ".atmos", "a.txt")
+		}},
 		{"reserved symlink document", func(t *testing.T, dir string) bool {
 			fixtures.WriteFile(t, dir, "real.md", "x", 0o644)
 			return fixtures.Symlink(t, dir, fixtures.ReservedDir+"/README.md", "../../real.md")

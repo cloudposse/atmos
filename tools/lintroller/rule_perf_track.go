@@ -65,6 +65,8 @@ var excludedPackages = []string{
 	"/pkg/github/oidc", // Stdlib-only OIDC leaf would create import cycle with pkg/perf (used by pkg/store).
 	"/internal/ci",     // Repository CI orchestration is build-time tooling, not production code.
 	"/magefiles",       // Mage targets are build-time entrypoints, not production code.
+	// Value types reproducing inet.af/netaddr's method set for gomplate v3 templates; trivial accessors.
+	"/pkg/template/compatibility/netaddr",
 }
 
 // Receiver types to exclude from perf.Track() checks.
@@ -85,6 +87,7 @@ var excludedReceivers = []string{
 	"azureBlobDownloadResponseWrapper", // Azure SDK response wrapper - simple getter.
 	"ExecutionContext",                 // Trivial With* mutators in pkg/function.
 	"Phase",                            // Trivial String() method in pkg/function.
+	"httpFileInfo",                     // fs.FileInfo accessors for HTTP datasource responses.
 }
 
 // Functions to exclude from perf.Track() checks (by name).

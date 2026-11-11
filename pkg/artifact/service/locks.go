@@ -58,8 +58,13 @@ func (s *Service) acquireLocks(ctx context.Context, op *operation, operation str
 	set := &lockSet{}
 	for index := range ordered {
 		target := ordered[index]
-		handle, err := target.repo.Lock(ctx, artifact.LockRequest{
-			Resource:    target.resource,
+		locker, resource, err := s.lockerFor(ctx, &target)
+		if err != nil {
+			releaseErr := set.release(ctx, op)
+			return nil, errors.Join(err, releaseErr)
+		}
+		handle, err := locker.Lock(ctx, artifact.LockRequest{
+			Resource:    resource,
 			Owner:       s.owner,
 			OperationID: op.id,
 			Required:    requiredScope(target.info),
@@ -71,6 +76,21 @@ func (s *Service) acquireLocks(ctx context.Context, op *operation, operation str
 		set.held = append(set.held, heldLock{target: target, handle: handle})
 	}
 	return set, nil
+}
+
+// lockerFor returns the repository that provides the target's lock and the resource to lock there.
+// A repository that delegates locking (locking.repository) is locked through its delegate, whose
+// resource is qualified by the target alias because one delegate can coordinate several repositories.
+func (s *Service) lockerFor(ctx context.Context, target *lockTarget) (artifact.Repository, string, error) {
+	provider := target.info.LockProvider
+	if provider == "" || provider == target.alias {
+		return target.repo, target.resource, nil
+	}
+	repo, err := s.repos.Open(ctx, provider)
+	if err != nil {
+		return nil, "", fmt.Errorf("open lock repository %q delegated by %q: %w", provider, target.alias, err)
+	}
+	return repo, target.alias + "/" + target.resource, nil
 }
 
 // canonicalOrder sorts targets by repository alias then resource and drops exact duplicates.

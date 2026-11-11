@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -252,6 +253,48 @@ func TestDeleteIsReconciledByResolvingTheDigest(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestDeleteDoesNotNeedReadAccessAndOnlyFallsBackOnDeniedReads(t *testing.T) {
+	tests := []struct {
+		name       string
+		readStatus int
+		wantDelete int
+		wantErr    bool
+	}{
+		{"read forbidden still deletes", http.StatusForbidden, 1, false},
+		{"read unauthorized still deletes", http.StatusUnauthorized, 1, false},
+		{"missing digest sends no delete", http.StatusNotFound, 0, true},
+		{"server failure sends no delete", http.StatusInternalServerError, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var deny atomic.Bool
+			server := newFlakyRegistry(t, func(w http.ResponseWriter, r *http.Request, _ http.Handler) bool {
+				if deny.Load() && (r.Method == http.MethodHead || r.Method == http.MethodGet) && strings.Contains(r.URL.Path, "/manifests/") {
+					w.WriteHeader(tt.readStatus)
+					return true
+				}
+				return false
+			})
+			client := memoryClient(t, server.host, "user", "password")
+			ref, err := name.NewTag(server.host + "/acme/plugin:1.0.0")
+			require.NoError(t, err)
+			index := testIndex(t)
+			require.NoError(t, client.WriteIndex(t.Context(), ref, index))
+			digest, err := index.Digest()
+			require.NoError(t, err)
+
+			deny.Store(true)
+			err = client.Delete(t.Context(), ref.Context().Digest(digest.String()))
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err, "a delete-only credential must reach the DELETE request")
+			}
+			assert.Equal(t, tt.wantDelete, server.count(http.MethodDelete, "/manifests/"))
+		})
+	}
+}
+
 func TestReadsAreRetriedButCredentialsAreNotDowngraded(t *testing.T) {
 	var failures atomic.Int32
 	server := newFlakyRegistry(t, func(w http.ResponseWriter, r *http.Request, _ http.Handler) bool {
@@ -288,6 +331,10 @@ func TestFetchBytesIsBoundedAndDigestVerified(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity, "content larger than the limit is rejected before reading")
 	_, err = oci.FetchBytes(ctx, layout, descriptor, 0)
 	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+
+	got, err = oci.FetchBytes(ctx, layout, descriptor, math.MaxInt64)
+	require.NoError(t, err, "a MaxInt64 limit must not overflow into an empty read")
+	assert.Equal(t, content, got)
 
 	wrongSize := descriptor
 	wrongSize.Size++

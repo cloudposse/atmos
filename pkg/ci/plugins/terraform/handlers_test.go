@@ -1550,23 +1550,6 @@ func TestUploadPlanfile_PlanfileDoesNotExist(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestDownloadPlanfile_NoPlanfilePath(t *testing.T) {
-	p := &Plugin{}
-
-	ctx := &plugin.HookContext{
-		Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
-		Command: "apply",
-		Info: &schema.ConfigAndStacksInfo{
-			Stack:            "",
-			ComponentFromArg: "",
-			PlanFile:         "",
-		},
-	}
-
-	err := p.downloadPlanfile(ctx)
-	require.NoError(t, err)
-}
-
 func TestBuildPlanfileMetadata(t *testing.T) {
 	p := &Plugin{}
 

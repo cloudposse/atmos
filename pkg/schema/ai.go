@@ -29,7 +29,7 @@ type AIProviderConfig struct {
 	ApiKey    string           `yaml:"api_key,omitempty" json:"api_key,omitempty" mapstructure:"api_key"` //nolint:gosec // G117: not a hardcoded credential, populated from !env YAML function
 	MaxTokens int              `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
 	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"` // For Ollama or custom endpoints
-	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"`   // Token caching settings
+	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`          // Token caching settings
 
 	// CLI provider fields (for claude-code, codex-cli, copilot-cli, gemini-cli).
 	Binary       string   `yaml:"binary,omitempty" json:"binary,omitempty" mapstructure:"binary"`
@@ -42,8 +42,8 @@ type AIProviderConfig struct {
 // AICacheSettings contains token caching configuration.
 type AICacheSettings struct {
 	Enabled                  bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                                          // Enable token caching
-	CacheSystemPrompt        bool `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`                      // Cache system prompt (Anthropic only)
-	CacheProjectInstructions bool `yaml:"cache_project_instructions,omitempty" json:"cache_project_instructions,omitempty" mapstructure:"cache_project_instructions"` // Cache ATMOS.md content (Anthropic only)
+	CacheSystemPrompt        bool `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`                      // Cache system prompt (Anthropic and Bedrock)
+	CacheProjectInstructions bool `yaml:"cache_project_instructions,omitempty" json:"cache_project_instructions,omitempty" mapstructure:"cache_project_instructions"` // Cache ATMOS.md content (Anthropic and Bedrock)
 }
 
 // AISessionSettings contains session management configuration.

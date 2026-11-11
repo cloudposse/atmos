@@ -81,15 +81,37 @@ func TestPluginReleaseLocalPreflight(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginBundlePathForbidden)
 }
 
-func TestPluginPublishRequiresPublicVisibilityBeforeRegistryWrites(t *testing.T) {
+func TestPluginPublishVerifiesPublicAccessAfterUpload(t *testing.T) {
 	_ = NewTestKit(t)
 	config := pluginCoverageProject(t)
-	// A layout is not opened and the destination is never contacted when the
-	// requested visibility preflight cannot establish public GHCR visibility.
-	output, err := invokePluginCoverage(t, config, "publish", "missing-layout", "--to=registry.example.com/plugin", "--verify-public")
-	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	require.Contains(t, err.Error(), "visibility preflight requires a GHCR")
+	layout, release := pluginSigningLayout(t, config)
+	server := httptest.NewServer(containerregistry.New(containerregistry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(server.Close)
+	destination := server.Listener.Addr().String() + "/plugins/public"
+
+	// Local layout validation still runs before any publication, including when
+	// anonymous verification is requested for a registry other than GHCR.
+	output, err := invokePluginCoverage(t, config, "publish", "missing-layout", "--to", destination, "--verify-public")
+	require.ErrorIs(t, err, errUtils.ErrOCILayout)
 	require.Empty(t, output)
+	ref, err := name.NewTag(destination + ":" + release.Version)
+	require.NoError(t, err)
+	_, err = remote.Head(ref)
+	require.True(t, atmosoci.IsNotFound(err), "invalid layouts must not create a release")
+
+	// The first upload creates the package and verifies it anonymously; retries
+	// must preserve the same immutable digest and machine-readable output.
+	for range 2 {
+		output, err = invokePluginCoverage(t, config, "publish", layout, "--to", destination, "--verify-public", "--format=json")
+		require.NoError(t, err)
+		var published pluginoutput.PublishedRelease
+		require.NoError(t, json.Unmarshal([]byte(output), &published))
+		require.NotNil(t, published.Release)
+		require.Equal(t, release.Digest, published.Digest)
+		descriptor, headErr := remote.Head(ref)
+		require.NoError(t, headErr)
+		require.Equal(t, release.Digest, descriptor.Digest.String())
+	}
 }
 
 func TestPluginTestBuildCoverageAndHostGuard(t *testing.T) {

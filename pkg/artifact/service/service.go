@@ -259,7 +259,8 @@ func (o *operation) info(code, message string) {
 	o.result.Diagnostics = append(o.result.Diagnostics, artifact.Diagnostic{Severity: artifact.SeverityInfo, Code: code, Message: message})
 }
 
-// record forwards a lifecycle event to the journal, if any.
+// record forwards a lifecycle event to the journal, if any. The call is synchronous so events keep
+// their order; the Journal contract requires implementations to return promptly.
 func (s *Service) record(ctx context.Context, entry *JournalEntry) {
 	if s.journal != nil {
 		s.journal.Record(ctx, entry)

@@ -285,6 +285,15 @@ func TestList_PaginationGuards(t *testing.T) {
 		_, err := m.svc.List(context.Background(), artifact.ListRequest{Repositories: []string{"dst"}})
 		require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable)
 	})
+	t.Run("cursor cycle across pages", func(t *testing.T) {
+		m := newMockSetup(t, &caps)
+		next := map[string]string{"": "a", "a": "b", "b": "a"}
+		m.repo.EXPECT().List(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query artifact.ListQuery) (*artifact.ListPage, error) {
+			return &artifact.ListPage{NextCursor: next[query.Cursor]}, nil
+		}).Times(3)
+		_, err := m.svc.List(context.Background(), artifact.ListRequest{Repositories: []string{"dst"}})
+		require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable)
+	})
 	t.Run("list error", func(t *testing.T) {
 		m := newMockSetup(t, &caps)
 		m.repo.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errTransport)
