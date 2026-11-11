@@ -29,6 +29,9 @@ type staged struct {
 func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.PutOptions) (*blob.ObjectInfo, error) {
 	defer perf.Track(nil, "blob.local.Put")()
 
+	if body == nil {
+		return nil, blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: nil body", errUtils.ErrBlobInvalid))
+	}
 	if err := s.validatePut(ctx, key, opts); err != nil {
 		return nil, err
 	}
@@ -132,8 +135,11 @@ func copyBody(ctx context.Context, dst io.Writer, body io.Reader, size int64) (i
 
 // checkCondition evaluates the put condition against the current object. Callers hold the lock.
 func (s *Store) checkCondition(key, target string, cond blob.Condition) error {
-	if !cond.IsConditional() {
+	if cond.Kind == blob.ConditionNone {
 		return nil
+	}
+	if cond.Kind != blob.ConditionIfAbsent && cond.Kind != blob.ConditionIfMatch {
+		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: unknown condition %d", errUtils.ErrBlobInvalid, cond.Kind))
 	}
 	state, err := inspect(target)
 	if err != nil {

@@ -87,7 +87,7 @@ func openFile(path string) (*os.File, error) {
 		err  error
 	)
 	for i := range attempts {
-		file, err = os.Open(path)
+		file, err = openRead(path)
 		if err == nil || errors.Is(err, os.ErrNotExist) {
 			return file, err
 		}

@@ -309,8 +309,8 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 
 		// Remove prefix to get relative key.
 		relKey := key
-		if s.prefix != "" && len(key) > len(s.prefix)+1 {
-			relKey = key[len(s.prefix)+1:]
+		if prefix := s.fullKey(""); s.prefix != "" {
+			relKey = strings.TrimPrefix(key, prefix+"/")
 		}
 
 		// Try to load metadata.

@@ -392,3 +392,9 @@ func TestPageCapMustBePositive(t *testing.T) {
 		assert.Panics(t, func() { NewServer(t, WithPageCap(cap)) })
 	}
 }
+
+func TestRangeEndMaxIntDoesNotOverflow(t *testing.T) {
+	got, ok := parseRange("bytes=0-9223372036854775807", 10)
+	require.True(t, ok)
+	assert.Equal(t, int64(10), got.end)
+}

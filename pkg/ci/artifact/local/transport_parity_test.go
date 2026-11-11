@@ -86,6 +86,12 @@ func TestBundledStoreTarBytesAndChecksumSurviveTheTransport(t *testing.T) {
 	require.Len(t, got, 2)
 	assert.Equal(t, "plan.tfplan", got[0].Name)
 	assert.Equal(t, "lock.hcl", got[1].Name)
+	for index, want := range []string{"plan-bytes", "lock"} {
+		data, readErr := io.ReadAll(got[index].Data)
+		require.NoError(t, readErr)
+		require.NoError(t, got[index].Data.Close())
+		assert.Equal(t, want, string(data))
+	}
 }
 
 // TestNamesAreCleanedLikeTheFilesystemDid pins that equivalent spellings address one artifact.

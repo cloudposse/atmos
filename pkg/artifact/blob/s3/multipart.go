@@ -41,7 +41,7 @@ func (s *Store) putMultipart(ctx context.Context, plan *putPlan, first, carry []
 		Metadata:    plan.opts.Metadata,
 		Tagging:     optionalString(plan.tags),
 	}
-	created, err := plan.api.CreateMultipartUpload(ctx, in, skipOptionalChecksums)
+	created, err := plan.api.CreateMultipartUpload(ctx, in, skipOptionalChecksums, noRetry)
 	if err != nil {
 		return nil, classify(plan.request(false), err)
 	}
