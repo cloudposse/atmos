@@ -136,10 +136,18 @@ func formatPath(path cty.Path) string {
 		case cty.GetAttrStep:
 			text.WriteString("." + step.Name)
 		case cty.IndexStep:
-			if step.Key.Type() == cty.String {
+			if !step.Key.IsKnown() || step.Key.IsNull() {
+				return text.String()
+			}
+			switch step.Key.Type() {
+			case cty.String:
 				text.WriteString("[" + strconv.Quote(step.Key.AsString()) + "]")
-			} else {
+			case cty.Number:
 				text.WriteString("[" + step.Key.AsBigFloat().String() + "]")
+			default:
+				// Set element keys can contain entire objects, including secrets.
+				// Stop at the containing value rather than rendering the key.
+				return text.String()
 			}
 		}
 	}

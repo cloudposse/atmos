@@ -165,3 +165,19 @@ func TestDecodeInputsNamesTheUnknownInput(t *testing.T) {
 	_, err = DecodeInputs(objectWireValue(t, cty.StringVal("not an object")))
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 }
+
+func TestDecodeInputsRejectsUnknownSetElementWithoutExposingKey(t *testing.T) {
+	value := cty.ObjectVal(map[string]cty.Value{
+		"items": cty.SetVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+			"secret":  cty.StringVal("private-set-key"),
+			"pending": cty.UnknownVal(cty.String),
+		})}),
+	})
+	_, err := DecodeInputs(objectWireValue(t, value))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.NotContains(t, err.Error(), "private-set-key")
+	path := cty.Path{cty.IndexStep{Key: cty.ObjectVal(map[string]cty.Value{
+		"secret": cty.StringVal("private-set-key"),
+	})}}
+	require.Empty(t, formatPath(path))
+}
