@@ -189,7 +189,7 @@ func (s *Store) transport(ctx context.Context) (*blobs3.Store, error) {
 		return nil, err
 	}
 	s.transportOnce.Do(func() {
-		s.transportStore, s.transportErr = blobs3.NewFromClient(s.client, s.bucket, blobs3.WithOpaqueKeys())
+		s.transportStore, s.transportErr = blobs3.NewFromClient(s.client, s.bucket, blobs3.WithOpaqueKeys(), blobs3.WithSinglePutFallback())
 	})
 	return s.transportStore, s.transportErr
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -209,4 +210,24 @@ func TestAdapterWrapsTransportFailuresInLegacySentinels(t *testing.T) {
 	fake.ClearFaults()
 	fake.Inject(s3test.Fault{Op: s3test.OpDeleteObject, Status: 403, Code: "AccessDenied", Times: -1})
 	require.ErrorIs(t, store.Delete(ctx, "k.tar"), errUtils.ErrArtifactDeleteFailed)
+}
+
+func TestAdapterFallsBackWhenMultipartUnsupported(t *testing.T) {
+	store, fake := newFakeStore(t, "")
+	fake.Inject(s3test.Fault{Op: s3test.OpCreateMultipartUpload, Status: http.StatusNotImplemented, Code: "NotImplemented"})
+	body := bytes.Repeat([]byte("x"), 9<<20)
+	require.NoError(t, store.Upload(context.Background(), "big.tar", bytes.NewBuffer(body), int64(len(body)), nil))
+	object, ok := fake.Object("big.tar")
+	require.True(t, ok)
+	assert.Equal(t, body, object.Data)
+	assert.Len(t, fake.RequestsFor(s3test.OpCreateMultipartUpload), 1)
+	assert.Len(t, fake.RequestsFor(s3test.OpPutObject), 1)
+}
+
+func TestAdapterDoesNotFallbackForOtherMultipartErrors(t *testing.T) {
+	store, fake := newFakeStore(t, "")
+	fake.Inject(s3test.Fault{Op: s3test.OpCreateMultipartUpload, Status: http.StatusForbidden, Code: "AccessDenied"})
+	body := bytes.Repeat([]byte("x"), 9<<20)
+	require.Error(t, store.Upload(context.Background(), "big.tar", bytes.NewReader(body), int64(len(body)), nil))
+	assert.Empty(t, fake.RequestsFor(s3test.OpPutObject))
 }
