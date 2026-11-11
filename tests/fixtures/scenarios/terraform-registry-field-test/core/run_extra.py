@@ -57,7 +57,7 @@ def affected(c):
                    cwd=c.project, env=c.env, check=True, capture_output=True)
     _, stdout, _ = c.command("describe-affected", ["describe", "affected", "--ref=" + base, "--format=json"], [0])
     try:
-        affected_components = json.loads(stdout)
+        affected_components = json.loads(stdout[stdout.index("["):])
     except ValueError:
         affected_components = []
     c.check("affected includes dev producer", isinstance(affected_components, list) and any(
@@ -91,19 +91,20 @@ def editions(c):
 def interrupted(c):
     simple(c)
     main = c.project / "components/terraform/marker/main.tf"
-    main.write_text(main.read_text().replace("echo 'create ${self.input.name}'", "sleep 30; echo 'create ${self.input.name}'"))
+    marker = c.root / "provisioner-started"
+    c.env["PROVISIONER_STARTED"] = str(marker)
+    main.write_text(main.read_text().replace("echo 'create ${self.input.name}'", "touch \\\"$PROVISIONER_STARTED\\\"; sleep 30; echo 'create ${self.input.name}'"))
     cmd = [c.binary, "terraform", "apply", "producer", "-s", "dev", "-auto-approve"]
     started = time.time()
     p = subprocess.Popen(cmd, cwd=c.project, env=c.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
-    trace = c.root / "trace.jsonl"
-    while time.time() - started < 15:
-        if p.poll() is not None:
-            break
-        if trace.exists() and any(json.loads(x)["argv"][0] == "apply" for x in trace.read_text().splitlines()):
-            time.sleep(1)
-            break
+    while time.time() - started < 30 and p.poll() is None and not marker.exists():
         time.sleep(.1)
-    p.send_signal(signal.SIGINT)
+    provisioner_running = marker.exists() and p.poll() is None
+    c.check("delayed provisioner started and is running", provisioner_running)
+    if provisioner_running:
+        p.send_signal(signal.SIGINT)
+    elif p.poll() is None:
+        os.killpg(p.pid, signal.SIGKILL)
     signal_time = time.time()
     forced = False
     try:
@@ -123,7 +124,8 @@ def interrupted(c):
                                                      "seconds_after_signal": time.time()-signal_time, "remaining_group": live}, indent=2))
     if live:
         os.killpg(p.pid, signal.SIGKILL)
-    c.check("interruption exits without forced kill", not forced)
+    c.check("interruption exit status", provisioner_running and p.returncode == 130, p.returncode)
+    c.check("interruption exits without forced kill", provisioner_running and not forced)
     c.check("interruption leaves no child group", not live, live)
     c.command("plan-after-cancellation", ["terraform", "plan", "producer", "-s", "dev"], [0])
     c.save()
@@ -133,7 +135,16 @@ def terminal(c):
     simple(c)
     config_path = c.project / "atmos.yaml"
     config = yaml.safe_load(config_path.read_text())
-    config["components"]["terraform"]["command"] = shutil.which(c.engine)
+    engine = shutil.which(c.engine)
+    gate = c.root / "plan-gate"
+    wrapper = c.root / "terminal-engine"
+    wrapper.write_text("#!" + sys.executable + "\nimport os,sys,time\n"
+                       "if len(sys.argv) > 1 and sys.argv[1] == 'plan':\n"
+                       f"    open({str(c.root / 'plan-started')!r}, 'w').close()\n"
+                       f"    while not os.path.exists({str(gate)!r}): time.sleep(.05)\n"
+                       f"os.execv({engine!r}, [{engine!r}] + sys.argv[1:])\n")
+    wrapper.chmod(0o755)
+    config["components"]["terraform"]["command"] = str(wrapper)
     config_path.write_text(yaml.safe_dump(config, sort_keys=False))
     cmd = [c.binary, "terraform", "plan", "producer", "-s", "dev", "--ui", "--force-tty", "--force-color"]
     pid, master = pty.fork()
@@ -142,6 +153,7 @@ def terminal(c):
         os.execve(c.binary, cmd, {**c.env, "TERM": "xterm-256color"})
     chunks, start = [], time.time()
     status = None
+    progress_before_completion = False
     while time.time() - start < 30:
         ready, _, _ = select.select([master], [], [], .1)
         if ready:
@@ -152,6 +164,9 @@ def terminal(c):
             if not data:
                 break
             chunks.append((time.time()-start, data))
+        if (c.root / "plan-started").exists() and b"plan dev/marker" in b"".join(data for _, data in chunks).lower():
+            progress_before_completion = True
+            gate.touch()
         exited, value = os.waitpid(pid, os.WNOHANG)
         if exited:
             status = value
@@ -191,7 +206,7 @@ def terminal(c):
     (c.root / "terminal.json").write_text(json.dumps({"command": cmd, "exit": code,
                                                     "chunks": [{"seconds": t, "bytes": len(data)} for t,data in chunks]}, indent=2))
     c.check("PTY plan succeeds", code == 0)
-    c.check("PTY emits progress before completion", len(chunks) > 1, len(chunks))
+    c.check("PTY emits progress before completion", progress_before_completion)
     c.save()
 
 
