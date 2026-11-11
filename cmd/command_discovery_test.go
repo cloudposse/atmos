@@ -53,6 +53,23 @@ func TestDiscoveryColorFlags(t *testing.T) {
 	}
 }
 
+func TestDiscoveryDefersConfiguredAlias(t *testing.T) {
+	root, _, _ := discoveryTestRoot(t)
+	root.AddCommand(&cobra.Command{
+		Use: "cft", Annotations: map[string]string{"configAlias": "aws cloudformation"},
+		DisableFlagParsing: true, Run: func(*cobra.Command, []string) {},
+	})
+	for _, args := range [][]string{
+		{"cft", "--docs"},
+		{"cft", "deploy", "--docs"},
+		{"cft", "--example"},
+	} {
+		handled, err := dispatchCommandDiscovery(root, args)
+		require.NoError(t, err)
+		assert.False(t, handled, "alias must forward %v to its target", args)
+	}
+}
+
 func TestCommandExampleConfirmationButtons(t *testing.T) {
 	_ = NewTestKit(t)
 	cmd := &cobra.Command{}

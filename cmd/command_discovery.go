@@ -56,6 +56,11 @@ func dispatchCommandDiscovery(root *cobra.Command, args []string) (bool, error) 
 		return false, nil
 	}
 	request, parseErr := parseDiscoveryRequest(root, args)
+	// Configured aliases forward their arguments to a new Atmos process. Let that
+	// process resolve discovery against the actual target, including subcommands.
+	if request.command.Annotations["configAlias"] != "" {
+		return false, nil
+	}
 	if request.help || (!request.docs && !request.example) {
 		return false, nil
 	}
