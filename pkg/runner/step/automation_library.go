@@ -36,6 +36,7 @@ func NewAutomationLibrary(vars *Variables, workflow *schema.WorkflowDefinition) 
 		vars = NewVariables()
 	}
 	snapshot := vars.Clone()
+	snapshot.artifactSession()
 	snapshot.automationDepth++
 	return &AutomationLibrary{vars: snapshot, workflow: workflow, processChanges: map[string]string{}}
 }
@@ -58,6 +59,19 @@ func (l *AutomationLibrary) Names() []string {
 func (l *AutomationLibrary) Fork() api.StepLibrary {
 	defer perf.Track(nil, "step.AutomationLibrary.Fork")()
 	return &AutomationLibrary{vars: l.vars.Clone(), workflow: l.workflow, processChanges: maps.Clone(l.processChanges)}
+}
+
+// ForkTask isolates artifact operation identities while retaining the report collector and schedule.
+func (l *AutomationLibrary) ForkTask() api.StepLibrary {
+	defer perf.Track(nil, "step.AutomationLibrary.ForkTask")()
+	fork := l.Fork().(*AutomationLibrary)
+	parent := l.vars.artifactSession()
+	parent.mu.Lock()
+	collector := parent.collector
+	parent.mu.Unlock()
+	fork.vars.artifacts = newArtifactSession()
+	fork.vars.artifacts.collector = collector
+	return fork
 }
 
 var (
@@ -120,6 +134,10 @@ func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowSt
 	before := maps.Clone(l.vars.Env)
 	result, err := l.execute(ctx, step)
 	l.rememberEnvironment(before)
+	if err == nil {
+		// A handler may report success after its background work was canceled.
+		err = ctx.Err()
+	}
 
 	if err != nil {
 		// Some handlers return only the process exit code after cancellation (notably

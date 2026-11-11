@@ -601,6 +601,48 @@ func TestRecorderNormalizesNilDetailedOutcome(t *testing.T) {
 	assert.Equal(t, outcome.Operation, recorder.Results()[0])
 }
 
+func TestAutomationForkTaskScopesArtifactIdentity(t *testing.T) {
+	vars := NewVariables()
+	library := NewAutomationLibrary(vars, nil)
+	first := library.ForkTask().(*AutomationLibrary)
+	second := library.ForkTask().(*AutomationLibrary)
+	one, _ := first.vars.artifactSession().begin("same", first.vars.artifactScopeOrRoot())
+	two, _ := second.vars.artifactSession().begin("same", second.vars.artifactScopeOrRoot())
+	assert.NotEqual(t, one.id, two.id)
+	retry := first.Fork().(*AutomationLibrary)
+	again, _ := retry.vars.artifactSession().begin("same", retry.vars.artifactScopeOrRoot())
+	assert.Equal(t, one.id, again.id)
+	assert.Equal(t, 2, again.attempts)
+}
+
+func TestArtifactHandler_RetainedInputsAreScopedToScheduledBranches(t *testing.T) {
+	env := newArtifactEnv(t)
+	var requests []artifact.PublishRequest
+	env.service.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, r artifact.PublishRequest) (*artifact.OperationResult, error) {
+		requests = append(requests, r)
+		return nil, errors.New("transient")
+	}).Times(3)
+	group := env.vars.ScheduleGroup()
+	first, second := group.ForkAt(0), group.ForkAt(1)
+	first.SetEnv("VERSION", "1")
+	second.SetEnv("VERSION", "2")
+	step := artifactStepWith(artifact.ActionPublish, invoke.FieldSource, invoke.FieldRepository, invoke.FieldVersion)
+	step.WorkingDirectory = env.dir
+	step.Version = "{{ .env.VERSION }}"
+	handler := &ArtifactHandler{}
+	_, err := handler.Execute(context.Background(), step, first)
+	require.Error(t, err)
+	_, err = handler.Execute(context.Background(), step, second)
+	require.Error(t, err)
+	first.SetEnv("VERSION", "3")
+	_, err = handler.Execute(context.Background(), step, first)
+	require.Error(t, err)
+	require.Len(t, requests, 3)
+	assert.Equal(t, []string{"1", "2", "1"}, []string{requests[0].Version, requests[1].Version, requests[2].Version})
+	assert.NotEqual(t, requests[0].Execution.OperationID, requests[1].Execution.OperationID)
+	assert.Equal(t, requests[0].Execution.OperationID, requests[2].Execution.OperationID)
+}
+
 func TestArtifactSessionFingerprintIsScopedAndPreservesIdentity(t *testing.T) {
 	first := newArtifactSession()
 	second := newArtifactSession()
@@ -620,11 +662,12 @@ func TestArtifactSessionFingerprintIsScopedAndPreservesIdentity(t *testing.T) {
 	assert.NotEqual(t, key, different, "authored inputs still participate in identity")
 
 	params := &invoke.Params{Action: artifact.ActionPublish, Labels: map[string]string{"token": "sensitive-value"}}
-	operation := first.operationKey(step.Name, params)
-	assert.Equal(t, operation, first.operationKey(step.Name, params))
-	assert.NotEqual(t, operation, second.operationKey(step.Name, params))
+	operation := first.operationKey(first.root, step.Name, params)
+	assert.Equal(t, operation, first.operationKey(first.root, step.Name, params))
+	assert.NotEqual(t, operation, first.operationKey(&artifactScope{path: []int{1}}, step.Name, params))
+	assert.NotEqual(t, operation, second.operationKey(first.root, step.Name, params))
 	params.Labels["token"] = "different-value"
-	assert.NotEqual(t, operation, first.operationKey(step.Name, params))
+	assert.NotEqual(t, operation, first.operationKey(first.root, step.Name, params))
 }
 
 func TestArtifactSessionRejectsUnserializableStepIdentity(t *testing.T) {

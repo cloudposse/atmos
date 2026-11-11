@@ -72,6 +72,7 @@ func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 	if err != nil {
 		return nil, err
 	}
+	stepKey = vars.artifactScopeOrRoot().key() + "\x00" + stepKey
 	params, retained, err := h.sessionParams(session, stepKey, step, vars)
 	if err != nil {
 		return nil, err

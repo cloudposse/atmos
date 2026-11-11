@@ -21,6 +21,7 @@ import (
 type scaffoldLoadOptions struct {
 	sourceDir     string
 	includedPaths *[]string
+	includeRoot   string
 }
 
 // ScaffoldLoadOption configures an optional LoadScaffoldConfigFromContent
@@ -58,6 +59,12 @@ func WithIncludedPaths(included *[]string) ScaffoldLoadOption {
 	}
 }
 
+// WithIncludeRoot confines local includes to the given publication root.
+func WithIncludeRoot(root string) ScaffoldLoadOption {
+	defer perf.Track(nil, "config.WithIncludeRoot")()
+	return func(o *scaffoldLoadOptions) { o.includeRoot = root }
+}
+
 // LoadScaffoldConfigFromContent loads and validates an AtmosScaffoldConfig manifest from YAML content.
 func LoadScaffoldConfigFromContent(content string, opts ...ScaffoldLoadOption) (*ScaffoldConfig, error) {
 	defer perf.Track(nil, "config.LoadScaffoldConfigFromContent")()
@@ -75,6 +82,10 @@ func LoadScaffoldConfigFromContent(content string, opts ...ScaffoldLoadOption) (
 		}
 		file := filepath.Join(options.sourceDir, ScaffoldConfigFileName)
 		loadOpts = append(loadOpts, manifest.WithIncludeResolution(atmosConfig, file, options.includedPaths))
+	}
+
+	if options.includeRoot != "" {
+		loadOpts = append(loadOpts, manifest.WithIncludeRoot(options.includeRoot))
 	}
 
 	scaffoldConfig, err := manifest.Load[ScaffoldSpec](ScaffoldKind, []byte(content), loadOpts...)
