@@ -67,7 +67,8 @@ func TestBuildCommandRunsTheUnitDirectoryWithEngineArgumentsAfterTheSeparator(t 
 }
 
 func TestBuildCommandEnvironment(t *testing.T) {
-	command := BuildCommand(request())
+	input := request()
+	command := BuildCommand(input)
 	value, found := envValue(command.Env, "AWS_PROFILE")
 	assert.True(t, found)
 	assert.Equal(t, "dev", value)
@@ -86,7 +87,8 @@ func TestBuildCommandEnvironment(t *testing.T) {
 	assert.Equal(t, "false", got)
 
 	// The input slice is never modified.
-	assert.Equal(t, []string{"AWS_PROFILE=dev"}, request().Environment)
+	command.Env[0] = "AWS_PROFILE=changed"
+	assert.Equal(t, []string{"AWS_PROFILE=dev"}, input.Environment)
 }
 
 func TestBuildCommandMapsSubcommands(t *testing.T) {
