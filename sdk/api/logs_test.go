@@ -29,11 +29,15 @@ type logFixture struct {
 	gate       chan struct{}
 	received   chan struct{}
 	failWith   error
+	maxBatch   int
 }
 
 func newLogFixture() *logFixture { return &logFixture{received: make(chan struct{}, 1024)} }
 
 func (f *logFixture) Write(ctx context.Context, request *pluginv1.LogRequest) (*emptypb.Empty, error) {
+	if f.maxBatch > 0 && len(request.GetEntries()) > f.maxBatch {
+		return nil, status.Error(codes.InvalidArgument, "batch too large")
+	}
 	if f.gate != nil {
 		select {
 		case <-f.gate:
@@ -139,6 +143,23 @@ func TestLogStreamPreservesOrderAcrossBatches(t *testing.T) {
 	}
 	if fixture.calls < 2 {
 		t.Fatalf("expected the backlog to use more than one call, got %d", fixture.calls)
+	}
+}
+
+func TestLogStreamCapsOversizedBatches(t *testing.T) {
+	fixture := newLogFixture()
+	fixture.maxBatch = MaxLogBatch
+	fixture.gate = make(chan struct{})
+	stream := logClient(t, fixture).OpenLogs(t.Context(), "id", WithLogQueue(2048), WithLogBatch(2048))
+	for i := range 1500 {
+		stream.Send(entry(fmt.Sprint(i)))
+	}
+	close(fixture.gate)
+	if got := stream.Close(); len(got) != 0 {
+		t.Fatalf("undelivered: %v", messages(got))
+	}
+	if got := fixture.delivered(); len(got) != 1500 {
+		t.Fatalf("delivered %d entries, want 1500", len(got))
 	}
 }
 

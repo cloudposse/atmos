@@ -17,6 +17,8 @@ const (
 	DefaultLogQueue = 1024
 	// DefaultLogBatch bounds the entries sent in one call, so a backlog drains in a few calls.
 	DefaultLogBatch = 64
+	// MaxLogBatch matches the host bridge limit on entries per Write call.
+	MaxLogBatch = 1024
 	// DefaultLogFlush is how long Close waits for Atmos to render the entries still queued. Zero waits until
 	// every entry is delivered or the call is cancelled, so no entry is lost to a slow terminal.
 	DefaultLogFlush = time.Duration(0)
@@ -37,13 +39,14 @@ func WithLogQueue(entries int) LogOption {
 	}
 }
 
-// WithLogBatch sets how many entries one call to Atmos carries at most. Values below one are ignored.
+// WithLogBatch sets how many entries one call to Atmos carries at most, capped at MaxLogBatch.
+// Values below one are ignored.
 //
 //nolint:lintroller // Pure SDK helper; the standalone SDK cannot import host perf tracking.
 func WithLogBatch(entries int) LogOption {
 	return func(s *LogStream) {
 		if entries > 0 {
-			s.batch = entries
+			s.batch = min(entries, MaxLogBatch)
 		}
 	}
 }
