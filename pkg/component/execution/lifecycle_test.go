@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -393,6 +395,25 @@ func TestRecovererIgnorePolicyWinsOverRetryAndWritesSignals(t *testing.T) {
 	require.Equal(t, map[string]any{"alert": false, "note": "kept"}, written)
 }
 
+func TestRecovererSignalsDoNotFollowSymlink(t *testing.T) {
+	directory := t.TempDir()
+	target := filepath.Join(directory, "target")
+	require.NoError(t, os.WriteFile(target, []byte("keep"), 0o600))
+	signals := filepath.Join(directory, SignalsFileName)
+	if err := os.Symlink(target, signals); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "ignore", Patterns: []string{"alpha"}, Signals: map[string]any{"x": 1}}}}
+	reporter := &fakeReporter{}
+	ignored, err := NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(signals)).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"alpha"}}).attempt)
+	require.NoError(t, err)
+	require.True(t, ignored)
+	data, err := os.ReadFile(target)
+	require.NoError(t, err)
+	require.Equal(t, "keep", string(data))
+	require.Equal(t, []string{signals}, reporter.signals)
+}
+
 func TestRecovererIgnoreWithoutSignalsOrFileWritesNothing(t *testing.T) {
 	directory := t.TempDir()
 	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "a", Patterns: []string{"alpha"}, Signals: map[string]any{"x": 1}}, {Name: "b", Patterns: []string{"beta"}}}}
@@ -402,7 +423,10 @@ func TestRecovererIgnoreWithoutSignalsOrFileWritesNothing(t *testing.T) {
 	require.True(t, ignored)
 	require.Empty(t, reporter.signals, "without a signals file nothing is written")
 
-	// A signals file that cannot be written is not reported and never undoes the ignore.
+	// A signals file that cannot be written emits a warning and never undoes the ignore.
+	var output bytes.Buffer
+	log.Default().SetOutput(&output)
+	t.Cleanup(func() { log.Default().SetOutput(os.Stderr) })
 	blocked := filepath.Join(directory, "missing", SignalsFileName)
 	reporter = &fakeReporter{}
 	ignored, err = NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(blocked)).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"alpha"}}).attempt)
@@ -410,6 +434,9 @@ func TestRecovererIgnoreWithoutSignalsOrFileWritesNothing(t *testing.T) {
 	require.True(t, ignored)
 	require.Empty(t, reporter.signals)
 	require.NoFileExists(t, blocked)
+	require.Contains(t, output.String(), "Failed to write error signals")
+	require.Contains(t, output.String(), blocked)
+	require.Contains(t, output.String(), "error")
 
 	reporter = &fakeReporter{}
 	ignored, err = NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(filepath.Join(directory, SignalsFileName))).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"beta"}}).attempt)

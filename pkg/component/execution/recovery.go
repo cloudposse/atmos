@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/filesystem"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -157,9 +158,13 @@ func (r *Recoverer) ignore(policy *schema.ComponentIgnorePolicy) {
 	}
 	data, err := json.MarshalIndent(policy.Signals, "", "  ")
 	if err == nil {
-		err = os.WriteFile(r.signalsFile, data, signalsFilePermissions)
+		err = filesystem.NewOSFileSystem().WriteFileAtomic(r.signalsFile, data, signalsFilePermissions)
 	}
-	if err == nil && r.reporter != nil {
+	if err != nil {
+		log.Warn("Failed to write error signals", "path", r.signalsFile, "error", err)
+		return
+	}
+	if r.reporter != nil {
 		r.reporter.SignalsWritten(r.signalsFile)
 	}
 }
