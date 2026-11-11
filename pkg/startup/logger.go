@@ -5,7 +5,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -34,9 +33,6 @@ const (
 	logsLevelFlagName = "logs-level"
 	logsFileFlagName  = "logs-file"
 	verboseFlagName   = "verbose"
-	verboseShorthand  = "v"
-	// The long-flag prefix, also the bare "--" end-of-options delimiter.
-	flagPrefix = "--"
 
 	defaultLogsLevel = "Warning"
 	defaultLogsFile  = "/dev/stderr"
@@ -94,75 +90,6 @@ func LogsConfigFromCommand(cmd *cobra.Command) schema.Logs {
 		logs.Level = debugLogsLevel
 	}
 	return logs
-}
-
-// LogsConfigFromArgs builds the minimal logs configuration from raw CLI args and the
-// ATMOS_LOGS_* / ATMOS_VERBOSE environment variables, without a parsed cobra.Command.
-//
-// It exists for the startup path that runs BEFORE Cobra parses flags: when configuration
-// loading fails, the logger must still honor an explicitly requested level (via --logs-level,
-// --verbose/-v, or ATMOS_LOGS_LEVEL/ATMOS_VERBOSE) instead of silently falling back to Warning,
-// otherwise a legitimately requested Debug/Trace diagnostic is filtered out.
-//
-// The argv here is the whole command line, which also carries flags meant for subcommands. This
-// deliberately does NOT emulate Cobra's parsing: without the full flag registry it is impossible to
-// know which tokens are operands of other value-taking flags (e.g. "--format --logs-level" makes
-// "--logs-level" the value of "--format"), so any attempt to consume a following token as a value
-// mis-parses some argv and could, for example, open an unexpected log file. Instead it recognizes
-// ONLY the unambiguous equals-joined forms (--logs-level=..., --logs-file=...), the bare boolean
-// verbose flags (--verbose, -v, --verbose=<bool>), and stops at the "--" end-of-options delimiter.
-// Nothing is consumed from a following token, so no reordering of unrelated flags can change the
-// result. The space-separated forms ("--logs-level Debug", "--verbose false") are intentionally not
-// honored here — the full command path parses those; this best-effort fallback covers the common
-// equals form and the environment variables, which is enough to keep an explicitly requested
-// diagnostic visible. Precedence matches LogsConfigFromCommand: defaults, then
-// ATMOS_LOGS_*/ATMOS_VERBOSE, then --logs-level/--logs-file, then verbose last.
-func LogsConfigFromArgs(args []string) schema.Logs {
-	defer perf.Track(nil, "startup.LogsConfigFromArgs")()
-
-	logs := LogsConfigFromCommand(nil) // Defaults + ATMOS_LOGS_*/ATMOS_VERBOSE.
-
-	levelPrefix := flagPrefix + logsLevelFlagName + "="
-	filePrefix := flagPrefix + logsFileFlagName + "="
-
-	verbose, verboseSet := false, false
-	for _, arg := range args {
-		// A bare "--" ends option parsing; everything after is positional. Stop so a later
-		// equals-joined logging flag is not honored (and so no unexpected log file is opened).
-		if arg == flagPrefix {
-			break
-		}
-		switch {
-		case strings.HasPrefix(arg, levelPrefix):
-			logs.Level = strings.TrimPrefix(arg, levelPrefix)
-		case strings.HasPrefix(arg, filePrefix):
-			logs.File = strings.TrimPrefix(arg, filePrefix)
-		default:
-			if on, matched := verboseArg(arg); matched {
-				verbose, verboseSet = on, true
-			}
-		}
-	}
-	// Verbose is applied last so it wins over an explicit --logs-level, matching LogsConfigFromCommand.
-	if verboseSet && verbose {
-		logs.Level = debugLogsLevel
-	}
-	return logs
-}
-
-// verboseArg reports whether arg is a recognized verbose flag and, if so, whether it enables verbose
-// logging. It matches the bare "--verbose"/"-v" (enable) and the equals-joined "--verbose=<bool>"
-// forms; a separate boolean value is deliberately not consumed (see LogsConfigFromArgs).
-func verboseArg(arg string) (enabled, matched bool) {
-	switch {
-	case arg == flagPrefix+verboseFlagName, arg == "-"+verboseShorthand:
-		return true, true
-	case strings.HasPrefix(arg, flagPrefix+verboseFlagName+"="):
-		on, err := strconv.ParseBool(strings.TrimPrefix(arg, flagPrefix+verboseFlagName+"="))
-		return err == nil && on, true
-	default:
-		return false, false
-	}
 }
 
 // ConfigureLogger applies --logs-level, --logs-file, and their ATMOS_LOGS_* variables without reading

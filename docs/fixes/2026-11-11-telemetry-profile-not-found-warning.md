@@ -59,22 +59,17 @@ ATMOS_PROFILE=nonexistent atmos version
   (`getTelemetryFromConfig` and `atmosProWorkspaceID`) now log at `log.Debug` instead of
   `log.Warn`, with a comment explaining the best-effort, degrade-quietly rationale. The diagnostic
   is preserved at `DEBUG` for troubleshooting.
-- `cmd/root.go` + `pkg/startup/logger.go`: when configuration fails to load, the startup logger
-  fallback previously hardcoded `Warning`, discarding an explicitly requested level. That dropped
-  the `DEBUG` diagnostic above even when the user asked for it (for example
-  `ATMOS_PROFILE=missing atmos version --logs-level=Debug`). `configForStartupLogger` now derives
-  the level from a new `startup.LogsConfigFromArgs(os.Args[1:])`, which honors
-  `ATMOS_LOGS_LEVEL`/`ATMOS_VERBOSE` and the unambiguous equals-joined flag forms
-  (`--logs-level=…`, `--logs-file=…`, `--verbose`/`-v`/`--verbose=<bool>`), stops at the `--`
-  end-of-options delimiter, and still defaults to `Warning` when nothing is set. It deliberately does
-  NOT emulate Cobra's parser: without the full flag registry it cannot know which tokens are operands
-  of other value-taking flags, so it never consumes a following token as a value. That keeps it immune
-  to argv it should not touch — a subcommand's single-dash option is not read as the verbose shorthand
-  (`terraform plan -var ...` does not enable `-v`), `--help`/`-h` does not stop the scan before a later
-  `--logs-level=…`, and no `--logs-file` after `--` opens an unexpected log file. The space-separated
-  forms (`--logs-level Debug`, `--verbose false`) are intentionally not honored in this degraded
-  fallback; the full command path parses those. This covers the common equals form and the environment
-  variables, which is enough to keep an explicitly requested diagnostic visible.
+- `cmd/root.go`: when configuration fails to load, the startup logger fallback previously hardcoded
+  `Warning`, discarding an explicitly requested level. That dropped the `DEBUG` diagnostic above even
+  when the user asked for it (for example `ATMOS_PROFILE=missing ATMOS_LOGS_LEVEL=Debug atmos version`).
+  `configForStartupLogger` now derives the level from `startup.LogsConfigFromCommand(nil)`, which reads
+  `ATMOS_LOGS_LEVEL`/`ATMOS_VERBOSE` and defaults to `Warning`. Only the environment variables are
+  honored on this fallback: Cobra has not parsed flags yet, and the raw argv cannot be parsed safely
+  this early — without the full flag registry any token (even an equals-joined `--logs-file=…`) can be
+  the operand of another value-taking flag (`--format --logs-file=…`), so attempting to read it could
+  open an unexpected log file. Flag-level requests are therefore left to the full command path (which
+  still surfaces a command's own enriched error loudly); the environment variables cover the
+  explicit-diagnostic case safely.
 - `pkg/telemetry/config_load_warning_test.go` (new): reproduces the scenario (missing
   `ATMOS_PROFILE` resolved from an empty working directory) and asserts that:
   - neither config-load site surfaces "Could not load config" at `WARN`;
@@ -82,9 +77,8 @@ ATMOS_PROFILE=nonexistent atmos version
   - telemetry degrades to `nil` / empty workspace ID;
   - the public `CaptureCmd` entry point runs end to end (both variadic forms) without a
     user-facing warning when telemetry is disabled.
-- `pkg/startup/logger_test.go` (new `TestLogsConfigFromArgs`) and `cmd/root_helpers_test.go`
-  (extended `TestConfigForStartupLogger`): cover that an explicit level survives the config-error
-  fallback while the default stays `Warning`, including unknown-flag / positional-arg robustness.
+- `cmd/root_helpers_test.go` (extended `TestConfigForStartupLogger`): covers that an explicit level
+  requested via `ATMOS_LOGS_LEVEL` survives the config-error fallback while the default stays `Warning`.
 
 ## Why not suppress the warning only for `version`
 

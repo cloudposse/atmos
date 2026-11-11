@@ -1695,13 +1695,15 @@ func configForStartupLogger(atmosConfig *schema.AtmosConfiguration, initErr erro
 		return atmosConfig
 	}
 	// Configuration failed to load (for example a missing ATMOS_PROFILE), so atmosConfig.Logs is
-	// unreliable. Still honor an explicitly requested log level from --logs-level/--verbose or
-	// ATMOS_LOGS_LEVEL/ATMOS_VERBOSE instead of hardcoding Warning; otherwise a Debug/Trace level the
-	// user explicitly asked for is dropped and best-effort diagnostics (such as telemetry's
-	// "Could not load config") are silently filtered out. Flags are not parsed by Cobra yet at this
-	// point, so derive them from os.Args. LogsConfigFromArgs defaults to Warning when nothing is set.
+	// unreliable. Still honor an explicitly requested log level from ATMOS_LOGS_LEVEL/ATMOS_VERBOSE
+	// instead of hardcoding Warning; otherwise a Debug/Trace level the user explicitly asked for is
+	// dropped and best-effort diagnostics (such as telemetry's "Could not load config") are silently
+	// filtered out. Only the environment variables are honored here: Cobra has not parsed flags yet,
+	// and the raw argv cannot be parsed safely without the full flag registry (a token can be the
+	// operand of another value-taking flag), so flag-level requests are left to the full command path.
+	// LogsConfigFromCommand(nil) reads ATMOS_LOGS_*/ATMOS_VERBOSE and defaults to Warning.
 	return &schema.AtmosConfiguration{
-		Logs: startup.LogsConfigFromArgs(os.Args[1:]),
+		Logs: startup.LogsConfigFromCommand(nil),
 	}
 }
 
