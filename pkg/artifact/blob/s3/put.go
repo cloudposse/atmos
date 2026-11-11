@@ -93,7 +93,10 @@ func effectivePartSize(size, partSize int64) int64 {
 	if size <= 0 {
 		return partSize
 	}
-	needed := (size + MaxParts - 1) / MaxParts
+	needed := size / MaxParts
+	if size%MaxParts != 0 {
+		needed++
+	}
 	return max(partSize, needed)
 }
 
