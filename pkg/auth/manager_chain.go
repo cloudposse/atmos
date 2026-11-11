@@ -66,7 +66,9 @@ func (m *manager) authenticateChain(ctx context.Context, identityName string) (t
 	// aws/credential-process) bypasses this cache: helper credentials may carry no expiration,
 	// so isCredentialValid would treat them as valid and skip the helper for the whole process.
 	// Multi-step chains still cache their final downstream credentials.
-	skipProcessCache := (len(m.chain) == 1 && m.chainRootIsStandalone()) || m.chainRootHasPrivateCache()
+	// GitLab job tokens must be read on every authentication, including within one process.
+	skipProcessCache := (len(m.chain) == 1 && m.chainRootIsStandalone()) ||
+		m.chainRootHasPrivateCache() || m.chainRootIsGitLabOIDC()
 	cacheKey := m.chainCacheKey()
 	if !skipProcessCache {
 		if cached := m.cachedChainCredentials(cacheKey); cached != nil {

@@ -54,7 +54,7 @@ func TestAuthExecGitLabCredentialCleanup(t *testing.T) {
 				if target == "production" {
 					wantActions = append(wantActions, "AssumeRole")
 				}
-				assert.Equal(t, wantActions, actions(), "credentials are reused throughout the command")
+				assert.Equal(t, wantActions, actions(), "the child uses the credentials prepared for this invocation")
 				assertGitLabExecSharedProfilesPreserved(t, files)
 			})
 		}
@@ -187,7 +187,8 @@ func TestAuthExecGitLabOverlappingInvocations(t *testing.T) {
 	require.NoError(t, shell.RunCommand([]string{binary, "-test.run=^TestGitLabExecChildProcess$"}, contexts[1].envList))
 	require.NoError(t, cleanupGitLabAuthExec(contexts[1]))
 
-	assert.Equal(t, []string{"AssumeRoleWithWebIdentity"}, actions(), "the process cache remains reusable")
+	assert.Equal(t, []string{"AssumeRoleWithWebIdentity", "AssumeRoleWithWebIdentity"}, actions(),
+		"each invocation must authenticate independently with the current job token")
 	assertGitLabExecSharedProfilesPreserved(t, files)
 }
 

@@ -21,9 +21,11 @@ An [`aws/assume-role` identity](/cli/configuration/auth/identities#assume-role) 
 
 Configuration validation does not require a live job token. Authentication fails with a clear error if the configured environment variable is missing or empty.
 
-Atmos does not cache the GitLab token or derived AWS credentials in the keyring. AWS credentials can be reused within one Atmos invocation and are written to Atmos-managed credential files for external tools.
+Atmos does not cache the GitLab token or derived AWS credentials in the keyring or the process-level credential cache. Each authentication through an `aws/assume-role` identity reads the current job token and exchanges it with AWS STS through the identity chain. AWS credentials are written to Atmos-managed credential files for external tools.
 
-The [`atmos auth exec`](/cli/commands/auth/exec) command writes AWS credential and config files to a private temporary directory for each invocation, preserving existing login profiles and allowing overlapping commands to run independently. It removes that directory when the command returns, including on errors. A separate `atmos auth login` also authenticates in a private temporary directory and removes its AWS files before returning, including on failure. Login validates authentication; use `auth exec` to supply credentials to an external command with the current job token.
+The [`atmos auth exec`](/cli/commands/auth/exec) command writes AWS credential and config files to a private temporary directory for each invocation, preserving existing login profiles and allowing overlapping commands to run independently. It removes that directory when the command returns, including on errors.
+
+To validate AWS authentication and role trust, run `atmos auth login --identity=<aws-role-identity>` with an `aws/assume-role` identity. Provider-only login checks that the configured token variable is nonempty without contacting AWS. GitLab identity login uses a private temporary directory and removes its AWS files before returning, including on failure. Use `auth exec` to supply credentials to an external command with the current job token.
 
 If directory removal fails, Atmos reports a cleanup error and unexpired credentials may remain. Resolve the error and remove the affected invocation's private directory and any remaining files.
 

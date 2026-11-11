@@ -58,7 +58,7 @@ func (p *oidcProvider) PreAuthenticate(_ types.AuthManager) error {
 }
 
 // IsAmbient prevents the manager from persisting the token or credentials derived
-// from it in the keyring. The process-level cache still applies to the final credentials.
+// from it in the keyring. GitLab chains also bypass the shared process credential cache.
 func (p *oidcProvider) IsAmbient() bool {
 	return true
 }

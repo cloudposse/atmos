@@ -62,7 +62,7 @@ func TestGitLabOIDCAuthenticationChain(t *testing.T) {
 	}
 }
 
-// runGitLabOIDCChain exercises mock STS authentication, process-local reuse, token rotation, and explicit
+// runGitLabOIDCChain exercises mock STS authentication, repeated token resolution, token rotation, and explicit
 // logout of managed AWS files.
 func runGitLabOIDCChain(t *testing.T, target string, wantActions, wantChain []string) {
 	t.Helper()
@@ -106,7 +106,9 @@ func runGitLabOIDCChain(t *testing.T, target string, wantActions, wantChain []st
 	assert.Equal(t, wantActions, actions)
 	assert.Equal(t, []string{"initial-gitlab-job-token"}, tokens)
 	assertGitLabToolCredentials(t, info, target, expiration)
-	verifyGitLabOIDCRefresh(t, newManager, target, wantActions, &actions, &tokens)
+	verifyGitLabOIDCRefresh(t, m, newManager, target, wantActions, &actions, &tokens)
+	_, cached := processCredentialCache.Load(m.(*manager).chainCacheKey())
+	assert.False(t, cached, "GitLab-derived credentials must not enter the process cache")
 	require.NoError(t, m.LogoutProvider(context.Background(), "gitlab", false))
 	// Logging out removes the tool credentials even though the provider owns no files.
 	files, err := awsCloud.NewAWSFileManager("", "gitlab-test")
@@ -190,22 +192,42 @@ func assertGitLabToolCredentials(t *testing.T, info *types.WhoamiInfo, target st
 	assert.NotContains(t, string(contents), "gitlab-job-token")
 }
 
-func verifyGitLabOIDCRefresh(t *testing.T, newManager func() types.AuthManager, target string, wantActions []string, actions, tokens *[]string) {
+// verifyGitLabOIDCRefresh checks repeated authentication without clearing any cache:
+// both an existing manager and a new manager must read token changes and reject missing tokens.
+func verifyGitLabOIDCRefresh(t *testing.T, current types.AuthManager, newManager func() types.AuthManager, target string, wantActions []string, actions, tokens *[]string) {
 	t.Helper()
-	_, err := newManager().Authenticate(context.Background(), target)
-	require.NoError(t, err)
-	assert.Equal(t, wantActions, *actions, "new managers in one command reuse process-cached AWS credentials")
-	resetProcessCredentialCache()
-	t.Setenv("ATMOS_OIDC_TOKEN", "rotated-gitlab-job-token")
-	_, err = newManager().Authenticate(context.Background(), target)
-	require.NoError(t, err)
-	wantRepeated := append(append([]string{}, wantActions...), wantActions...)
-	assert.Equal(t, wantRepeated, *actions)
-	assert.Equal(t, []string{"initial-gitlab-job-token", "rotated-gitlab-job-token"}, *tokens)
-	// Existing AWS files must not bypass a missing job token on a subsequent run.
-	resetProcessCredentialCache()
-	t.Setenv("ATMOS_OIDC_TOKEN", "")
-	_, err = newManager().Authenticate(context.Background(), target)
-	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
-	assert.Equal(t, wantRepeated, *actions)
+	expectedActions := append([]string{}, wantActions...)
+	expectedTokens := []string{"initial-gitlab-job-token"}
+	for _, factory := range []struct {
+		name string
+		new  func() types.AuthManager
+	}{
+		{name: "same manager", new: func() types.AuthManager { return current }},
+		{name: "new manager", new: newManager},
+	} {
+		for _, tc := range []struct {
+			name  string
+			token string
+			valid bool
+		}{
+			{name: "unchanged token", token: "initial-gitlab-job-token", valid: true},
+			{name: "rotated token", token: "rotated-gitlab-job-token", valid: true},
+			{name: "missing token"},
+			{name: "blank token", token: " \t\n"},
+		} {
+			t.Run(factory.name+"/"+tc.name, func(t *testing.T) {
+				t.Setenv("ATMOS_OIDC_TOKEN", tc.token)
+				_, err := factory.new().Authenticate(context.Background(), target)
+				if tc.valid {
+					require.NoError(t, err)
+					expectedActions = append(expectedActions, wantActions...)
+					expectedTokens = append(expectedTokens, tc.token)
+				} else {
+					require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+				}
+				assert.Equal(t, expectedActions, *actions, "each successful authentication must call STS again")
+				assert.Equal(t, expectedTokens, *tokens, "each exchange must use the current job token")
+			})
+		}
+	}
 }

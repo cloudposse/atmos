@@ -221,7 +221,7 @@ func authenticateForExec(ctx context.Context, execCtx *authExecContext) error {
 	var err error
 
 	// GitLab must authenticate with the current job token, never a previous job's files.
-	// Authenticate still permits credential reuse within this process.
+	// Every authentication of a GitLab chain exchanges the current job token.
 	if execCtx.credentialDir == "" {
 		_, err = execCtx.authManager.GetCachedCredentials(ctx, execCtx.identity)
 	}
