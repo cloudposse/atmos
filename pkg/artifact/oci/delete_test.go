@@ -126,3 +126,11 @@ func TestDeleteRefusesAMovedTag(t *testing.T) {
 	_, err = repo.Delete(context.Background(), old, artifact.DeleteOptions{Scope: artifact.DeleteReference})
 	require.ErrorIs(t, err, errUtils.ErrArtifactConflict, "the tag no longer names the pinned manifest")
 }
+
+func TestRegistryRejectsReferenceScope(t *testing.T) {
+	repo := newRegistryRepo(t, newRegistry(t, nil))
+	first := publish(t, repo, publishSpec{content: "keep"})
+	_, err := repo.Delete(context.Background(), first.Pinned, artifact.DeleteOptions{Scope: artifact.DeleteReference})
+	require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+	assert.True(t, resolves(repo, appName, appVersion))
+}

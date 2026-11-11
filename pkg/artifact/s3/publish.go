@@ -154,6 +154,19 @@ func (r *Repository) unchanged(ctx context.Context, job *publishJob, plan *publi
 	if rep == nil || rep.RecordDigest != current.RecordDigest {
 		return nil, fmt.Errorf("%w: %s:%s is completed but has no matching representation", errUtils.ErrArtifactIntegrityFailed, current.Name, current.Version)
 	}
+	journal, err := r.loadOperation(ctx, current.OperationID)
+	if err != nil {
+		return nil, err
+	}
+	if journal != nil && journal.Prior != nil {
+		keep, err := setOfRecord(record).keys(rep.Packaging, rep.Location)
+		if err != nil {
+			return nil, err
+		}
+		if err := r.retirePrior(ctx, journal.Prior, job, keep); err != nil {
+			return nil, err
+		}
+	}
 	r.tidyOperation(ctx, current.OperationID)
 	return r.result(record, current.RecordDigest, rep, layout.AdmitUnchanged.Outcome(), plan.scope), nil
 }

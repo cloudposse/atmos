@@ -119,3 +119,19 @@ func TestDelete_ThenRepublish(t *testing.T) {
 	assert.Equal(t, artifact.OutcomeCreated, again.Outcome)
 	assertIntact(t, repo, defaultRef())
 }
+
+func TestDeleteRejectsUnrelatedAndReleasedLocks(t *testing.T) {
+	repo := newRepo(t, noneSpec())
+	pinned := publish(t, repo, &prepareSpec{}, artifact.PublishOptions{}).Pinned
+	ctx := context.Background()
+	wrong, err := repo.Lock(ctx, artifact.LockRequest{Resource: "other:1"})
+	require.NoError(t, err)
+	_, err = repo.Delete(ctx, pinned, artifact.DeleteOptions{Lock: wrong})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+	require.NoError(t, wrong.Release(ctx))
+	lock, err := repo.Lock(ctx, artifact.LockRequest{Resource: pinned.Ref.Name + ":" + pinned.Ref.Version})
+	require.NoError(t, err)
+	require.NoError(t, lock.Release(ctx))
+	_, err = repo.Delete(ctx, pinned, artifact.DeleteOptions{Lock: lock})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+}

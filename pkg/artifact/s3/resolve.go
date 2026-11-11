@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/layout"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -76,9 +77,10 @@ func (r *Repository) Inspect(ctx context.Context, pinned artifact.PinnedReferenc
 
 // listCandidate is one completed reference awaiting its Record.
 type listCandidate struct {
-	name    string
-	version string
-	digest  digest.Digest
+	name       string
+	version    string
+	digest     digest.Digest
+	generation int64
 }
 
 func (c *listCandidate) less(other *listCandidate) bool {
@@ -102,7 +104,7 @@ func (r *Repository) List(ctx context.Context, query artifact.ListQuery) (*artif
 	candidates := make([]listCandidate, 0, len(refs))
 	for _, state := range refs {
 		if state.ref.Available() && (query.Name == "" || state.ref.Name == query.Name) {
-			candidates = append(candidates, listCandidate{name: state.ref.Name, version: state.ref.Version, digest: state.ref.RecordDigest})
+			candidates = append(candidates, listCandidate{name: state.ref.Name, version: state.ref.Version, digest: state.ref.RecordDigest, generation: state.ref.Generation})
 		}
 	}
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].less(&candidates[j]) })
@@ -170,9 +172,16 @@ func cursorAfter(candidate *listCandidate, cursor string) bool {
 }
 
 func (r *Repository) listEntry(ctx context.Context, candidate *listCandidate, labels []artifact.Label) (artifact.ListEntry, bool, error) {
-	record, _, err := r.loadRecord(ctx, candidate.digest)
+	record, _, recordErr := r.loadRecord(ctx, candidate.digest)
+	current, err := r.loadReference(ctx, layout.ReferenceKey(candidate.name, candidate.version))
 	if err != nil {
 		return artifact.ListEntry{}, false, err
+	}
+	if current == nil || !current.ref.Available() || current.ref.Generation != candidate.generation || current.ref.RecordDigest != candidate.digest {
+		return artifact.ListEntry{}, false, nil
+	}
+	if recordErr != nil {
+		return artifact.ListEntry{}, false, recordErr
 	}
 	if record.Name != candidate.name || record.Version != candidate.version {
 		return artifact.ListEntry{}, false, fmt.Errorf("%w: record %s describes %s:%s but its reference is %s:%s",

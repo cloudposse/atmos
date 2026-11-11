@@ -36,7 +36,7 @@ type attachmentSet struct {
 }
 
 // attachments lists the Sigstore bundle referrers of a root, in digest order, inspecting at most
-// [maxAttachments] of them. Referrers of other types (SBOMs, attestations) and manifests that
+// [maxAttachments] valid signatures and a bounded number of candidates. Referrers of other types and manifests that
 // merely contain the root as a child are not evidence and are skipped. A failure to list
 // referrers is an error: required signature material must never be silently omitted.
 func (r *Repository) attachments(ctx context.Context, st store, name string, rootDesc ocispec.Descriptor) (*attachmentSet, error) {
@@ -54,8 +54,8 @@ func (r *Repository) attachments(ctx context.Context, st store, name string, roo
 		if !isManifestMediaType(predecessors[index].MediaType) {
 			continue
 		}
-		if inspected >= maxAttachments {
-			set.warn("evidence-truncated", fmt.Sprintf("more than %d referrers of %s; the rest were not inspected", maxAttachments, rootDesc.Digest))
+		if inspected >= maxAttachments*4 {
+			set.warn("evidence-truncated", fmt.Sprintf("more than %d candidate referrers of %s; the rest were not inspected", maxAttachments*4, rootDesc.Digest))
 			break
 		}
 		inspected++
@@ -66,6 +66,10 @@ func (r *Repository) attachments(ctx context.Context, st store, name string, roo
 		case problem != "":
 			set.warn("malformed-evidence", problem)
 		case item != nil:
+			if len(set.valid) >= maxAttachments {
+				set.warn("evidence-truncated", fmt.Sprintf("more than %d signature referrers of %s", maxAttachments, rootDesc.Digest))
+				return set, nil
+			}
 			set.valid = append(set.valid, *item)
 		}
 	}
@@ -84,7 +88,7 @@ func (r *Repository) readAttachment(ctx context.Context, st store, name string, 
 		if ctx.Err() != nil {
 			return nil, "", ctx.Err()
 		}
-		return nil, fmt.Sprintf("referrer %s could not be read: %v", desc.Digest, err), nil
+		return nil, "", fmt.Errorf("%w: read referrer %s: %w", errUtils.ErrArtifactDownloadFailed, desc.Digest, err)
 	}
 	var manifest ocispec.Manifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {

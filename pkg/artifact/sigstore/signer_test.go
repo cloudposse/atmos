@@ -167,6 +167,7 @@ func TestEvidenceFormatOf(t *testing.T) {
 		{name: "certificate", bundle: `{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json","verificationMaterial":{"certificate":{"rawBytes":"AA=="}}}`, want: artifact.EvidenceSigstoreBundle, wantMedia: "application/vnd.dev.sigstore.bundle.v0.3+json"},
 		{name: "certificate chain defaults the media type", bundle: `{"verificationMaterial":{"x509CertificateChain":{"certificates":[]}}}`, want: artifact.EvidenceSigstoreBundle, wantMedia: defaultBundleMediaType},
 		{name: "public key", bundle: `{"mediaType":"application/vnd.dev.sigstore.bundle+json;version=0.2","verificationMaterial":{"publicKey":{"hint":"k"}}}`, want: artifact.EvidencePublicKeyBundle, wantMedia: "application/vnd.dev.sigstore.bundle+json;version=0.2"},
+		{name: "foreign media type", bundle: `{"mediaType":"application/json","verificationMaterial":{"publicKey":{"hint":"k"}}}`, wantErr: true},
 		{name: "both", bundle: `{"verificationMaterial":{"certificate":{},"publicKey":{}}}`, wantErr: true},
 		{name: "neither", bundle: `{"verificationMaterial":{}}`, wantErr: true},
 		{name: "null material", bundle: `{"verificationMaterial":{"certificate":null}}`, wantErr: true},
@@ -186,4 +187,15 @@ func TestEvidenceFormatOf(t *testing.T) {
 		})
 	}
 	assert.Contains(t, defaultBundleMediaType, BundleMediaTypePrefix)
+}
+
+func TestSignerRejectsCancellationAfterBlobSigning(t *testing.T) {
+	f := newFixture(t)
+	signed := f.auth.SignWithKey(t, SubjectStatement(f.subject))
+	ctx, cancel := context.WithCancel(context.Background())
+	ctrl := gomock.NewController(t)
+	blob := signature.NewMockBlobSigner(ctrl)
+	blob.EXPECT().Sign(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, []byte) ([]byte, error) { cancel(); return signed.Bundle, nil })
+	_, err := NewSigner(blob).Sign(ctx, f.subject)
+	require.ErrorIs(t, err, context.Canceled)
 }

@@ -40,18 +40,6 @@ func (k *keySet) trustedKeys() []signature.TrustedKey {
 	return out
 }
 
-// fingerprintFor maps a bundle's key hint back to the fingerprint of the key that matched.
-func (k *keySet) fingerprintFor(hint string) string {
-	for index := range k.keys {
-		for _, candidate := range k.keys[index].hints {
-			if candidate == hint {
-				return k.keys[index].fingerprint
-			}
-		}
-	}
-	return hint
-}
-
 // newResolvedKey derives the fingerprint and the hint variants from a key's PKIX DER bytes.
 func newResolvedKey(der []byte, key crypto.PublicKey, extraHints ...string) resolvedKey {
 	sum := sha256.Sum256(der)

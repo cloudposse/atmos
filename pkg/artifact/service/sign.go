@@ -40,7 +40,11 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	if err := checkSigningCapability(request.Repository, &info, s.signer, subject); err != nil {
 		return err
 	}
-	locks, err := s.acquireLocks(ctx, op, opSign, []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: request.Ref.String()}})
+	resource := request.Ref.String()
+	if inspection.Record != nil {
+		resource = inspection.Record.Name + ":" + inspection.Record.Version
+	}
+	locks, err := s.acquireLocks(ctx, op, opSign, []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: resource}})
 	if err != nil {
 		return err
 	}

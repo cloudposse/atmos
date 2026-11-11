@@ -111,11 +111,17 @@ type candidate struct {
 func (v *Verifier) Verify(ctx context.Context, subject artifact.SignatureSubject, evidence []artifact.EvidenceBlob, policy artifact.VerificationPolicy) (*artifact.VerificationResult, error) {
 	defer perf.Track(nil, "sigstore.Verifier.Verify")()
 
+	if err := subject.Validate(); err != nil {
+		return nil, err
+	}
 	result := &artifact.VerificationResult{Subject: subject, Status: artifact.VerificationFailed}
 	if fingerprint, err := policy.Fingerprint(); err == nil {
 		result.PolicyFingerprint = fingerprint
 	}
 	if !policy.HasTrustConstraints() {
+		if policy.RequireSignature {
+			return result, fmt.Errorf("%w: no trust constraints configured", errUtils.ErrArtifactVerificationFailed)
+		}
 		result.Status = artifact.VerificationUnchecked
 		return result, nil
 	}
@@ -188,6 +194,7 @@ func (s *session) satisfy(ctx context.Context, set *artifact.TrustSet, candidate
 	var failures []string
 	if keyErr != nil {
 		failures = append(failures, keyErr.Error())
+		return satisfaction{index: -1, failures: failures}, nil
 	}
 	for index := range candidates {
 		claim, err := s.authenticate(ctx, set, keys, &candidates[index])
@@ -249,17 +256,20 @@ func (s *session) verifyKeyless(ctx context.Context, trusted []artifact.TrustedI
 }
 
 func (s *session) verifyKey(ctx context.Context, keys *keySet, c *candidate) (artifact.SignerClaim, error) {
-	verifier := signature.KeyVerifier{Keys: keys.trustedKeys(), LoadRoot: s.loader}
 	var failure error
-	for _, subjectDigest := range s.digests {
-		result, err := verifier.Verify(ctx, c.blob.Data, subjectDigest, s.policy.Offline)
-		if err == nil {
-			return artifact.SignerClaim{KeyID: keys.fingerprintFor(result.Hint)}, nil
+	for _, key := range keys.keys {
+		one := &keySet{keys: []resolvedKey{key}}
+		verifier := signature.KeyVerifier{Keys: one.trustedKeys(), LoadRoot: s.loader}
+		for _, subjectDigest := range s.digests {
+			_, err := verifier.Verify(ctx, c.blob.Data, subjectDigest, s.policy.Offline)
+			if err == nil {
+				return artifact.SignerClaim{KeyID: key.fingerprint}, nil
+			}
+			if ctx.Err() != nil {
+				return artifact.SignerClaim{}, err
+			}
+			failure = err
 		}
-		if ctx.Err() != nil {
-			return artifact.SignerClaim{}, err
-		}
-		failure = err
 	}
 	return artifact.SignerClaim{}, fmt.Errorf("%s: %w", c.digest, failure)
 }
@@ -319,7 +329,7 @@ func evidenceDigest(blob *artifact.EvidenceBlob) digest.Digest {
 func (s *session) screenOne(blob *artifact.EvidenceBlob) (artifact.EvidenceFormat, bool) {
 	held := blob.Evidence
 	switch {
-	case held.Subject.Kind != s.subject.Kind || held.Subject.Digest != s.subject.Digest:
+	case held.Subject != s.subject:
 		s.add(artifact.SeverityWarning, "subject-mismatch", "evidence bound to a different subject was ignored")
 	case held.Format != artifact.EvidenceSigstoreBundle && held.Format != artifact.EvidencePublicKeyBundle:
 		s.add(artifact.SeverityWarning, "unsupported-evidence", fmt.Sprintf("evidence in unsupported format %q was ignored", held.Format))

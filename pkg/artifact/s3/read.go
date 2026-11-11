@@ -93,6 +93,9 @@ func (r *Repository) streams(ctx context.Context, v *view, guard func() error) (
 			return nil, fmt.Errorf("%w: an archive representation must have exactly one payload, found %d", errUtils.ErrArtifactIntegrityFailed, len(v.rep.Payload))
 		}
 		descriptor := v.rep.Payload[0]
+		if err := artifact.ValidateDigest(descriptor.Digest); err != nil {
+			return nil, fmt.Errorf("%w: invalid payload digest: %w", errUtils.ErrArtifactIntegrityFailed, err)
+		}
 		streams = append(streams, artifact.ContentStream{
 			Descriptor: descriptor, Role: artifact.BlobPayload,
 			Reader: r.objectReader(ctx, v.rep.Location, descriptor.Digest, descriptor.Size, guard),

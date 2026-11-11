@@ -85,7 +85,15 @@ func (s *Store) runProbe(ctx context.Context, api API) error {
 	}()
 	err := create()
 	if blob.IsPreconditionFailed(err) {
-		return nil
+		_, deleteErr := api.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.cfg.bucket), Key: aws.String(objectKey), IfMatch: aws.String("\"atmos-impossible-etag\"")}, noRetry)
+		deleteErr = classify(request{op: "probe", key: key, mutating: true, conditional: true}, deleteErr)
+		if blob.IsPreconditionFailed(deleteErr) {
+			return nil
+		}
+		if deleteErr == nil {
+			return unsupportedConditional("probe", key, "the endpoint ignored an incorrect If-Match on delete")
+		}
+		return deleteErr
 	}
 	if err == nil {
 		return unsupportedConditional("probe", key, "the endpoint accepted a second create-if-absent for the same key, so it ignores If-None-Match")

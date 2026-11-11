@@ -99,7 +99,7 @@ func bindSubject(subject artifact.SignatureSubject, loaded *root) error {
 			return fmt.Errorf("%w: the subject declares %d bytes but the Record is %d", errUtils.ErrArtifactRefInvalid, subject.Size, loaded.manifest.Config.Size)
 		}
 	case artifact.SubjectOCIRoot:
-		if loaded.desc.Digest != subject.Digest {
+		if loaded.desc.Digest != subject.Digest || loaded.desc.MediaType != subject.MediaType || (subject.Size != 0 && loaded.desc.Size != subject.Size) {
 			return fmt.Errorf("%w: %s is not the manifest or index digest of the located root", errUtils.ErrArtifactRefInvalid, subject.Digest)
 		}
 	default:
@@ -262,7 +262,7 @@ func finishVerification(base, verified *artifact.VerificationResult, verifyErr e
 		return result, verifyErr
 	case verifyErr != nil:
 		return result, fmt.Errorf("%w: %w", errUtils.ErrArtifactVerificationFailed, verifyErr)
-	case result.Status == artifact.VerificationFailed:
+	case result.Status != artifact.VerificationVerified:
 		return result, fmt.Errorf("%w: no valid permitted signature satisfies the policy for %s", errUtils.ErrArtifactVerificationFailed, result.Subject.Digest)
 	}
 	return result, nil
@@ -291,6 +291,11 @@ func (r *Repository) ReadEvidence(ctx context.Context, pinned *artifact.PinnedRe
 	set, err := r.attachments(ctx, st, pinned.Ref.Name, loaded.desc)
 	if err != nil {
 		return nil, err
+	}
+	for _, diagnostic := range set.diagnostics {
+		if diagnostic.Code == "evidence-truncated" {
+			return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactDownloadFailed, diagnostic.Message)
+		}
 	}
 	var blobs []artifact.EvidenceBlob
 	for item := range set.valid {

@@ -421,12 +421,15 @@ func toValues(in []digest.Digest) []digestValue { return in }
 
 func TestVerify_NoTrustConstraintsIsUnchecked(t *testing.T) {
 	f := newFixture(t)
-	for _, policy := range []artifact.VerificationPolicy{{}, {RequireSignature: true}, {TrustSets: []artifact.TrustSet{{}}}} {
+	for _, policy := range []artifact.VerificationPolicy{{}, {TrustSets: []artifact.TrustSet{{}}}} {
 		result, err := f.verifier().Verify(context.Background(), f.subject, []artifact.EvidenceBlob{f.keyless(testIdentity, testIssuer)}, policy)
 		require.NoError(t, err)
 		assert.Equal(t, artifact.VerificationUnchecked, result.Status, "nothing is claimed without trust configuration")
 		assert.Empty(t, result.Claims)
 	}
+	result, err := f.verifier().Verify(context.Background(), f.subject, nil, artifact.VerificationPolicy{RequireSignature: true})
+	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
+	assert.Equal(t, artifact.VerificationFailed, result.Status)
 }
 
 func TestVerify_CanceledContext(t *testing.T) {
@@ -463,4 +466,22 @@ func tamperSignature(t *testing.T, bundle []byte) []byte {
 	out, err := json.Marshal(parsed)
 	require.NoError(t, err)
 	return out
+}
+
+func TestVerifyRejectsInvalidSubject(t *testing.T) {
+	f := newFixture(t)
+	subject := f.subject
+	subject.Digest = "invalid"
+	_, err := f.verifier().Verify(context.Background(), subject, nil, artifact.VerificationPolicy{})
+	require.ErrorIs(t, err, errUtils.ErrArtifactRefInvalid)
+}
+
+func TestVerifyRejectsEvidenceWithDifferentSubjectMetadata(t *testing.T) {
+	f := newFixture(t)
+	for _, mutate := range []func(*artifact.SignatureSubject){func(s *artifact.SignatureSubject) { s.Size++ }, func(s *artifact.SignatureSubject) { s.MediaType = "different" }} {
+		blob := f.keyless(testIdentity, testIssuer)
+		mutate(&blob.Evidence.Subject)
+		_, err := f.verifier().Verify(context.Background(), f.subject, []artifact.EvidenceBlob{blob}, identityPolicy(testIdentity, testIssuer))
+		require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
+	}
 }

@@ -156,7 +156,10 @@ func (b *registryBackend) names(ctx context.Context) ([]string, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, b.unsupportedEnumeration(fmt.Sprintf("the registry did not provide a repository catalog (%v)", err))
+		if atmosoci.IsCatalogUnavailable(err) {
+			return nil, b.unsupportedEnumeration(fmt.Sprintf("the registry did not provide a repository catalog (%v)", err))
+		}
+		return nil, fmt.Errorf("%w: list registry catalog: %w", errUtils.ErrArtifactListFailed, err)
 	}
 	scope := ""
 	if b.prefix != "" {
