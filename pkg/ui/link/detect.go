@@ -52,7 +52,7 @@ func (e Environment) termProgramSupports() bool {
 		return versionAtLeast(version, minITermMajor, minITermMinor)
 	case "vscode":
 		return versionAtLeast(version, minVSCodeMajor, minVSCodeMinor)
-	case "WezTerm", "ghostty":
+	case "WezTerm", "ghostty", "Orca":
 		return true
 	default:
 		return false
