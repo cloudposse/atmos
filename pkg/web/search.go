@@ -26,6 +26,8 @@ const (
 	DuckDuckGoMaxResults = 50
 	// GoogleMaxResults is the maximum number of results for Google CSE API.
 	GoogleMaxResults = 10
+	// GoogleDefaultBaseURL is the Google Custom Search JSON API URL used when no base URL is configured.
+	GoogleDefaultBaseURL = "https://www.googleapis.com/customsearch/v1"
 )
 
 // SearchResult represents a single search result.
@@ -173,21 +175,28 @@ func wrapSearchError(baseErr, err error) error {
 
 // GoogleEngine implements search using Google Custom Search API.
 type GoogleEngine struct {
-	client *http.Client
-	apiKey string
-	cseID  string
+	client  *http.Client
+	apiKey  string
+	cseID   string
+	baseURL string
 }
 
 // NewGoogleEngine creates a new Google Custom Search engine.
-func NewGoogleEngine(apiKey, cseID string) *GoogleEngine {
+// An empty baseURL uses GoogleDefaultBaseURL.
+func NewGoogleEngine(apiKey, cseID, baseURL string) *GoogleEngine {
 	defer perf.Track(nil, "web.NewGoogleEngine")()
+
+	if baseURL == "" {
+		baseURL = GoogleDefaultBaseURL
+	}
 
 	return &GoogleEngine{
 		client: &http.Client{
 			Timeout: DefaultHTTPTimeout,
 		},
-		apiKey: apiKey,
-		cseID:  cseID,
+		apiKey:  apiKey,
+		cseID:   cseID,
+		baseURL: baseURL,
 	}
 }
 
@@ -198,7 +207,7 @@ func (e *GoogleEngine) Search(ctx context.Context, query string, maxResults int)
 	maxResults = normalizeMaxResults(maxResults, DefaultMaxResults, GoogleMaxResults)
 
 	// Build API URL.
-	apiURL := buildGoogleAPIURL(e.apiKey, e.cseID, query, maxResults)
+	apiURL := buildGoogleAPIURL(e.baseURL, e.apiKey, e.cseID, query, maxResults)
 
 	// Execute API request and parse response.
 	items, err := e.fetchGoogleResults(ctx, apiURL)
@@ -217,9 +226,14 @@ func (e *GoogleEngine) Search(ctx context.Context, query string, maxResults int)
 }
 
 // buildGoogleAPIURL constructs the Google Custom Search API URL.
-func buildGoogleAPIURL(apiKey, cseID, query string, maxResults int) string {
+func buildGoogleAPIURL(baseURL, apiKey, cseID, query string, maxResults int) string {
+	if baseURL == "" {
+		baseURL = GoogleDefaultBaseURL
+	}
+
 	return fmt.Sprintf(
-		"https://www.googleapis.com/customsearch/v1?key=%s&cx=%s&q=%s&num=%d",
+		"%s?key=%s&cx=%s&q=%s&num=%d",
+		strings.TrimRight(baseURL, "/"),
 		apiKey,
 		cseID,
 		url.QueryEscape(query),
@@ -301,6 +315,7 @@ func NewSearchEngine(atmosConfig *schema.AtmosConfiguration) SearchEngine {
 		return NewGoogleEngine(
 			atmosConfig.AI.WebSearch.GoogleAPIKey,
 			atmosConfig.AI.WebSearch.GoogleCSEID,
+			atmosConfig.AI.WebSearch.GoogleBaseURL,
 		)
 	}
 
