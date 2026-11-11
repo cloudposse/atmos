@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"testing"
@@ -65,6 +66,11 @@ func TestList_PaginatesInLexicalOrderAndFiltersByLabel(t *testing.T) {
 	require.Len(t, page.Entries, 2)
 	assert.Equal(t, "a/app:10", page.Entries[0].Name+":"+page.Entries[0].Version)
 	assert.NotEmpty(t, page.NextCursor, "the label filter pages too")
+
+	large, err := repo.List(context.Background(), artifact.ListQuery{PageSize: math.MaxInt})
+	require.NoError(t, err)
+	assert.Len(t, large.Entries, 5)
+	assert.Empty(t, large.NextCursor)
 
 	named, err := repo.List(context.Background(), artifact.ListQuery{Name: "a/app"})
 	require.NoError(t, err)
