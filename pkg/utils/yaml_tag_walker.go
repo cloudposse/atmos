@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -352,6 +353,63 @@ func simpleTagHandler(resolve func(fullTagValue string) (any, error)) TagHandler
 		}
 		return false, updateYamlNode(node, result, val, ctx.File)
 	}
+}
+
+// ConfineScaffoldIncludes wraps local include handlers with a publication-root boundary.
+func ConfineScaffoldIncludes(policy TagWalkPolicy, root string) (TagWalkPolicy, error) {
+	defer perf.Track(nil, "utils.ConfineScaffoldIncludes")()
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return policy, err
+	}
+	realRoot, err = filepath.Abs(realRoot)
+	if err != nil {
+		return policy, err
+	}
+	for _, tag := range []string{AtmosYamlFuncInclude, AtmosYamlFuncIncludeRaw} {
+		next := policy.Handlers[tag]
+		policy.Handlers[tag] = func(ctx TagContext, node *yaml.Node, val string) (bool, error) {
+			if err := checkScaffoldInclude(realRoot, &ctx, val); err != nil {
+				return false, err
+			}
+			return next(ctx, node, val)
+		}
+	}
+	return policy, nil
+}
+
+func checkScaffoldInclude(root string, ctx *TagContext, val string) error {
+	parsed, err := parser.ParseInclude(val)
+	if err != nil {
+		return err
+	}
+	// Forced go-getter sources may disguise local files as remote includes.
+	// A local getter must not bypass the publication-root check below.
+	if localGetterInclude(parsed.Path) {
+		return fmt.Errorf("%w: local getter include %q is not allowed during scaffold publication", errUtils.ErrArtifactScaffoldInvalid, parsed.Path)
+	}
+	local := findLocalFile(parsed.Path, ctx.File, ctx.AtmosConfig)
+	if local == "" {
+		return nil
+	}
+	resolved, err := filepath.EvalSymlinks(local)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return fmt.Errorf("%w: include %q lies outside the scaffold publication root", errUtils.ErrArtifactScaffoldInvalid, parsed.Path)
+	}
+	return nil
+}
+
+func localGetterInclude(path string) bool {
+	lower := strings.ToLower(path)
+	if strings.Contains(lower, "file://") || strings.HasPrefix(lower, "file::") {
+		return true
+	}
+	_, source, forced := strings.Cut(path, "::")
+	return forced && (filepath.IsAbs(source) || strings.HasPrefix(source, "."))
 }
 
 // ScaffoldTagPolicy returns the TagWalkPolicy used to resolve scaffold.yaml

@@ -185,7 +185,7 @@ func (r *declaredCast) session(action *castplan.Action, child *schema.WorkflowSt
 			Duration: item.Duration, Timeout: item.Timeout, Rate: item.Rate, Interval: item.Interval, Repeat: item.Repeat, Path: item.Path,
 		})
 	}
-	return asciicast.RunSession(r.ctx, &asciicast.SessionOptions{
+	return runCastSession(r.ctx, &asciicast.SessionOptions{
 		Shell: child.Shell, Dir: child.WorkingDirectory, Env: env,
 		Width: child.Width, Height: child.Height, WriteRate: writeRate, KeyInterval: keyInterval, Actions: actions, ScopedWaits: true,
 		Observe: func(i int, item *asciicast.SessionAction) error {

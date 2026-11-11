@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -178,11 +177,15 @@ func (s *Store) Fresh(fetched time.Time) bool {
 // read returns the raw bytes of a snapshot file within the size bound, or nil when it is absent,
 // unreadable, or oversized.
 func (s *Store) read(path string) []byte {
-	file, err := os.Open(path)
+	file, err := openSnapshot(path)
 	if err != nil {
 		return nil
 	}
 	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil
+	}
 	raw, err := io.ReadAll(io.LimitReader(file, s.maxSize+1))
 	if err != nil || int64(len(raw)) > s.maxSize {
 		return nil

@@ -213,6 +213,9 @@ func (s *session) runTask(ctx context.Context, prefix string, t *task, library a
 		ctx, cancel = context.WithTimeout(ctx, t.timeout)
 		defer cancel()
 	}
+	if scoped, ok := library.(interface{ ForkTask() api.StepLibrary }); ok {
+		library = scoped.ForkTask()
+	}
 	s.event(TaskEvent{Name: t.name, Status: "running"})
 	cfg := retry.DefaultConfig()
 	if t.retry != nil {

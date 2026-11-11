@@ -68,7 +68,7 @@ func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 	defer perf.Track(nil, "step.ArtifactHandler.Execute")()
 
 	session := vars.artifactSession()
-	stepKey := artifactStepKey(step)
+	stepKey := vars.artifactScopeOrRoot().key() + "\x00" + artifactStepKey(step)
 	params, retained := session.retainedInput(stepKey)
 	if !retained {
 		var err error

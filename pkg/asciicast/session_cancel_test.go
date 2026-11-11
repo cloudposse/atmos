@@ -99,3 +99,20 @@ func TestRunSessionObserveFailureStopsTheSession(t *testing.T) {
 	require.ErrorIs(t, err, errObserve)
 	require.Equal(t, []int{0, 1}, observed, "actions after the failed checkpoint must not run")
 }
+
+func TestRunSessionBeforeActionsFailureStopsSession(t *testing.T) {
+	require.NoError(t, iolib.Initialize())
+	shell, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv(asciicastSessionHelperEnv, "1")
+	failure := errors.New("readiness rejected")
+	observed := false
+	err = RunSession(t.Context(), &SessionOptions{
+		Shell:         shell,
+		BeforeActions: func(context.Context, func(string) bool) error { return failure },
+		Actions:       []SessionAction{{Type: "pause", Duration: "1ms"}},
+		Observe:       func(int, *SessionAction) error { observed = true; return nil },
+	})
+	require.ErrorIs(t, err, failure)
+	require.False(t, observed)
+}

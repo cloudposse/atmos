@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact/produce"
@@ -45,6 +46,9 @@ func (Validator) ValidateScaffold(ctx context.Context, dir string) (produce.Prod
 		return produce.ProducerMetadata{}, err
 	}
 	manifestPath := filepath.Join(dir, config.ScaffoldConfigFileName)
+	if err := checkManifestWithinRoot(dir, manifestPath); err != nil {
+		return produce.ProducerMetadata{}, err
+	}
 	content, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -52,7 +56,7 @@ func (Validator) ValidateScaffold(ctx context.Context, dir string) (produce.Prod
 		}
 		return produce.ProducerMetadata{}, fmt.Errorf("%w: read %s: %w", errUtils.ErrArtifactScaffoldInvalid, manifestPath, err)
 	}
-	manifest, err := config.LoadScaffoldConfigFromContent(string(content), config.WithSourceDir(dir))
+	manifest, err := config.LoadScaffoldConfigFromContent(string(content), config.WithSourceDir(dir), config.WithIncludeRoot(dir))
 	if err != nil {
 		return produce.ProducerMetadata{}, fmt.Errorf("%w: %s: %w", errUtils.ErrArtifactScaffoldInvalid, manifestPath, err)
 	}
@@ -61,4 +65,35 @@ func (Validator) ValidateScaffold(ctx context.Context, dir string) (produce.Prod
 		Version:     manifest.Metadata.Version,
 		Description: manifest.Metadata.Description,
 	}, nil
+}
+
+// checkManifestWithinRoot prevents publication from reading an outside manifest through a symlink.
+func checkManifestWithinRoot(dir, manifestPath string) error {
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return fmt.Errorf("%w: resolve scaffold root: %w", errUtils.ErrArtifactScaffoldInvalid, err)
+	}
+	root, err = filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("%w: resolve scaffold root: %w", errUtils.ErrArtifactScaffoldInvalid, err)
+	}
+	resolved, err := filepath.EvalSymlinks(manifestPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%w: resolve %s: %w", errUtils.ErrArtifactScaffoldInvalid, manifestPath, err)
+	}
+	resolved, err = filepath.Abs(resolved)
+	if err != nil {
+		return fmt.Errorf("%w: resolve %s: %w", errUtils.ErrArtifactScaffoldInvalid, manifestPath, err)
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return fmt.Errorf("%w: resolve %s: %w", errUtils.ErrArtifactScaffoldInvalid, manifestPath, err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return fmt.Errorf("%w: %s lies outside the scaffold publication root", errUtils.ErrArtifactScaffoldInvalid, manifestPath)
+	}
+	return nil
 }

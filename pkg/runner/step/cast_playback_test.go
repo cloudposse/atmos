@@ -41,6 +41,7 @@ func TestCastPlaybackSessionEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	t.Setenv(sessionShellHelperEnv, "1")
 	t.Setenv(sessionShellBannerEnv, "1")
+	installSessionReadyGate(t)
 	path := filepath.Join(t.TempDir(), "session.cast")
 	cast := &schema.WorkflowStep{Type: "cast", Mode: "session", Shell: shell, CastOutput: &schema.CastOutput{Cast: path}, Steps: []schema.WorkflowStep{
 		// The fake shell must be reading input before the command is typed.
@@ -58,16 +59,21 @@ func TestCastPlaybackSessionEndToEnd(t *testing.T) {
 	_, events, err := asciicast.ReadEvents(path)
 	require.NoError(t, err)
 	var text strings.Builder
-	var endpoint float64
+	var endpoint, readyAt float64
+	var readySeen bool
 	for _, event := range events {
+		text.WriteString(event.Data)
+		if !readySeen && strings.Contains(text.String(), sessionShellBanner) {
+			readyAt, readySeen = event.Time, true
+		}
 		if event.Data == "" {
 			endpoint = event.Time
 		}
-		text.WriteString(event.Data)
 	}
+	require.True(t, readySeen, "the shell readiness banner was recorded")
 	require.Contains(t, text.String(), "ready")
-	require.GreaterOrEqual(t, endpoint, 4.0)
-	require.Less(t, endpoint, 4.0+sessionReadyWaitTimeoutDuration.Seconds())
+	require.GreaterOrEqual(t, endpoint-readyAt, 4.0)
+	require.Less(t, endpoint-readyAt, 4.0+sessionReadyWaitTimeoutDuration.Seconds())
 }
 
 func TestCastPlaybackStepsEndToEnd(t *testing.T) {
@@ -156,6 +162,7 @@ func TestCastPlaybackPreservesPromptAcrossGroupBoundaries(t *testing.T) {
 			require.NoError(t, err)
 			t.Setenv(sessionShellHelperEnv, "1")
 			t.Setenv(sessionShellBannerEnv, "1")
+			installSessionReadyGate(t)
 			steps := []schema.WorkflowStep{
 				{Type: "session", Shell: shell, Steps: []schema.WorkflowStep{
 					// The fake shell must be reading input before the command is typed.
