@@ -15,6 +15,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// Discovered definitions are literal provider inventory data, so static inspection
+// (for example scoped `atmos auth validate`) includes them as well.
+func init() {
+	mergeStaticStacks = mergeConfigurationStacks
+}
+
 // mergeConfigurationStacks feeds provider definitions through the ordinary stack compiler.
 // The invocation-owned provider retains the caller's cancellation scope.
 func mergeConfigurationStacks(config *schema.AtmosConfiguration, stacks map[string]any, raw map[string]map[string]any, contexts AllStacksDeferredContexts) error {
