@@ -72,3 +72,19 @@ func TestInjectedTransportFactoryReceivesTheRepositoryIdentity(t *testing.T) {
 	assert.Equal(t, "registry", seenAlias)
 	assert.Equal(t, "registry-writer", seenIdentity)
 }
+
+func TestDefaultTransportRejectsInjectedResolverForIdentityBoundRegistry(t *testing.T) {
+	resolver := func(context.Context, string) (any, error) { return nil, nil }
+	repos := map[string]schema.ArtifactRepositoryConfig{"registry": *registryConfig("writer", "ghcr.io")}
+	composition, err := compose.New(&schema.AtmosConfiguration{Artifacts: schema.ArtifactConfig{Repositories: repos}}, compose.WithIdentityResolver(resolver))
+	require.NoError(t, err)
+	_, err = composition.Repositories.Open(context.Background(), "registry")
+	require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+	assert.Contains(t, err.Error(), "custom transport factory")
+
+	factory := compose.NewTransportFactory(authConfig(), nil)
+	_, err = factory(context.Background(), "registry", registryConfig("aws-writer", "ghcr.io"), resolver)
+	require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+	_, err = factory(context.Background(), "anonymous", registryConfig("", "ghcr.io"), resolver)
+	require.NoError(t, err, "an unbound registry does not use the resolver")
+}

@@ -122,7 +122,7 @@ func (p *artifactsProject) exists(parts ...string) bool {
 	return err == nil
 }
 
-// cliRun is the captured outcome of one real command run through RootCmd.
+// cliRun is the captured outcome of one run through a fresh artifacts command tree.
 type cliRun struct {
 	stdout string
 	stderr string
@@ -440,4 +440,18 @@ func TestArtifactsEnvironmentVariablesFeedFlags(t *testing.T) {
 	override := p.atmosArtifacts("publish", p.source, "--name=team/app", "--version=3.1.0", "--repository=backups")
 	require.NoError(t, override.err)
 	assert.Equal(t, "backups", jsonObject(t, override.stdout)["repository"], "a flag overrides the environment")
+}
+
+func TestExecuteHandsRootConfigToArtifacts(t *testing.T) {
+	p := newArtifactsProject(t, false)
+	artifactscmd.SetAtmosConfig(nil)
+	previousArgs := os.Args
+	os.Args = []string{"atmos", "artifacts", "publish", p.source, "--repository=work", "--name=app", "--version=1"}
+	t.Cleanup(func() {
+		os.Args = previousArgs
+		artifactscmd.SetAtmosConfig(nil)
+	})
+	RootCmd.SetArgs(nil)
+	require.NoError(t, Execute())
+	assert.True(t, p.exists("repositories", "work"), "the repository configured in atmos.yaml was used")
 }
