@@ -488,6 +488,19 @@ func TestOptionsRejectUnknownNamesAndWrongTypes(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupported)
 	_, err = applyOptions(map[string]string{}, map[string]*pluginv1.ComponentValue{"download_dir": {}})
 	require.ErrorIs(t, err, ErrUnsupported)
+	for name, values := range map[string][]any{
+		"download_dir":             {map[string]any{"path": "/cache"}, 42, true},
+		"iam_assume_role_duration": {"900", 1.5, map[string]any{"seconds": 900}},
+	} {
+		for _, value := range values {
+			t.Run(fmt.Sprintf("%s/%v", name, value), func(t *testing.T) {
+				env := map[string]string{}
+				_, err := applyOptions(env, map[string]*pluginv1.ComponentValue{name: encodedOption(t, value)})
+				require.ErrorIs(t, err, ErrUnsupported)
+				require.Empty(t, env)
+			})
+		}
+	}
 }
 
 func TestFeatureOptionsRankAboveEnvironmentAndConfiguration(t *testing.T) {

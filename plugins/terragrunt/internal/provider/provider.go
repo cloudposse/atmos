@@ -158,13 +158,15 @@ func applyOptions(env map[string]string, options map[string]*pluginv1.ComponentV
 		if !known {
 			return nil, optionProblem(name, "Check the option name against the package's declared options.")
 		}
-		var value any
-		if err := decode(options[name], &value); err != nil {
+		var text string
+		if name == "iam_assume_role_duration" {
+			var value int
+			if err := decode(options[name], &value); err != nil {
+				return nil, optionProblem(name, "The value has an unexpected type.")
+			}
+			text = fmt.Sprint(value)
+		} else if err := decode(options[name], &text); err != nil {
 			return nil, optionProblem(name, "The value has an unexpected type.")
-		}
-		text := fmt.Sprint(value)
-		if number, isNumber := value.(json.Number); isNumber {
-			text = number.String()
 		}
 		env[variable] = text
 	}
