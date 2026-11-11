@@ -147,6 +147,12 @@ func flagOptions(provider string, option *Option, name string) []flags.Option {
 		value, _ := option.Default.(bool)
 		result = append(result, flags.WithBoolFlag(name, "", value, description))
 	case TypeInt:
+		if option.Sensitive {
+			// pflag includes invalid integer input in its parse errors. Accept the raw
+			// value here and validate it in convert, which never echoes secrets.
+			result = append(result, flags.WithStringFlag(name, "", "", description))
+			break
+		}
 		value, _ := option.Default.(int)
 		result = append(result, flags.WithIntFlag(name, "", value, description))
 	case TypeList:

@@ -290,6 +290,22 @@ func TestResolveMarksSensitiveValues(t *testing.T) {
 	assert.Equal(t, "s3cret-value", resolved["tool"]["token"].Value)
 }
 
+func TestSensitiveIntegerFlagValidation(t *testing.T) {
+	raw := []any{map[string]any{"name": "pin", "type": "int", "sensitive": true, "description": "PIN.", "commands": []any{"plan"}, "aliases": []any{"tool-code"}}}
+	for _, flag := range []string{"tool-pin", "tool-code"} {
+		t.Run(flag, func(t *testing.T) {
+			resolved, err := resolveWith(t, raw, []string{"--" + flag + "=42"}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, 42, resolved["tool"]["pin"].Value)
+			assert.True(t, resolved["tool"]["pin"].Sensitive)
+
+			_, err = resolveWith(t, raw, []string{"--" + flag + "=secret-invalid"}, nil)
+			require.ErrorIs(t, err, errUtils.ErrProviderOption)
+			assert.NotContains(t, err.Error(), "secret-invalid")
+		})
+	}
+}
+
 func TestResolveEmptyListAlias(t *testing.T) {
 	raw := []any{map[string]any{"name": "paths", "type": "list", "description": "Paths.", "commands": []any{"plan"}, "aliases": []any{"tool-path"}}}
 	resolved, err := resolveWith(t, raw, []string{"--tool-path="}, nil)
