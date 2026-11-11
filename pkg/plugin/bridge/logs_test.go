@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 )
 
@@ -55,9 +56,13 @@ func TestLogDeliveryIsGrantedPerInvocation(t *testing.T) {
 		require.Equal(t, codes.PermissionDenied, status.Code(err), id)
 	}
 
+	_, err = server.Write(with("withheld"), &pluginv1.LogRequest{Entries: logEntries("hidden")})
+	require.ErrorIs(t, err, errUtils.ErrPluginUnauthorized)
+
 	// A batch above the bound is refused so one call cannot hold the terminal.
 	_, err = server.Write(with("granted"), &pluginv1.LogRequest{Entries: logEntries(make([]string, maxLogBatch+1)...)})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorIs(t, err, errUtils.ErrPluginPayloadTooLarge)
 
 	// After the invocation ends nothing is accepted, so a late call cannot print after the result.
 	granted()

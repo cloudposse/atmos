@@ -4,11 +4,13 @@ package bridge
 
 import (
 	"context"
+	"fmt"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 )
@@ -33,10 +35,10 @@ func (s *Server) Write(ctx context.Context, request *pluginv1.LogRequest) (*empt
 	}
 	defer call.done()
 	if call.Logs == nil {
-		return nil, status.Error(codes.PermissionDenied, "log delivery not granted")
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrPluginUnauthorized, status.Error(codes.PermissionDenied, "log delivery not granted"))
 	}
 	if len(request.GetEntries()) > maxLogBatch {
-		return nil, status.Error(codes.InvalidArgument, "too many log entries")
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrPluginPayloadTooLarge, status.Error(codes.InvalidArgument, "too many log entries"))
 	}
 	call.Logs.WriteLogs(call.Context, request.GetEntries())
 	return &emptypb.Empty{}, nil
