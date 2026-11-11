@@ -290,6 +290,17 @@ func TestResolveMarksSensitiveValues(t *testing.T) {
 	assert.Equal(t, "s3cret-value", resolved["tool"]["token"].Value)
 }
 
+func TestResolveEmptyListAlias(t *testing.T) {
+	raw := []any{map[string]any{"name": "paths", "type": "list", "description": "Paths.", "commands": []any{"plan"}, "aliases": []any{"tool-path"}}}
+	resolved, err := resolveWith(t, raw, []string{"--tool-path="}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{}, resolved["tool"]["paths"].Value)
+
+	resolved, err = resolveWith(t, raw, []string{"--tool-path=a", "--tool-path=b"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, resolved["tool"]["paths"].Value)
+}
+
 func TestResolveAcceptsAliasFlags(t *testing.T) {
 	raw := []any{map[string]any{"name": "level", "type": "string", "description": "Level.", "commands": []any{"plan"}, "aliases": []any{"tool-lvl"}}}
 	resolved, err := resolveWith(t, raw, []string{"--tool-lvl=debug"}, nil)

@@ -282,13 +282,16 @@ func convert(option *Option, flag string, raw any) (any, error) {
 func listValues(raw any) []string {
 	switch typed := raw.(type) {
 	case []string:
+		if len(typed) == 1 && typed[0] == "" {
+			return []string{}
+		}
 		return append([]string{}, typed...)
 	case []any:
 		items := make([]string, 0, len(typed))
 		for _, item := range typed {
 			items = append(items, fmt.Sprint(item))
 		}
-		return items
+		return listValues(items)
 	case string:
 		items := []string{}
 		for _, item := range strings.Split(typed, ",") {
