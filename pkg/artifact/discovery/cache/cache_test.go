@@ -177,6 +177,20 @@ func TestLoadOfflineServesAnySnapshotAgeButNeverFetches(t *testing.T) {
 	assert.Equal(t, int64(1), h.fetches.Load())
 }
 
+func TestLoadOfflineDoesNotCreateLock(t *testing.T) {
+	h := newHarness(t, "scope")
+	source := h.source("repository")
+	_, _, err := h.load(t, source, cache.Mode{})
+	require.NoError(t, err)
+	lock := h.store.Path("repository", "ref") + ".lock"
+	require.NoError(t, os.Remove(lock))
+	_, cached, err := h.load(t, source, cache.Mode{Offline: true})
+	require.NoError(t, err)
+	assert.True(t, cached)
+	_, err = os.Stat(lock)
+	assert.True(t, os.IsNotExist(err))
+}
+
 func TestLoadOfflineFailsWithoutAValidSnapshot(t *testing.T) {
 	t.Run("missing", func(t *testing.T) {
 		h := newHarness(t, "scope")
@@ -190,8 +204,8 @@ func TestLoadOfflineFailsWithoutAValidSnapshot(t *testing.T) {
 		_, _, err := h.load(t, source, cache.Mode{})
 		require.NoError(t, err)
 		_, _, err = h.load(t, source, cache.Mode{Offline: true, Refresh: true})
-		// Offline wins over the age: the existing snapshot is served and no fetch happens.
-		require.NoError(t, err)
+		// Refresh cannot be satisfied while offline, even with an existing snapshot.
+		require.ErrorIs(t, err, errOffline)
 		assert.Equal(t, int64(1), h.fetches.Load())
 	})
 }
@@ -458,6 +472,6 @@ func TestStoreAccessorsAndHeaderRoundTrip(t *testing.T) {
 func TestFreshnessRejectsFutureTimestamps(t *testing.T) {
 	h := newHarness(t, "scope")
 	assert.True(t, h.store.Fresh(epoch.Add(-time.Minute)))
-	assert.False(t, h.store.Fresh(epoch.Add(time.Minute)), "a snapshot from the future is never fresh")
+	assert.True(t, h.store.Fresh(epoch.Add(time.Minute)), "clock skew does not force refresh churn")
 	assert.False(t, h.store.Fresh(epoch.Add(-cache.DefaultTTL)))
 }

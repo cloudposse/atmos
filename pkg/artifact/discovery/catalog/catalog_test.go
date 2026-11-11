@@ -429,12 +429,13 @@ func TestCatalogLocationMustLieInsideTheRepository(t *testing.T) {
 	assert.True(t, byDigest.IsDigest())
 
 	for uri, want := range map[string]string{
-		"https://" + location + "/catalog:stable":              "oci://",
-		"oci://other.example.com/acme/atmos/catalog:stable":    "outside the repository path",
-		"oci://" + registry.Host + "/elsewhere/catalog:stable": "outside the repository path",
-		"oci://" + location + "/catalog":                       "version",
-		"oci://" + location + "/":                              "outside the repository path",
-		"oci://user:secret@" + location + "/catalog:stable":    "outside the repository path",
+		"https://" + location + "/catalog:stable":                                      "oci://",
+		"oci://other.example.com/acme/atmos/catalog:stable":                            "outside the repository path",
+		"oci://" + registry.Host + "/elsewhere/catalog:stable":                         "outside the repository path",
+		"oci://" + location + "/catalog":                                               "version",
+		"oci://" + location + "/":                                                      "outside the repository path",
+		"oci://user:secret@" + location + "/catalog:stable":                            "outside the repository path",
+		"oci://user:secret@" + location + "/catalog@sha256:" + strings.Repeat("a", 64): "outside the repository path",
 	} {
 		_, err := catalog.RefOf(location, uri)
 		require.ErrorIs(t, err, errUtils.ErrArtifactCatalogInvalid, uri)
