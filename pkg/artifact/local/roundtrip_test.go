@@ -72,10 +72,12 @@ func TestRoundTrip_EveryAllowedPackaging(t *testing.T) {
 			assert.Equal(t, fixtures.FilePackagePaths(pkg.Symlinks), listInventoryPaths(content.Record))
 			assert.NoDirExists(t, filepath.Join(out, ".atmos"), "the distribution directory never leaks into pulled user content")
 			assert.FileExists(t, filepath.Join(out, "README.md"), "a root README is ordinary payload")
-			fixtures.RequirePOSIXModes(t)
-			info, err := os.Stat(filepath.Join(out, "bin", "helper.sh"))
-			require.NoError(t, err)
-			assert.NotZero(t, info.Mode()&0o111, "the executable bit survives the round trip")
+			t.Run("POSIX modes", func(t *testing.T) {
+				fixtures.RequirePOSIXModes(t)
+				info, err := os.Stat(filepath.Join(out, "bin", "helper.sh"))
+				require.NoError(t, err)
+				assert.NotZero(t, info.Mode()&0o111, "the executable bit survives the round trip")
+			})
 		})
 	}
 }

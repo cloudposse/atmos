@@ -383,8 +383,20 @@ func (o *Operation) validateState() error {
 	if o.Payload == nil || o.Documents == nil {
 		return invalid(kindOperation, "payload and documents lists are required (use empty lists)")
 	}
-	if o.Prior != nil && o.Prior.RecordDigest == "" {
+	return validatePrior(o.Prior)
+}
+
+func validatePrior(prior *Prior) error {
+	if prior == nil {
+		return nil
+	}
+	if prior.RecordDigest == "" {
 		return invalid(kindOperation, "prior needs a record_digest")
+	}
+	if prior.Location != "" {
+		if _, err := CleanLocation(prior.Location); err != nil {
+			return invalid(kindOperation, "prior location %q is not a valid relative location", prior.Location)
+		}
 	}
 	return nil
 }

@@ -92,6 +92,15 @@ func Admit(in *AdmitInput) (Admission, error) {
 		return AdmitCreate, nil
 	}
 	if in.Current.State == StatePending {
+		if in.Current.IntentDigest == in.IncomingIntent {
+			var expected digest.Digest
+			if in.ExpectedPrior != nil {
+				expected = in.ExpectedPrior.ResolvedDigest
+			}
+			if expected != in.Current.PriorRecordDigest {
+				return "", fmt.Errorf("%w: pending publication expected prior %s, caller expected %s", errUtils.ErrArtifactConflict, in.Current.PriorRecordDigest, expected)
+			}
+		}
 		return admitPending(in)
 	}
 	if err := checkExpectedPrior(in.Current, in.ExpectedPrior); err != nil {

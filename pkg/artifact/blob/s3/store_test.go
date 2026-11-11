@@ -1,6 +1,7 @@
 package s3
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -159,4 +160,22 @@ func TestInvalidSizeAndOverflowingRangeFailBeforeRequest(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
 	assert.Empty(t, fake.Requests())
 	assert.Equal(t, "bytes=9223372036854775807-9223372036854775807", aws.ToString(rangeHeader(blob.GetOptions{Offset: math.MaxInt64, Length: 1})))
+}
+
+func TestNilPutBodyIsInvalid(t *testing.T) {
+	fake := newFake(t)
+	s := newTestStore(t, fake)
+	_, err := s.Put(context.Background(), "k", nil, blob.PutOptions{})
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
+	assert.Empty(t, fake.Requests())
+}
+
+func TestMultipartCreateIsNotRetriedAfterLostResponse(t *testing.T) {
+	fake := newFake(t)
+	fake.Inject(s3test.Fault{Op: s3test.OpCreateMultipartUpload, Action: s3test.DropAfterCommit})
+	s := newTestStore(t, fake, WithPartSize(smallPart))
+	data := bytes.Repeat([]byte("x"), int(smallPart)+1)
+	_, err := s.Put(context.Background(), "k", bytes.NewReader(data), blob.PutOptions{Size: int64(len(data))})
+	require.Error(t, err)
+	assert.Len(t, fake.RequestsFor(s3test.OpCreateMultipartUpload), 1)
 }

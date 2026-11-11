@@ -111,10 +111,9 @@ func rejectsCondition(status int, code string) bool {
 }
 
 // ambiguousStatus reports server errors after which a mutation may or may not have been applied.
-// 503 (throttling) and 501 (not implemented) are definite rejections.
+// 501 (not implemented) is a definite rejection.
 func ambiguousStatus(status int) bool {
 	return status >= http.StatusInternalServerError &&
-		status != http.StatusServiceUnavailable &&
 		status != http.StatusNotImplemented
 }
 

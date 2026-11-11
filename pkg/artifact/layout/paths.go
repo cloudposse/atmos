@@ -103,7 +103,7 @@ func RepresentationPath(key string) string {
 func OperationFileName(operationID string) string {
 	defer perf.Track(nil, "layout.OperationFileName")()
 
-	if len(operationID) <= maxSafeOperationID && safeOperationID.MatchString(operationID) {
+	if len(operationID) <= maxSafeOperationID && safeOperationID.MatchString(operationID) && !windowsDeviceName(operationID) {
 		return operationID
 	}
 	sum := sha256.Sum256([]byte(operationID))

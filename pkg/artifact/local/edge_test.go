@@ -196,7 +196,7 @@ func TestPendingReference_RepairsWithoutItsJournal(t *testing.T) {
 	require.ErrorIs(t, err, errCrash)
 
 	require.NoError(t, os.RemoveAll(filepath.Join(repo.root, filepath.FromSlash(layout.ManagedRoot), "operations")))
-	retry, err := repo.Publish(context.Background(), replacement, artifact.PublishOptions{Force: true})
+	retry, err := repo.Publish(context.Background(), replacement, artifact.PublishOptions{Force: true, ExpectedPrior: &old})
 	require.NoError(t, err)
 	assert.Equal(t, artifact.OutcomeReplaced, retry.Outcome)
 	assertIntact(t, repo, defaultRef())

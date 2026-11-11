@@ -41,7 +41,7 @@ func (s *Store) Get(ctx context.Context, key string, opts blob.GetOptions) (*blo
 	if err != nil {
 		return nil, wrapIO(blob.OpGet, key, err)
 	}
-	info, err := s.describe(key, target, file, false)
+	info, err := s.describe(blob.OpGet, key, target, file, false)
 	if err != nil {
 		_ = file.Close()
 		return nil, err
@@ -88,25 +88,25 @@ func (s *Store) Stat(ctx context.Context, key string, opts blob.StatOptions) (*b
 		return nil, wrapIO(blob.OpStat, key, err)
 	}
 	defer file.Close()
-	return s.describe(key, target, file, opts.IncludeTags)
+	return s.describe(blob.OpStat, key, target, file, opts.IncludeTags)
 }
 
 // describe builds ObjectInfo for an open regular file. A directory is not an object.
-func (s *Store) describe(key, target string, file *os.File, withTags bool) (*blob.ObjectInfo, error) {
+func (s *Store) describe(op, key, target string, file *os.File, withTags bool) (*blob.ObjectInfo, error) {
 	stat, err := file.Stat()
 	if err != nil {
-		return nil, wrapIO(blob.OpStat, key, err)
+		return nil, wrapIO(op, key, err)
 	}
 	if !stat.Mode().IsRegular() {
-		return nil, blob.NewError(blob.KindNotFound, blob.OpStat, key, fmt.Errorf("%w: key is a prefix, not an object", errUtils.ErrBlobNotFound))
+		return nil, blob.NewError(blob.KindNotFound, op, key, fmt.Errorf("%w: key is a prefix, not an object", errUtils.ErrBlobNotFound))
 	}
-	etag, err := etagOf(target, stat)
+	etag, err := etagOpen(file, stat)
 	if err != nil {
-		return nil, wrapIO(blob.OpStat, key, err)
+		return nil, wrapIO(op, key, err)
 	}
 	a, err := readAttrs(target)
 	if err != nil {
-		return nil, blob.NewError(blob.KindOther, blob.OpStat, key, fmt.Errorf("read attributes: %w", err))
+		return nil, blob.NewError(blob.KindOther, op, key, fmt.Errorf("read attributes: %w", err))
 	}
 	info := &blob.ObjectInfo{Key: key, Size: stat.Size(), ETag: etag, ContentType: a.ContentType, LastModified: stat.ModTime(), Metadata: a.Metadata}
 	if withTags {

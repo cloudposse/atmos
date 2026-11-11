@@ -169,7 +169,10 @@ func rangeEnd(last string, start, size int64) (int64, bool) {
 	if err != nil || through < start {
 		return 0, false
 	}
-	return min(through+1, size), true
+	if through >= size {
+		return size, true
+	}
+	return through + 1, true
 }
 
 func (s *Server) deleteObject(w http.ResponseWriter, r *http.Request, key string) {

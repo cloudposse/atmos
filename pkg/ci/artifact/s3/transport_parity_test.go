@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +63,10 @@ func TestAdapterLegacyKeyQuirksArePreserved(t *testing.T) {
 	store, fake := newFakeStore(t, "pre/fix/")
 	require.NoError(t, store.Upload(context.Background(), "a//b/../c.tar", strings.NewReader("x"), 1, nil))
 	assert.Equal(t, []string{"pre/fix/a/c.tar"}, fake.Keys(), "path.Join cleaning of prefix and key is unchanged; nil metadata writes no sidecar")
+	listed, err := store.List(context.Background(), artifact.Query{All: true})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	assert.Equal(t, "a/c.tar", listed[0].Name)
 }
 
 func TestAdapterRoundTripWithoutPrefix(t *testing.T) {
@@ -155,6 +160,10 @@ func TestAdapterBundledStoreChecksumAndTarSurviveTheTransport(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "plan.tfplan", got[0].Name)
+	data, err := io.ReadAll(got[0].Data)
+	require.NoError(t, err)
+	require.NoError(t, got[0].Data.Close())
+	assert.Equal(t, "plan-bytes", string(data))
 }
 
 func TestAdapterLargeUploadStreamsAsMultipartWithLegacyClient(t *testing.T) {

@@ -3,6 +3,8 @@ package local
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -151,5 +153,41 @@ func TestInvalidSizesAndNULPrefix(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
 	}
 	_, err := store.List(context.Background(), blob.ListOptions{Prefix: "x\x00y"})
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
+}
+
+func TestDescribeHashesOpenedFile(t *testing.T) {
+	store := newStore(t)
+	require.NoError(t, os.MkdirAll(store.Root(), 0o755))
+	path := filepath.Join(store.Root(), "k")
+	require.NoError(t, os.WriteFile(path, []byte("old"), 0o644))
+	file, err := openFile(path)
+	require.NoError(t, err)
+	defer file.Close()
+	require.NoError(t, os.Rename(path, path+".old"))
+	require.NoError(t, os.WriteFile(path, []byte("new"), 0o644))
+	info, err := store.describe(blob.OpGet, "k", path, file, false)
+	require.NoError(t, err)
+	sum := sha256.Sum256([]byte("old"))
+	assert.Equal(t, contentETag(sum[:]), info.ETag)
+	body, err := io.ReadAll(file)
+	require.NoError(t, err)
+	assert.Equal(t, "old", string(body))
+}
+
+func TestRootLockWaitRespectsCancellation(t *testing.T) {
+	store := newStore(t)
+	release, err := store.lockRoot(context.Background(), blob.OpPut, "k")
+	require.NoError(t, err)
+	defer release()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = store.lockRoot(ctx, blob.OpPut, "k")
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestPutRejectsUnknownCondition(t *testing.T) {
+	store := newStore(t)
+	_, err := store.Put(context.Background(), "k", bytes.NewReader(nil), blob.PutOptions{Condition: blob.Condition{Kind: blob.ConditionKind(999)}})
 	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
 }

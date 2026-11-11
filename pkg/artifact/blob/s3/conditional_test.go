@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"testing"
 
+	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -123,12 +125,12 @@ func TestProbeAcceptsEnforcingEndpointOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	puts := fake.RequestsFor(s3test.OpPutObject)
-	assert.Len(t, puts, 4, "two probe creates plus the two caller puts; the probe runs once")
+	assert.Len(t, puts, 5, "three probe puts plus the two caller puts; the probe runs once")
 	assert.Equal(t, []string{"lock", "lock2"}, fake.Keys(), "the probe object was cleaned up")
-	assert.Equal(t, 1, countPrefix(puts, probePrefix)/2, "exactly one probe key was created twice")
+	assert.Equal(t, 1, countPrefix(puts, probePrefix)/3, "exactly one probe key was created twice")
 
 	require.NoError(t, s.ProbeConditionalWrites(context.Background()))
-	assert.Len(t, fake.RequestsFor(s3test.OpPutObject), 4, "explicit probe reuses the cached verdict")
+	assert.Len(t, fake.RequestsFor(s3test.OpPutObject), 5, "explicit probe reuses the cached verdict")
 }
 
 func countPrefix(requests []s3test.Request, prefix string) int {
@@ -184,13 +186,13 @@ func TestServerErrorOnConditionalMutationIsAmbiguous(t *testing.T) {
 	assert.Len(t, fake.RequestsFor(s3test.OpPutObject), 1)
 }
 
-func TestThrottlingIsNotAmbiguous(t *testing.T) {
+func TestServiceUnavailableIsAmbiguous(t *testing.T) {
 	fake := newFake(t)
 	fake.Inject(s3test.Fault{Op: s3test.OpPutObject, Status: http.StatusServiceUnavailable, Code: "SlowDown", Times: -1})
 	s := newTestStore(t, fake)
 	_, err := putIfAbsent(s, "lock", "a")
 	require.Error(t, err)
-	assert.False(t, blob.IsAmbiguous(err), "503 means the request was rejected, not half applied")
+	assert.True(t, blob.IsAmbiguous(err), "an endpoint may apply a mutation before responding 503")
 }
 
 func TestUnconditionalPutRetriesTransientServerError(t *testing.T) {
@@ -254,6 +256,55 @@ func TestServiceCodesMapToKinds(t *testing.T) {
 			}
 			require.Error(t, err)
 			assert.True(t, tc.check(err), "%v", err)
+		})
+	}
+}
+
+func TestProbeCleanupFailureIsReturnedAndNotCached(t *testing.T) {
+	fake := newFake(t)
+	fake.Inject(s3test.Fault{Op: s3test.OpDeleteObject, Status: http.StatusForbidden, Code: "AccessDenied", Skip: 1})
+	s := newTestStore(t, fake, WithConditionalMode(ConditionalProbe))
+	err := s.ProbeConditionalWrites(context.Background())
+	require.ErrorContains(t, err, "cleanup probe object")
+	fake.ClearFaults()
+	require.NoError(t, s.ProbeConditionalWrites(context.Background()))
+	assert.Len(t, fake.RequestsFor(s3test.OpPutObject), 6)
+}
+
+type ignoresIfMatch struct {
+	API
+	put, delete bool
+}
+
+func (i ignoresIfMatch) PutObject(ctx context.Context, in *awss3.PutObjectInput, opts ...func(*awss3.Options)) (*awss3.PutObjectOutput, error) {
+	copy := *in
+	if i.put {
+		copy.IfMatch = nil
+	}
+	return i.API.PutObject(ctx, &copy, opts...)
+}
+
+func (i ignoresIfMatch) DeleteObject(ctx context.Context, in *awss3.DeleteObjectInput, opts ...func(*awss3.Options)) (*awss3.DeleteObjectOutput, error) {
+	copy := *in
+	if i.delete {
+		copy.IfMatch = nil
+	}
+	return i.API.DeleteObject(ctx, &copy, opts...)
+}
+
+func TestProbeRejectsIgnoredIfMatch(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		put, delete bool
+	}{{"put", true, false}, {"delete", false, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := newFake(t)
+			api := ignoresIfMatch{API: fake.Client(), put: tc.put, delete: tc.delete}
+			s, err := NewFromClient(api, fake.Bucket(), WithConditionalMode(ConditionalProbe))
+			require.NoError(t, err)
+			err = s.ProbeConditionalWrites(context.Background())
+			assert.True(t, blob.IsConditionalUnsupported(err), "%v", err)
+			assert.Empty(t, fake.Keys())
 		})
 	}
 }

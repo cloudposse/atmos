@@ -36,6 +36,9 @@ func (p *putPlan) request(mutating bool) request {
 func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.PutOptions) (*blob.ObjectInfo, error) {
 	defer perf.Track(nil, "blob.s3.Put")()
 
+	if body == nil {
+		return nil, blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: nil body", errUtils.ErrBlobInvalid))
+	}
 	plan, err := s.planPut(ctx, key, opts)
 	if err != nil {
 		return nil, err

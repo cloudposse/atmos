@@ -177,3 +177,9 @@ func (s *listOnlyStore) List(_ context.Context, opts ListOptions) (*ListPage, er
 	page := s.pages[len(s.calls)-1]
 	return &page, nil
 }
+
+func TestValidateTagsRejectsInvalidUTF8(t *testing.T) {
+	for _, tags := range []map[string]string{{"\xff": "value"}, {"key": "\xff"}} {
+		require.ErrorIs(t, ValidateTags(tags), errUtils.ErrBlobInvalid)
+	}
+}

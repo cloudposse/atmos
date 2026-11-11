@@ -55,6 +55,9 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 			err = releaseErr
 		}
 	}()
+	if options.Lock != nil && options.Lock.Resource() != prepared.Record.Name+":"+prepared.Record.Version {
+		return nil, fmt.Errorf("%w: supplied lock does not cover reference %s:%s", errUtils.ErrArtifactConflict, prepared.Record.Name, prepared.Record.Version)
+	}
 	if options.Lock == nil {
 		lock, lockErr := r.acquire(ctx, prepared.Record.Name+":"+prepared.Record.Version, r.settings.owner, job.opID)
 		if lockErr != nil {
@@ -244,6 +247,13 @@ func (r *Repository) begin(ctx context.Context, t *tree, job *publishJob, plan *
 // reserve checks for location collisions and unmanaged content, then records the journal and the
 // pending reference.
 func (r *Repository) reserve(t *tree, job *publishJob, plan *publishPlan) (*layout.Reference, error) {
+	existing, err := t.loadOperation(job.opID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil && layout.ReferenceKey(existing.Name, existing.Version) != job.key {
+		return nil, fmt.Errorf("%w: operation %s belongs to %s:%s", errUtils.ErrArtifactConflict, job.opID, existing.Name, existing.Version)
+	}
 	if err := r.checkCollision(t, job, plan); err != nil {
 		return nil, err
 	}

@@ -39,10 +39,10 @@ func ValidateTags(tags map[string]string) error {
 		return tagError(fmt.Sprintf("%d tags exceed the limit of %d", len(tags), MaxTags))
 	}
 	for key, value := range tags {
-		if key == "" || utf8.RuneCountInString(key) > MaxTagKeyChars {
+		if key == "" || !utf8.ValidString(key) || utf8.RuneCountInString(key) > MaxTagKeyChars {
 			return tagError(fmt.Sprintf("tag key %q must be 1-%d characters", key, MaxTagKeyChars))
 		}
-		if utf8.RuneCountInString(value) > MaxTagValueChars {
+		if !utf8.ValidString(value) || utf8.RuneCountInString(value) > MaxTagValueChars {
 			return tagError(fmt.Sprintf("tag %q value exceeds %d characters", key, MaxTagValueChars))
 		}
 	}
