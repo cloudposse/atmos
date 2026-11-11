@@ -83,7 +83,7 @@ func buildGateTool(t *testing.T) string {
 	build := exec.Command("go", "build", "-o", output, "./fixtures/toolprobe")
 	build.Dir = filepath.Join(repoRoot, "plugins", "terragrunt")
 	if combined, err := build.CombinedOutput(); err != nil {
-		t.Skipf("cannot build the gate helper: %v\n%s", err, combined)
+		t.Fatalf("cannot build the gate helper: %v\n%s", err, combined)
 	}
 	return output
 }
@@ -152,6 +152,7 @@ func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T)
 	})
 
 	t.Run("the default level shows no engine events", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(gate, nil, 0o600))
 		stdout, stderr, done := run("terraform", "plan", "slow", "-s", "dev")
 		require.NoError(t, <-done, "stderr:\n%s", stderr.text())
 		assert.NotContains(t, stderr.text(), "Evaluating unit")
