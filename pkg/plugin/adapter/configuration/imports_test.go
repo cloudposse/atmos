@@ -17,6 +17,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+//go:generate go run go.uber.org/mock/mockgen -source=imports_test.go -destination=mock_import_runtime_test.go -package=configuration ImportTestRuntime
+
+// ImportTestRuntime combines the host and import contracts for generated test mocks.
+type ImportTestRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationImportRuntime
+}
+
 // directories creates project directories so that imports naming them exist.
 func directories(t *testing.T, root string, names ...string) {
 	t.Helper()
@@ -284,19 +292,6 @@ func TestImportOfAProviderWithInvalidSettingsReportsTheSetting(t *testing.T) {
 	require.False(t, handled)
 }
 
-// importStub serves provider imports without the rest of the runtime.
-type importStub struct {
-	schema.ComponentConfigurationRuntime
-	imports []string
-	err     error
-}
-
-func (r *importStub) ImportComponents(_ context.Context, uri string) (map[string]any, bool, error) {
-	r.imports = append(r.imports, uri)
-	unit := map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": "live/app/terragrunt.hcl"}}}
-	return map[string]any{"app": unit}, true, r.err
-}
-
 func TestImportProviderComponentsRouting(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	for _, uri := range []string{"ordinary", "https://example.com/config.yaml"} {
@@ -313,20 +308,22 @@ func TestImportProviderComponentsRouting(t *testing.T) {
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = schema.ComponentConfiguration{Enabled: true}
 	_, _, err = ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
 	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
-	runtime := &importStub{}
+	runtime := NewMockImportTestRuntime(gomock.NewController(t))
 	config.ComponentConfigurations = runtime
 	for _, declaration := range []schema.StackImport{{Context: map[string]any{"stage": "dev"}}, {SkipIfMissing: true}, {TTL: "1h"}, {NestedImports: "local"}} {
 		_, _, err := ImportProviderComponents(config, "terragrunt://live", &declaration)
 		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	}
+	unit := map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": "live/app/terragrunt.hcl"}}}
+	runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(map[string]any{"app": unit}, true, nil)
 	fragment, handled, err := ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
 	require.Contains(t, fragment["components"].(map[string]any)["terraform"], "app")
-	runtime.err = errors.New("registration failed")
+	importErr := errors.New("registration failed")
+	runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(nil, true, importErr)
 	_, _, err = ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
-	require.ErrorIs(t, err, runtime.err)
+	require.ErrorIs(t, err, importErr)
 }
 
 // Imported units are merged into the manifest that imports them (and so into every stack that

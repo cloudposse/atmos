@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -22,6 +21,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+//go:generate go run go.uber.org/mock/mockgen -source=stack_processor_utils_test.go -destination=mock_import_runtime_test.go -package=exec ImportTestRuntime
+
+// ImportTestRuntime combines the host and import contracts for generated test mocks.
+type ImportTestRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationImportRuntime
+}
 
 func TestMissingBaseComponentQuotedIdentifiers(t *testing.T) {
 	config := &schema.AtmosConfiguration{TrackProvenance: true}
@@ -5104,22 +5111,6 @@ func TestExtractLocalsFromRawYAML_UnsupportedTagHints(t *testing.T) {
 	})
 }
 
-type importRuntime struct {
-	*MockComponentConfigurationRuntime
-	imports []string
-	err     error
-	// unit replaces the default component returned for "app".
-	unit map[string]any
-}
-
-func (r *importRuntime) ImportComponents(_ context.Context, uri string) (map[string]any, bool, error) {
-	r.imports = append(r.imports, uri)
-	if r.unit != nil {
-		return map[string]any{"app": r.unit}, true, r.err
-	}
-	return map[string]any{"app": map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": "live/app/terragrunt.hcl"}}}}, true, r.err
-}
-
 // imports that manifest), exactly like components of an imported YAML mixin.
 func TestYAMLImportsAddUnitsToTheImportingManifest(t *testing.T) {
 	root := t.TempDir()
@@ -5127,12 +5118,12 @@ func TestYAMLImportsAddUnitsToTheImportingManifest(t *testing.T) {
 	require.NoError(t, os.WriteFile(mixin, []byte("import:\n  - terragrunt://live\n"), 0o600))
 	path := filepath.Join(root, "adopt.yaml")
 	require.NoError(t, os.WriteFile(path, []byte("import:\n  - mixin\nvars:\n  stage: dev\n"), 0o600))
-	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t))}
+	runtime := NewMockImportTestRuntime(gomock.NewController(t))
+	runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(map[string]any{"app": placeholderUnit()}, true, nil)
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: runtime}
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
 	result, err := ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
 	require.NoError(t, err)
-	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
 	components := result.DeepMergedConfig["components"].(map[string]any)["terraform"].(map[string]any)
 	require.Contains(t, components, "app")
 }
@@ -5146,7 +5137,7 @@ func placeholderUnit() map[string]any {
 	}
 }
 
-func processUnitManifest(t *testing.T, root, name, content string, runtime *importRuntime) map[string]any {
+func processUnitManifest(t *testing.T, root, name, content string, runtime *MockImportTestRuntime) map[string]any {
 	t.Helper()
 	path := filepath.Join(root, name)
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
@@ -5164,7 +5155,8 @@ func processUnitManifest(t *testing.T, root, name, content string, runtime *impo
 // whether it is written in the importing manifest or in an import that comes before the unit.
 func TestYAMLComponentOverridesAnImportedUnit(t *testing.T) {
 	root := t.TempDir()
-	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: placeholderUnit()}
+	runtime := NewMockImportTestRuntime(gomock.NewController(t))
+	runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(map[string]any{"app": placeholderUnit()}, true, nil).Times(2)
 
 	app := processUnitManifest(t, root, "adopt.yaml", "import:\n  - terragrunt://live\ncomponents:\n  terraform:\n    app:\n      vars:\n        a: 1\n        nested:\n          key: value\n      settings:\n        team: platform\n      metadata:\n        terraform_workspace: blue\n", runtime)
 	require.Equal(t, map[string]any{"a": 1, "nested": map[string]any{"key": "value"}}, app["vars"])
@@ -5183,12 +5175,17 @@ func TestYAMLComponentOverridesAnImportedUnit(t *testing.T) {
 
 func TestTwoUnitsWithOneComponentNameStillConflict(t *testing.T) {
 	root := t.TempDir()
-	first := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: placeholderUnit()}
+	runtime := NewMockImportTestRuntime(gomock.NewController(t))
+	first := placeholderUnit()
 	second := placeholderUnit()
 	second["settings"].(map[string]any)["configuration"].(map[string]any)["source"] = "live/other/terragrunt.hcl"
 	path := filepath.Join(root, "adopt.yaml")
 	require.NoError(t, os.WriteFile(path, []byte("import:\n  - terragrunt://live\n  - terragrunt://other\n"), 0o600))
-	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: &alternatingRuntime{importRuntime: first, units: []map[string]any{first.unit, second}}}
+	gomock.InOrder(
+		runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(map[string]any{"app": first}, true, nil),
+		runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://other").Return(map[string]any{"app": second}, true, nil),
+	)
+	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: runtime}
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
 	_, err := ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
 	require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
@@ -5196,49 +5193,40 @@ func TestTwoUnitsWithOneComponentNameStillConflict(t *testing.T) {
 	require.ErrorContains(t, err, "live/other/terragrunt.hcl")
 }
 
-// alternatingRuntime returns a different unit for every import, in order.
-type alternatingRuntime struct {
-	*importRuntime
-	units []map[string]any
-	calls int
-}
-
-func (r *alternatingRuntime) ImportComponents(_ context.Context, _ string) (map[string]any, bool, error) {
-	unit := r.units[r.calls%len(r.units)]
-	r.calls++
-	return map[string]any{"app": unit}, true, nil
-}
-
 func TestYAMLImportsRejectProviderImportsThatCannotBeRegistered(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "adopt.yaml")
 	require.NoError(t, os.WriteFile(path, []byte("import:\n  - terragrunt://live\nvars:\n  stage: dev\n"), 0o600))
-	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), err: errUtils.ErrPluginInvalidConfig}
+	runtime := NewMockImportTestRuntime(gomock.NewController(t))
+	runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(nil, true, errUtils.ErrPluginInvalidConfig)
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: runtime}
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
 	_, err := ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig, "a rejected provider import must fail the stack load instead of being skipped")
-	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
 
 	// A disabled provider fails the same way before any plugin is consulted.
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: false}}
 	_, err = ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	require.Len(t, runtime.imports, 1, "the disabled provider is never asked to register the import")
 }
 
 // Two mixins that import different units with one component name conflict in the manifest that
 // imports both, even though that manifest has no provider import of its own.
 func TestUnitsImportedThroughDifferentMixinsConflict(t *testing.T) {
 	root := t.TempDir()
-	first := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: placeholderUnit()}
+	runtime := NewMockImportTestRuntime(gomock.NewController(t))
+	first := placeholderUnit()
 	second := placeholderUnit()
 	second["settings"].(map[string]any)["configuration"].(map[string]any)["source"] = "live/other/terragrunt.hcl"
 	require.NoError(t, os.WriteFile(filepath.Join(root, "first.yaml"), []byte("import:\n  - terragrunt://live\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "second.yaml"), []byte("import:\n  - terragrunt://other\n"), 0o600))
 	path := filepath.Join(root, "adopt.yaml")
 	require.NoError(t, os.WriteFile(path, []byte("import:\n  - first\n  - second\n"), 0o600))
-	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: &alternatingRuntime{importRuntime: first, units: []map[string]any{first.unit, second}}}
+	gomock.InOrder(
+		runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(map[string]any{"app": first}, true, nil),
+		runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://other").Return(map[string]any{"app": second}, true, nil),
+	)
+	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: runtime}
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
 	_, err := ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
 	require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
@@ -5251,7 +5239,8 @@ func TestUnitsImportedThroughDifferentMixinsConflict(t *testing.T) {
 func TestStackOverridesApplyToImportedUnits(t *testing.T) {
 	root := t.TempDir()
 	unit := placeholderUnit()
-	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: unit}
+	runtime := NewMockImportTestRuntime(gomock.NewController(t))
+	runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(map[string]any{"app": unit}, true, nil).Times(2)
 	overrides := "terraform:\n  overrides:\n    vars:\n      region: us-west-2\n"
 
 	app := processUnitManifest(t, root, "direct.yaml", "import:\n  - terragrunt://live\n"+overrides, runtime)
