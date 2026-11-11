@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,8 +13,13 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+//go:generate go run go.uber.org/mock/mockgen -destination mock_interaction_streams_test.go -package auth github.com/cloudposse/atmos/pkg/io Streams
 
 func deviceInteraction() *pluginv1.Interaction {
 	return &pluginv1.Interaction{Kind: deviceCodeInteractionKind, Title: "synthetic-private-title", Fields: map[string]string{
@@ -88,6 +94,45 @@ func TestCredentialStreamPresentsDeviceCodeBeforeReturningCredentials(t *testing
 	require.NoError(t, err)
 	assert.True(t, presented)
 	assert.Equal(t, credentials, actual)
+}
+
+func TestCredentialStreamPresentsDeviceCodeOnStderrBeforeResult(t *testing.T) {
+	t.Setenv("ATMOS_FORCE_TTY", "false")
+	t.Setenv("ATMOS_FORCE_COLOR", "false")
+	t.Setenv("NO_COLOR", "1")
+	var stdout, stderr bytes.Buffer
+	previous := iolib.GetContext()
+	streams := NewMockStreams(gomock.NewController(t))
+	streams.EXPECT().RawOutput().Return(&stdout).AnyTimes()
+	streams.EXPECT().RawError().Return(&stderr).AnyTimes()
+	ctx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ctx)
+	ui.InitFormatter(ctx)
+	t.Cleanup(func() {
+		data.InitWriter(previous)
+		ui.InitFormatter(previous)
+	})
+
+	credentials := &pluginv1.Credentials{Type: "oidc/v1"}
+	stream := NewMockcredentialStream(gomock.NewController(t))
+	gomock.InOrder(
+		stream.EXPECT().Recv().Return(&pluginv1.AuthenticateEvent{
+			Event: &pluginv1.AuthenticateEvent_Interaction{Interaction: deviceInteraction()},
+		}, nil),
+		stream.EXPECT().Recv().DoAndReturn(func() (*pluginv1.AuthenticateEvent, error) {
+			require.Contains(t, stderr.String(), "https://issuer.example/device", "the URI must reach stderr before the credential result")
+			require.Contains(t, stderr.String(), "ABCD-EFGH", "the user code must reach stderr before the credential result")
+			require.NotContains(t, stderr.String(), "synthetic-private")
+			require.Empty(t, stdout.String(), "the device prompt must leave the data channel empty")
+			return &pluginv1.AuthenticateEvent{Event: &pluginv1.AuthenticateEvent_Result{Result: credentials}}, nil
+		}),
+		stream.EXPECT().Recv().Return(nil, io.EOF),
+	)
+	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, presentDeviceCode))
+	require.NoError(t, err)
+	require.Equal(t, credentials, actual)
+	require.Empty(t, stdout.String())
 }
 
 func TestCredentialStreamRejectsUnrenderableOrRepeatedInteractions(t *testing.T) {

@@ -34,6 +34,9 @@ type providerFixture struct {
 }
 
 func (*providerFixture) Authenticate(request *pluginv1.ProviderRequest, stream grpc.ServerStreamingServer[pluginv1.AuthenticateEvent]) error {
+	if request.Name == authDeadlineFixtureName {
+		return hangUntilAuthDeadline(stream.Context(), request.Invocation)
+	}
 	if request.Name != "corporate" || request.Kind != "plugin/test" || request.Realm != "fixture" {
 		return status.Error(codes.InvalidArgument, "provider configuration was not forwarded")
 	}
@@ -46,7 +49,10 @@ func (*providerFixture) Authenticate(request *pluginv1.ProviderRequest, stream g
 	}}})
 }
 
-func (*providerFixture) Logout(context.Context, *pluginv1.ProviderRequest) (*emptypb.Empty, error) {
+func (*providerFixture) Logout(ctx context.Context, request *pluginv1.ProviderRequest) (*emptypb.Empty, error) {
+	if request.Name == authDeadlineFixtureName {
+		return nil, hangUntilAuthDeadline(ctx, request.Invocation)
+	}
 	return &emptypb.Empty{}, os.WriteFile("provider-logout", []byte("revoked"), 0o600)
 }
 
@@ -57,6 +63,9 @@ type identityFixture struct {
 
 func (*identityFixture) Authenticate(request *pluginv1.IdentityAuthenticateRequest, stream grpc.ServerStreamingServer[pluginv1.AuthenticateEvent]) error {
 	identity := request.Identity
+	if identity.Name == authDeadlineFixtureName {
+		return hangUntilAuthDeadline(stream.Context(), identity.Invocation)
+	}
 	if identity.Name != "broker" || identity.Kind != "plugin/broker" || identity.Realm != "fixture" ||
 		identity.Principal.GetFields()["endpoint"].GetStringValue() != "https://broker.example" ||
 		identity.Spec.GetFields()["tenant"].GetStringValue() != "test" ||
@@ -75,6 +84,9 @@ func (*identityFixture) Authenticate(request *pluginv1.IdentityAuthenticateReque
 	}}})
 }
 
-func (*identityFixture) Logout(context.Context, *pluginv1.IdentityRequest) (*emptypb.Empty, error) {
+func (*identityFixture) Logout(ctx context.Context, request *pluginv1.IdentityRequest) (*emptypb.Empty, error) {
+	if request.Name == authDeadlineFixtureName {
+		return nil, hangUntilAuthDeadline(ctx, request.Invocation)
+	}
 	return &emptypb.Empty{}, os.WriteFile("identity-logout", []byte("revoked"), 0o600)
 }
