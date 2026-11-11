@@ -251,7 +251,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return result.Err
 	}
 
-	if processedCount(result) == 0 {
+	if processedCount(result) == 0 && !hasExcludedResult(result, excluded) {
 		ui.Success("No components matched")
 	}
 	if opts.Info.SubCommand == terraformSubCommandPlan && terraformPlanChanged(result) {
@@ -976,11 +976,11 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 	if err := ctx.Err(); err != nil {
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed}, err
 	}
-	if d.shouldSkipByQuery(node) {
-		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil
-	}
 	if reason, excluded := d.excluded[node.ID]; excluded {
 		ui.Info(describeExclusion(node, reason))
+		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil
+	}
+	if d.shouldSkipByQuery(node) {
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil
 	}
 
@@ -1587,6 +1587,20 @@ func sortedUniqueStrings(values []string) []string {
 func containsString(values []string, value string) bool {
 	for _, candidate := range values {
 		if candidate == value {
+			return true
+		}
+	}
+	return false
+}
+
+// hasExcludedResult reports an exclusion that was actually dispatched.
+func hasExcludedResult(result *scheduler.AggregateResult, excluded map[string]string) bool {
+	if result == nil {
+		return false
+	}
+	for i := range result.Results {
+		nodeResult := &result.Results[i]
+		if _, ok := excluded[nodeResult.NodeID]; ok && nodeResult.Status == scheduler.StatusSucceeded {
 			return true
 		}
 	}

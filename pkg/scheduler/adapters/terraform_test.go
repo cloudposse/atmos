@@ -20,10 +20,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestExecuteTerraformSharesRegistryCacheAcrossBulkRun(t *testing.T) {
@@ -3742,4 +3744,27 @@ func TestExecuteTerraformExcludeDependenciesIgnoresContractedEdges(t *testing.T)
 		},
 	}))
 	require.Equal(t, []string{"vpc"}, executed)
+}
+
+func TestExecuteTerraformAllExcludedCIResults(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var output bytes.Buffer
+	t.Cleanup(iolib.PushUIWriter(&output))
+	handler := &capturingTerraformPlanCIResultHandler{}
+	stacks := excludeStacks(map[string]map[string]any{
+		"vpc": {"actions": []any{"plan"}}, "database": {"actions": []any{"plan"}}, "app": {"actions": []any{"plan"}},
+	})
+	executed := runExcluded(t, stacks, &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan", TerraformPlanCIResultHandler: handler})
+	require.Empty(t, executed)
+	require.Contains(t, output.String(), "Skipped")
+	require.NotContains(t, output.String(), "No components matched")
+	require.Len(t, handler.resultSet.Results, 3)
+	for _, result := range handler.resultSet.Results {
+		require.Equal(t, "succeeded", result.Status)
+		require.False(t, result.Processed)
+	}
 }
