@@ -73,7 +73,11 @@ func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (ar
 func (r *Repository) LockNamespace() string {
 	defer perf.Track(nil, "local.Repository.LockNamespace")()
 
-	return filepath.ToSlash(r.root)
+	root := r.root
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	return filepath.ToSlash(root)
 }
 
 // acquire takes the OS lock for resource.

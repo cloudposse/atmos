@@ -64,11 +64,15 @@ func (r *identityResolver) resolve(ctx context.Context, identity string) (any, e
 	if !found {
 		return nil, fmt.Errorf("%w: artifact repository identity %q is not defined under auth.identities", errUtils.ErrIdentityNotFound, identity)
 	}
+	kind := configured.Kind
+	if !strings.HasPrefix(kind, kindPrefixAWS) && !strings.HasPrefix(kind, kindPrefixAzure) && !strings.HasPrefix(kind, kindPrefixGCP) {
+		return nil, fmt.Errorf("%w: identity %q has kind %q, which provides no cloud credentials for an artifact repository", errUtils.ErrBlobIdentityUnresolved, identity, kind)
+	}
 	bridge, err := r.bridgeOnce()
 	if err != nil {
 		return nil, err
 	}
-	switch kind := configured.Kind; {
+	switch {
 	case strings.HasPrefix(kind, kindPrefixAWS):
 		return bridge.ResolveAWSAuthContext(ctx, identity)
 	case strings.HasPrefix(kind, kindPrefixAzure):

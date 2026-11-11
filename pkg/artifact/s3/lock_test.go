@@ -430,3 +430,14 @@ func TestLock_RefusesAClaimLargerThanItCanBeRead(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactTooLarge)
 	assert.Empty(t, lockObjects(spec.fake), "no claim object was created")
 }
+
+func TestLockNamespaceIncludesEndpoint(t *testing.T) {
+	base := Repository{bucket: "bucket", prefix: "prefix"}
+	assert.Equal(t, "s3://bucket/prefix", base.LockNamespace())
+	first := base
+	first.endpoint = "https://one.example"
+	second := base
+	second.endpoint = "https://two.example"
+	assert.NotEqual(t, first.LockNamespace(), second.LockNamespace())
+	assert.Equal(t, first.LockNamespace(), (&first).LockNamespace())
+}

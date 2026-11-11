@@ -55,10 +55,11 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 			err = releaseErr
 		}
 	}()
-	if options.Lock != nil && options.Lock.Resource() != prepared.Record.Name+":"+prepared.Record.Version {
+	localLock, isLocalLock := options.Lock.(*fileLock)
+	if isLocalLock && localLock.Resource() != prepared.Record.Name+":"+prepared.Record.Version {
 		return nil, fmt.Errorf("%w: supplied lock does not cover reference %s:%s", errUtils.ErrArtifactConflict, prepared.Record.Name, prepared.Record.Version)
 	}
-	if options.Lock == nil {
+	if !isLocalLock {
 		lock, lockErr := r.acquire(ctx, prepared.Record.Name+":"+prepared.Record.Version, r.settings.owner, job.opID)
 		if lockErr != nil {
 			return nil, lockErr

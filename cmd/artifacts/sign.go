@@ -19,7 +19,8 @@ func newSignCommand() *cobra.Command {
 		Short: "Add signature evidence to an immutable artifact digest",
 		Long: `Sign the immutable subject of a digest reference (name@sha256:<digest>) and store the evidence beside
 it. The digest may be the one the repository resolved (the OCI manifest digest, or the Record digest
-for local and S3) or the Record digest; either way the portable Record is the signed subject.
+for local and S3) or the Record digest. An Atmos package signs its portable Record; a foreign
+OCI graph signs its original OCI root.
 Signing does not verify the artifact against trust policy: use atmos artifacts verify.`,
 		Example: markdown.ArtifactsSignUsageMarkdown,
 		Args:    exactArgs("atmos artifacts sign <name>@sha256:<digest> --repository=<alias>"),
