@@ -15,7 +15,7 @@ import (
 )
 
 func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return nil, nil
 	}
 	if config.ComponentConfigurations == nil {
@@ -60,7 +60,7 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 }
 
 func configurationArtifactName(info *schema.ConfigAndStacksInfo, suffix string) (string, bool) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return "", false
 	}
 	component := info.ComponentFromArg
@@ -85,7 +85,7 @@ func configurationIdentity(stack, component string) string {
 // prepareConfigurationEnvironment applies the same authentication, RC, cache,
 // and toolchain environment as Terraform before the evaluator can spawn children.
 func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool) (*dependencies.ToolchainEnvironment, error) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned || info.DryRun {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
 		return nil, nil
 	}
 	if err := checkComponentRestrictions(info); err != nil {

@@ -33,7 +33,7 @@ func rebaseConfigurationDiscovery(config *schema.AtmosConfiguration) error {
 // Existing YAML dependency path semantics remain unchanged. It reports whether
 // the dependencies belong to a provider-discovered component.
 func configurationWatchPaths(config *schema.AtmosConfiguration, settings map[string]any, deps []schema.ComponentDependency) bool {
-	if _, provider := settings["configuration"]; !provider {
+	if !schema.ConfigurationOwned(settings) {
 		return false
 	}
 	for i := range deps {

@@ -18,7 +18,7 @@ import (
 func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
 	defer perf.Track(nil, "configurationadapter.Prepare")()
 
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return nil, nil
 	}
 	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {

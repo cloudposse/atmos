@@ -61,6 +61,19 @@ type ComponentConfigurationFile struct {
 	Sensitive bool
 }
 
+// ConfigurationOwned reports whether a configuration provider owns a component's settings.
+// Discovery records ownership as a map; an explicit false or null leaves an ordinary component.
+func ConfigurationOwned(settings map[string]any) bool {
+	switch value := settings["configuration"].(type) {
+	case nil:
+		return false
+	case bool:
+		return value
+	default:
+		return true
+	}
+}
+
 // HasComponentDiscovery reports an explicit opt-in without consulting plugins or the filesystem.
 func (c *AtmosConfiguration) HasComponentDiscovery() bool {
 	for _, provider := range c.Components.Terraform.ConfigurationProviders {
