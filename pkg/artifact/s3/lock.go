@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,8 @@ import (
 
 // opLock names the lock operation in capability errors.
 const opLock = "lock"
+
+const reconciliationOwnerPrefix = "pending reconciliation (do not delete until original remote request is known to have finished): "
 
 // maxClaimBytes bounds a claim object read.
 const maxClaimBytes int64 = 64 << 10
@@ -151,10 +154,37 @@ func (r *Repository) settleClaim(ctx context.Context, key string, doc *claimDoc)
 	case current != nil && current.Token == doc.Token:
 		return r.adopt(ctx, key, doc)
 	case current == nil:
-		return nil, fmt.Errorf("%w: claim %s was not observed, but its create may still commit; inspect the claim before retrying", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key))
+		handle, fenceErr := r.fenceUnknownClaim(ctx, readCtx, key, doc)
+		if handle != nil {
+			return handle, nil
+		}
+		return nil, errors.Join(fenceErr, ctx.Err())
 	}
-	// Another owner holds the claim.
-	return nil, nil
+	return nil, errors.Join(ctx.Err(), errUtils.ErrArtifactConflict, fmt.Errorf("%w: claim %s is held by another owner, but the prior create may still commit after it is released", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key)))
+}
+
+// fenceUnknownClaim leaves a visible claim at an empty key while the first PUT may still arrive.
+// The fence is intentionally not released: a finite wait or an empty read cannot prove that the
+// first request has stopped executing. Legacy writers understand the existing claim format.
+func (r *Repository) fenceUnknownClaim(originalCtx, ctx context.Context, key string, original *claimDoc) (*claimHandle, error) {
+	fence := *original
+	fence.Token = uuid.NewString()
+	fence.Owner = reconciliationOwnerPrefix + original.Owner
+	raw, err := json.Marshal(&fence)
+	if err != nil {
+		return nil, fmt.Errorf("%w: encode claim fence: %w", errUtils.ErrArtifactPublicationAmbiguous, err)
+	}
+	_, err = r.putConditional(ctx, key, raw, contentTypeJSON, blob.IfAbsent())
+	if err == nil {
+		return nil, fmt.Errorf("%w: claim %s is fenced pending reconciliation of a possibly late create; do not delete the fence until the original request is known to have finished", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key))
+	}
+	if blob.IsPreconditionFailed(err) {
+		current, _, readErr := r.readClaim(ctx, key)
+		if readErr == nil && current != nil && current.Token == original.Token {
+			return r.adopt(originalCtx, key, original)
+		}
+	}
+	return nil, fmt.Errorf("%w: could not conclusively fence claim %s; its original create or fence may still commit: %w", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key), err)
 }
 
 // adopt turns a created claim into a handle. A context that ended while the claim was being created
@@ -194,7 +224,11 @@ func (r *Repository) heldError(ctx context.Context, key, resource string, cause 
 	if holder != nil {
 		message = fmt.Sprintf("lock %q is held by owner %q (operation %q, since %s) through claim object %s",
 			resource, holder.Owner, holder.OperationID, holder.AcquiredAt, r.uri(key))
-		message += "; claims never expire and are never taken over automatically. If that writer has stopped, confirm it is no longer running and delete the claim object to recover"
+		if strings.HasPrefix(holder.Owner, reconciliationOwnerPrefix) {
+			message += "; this claim fences an ambiguous create. Do not delete it until the original remote request is known to have finished"
+		} else {
+			message += "; claims never expire and are never taken over automatically. If that writer has stopped, confirm it is no longer running and delete the claim object to recover"
+		}
 	}
 	if cause != nil {
 		return fmt.Errorf("%w: %s: %w", errUtils.ErrArtifactConflict, message, cause)

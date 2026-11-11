@@ -3,6 +3,7 @@ package s3
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/artifacttest"
+	"github.com/cloudposse/atmos/pkg/artifact/blob"
 	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
 	"github.com/cloudposse/atmos/pkg/artifact/layout"
 )
@@ -245,7 +247,18 @@ func TestLock_MissingAfterAmbiguousCreateRemainsAmbiguous(t *testing.T) {
 	handle, err := repo.Lock(context.Background(), artifact.LockRequest{Resource: lockResource, Owner: "owner-a"})
 	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
 	assert.Nil(t, handle)
-	assert.Len(t, spec.fake.RequestsFor(s3test.OpPutObject), 1, "do not retry an unsettled create")
+	puts := spec.fake.RequestsFor(s3test.OpPutObject)
+	require.Len(t, puts, 2, "the second create installs a distinct fence, not a retry")
+	key := layout.LockPath(lockResource)
+	claim, _, err := repo.readClaim(context.Background(), key)
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+	assert.Contains(t, claim.Owner, "pending reconciliation")
+	assert.ErrorContains(t, repo.heldError(context.Background(), key, lockResource, nil), "Do not delete it until the original remote request is known to have finished")
+	delayed, err := json.Marshal(&claimDoc{SchemaVersion: layout.SchemaVersion, Resource: lockResource, Owner: "owner-a", Token: "late-request"})
+	require.NoError(t, err)
+	_, err = repo.putConditional(context.Background(), key, delayed, contentTypeJSON, blob.IfAbsent())
+	require.True(t, blob.IsPreconditionFailed(err), "the retained fence rejects a late original create")
 }
 
 // More evidence than the read bound is reported, not silently dropped.

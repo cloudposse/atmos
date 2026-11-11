@@ -192,3 +192,16 @@ func TestDistinctLocationsCoexist(t *testing.T) {
 	assertIntact(t, archives, ref("two/app", testVersion))
 	assert.Equal(t, []string{"one/app:1.0.0", "two/app:1.0.0"}, listNames(t, files), "both repositories share one namespace")
 }
+
+// A legacy writer can reserve an empty path without writing an index or a payload object.
+// An optimized reader must still inspect the pending reference before allowing a collision.
+func TestLegacyPendingClaimBlocksCollisionBeforeAnyPayloadExists(t *testing.T) {
+	fake := s3test.NewServer(t)
+	legacy := newRepo(t, noneSpec().withPattern("shared/empty").with(func(s *rspec) { s.fake = fake }).withOpts(withFaults(crashAt(faultBeforePayload))))
+	current := newRepo(t, noneSpec().withPattern("shared/empty/child").with(func(s *rspec) { s.fake = fake }))
+	_, err := legacy.Publish(context.Background(), prepare(t, legacy, &prepareSpec{name: "legacy/app"}), artifact.PublishOptions{})
+	require.ErrorIs(t, err, errCrash)
+	assert.Empty(t, managedKeys(fake, "", "shared/empty"), "the pending claim precedes all payload writes")
+	_, err = current.Publish(context.Background(), prepare(t, current, &prepareSpec{name: "new/app"}), artifact.PublishOptions{})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict, "the legacy reference must still be examined")
+}
