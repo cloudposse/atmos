@@ -70,7 +70,12 @@ def editions(c):
         c.command("config-" + date, ["describe", "config", "-f", "json", "--edition=" + date], [0])
         c.command("plan-" + date, ["terraform", "plan", "producer", "-s", "dev", "--edition=" + date], [0])
     c.command("old-edition-explicit-auto", ["terraform", "plan", "producer", "-s", "dev", "--edition=2026-09-11", "--init-mode=auto"], [0])
-    c.command("flag-over-env", ["describe", "edition", "--edition=2026-10-26"], [0], env={"ATMOS_EDITION": "2026-09-11"})
+    _, stdout, _ = c.command("flag-over-env", ["describe", "edition", "--edition=2026-10-26"], [0], env={"ATMOS_EDITION": "2026-09-11"})
+    try:
+        edition = yaml.safe_load(stdout)
+    except yaml.YAMLError:
+        edition = None
+    c.check("edition flag overrides environment", isinstance(edition, dict) and edition.get("edition") == "2026-10-26", edition)
     c.command("invalid-edition", ["describe", "edition", "--edition=not-a-date"], [1])
     c.save()
 

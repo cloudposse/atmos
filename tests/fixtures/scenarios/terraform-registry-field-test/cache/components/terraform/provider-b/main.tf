@@ -6,4 +6,4 @@ terraform {
 variable "value" { type = string }
 variable "stage" { type = string }
 resource "null_resource" "example" { triggers = { value = var.value } }
-output "value" { value = var.value }
+output "value" { value = null_resource.example.triggers.value }
