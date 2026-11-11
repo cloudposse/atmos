@@ -150,8 +150,10 @@ func (r *Repository) settleClaim(ctx context.Context, key string, doc *claimDoc)
 		return nil, fmt.Errorf("%w: settle claim %s: %w", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key), err)
 	case current != nil && current.Token == doc.Token:
 		return r.adopt(ctx, key, doc)
+	case current == nil:
+		return nil, fmt.Errorf("%w: claim %s was not observed, but its create may still commit; inspect the claim before retrying", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key))
 	}
-	// Another owner's claim, or no claim at all: the create did not take effect.
+	// Another owner holds the claim.
 	return nil, nil
 }
 
