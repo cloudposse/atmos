@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -108,5 +110,42 @@ func TestEvaluatorErrorsDoNotExposePayloads(t *testing.T) {
 		_, err := p.Prepare(t.Context(), componentRequest(t))
 		require.Equal(t, test.code, status.Code(err))
 		require.NotContains(t, err.Error(), "secret-evaluated-value")
+	}
+}
+
+func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
+	request := componentRequest(t)
+	parsing := make(chan struct{})
+	release := make(chan struct{})
+	secondGeneration := make(chan struct{}, 1)
+	var calls atomic.Int32
+	p := New(func(ctx context.Context, req model.Request) (*model.Resolution, error) {
+		if req.Phase == "discover" {
+			if calls.Add(1) == 2 {
+				secondGeneration <- struct{}{}
+			}
+		} else if calls.Load() == 1 {
+			close(parsing)
+			<-release
+		}
+		return &model.Resolution{Source: request.RootDirectory, WorkingDir: request.RootDirectory}, nil
+	})
+	first := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); first <- err }()
+	<-parsing
+	second := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); second <- err }()
+	select {
+	case <-secondGeneration:
+		t.Fatal("second generation started before the first parse finished")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	select {
+	case <-secondGeneration:
+	default:
+		t.Fatal("second generation did not run")
 	}
 }
