@@ -25,6 +25,11 @@ never received that change.
 
 ## Changes
 
+- The SSO dialog shows the short `VerificationUri` from
+  `StartDeviceAuthorization` as its fallback, with an instruction to enter the
+  code shown in the box (the RFC 8628 device flow). The browser still opens the
+  complete `VerificationUriComplete`. The complete URL is shown only when AWS
+  returns no short URI, and then the rules below apply.
 - The SSO dialog now keeps a URL in the box only when it fits in 80 columns,
   using the same limit as the webflow dialog. The limit and the delivery of
   longer URLs are shared by both dialogs instead of being duplicated.

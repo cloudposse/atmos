@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -180,5 +181,42 @@ func TestDisplayVerificationDialog(t *testing.T) {
 				displayVerificationDialog(tt.code, tt.url)
 			})
 		})
+	}
+}
+
+func TestFallbackVerificationURL(t *testing.T) {
+	short := "https://device.sso.us-east-1.amazonaws.com/"
+	long := longVerificationURL()
+	empty := ""
+
+	tests := []struct {
+		name     string
+		resp     *ssooidc.StartDeviceAuthorizationOutput
+		expected string
+	}{
+		{name: "short URI preferred over the complete URL", resp: &ssooidc.StartDeviceAuthorizationOutput{VerificationUri: &short, VerificationUriComplete: &long}, expected: short},
+		{name: "complete URL used when no short URI", resp: &ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &long}, expected: long},
+		{name: "complete URL used when short URI is empty", resp: &ssooidc.StartDeviceAuthorizationOutput{VerificationUri: &empty, VerificationUriComplete: &long}, expected: long},
+		{name: "short URI alone", resp: &ssooidc.StartDeviceAuthorizationOutput{VerificationUri: &short}, expected: short},
+		{name: "neither URL", resp: &ssooidc.StartDeviceAuthorizationOutput{}, expected: ""},
+		{name: "nil response", resp: nil, expected: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, fallbackVerificationURL(tt.resp))
+		})
+	}
+}
+
+func TestDisplayVerificationDialog_ShortURIStaysInBoxWithCodeInstruction(t *testing.T) {
+	short := "https://device.sso.us-east-1.amazonaws.com/"
+	output := captureVerificationDialogOutput(t, "ABCD-1234", short)
+
+	assert.Contains(t, output, short)
+	assert.Contains(t, output, "enter the code")
+	assert.NotContains(t, output, "If the browser doesn't open, visit:")
+	for _, line := range boxLines(output) {
+		assert.LessOrEqual(t, lipgloss.Width(line), maxVerificationDialogWidth)
 	}
 }

@@ -329,12 +329,9 @@ func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizatio
 		code = *authResp.UserCode
 	}
 
-	verificationURL := ""
-	if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
-		verificationURL = *authResp.VerificationUriComplete
-	} else if authResp.VerificationUri != nil {
-		verificationURL = *authResp.VerificationUri
-	}
+	// The browser opens the complete URL (code embedded); the prompt shows the
+	// short fallback URL, where the user enters the code shown in the dialog.
+	verificationURL := fallbackVerificationURL(authResp)
 
 	// Always display the prompt - even if CI env vars are set, the user might be running make locally.
 	log.Debug("Displaying authentication prompt", "url", verificationURL, "code", code, "isCI", telemetry.IsCI())

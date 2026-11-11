@@ -208,7 +208,7 @@ TERM=screen-256color atmos terraform plan vpc -s dev
 
 ## Long URLs
 
-Some commands hand you a URL to open by hand. `atmos auth login`, for example, shows the AWS sign-in URL in case the browser does not open, and AWS IAM Identity Center now returns URLs of more than 500 characters. A URL of up to 80 columns is shown inside the prompt's box. A longer one is never drawn inside the box, because the border would wrap into the URL and end up in the text you copy. It is delivered below the box instead, in the form `settings.terminal.links` selects. The same setting applies to the console sign-in URL that [`atmos auth console`](/cli/commands/auth/console) shows when it does not open a browser:
+Some commands hand you a URL to open by hand. `atmos auth login`, for example, shows the AWS sign-in URL in case the browser does not open. For AWS IAM Identity Center (SSO) logins, Atmos shows the short verification address, where you enter the code from the prompt, rather than the complete sign-in URL of more than 500 characters that the browser opens. Other sign-in URLs have no short form. A URL of up to 80 columns is shown inside the prompt's box. A longer one is never drawn inside the box, because the border would wrap into the URL and end up in the text you copy. It is delivered below the box instead, in the form `settings.terminal.links` selects. The same setting applies to the console sign-in URL that [`atmos auth console`](/cli/commands/auth/console) shows when it does not open a browser:
 
 ```yaml
 settings:

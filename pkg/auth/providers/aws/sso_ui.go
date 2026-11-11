@@ -3,6 +3,7 @@ package aws
 import (
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -19,6 +20,25 @@ const (
 	// Blank line between sections of the dialog.
 	dialogSectionBreak = "\n\n"
 )
+
+// fallbackVerificationURL returns the URL to show the user in case the browser
+// does not open. It prefers the short verification URI, where the user types
+// the code shown in the dialog (RFC 8628). The complete URI embeds the code and
+// is what the browser opens, but AWS IAM Identity Center now returns complete
+// URIs of several hundred characters, which are unwieldy to read or copy. The
+// complete URI is used only when AWS returns no short one.
+func fallbackVerificationURL(authResp *ssooidc.StartDeviceAuthorizationOutput) string {
+	if authResp == nil {
+		return ""
+	}
+	if authResp.VerificationUri != nil && *authResp.VerificationUri != "" {
+		return *authResp.VerificationUri
+	}
+	if authResp.VerificationUriComplete != nil {
+		return *authResp.VerificationUriComplete
+	}
+	return ""
+}
 
 // displayVerificationDialog shows a styled dialog with the verification code.
 // A verification URL too long for the dialog is delivered below it, outside the
@@ -78,7 +98,7 @@ func renderVerificationDialog(code, url string) (string, bool) {
 		content.WriteString(dialogSectionBreak)
 		content.WriteString(urlStyle.Render(url))
 		content.WriteString(dialogSectionBreak)
-		content.WriteString(instructionStyle.Render("Opening browser... If it doesn't open, visit the URL above."))
+		content.WriteString(instructionStyle.Render("Opening browser... If it doesn't open, visit the URL above and enter the code."))
 	case url != "":
 		content.WriteString(dialogSectionBreak)
 		content.WriteString(instructionStyle.Render("Opening browser for authentication..."))
@@ -94,8 +114,8 @@ func displayVerificationPlainText(code, url string) {
 
 	if url != "" {
 		if !telemetry.IsCI() {
-			ui.Writef("Opening browser to: %s\n", url)
-			ui.Writef("If the browser does not open, visit the URL above and enter the code.\n")
+			ui.Writef("Opening browser for authentication...\n")
+			ui.Writef("If the browser does not open, visit %s and enter the code.\n", url)
 		} else {
 			ui.Writef("Verification URL: %s\n", url)
 		}

@@ -39,9 +39,10 @@ Terminal and other VTE-based terminals, and Konsole. Inside `tmux` or `screen`, 
 identify the terminal, it falls back to the plain URL. When output isn't a terminal, such as in CI or
 when piped, Atmos always prints the plain URL and never touches the clipboard.
 
-The AWS sign-in prompts are tidier too. A URL that fits in 80 columns stays inside the prompt's box. A
-longer one is delivered below the box, so the border no longer wraps into the URL or ends up in the text
-you copy.
+The AWS sign-in prompts are tidier too. For AWS IAM Identity Center (SSO) logins, the browser still
+opens the complete sign-in URL, but the prompt now shows only the short verification address and the
+code to enter there. Any other URL that fits in 80 columns stays inside the prompt's box. A longer one is
+delivered below the box, so the border no longer wraps into the URL or ends up in the text you copy.
 
 ## How to Use It
 
