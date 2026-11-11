@@ -30,7 +30,7 @@ func TestCloneFreshAppendsExtraArgsBeforeSeparator(t *testing.T) {
 	// Extra args are git clone flags, so they must precede the "--" that
 	// separates flags from the URI/workdir positionals.
 	assert.Equal(t, []string{
-		"clone", "--no-tags", "--origin", "upstream", "--",
+		"clone", "--origin", "origin", "--no-tags", "--origin", "upstream", "--",
 		"https://github.com/acme/deploy.git", workdir,
 	}, runner.calls[0].args)
 }
