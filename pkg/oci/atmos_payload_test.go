@@ -255,3 +255,9 @@ func TestProcessImageClassifiesAtmosPackages(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractZipValidatesBeforeSkipping(t *testing.T) {
+	archive := writeTestZip(t, map[string]string{"../escape": "x"})
+	err := extractZipSkipping(archive, t.TempDir(), func(string) bool { return true })
+	require.ErrorIs(t, err, ErrInvalidFilePath)
+}
