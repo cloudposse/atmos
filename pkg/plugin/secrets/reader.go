@@ -110,11 +110,23 @@ func (r *reader) readValue(ctx context.Context, ref *secretReference) (any, erro
 			return nil, err
 		}
 		if ref.field != "" {
+			if contextual, ok := backend.(store.ContextFieldStore); ok {
+				if ref.stack != "" {
+					return contextual.GetFieldContext(ctx, ref.stack, ref.component, ref.path, ref.field)
+				}
+				return contextual.GetKeyFieldContext(ctx, ref.path, ref.field)
+			}
 			fieldBackend := backend.(store.FieldStore)
 			if ref.stack != "" {
 				return fieldBackend.GetField(ref.stack, ref.component, ref.path, ref.field)
 			}
 			return fieldBackend.GetKeyField(ref.path, ref.field)
+		}
+		if contextual, ok := backend.(store.ContextStore); ok {
+			if ref.stack != "" {
+				return contextual.GetContext(ctx, ref.stack, ref.component, ref.path)
+			}
+			return contextual.GetKeyContext(ctx, ref.path)
 		}
 		if ref.stack != "" {
 			return backend.Get(ref.stack, ref.component, ref.path)

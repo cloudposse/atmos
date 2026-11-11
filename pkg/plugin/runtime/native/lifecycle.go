@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -43,6 +44,9 @@ type interrupt struct {
 func newInterrupt(parent context.Context) *interrupt {
 	ctx, cancel := context.WithCancel(parent)
 	i := &interrupt{ctx: ctx, cancel: cancel, signals: make(chan os.Signal, 1)}
+	if signals.OwnsCleanup(parent) {
+		return i
+	}
 	notifySignals(i.signals, interruptSignals()...)
 	go func() {
 		select {

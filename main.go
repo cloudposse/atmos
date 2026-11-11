@@ -151,8 +151,12 @@ func silentExitCode(err error) (int, bool) {
 
 // shouldExitOnSignal reports whether the process should exit in response to sig.
 // SIGINT is ignored while a foreground interactive/TTY step owns the terminal
-// (the child process handles Ctrl-C). SIGTERM always exits as an escape hatch.
+// (the child process handles Ctrl-C). A credential operation instead handles
+// both signals by cancellation and bounded cleanup before returning an error.
 func shouldExitOnSignal(sig os.Signal) bool {
+	if signals.CleanupExitDeferred() {
+		return false
+	}
 	return sig != os.Interrupt || !signals.InterruptExitSuspended()
 }
 
