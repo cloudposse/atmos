@@ -12,6 +12,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosoci "github.com/cloudposse/atmos/pkg/oci"
+	"github.com/cloudposse/atmos/pkg/plugin/extension"
 )
 
 //go:generate go run go.uber.org/mock/mockgen -destination=mock_registry_test.go -package=plugin github.com/cloudposse/atmos/pkg/oci Registry
@@ -146,6 +148,14 @@ func TestPackOptionsSourceIsOptInAndNeverImplicit(t *testing.T) {
 	opts, err = packOptions(values(sourceGitHubActions))
 	require.NoError(t, err)
 	require.Len(t, opts, 2)
+	descriptors := extension.New()
+	require.NoError(t, descriptors.Register(extension.Descriptor{Capability: "fixture", Path: []string{"fixtures"}, Version: 1, Validate: func(extension.Binding) error { return nil }}))
+	layout := publicReleaseLayout(t, descriptors, opts...)
+	index, err := atmosoci.LoadIndex(layout, "")
+	require.NoError(t, err)
+	manifest, err := index.IndexManifest()
+	require.NoError(t, err)
+	require.Equal(t, "https://github.com/example/repo", manifest.Annotations["org.opencontainers.image.source"])
 
 	t.Setenv("GITHUB_REPOSITORY", "example/repo")
 	opts, err = packOptions(values(""))

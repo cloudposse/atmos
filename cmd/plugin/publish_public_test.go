@@ -82,7 +82,7 @@ func TestPublishPublicAccessAfterUpload(t *testing.T) {
 	require.NoError(t, err, "ordinary publication must support private registries")
 }
 
-func publicReleaseLayout(t *testing.T, descriptors *extension.Registry) string {
+func publicReleaseLayout(t *testing.T, descriptors *extension.Registry, opts ...pluginoci.Option) string {
 	t.Helper()
 	directory := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(directory, "bin"), 0o755))
@@ -107,6 +107,6 @@ spec:
       example/fixture: {}
 `), 0o644))
 	layout := filepath.Join(t.TempDir(), "layout")
-	require.NoError(t, pluginoci.Pack(directory, layout, descriptors))
+	require.NoError(t, pluginoci.Pack(directory, layout, descriptors, opts...))
 	return layout
 }
