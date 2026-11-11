@@ -138,6 +138,11 @@ These environment variables configure Atmos behavior and can override settings i
     How a URL too long for a prompt's box (such as the AWS sign-in URL) is delivered: `auto` (default), `osc8`, `clipboard`, or `raw`.
     Equivalent to `--links` and overrides `settings.terminal.links`. See [Long URLs](/cli/configuration/settings/terminal#long-urls).
   </dd>
+
+  <dt>`FORCE_HYPERLINK`</dt>
+  <dd>
+    Overrides terminal detection for clickable links when `settings.terminal.links` is `auto`: `1` shows the clickable link, `0` shows the plain URL. A convention shared with other command-line tools. Has no effect when output is not a terminal. See [Long URLs](/cli/configuration/settings/terminal#long-urls).
+  </dd>
 </dl>
 
 ## Component Variables

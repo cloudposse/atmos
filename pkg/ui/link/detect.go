@@ -32,6 +32,12 @@ func SupportsHyperlinks(env Environment) bool {
 	if !env.IsTTY || env.Lookup == nil {
 		return false
 	}
+	// FORCE_HYPERLINK is the cross-tool override popularized by the
+	// supports-hyperlinks package: "0" disables hyperlinks and any other value
+	// enables them, ahead of every detection rule below.
+	if force, ok := env.Lookup("FORCE_HYPERLINK"); ok {
+		return strings.TrimSpace(force) != "0"
+	}
 	if env.value("TERM") == "dumb" {
 		return false
 	}

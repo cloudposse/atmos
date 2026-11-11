@@ -37,7 +37,9 @@ Atmos delivers these links:
 In `auto` mode, Atmos recognizes iTerm2, VS Code, WezTerm, Ghostty, kitty, Windows Terminal, GNOME
 Terminal and other VTE-based terminals, Konsole, and Orca. Inside `tmux` or `screen`, or anywhere it can't
 identify the terminal, it falls back to the plain URL. When output isn't a terminal, such as in CI or
-when piped, Atmos always prints the plain URL and never touches the clipboard.
+when piped, Atmos always prints the plain URL and never touches the clipboard. Atmos also honors
+the `FORCE_HYPERLINK` convention other command-line tools use: `1` forces the clickable link and `0`
+turns it off.
 
 The AWS sign-in prompts are tidier too. A URL that fits in 80 columns stays inside the prompt's box. A
 longer one is delivered below the box, so the border no longer wraps into the URL or ends up in the text
