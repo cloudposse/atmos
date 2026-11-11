@@ -16,7 +16,7 @@ import (
 // and are better covered by the dedicated unit tests in internal/exec/component_path_resolution_test.go.
 func TestPackerPathResolution(t *testing.T) {
 	_ = NewTestKit(t)
-	skipIfPackerNotInstalled(t)
+	requirePacker(t)
 
 	// Use a private copy of the fixture (see packerFixtureWorkDir in
 	// packer_fixture_test.go): this test runs real "packer validate"
@@ -84,7 +84,7 @@ func TestPackerPathResolution(t *testing.T) {
 // TestPackerPathResolutionWithCurrentDir tests path resolution with "." (current directory).
 func TestPackerPathResolutionWithCurrentDir(t *testing.T) {
 	_ = NewTestKit(t)
-	skipIfPackerNotInstalled(t)
+	requirePacker(t)
 
 	// Use a private copy of the fixture (see packerFixtureWorkDir in
 	// packer_fixture_test.go) for the same reason as TestPackerPathResolution.

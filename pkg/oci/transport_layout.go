@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -89,8 +91,19 @@ func (l *Layout) loadIndex() error {
 	return nil
 }
 
-func (l *Layout) writeIndex() error {
-	index := ocispec.Index{MediaType: ocispec.MediaTypeImageIndex, Manifests: l.index}
+// commitIndex persists entries as index.json and only then adopts them as the in-memory state, so a
+// failed write leaves the layout exactly as persisted and a retry repeats the whole update. Callers
+// hold l.mu.
+func (l *Layout) commitIndex(entries []ocispec.Descriptor) error {
+	if err := writeIndexFile(l.indexPath(), entries); err != nil {
+		return err
+	}
+	l.index = entries
+	return nil
+}
+
+func writeIndexFile(indexPath string, entries []ocispec.Descriptor) error {
+	index := ocispec.Index{MediaType: ocispec.MediaTypeImageIndex, Manifests: entries}
 	index.SchemaVersion = 2
 	if index.Manifests == nil {
 		index.Manifests = []ocispec.Descriptor{}
@@ -99,7 +112,7 @@ func (l *Layout) writeIndex() error {
 	if err != nil {
 		return errors.Join(errUtils.ErrOCILayout, err)
 	}
-	if err := filesystem.NewOSFileSystem().WriteFileAtomic(l.indexPath(), raw, layoutIndexMode); err != nil {
+	if err := filesystem.NewOSFileSystem().WriteFileAtomic(indexPath, raw, layoutIndexMode); err != nil {
 		return errors.Join(errUtils.ErrOCILayout, err)
 	}
 	return nil
@@ -136,19 +149,23 @@ func (l *Layout) recordAttachment(ctx context.Context, desc ocispec.Descriptor) 
 	if desc.MediaType != ocispec.MediaTypeImageManifest && desc.MediaType != ocispec.MediaTypeImageIndex {
 		return nil
 	}
-	raw, err := FetchBytes(ctx, l.store, desc, maxAttachmentManifest)
+	subject, err := readSubject(ctx, l.store, &desc)
 	if err != nil {
 		return layoutError(err)
 	}
-	var manifest struct {
-		Subject *ocispec.Descriptor `json:"subject"`
-	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return errors.Join(errUtils.ErrOCILayout, err)
-	}
-	if manifest.Subject == nil {
+	if subject == nil {
 		return nil
 	}
+	// The size cap protects attachment handling only; a large manifest without a subject is valid.
+	if desc.Size > maxAttachmentManifest {
+		return layoutError(errUtils.ErrOCIIntegrity)
+	}
+	return l.recordRoot(desc)
+}
+
+// recordRoot lists desc as an unnamed root in index.json unless its digest is already listed, so the
+// manifest and its graph edges still resolve after the layout is reopened.
+func (l *Layout) recordRoot(desc ocispec.Descriptor) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for i := range l.index {
@@ -156,8 +173,8 @@ func (l *Layout) recordAttachment(ctx context.Context, desc ocispec.Descriptor) 
 			return nil
 		}
 	}
-	l.index = append(l.index, ocispec.Descriptor{MediaType: desc.MediaType, Digest: desc.Digest, Size: desc.Size})
-	return l.writeIndex()
+	entries := append(slices.Clone(l.index), ocispec.Descriptor{MediaType: desc.MediaType, Digest: desc.Digest, Size: desc.Size})
+	return l.commitIndex(entries)
 }
 
 // Resolve resolves a reference name or digest to a descriptor.
@@ -174,9 +191,9 @@ func (l *Layout) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]o
 	return found, layoutError(err)
 }
 
-// Tag records reference as a named root in index.json. Digest references are implicit
-// and never listed. An unnamed root with the same digest is named in place, so a legacy
-// single-release layout keeps exactly one entry.
+// Tag records reference as a named root in index.json. A digest reference is recorded as an
+// unnamed root unless the digest is already listed. An unnamed root with the same digest is named
+// in place, so a legacy single-release layout keeps exactly one entry.
 func (l *Layout) Tag(ctx context.Context, desc ocispec.Descriptor, reference string) error {
 	defer perf.Track(nil, "oci.Layout.Tag")()
 
@@ -184,16 +201,19 @@ func (l *Layout) Tag(ctx context.Context, desc ocispec.Descriptor, reference str
 		return layoutError(err)
 	}
 	if reference == desc.Digest.String() {
-		return nil
+		// A digest reference is never named, but the root must still be listed or reopening the
+		// layout loses its media type and children.
+		return l.recordRoot(desc)
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	named := ocispec.Descriptor{
-		MediaType: desc.MediaType, Digest: desc.Digest, Size: desc.Size,
-		Annotations: map[string]string{ocispec.AnnotationRefName: reference},
-	}
-	l.index = withReference(l.index, named)
-	return l.writeIndex()
+	// Copy the descriptor and its annotations so root metadata (artifact type, platform, other
+	// annotations) survives reopening without mutating the caller's descriptor.
+	named := desc
+	named.Annotations = make(map[string]string, len(desc.Annotations)+1)
+	maps.Copy(named.Annotations, desc.Annotations)
+	named.Annotations[ocispec.AnnotationRefName] = reference
+	return l.commitIndex(withReference(slices.Clone(l.index), named))
 }
 
 func withReference(entries []ocispec.Descriptor, named ocispec.Descriptor) []ocispec.Descriptor {
@@ -229,8 +249,7 @@ func (l *Layout) Untag(ctx context.Context, reference string) error {
 			kept = append(kept, l.index[i])
 		}
 	}
-	l.index = kept
-	return l.writeIndex()
+	return l.commitIndex(kept)
 }
 
 // References returns the named roots in index.json in insertion order.

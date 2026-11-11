@@ -1374,7 +1374,8 @@ func processYAMLConfigFileWithContextInternal(
 		// Check if we have merge context to provide enhanced error formatting
 		if mergeContext != nil {
 			// Wrap the error with the sentinel first to preserve it
-			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
+			// %w keeps the cause's hints (such as where a missing !include was resolved) reachable.
+			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, err)
 			// Then format it with context information
 			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, e

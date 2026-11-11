@@ -220,14 +220,12 @@ func processIncludeTagInternal(
 			return false, err
 		}
 	} else {
-		// Local file not found - provide helpful error message.
-		// Prefer BasePathAbsolute for the error since it's more informative.
-		errBasePath := atmosConfig.BasePathAbsolute
-		if errBasePath == "" {
-			errBasePath = atmosConfig.BasePath
+		// Local file not found - explain where this kind of path was looked for.
+		tag := AtmosYamlFuncInclude
+		if forceRaw {
+			tag = AtmosYamlFuncIncludeRaw
 		}
-		return false, fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
-			ErrIncludeYamlFunctionInvalidFile, includeFile, file, errBasePath)
+		return false, includeNotFoundError(tag, val, includeFile, file, atmosConfig)
 	}
 
 	// Apply YQ expression if provided
@@ -405,6 +403,19 @@ func shouldFetchRemote(path string) bool {
 	}
 
 	for _, detector := range detectors {
+		if _, isBitBucket := detector.(*getter.BitBucketDetector); isBitBucket {
+			// BitBucketDetector.Detect reports ok=true as soon as the "bitbucket.org/" prefix
+			// matches, independent of the live Bitbucket API lookup that follows to determine
+			// git vs. hg (which can fail on a private repo, a lookup error, or a timeout).
+			// Checking the prefix directly gets the same classification without making that
+			// live call here; the real fetch that follows still performs the lookup and
+			// surfaces any error to the caller.
+			if strings.HasPrefix(path, "bitbucket.org/") {
+				return true
+			}
+			continue
+		}
+
 		src, ok, err := detector.Detect(path, "")
 		if err != nil || !ok {
 			continue
@@ -478,7 +489,12 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 		}
 	}
 
-	// Last resort: relative to the process working directory.
+	// Last resort: relative to the process working directory. Skipped for paths go-getter
+	// recognizes as remote shorthand (e.g. "github.com/org/repo/path"), so a coincidentally
+	// matching local file never shadows the intended remote fetch.
+	if shouldFetchRemote(includeFile) {
+		return ""
+	}
 	return resolveAbsolutePath(includeFile)
 }
 

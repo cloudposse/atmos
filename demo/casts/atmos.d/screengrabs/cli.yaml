@@ -536,6 +536,7 @@ commands:
           from cast_checks import (
               command_slug,
               load_text,
+              assert_recorded_command,
               assert_no_error_output,
               assert_no_local_paths,
               assert_body_color,
@@ -992,6 +993,10 @@ commands:
               if not path.is_file():
                   raise SystemExit(f"screengrab cast missing for {command!r}: {path.name}")
               text = load_text(path)
+              # "atmos about --help" is recorded by a cast script with a typed
+              # title instead of a recorded command header.
+              if command != "atmos about --help":
+                  assert_recorded_command(path, command)
               assert_no_error_output(text)
               assert_no_local_paths(text)
               assert_body_color(text)

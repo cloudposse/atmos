@@ -82,3 +82,29 @@ func TestAuthAndCommandExportMetadata(t *testing.T) {
 	}
 	require.NoError(t, ValidateCommand(Binding{Metadata: map[string]any{"description": "About"}}))
 }
+
+func TestAuthIdentitySchemaTargetMetadata(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "schema.json"), []byte(`{"type":"object"}`), 0o600))
+	for _, test := range []struct {
+		capability string
+		target     any
+		valid      bool
+	}{
+		{"auth.identity", "spec", true},
+		{"auth.identity", "principal", true},
+		{"auth.identity", "", false},
+		{"auth.identity", "unknown", false},
+		{"auth.identity", true, false},
+		{"auth.provider", "spec", false},
+	} {
+		binding := Binding{Capability: test.capability, Directory: directory, Metadata: map[string]any{"schema": "schema.json", "credentials": []any{"environment/v1"}, "schema_target": test.target}}
+		err := ValidateAuth(binding)
+		if test.valid {
+			require.NoError(t, err)
+		} else {
+			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+		}
+	}
+}

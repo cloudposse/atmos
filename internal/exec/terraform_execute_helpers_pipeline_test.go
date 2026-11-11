@@ -371,6 +371,64 @@ func TestRunWorkspaceSetup_NoRecoveryOnMismatchedEnv(t *testing.T) {
 		"recovery warn log must NOT be emitted on mismatch; got log output: %q", logOutput)
 }
 
+// TestRunWorkspaceSetup_FailureSurfacesTerraformOutput is the regression guard for
+// issue #3607: when both `workspace select -or-create` and the `workspace new`
+// fallback fail, Terraform's own diagnostic must be attached to the returned error
+// instead of being discarded, and the exit code must stay reachable.
+func TestRunWorkspaceSetup_FailureSurfacesTerraformOutput(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	const diagnostic = "Error: Failed to get existing workspaces: AccessDenied"
+
+	tests := []struct {
+		name         string
+		env          []string
+		wantDetails  []string
+		wantNoDetail bool
+	}{
+		{
+			name:        "stderr diagnostic is attached for both steps",
+			env:         []string{"_ATMOS_TEST_EXIT_ONE=1", "_ATMOS_TEST_STDERR=" + diagnostic + "\n"},
+			wantDetails: []string{"terraform workspace select -or-create", "terraform workspace new", diagnostic},
+		},
+		{
+			name:         "no output means no explanation",
+			env:          []string{"_ATMOS_TEST_EXIT_ONE=1"},
+			wantNoDetail: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{}
+			info := schema.ConfigAndStacksInfo{
+				SubCommand:         "plan",
+				TerraformWorkspace: "dev",
+				Command:            exePath,
+				ComponentEnvList:   tt.env,
+			}
+
+			wsErr := runWorkspaceSetup(&atmosConfig, &info, t.TempDir())
+			require.Error(t, wsErr)
+			assert.ErrorIs(t, wsErr, errUtils.ErrTerraformWorkspaceOp)
+
+			var exitErr errUtils.ExitCodeError
+			require.True(t, errors.As(wsErr, &exitErr), "exit code must stay reachable, got: %T (%v)", wsErr, wsErr)
+			assert.Equal(t, 1, exitErr.Code)
+
+			details := strings.Join(errUtils.AllDetails(wsErr), "\n")
+			if tt.wantNoDetail {
+				assert.NotContains(t, details, "terraform workspace")
+				return
+			}
+			for _, want := range tt.wantDetails {
+				assert.Contains(t, details, want)
+			}
+		})
+	}
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // executeShellCommandWithRetry — per-invocation retry with pattern matching
 // ──────────────────────────────────────────────────────────────────────────────

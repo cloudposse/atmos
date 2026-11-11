@@ -133,7 +133,7 @@ func (backend *releaseBackend) Publish(ctx context.Context, layout string) (*plu
 func publicationFlags() []flags.Option {
 	return append(signingFlags(),
 		flags.WithBoolFlag(signFlag, "", false, "Sign the published release with Sigstore"),
-		flags.WithBoolFlag(verifyPublicFlag, "", false, "Require public GHCR organization package visibility and verify every published payload anonymously"),
+		flags.WithBoolFlag(verifyPublicFlag, "", false, "Verify every published payload anonymously after upload"),
 		flags.WithStringFlag(publishDestinationFlag, "", "", "Destination OCI repository"))
 }
 

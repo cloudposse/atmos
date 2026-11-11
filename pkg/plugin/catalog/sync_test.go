@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"io"
 	"log"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/stretchr/testify/require"
@@ -47,25 +49,11 @@ func TestSyncPreservesHistoryAndPublishesOnce(t *testing.T) {
 	client := atmosoci.NewClient(nil)
 	source := server.Listener.Addr().String() + "/example/plugin"
 	target := server.Listener.Addr().String() + "/example/catalog:stable"
-	directory := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(directory, "bin"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(syncManifest), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(directory, "bin", "plugin"), []byte("native"), 0o755))
-	descriptors := extension.New()
-	require.NoError(t, descriptors.Register(extension.Descriptor{Capability: "fixture", Path: []string{"fixtures"}, Version: 1, Validate: func(extension.Binding) error { return nil }}))
-	index, err := pluginoci.BuildIndex(directory, descriptors)
-	require.NoError(t, err)
-	ref, err := name.NewTag(source + ":1.2.3")
-	require.NoError(t, err)
-	require.NoError(t, client.WriteIndex(t.Context(), ref, index))
-	hash, err := index.Digest()
-	require.NoError(t, err)
+	descriptors, index, hash := publishSyncFixture(t, client, source)
 	plan := []ReleaseSelection{{Name: "fixture", Repository: source, Version: "1.2.3"}}
 	public := NewMockPublicVerifier(gomock.NewController(t))
-	public.EXPECT().RequirePublic(gomock.Any(), server.Listener.Addr().String()+"/example/catalog").Return(nil)
-	public.EXPECT().RequirePublic(gomock.Any(), source).Return(nil)
 	public.EXPECT().Verify(gomock.Any(), source, "1.2.3", hash.String()).Return(hash.String(), nil)
-	public.EXPECT().Verify(gomock.Any(), server.Listener.Addr().String()+"/example/catalog", "stable", gomock.Any()).Return("", nil)
+	public.EXPECT().Verify(gomock.Any(), server.Listener.Addr().String()+"/example/catalog", gomock.Any(), gomock.Any()).Return("", nil)
 	require.NoError(t, NewSyncer(client, descriptors).Sync(t.Context(), target, plan, WithPublicVerification(public)))
 	file, digest, err := Read(t.Context(), client, target)
 	require.NoError(t, err)
@@ -87,11 +75,10 @@ func TestSyncPreservesHistoryAndPublishesOnce(t *testing.T) {
 		require.Error(t, NewSyncer(client, descriptors).Sync(t.Context(), target, []ReleaseSelection{release}))
 	}
 	public = NewMockPublicVerifier(gomock.NewController(t))
-	public.EXPECT().RequirePublic(gomock.Any(), gomock.Any()).Return(errUtils.ErrOCIRegistry)
+	public.EXPECT().Verify(gomock.Any(), source, "1.2.3", hash.String()).Return("", errUtils.ErrOCIRegistry)
 	require.ErrorIs(t, NewSyncer(client, descriptors).Sync(t.Context(), target, plan, WithPublicVerification(public)), errUtils.ErrOCIRegistry)
 
 	public = NewMockPublicVerifier(gomock.NewController(t))
-	public.EXPECT().RequirePublic(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 	missingBlob := &transport.Error{StatusCode: 404}
 	public.EXPECT().Verify(gomock.Any(), source, "1.2.3", hash.String()).Return("", missingBlob)
 	require.ErrorIs(t, NewSyncer(client, descriptors).Sync(t.Context(), target, plan, WithSkipMissing(), WithPublicVerification(public)), missingBlob, "a missing blob is corruption, not an unpublished release")
@@ -115,11 +102,60 @@ func TestSyncFailsClosedOnRegistryAndPublicErrors(t *testing.T) {
 	client.EXPECT().Get(gomock.Any(), gomock.Any()).Return(nil, errUtils.ErrOCIRegistry)
 	require.ErrorIs(t, NewSyncer(client, descriptors).Sync(t.Context(), "ghcr.io/example/catalog:stable", []ReleaseSelection{selected}, WithSkipMissing()), errUtils.ErrOCIRegistry)
 	public := NewMockPublicVerifier(gomock.NewController(t))
-	public.EXPECT().RequirePublic(gomock.Any(), selected.Repository).Return(errUtils.ErrOCIRegistry)
-	require.ErrorIs(t, NewSyncer(client, descriptors).syncRelease(t.Context(), New("test"), selected, public), errUtils.ErrOCIRegistry)
-	public = NewMockPublicVerifier(gomock.NewController(t))
-	public.EXPECT().RequirePublic(gomock.Any(), selected.Repository).Return(nil)
 	public.EXPECT().Verify(gomock.Any(), selected.Repository, selected.Version, gomock.Any()).Return("", errUtils.ErrOCIIntegrity)
 	client.EXPECT().Get(gomock.Any(), gomock.Any()).Return(&remote.Descriptor{}, nil)
 	require.ErrorIs(t, NewSyncer(client, descriptors).syncRelease(t.Context(), New("test"), selected, public), errUtils.ErrOCIIntegrity)
+}
+
+func TestSyncFirstPublicationAndVisibilityRetry(t *testing.T) {
+	server := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(server.Close)
+	client := atmosoci.NewClient(nil)
+	source := server.Listener.Addr().String() + "/example/plugin"
+	targetRepo := server.Listener.Addr().String() + "/example/catalog"
+	target := targetRepo + ":stable"
+	descriptors, _, hash := publishSyncFixture(t, client, source)
+	plan := []ReleaseSelection{{Name: "fixture", Repository: source, Version: "1.2.3"}}
+	public := NewMockPublicVerifier(gomock.NewController(t))
+	public.EXPECT().Verify(gomock.Any(), source, "1.2.3", hash.String()).Return(hash.String(), nil).Times(2)
+	public.EXPECT().Verify(gomock.Any(), targetRepo, gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, reference, expected string) (string, error) {
+			_, digest, readErr := Read(t.Context(), client, target)
+			require.NoError(t, readErr, "catalog must already exist when verification starts")
+			require.Equal(t, digest, reference, "verify the immutable published digest")
+			require.Equal(t, digest, expected)
+			return "", errUtils.ErrOCIRegistry
+		},
+	)
+	err := NewSyncer(client, descriptors).Sync(t.Context(), target, plan, WithPublicVerification(public))
+	require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+	require.ErrorContains(t, err, "was published but public access verification failed")
+	file, _, err := Read(t.Context(), client, target)
+	require.NoError(t, err, "failed verification must not delete the catalog")
+	require.Len(t, file.Spec.Entries, 1)
+	public.EXPECT().Verify(gomock.Any(), targetRepo, gomock.Any(), gomock.Any()).Return("", nil)
+	require.NoError(t, NewSyncer(client, descriptors).Sync(t.Context(), target, plan, WithPublicVerification(public)))
+	file, _, err = Read(t.Context(), client, target)
+	require.NoError(t, err)
+	require.Len(t, file.Spec.Entries, 1)
+	require.Len(t, file.Spec.Entries[0].Versions, 1)
+	require.Equal(t, hash.String(), file.Spec.Entries[0].Versions[0].Digest)
+}
+
+func publishSyncFixture(t *testing.T, client atmosoci.Registry, source string) (*extension.Registry, v1.ImageIndex, v1.Hash) {
+	t.Helper()
+	directory := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(directory, "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(syncManifest), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "bin", "plugin"), []byte("native"), 0o755))
+	descriptors := extension.New()
+	require.NoError(t, descriptors.Register(extension.Descriptor{Capability: "fixture", Path: []string{"fixtures"}, Version: 1, Validate: func(extension.Binding) error { return nil }}))
+	index, err := pluginoci.BuildIndex(directory, descriptors)
+	require.NoError(t, err)
+	ref, err := name.NewTag(source + ":1.2.3")
+	require.NoError(t, err)
+	require.NoError(t, client.WriteIndex(t.Context(), ref, index))
+	hash, err := index.Digest()
+	require.NoError(t, err)
+	return descriptors, index, hash
 }

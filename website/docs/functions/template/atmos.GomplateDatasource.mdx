@@ -98,7 +98,14 @@ The `atmos.GomplateDatasource` function automatically caches results in memory d
 
 1. **First call**: Fetches data from the external source and stores in cache
 2. **Subsequent calls**: Returns cached data without additional external calls
-3. **Cache scope**: Per Atmos execution (cache is cleared between runs)
+3. **Cache scope**: Per Atmos execution (cache is cleared between runs). Within a run, a cached value is reused only
+   for the same datasource definition (URL and headers), arguments, and environment variables, so stacks that set
+   different `templates.settings.env` values (for example `AWS_PROFILE`) each read their own data
+
+:::note
+The cache applies only when no [admission policy](/policies/admission) has `source` rules. With source rules
+enabled, every call is checked against the policy and then read, so an HTTP datasource makes a request on each call.
+:::
 
 This caching mechanism provides several benefits:
 - **Performance**: Dramatically faster stack processing with multiple datasource references
@@ -110,8 +117,8 @@ This caching mechanism provides several benefits:
 
 | Feature | `datasource` (Gomplate) | `atmos.GomplateDatasource` |
 |---------|------------------------|---------------------------|
-| External calls | Every invocation | Once per alias |
-| Performance | Slower with multiple uses | Fast (cached) |
+| External calls | Every invocation | Once per definition, arguments, and environment (every call when source policies are enabled) |
+| Performance | Slower with multiple uses | Fast (cached, unless source policies are enabled) |
 | Rate limiting risk | High | Low |
 | Network failures | Each call can fail | Single point of failure |
 | Use case | Single reference | Multiple references |
@@ -151,16 +158,22 @@ components:
 
 ### AWS Systems Manager Parameter
 
+An `aws+smp://` datasource returns the parameter value directly, with no wrapper object, so there is no `.Value` field
+to unwrap. Add `?type=application/json` to the URL when the parameter holds a JSON document whose fields you want to address.
+
 <File>
 ```yaml
 settings:
   templates:
     settings:
+      # AWS region and credentials come from the environment passed to datasources
+      env:
+        AWS_REGION: "us-east-1"
       gomplate:
         datasources:
-          # Fetch from AWS SSM Parameter Store
+          # Fetch from AWS SSM Parameter Store; parse the parameter value as JSON
           database:
-            url: "aws+smp:///myapp/database/config?region=us-east-1"
+            url: "aws+smp:///myapp/database/config?type=application/json"
 
 components:
   terraform:

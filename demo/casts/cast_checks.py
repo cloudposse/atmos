@@ -34,6 +34,29 @@ def load_text(path):
     )
 
 
+def assert_recorded_command(path, command):
+    """The cast header must record the command as typed, program name included.
+
+    The docs player types the header's ``command`` after the prompt, so a
+    header that omits the leading ``atmos`` renders "> --help" instead of
+    "> atmos --help". ``command`` is the full manifest command. The recorder
+    may widen a trailing ``--help`` to ``--help=all`` (see the source
+    commands in the screengrab manifest), so that one substitution is allowed.
+    """
+    header = json.loads(Path(path).read_text().splitlines()[0])
+    recorded = header.get("command")
+    if not isinstance(recorded, str):
+        raise SystemExit(f"cast header has no recorded command: {Path(path).name}")
+    expected = command.split()
+    actual = recorded.split()
+    if actual and expected and expected[-1] == "--help" and actual[-1] == "--help=all":
+        actual = actual[:-1] + ["--help"]
+    if actual != expected:
+        raise SystemExit(
+            f"cast header command {recorded!r} must be {command!r}: {Path(path).name}"
+        )
+
+
 def assert_no_experimental(text):
     """The experimental indicator must be silenced at the recording source."""
     if "\U0001f9ea" in text or "experimental" in text.lower():

@@ -57,3 +57,28 @@ func TestBehaviorInspectionMatchesExecution(t *testing.T) {
 	assert.Equal(t, []Entry{chainedJournal()[3], chainedJournal()[2]}, Between(&before, &on))
 	assert.Empty(t, Between(&on, &on), "the lower date is exclusive")
 }
+
+// The behavior index is cached per journal: replacing the journal must take effect, and the first
+// transition in Journal order (oldest date) wins when a key appears more than once.
+func TestBehaviorChangedFollowsJournalReplacement(t *testing.T) {
+	setTestJournal(t, []Entry{
+		{Date: "2025-09-01", Key: "behavior.demo.swap", Kind: KindBehavior, Old: "b", New: "c", Description: "later", Ref: "https://example.com/2"},
+		{Date: "2025-03-01", Key: "behavior.demo.swap", Kind: KindBehavior, Old: "a", New: "b", Description: "earlier", Ref: "https://example.com/1"},
+	})
+	changed, err := BehaviorChanged("2025-04-01", "behavior.demo.swap")
+	require.NoError(t, err)
+	assert.True(t, changed, "the oldest transition for a key decides")
+
+	// The replacement has the same length as the previous journal, so only its contents differ.
+	setTestJournal(t, []Entry{
+		{Date: "2025-06-01", Key: "behavior.demo.swap", Kind: KindBehavior, Old: "a", New: "b", Description: "moved", Ref: "https://example.com/3"},
+		{Date: "2025-07-01", Key: "behavior.demo.other", Kind: KindBehavior, Old: "a", New: "b", Description: "other", Ref: "https://example.com/4"},
+	})
+	changed, err = BehaviorChanged("2025-04-01", "behavior.demo.swap")
+	require.NoError(t, err)
+	assert.False(t, changed, "a replaced journal must not reuse the previous index")
+
+	setTestJournal(t, []Entry{})
+	_, err = BehaviorChanged("", "behavior.demo.swap")
+	assert.ErrorIs(t, err, ErrUnknownBehavior)
+}

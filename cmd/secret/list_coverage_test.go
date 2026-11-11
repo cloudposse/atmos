@@ -121,8 +121,9 @@ func TestRunSecretList_VerifyWithoutFullScope(t *testing.T) {
 	err := runSecretSubcommand(t, "list", "--stack", "prod", "--verify")
 	require.NoError(t, err)
 	require.Len(t, scopes, 2)
-	assert.Equal(t, secretScope{Stack: "prod", Component: "api"}, scopes[0])
-	assert.Equal(t, secretScope{Stack: "prod", Component: "web"}, scopes[1])
+	// The per-component scopes keep the invoking command for component admission.
+	assert.Equal(t, secretScope{Stack: "prod", Component: "api", CommandPath: []string{"list"}}, scopes[0])
+	assert.Equal(t, secretScope{Stack: "prod", Component: "web", CommandPath: []string{"list"}}, scopes[1])
 }
 
 // TestRunSecretList_SingleScope drives runSecretList's fast path (both facets set): it loads the

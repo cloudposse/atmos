@@ -293,8 +293,12 @@ func (r *Reporter) symbol(status, spin string) string {
 	case Failed:
 		return theme.GetCurrentStyles().Error.Render("●")
 	case Running:
-		if spin != "" {
-			return theme.GetCurrentStyles().Spinner.Render(strings.TrimSpace(spin))
+		// The live model passes spinner.View(), which is already styled and carries the Dot
+		// frame's trailing space inside the ANSI wrapper. Strip it first so the trim removes that
+		// space (keeping the marker one column wide like the outcome markers) and the style is
+		// applied exactly once.
+		if glyph := strings.TrimSpace(ansi.Strip(spin)); glyph != "" {
+			return theme.GetCurrentStyles().Spinner.Render(glyph)
 		}
 		return theme.GetCurrentStyles().Spinner.Render("◌")
 	default:

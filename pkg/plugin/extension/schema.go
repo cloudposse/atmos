@@ -55,6 +55,13 @@ func CompileSchema(directory, path string) (*jsonschema.Schema, error) {
 func ValidateAuth(binding Binding) error {
 	defer perf.Track(nil, "extension.ValidateAuth")()
 
+	if target, exists := binding.Metadata["schema_target"]; exists {
+		value, ok := target.(string)
+		if binding.Capability != "auth.identity" || !ok || (value != "principal" && value != "spec") {
+			return invalidMetadata("The identity schema_target must be principal or spec.", "Only identity exports may set schema_target; omit it to validate principal.")
+		}
+	}
+
 	schema, ok := binding.Metadata["schema"].(string)
 	if !ok {
 		return invalidMetadata("The export has no `schema` path.", "Set `schema:` to a JSON Schema file inside the plugin, for example `schemas/config.schema.json`.")

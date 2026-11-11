@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -59,24 +60,163 @@ const defaultDirectoryName = "policy.d"
 // missing directory is returned so loading fails rather than falling back.
 func DirectoryFromEnvironment() (string, error) {
 	defer perf.Track(nil, "policy.DirectoryFromEnvironment")()
-	settings := viper.New()
-	if err := settings.BindEnv("directory", "ATMOS_POLICY_DIR"); err != nil {
-		return "", err
-	}
-	if directory := settings.GetString("directory"); directory != "" {
-		return directory, nil
+	directory, err := explicitDirectory()
+	if err != nil || directory != "" {
+		return directory, err
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("%w: resolve working directory: %w", errUtils.ErrPolicyInvalid, err)
 	}
-	for _, root := range projectroot.SearchDirs(cwd, os.Args) {
+	for _, root := range searchRoots(cwd) {
 		directory, err := defaultDirectory(filepath.Join(root, defaultDirectoryName))
 		if err != nil || directory != "" {
 			return directory, err
 		}
 	}
 	return "", nil
+}
+
+// explicitSettings binds ATMOS_POLICY_DIR once. Viper reads a bound variable
+// when it is requested, so one instance sees every change to the environment;
+// the mutex is held because Viper is not safe for concurrent use.
+var explicitSettings struct {
+	sync.Mutex
+	once     sync.Once
+	settings *viper.Viper
+	err      error
+}
+
+// explicitDirectory returns the ATMOS_POLICY_DIR override, or "" when unset.
+func explicitDirectory() (string, error) {
+	explicitSettings.once.Do(func() {
+		settings := viper.New()
+		explicitSettings.err = settings.BindEnv("directory", "ATMOS_POLICY_DIR")
+		explicitSettings.settings = settings
+	})
+	if explicitSettings.err != nil {
+		return "", explicitSettings.err
+	}
+	explicitSettings.Lock()
+	defer explicitSettings.Unlock()
+	return explicitSettings.settings.GetString("directory"), nil
+}
+
+// searchDirs resolves the project roots that may hold policy.d. Overridden in tests.
+var searchDirs = projectroot.SearchDirs
+
+// searchRootsCache remembers the project roots for the last working directory,
+// argument list and environment. Without a CLI invocation pinning the bundle
+// (for example when Atmos is embedded as a library), every template render
+// consults discovery, and resolving the Git root and parsing configuration
+// flags each time dominated render cost. Only the roots are cached: the
+// policy.d inside them is checked on every call, so creating or removing it
+// takes effect immediately. A change to the working directory, arguments or
+// any environment variable recomputes the roots, and so does a change to the
+// on-disk inputs of discovery (see discoveryFingerprint).
+var searchRootsCache struct {
+	sync.Mutex
+	valid bool
+	key   string
+	// selected are the config paths chosen by flags or environment, parsed
+	// once per key; their type is part of discoveryFingerprint.
+	selected    []string
+	fingerprint string
+	roots       []string
+}
+
+// searchRoots returns the cached project roots for cwd, recomputing them when
+// the working directory, os.Args, the environment or the on-disk discovery
+// inputs have changed.
+func searchRoots(cwd string) []string {
+	key := searchRootsKey(cwd, os.Args, os.Environ())
+	searchRootsCache.Lock()
+	defer searchRootsCache.Unlock()
+	sameKey := searchRootsCache.valid && searchRootsCache.key == key
+	if !sameKey {
+		searchRootsCache.selected = selectedConfigPaths(cwd, os.Args)
+	}
+	fingerprint := discoveryFingerprint(cwd, searchRootsCache.selected)
+	if sameKey && searchRootsCache.fingerprint == fingerprint {
+		return searchRootsCache.roots
+	}
+	roots := searchDirs(cwd, os.Args)
+	searchRootsCache.valid, searchRootsCache.key, searchRootsCache.fingerprint, searchRootsCache.roots = true, key, fingerprint, roots
+	return roots
+}
+
+// selectedConfigPaths returns the absolute config paths chosen by --config-path,
+// ATMOS_CONFIG_PATH or ATMOS_CLI_CONFIG_PATH. Discovery uses a selected path
+// itself when it is a directory and its parent when it is a file, so its type
+// is a discovery input. Selected config files always resolve to their parent.
+func selectedConfigPaths(cwd string, args []string) []string {
+	selection := projectroot.ParseConfigSelectionFromOsArgs(args)
+	selection.ApplyFallbacks(projectroot.ConfigSelectionFromEnv())
+	paths := append([]string(nil), selection.ConfigPath...)
+	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself, as in projectroot.SearchDirs.
+	if configPath := os.Getenv(projectroot.CliConfigPathEnvVar); configPath != "" {
+		paths = append(paths, configPath)
+	}
+	for i, path := range paths {
+		if !filepath.IsAbs(path) {
+			paths[i] = filepath.Join(cwd, path)
+		}
+	}
+	return paths
+}
+
+// searchRootsKey joins every discovery input with separators that cannot occur
+// in a path, argument or environment entry.
+func searchRootsKey(cwd string, args, environ []string) string {
+	const field, group = "\x00", "\x00\x01"
+	return cwd + group + strings.Join(args, field) + group + strings.Join(environ, field)
+}
+
+// discoveryFingerprint captures the on-disk inputs of root discovery that can
+// change while a process runs: the type of each selected config path,
+// configuration in cwd, the nearest ancestor with atmos.yaml, and the nearest
+// ancestor holding .git. Each is a stat or a short stat walk, unlike the git
+// root resolution and configuration flag parsing the cache avoids.
+func discoveryFingerprint(cwd string, selected []string) string {
+	var b strings.Builder
+	for _, path := range selected {
+		b.WriteString(pathKind(path))
+	}
+	b.WriteString("\x00")
+	if projectroot.HasLocalConfig(cwd) {
+		b.WriteString("1")
+	}
+	b.WriteString("\x00" + projectroot.FindConfigInParentDirs(cwd) + "\x00" + nearestGitDirectory(cwd))
+	return b.String()
+}
+
+// pathKind reports whether path is a directory ("d"), another file ("f") or
+// missing ("-").
+func pathKind(path string) string {
+	info, err := os.Stat(path)
+	switch {
+	case err != nil:
+		return "-"
+	case info.IsDir():
+		return "d"
+	default:
+		return "f"
+	}
+}
+
+// nearestGitDirectory returns the closest directory at or above dir that
+// contains .git, or "" when there is none.
+func nearestGitDirectory(dir string) string {
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }
 
 // defaultDirectory returns candidate when it is an existing directory, and an

@@ -199,6 +199,16 @@ func (s *ContainerSpec) Ports() []ctr.PortBinding {
 	return ports
 }
 
+// RunArgs returns additional runtime arguments, including explicit port bindings.
+func (s *ContainerSpec) RunArgs() []string {
+	defer perf.Track(nil, "container.ContainerSpec.RunArgs")()
+
+	if s.Run == nil {
+		return nil
+	}
+	return s.Run.RunArgs
+}
+
 // HostRuntime reports whether the container needs access to the host container
 // runtime (Docker-out-of-Docker), set via `run.runtime.host: true`.
 func (s *ContainerSpec) HostRuntime() bool {

@@ -37,7 +37,7 @@ func TestShouldFetchRemoteComprehensive(t *testing.T) {
 		{"git::https://bitbucket.org/myorg/myrepo.git", true, "Bitbucket with git protocol"},
 		{"git@bitbucket.org:myorg/myrepo.git", true, "Bitbucket SSH format"},
 		{"git::ssh://git@bitbucket.org/myorg/myrepo.git", true, "Bitbucket SSH protocol"},
-		{"bitbucket.org/myorg/myrepo", false, "Bitbucket shorthand (not supported without protocol)"},
+		{"bitbucket.org/myorg/myrepo", true, "Bitbucket shorthand matches even if the live lookup fails"},
 
 		// S3 formats.
 		{"s3::https://s3.amazonaws.com/bucket/key", true, "S3 HTTPS"},
