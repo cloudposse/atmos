@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"hash/fnv"
 	"maps"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependencies"
@@ -114,4 +116,26 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 		return nil, err
 	}
 	return tenv, nil
+}
+
+// checkConfigurationWorkspace rejects a TF_WORKSPACE that would make Terraform use a different
+// workspace than the one the configuration provider prepared, before any initialization runs.
+// The component environment overrides the base environment, as it does for the Terraform process.
+func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
+	base := info.SanitizedEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	workspace := ""
+	for _, entries := range [][]string{base, info.ComponentEnvList} {
+		for _, entry := range entries {
+			if key, value, ok := strings.Cut(entry, "="); ok && key == "TF_WORKSPACE" {
+				workspace = value
+			}
+		}
+	}
+	if workspace != "" && workspace != info.TerraformWorkspace {
+		return fmt.Errorf("%w: TF_WORKSPACE %q differs from the prepared workspace %q", errUtils.ErrPluginInvalidConfig, workspace, info.TerraformWorkspace)
+	}
+	return nil
 }

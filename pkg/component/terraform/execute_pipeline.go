@@ -156,6 +156,9 @@ func (e *Executor) runPreExecutionSteps(
 	warnOnConflictingEnvVars()
 
 	if schema.ConfigurationOwned(info.ComponentSettingsSection) && !info.DryRun {
+		if err := checkConfigurationWorkspace(info); err != nil {
+			return err
+		}
 		// Inputs have now been evaluated; append their secret variables after masking.
 		return appendTerraformSecretEnv(info)
 	}

@@ -96,3 +96,25 @@ func TestConfigurationIdentityIsStableAndSeparatesFields(t *testing.T) {
 	// The separator keeps adjacent fields from sliding into each other.
 	require.NotEqual(t, configurationIdentity("ab", "c"), configurationIdentity("a", "bc"))
 }
+
+func TestCheckConfigurationWorkspace(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		base      []string
+		component []string
+		want      error
+	}{
+		{name: "unset", base: []string{}},
+		{name: "empty", base: []string{"TF_WORKSPACE="}},
+		{name: "matching base", base: []string{"TF_WORKSPACE=stage"}},
+		{name: "matching component", base: []string{}, component: []string{"TF_WORKSPACE=stage"}},
+		{name: "conflicting base", base: []string{"TF_WORKSPACE=prod"}, want: errUtils.ErrPluginInvalidConfig},
+		{name: "conflicting component", base: []string{"TF_WORKSPACE=stage"}, component: []string{"TF_WORKSPACE=prod"}, want: errUtils.ErrPluginInvalidConfig},
+		{name: "component overrides conflicting base", base: []string{"TF_WORKSPACE=prod"}, component: []string{"TF_WORKSPACE=stage"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{TerraformWorkspace: "stage", SanitizedEnv: test.base, ComponentEnvList: test.component}
+			require.ErrorIs(t, checkConfigurationWorkspace(info), test.want)
+		})
+	}
+}
