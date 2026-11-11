@@ -114,6 +114,13 @@ func TestRPCFailuresAndDeadlineAreSafe(t *testing.T) {
 	_, err = p.Prepare(t.Context(), request)
 	require.ErrorIs(t, err, errUtils.ErrPluginTimeout)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	request.Operation.Command = "wait-prepare"
+	p.timeout = 2 * time.Second
+	_, err = p.Prepare(t.Context(), request)
+	require.ErrorIs(t, err, errUtils.ErrPluginTimeout)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.FileExists(t, filepath.Join(request.RootDirectory, "preparation.pb"), "preparation must have started")
 }
 
 func TestProviderWithoutValidatorStillHasIndependentStateCapability(t *testing.T) {
