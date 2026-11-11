@@ -36,7 +36,7 @@ func TestSign_AcceptsTheResolvedOrTheRecordDigestAndSignsTheRecord(t *testing.T)
 			pinned := artifact.PinnedReference{Ref: artifact.Ref{Name: "tools/example", Digest: tt.named}, ResolvedDigest: manifest, RecordDigest: recordDigest}
 			m := newMockSetup(t, &caps, service.WithSigner(releaseSigner))
 			m.expectLock()
-			m.repo.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(pinned, nil)
+			m.repo.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(pinned, nil).Times(2)
 			m.repo.EXPECT().Inspect(gomock.Any(), pinned).Return(&artifact.Inspection{Pinned: pinned, Record: &record}, nil)
 			var signed artifact.SignatureSubject
 			m.repo.EXPECT().Sign(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
@@ -70,7 +70,7 @@ func TestSign_AForeignGraphIsSignedByItsOriginalRoot(t *testing.T) {
 
 	m := newMockSetup(t, &caps, service.WithSigner(releaseSigner))
 	m.expectLock()
-	m.repo.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(pinned, nil)
+	m.repo.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(pinned, nil).Times(2)
 	m.repo.EXPECT().Inspect(gomock.Any(), pinned).Return(inspection, nil)
 	m.repo.EXPECT().Sign(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, subject artifact.SignatureSubject, _ artifact.Signer, _ artifact.SignOptions) ([]artifact.SignatureEvidence, error) {
