@@ -65,6 +65,10 @@ func TestParseRejectsInvalidDeclarations(t *testing.T) {
 		"bad mode":          declaration(map[string]any{"modes": []any{"fast"}}),
 		"duplicate aliases": declaration(map[string]any{"aliases": []any{"tool-level"}}),
 		"sensitive string":  declaration(map[string]any{"sensitive": "true"}),
+		"sensitive null":    declaration(map[string]any{"sensitive": nil}),
+		"flag list":         declaration(map[string]any{"flag": []any{"custom-level"}}),
+		"config number":     declaration(map[string]any{"config": 42}),
+		"deprecated bool":   declaration(map[string]any{"deprecated": true}),
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {

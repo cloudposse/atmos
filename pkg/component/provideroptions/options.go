@@ -188,9 +188,16 @@ func parseOption(provider string, fields map[string]any) (Option, error) {
 		Name: stringField(fields, "name"), Flag: stringField(fields, "flag"), Type: stringField(fields, "type"),
 		Config: stringField(fields, "config"), Deprecated: stringField(fields, "deprecated"), Description: stringField(fields, "description"),
 	}
+	for _, key := range []string{"flag", "config", "deprecated"} {
+		if raw := fields[key]; raw != nil {
+			if _, ok := raw.(string); !ok {
+				return Option{}, declarationError(option.Name, fmt.Sprintf("`%s` must be a string, not %T", key, raw))
+			}
+		}
+	}
 	var err error
 	sensitive, isBool := fields["sensitive"].(bool)
-	if raw, present := fields["sensitive"]; present && raw != nil && !isBool {
+	if raw, present := fields["sensitive"]; present && !isBool {
 		return Option{}, declarationError(option.Name, fmt.Sprintf("`sensitive` must be true or false, not %T", raw))
 	}
 	option.Sensitive = sensitive
