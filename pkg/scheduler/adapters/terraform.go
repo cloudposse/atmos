@@ -163,20 +163,28 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if err != nil {
 		return err
 	}
-	graph, err = buildScopedTerraformGraph(opts.Stacks, leftDelim, terraformGraphNodeIDs(filtered))
+	selected := terraformGraphNodeIDs(filtered)
+	// Discovery retains direct edges, unlike the filtered graph's contracted ordering edges.
+	direct := graph.Clone()
+	for id := range direct.Nodes {
+		if !selected[id] {
+			delete(direct.Nodes, id)
+		}
+	}
+	excluded := terraformExclusions(direct, opts.Info)
+	graph, err = buildTerraformGraphMode(opts.Stacks, leftDelim, terraformGraphMode{
+		selectedNodeIDs: selected, validationSources: selected, ignoredSources: excluded, warn: log.Warn,
+	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
-	// Exclusions follow the direct dependency edges; contracted edges only preserve ordering and
-	// must not make an indirect dependency look direct to exclude_dependencies.
-	excluded := terraformExclusions(graph, opts.Info)
-	addContractedTerraformEdges(graph, filtered)
+	addContractedTerraformEdges(graph, filtered, excluded)
 
 	if graph.Size() == 0 {
 		ui.Success("No components matched")
 		return nil
 	}
-	if err := preflightTerraformGraph(ctx, opts.AtmosConfig, graph); err != nil {
+	if err := preflightTerraformGraph(ctx, opts.AtmosConfig, graph, excluded); err != nil {
 		return err
 	}
 
@@ -415,6 +423,7 @@ func buildTerraformGraphWithWarnings(stacks map[string]any, leftDelim string, se
 type terraformGraphMode struct {
 	selectedNodeIDs   map[string]bool
 	validationSources map[string]bool
+	ignoredSources    map[string]string
 	warn              func(any, ...any)
 	// collect keeps going after a dependency error and reports every one of them.
 	collect bool
@@ -473,6 +482,9 @@ func addTerraformEdges(builder *dependency.GraphBuilder, stacks map[string]any, 
 	var dependencyErrors []error
 	err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
 		if shouldSkipComponent(componentSection) || !mode.selects(terraformNodeID(componentName, stackName)) {
+			return nil
+		}
+		if _, excluded := mode.ignoredSources[terraformNodeID(componentName, stackName)]; excluded {
 			return nil
 		}
 		edges := &terraformEdges{builder, targets, mode.validationSources, mode.selectedNodeIDs, leftDelim, stackName, componentName, mode.warn}
@@ -668,11 +680,14 @@ func terraformSelectionSeedNodeIDs(graph *dependency.Graph, info *schema.ConfigA
 // only re-creates edges that are declared directly between selected nodes.
 // Every edge in filtered whose endpoints both exist in scoped but is missing
 // there is copied over with the same optional flag.
-func addContractedTerraformEdges(scoped, filtered *dependency.Graph) {
+func addContractedTerraformEdges(scoped, filtered *dependency.Graph, excluded map[string]string) {
 	if scoped == nil || filtered == nil {
 		return
 	}
 	for _, fromID := range sortedGraphNodeIDs(filtered) {
+		if _, skip := excluded[fromID]; skip {
+			continue
+		}
 		fromFiltered := filtered.Nodes[fromID]
 		if fromFiltered == nil || scoped.Nodes[fromID] == nil {
 			continue

@@ -3768,3 +3768,30 @@ func TestExecuteTerraformAllExcludedCIResults(t *testing.T) {
 		require.False(t, result.Processed)
 	}
 }
+
+func TestExecuteTerraformExclusionPrecedesValidationAndPreflight(t *testing.T) {
+	stacks := excludeStacks(map[string]map[string]any{"app": {"actions": []any{"plan"}}})
+	components := stacks["dev"].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.TerraformSectionName].(map[string]any)
+	components["app"].(map[string]any)[cfg.DependenciesSectionName] = map[string]any{"components": []any{map[string]any{"name": "missing", "required": true}}}
+	runtime := &failureRuntime{failures: map[string]error{"dev/app": errors.New("excluded failure")}}
+	var executed []string
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{ComponentConfigurations: runtime},
+		Info:        &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"}, Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"vpc", "database"}, executed)
+	require.NotContains(t, runtime.asked, "dev/app")
+
+	// The same invalid dependency must still fail when its source is included.
+	info := &schema.ConfigAndStacksInfo{All: true, SubCommand: "apply"}
+	err = ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{}, Info: info, Stacks: stacks,
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) { return TerraformExecutionResult{}, nil },
+	})
+	require.ErrorContains(t, err, "missing")
+}
