@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -109,4 +113,24 @@ func TestExecuteTerragruntUnitInvalidatesStateAfterFailure(t *testing.T) {
 			require.Equal(t, dryRun, found)
 		})
 	}
+}
+
+func TestResolveTerragruntPathUsesInvocationEnvironment(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses a Unix executable")
+	}
+	ambient := t.TempDir()
+	invocation := t.TempDir()
+	for _, dir := range []string{ambient, invocation} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "terragrunt"), []byte("#!/bin/sh\n"), 0o700))
+	}
+	t.Setenv("PATH", ambient)
+	got, err := resolveTerragruntPath("terragrunt", nil, []string{"PATH=" + invocation})
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(invocation, "terragrunt"), got)
+	got, err = resolveTerragruntPath("terragrunt", nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(ambient, "terragrunt"), got)
+	_, err = resolveTerragruntPath("terragrunt", []string{"PATH="}, nil)
+	require.ErrorIs(t, err, exec.ErrNotFound)
 }
