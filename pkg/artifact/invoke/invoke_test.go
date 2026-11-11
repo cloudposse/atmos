@@ -57,6 +57,7 @@ func TestOutputPairsOmitOptionalValues(t *testing.T) {
 		"record_digest": string(recordDigest), "size": "7",
 	}, full)
 	assert.Empty(t, invoke.NamedOutputs(&artifact.OperationResult{}))
+	assert.Equal(t, "0", invoke.NamedOutputs(&artifact.OperationResult{SizeMeasured: true})[invoke.OutputSize])
 }
 
 func TestRunMapsParamsOntoServiceRequests(t *testing.T) {

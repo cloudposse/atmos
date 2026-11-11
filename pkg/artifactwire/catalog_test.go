@@ -10,6 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var _ = schema.ArtifactRepositoryConfig{Kind: "", Options: nil, Catalog: ""}
+
 func TestNewCatalogsComposesWithoutAccessingAnyRepository(t *testing.T) {
 	config := &schema.AtmosConfiguration{Artifacts: schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
 		"shared": {

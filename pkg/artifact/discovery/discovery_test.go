@@ -228,6 +228,13 @@ func TestRefreshReusesMetadataByDigestAndReadsNoPayload(t *testing.T) {
 	assert.Zero(t, e.registry.Count("GET", "/blobs/"), "no Record config or payload blob is read: %v", e.registry.Requests())
 	assert.Equal(t, 2, e.registry.Count("HEAD", "/manifests/"), "each reference is still resolved, so a moved tag is noticed")
 
+	// A second tag for an existing manifest must not duplicate its original record.
+	e.registry.TagExisting(t, "app", "1.0.0", "1.0.1")
+	e.rebuild(envOptions{})
+	aliased, err := e.list(artifact.ListRequest{Refresh: true})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"shared|app:1.0.0", "shared|app:1.1.0"}, refs(aliased))
+
 	// A changed digest is read again.
 	e.publish("app", "1.2.0", nil)
 	e.rebuild(envOptions{})

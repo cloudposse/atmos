@@ -34,16 +34,17 @@ type capturer struct {
 	// rootInfo identifies the source root as it was resolved, so a replacement is detected.
 	rootInfo os.FileInfo
 	entries  []artifact.Entry
-	staged   map[string]string
-	dirs     map[string][]string
-	sources  []sourceRecord
-	total    int64
-	counter  int
+	// exclusions are the entries the excluder left out.
+	exclusions      []artifact.Exclusion
+	excludedSources []sourceRecord
+	staged          map[string]string
+	dirs            map[string][]string
+	sources         []sourceRecord
+	total           int64
+	counter         int
 
 	// staging identifies the private staging directory, which is skipped when it lies inside the source.
 	staging os.FileInfo
-	// exclusions are the entries the excluder left out.
-	exclusions []artifact.Exclusion
 }
 
 // walkDir captures the directory at abs, whose slash-separated inventory path is rel ("" for the root).
@@ -82,8 +83,7 @@ func (c *capturer) captureChild(abs, rel string) error {
 	mode := info.Mode()
 	if c.opts.excluder != nil {
 		if rule, excluded := c.opts.excluder(rel, mode.IsDir()); excluded {
-			c.exclusions = append(c.exclusions, artifact.Exclusion{Path: rel, Rule: rule})
-			return nil
+			return c.exclude(abs, rel, rule, info)
 		}
 	}
 	switch {
@@ -100,6 +100,16 @@ func (c *capturer) captureChild(abs, rel string) error {
 	default:
 		return fmt.Errorf("%w: %q is a device, socket, pipe, or other special file (%s)", errUtils.ErrArtifactPackagingInvalid, rel, mode.Type())
 	}
+}
+
+// exclude records a bounded exclusion and its source type for the final recheck.
+func (c *capturer) exclude(abs, rel, rule string, info os.FileInfo) error {
+	if len(c.exclusions) >= c.opts.limits.MaxEntries {
+		return fmt.Errorf("%w: more than %d exclusions", errUtils.ErrArtifactTooLarge, c.opts.limits.MaxEntries)
+	}
+	c.exclusions = append(c.exclusions, artifact.Exclusion{Path: rel, Rule: rule})
+	c.excludedSources = append(c.excludedSources, sourceRecord{abs: abs, rel: rel, info: info})
+	return nil
 }
 
 // captureSymlink records a relative symlink without following it. Absolute or escaping targets
@@ -157,6 +167,7 @@ func readDirNames(dir string) ([]string, error) {
 // can clean to a contained path yet resolve outside it. A dangling link is resolved through its
 // existing part plus the missing remainder, so it cannot escape once the missing path is created.
 // The check reads the links as captured and never the source, which may have changed since.
+// A contained link is then checked against the excluder, so that it cannot name excluded content.
 func (c *capturer) checkLinkContainment() error {
 	links := make(map[string]string)
 	for index := range c.sources {
@@ -164,10 +175,62 @@ func (c *capturer) checkLinkContainment() error {
 			links[record.rel] = record.target
 		}
 	}
+	var captured map[string]bool
+	if c.opts != nil && c.opts.excluder != nil {
+		captured = c.capturedTypes()
+	}
 	for index := range c.sources {
 		record := &c.sources[index]
-		if record.target != "" && linkpath.Escapes(links, record.rel) {
+		if record.target == "" {
+			continue
+		}
+		if linkpath.Escapes(links, record.rel) {
 			return fmt.Errorf("%w: symlink %q resolves outside the source", errUtils.ErrArtifactUnsafePath, record.rel)
+		}
+		if captured == nil {
+			continue
+		}
+		if err := c.checkExcludedTarget(links, captured, record.rel); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// capturedTypes maps the path of every entry the walk classified, captured or excluded, to whether
+// it was a directory. It is the walk's own record of the source, so the excluder can be asked about
+// a link target with the same arguments the walk used, without inspecting the source again.
+func (c *capturer) capturedTypes() map[string]bool {
+	types := make(map[string]bool, len(c.sources)+len(c.excludedSources))
+	for index := range c.sources {
+		types[c.sources[index].rel] = c.sources[index].info.IsDir()
+	}
+	for index := range c.excludedSources {
+		types[c.excludedSources[index].rel] = c.excludedSources[index].info.IsDir()
+	}
+	return types
+}
+
+// checkExcludedTarget rejects a symlink whose target is an excluded entry, lies below one, or passes
+// through one on the way. The filesystem looks up every directory before it processes a ".." that
+// follows it, so a link such as "cache/p/../../keep.txt" breaks when "cache" is left out even
+// though it reduces to "keep.txt". The target is therefore followed through the captured links the
+// way the filesystem would, and each path it traverses is tested as the walk classified it, so the
+// answer cannot change when the source changes after capture. A path the walk never classified is
+// either missing (a dangling link) or below an excluded directory, which is traversed, and tested,
+// first.
+func (c *capturer) checkExcludedTarget(links map[string]string, captured map[string]bool, link string) error {
+	traversed, inside := linkpath.TraversedRecorded(links, link)
+	if !inside {
+		return nil
+	}
+	for _, candidate := range traversed {
+		isDir, classified := captured[candidate]
+		if !classified {
+			continue
+		}
+		if _, excluded := c.opts.excluder(candidate, isDir); excluded {
+			return fmt.Errorf("%w: symlink %q targets excluded path %q", errUtils.ErrArtifactUnsafePath, link, candidate)
 		}
 	}
 	return nil
