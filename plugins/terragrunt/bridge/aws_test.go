@@ -301,10 +301,13 @@ func TestAWSCacheKeyTracksSelectionAndFileChanges(t *testing.T) {
 }
 
 func TestAWSWebIdentityRoleFromInvocationTokenFile(t *testing.T) {
+	var mu sync.Mutex
 	var gotAction string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
 		gotAction = string(body)
+		mu.Unlock()
 		w.Header().Set("Content-Type", "text/xml")
 		fmt.Fprintf(w, `<AssumeRoleWithWebIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><AssumeRoleWithWebIdentityResult><Credentials><AccessKeyId>ASIAWEB</AccessKeyId><SecretAccessKey>web</SecretAccessKey><SessionToken>web-token</SessionToken><Expiration>%s</Expiration></Credentials></AssumeRoleWithWebIdentityResult></AssumeRoleWithWebIdentityResponse>`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
 	}))
@@ -320,6 +323,9 @@ func TestAWSWebIdentityRoleFromInvocationTokenFile(t *testing.T) {
 
 	assert.Equal(t, "ASIAWEB", scoped.Env["AWS_ACCESS_KEY_ID"])
 	assert.Equal(t, "web-token", scoped.Env["AWS_SESSION_TOKEN"])
-	assert.Contains(t, gotAction, "AssumeRoleWithWebIdentity")
-	assert.Contains(t, gotAction, "RoleSessionName=atmos-web")
+	mu.Lock()
+	action := gotAction
+	mu.Unlock()
+	assert.Contains(t, action, "AssumeRoleWithWebIdentity")
+	assert.Contains(t, action, "RoleSessionName=atmos-web")
 }
