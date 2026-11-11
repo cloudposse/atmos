@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -282,7 +281,7 @@ func TestLogStreamCancellationReleasesWaitingSenders(t *testing.T) {
 		t.Fatal("cancellation left a sender waiting")
 	}
 	got := messages(stream.Close())
-	if len(got) != 1 || !strings.HasSuffix(got[0], "log events were not shown") {
+	if !equal(got, []string{"3 log events were not shown"}) {
 		t.Fatalf("a cancelled call must report what it could not show: %v", got)
 	}
 }
