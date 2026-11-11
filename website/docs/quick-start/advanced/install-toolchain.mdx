@@ -6,7 +6,6 @@ slug: /quick-start/advanced/install-toolchain
 id: install-toolchain
 description: Let Atmos install and pin the exact tools your stacks need — OpenTofu and a security scanner — so everyone runs the same versions with no separate tool manager.
 ---
-import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
@@ -22,26 +21,9 @@ By the end of this step, Atmos will install OpenTofu (and a security scanner) fo
 
 ## The transparent way: declare what you depend on
 
-The toolchain works **automatically**. You declare the tools your components need, and Atmos installs them on demand and records exact versions in a lockfile. There are two small pieces.
+The toolchain works **automatically** with the default configuration. Atmos uses the Aqua registry to resolve declared tools and installs them on demand.
 
-**1. Tell Atmos where to get tools.** Add a `toolchain:` section to your `atmos.yaml`:
-
-<File title="atmos.yaml">
-```yaml
-toolchain:
-  # Where installed tool binaries live (relative to base_path).
-  install_path: .tools
-  # Resolve installs against the committed lockfile for reproducibility.
-  use_lock_file: true
-  registries:
-    # The Aqua registry provides metadata for 1,000+ tools (opentofu, kubectl, …).
-    - name: aqua
-      type: aqua
-      priority: 100
-```
-</File>
-
-**2. Declare the tools your stacks depend on.** In your stack defaults (you'll build these out in [Create Stacks](/quick-start/advanced/create-atmos-stacks)), pin versions with `dependencies.tools`:
+Declare the tools your stacks depend on. In your stack defaults (you'll build these out in [Create Stacks](/quick-start/advanced/create-atmos-stacks)), pin versions with `dependencies.tools`:
 
 ```yaml
 # stacks/orgs/acme/_defaults.yaml
@@ -51,7 +33,7 @@ dependencies:
     checkov: "3.2.529"   # security scanner, used by a hook later
 ```
 
-That's it. The next time you run a Terraform command, Atmos resolves these versions from the Aqua registry, installs them under `.tools/`, and pins the resolved versions in **`toolchain.lock.yaml`**. Tell Atmos to use OpenTofu as the Terraform binary in `atmos.yaml`:
+That's it. The next time you run a Terraform command, Atmos resolves these versions from the Aqua registry, installs them in its toolchain cache, and records artifact checksums in its lockfile. Tell Atmos to use OpenTofu as the Terraform binary in `atmos.yaml`:
 
 ```yaml
 components:
@@ -60,7 +42,7 @@ components:
 ```
 
 :::tip Commit the lockfile
-Check `toolchain.lock.yaml` into git after populating and reviewing entries for each platform your team and CI use. The lockfile records the artifact URL and checksum for each included platform; installing on one platform does not automatically populate every other platform.
+To use a committed project lockfile, set `toolchain.lock_file: toolchain.lock.yaml` in `atmos.yaml`, then populate and review entries for each platform your team and CI use. The lockfile records the artifact URL and checksum for each included platform; installing on one platform does not automatically populate every other platform.
 :::
 
 ## The manual way: manage tools yourself
@@ -84,7 +66,7 @@ Need a tool your components depend on that isn't OpenTofu — `kubectl`, `helm`,
 The payoff: the tools your infrastructure needs are declared **next to the infrastructure that needs them**, version-controlled in the same repo, and resolved identically everywhere — no second tool to install, no drift between laptops and CI. See the [toolchain configuration reference](/cli/configuration/toolchain) for registries, aliases, and verification.
 
 :::tip Tools aren't added to your system `PATH` — on purpose
-Atmos installs tools under `.tools/` and puts them on the `PATH` only for the commands **it** runs (Terraform, hooks, [custom commands](/quick-start/advanced/add-custom-commands)). It deliberately does **not** install them globally, so different projects can pin different versions of the same tool without colliding. When you want the pinned tools in **your own** shell:
+Atmos installs tools in its toolchain cache and puts them on the `PATH` only for the commands **it** runs (Terraform, hooks, [custom commands](/quick-start/advanced/add-custom-commands)). It deliberately does **not** install them globally, so different projects can pin different versions of the same tool without colliding. When you want the pinned tools in **your own** shell:
 
 - Run `eval "$(atmos toolchain env)"` to add the toolchain to the current shell's `PATH`.
 - Run `atmos toolchain exec opentofu version` to invoke a single pinned tool without touching `PATH`.

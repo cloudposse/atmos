@@ -1,13 +1,5 @@
 base_path: "./"
 
-toolchain:
-  install_path: .tools
-  use_lock_file: true
-  registries:
-    - name: aqua
-      type: aqua
-      priority: 100
-
 components:
   terraform:
     command: tofu
