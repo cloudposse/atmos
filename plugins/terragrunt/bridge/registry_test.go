@@ -18,15 +18,15 @@ import (
 
 // fakeRegistry serves the Terraform module registry protocol over TLS.
 type fakeRegistry struct {
-	server     *httptest.Server
-	authHeader string
-	download   string
-	requests   []string
+	server      *httptest.Server
+	authHeaders map[string]string
+	download    string
+	requests    []string
 }
 
 func newFakeRegistry(t *testing.T, versions ...string) *fakeRegistry {
 	t.Helper()
-	registry := &fakeRegistry{download: "git::https://example.test/acme/vpc.git?ref=v%s"}
+	registry := &fakeRegistry{download: "git::https://example.test/acme/vpc.git?ref=v%s", authHeaders: make(map[string]string)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/terraform.json", func(w http.ResponseWriter, r *http.Request) {
 		registry.record(r)
@@ -56,9 +56,7 @@ func newFakeRegistry(t *testing.T, versions ...string) *fakeRegistry {
 
 func (r *fakeRegistry) record(req *http.Request) {
 	r.requests = append(r.requests, req.URL.Path)
-	if header := req.Header.Get("Authorization"); header != "" {
-		r.authHeader = header
-	}
+	r.authHeaders[req.URL.Path] = req.Header.Get("Authorization")
 }
 
 func (r *fakeRegistry) source(path, query string) string {
@@ -118,13 +116,13 @@ func TestResolveRegistrySourceCredentials(t *testing.T) {
 		registry := newFakeRegistry(t, "1.0.0")
 		_, err := resolveTestSource(t, registry, registry.source("/acme/vpc/aws", "?version=1.0.0"), "", map[string]string{"TG_TF_REGISTRY_TOKEN": "bearer-secret"})
 		require.NoError(t, err)
-		assert.Equal(t, "Bearer bearer-secret", registry.authHeader)
+		assert.Equal(t, map[string]string{"/.well-known/terraform.json": "Bearer bearer-secret", "/v1/modules/acme/vpc/aws/1.0.0/download": "Bearer bearer-secret"}, registry.authHeaders)
 	})
 	t.Run("TF_TOKEN_host wins over the CLI configuration", func(t *testing.T) {
 		registry := newFakeRegistry(t, "1.0.0")
 		_, err := resolveTestSource(t, registry, registry.source("/acme/vpc/aws", "?version=1.0.0"), "", map[string]string{"TF_TOKEN_127_0_0_1": "env-secret", "TG_TF_REGISTRY_TOKEN": "ignored", "HOME": t.TempDir()})
 		require.NoError(t, err)
-		assert.Equal(t, "Bearer env-secret", registry.authHeader)
+		assert.Equal(t, map[string]string{"/.well-known/terraform.json": "Bearer env-secret", "/v1/modules/acme/vpc/aws/1.0.0/download": "Bearer env-secret"}, registry.authHeaders)
 	})
 	t.Run("the CLI configuration credentials block is used", func(t *testing.T) {
 		registry := newFakeRegistry(t, "1.0.0")
@@ -133,13 +131,21 @@ func TestResolveRegistrySourceCredentials(t *testing.T) {
 		require.NoError(t, os.WriteFile(rc, []byte(fmt.Sprintf("credentials %q {\n  token = \"rc-secret\"\n}\n", address.Hostname())), 0o600))
 		_, err := resolveTestSource(t, registry, registry.source("/acme/vpc/aws", "?version=1.0.0"), "", map[string]string{"TF_CLI_CONFIG_FILE": rc, "TOFU_CLI_CONFIG_FILE": rc, "HOME": t.TempDir()})
 		require.NoError(t, err)
-		assert.Equal(t, "Bearer rc-secret", registry.authHeader)
+		assert.Equal(t, map[string]string{"/.well-known/terraform.json": "Bearer rc-secret", "/v1/modules/acme/vpc/aws/1.0.0/download": "Bearer rc-secret"}, registry.authHeaders)
+	})
+	t.Run("versions request uses credentials", func(t *testing.T) {
+		registry := newFakeRegistry(t, "1.0.0")
+		_, err := resolveTestSource(t, registry, registry.source("/acme/vpc/aws", ""), "", map[string]string{"TG_TF_REGISTRY_TOKEN": "bearer-secret"})
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer bearer-secret", registry.authHeaders["/.well-known/terraform.json"])
+		assert.Equal(t, "Bearer bearer-secret", registry.authHeaders["/v1/modules/acme/vpc/aws/versions"])
+		assert.Equal(t, "Bearer bearer-secret", registry.authHeaders["/v1/modules/acme/vpc/aws/1.0.0/download"])
 	})
 	t.Run("anonymous requests carry no authorization", func(t *testing.T) {
 		registry := newFakeRegistry(t, "1.0.0")
 		_, err := resolveTestSource(t, registry, registry.source("/acme/vpc/aws", "?version=1.0.0"), "", map[string]string{"HOME": t.TempDir()})
 		require.NoError(t, err)
-		assert.Empty(t, registry.authHeader)
+		assert.Equal(t, map[string]string{"/.well-known/terraform.json": "", "/v1/modules/acme/vpc/aws/1.0.0/download": ""}, registry.authHeaders)
 	})
 }
 
