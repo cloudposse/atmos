@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -71,6 +72,21 @@ func TestPull_ExistingDestinationRules(t *testing.T) {
 
 	request.Force = true
 	forced, err := e.svc.Pull(context.Background(), request)
+	if runtime.GOOS == "windows" {
+		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+		data, readErr := os.ReadFile(filepath.Join(dest, "data.txt"))
+		require.NoError(t, readErr)
+		assert.Equal(t, "locally edited", string(data))
+		empty := out(t)
+		require.NoError(t, os.MkdirAll(empty, 0o755))
+		request.Destination, request.Force = empty, false
+		_, err = e.svc.Pull(context.Background(), request)
+		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+		entries, readErr := os.ReadDir(empty)
+		require.NoError(t, readErr)
+		assert.Empty(t, entries)
+		return
+	}
 	require.NoError(t, err)
 	assert.Equal(t, artifact.OutcomeRead, forced.Outcome)
 	_, statErr := os.Stat(filepath.Join(dest, "stale.txt"))
@@ -407,6 +423,10 @@ func TestPull_RechecksTheDestinationBeforeReplacingIt(t *testing.T) {
 			}}
 
 			_, err := e.svc.Pull(context.Background(), artifact.PullRequest{Repository: "dst", Ref: exampleRef, Destination: dest, Force: tt.force})
+			if runtime.GOOS == "windows" && tt.force {
+				tt.wantErr = errUtils.ErrArtifactUnsupportedCapability
+				tt.wantKept = true
+			}
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 			} else {
