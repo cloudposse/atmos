@@ -31,6 +31,9 @@ func (h *ArtifactHandler) Validate(step *schema.WorkflowStep) error {
 	if err := validateArtifactLabelShape(step); err != nil {
 		return err
 	}
+	if err := validateArtifactOtherFields(step); err != nil {
+		return err
+	}
 	set := artifactFieldsSet(step)
 	for _, field := range invoke.AllFields() {
 		if set[field] && !spec.Accepts(field) {
@@ -53,6 +56,36 @@ func (h *ArtifactHandler) Validate(step *schema.WorkflowStep) error {
 				WithHintf("Fields for `%s`: %s", step.Action, artifactFieldList(spec)).
 				Err()
 		}
+	}
+	return nil
+}
+
+// validateArtifactOtherFields rejects populated fields belonging to other step types.
+func validateArtifactOtherFields(step *schema.WorkflowStep) error {
+	allowed := map[string]bool{}
+	for _, name := range []string{
+		"Name", "Type", "Action", "Source", "Repository", "ArtifactName", "Version", "ArtifactKind", "Force", "ArtifactDryRun", "Metadata", "Labels", "Readme", "Changelog", "Ref", "Destination", "From", "To", "Document", "SearchQuery", "Refresh",
+		"WorkingDirectory", "Retry", "Identity", "Needs", "When", "Continue", "Output", "Timeout", "Env", "With", "Inputs", "Artifacts", "Outputs", "Show", "DryRun", "LiteralFields", "LoadError",
+	} {
+		allowed[name] = true
+	}
+	value := reflect.ValueOf(step).Elem()
+	kind := value.Type()
+	for index := 0; index < value.NumField(); index++ {
+		field := kind.Field(index)
+		if allowed[field.Name] || value.Field(index).IsZero() {
+			continue
+		}
+		key := strings.Split(field.Tag.Get("yaml"), ",")[0]
+		if key == "-" {
+			key = strings.Split(field.Tag.Get("json"), ",")[0]
+		}
+		if key == "" || key == "-" {
+			continue
+		}
+		return errUtils.Build(fmt.Errorf("%w: `%s` for action `%s`", errUtils.ErrArtifactStepFieldForbidden, key, step.Action)).
+			WithContext("step", step.Name).WithContext("action", step.Action).WithContext("field", key).
+			WithExplanationf("Field `%s` is not valid for artifact action `%s`", key, step.Action).Err()
 	}
 	return nil
 }
@@ -122,7 +155,15 @@ func validateArtifactLabelShape(step *schema.WorkflowStep) error {
 		return nil
 	}
 	switch reflect.ValueOf(step.Labels).Kind() {
-	case reflect.String, reflect.Map:
+	case reflect.String:
+		return nil
+	case reflect.Map:
+		for _, key := range reflect.ValueOf(step.Labels).MapKeys() {
+			item := unwrapInterface(reflect.ValueOf(step.Labels).MapIndex(key))
+			if !item.IsValid() || item.Kind() != reflect.String {
+				return artifactInvalidField(step, "labels", "mapping values must be strings")
+			}
+		}
 		return nil
 	case reflect.Slice:
 		for _, item := range reflect.ValueOf(step.Labels).Seq2() {

@@ -319,3 +319,14 @@ func TestPublish_UsesTheCallersLock(t *testing.T) {
 	assert.Len(t, lockObjects(spec.fake), 1, "the caller's lock is still held")
 	require.NoError(t, handle.Release(context.Background()))
 }
+
+func TestLockNamespaceIncludesEndpoint(t *testing.T) {
+	base := Repository{bucket: "bucket", prefix: "prefix"}
+	assert.Equal(t, "s3://bucket/prefix", base.LockNamespace())
+	first := base
+	first.endpoint = "https://one.example"
+	second := base
+	second.endpoint = "https://two.example"
+	assert.NotEqual(t, first.LockNamespace(), second.LockNamespace())
+	assert.Equal(t, first.LockNamespace(), (&first).LockNamespace())
+}

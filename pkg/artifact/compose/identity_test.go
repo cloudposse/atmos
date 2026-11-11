@@ -69,13 +69,15 @@ func TestIdentityResolverReturnsTheCredentialTypeOfTheIdentitysCloud(t *testing.
 
 func TestIdentityResolverFailsClosed(t *testing.T) {
 	bridge := &recordingBridge{}
-	resolve := compose.NewIdentityResolverForTest(authConfig(), func(*schema.AtmosConfiguration) (store.AuthContextResolver, error) { return bridge, nil })
+	var builds atomic.Int64
+	resolve := compose.NewIdentityResolverForTest(authConfig(), func(*schema.AtmosConfiguration) (store.AuthContextResolver, error) { builds.Add(1); return bridge, nil })
 
 	_, err := resolve(context.Background(), "nobody")
 	require.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
 	_, err = resolve(context.Background(), "token")
 	require.ErrorIs(t, err, errUtils.ErrBlobIdentityUnresolved, "an identity without cloud credentials is never accepted")
 	assert.Zero(t, bridge.aws.Load()+bridge.azure.Load()+bridge.gcp.Load(), "unknown and unsupported identities never authenticate")
+	assert.Zero(t, builds.Load(), "unsupported identities do not construct the auth bridge")
 
 	boom := errors.New("sso expired")
 	failing := compose.NewIdentityResolverForTest(authConfig(), func(*schema.AtmosConfiguration) (store.AuthContextResolver, error) {

@@ -192,7 +192,7 @@ func TestPluginFormatArtifactsStayImmutableEvenWithForce(t *testing.T) {
 	composition := build(t, repos, nil)
 	request := publishRequest("layout", source(t, "release"))
 	request.Metadata = artifact.Metadata{Labels: map[string]string{"dev.atmos.plugin.name": "login"}}
-	_, err := composition.Service.Publish(context.Background(), request)
+	first, err := composition.Service.Publish(context.Background(), request)
 	require.NoError(t, err)
 
 	replacement := publishRequest("layout", source(t, "tampered"))
@@ -203,5 +203,20 @@ func TestPluginFormatArtifactsStayImmutableEvenWithForce(t *testing.T) {
 
 	inspected, err := composition.Service.Inspect(context.Background(), artifact.InspectRequest{Repository: "layout", Ref: appRef()})
 	require.NoError(t, err)
-	assert.NotNil(t, inspected.Inspection.Record)
+	require.NotNil(t, inspected.Inspection.Record)
+	digest, err := inspected.Inspection.Record.RecordDigest()
+	require.NoError(t, err)
+	assert.Equal(t, first.RecordDigest, digest)
+}
+
+func TestInvalidConfigurationDoesNotRegisterKinds(t *testing.T) {
+	registry := artifact.NewRepositoryRegistry()
+	config := &schema.AtmosConfiguration{Artifacts: schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
+		"bad": {Kind: artifact.RepositoryKindLocalDir},
+	}}}
+	_, err := compose.New(config, compose.WithRegistry(registry))
+	require.Error(t, err)
+	assert.False(t, registry.IsRegistered(artifact.RepositoryKindLocalDir))
+	_, err = compose.New(&schema.AtmosConfiguration{}, compose.WithRegistry(registry))
+	require.NoError(t, err)
 }

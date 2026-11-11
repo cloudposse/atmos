@@ -691,7 +691,7 @@ func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t *
 	if err := decodeWorkflowStepList(nodes.steps, t.steps); err != nil {
 		return err
 	}
-	if err := decodeStepQuery(nodes.query, t.query, t.search); err != nil {
+	if err := decodeStepQuery(nodes.query, stepType, t.query, t.search); err != nil {
 		return err
 	}
 	return decodeStepWith(nodes.with, stepType, action, t)

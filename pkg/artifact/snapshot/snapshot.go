@@ -198,7 +198,16 @@ func captureInto(ctx context.Context, source, root string, opts *options) (*Snap
 	if info.IsDir() {
 		err = c.walkDir(resolved, "")
 	} else {
-		err = c.captureFile(resolved, filepath.Base(resolved), info)
+		rel := filepath.Base(resolved)
+		if opts.excluder != nil {
+			if rule, excluded := opts.excluder(rel, false); excluded {
+				err = c.exclude(resolved, rel, rule, info)
+			} else {
+				err = c.captureFile(resolved, rel, info)
+			}
+		} else {
+			err = c.captureFile(resolved, rel, info)
+		}
 	}
 	if err != nil {
 		return nil, err

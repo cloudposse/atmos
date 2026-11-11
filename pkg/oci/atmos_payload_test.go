@@ -5,14 +5,20 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/google/go-containerregistry/pkg/v1/types"
@@ -111,6 +117,7 @@ func TestSelectLayers_RejectsPackagesWithoutExactlyOnePayload(t *testing.T) {
 	}{
 		{name: "documents only", layers: []v1.Layer{documentLayer("# readme\n")}},
 		{name: "two payloads", layers: []v1.Layer{tarLayer("a"), tarLayer("b")}},
+		{name: "unexpected layer", layers: []v1.Layer{tarLayer("a"), static.NewLayer([]byte("x"), types.MediaType("application/octet-stream"))}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -214,4 +221,37 @@ func TestSelectedLayers_AtmosPackageExtractsThroughTheRetryPath(t *testing.T) {
 
 	assert.FileExists(t, filepath.Join(dest, "main.tf"))
 	assert.NoDirExists(t, filepath.Join(dest, ".atmos"))
+}
+
+func TestProcessImageClassifiesAtmosPackages(t *testing.T) {
+	server := httptest.NewServer(registry.New())
+	defer server.Close()
+	host := strings.TrimPrefix(server.URL, "http://")
+	payload := atmosLayer(t, types.MediaType(artifact.MediaTypeTar), atmosFiles())
+	for _, tc := range []struct {
+		name          string
+		image         v1.Image
+		keepsMetadata bool
+	}{
+		{name: "atmos", image: atmosPackage(t, payload, documentLayer("# readme"))},
+		{name: "legacy", image: func() v1.Image {
+			img, err := mutate.AppendLayers(empty.Image, payload)
+			require.NoError(t, err)
+			return img
+		}(), keepsMetadata: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ref, err := name.NewTag(host + "/test/" + tc.name + ":latest")
+			require.NoError(t, err)
+			require.NoError(t, remote.Write(ref, tc.image))
+			dest := t.TempDir()
+			require.NoError(t, ProcessImage(context.Background(), &schema.AtmosConfiguration{}, ref.String(), dest))
+			assert.FileExists(t, filepath.Join(dest, "main.tf"))
+			if tc.keepsMetadata {
+				assert.FileExists(t, filepath.Join(dest, ".atmos", "artifact", "README.md"))
+			} else {
+				assert.NoDirExists(t, filepath.Join(dest, ".atmos"))
+			}
+		})
+	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/artifact/report"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // artifactSession is the artifact state a [Variables] carries across the attempts and steps of one
@@ -28,6 +29,7 @@ type artifactSession struct {
 	mu         sync.Mutex
 	collector  report.Collector
 	operations map[string]*artifactOperation
+	inputs     map[string]invoke.Params
 	root       *artifactScope
 }
 
@@ -77,7 +79,7 @@ type artifactOperation struct {
 }
 
 func newArtifactSession() *artifactSession {
-	return &artifactSession{collector: report.Discard{}, operations: make(map[string]*artifactOperation), root: &artifactScope{}}
+	return &artifactSession{collector: report.Discard{}, operations: make(map[string]*artifactOperation), inputs: make(map[string]invoke.Params), root: &artifactScope{}}
 }
 
 // Clocks and ID generation are variables so tests can pin them.
@@ -195,6 +197,35 @@ func (s *artifactSession) finish(key string, succeeded bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.operations, key)
+}
+
+// artifactStepKey identifies the authored call independently of resolved templates.
+func artifactStepKey(step *schema.WorkflowStep) string {
+	encoded, err := json.Marshal(step)
+	if err != nil {
+		return step.Name + "\x00" + step.Action
+	}
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:])
+}
+
+func (s *artifactSession) retainedInput(key string) (*invoke.Params, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.inputs[key]
+	return &value, ok
+}
+
+func (s *artifactSession) retainInput(key string, params *invoke.Params) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inputs[key] = *params
+}
+
+func (s *artifactSession) forgetInput(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.inputs, key)
 }
 
 // artifactOperationLabel domain-separates operation keys; it is a public label, not a secret.

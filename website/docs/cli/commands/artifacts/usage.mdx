@@ -28,9 +28,15 @@ Publish files and directories as named, versioned artifacts, then pull, copy, in
 
 <CastPlayer title="atmos artifacts --help" src="/casts/screengrabs/atmos-artifacts--help.cast" static chrome />
 
+## Usage
+
+```shell
+atmos artifacts <subcommand> [flags]
+```
+
 ## Quick Start
 
-Define two repositories, publish a directory to one, and copy it to the other:
+Define `artifact-writer` under [`auth.identities`](/cli/configuration/auth) first, then define two repositories, publish a directory to one, and copy it to the other:
 
 ```yaml
 artifacts:
@@ -88,7 +94,7 @@ Results label each digest by what it identifies:
 
     <dt>`record_digest`</dt>
     <dd>
-        The digest of the portable Record, which binds the name, version, metadata, inventory, content digest, and document digests. Signatures cover the Record, so evidence survives changes of physical representation.
+        The digest of the portable Record, which binds the name, version, metadata, inventory, content digest, and document digests. For Atmos packages, signatures cover the Record, so evidence survives changes of physical representation. Foreign OCI graphs are signed at their original OCI root.
     </dd>
 
     <dt>`content_digest`</dt>
@@ -138,7 +144,7 @@ The structured result also carries `operation_id`, `action`, `repository`, `requ
 
 ### Failures
 
-A failed command exits with a nonzero status. When you request `--format=json` or `--format=yaml`, the result is still written to stdout, with `outcome: failed` and an `error` field, so a script can parse the reason and the exit code still reports the failure. In text mode, a failure writes nothing to stdout and the error appears on stderr with hints.
+A failed command exits with a nonzero status. For a command that runs, `--format=json` or `--format=yaml` writes a result to stdout with `outcome: failed` and an `error` field. Usage errors, such as invalid argument counts or unknown flags, stop execution without a structured result. In text mode, a failure writes nothing to stdout and the error appears on stderr with hints.
 
 ## Environment Variables
 
@@ -146,7 +152,7 @@ Every flag has an `ATMOS_ARTIFACTS_` environment variable: `ATMOS_ARTIFACTS_REPO
 
 ## Authentication and CI
 
-Repositories authenticate through Atmos Auth identities named in `artifacts.repositories.<alias>.identity`, so there is no separate login. The commands never prompt, which makes them safe in CI. Use [`--dry-run`](/cli/commands/artifacts/publish) to validate a publication without contacting a repository or resolving credentials.
+Repositories authenticate through Atmos Auth identities named in `artifacts.repositories.<alias>.identity`, so there is no separate login. Signing can prompt for Sigstore confirmation or identity-provider login. In CI, pass `--yes` or set `ATMOS_ARTIFACTS_YES` to accept confirmation; configure the identity provider for unattended authentication. Use [`--dry-run`](/cli/commands/artifacts/publish) to validate a publication without contacting a repository or resolving credentials.
 
 ## CI Summaries and Outputs
 

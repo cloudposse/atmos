@@ -60,6 +60,7 @@ func (s *Service) runDelete(ctx context.Context, op *operation, request *artifac
 	op.result.Outcome = artifact.OutcomeDeleted
 	op.result.LockScope = locks.scope()
 	op.result.Size = payloadSize(inspection)
+	op.result.SizeMeasured = true
 	if len(result.Deleted) > 0 {
 		op.result.Location = result.Deleted[0]
 		op.result.Aliases = result.Deleted[1:]

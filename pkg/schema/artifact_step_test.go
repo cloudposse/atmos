@@ -9,6 +9,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var _ = WorkflowStep{
+	Name: "", Type: "", Action: "", Source: nil, Repository: "", ArtifactName: "", ArtifactKind: "", Version: "",
+	Force: false, ArtifactDryRun: false, Readme: "", Changelog: "", Output: "", Metadata: nil, Artifacts: nil,
+	Ref: "", Destination: "", From: "", To: "", Document: "", SearchQuery: "", Query: nil, Refresh: false, Labels: nil,
+}
+
 const publishStepYAML = `
 name: publish-vpc
 type: artifact
@@ -158,6 +164,13 @@ func TestTasks_DecodeCustomCommandArtifactSteps(t *testing.T) {
 		assert.Equal(t, map[string]string{"page": "2"}, tasks[0].Query)
 		assert.Empty(t, tasks[0].SearchQuery)
 	})
+	for _, input := range []map[string]any{
+		{"type": "artifact", "query": 42},
+		{"type": "http", "query": "page=2"},
+	} {
+		tasks := decode(t, input)
+		require.Error(t, tasks[0].LoadError)
+	}
 	t.Run("an unknown artifact key still fails the step, not the load", func(t *testing.T) {
 		tasks := decode(t, map[string]any{"type": "artifact", "action": "pull", "repositry": "dir"})
 		require.Error(t, tasks[0].LoadError)
@@ -174,4 +187,15 @@ func TestNormalizeSearchQueryMapDoesNotMutateItsInput(t *testing.T) {
 	assert.Equal(t, mapping, normalizeSearchQueryMap(mapping))
 	assert.Equal(t, map[string]any{"type": "x"}, normalizeSearchQueryMap(map[string]any{"type": "x"}))
 	assert.Equal(t, map[string]any{"query": nil}, normalizeSearchQueryMap(map[string]any{"query": nil}))
+}
+
+func TestRejectInvalidScalarStepQueries(t *testing.T) {
+	for _, input := range []string{
+		"{type: http, query: text}",
+		"{type: artifact, query: 42}",
+		"{type: artifact, query: true}",
+	} {
+		var step WorkflowStep
+		require.ErrorIs(t, yaml.Unmarshal([]byte(input), &step), ErrWorkflowControlStepInvalid)
+	}
 }

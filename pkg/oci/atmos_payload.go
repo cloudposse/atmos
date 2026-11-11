@@ -74,8 +74,14 @@ func selectLayers(img v1.Image, layers []v1.Layer) ([]v1.Layer, error) {
 	}
 	var payload []v1.Layer
 	for index := range manifest.Layers {
-		if _, isPayload := atmosPayloadExtractor(string(manifest.Layers[index].MediaType)); isPayload && index < len(layers) {
+		mediaType := string(manifest.Layers[index].MediaType)
+		if _, isPayload := atmosPayloadExtractor(mediaType); isPayload {
+			if index >= len(layers) {
+				return nil, fmt.Errorf("%w: missing payload layer", errUtils.ErrArtifactPayloadLayer)
+			}
 			payload = append(payload, layers[index])
+		} else if mediaType != artifact.DocumentMediaType {
+			return nil, fmt.Errorf("%w: unexpected layer media type %q", errUtils.ErrArtifactPayloadLayer, mediaType)
 		}
 	}
 	if len(payload) != 1 {

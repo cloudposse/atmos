@@ -178,6 +178,7 @@ func fillFromInspection(op *operation, pinned *artifact.PinnedReference, inspect
 	op.result.ContentDigest = pinned.ContentDigest
 	op.result.RepresentationDigest = inspection.Representation.RepresentationDigest
 	op.result.Size = payloadSize(inspection)
+	op.result.SizeMeasured = true
 	if inspection.Record != nil {
 		op.result.Ref = artifact.Ref{Name: inspection.Record.Name, Version: inspection.Record.Version}.String()
 		op.result.ContentDigest = inspection.Record.ContentDigest

@@ -77,6 +77,9 @@ func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (ar
 func (r *Repository) LockNamespace() string {
 	defer perf.Track(nil, "s3.Repository.LockNamespace")()
 
+	if r.endpoint != "" {
+		return "s3://" + r.endpoint + "/" + r.bucket + "/" + r.prefix
+	}
 	return "s3://" + r.bucket + "/" + r.prefix
 }
 

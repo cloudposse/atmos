@@ -56,8 +56,16 @@ func RefOf(location, uri string) (artifact.Ref, error) {
 
 // sanitize hides userinfo so a mistaken credential is never echoed.
 func sanitize(uri string) string {
-	if at := strings.LastIndex(uri, "@"); at >= 0 && strings.Contains(uri[:at], ":") && !strings.Contains(uri[at:], "sha256:") {
-		return "oci://<redacted>@" + uri[at+1:]
+	base := 0
+	if i := strings.Index(uri, "://"); i >= 0 {
+		base = i + len("://")
+	}
+	end := len(uri)
+	if i := strings.IndexAny(uri[base:], "/?#"); i >= 0 {
+		end = base + i
+	}
+	if at := strings.LastIndex(uri[base:end], "@"); at >= 0 && strings.Contains(uri[base:base+at], ":") {
+		return uri[:base] + "<redacted>@" + uri[base+at+1:]
 	}
 	return uri
 }

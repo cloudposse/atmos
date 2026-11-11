@@ -121,12 +121,17 @@ func resolveArtifactLabels(step *schema.WorkflowStep, resolver *artifactFieldRes
 	return parseArtifactSelectors(step, resolver)
 }
 
+const artifactLabelsField = "labels"
+
 // parseArtifactSelectors accepts the three shapes of `labels`: a comma-separated key=value string,
 // a list of them, or a mapping. The string forms use the CLI's exact key/value parser.
 func parseArtifactSelectors(step *schema.WorkflowStep, resolver *artifactFieldResolver) (map[string]string, error) {
 	value := reflect.ValueOf(step.Labels)
 	if value.Kind() == reflect.Map {
-		labels := resolveLabelMapping(value, resolver)
+		labels, err := resolveLabelMapping(step, value, resolver)
+		if err != nil {
+			return nil, err
+		}
 		if resolver.err != nil {
 			return nil, resolver.err
 		}
@@ -139,11 +144,11 @@ func parseArtifactSelectors(step *schema.WorkflowStep, resolver *artifactFieldRe
 	case reflect.Slice:
 		pairs = labelListItems(value)
 	default:
-		return nil, artifactInvalidField(step, "labels", "use a key=value string, a list of them, or a mapping")
+		return nil, artifactInvalidField(step, artifactLabelsField, "use a key=value string, a list of them, or a mapping")
 	}
 	rendered := make([]string, 0, len(pairs))
 	for _, pair := range pairs {
-		rendered = append(rendered, resolver.text("labels", pair))
+		rendered = append(rendered, resolver.text(artifactLabelsField, pair))
 	}
 	if resolver.err != nil {
 		return nil, resolver.err
@@ -161,13 +166,16 @@ func labelListItems(list reflect.Value) []string {
 }
 
 // resolveLabelMapping renders the values of a label mapping as templates.
-func resolveLabelMapping(mapping reflect.Value, resolver *artifactFieldResolver) map[string]string {
+func resolveLabelMapping(step *schema.WorkflowStep, mapping reflect.Value, resolver *artifactFieldResolver) (map[string]string, error) {
 	labels := make(map[string]string, mapping.Len())
 	for _, key := range mapping.MapKeys() {
 		entry := unwrapInterface(mapping.MapIndex(key))
-		labels[fmt.Sprint(key.Interface())] = resolver.text("labels", fmt.Sprint(entry.Interface()))
+		if !entry.IsValid() || entry.Kind() != reflect.String {
+			return nil, artifactInvalidField(step, artifactLabelsField, "mapping values must be strings")
+		}
+		labels[fmt.Sprint(key.Interface())] = resolver.text(artifactLabelsField, entry.String())
 	}
-	return labels
+	return labels, nil
 }
 
 // unwrapInterface returns the concrete value held by an interface-typed element.

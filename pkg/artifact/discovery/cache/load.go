@@ -58,10 +58,13 @@ func Load[T any, P interface {
 }](ctx context.Context, store *Store, source *Source[T, P], mode Mode) (P, bool, error) {
 	defer perf.Track(nil, "cache.Load")()
 
+	path := store.Path(source.Kind, source.Reference)
+	if mode.Offline {
+		return update(ctx, store, source, mode, path)
+	}
 	if err := os.MkdirAll(store.directory, DirectoryMode); err != nil {
 		return nil, false, err
 	}
-	path := store.Path(source.Kind, source.Reference)
 	var (
 		result P
 		cached bool
@@ -77,11 +80,14 @@ func Load[T any, P interface {
 	return result, cached, nil
 }
 
-// update applies the freshness, offline, and refresh rules while the source lock is held.
+// update applies freshness, offline, and refresh rules. Online callers hold the source lock.
 func update[T any, P interface {
 	*T
 	Snapshot
 }](ctx context.Context, store *Store, source *Source[T, P], mode Mode, path string) (P, bool, error) {
+	if mode.Offline && mode.Refresh {
+		return nil, false, source.ErrOffline
+	}
 	previous := readSnapshot(store, source, path)
 	if previous != nil && (mode.Offline || (!mode.Refresh && store.Fresh(previous.SnapshotHeader().FetchedAt))) {
 		if err := authorize(ctx, source, true); err != nil {

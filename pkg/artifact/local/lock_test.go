@@ -378,3 +378,26 @@ func TestLock_ReleasesWhenItsOwnerProcessExits(t *testing.T) {
 func lockFile(repo *Repository, resource string) string {
 	return filepath.Join(repo.root, filepath.FromSlash(layout.LockPath(resource)))
 }
+
+func TestLockNamespaceResolvesSymlinkAliases(t *testing.T) {
+	root := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	assert.Equal(t, (&Repository{root: root}).LockNamespace(), (&Repository{root: alias}).LockNamespace())
+}
+
+// A delegated handle does not protect local writers that lock this root directly.
+type delegatedTestLock struct{ artifact.LockHandle }
+
+func TestPublishWithDelegatedLockAlsoTakesLocalReferenceLock(t *testing.T) {
+	repo := newRepo(t, dirSpec())
+	holder, err := repo.Lock(context.Background(), lockRequest(testName+":"+testVersion))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Release(context.Background()) })
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	_, err = repo.Publish(ctx, prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: delegatedTestLock{}})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
