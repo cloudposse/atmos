@@ -16,6 +16,7 @@ import (
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func prepareWith(t *testing.T, command string) error {
@@ -196,6 +197,13 @@ func TestRenderLogsKeepsWarningsThatDifferInTheirFields(t *testing.T) {
 
 func TestWarnDiagnosticShowsTheSameWarningOncePerInvocation(t *testing.T) {
 	captureLogs(t, charm.WarnLevel)
+	ioCtx, err := atmosio.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.ReinitFormatter)
+	var output bytes.Buffer
+	restore := atmosio.PushUIWriter(&output)
+	t.Cleanup(restore)
 	warning := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "remote_state_encryption_not_generated", Summary: "Encryption is not generated", Unit: "app", Stack: "dev", UserSafe: true, Severity: pluginv1.Severity_SEVERITY_WARNING}}
 
 	assert.True(t, firstTime("diagnostic", "app", "dev", "remote_state_encryption_not_generated", "Encryption is not generated (Component `app` in stack `dev`)"), "unseen before the first call")
@@ -206,6 +214,9 @@ func TestWarnDiagnosticShowsTheSameWarningOncePerInvocation(t *testing.T) {
 	other := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "remote_state_encryption_not_generated", Summary: "Encryption is not generated", Unit: "app", Stack: "prod", Severity: pluginv1.Severity_SEVERITY_WARNING}}
 	WarnDiagnostic(other)
 	assert.False(t, firstTime("diagnostic", "app", "prod", "remote_state_encryption_not_generated", "Encryption is not generated (Component `app` in stack `prod`)"), "another stack is its own warning, recorded by its own call")
+	assert.Equal(t, 2, strings.Count(output.String(), "Encryption is not generated"))
+	assert.Equal(t, 1, strings.Count(output.String(), "stack dev"), "%q", output.String())
+	assert.Equal(t, 1, strings.Count(output.String(), "stack prod"), "%q", output.String())
 }
 
 func TestFailureLogsRenderBeforeTheErrorAtTheAtmosLevel(t *testing.T) {
