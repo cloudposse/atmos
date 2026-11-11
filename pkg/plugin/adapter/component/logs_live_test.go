@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -155,12 +156,23 @@ func TestCancellingTheCallStopsLiveDeliveryWithoutLeakingGoroutines(t *testing.T
 	output := captureLiveLogs(t, charm.DebugLevel)
 	provider := fixtureProvider(t)
 	// Warm up so the baseline includes the long-lived runtime goroutines.
+	beforeWarm := atmosGoroutines()
 	warm := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(warm, "gate"), nil, 0o600))
 	_, err := provider.Prepare(t.Context(), liveRequest(t, warm, "live-logs"))
 	require.NoError(t, err)
-	baseline := settledGoroutines()
-	require.Positive(t, baseline, "the counter must see at least this test goroutine")
+	// The interrupt goroutine can outlive Prepare briefly. Wait for this specific
+	// warm-up goroutine to exit before taking the baseline.
+	waitFor(t, "warm-up interrupt goroutine exits", func() bool {
+		for id, stack := range atmosGoroutines() {
+			if _, existed := beforeWarm[id]; !existed && strings.Contains(stack, "runtime/native.newInterrupt.func1") {
+				return false
+			}
+		}
+		return true
+	})
+	baseline := atmosGoroutines()
+	require.NotEmpty(t, baseline, "the snapshot must see at least this test goroutine")
 
 	root := t.TempDir()
 	ctx, cancel := context.WithCancel(t.Context())
@@ -177,37 +189,46 @@ func TestCancellingTheCallStopsLiveDeliveryWithoutLeakingGoroutines(t *testing.T
 	case <-time.After(20 * time.Second):
 		t.Fatal("cancelling the command did not stop the call")
 	}
-	// Poll directly: a testify Eventually condition runs on a goroutine of its own and would count itself.
-	// Count only goroutines running Atmos code, so runtime and scheduler goroutines that come and go
-	// (garbage collection workers, timers, the race detector) cannot make the comparison flaky.
+	// Compare goroutine identities, not counts: an older goroutine exiting cannot
+	// conceal a goroutine leaked by the cancelled call. Poll directly so the
+	// assertion itself does not introduce a goroutine into the snapshot.
 	deadline := time.Now().Add(10 * time.Second)
-	for atmosGoroutines() > baseline && time.Now().Before(deadline) {
+	var remaining map[string]string
+	for {
+		remaining = newAtmosGoroutines(baseline)
+		if len(remaining) == 0 || time.Now().After(deadline) {
+			break
+		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if atmosGoroutines() > baseline {
-		buffer := make([]byte, 1<<18)
-		t.Fatalf("Atmos goroutines after cancel: %d, baseline %d\n%s", atmosGoroutines(), baseline, buffer[:runtime.Stack(buffer, true)])
+	if len(remaining) != 0 {
+		t.Fatalf("Atmos goroutines created after baseline remain after cancel: %v", remaining)
 	}
 	// Only the warm-up call produced a last entry: the cancelled call never reached its end.
 	assert.Equal(t, 1, strings.Count(output.String(), "last live entry"))
 	assert.Equal(t, 2, strings.Count(output.String(), "first live entry"))
 }
 
-func settledGoroutines() int {
-	runtime.GC()
-	time.Sleep(200 * time.Millisecond)
-	return atmosGoroutines()
-}
-
-// atmosGoroutines counts goroutines with a frame in Atmos code.
-func atmosGoroutines() int {
+// atmosGoroutines snapshots the identities and stacks of goroutines running Atmos code.
+func atmosGoroutines() map[string]string {
 	buffer := make([]byte, 1<<20)
 	buffer = buffer[:runtime.Stack(buffer, true)]
-	count := 0
+	stacks := make(map[string]string)
 	for _, stack := range strings.Split(string(buffer), "\n\n") {
 		if strings.Contains(stack, "github.com/cloudposse/atmos/") {
-			count++
+			var id string
+			if _, err := fmt.Sscanf(stack, "goroutine %s", &id); err == nil {
+				stacks[id] = stack
+			}
 		}
 	}
-	return count
+	return stacks
+}
+
+func newAtmosGoroutines(baseline map[string]string) map[string]string {
+	current := atmosGoroutines()
+	for id := range baseline {
+		delete(current, id)
+	}
+	return current
 }
