@@ -58,8 +58,8 @@ in the protected release job.
   <dt><code>--cosign-version</code></dt>
   <dd>Exact managed Cosign 3 version. Defaults to 3.1.3. Requires --sign when explicitly set.</dd>
   <dt><code>--verify-public</code></dt>
-  <dd>Require an existing public GHCR organization package before upload, then verify anonymous access
-  to the complete OCI graph. Other registries do not yet have a visibility preflight adapter.</dd>
+  <dd>After upload and any requested signing, verify anonymous access to the published digest and complete
+  OCI graph. Disabled by default. Does not change registry visibility; a failed check leaves the upload intact.</dd>
   <dt><code>--format</code></dt>
   <dd>Publication output format: table (default), json, yaml, csv, or tsv.</dd>
 </dl>
@@ -79,3 +79,9 @@ A simple CI workflow needs two jobs: a read-only check job and a protected relea
 artifacts. Hold a global release lock before starting the publishing command. Catalog reconciliation
 fetches the current default branch after that lock is acquired, preserving newer accepted versions
 even when an older queued workflow runs later.
+
+For GHCR, the first upload creates a private package. With `--verify-public`, publication therefore
+fails its anonymous access check until you select **Package settings → Danger Zone → Change visibility → Public**
+in GitHub. Rerun the same release command afterward. The plugin and catalog are separate packages,
+and each needs this one-time setting. Source repository labels do not make either package public.
+See [Public packages on GHCR](publish.mdx#public-packages-on-ghcr) for the complete first-publication flow.

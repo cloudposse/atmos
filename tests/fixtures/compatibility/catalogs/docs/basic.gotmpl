@@ -1,0 +1,4 @@
+{{ $cfg := ds "config" }}# {{ $cfg.name }}
+{{ getenv "COMPAT_VALUE" }}
+{{ printf "%T:%v" $cfg.count $cfg.count }}
+{{ $cfg.items | toJSON }}

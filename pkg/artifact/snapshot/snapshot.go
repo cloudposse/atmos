@@ -190,7 +190,11 @@ func captureInto(ctx context.Context, source, root string, opts *options) (*Snap
 	if err != nil {
 		return nil, err
 	}
-	c := &capturer{ctx: ctx, opts: opts, root: resolved, dataDir: dataDir, staged: make(map[string]string), dirs: make(map[string][]string)}
+	staging, err := os.Lstat(root)
+	if err != nil {
+		return nil, fmt.Errorf("%w: inspect staging directory: %w", errUtils.ErrArtifactPackagingInvalid, err)
+	}
+	c := &capturer{staging: staging, ctx: ctx, opts: opts, root: resolved, dataDir: dataDir, staged: make(map[string]string), dirs: make(map[string][]string)}
 	if info.IsDir() {
 		err = c.walkDir(resolved, "")
 	} else {

@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/plugin/bridge"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 )
 
@@ -68,7 +69,7 @@ func (r *reader) ReadSecret(ctx context.Context, name string) (string, error) {
 }
 
 type secretReference struct {
-	store, key, stack, component string
+	store, path, field, stack, component string
 }
 
 func (r *reader) reference(name string) (*secretReference, error) {
@@ -78,11 +79,21 @@ func (r *reader) reference(name string) (*secretReference, error) {
 	}
 	ref := &secretReference{}
 	ref.store, _ = raw["store"].(string)
-	ref.key, _ = raw["key"].(string)
+	ref.path, _ = raw["path"].(string)
 	ref.stack, _ = raw["stack"].(string)
 	ref.component, _ = raw["component"].(string)
-	if r.config.Stores[ref.store] == nil || ref.key == "" || !r.config.StoresConfig[ref.store].Secret || ((ref.stack == "") != (ref.component == "")) {
+	if r.config.Stores[ref.store] == nil || ref.path == "" || !r.config.StoresConfig[ref.store].Secret || ((ref.stack == "") != (ref.component == "")) {
 		return nil, errUtils.ErrPluginInvalidConfig
+	}
+	if rawField, exists := raw["field"]; exists {
+		var ok bool
+		ref.field, ok = rawField.(string)
+		if !ok || ref.field == "" {
+			return nil, errUtils.ErrPluginInvalidConfig
+		}
+		if _, ok := r.config.Stores[ref.store].(store.FieldStore); !ok {
+			return nil, errUtils.ErrPluginInvalidConfig
+		}
 	}
 	return ref, nil
 }
@@ -98,9 +109,16 @@ func (r *reader) readValue(ctx context.Context, ref *secretReference) (any, erro
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if ref.stack != "" {
-			return backend.Get(ref.stack, ref.component, ref.key)
+		if ref.field != "" {
+			fieldBackend := backend.(store.FieldStore)
+			if ref.stack != "" {
+				return fieldBackend.GetField(ref.stack, ref.component, ref.path, ref.field)
+			}
+			return fieldBackend.GetKeyField(ref.path, ref.field)
 		}
-		return backend.GetKey(ref.key)
+		if ref.stack != "" {
+			return backend.Get(ref.stack, ref.component, ref.path)
+		}
+		return backend.GetKey(ref.path)
 	})
 }

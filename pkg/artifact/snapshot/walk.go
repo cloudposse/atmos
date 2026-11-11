@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/linkpath"
 )
 
 // sourceRecord remembers one captured source entry for the final recheck.
@@ -37,6 +38,9 @@ type capturer struct {
 	sources    []sourceRecord
 	total      int64
 	counter    int
+
+	// staging identifies the private staging directory, which is skipped when it lies inside the source.
+	staging os.FileInfo
 }
 
 // walkDir captures the directory at abs, whose slash-separated inventory path is rel ("" for the root).
@@ -67,6 +71,10 @@ func (c *capturer) captureChild(abs, rel string) error {
 	info, err := os.Lstat(abs)
 	if err != nil {
 		return changedError(rel, err)
+	}
+	if c.staging != nil && os.SameFile(c.staging, info) {
+		// The private staging directory changes while files are staged, so it is never source content.
+		return nil
 	}
 	mode := info.Mode()
 	if c.opts.excluder != nil {
@@ -143,7 +151,8 @@ func readDirNames(dir string) ([]string, error) {
 
 // checkLinkContainment resolves every captured symlink physically and rejects any that leaves the
 // source. A lexical target check is not enough, because a chain of links can clean to a contained
-// path yet resolve outside it. Dangling links stay allowed.
+// path yet resolve outside it. A dangling link is checked through its longest existing ancestor
+// plus the missing remainder, so it cannot escape once the missing path is created.
 func (c *capturer) checkLinkContainment() error {
 	realRoot, err := filepath.EvalSymlinks(c.root)
 	if err != nil {
@@ -154,12 +163,8 @@ func (c *capturer) checkLinkContainment() error {
 		if record.target == "" {
 			continue
 		}
-		resolved, err := filepath.EvalSymlinks(record.abs)
-		if err != nil {
-			continue
-		}
-		relative, err := filepath.Rel(realRoot, resolved)
-		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		resolved, reachable := linkpath.Resolve(record.abs)
+		if reachable && !linkpath.Within(realRoot, resolved) {
 			return fmt.Errorf("%w: symlink %q resolves outside the source", errUtils.ErrArtifactUnsafePath, record.rel)
 		}
 	}

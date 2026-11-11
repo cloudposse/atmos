@@ -76,6 +76,18 @@ func TestProcessTagStoreGet(t *testing.T) {
 			expected:     "my-secret-value",
 		},
 		{
+			name:         "tab after tag in untagged string",
+			input:        "!store.get\tredis shared-secret",
+			currentStack: "prod",
+			expected:     "my-secret-value",
+		},
+		{
+			name:         "mixed whitespace after tag with query",
+			input:        "!store.get \t redis global-config | query .region",
+			currentStack: "dev",
+			expected:     "us-east-1",
+		},
+		{
 			name:         "Test !store.get with query",
 			input:        "!store.get redis global-config | query .region",
 			currentStack: "dev",

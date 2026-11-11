@@ -549,6 +549,10 @@ func (m *mockTerminal) ColorProfile() terminal.ColorProfile {
 	return m.profile
 }
 
+func (m *mockTerminal) ColorProfileFor(stream terminal.Stream) terminal.ColorProfile {
+	return m.profile
+}
+
 func (m *mockTerminal) Width(stream terminal.Stream) int {
 	return m.width
 }

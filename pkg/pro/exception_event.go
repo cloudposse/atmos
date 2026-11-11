@@ -19,8 +19,24 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+const (
+	// The event message is cut at this many bytes, so one verbose error cannot push the whole
+	// event over the envelope limit and drop it. The text is written to both the message and the
+	// top exception value, so it adds at most twice this size (about 16 KiB of the 1 MiB limit).
+	maxExceptionMessageBytes = 8 << 10
+	// This marker is appended to error text that was cut at maxExceptionMessageBytes.
+	truncationMarker = "… [truncated]"
+)
+
+// buildExceptionEvent builds the Sentry event for a failure: the cockroachdb/errors report, hints as
+// breadcrumbs, component metadata, and runtime identity, with a readable message in place of the
+// redacted one.
 func buildExceptionEvent(err error, info *schema.ConfigAndStacksInfo, custom map[string]string, runtime map[string]string) *sentry.Event {
+	if info == nil {
+		info = &schema.ConfigAndStacksInfo{}
+	}
 	event, details := crerrors.BuildSentryReport(err)
+	applyExceptionSummary(event, exceptionSummary(err, info))
 	if event.Tags == nil {
 		event.Tags = make(map[string]string)
 	}
@@ -46,6 +62,47 @@ func buildExceptionEvent(err error, info *schema.ConfigAndStacksInfo, custom map
 	event.Tags["atmos.exit_code"] = fmt.Sprint(errUtils.GetExitCode(err))
 	event.Release = "atmos@" + version.Version
 	return event
+}
+
+// exceptionSummary is the readable text of the failure: the error chain's own message, prefixed
+// with the command that failed when it is known. The cockroachdb/errors library redacts every
+// message it cannot prove safe, which turns a bare exit-code failure into "×". Atmos masks the
+// whole event before it leaves the process (see maskedExceptionEvent), so the original text is
+// sent instead. The text is masked here as well, before it is truncated: a secret split by the
+// cut could no longer be matched, and its leading part would be sent.
+func exceptionSummary(err error, info *schema.ConfigAndStacksInfo) string {
+	summary := err.Error()
+	if info.ComponentType != "" && info.SubCommand != "" {
+		summary = info.ComponentType + " " + info.SubCommand + ": " + summary
+	}
+	return truncateExceptionText(ioLayer.MaskString(summary))
+}
+
+// applyExceptionSummary replaces the redacted message and the top exception value with summary.
+// The error-type breakdown that cockroachdb/errors appends to the message is kept, because it
+// names the error types without exposing any message text.
+func applyExceptionSummary(event *sentry.Event, summary string) {
+	const typesMarker = "\nError types:"
+	tail := ""
+	if i := strings.Index(event.Message, typesMarker); i >= 0 {
+		tail = event.Message[i:]
+	}
+	event.Message = summary + tail
+	if len(event.Exception) > 0 {
+		event.Exception[len(event.Exception)-1].Value = summary
+	}
+}
+
+// truncateExceptionText cuts text to maxExceptionMessageBytes on a rune boundary.
+func truncateExceptionText(text string) string {
+	if len(text) <= maxExceptionMessageBytes {
+		return text
+	}
+	cut := maxExceptionMessageBytes
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + truncationMarker
 }
 
 func enrichExceptionIdentity(event *sentry.Event, info *schema.ConfigAndStacksInfo, runtime map[string]string) {

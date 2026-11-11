@@ -13,7 +13,7 @@ import (
 func TestPackerVersionCmd(t *testing.T) {
 	_ = NewTestKit(t)
 
-	skipIfPackerNotInstalled(t)
+	requirePacker(t)
 
 	workDir := "../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)

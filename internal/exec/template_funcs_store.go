@@ -96,29 +96,34 @@ func storeFunc(
 	if cfg, ok := atmosConfig.StoresConfig[storeName]; ok && cfg.Secret {
 		return nil, fmt.Errorf("%w: store %q (in %s)", errUtils.ErrStoreIsSecret, storeName, functionName)
 	}
+	backend := atmosConfig.Stores[storeName]
+	if backend == nil {
+		return nil, fmt.Errorf("%w: %s\nstore '%s' not found", errUtils.ErrInvalidTemplateFunc, functionName, storeName)
+	}
+	// Identity-aware stores must resolve within the current binding, never the legacy
+	// process-wide value cache shared with other authenticated invocations.
+	_, identityAware := backend.(store.IdentityAwareStore)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	existing, found := storeFuncSyncMap.Load(slug)
-	if found && existing != nil {
+	if found && existing != nil && !identityAware {
 		log.Debug("Cache hit for template function", "function", functionName, "result", existing)
 		return existing, nil
 	}
 
-	// Retrieve the store from atmosConfig
-	store := atmosConfig.Stores[storeName]
-
-	if store == nil {
-		return nil, fmt.Errorf("%w: %s\nstore '%s' not found", errUtils.ErrInvalidTemplateFunc, functionName, storeName)
-	}
-
-	// Retrieve the value from the store
-	value, err := store.Get(stack, component, key)
+	// Retrieve the value while authentication binding and the complete read share a lock.
+	value, err := storedeferred.LookupStore(atmosConfig, nil, storedeferred.StoreOptions{Name: storeName, Stack: stack, Component: component, Key: key})
 	if err != nil {
+		if identityAware {
+			return nil, err
+		}
 		value = nil
 	}
 
-	// Cache the result
-	storeFuncSyncMap.Store(slug, value)
+	// Cache only values that cannot inherit another invocation's identity.
+	if !identityAware {
+		storeFuncSyncMap.Store(slug, value)
+	}
 
 	log.Debug("Executed template function", "function", functionName, "result", value)
 

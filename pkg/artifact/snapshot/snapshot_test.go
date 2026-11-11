@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -135,6 +136,10 @@ func TestCapture_InvalidSources(t *testing.T) {
 		{"traversal target", func(t *testing.T, dir string) bool {
 			return fixtures.Symlink(t, dir, "up", "..")
 		}, errUtils.ErrArtifactUnsafePath},
+		{"chained symlink escape through a dangling tail", func(t *testing.T, dir string) bool {
+			fixtures.MkdirAll(t, dir, "a")
+			return fixtures.Symlink(t, dir, "a/b", "..") && fixtures.Symlink(t, dir, "c", "a/b/../../missing")
+		}, errUtils.ErrArtifactUnsafePath},
 		{"chained symlink escape", func(t *testing.T, dir string) bool {
 			fixtures.MkdirAll(t, dir, "a")
 			return fixtures.Symlink(t, dir, "a/b", "..") && fixtures.Symlink(t, dir, "c", "a/b/../..")
@@ -223,6 +228,42 @@ func TestCapture_DetectsChangeDuringCapture(t *testing.T) {
 			assertEmptyDir(t, staging)
 		})
 	}
+}
+
+func TestCapture_DetectsDirectoryModeChangeDuringCapture(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permission bits are not tracked on Windows")
+	}
+	src := t.TempDir()
+	fixtures.MkdirAll(t, src, "0dir")
+	fixtures.WriteFile(t, src, "0dir/inner.txt", "inner", 0o644)
+	fixtures.WriteFile(t, src, "b.txt", "other", 0o644)
+	require.NoError(t, os.Chmod(filepath.Join(src, "0dir"), 0o755))
+	staging := t.TempDir()
+	snap, err := snapshot.Capture(context.Background(), src,
+		snapshot.WithStagingRoot(staging),
+		snapshot.WithCaptureHook(func(path string) {
+			if path == "b.txt" {
+				require.NoError(t, os.Chmod(filepath.Join(src, "0dir"), 0o700))
+			}
+		}))
+	require.ErrorIs(t, err, errUtils.ErrArtifactSourceChanged)
+	assert.Nil(t, snap)
+	assertEmptyDir(t, staging)
+}
+
+func TestCapture_StagingInsideTheSourceIsNotSourceContent(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "a.txt", "alpha", 0o644)
+	fixtures.WriteFile(t, src, "b.txt", "bravo", 0o644)
+	staging := filepath.Join(src, ".staging")
+	require.NoError(t, os.Mkdir(staging, 0o755))
+
+	snap, err := snapshot.Capture(context.Background(), src, snapshot.WithStagingRoot(staging))
+	require.NoError(t, err, "staged files must not be mistaken for a source change")
+	t.Cleanup(func() { _ = snap.Close() })
+	assert.Equal(t, []string{".staging", "a.txt", "b.txt"}, entryPaths(snap.Entries), "the private staging directory is left out of the inventory")
+	assert.Equal(t, int64(10), snap.TotalBytes)
 }
 
 func TestCapture_Limits(t *testing.T) {

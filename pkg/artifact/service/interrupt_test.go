@@ -297,7 +297,7 @@ func TestPublish_ConditionalGuardRejectsRacingWritersEvenWithoutAWriterLock(t *t
 		}()
 	}
 	wg.Wait()
-	assert.GreaterOrEqual(t, wins.Load(), int64(1))
+	assert.Equal(t, int64(1), wins.Load(), "exactly one writer wins the reference")
 	current, ok := bare.RecordDigestOf(exampleRef)
 	require.True(t, ok)
 	var count int
@@ -306,4 +306,21 @@ func TestPublish_ConditionalGuardRejectsRacingWritersEvenWithoutAWriterLock(t *t
 	pinned, err := bare.Resolve(context.Background(), exampleRef)
 	require.NoError(t, err)
 	assert.Equal(t, current, pinned.RecordDigest, "the reference is bound to exactly one artifact")
+}
+
+func TestPublish_DelegatedLockIsTakenFromTheProvider(t *testing.T) {
+	e := newEnv(t, envConfig{repos: map[string]artifacttest.Options{"dst": {}, "coord": {}}})
+	e.setInfo("dst", func(info *service.RepositoryInfo) { info.LockProvider = "coord" })
+
+	outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("hello")))
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeCreated, outcome.Operation.Outcome)
+	assert.Equal(t, 1, e.repos["coord"].Calls("Lock"), "the delegate provides the lock")
+	assert.Zero(t, e.repos["dst"].Calls("Lock"), "the target repository is not asked to lock")
+	assert.Empty(t, e.repos["coord"].HeldLocks(), "the delegated lock is released")
+
+	e.setInfo("dst", func(info *service.RepositoryInfo) { info.LockProvider = "" })
+	_, err = e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("other")))
+	require.Error(t, err, "the second publish conflicts, but only after locking")
+	assert.Equal(t, 1, e.repos["dst"].Calls("Lock"), "without delegation the target repository locks for itself")
 }

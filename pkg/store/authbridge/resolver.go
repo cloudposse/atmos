@@ -15,6 +15,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
+const logIdentityKey = "identity"
+
 // Resolver implements store.AuthContextResolver by delegating to an AuthManager.
 type Resolver struct {
 	authManager types.AuthManager
@@ -24,7 +26,10 @@ type Resolver struct {
 }
 
 // Verify that Resolver implements store.AuthContextResolver.
-var _ store.AuthContextResolver = (*Resolver)(nil)
+var (
+	_ store.AuthContextResolver            = (*Resolver)(nil)
+	_ store.EnvironmentAuthContextResolver = (*Resolver)(nil)
+)
 
 // NewResolver creates a new Resolver that uses the provided AuthManager to resolve
 // identity names to cloud-specific auth contexts.
@@ -55,7 +60,7 @@ func (r *Resolver) authenticateIsolated(ctx context.Context, identityName string
 func (r *Resolver) ResolveAWSAuthContext(ctx context.Context, identityName string) (*store.AWSAuthConfig, error) {
 	defer perf.Track(nil, "authbridge.ResolveAWSAuthContext")()
 
-	log.Debug("Resolving AWS auth context for store identity", "identity", identityName)
+	log.Debug("Resolving AWS auth context for store identity", logIdentityKey, identityName)
 
 	authCtx, err := r.authenticateIsolated(ctx, identityName)
 	if err != nil {
@@ -72,7 +77,7 @@ func (r *Resolver) ResolveAWSAuthContext(ctx context.Context, identityName strin
 func (r *Resolver) ResolveAzureAuthContext(ctx context.Context, identityName string) (*store.AzureAuthConfig, error) {
 	defer perf.Track(nil, "authbridge.ResolveAzureAuthContext")()
 
-	log.Debug("Resolving Azure auth context for store identity", "identity", identityName)
+	log.Debug("Resolving Azure auth context for store identity", logIdentityKey, identityName)
 
 	authCtx, err := r.authenticateIsolated(ctx, identityName)
 	if err != nil {
@@ -89,7 +94,7 @@ func (r *Resolver) ResolveAzureAuthContext(ctx context.Context, identityName str
 func (r *Resolver) ResolveGCPAuthContext(ctx context.Context, identityName string) (*store.GCPAuthConfig, error) {
 	defer perf.Track(nil, "authbridge.ResolveGCPAuthContext")()
 
-	log.Debug("Resolving GCP auth context for store identity", "identity", identityName)
+	log.Debug("Resolving GCP auth context for store identity", logIdentityKey, identityName)
 
 	authCtx, err := r.authenticateIsolated(ctx, identityName)
 	if err != nil {
@@ -100,4 +105,21 @@ func (r *Resolver) ResolveGCPAuthContext(ctx context.Context, identityName strin
 	}
 
 	return (&resolvedContext{auth: authCtx}).ResolveGCPAuthContext(ctx, identityName)
+}
+
+// ResolveEnvironmentAuthContext authenticates the named identity and returns native environment credentials.
+func (r *Resolver) ResolveEnvironmentAuthContext(ctx context.Context, identityName string) (*store.EnvironmentAuthConfig, error) {
+	defer perf.Track(nil, "authbridge.ResolveEnvironmentAuthContext")()
+
+	log.Debug("Resolving environment auth context for store identity", logIdentityKey, identityName)
+
+	authCtx, err := r.authenticateIsolated(ctx, identityName)
+	if err != nil {
+		return nil, err
+	}
+	if authCtx == nil || len(authCtx.Environment) == 0 {
+		return nil, fmt.Errorf("%w: environment auth context not available after authenticating identity %q", store.ErrAuthContextNotAvailable, identityName)
+	}
+
+	return (&resolvedContext{auth: authCtx}).ResolveEnvironmentAuthContext(ctx, identityName)
 }

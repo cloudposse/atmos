@@ -48,6 +48,12 @@ func checkReserved(entries []artifact.Entry) error {
 	for index := range entries {
 		entry := &entries[index]
 		switch {
+		case entry.Path == reservedParent:
+			// A file or symlink named .atmos would be dropped from the inventory by payloadInventory
+			// and then be missing after a pull, so it cannot be sealed.
+			if entry.Type != artifact.EntryDirectory {
+				return reservedError(entry.Path, "must be a directory")
+			}
 		case entry.Path == reservedDir:
 			if entry.Type != artifact.EntryDirectory {
 				return reservedError(entry.Path, "must be a directory")
@@ -213,12 +219,27 @@ func readSiblingDocument(source string, role artifact.DocumentRole, rel string) 
 	if info.Size() > artifact.MaxDocumentSize {
 		return nil, fmt.Errorf("%w: %s is %d bytes; the limit is %d", errUtils.ErrArtifactTooLarge, rel, info.Size(), artifact.MaxDocumentSize)
 	}
-	file, err := os.Open(full)
+	file, err := openChecked(full, info)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s file %q: %w", errUtils.ErrArtifactPackagingInvalid, role, rel, err)
 	}
 	defer file.Close()
 	return readBounded(file, rel)
+}
+
+// openChecked opens full and confirms the opened file is the regular file that was inspected, so a
+// path replaced by a symlink between the check and the open is never read.
+func openChecked(full string, inspected os.FileInfo) (*os.File, error) {
+	file, err := os.Open(full)
+	if err != nil {
+		return nil, err
+	}
+	opened, err := file.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(inspected, opened) {
+		_ = file.Close()
+		return nil, fmt.Errorf("%w: the file changed while it was being read", errUtils.ErrArtifactSourceChanged)
+	}
+	return file, nil
 }
 
 func readBounded(reader io.Reader, name string) ([]byte, error) {

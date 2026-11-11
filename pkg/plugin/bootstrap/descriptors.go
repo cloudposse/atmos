@@ -63,6 +63,13 @@ func (c *ConstructorSet) identity(binding extension.Binding, definition *adapter
 	if _, exists := c.Batch.Identities[binding.Name]; exists {
 		return errUtils.ErrDuplicateAuthRegistration
 	}
+	if target, exists := binding.Metadata["schema_target"]; exists {
+		value, ok := target.(string)
+		if !ok || (value != "principal" && value != "spec") {
+			return errUtils.ErrPluginInvalidConfig
+		}
+		definition.SchemaTarget = value
+	}
 	accepts, err := stringList(binding.Metadata["accepts"])
 	if err != nil {
 		return err

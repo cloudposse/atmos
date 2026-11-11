@@ -179,7 +179,8 @@ func TestProcessTemplateHoistsMatrixOntoRoot(t *testing.T) {
 
 	result, err := processor.ProcessTemplate(
 		`{{.Config.project_name}}/{{.matrix.environment}}/{{.matrix.region}}.yaml`,
-		"/tmp/test", nil, userValues)
+		"/tmp/test", nil, userValues,
+	)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -221,7 +222,8 @@ func TestProcessTemplateHoistsFileContextOntoRoot(t *testing.T) {
 
 	result, err := processor.ProcessTemplate(
 		`{{.Config.project_name}}/{{.file.RelPath}} (from {{.file.Path}})`,
-		"/tmp/test", nil, userValues)
+		"/tmp/test", nil, userValues,
+	)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}

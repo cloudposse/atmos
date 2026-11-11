@@ -24,10 +24,18 @@ The release job holds its global lock throughout publication and catalog reconci
 
 ## Required public GHCR setup
 
-**Both `atmos/plugins/auth-secrets` and `atmos/plugins/catalog` must be public GHCR packages before their first release.** GitHub creates new packages private by default, even in a public repository. The release workflow checks package visibility before uploading release bytes and checks anonymous access to the full OCI graph afterward. A private or inaccessible package fails closed.
+**Both `atmos/plugins/auth-secrets` and `atmos/plugins/catalog` must be public for successful official distribution.** GitHub creates new GHCR packages private by default, even in a public repository. Source repository labels and publishing through GitHub Actions establish repository association and permissions, but do not inherit public visibility. GitHub currently has no documented, supported REST or GraphQL API to change package visibility.
 
-An organization package administrator must provision the package namespaces, set **Package settings → Change visibility → Public**, and grant this repository Actions write access. If GHCR requires an initial object to create the namespace, use a clearly separate bootstrap tag containing no plugin release, then set public visibility before running this workflow. Do not publish a version tag or catalog `stable` while private. The workflow does not attempt an undocumented REST visibility mutation.
+The workflow uses `--verify-public`: it uploads first, then anonymously downloads and verifies the published digest and every referenced payload before reporting success. A first upload creates the package and fails verification while it is private. The error confirms that content was published and provides recovery instructions; uploaded content is not deleted.
 
-Configure the `plugin-release` environment to allow trusted `main` releases and any required organization approval policy. Ensure its `GITHUB_TOKEN` can read package metadata and write the packages, and that keyless signing has `id-token: write`. Restrict catalog writes to this workflow. Manual dispatch of the **Tests** workflow on `main` reruns the full validation and publication pipeline; it is not a bypass.
+1. Run the release workflow to create the package with its actual release content. No separate bootstrap artifact is needed.
+2. As a package administrator, open **Package settings → Danger Zone → Change visibility → Public** in GitHub. Ensure this repository has Actions write access.
+3. Rerun the workflow with identical release inputs. Matching immutable versions are reused; differing bytes under the same version remain an error.
+
+Do this once for each plugin package and separately for the catalog. A run stops when a plugin fails verification; after fixing the plugin and retrying, the first catalog publication may need its own visibility change. Subsequent versions retain package visibility. The catalog only lists selected releases after they pass anonymous verification, and the catalog itself is verified after upload.
+
+See [GitHub's visibility instructions](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility#configuring-visibility-of-packages-for-an-organization) and [Packages API reference](https://docs.github.com/en/rest/packages/packages). Private publishers should omit `--verify-public`; Atmos preserves registry access settings by default.
+
+Configure the `plugin-release` environment to allow trusted `main` releases and any required organization approval policy. Ensure its `GITHUB_TOKEN` can read and write the packages, and that keyless signing has `id-token: write`. Restrict catalog writes to this workflow. Manual dispatch of the **Tests** workflow on `main` reruns the full validation and publication pipeline; it is not a bypass.
 
 Public visibility is necessary for distribution, but does not grant trust. Consumers may additionally require signatures and an explicit trusted publisher policy.

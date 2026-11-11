@@ -103,7 +103,7 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	}
 
 	// Set the appropriate token limit parameter based on the model.
-	openaicompat.SetTokenLimit(&params, c.config.Model, c.config.MaxTokens)
+	openaicompat.SetDeploymentTokenLimit(&params, c.config.Model, c.config.MaxTokens)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -139,7 +139,7 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	}
 
 	// Set the appropriate token limit parameter based on the model.
-	openaicompat.SetTokenLimit(&params, c.config.Model, c.config.MaxTokens)
+	openaicompat.SetDeploymentTokenLimit(&params, c.config.Model, c.config.MaxTokens)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -168,7 +168,7 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 	}
 
 	// Set the appropriate token limit parameter based on the model.
-	openaicompat.SetTokenLimit(&params, c.config.Model, c.config.MaxTokens)
+	openaicompat.SetDeploymentTokenLimit(&params, c.config.Model, c.config.MaxTokens)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -205,7 +205,7 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	}
 
 	// Set the appropriate token limit parameter based on the model.
-	openaicompat.SetTokenLimit(&params, c.config.Model, c.config.MaxTokens)
+	openaicompat.SetDeploymentTokenLimit(&params, c.config.Model, c.config.MaxTokens)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {

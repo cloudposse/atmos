@@ -16,7 +16,7 @@ import (
 // code path executes without panicking, even when components don't exist.
 func TestHelmfilePathResolution(t *testing.T) {
 	_ = NewTestKit(t)
-	skipIfHelmfileNotInstalled(t)
+	requireHelmfile(t)
 
 	// Use stack-templates fixture which has a valid atmos.yaml.
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
@@ -91,7 +91,7 @@ func TestHelmfilePathResolution(t *testing.T) {
 // TestHelmfilePathResolutionWithCurrentDir tests path resolution with "." (current directory).
 func TestHelmfilePathResolutionWithCurrentDir(t *testing.T) {
 	_ = NewTestKit(t)
-	skipIfHelmfileNotInstalled(t)
+	requireHelmfile(t)
 
 	// Use stack-templates fixture which has a valid atmos.yaml.
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"

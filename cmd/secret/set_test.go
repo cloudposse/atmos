@@ -280,7 +280,7 @@ func TestFindSharedSetContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			overrideEnumerateScopes(t, tt.entries, tt.enumerationErr)
 
-			component, componentType, err := findSharedSetContext(tt.scope, "SHARED_TOKEN")
+			component, componentType, err := findSharedContext(tt.scope, "SHARED_TOKEN", "set")
 			if tt.expectedErr != nil {
 				require.ErrorIs(t, err, tt.expectedErr)
 				if tt.expectedCause != nil {

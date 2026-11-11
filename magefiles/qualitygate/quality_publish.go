@@ -189,7 +189,9 @@ func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, pe
 	if q.ciIncomplete && qualityPublishedRevision(existing, pr) && strings.Contains(existing.Body, qualityCIPending) {
 		// Keep the initial snapshot while jobs/workflows finish. refresh still
 		// validates the revision and publish still repairs a stale ready label.
-		return qualityRenderedReport{body: existing.Body}
+		if _, valid := qualityReadResult(existing.Body, pr); valid {
+			return qualityRenderedReport{body: existing.Body}
+		}
 	}
 	if performance == "" {
 		performance = qualityPreservePerformance(existing, pr.Head.SHA)
@@ -207,10 +209,10 @@ func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, pe
 			fmt.Printf("PR #%d: %s: %s\n", pr.Number, gates[i].Name, gates[i].Detail)
 		}
 	}
-	body, ready := qualityMarkdown(pr, gates, performance)
+	body, ready := qualityMarkdown(pr, gates, performance, qualitySnapshot(pr, gates, q.ciIncomplete))
 	if q.ciIncomplete {
 		notice := qualityCIPending + "\n> CI is still running. This is an initial snapshot; the full report will refresh when all workflows finish.\n"
-		body = strings.Replace(body, qualityMarker, qualityMarker+"\n"+notice, 1)
+		body = strings.Replace(body, "\n<h2>", "\n"+notice+"\n<h2>", 1)
 	}
 	if run != nil {
 		body += fmt.Sprintf("\n<!-- atmos-benchmark-run:%d:%d -->\n", run.ID, run.Attempt)
@@ -324,7 +326,7 @@ func qualityPreservePerformance(existing *githubapi.Comment, sha string) string 
 }
 
 // qualityMarkdown renders gate evidence, revision markers, and performance data with the readiness verdict.
-func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) (string, bool) {
+func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string, results ...qualityResult) (string, bool) {
 	var out strings.Builder
 	ready := true
 	for i := range gates {
@@ -335,13 +337,18 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 	if ready {
 		status, badge, label = "passed", "Passed-0e8a16", qualityReady
 	}
-	fmt.Fprintf(&out, "%s\n<!-- coderabbit do not respond to this -->\n<h2>Quality Gate &nbsp; <a href=\"https://github.com/%s/pull/%d/checks\"><img height=\"28\" align=\"top\" alt=\"Quality Gate %s\" src=\"https://img.shields.io/badge/%s?style=for-the-badge\" /></a></h2>\n\n", qualityMarker, pr.Base.Repo.FullName, pr.Number, status, badge)
+	fmt.Fprint(&out, qualityReportHeader)
+	if len(results) > 0 {
+		fmt.Fprintln(&out, qualityResultMarker(&results[0]))
+	}
+	fmt.Fprintf(&out, "<h2>Quality Gate &nbsp; <a href=\"https://github.com/%s/pull/%d/checks\"><img height=\"28\" align=\"top\" alt=\"Quality Gate %s\" src=\"https://img.shields.io/badge/%s?style=for-the-badge\" /></a></h2>\n\n", pr.Base.Repo.FullName, pr.Number, status, badge)
 	qualityGateList(&out, gates)
 	if summaryURL := qualitySummaryURL(pr.Base.Repo.FullName); summaryURL != "" {
 		fmt.Fprintf(&out, "[View job summary](%s)\n\n", summaryURL)
 	}
 	fmt.Fprintf(&out, "<sub>Current commit: <code>%s</code> · <code>%s</code></sub>\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA)+"\n"+qualityBaseMarker(pr))
 	fmt.Fprintln(&out, qualityStatusBlockersMarker(pr, gates))
+	fmt.Fprintln(&out, qualityReporterRunsExcluded)
 	qualityDetails(&out, gates)
 	out.WriteString(qualityGuidance(pr, gates, performance))
 	if performance == "Performance measurements pending for this commit." {
