@@ -1,0 +1,17 @@
+name: Plan
+on:
+  pull_request:
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      # The Atmos image has no Node.js for actions/checkout; Atmos clones the
+      # repository from the Gitea Actions context instead.
+      - run: atmos git clone --ci
+
+      - run: atmos terraform plan demo -s prod
+        env:
+          ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}

@@ -1,0 +1,53 @@
+---
+title: Gitea Actions
+slug: /integrations/gitea-actions
+description: Plan, review, and deploy infrastructure in Gitea Actions with Atmos native CI.
+---
+
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use Gitea Actions to plan infrastructure changes on pull requests, deploy after review, and run jobs across the components in your stacks. Atmos detects Gitea Actions and reports through Gitea's commit statuses and pull request comments.
+</Intro>
+
+## Get Started
+
+Gitea Actions runs GitHub-Actions-compatible workflows from `.gitea/workflows/`. Atmos selects its Gitea provider whenever `GITEA_ACTIONS=true`, even though Gitea's runner also sets `GITHUB_ACTIONS=true`.
+
+Start with [Setup and Authentication](/integrations/gitea-actions/setup) to create the token Atmos uses, then [Plan on Pull Request](/integrations/gitea-actions/plan-on-pull-request) and [Apply on Merge](/integrations/gitea-actions/apply-on-merge). For larger projects, use [affected-component matrices](/integrations/gitea-actions/deploy-affected) to limit work to changed infrastructure.
+
+## What Differs from GitHub Actions
+
+<dl>
+  <dt>Workflow directory</dt>
+  <dd>`.gitea/workflows/` instead of `.github/workflows/`.</dd>
+
+  <dt>Checkout</dt>
+  <dd>Run `atmos git clone --ci` instead of `actions/checkout`. JavaScript actions need Node.js inside the job container, and the Atmos image does not include it.</dd>
+
+  <dt>Token</dt>
+  <dd>Atmos reads `ATMOS_CI_GITEA_TOKEN` (or `GITEA_TOKEN`) and never sends `GITHUB_TOKEN` to Gitea.</dd>
+
+  <dt>Permissions</dt>
+  <dd>Omit `permissions:`. Gitea has no OIDC token issuance or Checks API, so Atmos reports through commit statuses.</dd>
+
+  <dt>Apply after merge</dt>
+  <dd>Gitea cannot map a merge commit back to its pull request, so a deploy plans the merged commit fresh instead of verifying the plan reviewed in the pull request.</dd>
+
+  <dt>Not available</dt>
+  <dd>Deployment approvals (Gitea ignores `environment:`), OIDC cloud authentication, merge queues, annotations, and GitHub artifact storage. Configure a shared [planfile store](/ci/planfile-storage) when plans must survive between jobs.</dd>
+</dl>
+
+## Workflow Guides
+
+<DocCardList />
+
+<ActionCard title="Run It Locally">
+    The Gitea Actions example starts a Gitea server emulator and a runner on your machine, then runs every workflow in these guides. The same workflows run in Atmos's own end-to-end tests.
+    <div>
+      <PrimaryCTA to="/examples/gitea-actions">Gitea Actions Example</PrimaryCTA>
+    </div>
+</ActionCard>

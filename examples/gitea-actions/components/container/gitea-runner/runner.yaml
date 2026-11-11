@@ -1,0 +1,12 @@
+# Gitea runner configuration. See `gitea-runner config init` for every option.
+runner:
+  capacity: 2
+  envs:
+    # The local emulator serves plain HTTP. Never set this against a real server.
+    ATMOS_CI_GITEA_ALLOW_INSECURE: "true"
+  labels:
+    - "ubuntu-latest:docker://docker.gitea.com/runner-images:ubuntu-latest"
+container:
+  # Run job containers on the stack's shared network so they can reach Gitea as
+  # local-gitea (the emulator's network alias).
+  network: atmos-local

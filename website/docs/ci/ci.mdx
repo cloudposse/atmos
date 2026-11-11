@@ -360,7 +360,7 @@ Atmos auto-detects the CI environment and selects the appropriate provider:
   <dd>Integrates with GitHub job summaries, commit status checks, and output variables. Requires `GITHUB_TOKEN` for checks and PR features.</dd>
 
   <dt>**Gitea Actions**</dt>
-  <dd>Integrates with Gitea commit statuses, PR comments, and runner output files. See [Gitea Actions](#gitea-actions) for credentials and capabilities.</dd>
+  <dd>Integrates with Gitea commit statuses, PR comments, and runner output files. See the [Gitea Actions workflow guides](/integrations/gitea-actions) and [Gitea Actions](#gitea-actions) for credentials and capabilities.</dd>
 
   <dt>**Generic CI**</dt>
   <dd>Prints summaries, checks, and outputs to stdout. Useful for local development and testing, or any CI provider without native integration.</dd>
@@ -379,9 +379,12 @@ Atmos auto-detects the CI environment and selects the appropriate provider:
 
 Atmos detects `GITEA_ACTIONS=true` and selects the `gitea-actions` provider, even when
 Gitea also sets `GITHUB_ACTIONS=true`. Enable `ci` with the configuration above and run
-ordinary Atmos commands in `.gitea/workflows/`:
+ordinary Atmos commands in `.gitea/workflows/`. The [Gitea Actions workflow guides](/integrations/gitea-actions)
+cover plan, apply, deploy-affected, and deploy-all workflows. Check out the repository with
+`atmos git clone --ci`, because the Atmos container image has no Node.js for `actions/checkout`:
 
 ```yaml
+- run: atmos git clone --ci
 - name: Plan infrastructure
   env:
     ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}

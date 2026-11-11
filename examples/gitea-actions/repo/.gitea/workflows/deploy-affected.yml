@@ -1,0 +1,36 @@
+name: Deploy Affected
+on:
+  pull_request:
+
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    outputs:
+      matrix: ${{ steps.affected.outputs.matrix }}
+      count: ${{ steps.affected.outputs.count }}
+    steps:
+      # A full clone (the default) gives describe affected the base commit.
+      - run: atmos git clone --ci
+
+      - id: affected
+        run: atmos describe affected --format=matrix
+
+  deploy:
+    needs: affected
+    if: ${{ needs.affected.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    strategy:
+      matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - run: atmos git clone --ci
+
+      - env:
+          COMPONENT: ${{ matrix.component }}
+          STACK: ${{ matrix.stack }}
+          ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}
+        run: atmos terraform deploy "$COMPONENT" -s "$STACK"

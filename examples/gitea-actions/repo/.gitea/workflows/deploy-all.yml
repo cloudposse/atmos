@@ -1,0 +1,37 @@
+name: Deploy All
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'   # Daily drift sweep
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+      count: ${{ steps.list.outputs.count }}
+    steps:
+      - run: atmos git clone --ci
+
+      - id: list
+        run: atmos list instances --format=matrix
+
+  deploy:
+    needs: inventory
+    if: ${{ needs.inventory.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    strategy:
+      matrix: ${{ fromJson(needs.inventory.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - run: atmos git clone --ci
+
+      - env:
+          COMPONENT: ${{ matrix.component }}
+          STACK: ${{ matrix.stack }}
+          ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}
+        run: atmos terraform deploy "$COMPONENT" -s "$STACK"

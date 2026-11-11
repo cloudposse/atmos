@@ -1,0 +1,18 @@
+name: Apply
+on:
+  push:
+    branches: [main]
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - run: atmos git clone --ci
+
+      # Gitea cannot map a merge commit back to its pull request, so deploy plans
+      # the merged commit fresh instead of verifying the plan reviewed in the PR.
+      - run: atmos terraform deploy demo -s prod
+        env:
+          ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}

@@ -1,0 +1,24 @@
+---
+title: Apply on Merge
+slug: /integrations/gitea-actions/apply-on-merge
+description: Deploy infrastructure after a change merges, with Atmos running in Gitea Actions.
+---
+
+import EmbedFile from '@site/src/components/EmbedFile'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Deploy infrastructure after a change merges. Atmos plans the merged commit and applies it, reporting the result as a commit status.
+</Intro>
+
+Complete [Setup and Authentication](/integrations/gitea-actions/setup) first.
+
+## Workflow
+
+<EmbedFile filePath="examples/gitea-actions/repo/.gitea/workflows/apply.yml" />
+
+`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`.
+
+:::note
+On GitHub, a deploy can find the pull request a merge commit came from and verify the plan reviewed there. Gitea has no equivalent lookup, so the deploy plans the merged commit fresh. Do not pass `--verify-plan` in Gitea workflows: there is no reviewed plan to verify against.
+:::

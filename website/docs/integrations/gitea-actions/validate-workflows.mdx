@@ -1,0 +1,22 @@
+---
+title: Validate Workflows
+slug: /integrations/gitea-actions/validate-workflows
+description: Catch mistakes in Gitea Actions workflows before running infrastructure commands.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Catch mistakes in Gitea Actions workflows before running infrastructure commands. Gitea runs GitHub-Actions-compatible workflow syntax, so Atmos can lint it.
+</Intro>
+
+## Workflow
+
+`atmos ci validate` checks `.github/workflows` by default. Point it at `.gitea/workflows`:
+
+```yaml title=".gitea/workflows/validate.yml"
+- name: Validate workflows
+  run: atmos ci validate --workflow-path .gitea/workflows
+```
+
+The linter checks GitHub Actions syntax. Gitea-only extensions, such as `uses:` with an absolute URL, may be reported. See [`atmos ci validate`](/cli/commands/ci/validate) for file selection, output formats, and configuration.
