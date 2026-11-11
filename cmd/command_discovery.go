@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"al.essio.dev/pkg/shellescape"
 	"github.com/charmbracelet/huh"
@@ -59,6 +60,11 @@ func dispatchCommandDiscovery(root *cobra.Command, args []string) (bool, error) 
 	// Configured aliases forward their arguments to a new Atmos process. Let that
 	// process resolve discovery against the actual target, including subcommands.
 	if request.command.Annotations["configAlias"] != "" {
+		if !request.help && (request.docs || request.example || parseErr != nil) {
+			if err := validateDiscoveryAliases(root, request.command); err != nil {
+				return true, discoveryUsageError(request.command, err)
+			}
+		}
 		return false, nil
 	}
 	if request.help || (!request.docs && !request.example) {
@@ -88,6 +94,30 @@ func dispatchCommandDiscovery(root *cobra.Command, args []string) (bool, error) 
 		return true, nil
 	}
 	return true, discoverCommandExamples(&request, metadata.Examples)
+}
+
+// Reject targets that would hide discovery flags or cause unbounded re-execution.
+// Acyclic targets without a separator retain the normal alias forwarding path.
+func validateDiscoveryAliases(root, alias *cobra.Command) error {
+	seen := make(map[*cobra.Command]bool)
+	for alias != nil && alias.Annotations["configAlias"] != "" {
+		if seen[alias] {
+			return fmt.Errorf("%w: configured alias cycle at %q", errUtils.ErrInvalidConfig, alias.Name())
+		}
+		seen[alias] = true
+		target := strings.Fields(alias.Annotations["configAlias"])
+		for _, arg := range target {
+			if arg == "--" {
+				return fmt.Errorf("%w: discovery is unavailable for alias %q with a -- separator in its target", errUtils.ErrInvalidConfig, alias.Name())
+			}
+		}
+		request, err := parseDiscoveryRequest(root, target)
+		if err != nil || request.command == root {
+			return fmt.Errorf("%w: cannot safely resolve discovery target for alias %q", errUtils.ErrInvalidConfig, alias.Name())
+		}
+		alias = request.command
+	}
+	return nil
 }
 
 func validateDiscoveryRequest(request *discoveryRequest) error {
