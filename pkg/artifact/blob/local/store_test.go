@@ -221,3 +221,34 @@ func TestSymlinksCannotEscapeRoot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "keep", string(data))
 }
+
+func TestListingPagesUseSnapshotAndFreshListingWalksAgain(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	for _, key := range []string{"a", "b"} {
+		_, err := store.Put(ctx, key, bytes.NewReader([]byte(key)), blob.PutOptions{Size: 1})
+		require.NoError(t, err)
+	}
+	first, err := store.List(ctx, blob.ListOptions{Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, first.Objects, 1)
+	assert.Equal(t, "a", first.Objects[0].Key)
+	require.NotEmpty(t, first.NextCursor)
+	require.NoError(t, store.Delete(ctx, "b", blob.DeleteOptions{}))
+	_, err = store.Put(ctx, "c", bytes.NewReader([]byte("c")), blob.PutOptions{Size: 1})
+	require.NoError(t, err)
+	second, err := store.List(ctx, blob.ListOptions{Limit: 1, Cursor: first.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, second.Objects, 1)
+	assert.Equal(t, "b", second.Objects[0].Key, "continuation uses the original walk")
+	fresh, err := store.List(ctx, blob.ListOptions{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, fresh.Objects, 2)
+	assert.Equal(t, "c", fresh.Objects[1].Key, "a fresh listing sees filesystem changes")
+	other, err := New(store.Root())
+	require.NoError(t, err)
+	resumed, err := other.List(ctx, blob.ListOptions{Limit: 1, Cursor: first.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, resumed.Objects, 1)
+	assert.Equal(t, "c", resumed.Objects[0].Key, "an evicted snapshot resumes from its ordering token")
+}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact/blob"
@@ -32,6 +33,8 @@ type Store struct {
 	filePerm       os.FileMode
 	lockAll        bool
 	allowBackslash bool
+	snapshotMu     sync.Mutex
+	snapshots      map[string]listSnapshot
 }
 
 // New returns a Store rooted at root. The directory is created on first write.
