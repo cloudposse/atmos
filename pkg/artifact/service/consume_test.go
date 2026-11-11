@@ -325,3 +325,50 @@ func TestList_ConcurrencyIsInjectable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, result.Artifacts, 3)
 }
+
+// readHookRepository runs a hook right before every Read, as if another process touched the
+// destination while the artifact was downloading.
+type readHookRepository struct {
+	*artifacttest.Repository
+	onRead func()
+}
+
+//nolint:gocritic // The pinned reference is passed by value because artifact.Repository fixes the signature.
+func (r *readHookRepository) Read(ctx context.Context, pinned artifact.PinnedReference) (*artifact.Content, error) {
+	r.onRead()
+	return r.Repository.Read(ctx, pinned)
+}
+
+func TestPull_RechecksTheDestinationBeforeReplacingIt(t *testing.T) {
+	tests := []struct {
+		name     string
+		force    bool
+		wantErr  error
+		wantKept bool
+	}{
+		{"files appeared during the download without force", false, errUtils.ErrArtifactConflict, true},
+		{"files appeared during the download with force", true, nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t, envConfig{})
+			e.publish("dst", e.source("ORIGINAL"))
+			dest := out(t)
+			require.NoError(t, os.MkdirAll(dest, 0o755))
+			e.static.Repositories["dst"] = &readHookRepository{Repository: e.repos["dst"], onRead: func() {
+				fixtures.WriteFile(t, dest, "late.txt", "written during the download", 0o644)
+			}}
+
+			_, err := e.svc.Pull(context.Background(), artifact.PullRequest{Repository: "dst", Ref: exampleRef, Destination: dest, Force: tt.force})
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			_, lateErr := os.Stat(filepath.Join(dest, "late.txt"))
+			assert.Equal(t, tt.wantKept, lateErr == nil, "a refused replacement leaves the destination untouched; a forced one replaces it")
+			_, dataErr := os.Stat(filepath.Join(dest, "data.txt"))
+			assert.Equal(t, !tt.wantKept, dataErr == nil)
+		})
+	}
+}

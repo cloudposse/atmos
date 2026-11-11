@@ -2,13 +2,16 @@ package signature
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sigstore/sigstore-go/pkg/root"
+	sigstore "github.com/sigstore/sigstore/pkg/signature"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -85,5 +88,63 @@ func TestKeyAndIdentityPathsNeverSubstituteForEachOther(t *testing.T) {
 	// A certificate-signed bundle cannot be accepted by the key path, whatever keys are configured.
 	keys := KeyVerifier{Keys: []TrustedKey{{Hint: keySigned.Hint, PublicKey: keySigned.PublicKey}}, LoadRoot: trust}
 	_, err = keys.Verify(t.Context(), certificateBundle, digestOf(artifact), true)
+	require.ErrorIs(t, err, errUtils.ErrSignatureInvalid)
+}
+
+// leakingRoot is transparency-log trust that also resolves a signer key, as a loader might.
+type leakingRoot struct {
+	*signaturetest.Authority
+	key root.TimeConstrainedVerifier
+}
+
+func (l leakingRoot) PublicKeyVerifier(string) (root.TimeConstrainedVerifier, error) {
+	return l.key, nil
+}
+
+func TestKeyVerifierIgnoresSignerKeysFromTheLoader(t *testing.T) {
+	authority := signaturetest.New(t)
+	artifact := []byte("key-signed release")
+	signed := authority.SignWithKey(t, artifact)
+	loaded, err := sigstore.LoadVerifier(signed.PublicKey, crypto.SHA256)
+	require.NoError(t, err)
+	leaking := func(context.Context, bool) (root.TrustedMaterial, error) {
+		return leakingRoot{Authority: authority, key: root.NewExpiringKey(loaded, time.Time{}, time.Time{})}, nil
+	}
+	stranger, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// The loader's key would verify the bundle, but it is not configured, so verification fails.
+	verifier := KeyVerifier{Keys: []TrustedKey{{Hint: "other", PublicKey: &stranger.PublicKey}}, LoadRoot: leaking}
+	_, err = verifier.Verify(t.Context(), signed.Bundle, digestOf(artifact), true)
+	require.ErrorIs(t, err, errUtils.ErrSignatureInvalid)
+
+	// The loader's transparency-log trust is still used when the signer key is configured.
+	verifier.Keys = []TrustedKey{{Hint: signed.Hint, PublicKey: signed.PublicKey}}
+	result, err := verifier.Verify(t.Context(), signed.Bundle, digestOf(artifact), true)
+	require.NoError(t, err)
+	assert.Equal(t, signaturetest.KeyHint, result.Hint)
+}
+
+func TestKeyVerifierTriesEveryKeyThatSharesAHint(t *testing.T) {
+	authority := signaturetest.New(t)
+	artifact := []byte("key-signed release")
+	signed := authority.SignWithKey(t, artifact)
+	stranger, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	right := TrustedKey{Hint: signed.Hint, PublicKey: signed.PublicKey}
+	wrong := TrustedKey{Hint: signed.Hint, PublicKey: &stranger.PublicKey}
+
+	for name, keys := range map[string][]TrustedKey{"wrong key first": {wrong, right}, "right key first": {right, wrong}} {
+		t.Run(name, func(t *testing.T) {
+			result, err := KeyVerifier{Keys: keys, LoadRoot: logsOnly(authority)}.Verify(t.Context(), signed.Bundle, digestOf(artifact), true)
+			require.NoError(t, err)
+			assert.Equal(t, signaturetest.KeyHint, result.Hint)
+		})
+	}
+
+	// Two non-matching keys under the hint still fail.
+	other, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	_, err = KeyVerifier{Keys: []TrustedKey{wrong, {Hint: signed.Hint, PublicKey: &other.PublicKey}}, LoadRoot: logsOnly(authority)}.Verify(t.Context(), signed.Bundle, digestOf(artifact), true)
 	require.ErrorIs(t, err, errUtils.ErrSignatureInvalid)
 }

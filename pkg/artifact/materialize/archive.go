@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -59,7 +60,7 @@ func fillArchive(ctx context.Context, t *tree, content *artifact.Content, scratc
 		return err
 	}
 	if content.Representation.Packaging == artifact.PackagingZip {
-		return fillZip(ctx, t, payload.Reader, scratch, checker)
+		return fillZip(ctx, t, payload, scratch, checker)
 	}
 	return fillTar(ctx, t, payload.Reader, content.Representation.Packaging == artifact.PackagingTgz, checker)
 }
@@ -107,16 +108,16 @@ func applyTarHeader(t *tree, tr *tar.Reader, header *tar.Header, checker *manage
 	}
 }
 
-func fillZip(ctx context.Context, t *tree, reader io.Reader, scratch string, checker *managedChecker) error {
+func fillZip(ctx context.Context, t *tree, payload *artifact.ContentStream, scratch string, checker *managedChecker) error {
 	spool, err := os.CreateTemp(scratch, "archive-*.zip")
 	if err != nil {
 		return fmt.Errorf("%w: spool archive: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
 	defer os.Remove(spool.Name())
 	defer spool.Close()
-	size, err := copyContext(ctx, spool, reader)
+	size, err := spoolBounded(ctx, spool, payload)
 	if err != nil {
-		return fmt.Errorf("%w: spool archive: %w", errUtils.ErrArtifactIntegrityFailed, err)
+		return err
 	}
 	zr, err := zip.NewReader(spool, size)
 	if err != nil {
@@ -131,6 +132,25 @@ func fillZip(ctx context.Context, t *tree, reader io.Reader, scratch string, che
 		}
 	}
 	return nil
+}
+
+// spoolBounded copies the payload into the spool file without exceeding the size declared by its
+// descriptor, so a padded or oversized stream cannot fill the scratch disk.
+func spoolBounded(ctx context.Context, spool io.Writer, payload *artifact.ContentStream) (int64, error) {
+	limit := max(payload.Descriptor.Size, 0)
+	// Read one byte past the declared size so an oversized stream is detected without spooling it all.
+	probe := limit
+	if probe < math.MaxInt64 {
+		probe++
+	}
+	size, err := copyContext(ctx, spool, io.LimitReader(payload.Reader, probe))
+	if err != nil {
+		return size, fmt.Errorf("%w: spool archive: %w", errUtils.ErrArtifactIntegrityFailed, err)
+	}
+	if size > limit {
+		return size, fmt.Errorf("%w: spool archive: the payload is longer than the declared %d bytes", errUtils.ErrArtifactIntegrityFailed, limit)
+	}
+	return size, nil
 }
 
 func applyZipFile(t *tree, file *zip.File, checker *managedChecker) error {

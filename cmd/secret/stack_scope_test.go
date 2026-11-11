@@ -67,6 +67,28 @@ components:
 	value, err := svc.Get("TOKEN", secrets.ResolveOptions{})
 	require.NoError(t, err)
 	require.Equal(t, "value", value)
+
+	// The remaining commands also work from --stack alone and only ever touch shared secrets.
+	require.NoError(t, runSecretSubcommand(t, "set", "PRIVATE=instance-value", "-s", "dev", "-c", "vpc"))
+	require.NoError(t, runSecretSubcommand(t, "get", "TOKEN", "-s", "dev"))
+	pulled := filepath.Join(t.TempDir(), "pulled.env")
+	require.NoError(t, runSecretSubcommand(t, "pull", "-s", "dev", "--output", pulled))
+	content, err := os.ReadFile(pulled)
+	require.NoError(t, err)
+	require.Equal(t, "TOKEN=value\n", string(content))
+	require.ErrorIs(t, runSecretSubcommand(t, "get", "PRIVATE", "-s", "dev"), errUtils.ErrRequiredFlagNotProvided)
+
+	require.NoError(t, runSecretSubcommand(t, "delete", "TOKEN", "-s", "dev", "--force"))
+	require.ErrorIs(t, runSecretSubcommand(t, "validate", "-s", "dev"), errUtils.ErrValidationFailed)
+	require.NoError(t, runSecretSubcommand(t, "set", "TOKEN=again", "-s", "dev"))
+	require.NoError(t, runSecretSubcommand(t, "delete", "--all", "-s", "dev", "--force"))
+	require.ErrorIs(t, runSecretSubcommand(t, "validate", "-s", "dev"), errUtils.ErrValidationFailed)
+	// delete --all without a component leaves the instance secret alone.
+	svc, err = loadService(secretScope{Stack: "dev", Component: "vpc"})
+	require.NoError(t, err)
+	value, err = svc.Get("PRIVATE", secrets.ResolveOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "instance-value", value)
 }
 
 func TestFindSharedSetContext_DifferentProvidersRequireComponent(t *testing.T) {
@@ -76,6 +98,6 @@ func TestFindSharedSetContext_DifferentProvidersRequireComponent(t *testing.T) {
 		return scopeEntry{Stack: "dev", Component: component, ComponentType: "terraform", Section: section}
 	}
 	overrideEnumerateScopes(t, []scopeEntry{entry("a", "a.enc.yaml"), entry("b", "b.enc.yaml")}, nil)
-	_, _, err := findSharedSetContext(secretScope{Stack: "dev"}, "TOKEN")
+	_, _, err := findSharedContext(secretScope{Stack: "dev"}, "TOKEN", "set")
 	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 }

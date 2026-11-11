@@ -232,9 +232,23 @@ func copyMemberContent(dst io.Writer, member *Member) error {
 	if written != member.Size {
 		return writeFailedError(member.Path, io.ErrUnexpectedEOF)
 	}
+	return rejectExtraContent(src, member)
+}
+
+// rejectExtraContent reads until a byte or the end of the source. A reader may legally return no
+// bytes and no error from a single call, so one read cannot prove the source has ended. The probe
+// never touches the archive writer, so extra content is not written before the failure.
+func rejectExtraContent(src io.Reader, member *Member) error {
 	var extra [1]byte
-	if n, readErr := src.Read(extra[:]); n > 0 || (readErr != nil && !errors.Is(readErr, io.EOF)) {
-		return writeFailedError(member.Path, fmt.Errorf("%w: content is longer than the declared %d bytes", errUtils.ErrArchiveWriteFailed, member.Size))
+	for {
+		n, readErr := src.Read(extra[:])
+		switch {
+		case n > 0:
+			return writeFailedError(member.Path, fmt.Errorf("%w: content is longer than the declared %d bytes", errUtils.ErrArchiveWriteFailed, member.Size))
+		case errors.Is(readErr, io.EOF):
+			return nil
+		case readErr != nil:
+			return writeFailedError(member.Path, readErr)
+		}
 	}
-	return nil
 }

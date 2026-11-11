@@ -169,3 +169,36 @@ func TestWritePlanfileResultsForVerification(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestVerificationPreservesCheckoutLockfile(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, LockFilename)
+	require.NoError(t, os.WriteFile(lockPath, []byte("landed-provider-selection"), 0o600))
+	storedPath := filepath.Join(dir, StoredPlanPrefix+PlanFilename)
+	results := []FileResult{
+		{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("reviewed-plan"))},
+		{Name: LockFilename, Data: io.NopCloser(strings.NewReader("old-provider-selection"))},
+	}
+	require.NoError(t, WritePlanfileResultsForVerification(results, storedPath, filepath.Join(dir, PlanFilename)))
+	contents, err := os.ReadFile(lockPath)
+	require.NoError(t, err)
+	assert.Equal(t, "landed-provider-selection", string(contents))
+	contents, err = os.ReadFile(storedPath)
+	require.NoError(t, err)
+	assert.Equal(t, "reviewed-plan", string(contents))
+}
+
+func TestVerificationStopsOnUnreadableLockfile(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, LockFilename)
+	// A loop gives a deterministic stat failure without relying on UID or modes.
+	if err := os.Symlink(LockFilename, lockPath); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	results := []FileResult{{Name: LockFilename, Data: io.NopCloser(strings.NewReader("older-lockfile"))}}
+	err := WritePlanfileResultsForVerification(results, filepath.Join(dir, StoredPlanPrefix+PlanFilename), filepath.Join(dir, PlanFilename))
+	require.Error(t, err)
+	target, err := os.Readlink(lockPath)
+	require.NoError(t, err)
+	assert.Equal(t, LockFilename, target, "a stat error must not overwrite the current lockfile")
+}

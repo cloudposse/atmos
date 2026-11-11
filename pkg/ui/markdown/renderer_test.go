@@ -29,6 +29,10 @@ func (t testTerminal) ColorProfile() terminal.ColorProfile {
 	return t.colorProfile
 }
 
+func (t testTerminal) ColorProfileFor(terminal.Stream) terminal.ColorProfile {
+	return t.colorProfile
+}
+
 func (t testTerminal) Width(stream terminal.Stream) int {
 	if t.width == nil {
 		return 0

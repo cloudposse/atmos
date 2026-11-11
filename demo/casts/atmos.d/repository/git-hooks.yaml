@@ -1,9 +1,15 @@
 commands:
   - name: casts generate repository git-hooks
     description: Record this repository's Git hook against actual configuration changes
+    flags:
+      - name: base
+        description: "Git revision to diff the tracked check files against; use an earlier revision when the working tree has no edits to record"
+        default: HEAD
     steps:
       - type: script
         name: prepare-and-record
+        env:
+          ATMOS_CAST_GIT_HOOKS_BASE: '{{ .Flags.base }}'
         interpreter: starlark
         script: !include scripts/record-repository-git-hooks.star
       - type: script

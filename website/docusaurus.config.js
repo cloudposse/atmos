@@ -15,6 +15,7 @@ const lightCodeTheme = require('prism-react-renderer').themes.oneLight;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 const latestReleasePlugin = require('./plugins/fetch-latest-release');
 const rehypeDtIds = require('./plugins/rehype-dt-ids');
+const remarkGithubAdmonitions = require('./plugins/remark-github-admonitions');
 const { getBuildDate } = require('./plugins/build-timestamp');
 
 const BASE_URL = '';
@@ -659,10 +660,12 @@ const config = {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md', '**/_*/**', '**/_*'],
+                    remarkPlugins: [remarkGithubAdmonitions],
                     rehypePlugins: [rehypeDtIds],
                 },
                 blog: {
                     routeBasePath: 'changelog',
+                    remarkPlugins: [remarkGithubAdmonitions],
                     showReadingTime: true,
                     postsPerPage: 'ALL',
                     blogSidebarCount: 'ALL',

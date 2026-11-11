@@ -42,6 +42,23 @@ func TestDelete_ScopedToTheSelectedArtifact(t *testing.T) {
 	assert.Empty(t, e.repos["dst"].HeldLocks(), "locks are released on failure too")
 }
 
+func TestDelete_RefusesAReferenceThatMovedAfterItWasPinned(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	original := e.publish("dst", e.source("ORIGINAL"))
+	publishDecoy(t, e)
+	moveTagOnFirstResolve(t, e, "2.0.0")
+
+	_, err := e.svc.Delete(context.Background(), artifact.DeleteRequest{Repository: "dst", Ref: exampleRef})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict, "the reference now names another record than the one the caller observed")
+
+	moved, ok := e.repos["dst"].RecordDigestOf(exampleRef)
+	require.True(t, ok, "the moved reference is left in place")
+	assert.NotEqual(t, original.Operation.RecordDigest, moved)
+	_, ok = e.repos["dst"].RecordDigestOf(ref("tools/example", "2.0.0"))
+	assert.True(t, ok, "the record the reference moved to is not deleted")
+	assert.Empty(t, e.repos["dst"].HeldLocks())
+}
+
 func TestDelete_CapabilityAndRequestChecks(t *testing.T) {
 	noDelete := artifacttest.DefaultCapabilities()
 	noDelete.Delete = artifact.DeleteNone

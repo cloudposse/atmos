@@ -305,6 +305,22 @@ func TestDeepEqualMaps(t *testing.T) {
 	})
 }
 
+func TestDeepEqualValuesEmbeddedSources(t *testing.T) {
+	t.Parallel()
+
+	here := yamlsource.Source{Tag: "!env", Argument: "STAGE", File: "/checkout-a/stack.yaml"}.Encode()
+	there := yamlsource.Source{Tag: "!env", Argument: "STAGE", File: "/checkout-b/stack.yaml"}.Encode()
+	other := yamlsource.Source{Tag: "!env", Argument: "OTHER", File: "/checkout-a/stack.yaml"}.Encode()
+
+	assert.True(t, deepEqualValues("x-"+here, "x-"+there), "checkout paths in metadata are ignored")
+	assert.False(t, deepEqualValues("x-"+here, "x-"+other), "a different argument is a change")
+	assert.False(t, deepEqualValues("x-"+here, "x-!env STAGE"), "a function differs from literal text spelling it")
+
+	template := func(argument string) string { return yamlsource.Source{Tag: "!template", Argument: argument}.Encode() }
+	assert.True(t, deepEqualValues(template("a-"+here), template("a-"+there)), "a whole value ignores nested metadata")
+	assert.False(t, deepEqualValues(template("a-"+here), template("a-"+other)), "a whole value compares nested arguments")
+}
+
 func TestDeepEqualValues(t *testing.T) {
 	t.Parallel()
 

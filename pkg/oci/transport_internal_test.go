@@ -102,6 +102,7 @@ func TestRepositoryFailsClosedBeforeAnyRequest(t *testing.T) {
 		{"resolver error", nil, true, os.ErrPermission},
 		{"matched identity without credentials", nil, true, nil},
 		{"matched identity resolves to anonymous", authn.Anonymous, true, nil},
+		{"bound authenticator cannot authorize", failingAuthenticator{}, true, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
