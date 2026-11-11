@@ -47,6 +47,14 @@ func testLinkPrompt() LinkPrompt {
 	return LinkPrompt{URL: testLongSignInURL(), Label: "Open AWS sign-in", Hint: "If the browser doesn't open"}
 }
 
+// renderVisible renders a prompt and strips SGR styling, which depends on the
+// color profile of the environment running the tests. OSC 8 and OSC 52
+// sequences are not SGR, so they survive and can still be asserted.
+func renderVisible(prompt LinkPrompt, mode link.Mode, copyFn func(string) error) (string, clipboardOutcome) {
+	got, outcome := renderLinkPrompt(prompt, mode, copyFn)
+	return atmosansi.Strip(got), outcome
+}
+
 // neverCopy fails the test if a mode that must not touch the clipboard does.
 func neverCopy(t *testing.T) func(string) error {
 	t.Helper()
@@ -59,7 +67,7 @@ func neverCopy(t *testing.T) func(string) error {
 func TestRenderLinkPrompt_Raw(t *testing.T) {
 	prompt := testLinkPrompt()
 
-	got, outcome := renderLinkPrompt(prompt, link.ModeRaw, neverCopy(t))
+	got, outcome := renderVisible(prompt, link.ModeRaw, neverCopy(t))
 	assert.Equal(t, clipboardUntouched, outcome)
 
 	assert.Contains(t, got, "If the browser doesn't open, visit:")
@@ -72,7 +80,7 @@ func TestRenderLinkPrompt_Raw(t *testing.T) {
 func TestRenderLinkPrompt_OSC8(t *testing.T) {
 	prompt := testLinkPrompt()
 
-	got, outcome := renderLinkPrompt(prompt, link.ModeOSC8, neverCopy(t))
+	got, outcome := renderVisible(prompt, link.ModeOSC8, neverCopy(t))
 	assert.Equal(t, clipboardUntouched, outcome)
 
 	assert.Contains(t, got, "If the browser doesn't open, click:")
@@ -86,7 +94,7 @@ func TestRenderLinkPrompt_ClipboardCopied(t *testing.T) {
 	prompt := testLinkPrompt()
 	var copied string
 
-	got, outcome := renderLinkPrompt(prompt, link.ModeClipboard, func(text string) error {
+	got, outcome := renderVisible(prompt, link.ModeClipboard, func(text string) error {
 		copied = text
 		return nil
 	})
@@ -101,7 +109,7 @@ func TestRenderLinkPrompt_ClipboardCopied(t *testing.T) {
 func TestRenderLinkPrompt_ClipboardUnavailableFallsBackToRaw(t *testing.T) {
 	prompt := testLinkPrompt()
 
-	got, outcome := renderLinkPrompt(prompt, link.ModeClipboard, func(string) error {
+	got, outcome := renderVisible(prompt, link.ModeClipboard, func(string) error {
 		return errTestClipboardUnavailable
 	})
 
@@ -185,7 +193,7 @@ func TestRenderLinkPrompt_WithoutHint(t *testing.T) {
 	prompt := LinkPrompt{URL: testLongSignInURL(), Label: "Open console"}
 
 	t.Run("raw introduces the URL with the label", func(t *testing.T) {
-		got, _ := renderLinkPrompt(prompt, link.ModeRaw, neverCopy(t))
+		got, _ := renderVisible(prompt, link.ModeRaw, neverCopy(t))
 
 		assert.True(t, strings.HasPrefix(got, "Open console:\n"), "got %q", got[:40])
 		assert.Equal(t, 1, strings.Count(got, prompt.URL))
@@ -193,7 +201,7 @@ func TestRenderLinkPrompt_WithoutHint(t *testing.T) {
 	})
 
 	t.Run("osc8 shows only the clickable label", func(t *testing.T) {
-		got, _ := renderLinkPrompt(prompt, link.ModeOSC8, neverCopy(t))
+		got, _ := renderVisible(prompt, link.ModeOSC8, neverCopy(t))
 
 		assert.True(t, strings.HasPrefix(got, "\x1b]8;;"+prompt.URL+"\x1b\\"), "the line starts with the hyperlink, with no lead-in")
 		assert.Contains(t, got, "Open console")
@@ -201,7 +209,7 @@ func TestRenderLinkPrompt_WithoutHint(t *testing.T) {
 	})
 
 	t.Run("a confirmed clipboard copy needs no further text", func(t *testing.T) {
-		got, outcome := renderLinkPrompt(prompt, link.ModeClipboard, func(string) error { return nil })
+		got, outcome := renderVisible(prompt, link.ModeClipboard, func(string) error { return nil })
 
 		assert.Equal(t, clipboardCopied, outcome)
 		assert.Empty(t, got, "the status message alone reports the copy")
