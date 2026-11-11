@@ -430,12 +430,26 @@ func TestPrepareMasksSensitiveInputsInTheLogsOfTheSameResponse(t *testing.T) {
 func TestPrepareNamesAnUnknownInput(t *testing.T) {
 	session, provider, info := preparationSession(t)
 	inputs := &pluginv1.ComponentValue{TypeJson: []byte(`["object",{"zone":"string"}]`), Msgpack: []byte{0x81, 0xa4, 'z', 'o', 'n', 'e', 0xd4, 0x00, 0x00}}
-	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{}}, nil)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{}, Logs: []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "unregistered-secret"}}}, nil)
+	output := captureAtmosLogs(t, charm.DebugLevel)
 
 	_, err := session.Prepare(t.Context(), info)
 
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 	require.Contains(t, err.Error()+strings.Join(errUtils.AllDetails(err), "\n"), "`zone`")
+	require.NotContains(t, output.String(), "unregistered-secret")
+}
+
+func TestPrepareSuppressesLogsForMalformedInputs(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{
+		Inputs: &pluginv1.ComponentValue{TypeJson: []byte("invalid")},
+		Logs:   []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "unregistered-secret"}},
+	}, nil)
+	output := captureAtmosLogs(t, charm.DebugLevel)
+	_, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.NotContains(t, output.String(), "unregistered-secret")
 }
 
 func TestDiscoveryAndStateRenderEngineLogs(t *testing.T) {

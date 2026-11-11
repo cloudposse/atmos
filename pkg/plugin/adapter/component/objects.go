@@ -254,23 +254,6 @@ func objectJSON(value cty.Value) (any, error) {
 	return result, nil
 }
 
-// RegisterSensitiveValues registers the sensitive parts of a plugin value with masked I/O without decoding
-// it for use. Call it before rendering anything else the same response carries, such as log events, so a
-// value the plugin marked sensitive is masked there too. A value that cannot be decoded registers nothing;
-// decoding it for use reports the problem.
-func RegisterSensitiveValues(input *pluginv1.ComponentValue) {
-	defer perf.Track(nil, "componentadapter.RegisterSensitiveValues")()
-
-	if input == nil || len(input.SensitivePaths) == 0 {
-		return
-	}
-	value, err := decodePlain(input)
-	if err != nil || !value.IsWhollyKnown() {
-		return
-	}
-	_ = registerSensitivePaths(value, input.SensitivePaths)
-}
-
 func registerSensitive(value any) {
 	switch value := value.(type) {
 	case map[string]any:
