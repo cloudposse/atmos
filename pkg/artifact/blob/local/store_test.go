@@ -3,6 +3,7 @@ package local
 import (
 	"bytes"
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -141,4 +142,14 @@ func TestCanceledContextFailsFast(t *testing.T) {
 	_, err = store.Stat(ctx, "k", blob.StatOptions{})
 	require.ErrorIs(t, err, context.Canceled)
 	assert.NoDirExists(t, store.Root(), "nothing is created for a canceled operation")
+}
+
+func TestInvalidSizesAndNULPrefix(t *testing.T) {
+	store := newStore(t)
+	for _, size := range []int64{-2, math.MaxInt64} {
+		_, err := store.Put(context.Background(), "k", bytes.NewReader(nil), blob.PutOptions{Size: size})
+		require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
+	}
+	_, err := store.List(context.Background(), blob.ListOptions{Prefix: "x\x00y"})
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
 }

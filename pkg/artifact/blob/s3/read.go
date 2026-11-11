@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -30,6 +31,9 @@ func (s *Store) Get(ctx context.Context, key string, opts blob.GetOptions) (*blo
 	if opts.Offset < 0 {
 		return nil, blob.NewError(blob.KindInvalid, blob.OpGet, key, fmt.Errorf("%w: negative offset", errUtils.ErrBlobInvalid))
 	}
+	if opts.Length > 0 && opts.Offset > math.MaxInt64-(opts.Length-1) {
+		return nil, blob.NewError(blob.KindInvalid, blob.OpGet, key, fmt.Errorf("%w: range end overflows", errUtils.ErrBlobInvalid))
+	}
 	api, err := s.client(ctx)
 	if err != nil {
 		return nil, err
@@ -56,7 +60,7 @@ func rangeHeader(opts blob.GetOptions) *string {
 		return nil
 	}
 	if opts.Length > 0 {
-		return aws.String(fmt.Sprintf("bytes=%d-%d", opts.Offset, opts.Offset+opts.Length-1))
+		return aws.String(fmt.Sprintf("bytes=%d-%d", opts.Offset, opts.Offset+(opts.Length-1)))
 	}
 	return aws.String(fmt.Sprintf("bytes=%d-", opts.Offset))
 }

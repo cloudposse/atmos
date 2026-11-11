@@ -153,7 +153,7 @@ func parseRange(header string, size int64) (byteRange, bool) {
 		return byteRange{}, false
 	}
 	start, err := strconv.ParseInt(first, decimalBase, bitSize64)
-	if err != nil || start > size || (start == size && size > 0) {
+	if err != nil || start < 0 || start >= size {
 		return byteRange{}, false
 	}
 	end, ok := rangeEnd(last, start, size)

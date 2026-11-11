@@ -158,7 +158,7 @@ func validatePrefix(prefix string) error {
 			return blob.NewError(blob.KindInvalid, blob.OpList, prefix, fmt.Errorf("%w: prefix contains a relative segment", errUtils.ErrBlobInvalid))
 		}
 	}
-	if strings.ContainsRune(prefix, '\\') || strings.HasPrefix(prefix, "/") {
+	if strings.ContainsRune(prefix, '\\') || strings.ContainsRune(prefix, 0) || strings.HasPrefix(prefix, "/") {
 		return blob.NewError(blob.KindInvalid, blob.OpList, prefix, fmt.Errorf("%w: prefix must be a relative slash path", errUtils.ErrBlobInvalid))
 	}
 	return nil

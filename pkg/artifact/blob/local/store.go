@@ -27,10 +27,11 @@ const (
 
 // Store is a filesystem [blob.Store].
 type Store struct {
-	root     string
-	dirPerm  os.FileMode
-	filePerm os.FileMode
-	lockAll  bool
+	root           string
+	dirPerm        os.FileMode
+	filePerm       os.FileMode
+	lockAll        bool
+	allowBackslash bool
 }
 
 // New returns a Store rooted at root. The directory is created on first write.
@@ -79,7 +80,11 @@ func (s *Store) Capabilities() blob.Capabilities {
 
 // validate rejects keys that are unsafe on a filesystem or collide with the store's own files.
 func (s *Store) validate(op, key string) error {
-	if err := blob.ValidateKey(key); err != nil {
+	validationKey := key
+	if s.allowBackslash && os.PathSeparator != '\\' {
+		validationKey = strings.ReplaceAll(key, "\\", "_")
+	}
+	if err := blob.ValidateKey(validationKey); err != nil {
 		return err
 	}
 	last := key[strings.LastIndexByte(key, '/')+1:]

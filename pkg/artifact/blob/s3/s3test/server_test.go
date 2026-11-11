@@ -375,3 +375,20 @@ func TestEmulatorFromEnvSkipsWhenUnset(t *testing.T) {
 	emulator := EmulatorFromEnv(t)
 	assert.Equal(t, Emulator{Endpoint: "http://localhost:4566", Bucket: "b", Region: "us-east-1"}, emulator)
 }
+
+func TestWeakIfMatchAndEmptyRange(t *testing.T) {
+	srv := NewServer(t)
+	first, err := putObject(t, srv.Client(), srv, "k", "value")
+	require.NoError(t, err)
+	_, err = putObject(t, srv.Client(), srv, "k", "new", func(in *s3.PutObjectInput) { in.IfMatch = aws.String("W/" + aws.ToString(first.ETag)) })
+	assert.Equal(t, "PreconditionFailed", apiCode(t, err))
+	srv.Seed("empty", nil, nil)
+	_, err = srv.Client().GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String(srv.Bucket()), Key: aws.String("empty"), Range: aws.String("bytes=0-")})
+	assert.Equal(t, "InvalidRange", apiCode(t, err))
+}
+
+func TestPageCapMustBePositive(t *testing.T) {
+	for _, cap := range []int{0, -1} {
+		assert.Panics(t, func() { NewServer(t, WithPageCap(cap)) })
+	}
+}
