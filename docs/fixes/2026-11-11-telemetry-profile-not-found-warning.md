@@ -64,13 +64,17 @@ ATMOS_PROFILE=nonexistent atmos version
   the `DEBUG` diagnostic above even when the user asked for it (for example
   `ATMOS_PROFILE=missing atmos version --logs-level=Debug`). `configForStartupLogger` now derives
   the level from a new `startup.LogsConfigFromArgs(os.Args[1:])`, which honors
-  `--logs-level`/`--verbose`/`-v` and `ATMOS_LOGS_LEVEL`/`ATMOS_VERBOSE` (ignoring the command name
-  and unknown subcommand flags) and still defaults to `Warning` when nothing is set. It scans for the
-  three logging options as literal tokens rather than running a general flag parser over the whole
-  argv, so a subcommand's single-dash compatibility option is not read as the verbose shorthand
-  (`terraform plan -var ...` does not enable `-v`), a `--help`/`-h` does not stop the scan before a
-  later `--logs-level`, and a separate boolean value (`--verbose false`) disables verbose instead of
-  being stranded as a positional.
+  `ATMOS_LOGS_LEVEL`/`ATMOS_VERBOSE` and the unambiguous equals-joined flag forms
+  (`--logs-level=…`, `--logs-file=…`, `--verbose`/`-v`/`--verbose=<bool>`), stops at the `--`
+  end-of-options delimiter, and still defaults to `Warning` when nothing is set. It deliberately does
+  NOT emulate Cobra's parser: without the full flag registry it cannot know which tokens are operands
+  of other value-taking flags, so it never consumes a following token as a value. That keeps it immune
+  to argv it should not touch — a subcommand's single-dash option is not read as the verbose shorthand
+  (`terraform plan -var ...` does not enable `-v`), `--help`/`-h` does not stop the scan before a later
+  `--logs-level=…`, and no `--logs-file` after `--` opens an unexpected log file. The space-separated
+  forms (`--logs-level Debug`, `--verbose false`) are intentionally not honored in this degraded
+  fallback; the full command path parses those. This covers the common equals form and the environment
+  variables, which is enough to keep an explicitly requested diagnostic visible.
 - `pkg/telemetry/config_load_warning_test.go` (new): reproduces the scenario (missing
   `ATMOS_PROFILE` resolved from an empty working directory) and asserts that:
   - neither config-load site surfaces "Could not load config" at `WARN`;

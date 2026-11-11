@@ -35,6 +35,8 @@ const (
 	logsFileFlagName  = "logs-file"
 	verboseFlagName   = "verbose"
 	verboseShorthand  = "v"
+	// The long-flag prefix, also the bare "--" end-of-options delimiter.
+	flagPrefix = "--"
 
 	defaultLogsLevel = "Warning"
 	defaultLogsFile  = "/dev/stderr"
@@ -102,84 +104,65 @@ func LogsConfigFromCommand(cmd *cobra.Command) schema.Logs {
 // --verbose/-v, or ATMOS_LOGS_LEVEL/ATMOS_VERBOSE) instead of silently falling back to Warning,
 // otherwise a legitimately requested Debug/Trace diagnostic is filtered out.
 //
-// The argv here is the whole command line, which also carries flags meant for subcommands. A
-// general flag parser (pflag) is deliberately NOT used: it would read a subcommand's single-dash
-// compatibility option as a shorthand cluster (`-var` sets `-v`), stop at `--help`/`-h` before
-// reaching a later `--logs-level`, and leave a separate boolean value (`--verbose false`) stranded.
-// Instead this scans for exactly the three logging options as literal tokens and ignores everything
-// else, so it is immune to those quirks. Precedence matches LogsConfigFromCommand: defaults, then
+// The argv here is the whole command line, which also carries flags meant for subcommands. This
+// deliberately does NOT emulate Cobra's parsing: without the full flag registry it is impossible to
+// know which tokens are operands of other value-taking flags (e.g. "--format --logs-level" makes
+// "--logs-level" the value of "--format"), so any attempt to consume a following token as a value
+// mis-parses some argv and could, for example, open an unexpected log file. Instead it recognizes
+// ONLY the unambiguous equals-joined forms (--logs-level=..., --logs-file=...), the bare boolean
+// verbose flags (--verbose, -v, --verbose=<bool>), and stops at the "--" end-of-options delimiter.
+// Nothing is consumed from a following token, so no reordering of unrelated flags can change the
+// result. The space-separated forms ("--logs-level Debug", "--verbose false") are intentionally not
+// honored here — the full command path parses those; this best-effort fallback covers the common
+// equals form and the environment variables, which is enough to keep an explicitly requested
+// diagnostic visible. Precedence matches LogsConfigFromCommand: defaults, then
 // ATMOS_LOGS_*/ATMOS_VERBOSE, then --logs-level/--logs-file, then verbose last.
 func LogsConfigFromArgs(args []string) schema.Logs {
 	defer perf.Track(nil, "startup.LogsConfigFromArgs")()
 
 	logs := LogsConfigFromCommand(nil) // Defaults + ATMOS_LOGS_*/ATMOS_VERBOSE.
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		// A bare "--" ends option parsing; everything after it is positional (and would be rejected
-		// by Cobra). Stop so a later "--logs-file" after "--" is not honored (it must not open a log
-		// file). flagValue never consumes "--" as a value (it starts with "-"), so reaching this as a
-		// standalone token always means the real delimiter.
-		if arg == "--" {
+	levelPrefix := flagPrefix + logsLevelFlagName + "="
+	filePrefix := flagPrefix + logsFileFlagName + "="
+
+	verbose, verboseSet := false, false
+	for _, arg := range args {
+		// A bare "--" ends option parsing; everything after is positional. Stop so a later
+		// equals-joined logging flag is not honored (and so no unexpected log file is opened).
+		if arg == flagPrefix {
 			break
 		}
 		switch {
-		case strings.HasPrefix(arg, "--"+logsLevelFlagName):
-			if v, ok := flagValue(arg, logsLevelFlagName, args, &i); ok {
-				logs.Level = v
-			}
-		case strings.HasPrefix(arg, "--"+logsFileFlagName):
-			if v, ok := flagValue(arg, logsFileFlagName, args, &i); ok {
-				logs.File = v
-			}
-		case arg == "--"+verboseFlagName || strings.HasPrefix(arg, "--"+verboseFlagName+"="), arg == "-"+verboseShorthand:
-			if verboseEnabled(arg, verboseFlagName, args, &i) {
-				logs.Level = debugLogsLevel
+		case strings.HasPrefix(arg, levelPrefix):
+			logs.Level = strings.TrimPrefix(arg, levelPrefix)
+		case strings.HasPrefix(arg, filePrefix):
+			logs.File = strings.TrimPrefix(arg, filePrefix)
+		default:
+			if on, matched := verboseArg(arg); matched {
+				verbose, verboseSet = on, true
 			}
 		}
+	}
+	// Verbose is applied last so it wins over an explicit --logs-level, matching LogsConfigFromCommand.
+	if verboseSet && verbose {
+		logs.Level = debugLogsLevel
 	}
 	return logs
 }
 
-// flagValue extracts the value of a string option written as either "--name=value" or
-// "--name value", advancing i past a consumed separate value. The option name must match exactly
-// (so "--logs-level" matches but "--logs-level-extra" does not). Returns ok=false when the token is
-// a different flag or no value is available.
-func flagValue(arg, name string, args []string, i *int) (string, bool) {
-	prefix := "--" + name
-	if value, found := strings.CutPrefix(arg, prefix+"="); found {
-		return value, true
+// verboseArg reports whether arg is a recognized verbose flag and, if so, whether it enables verbose
+// logging. It matches the bare "--verbose"/"-v" (enable) and the equals-joined "--verbose=<bool>"
+// forms; a separate boolean value is deliberately not consumed (see LogsConfigFromArgs).
+func verboseArg(arg string) (enabled, matched bool) {
+	switch {
+	case arg == flagPrefix+verboseFlagName, arg == "-"+verboseShorthand:
+		return true, true
+	case strings.HasPrefix(arg, flagPrefix+verboseFlagName+"="):
+		on, err := strconv.ParseBool(strings.TrimPrefix(arg, flagPrefix+verboseFlagName+"="))
+		return err == nil && on, true
+	default:
+		return false, false
 	}
-	if arg != prefix {
-		return "", false // A longer flag that merely shares the prefix.
-	}
-	// Space-separated form: a string flag consumes the next token as its value unconditionally,
-	// exactly as cobra/pflag do — even when that token is "--" or itself looks like a flag (so
-	// "--logs-file -- --logs-level=Debug" takes "--" as the file value and still honors the later
-	// "--logs-level", rather than treating "--" as the end-of-options delimiter).
-	if *i+1 < len(args) {
-		*i++
-		return args[*i], true
-	}
-	return "", false
-}
-
-// verboseEnabled reports whether a --verbose/-v token enables verbose logging, consuming an
-// explicit boolean value when one follows (so "--verbose false" and "-v false" disable it, matching
-// how the normal command path folds separate boolean values before Cobra parses them).
-func verboseEnabled(arg, name string, args []string, i *int) bool {
-	if value, found := strings.CutPrefix(arg, "--"+name+"="); found {
-		enabled, err := strconv.ParseBool(value)
-		return err == nil && enabled
-	}
-	// Bare "--verbose" or "-v": an explicit boolean literal may follow as a separate token.
-	if *i+1 < len(args) {
-		if enabled, err := strconv.ParseBool(args[*i+1]); err == nil {
-			*i++
-			return enabled
-		}
-	}
-	return true
 }
 
 // ConfigureLogger applies --logs-level, --logs-file, and their ATMOS_LOGS_* variables without reading

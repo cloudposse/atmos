@@ -51,44 +51,38 @@ func TestLogsConfigFromArgs(t *testing.T) {
 		{name: "defaults", wantLevel: "Warning", wantFile: "/dev/stderr"},
 		{name: "environment", env: map[string]string{"ATMOS_LOGS_LEVEL": "Trace"}, wantLevel: "Trace", wantFile: "/dev/stderr"},
 		{name: "verbose environment", env: map[string]string{"ATMOS_VERBOSE": "true"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
-		// The level flag is honored even though the argv also carries a command name, a
+		// The equals-joined level flag is honored even though the argv also carries a command name, a
 		// positional arg, and unknown subcommand flags — these must be ignored, not error.
 		{name: "level flag amid command and unknown flags", args: []string{"version", "--logs-level=Debug", "--stack", "ue2-prod", "pos"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
-		{name: "level flag space-separated", args: []string{"terraform", "plan", "--logs-level", "Trace"}, wantLevel: "Trace", wantFile: "/dev/stderr"},
 		{name: "flag beats environment", env: map[string]string{"ATMOS_LOGS_LEVEL": "Trace"}, args: []string{"version", "--logs-level=Off"}, wantLevel: "Off", wantFile: "/dev/stderr"},
 		{name: "verbose shorthand", args: []string{"-v", "version"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
+		{name: "verbose long", args: []string{"--verbose", "version"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
+		{name: "verbose wins over level (order independent)", args: []string{"--verbose", "--logs-level=Off"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
 		{name: "file flag", args: []string{"version", "--logs-file=/dev/stdout"}, wantLevel: "Warning", wantFile: "/dev/stdout"},
+		{name: "verbose equals false does not enable", args: []string{"version", "--verbose=false"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
+		{name: "verbose equals true enables", args: []string{"version", "--verbose=true"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
 		// A subcommand's single-dash compatibility option (terraform's -var) must NOT be read as the
-		// verbose shorthand -v; the later --logs-level must still win.
+		// verbose shorthand -v; the equals-joined --logs-level must still win.
 		{name: "compat single-dash option is not verbose shorthand", args: []string{"terraform", "plan", "-var", "x=y", "--logs-level=Off"}, wantLevel: "Off", wantFile: "/dev/stderr"},
 		{name: "-var alone does not enable verbose", args: []string{"terraform", "plan", "-var=x=y"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
 		// A help flag must not stop the scan before a later logging flag is reached.
 		{name: "logs-level after --help", args: []string{"version", "--help", "--logs-level=Debug"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
 		{name: "logs-level after -h", args: []string{"version", "-h", "--logs-level=Trace"}, wantLevel: "Trace", wantFile: "/dev/stderr"},
 		{name: "logs-file after --help", args: []string{"version", "--help", "--logs-file=/dev/stdout"}, wantLevel: "Warning", wantFile: "/dev/stdout"},
-		// A separate boolean value disables verbose instead of being left as a stray positional.
-		{name: "verbose false disables", args: []string{"version", "--verbose", "false"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
-		{name: "verbose shorthand false disables", args: []string{"version", "-v", "false"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
-		{name: "verbose equals false disables", args: []string{"version", "--verbose=false"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
-		{name: "verbose true enables", args: []string{"version", "--verbose", "true"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
-		// A non-boolean token after --verbose is not consumed (it is a positional/command).
-		{name: "verbose then command stays enabled", args: []string{"--verbose", "version"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
 		// A flag that merely shares the --logs-level prefix must be ignored.
 		{name: "prefix-sharing flag ignored", args: []string{"version", "--logs-level-extra=x"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
-		// Space-separated value form.
-		{name: "logs-level space separated", args: []string{"version", "--logs-level", "Info"}, wantLevel: "Info", wantFile: "/dev/stderr"},
-		// A dangling --logs-level with no value (end of args) is ignored, keeping the default.
-		{name: "logs-level with no value ignored", args: []string{"version", "--logs-level"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
-		// A space-separated string flag consumes the next token as its value unconditionally (cobra
-		// semantics), even when that token itself looks like a flag.
-		{name: "logs-level consumes following flag-like token as value", args: []string{"version", "--logs-level", "--verbose"}, wantLevel: "--verbose", wantFile: "/dev/stderr"},
-		// A bare "--" that is NOT a flag value ends option scanning: logging flags after it are
-		// positional and ignored (so no unexpected log file is opened).
+		// Space-separated and separate-boolean forms are intentionally NOT honored here (only the full
+		// command path, with the flag registry, parses those). No following token is ever consumed, so
+		// no reordering of unrelated flags can change the result.
+		{name: "space-separated level not honored", args: []string{"version", "--logs-level", "Info"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
+		{name: "dangling --logs-level ignored", args: []string{"version", "--logs-level"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
+		{name: "another flag's operand is never consumed", args: []string{"version", "--format", "--logs-level", "--", "--logs-file=unexpected.log"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
+		// A bare "--" ends option scanning: equals-joined logging flags after it are positional and
+		// ignored (so no unexpected log file is opened).
 		{name: "logs-file after -- is ignored", args: []string{"version", "--", "--logs-file=unexpected.log"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
 		{name: "logs-level after -- is ignored", args: []string{"version", "--", "--logs-level=Debug"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
 		{name: "options before -- still honored", args: []string{"version", "--logs-level=Debug", "--", "--logs-level=Off"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
-		// A "--" consumed as a string flag's value is NOT the delimiter: the later flag is honored.
-		{name: "-- consumed as logs-file value then later flag honored", args: []string{"version", "--logs-file", "--", "--logs-level=Debug"}, wantLevel: "Debug", wantFile: "--"},
+		{name: "verbose before -- still honored", args: []string{"version", "--verbose", "--", "pos"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
