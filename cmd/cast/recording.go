@@ -235,8 +235,15 @@ func recordingBasePath(plan recordingOutputPlan, atmosConfig *schema.AtmosConfig
 	return recording.BasePath
 }
 
+// recordedCommandArgs returns the command as the user typed it: the program
+// name followed by the resolved arguments. The cast header stores this value
+// and the docs player types it after the prompt, so omitting the program name
+// would render "> --help" instead of "> atmos --help". The arguments are
+// copied so the caller's slice is never aliased.
 func recordedCommandArgs(args []string) []string {
-	return append([]string(nil), args...)
+	command := make([]string, 0, len(args)+1)
+	command = append(command, cfg.AtmosCommand)
+	return append(command, args...)
 }
 
 // StartHelpRecording starts a cast recording for help output when explicitly

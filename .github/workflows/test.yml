@@ -260,7 +260,7 @@ jobs:
         run: atmos helm plugin install --component ci-plugins --stack dev
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.target }}
@@ -788,7 +788,7 @@ jobs:
         if: matrix.flavor.target == 'linux' && hashFiles(format('coverage/shard-{0}/covmeta.*', matrix.shard)) != ''
         timeout-minutes: 5
         continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-coverage-linux-shard-${{ matrix.shard }}
           path: coverage/shard-${{ matrix.shard }}/
@@ -817,7 +817,7 @@ jobs:
         # Pact omits the final newline required by the repository hygiene hooks.
         run: git diff --exit-code --ignore-space-at-eol -- pacts/
       - name: Upload contracts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: atmos-pro-pacts
           path: pacts/*.json
@@ -856,7 +856,7 @@ jobs:
         run: go test -tags=mage -race -coverpkg=./magefiles/... -coverprofile=magefiles-coverage.out ./magefiles/...
 
       - name: Upload magefiles coverage report artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: magefiles-coverage-linux
           path: magefiles-coverage.out
@@ -873,10 +873,25 @@ jobs:
         working-directory: tools/noticegen
 
       - name: Upload tools/noticegen coverage report artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: noticegen-coverage-linux
           path: noticegen-coverage.out
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      # tools/gomodcheck is its own module too (see the noticegen note above),
+      # so its tests only run when invoked from inside that directory.
+      - name: Run tools/gomodcheck unit tests with coverage
+        run: go test -race -coverprofile=../../gomodcheck-coverage.out ./...
+        working-directory: tools/gomodcheck
+
+      - name: Upload tools/gomodcheck coverage report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gomodcheck-coverage-linux
+          path: gomodcheck-coverage.out
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -1016,16 +1031,89 @@ jobs:
           TEST: ${{ matrix.packages }}
         run: atmos test race
 
-  # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
-  # Keep the three historical required-check names as compatibility aliases so
-  # branch protection does not need to change. `needs.test.result` aggregates
-  # every OS/shard combination in the `test` matrix into a single verdict, so
-  # relying on it here would fail all three aliases whenever any single shard on
-  # any OS fails, not just the OS actually affected. Query the run's actual
-  # per-job results instead, so each alias only fails for its own OS's shards.
+  template-compatibility:
+    name: Template compatibility (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            suffix: ""
+          - os: macos-15
+            target: macos
+            suffix: ""
+          - os: windows-latest
+            target: windows
+            suffix: ".exe"
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - name: Harden Runner
+        if: runner.os == 'Linux'
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          policies: >-
+            github
+            github-releases
+            go-checksums
+            go-proxy
+            go-toolchain
+
+      - name: Check out source and pinned baseline history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-cache
+
+      - name: Test comparison and service fixtures
+        run: go -C tests/compatibility test ./...
+
+      - name: Build candidate CLI
+        env:
+          COMPAT_BINARY: .context/compatibility/atmos-candidate${{ matrix.suffix }}
+        run: |
+          mkdir -p .context/compatibility
+          go build -trimpath -o "$COMPAT_BINARY" .
+
+      # This builds the pinned OLD tree, verifies its behavior twice, then
+      # compares both actual CLIs on this OS. No snapshot regeneration or
+      # continue-on-error: every unapproved difference fails the required gate.
+      - name: Compare old and candidate CLIs
+        env:
+          COMPAT_BINARY: .context/compatibility/atmos-candidate${{ matrix.suffix }}
+        run: |
+          go -C tests/compatibility run . verify \
+            --candidate "$GITHUB_WORKSPACE/$COMPAT_BINARY" \
+            --report "$GITHUB_WORKSPACE/.context/compatibility/report.json"
+
+      - name: Upload compatibility observations
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: template-compatibility-${{ matrix.target }}
+          path: .context/compatibility/report.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Keep the three historical required-check names so branch protection does
+  # not need to change. Acceptance shards are checked per OS using job results,
+  # since needs.test.result aggregates every OS/shard. Template compatibility
+  # is also required: any unapproved difference blocks all three aliases.
   test-required:
     name: ${{ matrix.check }}
-    needs: [test, terraform-registry-cache]
+    needs: [test, terraform-registry-cache, template-compatibility]
     runs-on: ubuntu-24.04
     if: ${{ always() }}
     # `gh api .../actions/runs/.../jobs` (below) hits the REST API for this
@@ -1041,6 +1129,16 @@ jobs:
       matrix:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
+      - name: Require template compatibility
+        if: ${{ !cancelled() }}
+        env:
+          COMPAT_RESULT: ${{ needs.template-compatibility.result }}
+        run: |
+          if [ "$COMPAT_RESULT" != "success" ]; then
+            echo "Template compatibility has unapproved differences or could not be verified ($COMPAT_RESULT)."
+            exit 1
+          fi
+
       - name: Harden Runner
         uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
@@ -1125,7 +1223,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           # This job was skipped in the only sampled run (upstream test matrix
           # had a failed shard), so there's no observed egress data to build an
@@ -1173,6 +1271,12 @@ jobs:
           name: noticegen-coverage-linux
           path: ${{ github.workspace }}
 
+      - name: Download tools/gomodcheck coverage report artifact
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: gomodcheck-coverage-linux
+          path: ${{ github.workspace }}
+
       # Upload the standalone SDK and root-module coverage together. An early
       # SDK-only upload can leave a failing GitHub check behind when Codecov
       # publishes the later combined result as a separate commit status.
@@ -1205,7 +1309,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
-          files: coverage.out,magefiles-coverage.out,noticegen-coverage.out,sdk-coverage.out,plugins-coverage.out
+          files: coverage.out,magefiles-coverage.out,noticegen-coverage.out,gomodcheck-coverage.out,sdk-coverage.out,plugins-coverage.out
           disable_search: true
           # Codecov's uploader downloads its CLI and verifies the binary's GPG
           # signature. Transient Codecov-side issues (e.g. an empty public-key
@@ -1251,6 +1355,7 @@ jobs:
             github-archives
             github-releases
             trivy
+            docker-mirror
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1274,7 +1379,7 @@ jobs:
       # file -- evicting the PR from the queue for a result nobody consumes.
       # The same commit was already scanned on the PR run.
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: always() && github.event_name != 'merge_group'
         with:
           # Path to SARIF file relative to the root of the repository
@@ -1297,7 +1402,7 @@ jobs:
 
       - name: Upload Trivy config scan results
         if: always() && github.event_name != 'merge_group'
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config

@@ -332,6 +332,7 @@ Use `no-release` label for docs-only changes.
 ### PR Tools
 Check status: `gh pr checks {pr} --repo cloudposse/atmos`
 Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
+Unexplained git/GitHub failures: check https://www.githubstatus.com/ (per-service status and open incidents, not just the headline) before retrying or changing anything.
 
 ### Documentation Requirements (MANDATORY)
 - All new commands/flags/parameters MUST have Docusaurus documentation

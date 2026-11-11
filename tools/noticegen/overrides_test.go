@@ -101,3 +101,18 @@ func TestApplyOverridesResolvesPackageLicenseFromParentModule(t *testing.T) {
 		})
 	}
 }
+
+// A version whose upstream tag was deleted resolves to the commit the module
+// proxy recorded, so its license URL still works; any other version of the
+// same module falls back to the tag.
+func TestApplyOverridesUsesPinnedCommitForDeletedTag(t *testing.T) {
+	entries := []LicenseEntry{
+		{Module: "github.com/hashicorp/consul/api/v2", URL: "unknown", License: "MPL-2.0"},
+	}
+	applyOverrides(entries, func(string) (string, error) { return "v2.0.0", nil })
+	assert.Equal(t, "https://github.com/hashicorp/consul/blob/782793ebb720f9798e49b125351fba1cd89406b4/api/LICENSE", entries[0].URL)
+
+	entries[0].URL = "unknown"
+	applyOverrides(entries, func(string) (string, error) { return "v2.1.0", nil })
+	assert.Equal(t, "https://github.com/hashicorp/consul/blob/api/v2.1.0/api/LICENSE", entries[0].URL)
+}

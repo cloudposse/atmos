@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -135,6 +136,46 @@ func fetchToken(ctx context.Context, requestURL, requestToken string) (string, e
 // decodeClaims extracts the claims from a JWT payload (the middle segment). The token is GitHub's
 // own, read here only to learn the current runtime context, so the signature is not verified.
 func decodeClaims(jwt string) (*Claims, error) {
+	payload, err := decodePayload(jwt)
+	if err != nil {
+		return nil, err
+	}
+	var c Claims
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return nil, fmt.Errorf(errFmtWrap, ErrTokenDecode, err)
+	}
+	return &c, nil
+}
+
+// ExpiresAt returns the expiry time from a JWT's "exp" claim. The signature is not verified: the
+// result only decides whether a token minted earlier in this process is still worth reusing. It
+// returns ErrTokenDecode when the token is malformed, has no positive "exp" claim, or has an "exp"
+// too large to represent as a time.
+func ExpiresAt(jwt string) (time.Time, error) {
+	payload, err := decodePayload(jwt)
+	if err != nil {
+		return time.Time{}, err
+	}
+	// RFC 7519 makes exp a NumericDate, which may carry a fractional part.
+	var c struct {
+		Exp float64 `json:"exp"`
+	}
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return time.Time{}, fmt.Errorf(errFmtWrap, ErrTokenDecode, err)
+	}
+	if c.Exp <= 0 {
+		return time.Time{}, fmt.Errorf("%w: missing exp claim", ErrTokenDecode)
+	}
+	// float64(math.MaxInt64) rounds up to 2^63, so this rejects exactly the values int64 cannot hold.
+	if c.Exp >= math.MaxInt64 {
+		return time.Time{}, fmt.Errorf("%w: exp claim out of range", ErrTokenDecode)
+	}
+	sec, frac := math.Modf(c.Exp)
+	return time.Unix(int64(sec), int64(frac*float64(time.Second))), nil
+}
+
+// decodePayload returns the decoded payload (middle segment) of a JWT.
+func decodePayload(jwt string) ([]byte, error) {
 	parts := strings.Split(jwt, ".")
 	if len(parts) != 3 {
 		return nil, fmt.Errorf("%w: malformed JWT", ErrTokenDecode)
@@ -143,11 +184,7 @@ func decodeClaims(jwt string) (*Claims, error) {
 	if err != nil {
 		return nil, fmt.Errorf(errFmtWrap, ErrTokenDecode, err)
 	}
-	var c Claims
-	if err := json.Unmarshal(payload, &c); err != nil {
-		return nil, fmt.Errorf(errFmtWrap, ErrTokenDecode, err)
-	}
-	return &c, nil
+	return payload, nil
 }
 
 // getenv reads a GitHub Actions runtime environment variable.

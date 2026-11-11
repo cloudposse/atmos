@@ -40,12 +40,17 @@ func (m *environmentMaterializer) Apply(ctx context.Context, params *types.PostA
 	clone := *credentials
 	clone.Data = maps.Clone(credentials.Data)
 	clone.SensitiveKeys = append([]string(nil), credentials.SensitiveKeys...)
-	for _, value := range clone.Data {
+	environment := make(map[string]string, len(clone.Data))
+	for name, value := range clone.Data {
 		text, ok := value.(string)
 		if !ok {
 			return errUtils.ErrPluginProtocol
 		}
 		atmosio.RegisterSecret(text)
+		environment[name] = text
+	}
+	if params.AuthContext != nil {
+		params.AuthContext.Environment = maps.Clone(environment)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

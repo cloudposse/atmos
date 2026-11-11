@@ -7,6 +7,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -261,6 +262,12 @@ func prepareShellExecution(atmosConfig *schema.AtmosConfiguration, info *schema.
 
 	varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
 	if err := u.WriteToFileAsJSON(varFilePath, diskSafeVars(info), filePermissions); err != nil {
+		return err
+	}
+
+	// Inject Atmos Auth credentials (AWS_PROFILE, AWS_SHARED_CREDENTIALS_FILE, etc.) into
+	// ComponentEnvSection, as plan/apply do, so init, workspace, and the shell are authenticated.
+	if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
 		return err
 	}
 

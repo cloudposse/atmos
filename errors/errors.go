@@ -105,6 +105,7 @@ var (
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
+	ErrTemplateConversion                    = errors.New("template value conversion failed")
 	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
 	ErrComponentDependencyMissingComponent   = schemaPkg.ErrComponentDependencyMissingComponent
 	ErrInvalidCastPlayback                   = errors.New("invalid cast playback group")
@@ -250,6 +251,7 @@ var (
 
 	ErrLabelNotFound                    = errors.New("component label not found")
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
+	ErrYamlFuncTemplateEmbedding        = errors.New("a YAML function value cannot be used in this template expression")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
 	ErrComponentFuncDuringManifestLoad  = errors.New("atmos.Component cannot be evaluated while stack manifests are being loaded")
 	ErrDeferredTemplateContextMissing   = errors.New("cannot resolve deferred !template value: template context is unavailable because template processing was disabled for this invocation")
@@ -1074,9 +1076,13 @@ var (
 	ErrGenerateTerraformDocs = errors.New("failed to generate terraform docs")
 	ErrMergeInputYAMLs       = errors.New("failed to merge input YAMLs")
 	ErrRenderTemplate        = errors.New("failed to render template with datasources")
-	ErrResolveOutputPath     = errors.New("failed to resolve output path")
-	ErrWriteOutput           = errors.New("failed to write output")
-	ErrCollectKeysNotMap     = errors.New("collectKeys: argument is not a map")
+	// ErrGomplateDatasourceUnavailable is returned when a gomplate datasource is read outside a
+	// template render, or while gomplate functions are disabled, so no datasource registry exists.
+	ErrGomplateDatasourceUnavailable = errors.New("gomplate datasource functions are unavailable: gomplate is disabled or no template render is in progress")
+	ErrInvalidDatasourceURL          = errors.New("invalid gomplate datasource URL")
+	ErrResolveOutputPath             = errors.New("failed to resolve output path")
+	ErrWriteOutput                   = errors.New("failed to write output")
+	ErrCollectKeysNotMap             = errors.New("collectKeys: argument is not a map")
 
 	// Import-related errors.
 	ErrBasePath             = errors.New("base path required to process imports")
@@ -1136,6 +1142,11 @@ var (
 	ErrSayNotFound                  = errors.New("text-to-speech command not found")
 	ErrVoiceListUnsupported         = errors.New("voice enumeration not supported for backend")
 	ErrUserAborted                  = errors.New("user aborted")
+
+	// GitHub OIDC provider errors.
+	// ErrGitHubOIDCEndpointUnavailable marks a token request that failed in a way worth retrying:
+	// a timeout or other transport error, HTTP 429, or HTTP 5xx.
+	ErrGitHubOIDCEndpointUnavailable = errors.New("GitHub OIDC token endpoint unavailable")
 
 	// AWS credential_process errors (consuming and producing the AWS process-credential format).
 	ErrCredentialProcessFailed        = errors.New("credential_process command failed")
@@ -1547,6 +1558,7 @@ var (
 	ErrCIStatusContextIncomplete  = errors.New("status context requires all parts to be non-empty")
 	ErrCIStatusFetchFailed        = errors.New("failed to fetch CI status")
 	ErrCILabelsFetchFailed        = errors.New("failed to fetch CI review labels")
+	ErrCIMergedPRLookupFailed     = errors.New("failed to look up the pull request merged as this commit")
 	ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed       = errors.New("failed to write CI summary")
 	ErrCIAnnotationFailed         = errors.New("failed to emit CI annotations")

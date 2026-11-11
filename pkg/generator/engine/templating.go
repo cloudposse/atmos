@@ -8,15 +8,14 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
-	data "github.com/cloudposse/atmos/pkg/template/gomplate"
+	"github.com/cloudposse/atmos/pkg/template/compatibility"
+	"github.com/cloudposse/atmos/pkg/template/render"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -229,22 +228,22 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 // collectKeys overrides both, registered under its own name so it doesn't
 // shadow Sprig's "keys".
 func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
-	d := data.Data{}
 	ctx := context.TODO()
 
 	funcs := template.FuncMap{}
 
 	// Add gomplate functions (base layer).
-	gomplateFuncs := data.CreateFuncs(ctx, &d)
-	for k, v := range gomplateFuncs {
+	for k, v := range render.GomplateFuncs(ctx, nil) {
 		funcs[k] = v
 	}
 
 	// Add sprig functions (overrides gomplate on collisions).
-	sprigFuncs := sprig.FuncMap()
-	for k, v := range sprigFuncs {
+	for k, v := range render.SprigFuncMap() {
 		funcs[k] = v
 	}
+
+	// Keep gomplate v3 names that v5 removed working, with a deprecation warning.
+	compatibility.ApplyShims(funcs, "scaffold template")
 
 	// Add Atmos's own custom functions (highest priority, overrides both).
 	for k, v := range templatefuncs.FuncMap() {
