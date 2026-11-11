@@ -34,11 +34,31 @@ func (s *Store) List(ctx context.Context, opts blob.ListOptions) (*blob.ListPage
 	if err := validatePrefix(opts.Prefix); err != nil {
 		return nil, err
 	}
-	entries, err := s.walk(ctx, opts.Prefix)
-	if err != nil {
-		return nil, blob.NewError(blob.KindOther, blob.OpList, opts.Prefix, err)
+	var entries []entry
+	var snapshotID string
+	if id, last, ok := parseSnapshotCursor(opts.Cursor); ok {
+		opts.Cursor = last
+		snapshotID = id
+		entries = s.lookupSnapshot(id, opts)
 	}
-	return paginate(entries, opts), nil
+	if entries == nil {
+		var err error
+		entries, err = s.walk(ctx, opts.Prefix)
+		if err != nil {
+			return nil, blob.NewError(blob.KindOther, blob.OpList, opts.Prefix, err)
+		}
+		snapshotID = ""
+	}
+	page := paginate(entries, opts)
+	if page.NextCursor != "" {
+		if snapshotID == "" {
+			snapshotID = s.rememberSnapshot(entries, opts)
+		}
+		if snapshotID != "" {
+			page.NextCursor = snapshotCursor(snapshotID, page.NextCursor)
+		}
+	}
+	return page, nil
 }
 
 // walk returns every object whose key starts with prefix, sorted by key.
