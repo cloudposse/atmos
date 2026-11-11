@@ -40,6 +40,42 @@ func logsCommand(t *testing.T, args ...string) *cobra.Command {
 	return cmd
 }
 
+func TestLogsConfigFromArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		env       map[string]string
+		args      []string
+		wantLevel string
+		wantFile  string
+	}{
+		{name: "defaults", wantLevel: "Warning", wantFile: "/dev/stderr"},
+		{name: "environment", env: map[string]string{"ATMOS_LOGS_LEVEL": "Trace"}, wantLevel: "Trace", wantFile: "/dev/stderr"},
+		{name: "verbose environment", env: map[string]string{"ATMOS_VERBOSE": "true"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
+		// The level flag is honored even though the argv also carries a command name, a
+		// positional arg, and unknown subcommand flags — these must be ignored, not error.
+		{name: "level flag amid command and unknown flags", args: []string{"version", "--logs-level=Debug", "--stack", "ue2-prod", "pos"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
+		{name: "level flag space-separated", args: []string{"terraform", "plan", "--logs-level", "Trace"}, wantLevel: "Trace", wantFile: "/dev/stderr"},
+		{name: "flag beats environment", env: map[string]string{"ATMOS_LOGS_LEVEL": "Trace"}, args: []string{"version", "--logs-level=Off"}, wantLevel: "Off", wantFile: "/dev/stderr"},
+		{name: "verbose shorthand", args: []string{"-v", "version"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
+		{name: "file flag", args: []string{"version", "--logs-file=/dev/stdout"}, wantLevel: "Warning", wantFile: "/dev/stdout"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, key := range []string{"ATMOS_LOGS_LEVEL", "ATMOS_LOGS_FILE", "ATMOS_VERBOSE"} {
+				t.Setenv(key, "")
+			}
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			logs := LogsConfigFromArgs(tt.args)
+
+			assert.Equal(t, tt.wantLevel, logs.Level)
+			assert.Equal(t, tt.wantFile, logs.File)
+		})
+	}
+}
+
 func TestLogsConfigFromCommand(t *testing.T) {
 	tests := []struct {
 		name      string

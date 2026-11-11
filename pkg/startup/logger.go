@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -90,6 +91,36 @@ func LogsConfigFromCommand(cmd *cobra.Command) schema.Logs {
 		logs.Level = debugLogsLevel
 	}
 	return logs
+}
+
+// LogsConfigFromArgs builds the minimal logs configuration from raw CLI args and the
+// ATMOS_LOGS_* / ATMOS_VERBOSE environment variables, without a parsed cobra.Command.
+//
+// It exists for the startup path that runs BEFORE Cobra parses flags: when configuration
+// loading fails, the logger must still honor an explicitly requested level (via --logs-level,
+// --verbose/-v, or ATMOS_LOGS_LEVEL/ATMOS_VERBOSE) instead of silently falling back to Warning,
+// otherwise a legitimately requested Debug/Trace diagnostic is filtered out. Unknown flags
+// (subcommand flags, the command name, positional args) are ignored so an arbitrary argv parses
+// cleanly. Precedence matches LogsConfigFromCommand, which this delegates to.
+func LogsConfigFromArgs(args []string) schema.Logs {
+	defer perf.Track(nil, "startup.LogsConfigFromArgs")()
+
+	fs := pflag.NewFlagSet("atmos-logs", pflag.ContinueOnError)
+	fs.ParseErrorsAllowlist.UnknownFlags = true
+	fs.SetOutput(io.Discard)
+	fs.String(logsLevelFlagName, defaultLogsLevel, "")
+	fs.String(logsFileFlagName, defaultLogsFile, "")
+	fs.BoolP(verboseFlagName, "v", false, "")
+	// Parse errors other than unknown flags are deliberately ignored: this is a best-effort
+	// early scan, and malformed flags are reported properly once Cobra parses them.
+	_ = fs.Parse(args)
+
+	// Reuse LogsConfigFromCommand's env+flag precedence by wrapping the pre-parsed flag set in a
+	// throwaway command. AddFlagSet preserves each flag's Changed state, so "was it explicitly
+	// set" is honored exactly as if Cobra had parsed it.
+	cmd := &cobra.Command{}
+	cmd.Flags().AddFlagSet(fs)
+	return LogsConfigFromCommand(cmd)
 }
 
 // ConfigureLogger applies --logs-level, --logs-file, and their ATMOS_LOGS_* variables without reading

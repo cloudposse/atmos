@@ -31,17 +31,40 @@ func captureTelemetryLogsAtLevel(t *testing.T, level log.Level, fn func()) strin
 	return logs.String()
 }
 
+// missingProfileName is the nonexistent profile the tests request so config loading fails with
+// ErrProfileNotFound. It is distinctive enough to appear verbatim in diagnostics.
+const missingProfileName = "this-profile-does-not-exist"
+
 // chdirToProfileLessDirWithProfileSet points ATMOS_PROFILE at a profile that does not exist
 // and changes into an empty directory, reproducing the real-world scenario where a user has
 // ATMOS_PROFILE exported in their shell but runs Atmos from a directory with no such profile.
 // In that state cfg.InitCliConfig fails with ErrProfileNotFound.
+//
+// It also neutralizes every other configuration source that could make InitCliConfig fail BEFORE
+// profile resolution (an invalid home/XDG config or an ATMOS_CONFIG* / ATMOS_BASE_PATH pointing at
+// bad config). Isolating them guarantees the failure under test is specifically "profile not found"
+// and not an unrelated config error that would make these tests pass for the wrong reason.
 func chdirToProfileLessDirWithProfileSet(t *testing.T) {
 	t.Helper()
 	isolateTelemetryCache(t)
+
+	// Point HOME and XDG config discovery at empty temp dirs so no user-level atmos.yaml is found.
+	empty := t.TempDir()
+	t.Setenv("HOME", empty)
+	t.Setenv("XDG_CONFIG_HOME", empty)
+	t.Setenv("XDG_CONFIG_DIRS", empty)
+
+	// Clear any inherited explicit config selection so nothing but defaults + the missing profile
+	// can contribute (empty string reads as "unset" everywhere these are consumed).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_CONFIG", "")
+	t.Setenv("ATMOS_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
 	// Empty working directory: no atmos.yaml, no profiles/ anywhere to resolve against.
 	t.Chdir(t.TempDir())
 	// A profile name that cannot be found in the empty directory.
-	t.Setenv("ATMOS_PROFILE", "this-profile-does-not-exist")
+	t.Setenv("ATMOS_PROFILE", missingProfileName)
 }
 
 // TestGetTelemetryFromConfig_ProfileNotFoundDoesNotWarn reproduces the bug from
@@ -76,6 +99,8 @@ func TestGetTelemetryFromConfig_ProfileNotFoundLogsAtDebug(t *testing.T) {
 	require.Nil(t, result, "telemetry should degrade to nil when config cannot be loaded")
 	assert.Contains(t, logs, "Could not load config",
 		"the config-load failure should still be logged at DEBUG for diagnostics")
+	assert.Contains(t, logs, "profile not found",
+		"the failure under test must be the missing profile, not an unrelated config error")
 }
 
 // TestAtmosProWorkspaceID_ProfileNotFoundDoesNotWarn covers the second config-load site used by
@@ -107,6 +132,8 @@ func TestAtmosProWorkspaceID_ProfileNotFoundLogsAtDebug(t *testing.T) {
 	assert.Empty(t, id, "workspace ID should be empty when config cannot be loaded")
 	assert.Contains(t, logs, "Could not load config",
 		"the config-load failure should still be logged at DEBUG for diagnostics")
+	assert.Contains(t, logs, "profile not found",
+		"the failure under test must be the missing profile, not an unrelated config error")
 }
 
 // TestCaptureCmd_PublicAPIDisabledTelemetry exercises the public CaptureCmd entry point with

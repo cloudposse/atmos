@@ -10,7 +10,7 @@ does not exist in the current directory printed a confusing, user-facing warning
 ```
 👽 Atmos 1.234.1 on darwin/arm64
 
- WARN  Could not load config error="profile not found"
+WARN  Could not load config error="profile not found"
 ```
 
 The warning came from the telemetry subsystem, which loads configuration independently and
@@ -59,6 +59,13 @@ ATMOS_PROFILE=nonexistent atmos version
   (`getTelemetryFromConfig` and `atmosProWorkspaceID`) now log at `log.Debug` instead of
   `log.Warn`, with a comment explaining the best-effort, degrade-quietly rationale. The diagnostic
   is preserved at `DEBUG` for troubleshooting.
+- `cmd/root.go` + `pkg/startup/logger.go`: when configuration fails to load, the startup logger
+  fallback previously hardcoded `Warning`, discarding an explicitly requested level. That dropped
+  the `DEBUG` diagnostic above even when the user asked for it (for example
+  `ATMOS_PROFILE=missing atmos version --logs-level=Debug`). `configForStartupLogger` now derives
+  the level from a new `startup.LogsConfigFromArgs(os.Args[1:])`, which honors
+  `--logs-level`/`--verbose`/`-v` and `ATMOS_LOGS_LEVEL`/`ATMOS_VERBOSE` (ignoring the command name
+  and unknown subcommand flags) and still defaults to `Warning` when nothing is set.
 - `pkg/telemetry/config_load_warning_test.go` (new): reproduces the scenario (missing
   `ATMOS_PROFILE` resolved from an empty working directory) and asserts that:
   - neither config-load site surfaces "Could not load config" at `WARN`;
@@ -66,6 +73,9 @@ ATMOS_PROFILE=nonexistent atmos version
   - telemetry degrades to `nil` / empty workspace ID;
   - the public `CaptureCmd` entry point runs end to end (both variadic forms) without a
     user-facing warning when telemetry is disabled.
+- `pkg/startup/logger_test.go` (new `TestLogsConfigFromArgs`) and `cmd/root_helpers_test.go`
+  (extended `TestConfigForStartupLogger`): cover that an explicit level survives the config-error
+  fallback while the default stays `Warning`, including unknown-flag / positional-arg robustness.
 
 ## Why not suppress the warning only for `version`
 
