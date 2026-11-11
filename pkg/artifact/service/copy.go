@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -206,7 +208,11 @@ func (s *Service) stageCopy(ctx context.Context, op *operation, plan *copyPlan) 
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: create copy staging: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
-	cleanup := func() { _ = os.RemoveAll(tree) }
+	cleanup := func() {
+		if err := removeStagedTree(tree); err != nil {
+			op.warn("staging-cleanup-failed", fmt.Sprintf("remove copy staging %q: %v", tree, err))
+		}
+	}
 	files := filepath.Join(tree, "files")
 	if err := materialize.Materialize(ctx, content, files); err != nil {
 		cleanup()
@@ -353,4 +359,27 @@ func missingEvidence(ctx context.Context, repo artifact.Repository, pinned *arti
 		}
 	}
 	return missing
+}
+
+// removeStagedTree restores owner access as it walks directories, without following symlinks.
+func removeStagedTree(tree string) error {
+	root, err := os.OpenRoot(tree)
+	if err != nil {
+		return err
+	}
+	walkErr := fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			return root.Chmod(path, info.Mode().Perm()|0o700)
+		}
+		return nil
+	})
+	closeErr := root.Close()
+	return errors.Join(walkErr, closeErr, os.RemoveAll(tree))
 }

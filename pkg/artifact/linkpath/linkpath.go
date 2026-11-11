@@ -34,10 +34,10 @@ func Resolve(target string) (string, bool) {
 	for len(w.pending) > 0 {
 		done, ok := w.step()
 		if done {
-			return w.resolved, ok
+			return filepath.Join(append([]string{w.resolved}, w.missing...)...), ok
 		}
 	}
-	return w.resolved, true
+	return filepath.Join(append([]string{w.resolved}, w.missing...)...), true
 }
 
 // walker resolves a path one component at a time.
@@ -51,6 +51,9 @@ type walker struct {
 	// pending holds the components still to resolve.
 	pending []string
 
+	// missing holds the lexical tail below the first missing component.
+	missing []string
+
 	// hops counts the symlinks followed.
 	hops int
 }
@@ -59,6 +62,16 @@ type walker struct {
 func (w *walker) step() (done, ok bool) {
 	component := w.pending[0]
 	w.pending = w.pending[1:]
+	if len(w.missing) > 0 {
+		switch component {
+		case ".":
+		case "..":
+			w.missing = w.missing[:len(w.missing)-1]
+		default:
+			w.missing = append(w.missing, component)
+		}
+		return false, true
+	}
 	if component == "." || component == ".." {
 		w.resolved = stepDot(w.resolved, component)
 		return false, true
@@ -66,9 +79,8 @@ func (w *walker) step() (done, ok bool) {
 	next := filepath.Join(w.resolved, component)
 	info, err := os.Lstat(next)
 	if errors.Is(err, fs.ErrNotExist) {
-		// Nothing below a missing component can be a symlink, so the rest is lexical.
-		w.resolved = filepath.Join(append([]string{next}, w.pending...)...)
-		return true, true
+		w.missing = append(w.missing, component)
+		return false, true
 	}
 	if err != nil {
 		return true, false

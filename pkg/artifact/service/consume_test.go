@@ -2,9 +2,12 @@ package service_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -313,6 +316,28 @@ func TestList_OnlyFailingRepositoriesFailTheListing(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability, "when no repository can answer, the listing fails")
 }
 
+type listGate struct {
+	inflight atomic.Int32
+	peak     atomic.Int32
+	entered  chan struct{}
+	release  chan struct{}
+}
+
+type gatedListRepository struct {
+	artifact.Repository
+	gate *listGate
+}
+
+func (r *gatedListRepository) List(ctx context.Context, query artifact.ListQuery) (*artifact.ListPage, error) {
+	current := r.gate.inflight.Add(1)
+	defer r.gate.inflight.Add(-1)
+	for old := r.gate.peak.Load(); current > old && !r.gate.peak.CompareAndSwap(old, current); old = r.gate.peak.Load() {
+	}
+	r.gate.entered <- struct{}{}
+	<-r.gate.release
+	return r.Repository.List(ctx, query)
+}
+
 func TestList_ConcurrencyIsInjectable(t *testing.T) {
 	e := newEnv(t, envConfig{
 		repos:   map[string]artifacttest.Options{"a": {}, "b": {}, "c": {}},
@@ -321,9 +346,31 @@ func TestList_ConcurrencyIsInjectable(t *testing.T) {
 	for _, alias := range []string{"a", "b", "c"} {
 		seedList(t, e, alias, map[string]string{"app/x:1": alias}, nil)
 	}
-	result, err := e.svc.List(context.Background(), artifact.ListRequest{})
-	require.NoError(t, err)
-	assert.Len(t, result.Artifacts, 3)
+	gate := &listGate{entered: make(chan struct{}, 3), release: make(chan struct{})}
+	for _, alias := range []string{"a", "b", "c"} {
+		e.static.Repositories[alias] = &gatedListRepository{Repository: e.repos[alias], gate: gate}
+	}
+	done := make(chan error, 1)
+	go func() {
+		result, err := e.svc.List(context.Background(), artifact.ListRequest{})
+		if err == nil && len(result.Artifacts) != 3 {
+			err = fmt.Errorf("got %d artifacts", len(result.Artifacts))
+		}
+		done <- err
+	}()
+	select {
+	case <-gate.entered:
+	case <-time.After(2 * time.Second):
+		close(gate.release)
+		t.Fatal("listing did not start")
+	}
+	select {
+	case <-gate.entered:
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(gate.release)
+	require.NoError(t, <-done)
+	assert.Equal(t, int32(1), gate.peak.Load())
 }
 
 // readHookRepository runs a hook right before every Read, as if another process touched the
