@@ -319,3 +319,34 @@ func TestPublish_UsesTheCallersLock(t *testing.T) {
 	assert.Len(t, lockObjects(spec.fake), 1, "the caller's lock is still held")
 	require.NoError(t, handle.Release(context.Background()))
 }
+
+func TestSettleClaimDoesNotRetryBehindForeignOwner(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	ctx := context.Background()
+	other, err := repo.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "other"})
+	require.NoError(t, err)
+	defer other.Release(ctx)
+	before := len(spec.fake.RequestsFor(s3test.OpPutObject))
+	handle, err := repo.settleClaim(ctx, layout.LockPath(lockResource), &claimDoc{Resource: lockResource, Owner: "original", Token: "original-token"})
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+	assert.Nil(t, handle)
+	assert.Len(t, spec.fake.RequestsFor(s3test.OpPutObject), before, "a foreign claim does not prove the original request has finished")
+}
+
+func TestFenceAdoptsOriginalClaimThatWonTheRace(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	ctx := context.Background()
+	key := layout.LockPath(lockResource)
+	doc := &claimDoc{SchemaVersion: layout.SchemaVersion, Resource: lockResource, Owner: "original", Token: "original-token"}
+	raw, err := json.Marshal(doc)
+	require.NoError(t, err)
+	_, err = repo.putConditional(ctx, key, raw, contentTypeJSON, blob.IfAbsent())
+	require.NoError(t, err)
+	handle, err := repo.fenceUnknownClaim(ctx, ctx, key, doc)
+	require.NoError(t, err)
+	require.NotNil(t, handle)
+	assert.Equal(t, doc.Token, handle.Token())
+	require.NoError(t, handle.Release(ctx))
+}
