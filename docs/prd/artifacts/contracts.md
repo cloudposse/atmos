@@ -306,8 +306,9 @@ Tests must distinguish archive-file mode from member mode and from filesystem AC
 
 ## Local/S3 record layout and publication lifecycle
 
-Below the configured root reserve `.atmos-artifacts/v1/` for managed records. Reject payload names
-and key patterns that enter this namespace. Use SHA-256 of canonical name/version for private
+Below the configured root reserve `.atmos-artifacts/v1/` for managed records. Reject payload paths
+and key patterns that overlap this namespace in either direction, including ancestors such as
+`.atmos-artifacts`. Use SHA-256 of canonical name/version for private
 reference keys so names containing slashes cannot collide with control paths.
 
 ```text
@@ -331,8 +332,9 @@ The operation journal records captured time, intent, expected prior reference, r
 and prepared representation checksums. It is an implementation recovery record, not a public catalog.
 Use local reference/location locks or S3 conditional ownership records. Reserve a location before
 overwriting it; another reference cannot claim it even when its key_pattern collides. Identical,
-ancestor, and descendant payload paths conflict: claims check and reserve overlapping locations
-atomically, so a force replacement or deletion of a parent cannot remove a child another reference owns.
+ancestor, and descendant locations conflict. Claims atomically reserve the payload and its sidecar
+paths together, rejecting payload-to-sidecar and sidecar-to-sidecar overlaps as well as payload
+overlaps. Thus a force replacement or deletion cannot remove another reference's payload or sidecars.
 
 Publication sequence:
 
