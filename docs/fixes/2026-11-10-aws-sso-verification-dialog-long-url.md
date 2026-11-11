@@ -25,11 +25,14 @@ never received that change.
 
 ## Changes
 
-- The SSO dialog shows the short `VerificationUri` from
-  `StartDeviceAuthorization` as its fallback, with an instruction to enter the
-  code shown in the box (the RFC 8628 device flow). The browser still opens the
-  complete `VerificationUriComplete`. The complete URL is shown only when AWS
-  returns no short URI, and then the rules below apply.
+- The SSO dialog prefers `VerificationUri` over `VerificationUriComplete` as
+  its fallback, with an instruction to enter the code shown in the box (the
+  RFC 8628 device flow). The browser still opens `VerificationUriComplete`.
+  This only shortens the fallback where AWS returns a short `VerificationUri`.
+  As of 2026-11-10, the `signin.aws` flow returns the same ~500-character URL
+  in both fields (checked against a `us-east-2` Identity Center instance), and
+  the legacy `device.sso.<region>.amazonaws.com` page no longer resolves, so
+  the rules below still apply there.
 - The SSO dialog now keeps a URL in the box only when it fits in 80 columns,
   using the same limit as the webflow dialog. The limit and the delivery of
   longer URLs are shared by both dialogs instead of being duplicated.
