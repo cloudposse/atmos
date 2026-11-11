@@ -110,7 +110,8 @@ func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schem
 		Component: info.ComponentFromArg, Stack: info.Stack, Binary: binary, Engine: info.Command,
 		Unit: unit, Root: atmosConfig.BasePathAbsolute, SubCommand: info.SubCommand, SubCommand2: info.SubCommand2,
 		Arguments: info.AdditionalArgsAndFlags, Options: info.ComponentProviderOptions[section], Features: features,
-		Environment: info.ComponentEnvList, DryRun: info.DryRun, SkipInit: info.SkipInit,
+		Environment: info.ComponentEnvList, DryRun: info.DryRun,
+		SkipInit: info.SkipInit || (info.SubCommand == "plan" && atmosConfig.Components.Terraform.EffectiveInitMode() == schema.TerraformInitModeNever),
 	}
 	err = terragruntexec.Run(ctx, &terragruntHost{executor: e, atmosConfig: atmosConfig, info: info, opts: opts, lookupErr: lookupErr}, request)
 	info.ExecMetadataRawExitCode = resolveExitCode(err)

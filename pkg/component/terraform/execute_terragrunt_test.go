@@ -115,6 +115,40 @@ func TestExecuteTerragruntUnitInvalidatesStateAfterFailure(t *testing.T) {
 	}
 }
 
+func TestExecuteTerragruntUnitHonorsInitModeForPlan(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		mode     schema.TerraformInitMode
+		command  string
+		explicit bool
+		skip     bool
+	}{
+		{name: "never", mode: schema.TerraformInitModeNever, skip: true},
+		{name: "auto", mode: schema.TerraformInitModeAuto},
+		{name: "always", mode: schema.TerraformInitModeAlways},
+		{name: "explicit skip", mode: schema.TerraformInitModeAuto, explicit: true, skip: true},
+		{name: "other command", mode: schema.TerraformInitModeNever, command: "apply"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			harness, info, _ := unitHarness(t)
+			harness.config.Components.Terraform.Init.Mode = tc.mode
+			info.SkipInit = tc.explicit
+			if tc.command != "" {
+				info.SubCommand = tc.command
+			}
+			probePath := info.ComponentEnvSection[testEnvToolchainProbe].(string)
+			require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun))
+			probes := readToolchainProbes(t, probePath)
+			require.Len(t, probes, 2)
+			if tc.skip {
+				require.Contains(t, probes[1].Arguments, "--no-auto-init")
+			} else {
+				require.NotContains(t, probes[1].Arguments, "--no-auto-init")
+			}
+		})
+	}
+}
+
 func TestResolveTerragruntPathUsesInvocationEnvironment(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture uses a Unix executable")
