@@ -13110,7 +13110,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Links selects how a URL too long for a dialog box (such as an AWS SSO\nsign-in link) is delivered: `auto` (default) uses a clickable OSC 8\nhyperlink when the terminal is known to support one and the raw URL\notherwise, `osc8` always uses the hyperlink, `clipboard` copies the URL to\nthe clipboard, and `raw` always prints the full URL."
+          "description": "Links selects how a URL the user opens by hand (such as an AWS sign-in\nlink too long for a dialog box) is delivered: `auto` (default) uses a\nclickable OSC 8 hyperlink when the terminal is known to support one and\nthe raw URL otherwise, `osc8` always uses the hyperlink, `clipboard`\ncopies the URL to the clipboard, and `raw` always prints the full URL.\nOverridden by ATMOS_TERMINAL_LINKS and --links. In `auto` mode,\nFORCE_HYPERLINK=1 or FORCE_HYPERLINK=0 overrides terminal detection."
         }
       },
       "type": "object"

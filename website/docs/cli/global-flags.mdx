@@ -363,13 +363,14 @@ These flags are available for every Atmos command:
 
     <dt>`--links`</dt>
     <dd>
-        Choose how a URL too long for a prompt's box, such as the AWS sign-in URL shown by `atmos auth login`, is delivered to the terminal.
+        Choose how a URL you open by hand, such as an AWS sign-in URL too long for the `atmos auth login` prompt's box or the console sign-in URL from `atmos auth console`, is delivered to the terminal.
         - `auto` (default): Show a short clickable link when the terminal is known to support one, otherwise print the full URL
         - `osc8`: Always show the short clickable link
         - `clipboard`: Copy the URL to the system clipboard
         - `raw`: Always print the full URL as plain text
         - Can also use the `ATMOS_TERMINAL_LINKS` environment variable or `settings.terminal.links` in `atmos.yaml`
         - **Precedence**: `--links` flag > `ATMOS_TERMINAL_LINKS` > `settings.terminal.links` > `auto`
+        - In `auto` mode, `FORCE_HYPERLINK=1` or `FORCE_HYPERLINK=0` overrides terminal detection
         - Example: `atmos auth login --links=raw`
         - See [Long URLs](/cli/configuration/settings/terminal#long-urls) for details
     </dd>

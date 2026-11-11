@@ -507,11 +507,13 @@ type Terminal struct {
 	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
 	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
 	Help               HelpSettings       `yaml:"help,omitempty" json:"help,omitempty" mapstructure:"help"`
-	// Links selects how a URL too long for a dialog box (such as an AWS SSO
-	// sign-in link) is delivered: `auto` (default) uses a clickable OSC 8
-	// hyperlink when the terminal is known to support one and the raw URL
-	// otherwise, `osc8` always uses the hyperlink, `clipboard` copies the URL to
-	// the clipboard, and `raw` always prints the full URL.
+	// Links selects how a URL the user opens by hand (such as an AWS sign-in
+	// link too long for a dialog box) is delivered: `auto` (default) uses a
+	// clickable OSC 8 hyperlink when the terminal is known to support one and
+	// the raw URL otherwise, `osc8` always uses the hyperlink, `clipboard`
+	// copies the URL to the clipboard, and `raw` always prints the full URL.
+	// Overridden by ATMOS_TERMINAL_LINKS and --links. In `auto` mode,
+	// FORCE_HYPERLINK=1 or FORCE_HYPERLINK=0 overrides terminal detection.
 	Links string `yaml:"links,omitempty" json:"links,omitempty" mapstructure:"links" jsonschema:"enum=,enum=auto,enum=osc8,enum=clipboard,enum=raw"`
 }
 

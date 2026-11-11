@@ -238,7 +238,20 @@ settings:
   </dd>
 </dl>
 
-Terminals offer no way to ask whether they support hyperlinks, so `auto` recognizes terminals by the environment variables they set. It currently recognizes iTerm2 (3.1+), VS Code (1.72+), WezTerm, Ghostty, kitty, Windows Terminal, VTE-based terminals such as GNOME Terminal (0.50+), Konsole (20.12+), and Orca. Anything else gets the full URL, including sessions inside `tmux` or `screen` and containers that do not pass those variables through. Set `links: osc8` there if your terminal does support hyperlinks. `auto` also honors the `FORCE_HYPERLINK` environment variable used by other command-line tools: `FORCE_HYPERLINK=1` turns the clickable link on and `FORCE_HYPERLINK=0` turns it off, whatever the terminal. An explicit `links` mode other than `auto` takes precedence over it.
+Terminals offer no way to ask whether they support hyperlinks, so `auto` recognizes terminals by the environment variables they set:
+
+- **iTerm2 (3.1+)** and **VS Code (1.72+)**: `TERM_PROGRAM` (`iTerm.app` or `vscode`) with `TERM_PROGRAM_VERSION`
+- **WezTerm**, **Ghostty**, and **Orca**: `TERM_PROGRAM` (`WezTerm`, `ghostty`, or `Orca`)
+- **Ghostty** and **kitty**: `TERM` (`xterm-ghostty` or `xterm-kitty`)
+- **kitty**: `KITTY_WINDOW_ID`
+- **Windows Terminal**: `WT_SESSION`
+- **VTE-based terminals such as GNOME Terminal (0.50+)**: `VTE_VERSION`
+- **Konsole (20.12+)**: `KONSOLE_VERSION`
+- **Orca**: `ORCA_PANE_KEY`
+
+Anything else gets the full URL, including `TERM=dumb`, sessions inside `tmux` or `screen` (detected by `TMUX` and `STY`), and containers that do not pass those variables through. Set `links: osc8` there if your terminal does support hyperlinks, or pass the variables into the container.
+
+`auto` also honors the `FORCE_HYPERLINK` environment variable used by other command-line tools: `FORCE_HYPERLINK=1` turns the clickable link on and `FORCE_HYPERLINK=0` turns it off, whatever the terminal, including inside `tmux`. An explicit `links` mode other than `auto` takes precedence over it.
 
 When output is not a terminal (piped, redirected, or in CI), Atmos always prints the full URL and never touches the clipboard, whatever this setting says.
 
