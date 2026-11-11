@@ -1946,9 +1946,6 @@
             },
             {
               "$ref": "#/$defs/yamlFunction"
-            },
-            {
-              "type": "string"
             }
           ],
           "description": "TrustedKeys are operator-managed public-key file paths. Relative paths resolve against the\nconfiguration file that declared them."

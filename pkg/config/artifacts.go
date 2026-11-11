@@ -53,6 +53,16 @@ func resolveArtifactsConfig(v *viper.Viper, atmosConfig *schema.AtmosConfigurati
 	origins := newArtifactOrigins()
 	declared := false
 	for _, source := range collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed()) {
+		var document yaml.Node
+		if err := yaml.Unmarshal([]byte(source.content), &document); err != nil {
+			return fmt.Errorf("%w: parse %s: %w", errUtils.ErrArtifactConfigInvalid, source.path, err)
+		}
+		if node := policyMappingValue(&document, artifactsSectionKey); node != nil && node.Tag == "!unset" {
+			merged = map[string]any{}
+			origins = newArtifactOrigins()
+			declared = true
+			continue
+		}
 		section, ok, err := artifactsSectionFromSource(source)
 		if err != nil {
 			return err

@@ -417,3 +417,17 @@ func TestLoadConfig_ArtifactsDescribeRoundTrip(t *testing.T) {
 	assert.Equal(t, expected, describedYAML.Artifacts)
 	assert.NotContains(t, string(jsonBytes), "PathOrigin")
 }
+
+func TestLoadConfig_ArtifactsSectionUnsetClearsPriorSources(t *testing.T) {
+	dir := artifactsTestDir(t, "import:\n  - ./base.yaml\nartifacts: !unset\n")
+	writeArtifactsFile(t, filepath.Join(dir, "base.yaml"), "artifacts:\n  repositories:\n    old:\n      kind: local/dir\n      options:\n        path: old\n")
+	cfg, err := loadArtifactsDir(t, dir)
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Artifacts.Repositories)
+}
+
+func TestPathInsideAnyRoot(t *testing.T) {
+	root := t.TempDir()
+	assert.True(t, pathInsideAnyRoot(filepath.Join(root, "nested", "file.yaml"), []string{root}))
+	assert.False(t, pathInsideAnyRoot(root+"-other/file.yaml", []string{root}))
+}
