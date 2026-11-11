@@ -48,6 +48,9 @@ func (s *Service) Build(ctx context.Context, request *BuildRequest) (*BuildResul
 	if err != nil {
 		return nil, err
 	}
+	if t.info.Discovery.Kind == artifact.RepositoryKindS3 {
+		return nil, invalid("catalog snapshots do not support S3 repository %q", request.Repository)
+	}
 	repo, err := s.repos.Open(ctx, request.Repository)
 	if err != nil {
 		return nil, err

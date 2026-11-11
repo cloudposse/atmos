@@ -30,7 +30,7 @@ const (
 // parameters; a scalar is the artifact step's search text. Both live in one YAML key because the
 // artifact step contract names its search text `query`, while the http step already owns the
 // mapping form.
-func decodeStepQuery(node *yaml.Node, params *map[string]string, search *string) error {
+func decodeStepQuery(node *yaml.Node, stepType string, params *map[string]string, search *string) error {
 	if node == nil {
 		return nil
 	}
@@ -40,6 +40,9 @@ func decodeStepQuery(node *yaml.Node, params *map[string]string, search *string)
 	if node.Kind == yaml.ScalarNode {
 		if node.Tag == "!!null" {
 			return nil
+		}
+		if stepType != TaskTypeArtifact || node.Tag != "!!str" {
+			return fmt.Errorf("%w: `query` must be a mapping (http) or a string (artifact search text)", ErrWorkflowControlStepInvalid)
 		}
 		*search = node.Value
 		return nil
@@ -58,7 +61,11 @@ func normalizeSearchQueryMap(m map[string]any) map[string]any {
 	if !ok {
 		return m
 	}
-	if value == nil || reflect.ValueOf(value).Kind() == reflect.Map {
+	if value == nil || reflect.ValueOf(value).Kind() == reflect.Map || m["type"] != TaskTypeArtifact {
+		return m
+	}
+	query, ok := value.(string)
+	if !ok {
 		return m
 	}
 	copied := make(map[string]any, len(m))
@@ -67,6 +74,6 @@ func normalizeSearchQueryMap(m map[string]any) map[string]any {
 			copied[key] = val
 		}
 	}
-	copied[taskMapKeySearchQuery] = fmt.Sprint(value)
+	copied[taskMapKeySearchQuery] = query
 	return copied
 }
