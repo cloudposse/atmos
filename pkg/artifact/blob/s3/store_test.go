@@ -3,7 +3,11 @@ package s3
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,4 +148,15 @@ func TestListDefaultsToServerPageSizeWhenNoLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, page.NextCursor)
 	assert.NotContains(t, fake.RequestsFor(s3test.OpListObjectsV2)[0].Query, "max-keys")
+}
+
+func TestInvalidSizeAndOverflowingRangeFailBeforeRequest(t *testing.T) {
+	fake := newFake(t)
+	s := newTestStore(t, fake)
+	_, err := s.Put(context.Background(), "k", strings.NewReader(""), blob.PutOptions{Size: -2})
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
+	_, err = s.Get(context.Background(), "k", blob.GetOptions{Offset: math.MaxInt64, Length: 2})
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
+	assert.Empty(t, fake.Requests())
+	assert.Equal(t, "bytes=9223372036854775807-9223372036854775807", aws.ToString(rangeHeader(blob.GetOptions{Offset: math.MaxInt64, Length: 1})))
 }

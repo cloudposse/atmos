@@ -110,6 +110,9 @@ func (c *conformance) attributes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, stat.Tags)
 	assert.Empty(t, stat.Metadata)
+	if caps.Metadata {
+		assert.NotEqual(t, "application/json", stat.ContentType)
+	}
 
 	tooMany := map[string]string{}
 	for _, key := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"} {

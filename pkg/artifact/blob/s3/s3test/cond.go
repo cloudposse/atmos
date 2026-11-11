@@ -43,11 +43,19 @@ func enforce(ifNoneMatch, ifMatch string, current *object) conditionResult {
 	switch {
 	case current == nil:
 		return conditionMissing
-	case ifMatch != "*" && !etagMatches(ifMatch, current.etag):
+	case ifMatch != "*" && !strongETagMatches(ifMatch, current.etag):
 		return conditionFailed
 	default:
 		return conditionOK
 	}
+}
+
+// strongETagMatches rejects weak validators for If-Match.
+func strongETagMatches(header, etag string) bool {
+	if strings.HasPrefix(strings.TrimSpace(header), "W/") || strings.HasPrefix(strings.TrimSpace(etag), "W/") {
+		return false
+	}
+	return etagMatches(header, etag)
 }
 
 // etagMatches compares ETags ignoring quotes and the weak prefix.

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -58,7 +59,7 @@ func TestTransportKeepsTheLegacyOnDiskLayout(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, want, sidecar, "the sidecar is byte-identical to the legacy encoding")
 	if info, statErr := os.Stat(filepath.Join(root, "dev", "vpc", "abc.tar")); statErr == nil && filepath.Separator == '/' {
-		assert.Equal(t, os.FileMode(0o644), info.Mode().Perm()&0o644)
+		assert.Equal(t, os.FileMode(0o644), info.Mode().Perm())
 	}
 }
 
@@ -175,4 +176,27 @@ func TestListSkipsOrphanSidecarsAndFiltersByQuery(t *testing.T) {
 	require.Len(t, prod, 1)
 	assert.Equal(t, int64(2), prod[0].Size)
 	assert.Equal(t, "prod", prod[0].Metadata.Stack)
+}
+
+func TestLegacyLiteralBackslashName(t *testing.T) {
+	if filepath.Separator == '\\' {
+		t.Skip("backslash is a path separator")
+	}
+	root := t.TempDir()
+	store := &Store{basePath: root}
+	ctx := context.Background()
+	name := `literal\name`
+	require.NoError(t, store.Upload(ctx, name, strings.NewReader("payload"), 7, nil))
+	assert.FileExists(t, filepath.Join(root, name))
+	reader, _, err := store.Download(ctx, name)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+	assert.Equal(t, "payload", string(data))
+	listed, err := store.List(ctx, artifact.Query{All: true})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	assert.Equal(t, name, listed[0].Name)
+	require.NoError(t, store.Delete(ctx, name))
 }

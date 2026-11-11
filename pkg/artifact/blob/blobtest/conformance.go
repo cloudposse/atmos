@@ -24,7 +24,6 @@ const (
 
 	sourceChunk    = 1024
 	maxRetries     = 500
-	counterBuffer  = 16
 	listPageSize   = 10
 	listPageGuard  = 100
 	listKeyCount   = 53

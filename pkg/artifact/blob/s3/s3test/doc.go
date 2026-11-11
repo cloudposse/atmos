@@ -6,7 +6,7 @@
 //   - Conditional PUT, multipart completion, and DELETE with If-None-Match and If-Match, answering
 //     412 on a lost race and 404 for If-Match on a missing key, plus endpoints that ignore the
 //     headers or answer 501.
-//   - ETags (MD5 for single puts, MD5-of-MD5s with a part count for multipart uploads).
+//   - ETags (truncated SHA-256 for single puts, and a digest with a part count for multipart uploads).
 //   - Multipart create, upload-part, complete, and abort, with tracking of open and aborted uploads
 //     and of concurrent part uploads.
 //   - Object tags (the x-amz-tagging header and GetObjectTagging) and user metadata.

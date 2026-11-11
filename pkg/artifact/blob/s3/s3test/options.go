@@ -62,7 +62,12 @@ func WithConditionalBehavior(behavior ConditionalBehavior) Option {
 func WithPageCap(n int) Option {
 	defer perf.Track(nil, "s3test.WithPageCap")()
 
-	return func(s *settings) { s.pageCap = n }
+	return func(s *settings) {
+		if n <= 0 {
+			panic("s3test: page cap must be positive")
+		}
+		s.pageCap = n
+	}
 }
 
 // WithMinPartSize rejects completion when a non-final part is smaller than n bytes, as S3 does

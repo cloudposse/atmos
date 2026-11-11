@@ -55,6 +55,9 @@ func (s *Store) planPut(ctx context.Context, key string, opts blob.PutOptions) (
 	if err := s.validateKey(key); err != nil {
 		return nil, err
 	}
+	if opts.Size < blob.UnknownSize {
+		return nil, blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: invalid size %d", errUtils.ErrBlobInvalid, opts.Size))
+	}
 	tags := blob.MergeTags(s.cfg.tags, opts.Tags)
 	if err := blob.ValidateTags(tags); err != nil {
 		return nil, err

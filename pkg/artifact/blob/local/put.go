@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -56,6 +57,9 @@ func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.P
 func (s *Store) validatePut(ctx context.Context, key string, opts blob.PutOptions) error {
 	if err := s.validate(blob.OpPut, key); err != nil {
 		return err
+	}
+	if opts.Size < blob.UnknownSize || opts.Size == math.MaxInt64 {
+		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: invalid or unverifiable size %d", errUtils.ErrBlobInvalid, opts.Size))
 	}
 	if err := blob.ValidateTags(opts.Tags); err != nil {
 		return err
@@ -109,6 +113,9 @@ func (s *Store) stageAttrs(pending *staged, target string, a attrs) error {
 
 // copyBody streams body into dst, enforcing a declared size and honoring cancellation.
 func copyBody(ctx context.Context, dst io.Writer, body io.Reader, size int64) (int64, error) {
+	if size == math.MaxInt64 {
+		return 0, fmt.Errorf("%w: size %d is unverifiable", errUtils.ErrBlobInvalid, size)
+	}
 	reader := io.Reader(&ctxReader{ctx: ctx, r: body})
 	if size >= 0 {
 		reader = io.LimitReader(reader, size+1)
