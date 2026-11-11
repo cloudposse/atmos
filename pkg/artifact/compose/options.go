@@ -63,7 +63,9 @@ func WithImmutabilityPolicy(policy service.ImmutabilityPolicy) Option {
 }
 
 // WithIdentityResolver replaces the lazy identity resolver handed to every backend. The default
-// resolves an Atmos auth identity into the credential type its cloud backend expects.
+// resolves an Atmos auth identity into the credential type its cloud backend expects. The default
+// OCI registry transport uses registry authentication instead and rejects an injected resolver for
+// identity-bound registries; use WithTransportFactory to implement a custom binding.
 func WithIdentityResolver(resolver artifact.IdentityResolver) Option {
 	defer perf.Track(nil, "compose.WithIdentityResolver")()
 
