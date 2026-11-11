@@ -1523,6 +1523,7 @@ jobs:
             github-archives
             github-releases
             github-content
+            github-containers
             sigstore
             terraform
             opentofu

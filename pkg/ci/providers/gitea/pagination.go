@@ -20,7 +20,7 @@ type listing[T any] struct {
 }
 
 // forEachPage walks a paginated Gitea listing, handing each page's previously unseen
-// items to visit. It stops on a short page or on a page with no unseen items (a server
+// items to visit. It stops on an empty page or on a page with no unseen items (a server
 // that ignores the page parameter repeats one page forever), and wraps the listing's limitErr when
 // the listing exceeds maxPages so a runaway listing fails instead of looping.
 func forEachPage[T any](ctx context.Context, p *Provider, l listing[T], visit func([]T) error) error {
@@ -47,7 +47,7 @@ func forEachPage[T any](ctx context.Context, p *Provider, l listing[T], visit fu
 		if err := visit(unseen); err != nil {
 			return err
 		}
-		if len(items) < pageSize || len(unseen) == 0 {
+		if len(unseen) == 0 {
 			return nil
 		}
 	}

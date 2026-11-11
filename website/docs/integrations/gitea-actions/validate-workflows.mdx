@@ -12,9 +12,9 @@ Catch mistakes in Gitea Actions workflows before running infrastructure commands
 
 ## Workflow
 
-`atmos ci validate` checks `.github/workflows` by default. Point it at `.gitea/workflows`:
+`atmos ci validate` checks `.github/workflows` by default. Add this step to an existing job to check `.gitea/workflows`:
 
-```yaml title=".gitea/workflows/validate.yml"
+```yaml title="Step in an existing Gitea Actions job"
 - name: Validate workflows
   run: atmos ci validate --workflow-path .gitea/workflows
 ```

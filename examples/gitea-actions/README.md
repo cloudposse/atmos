@@ -69,6 +69,7 @@ curl -X POST "$API/repos/atmos/infra/actions/variables/ATMOS_VERSION" \
 Push the project. The push to `main` runs `apply.yml`:
 
 ```shell
+HARNESS_DIR=$PWD
 cp -R repo /tmp/infra && cd /tmp/infra
 git init -b main && git add -A && git commit -m "Add infrastructure"
 git push http://atmos:atmos@localhost:3300/atmos/infra.git main
@@ -87,13 +88,14 @@ curl -X POST "$API/repos/atmos/infra/pulls" -H 'Content-Type: application/json' 
 ```
 
 Watch the runs at http://localhost:3300/atmos/infra/actions. The pull request gets
-`atmos/plan/prod/demo` and `atmos/deploy/dev/demo` commit statuses and an Atmos plan
-comment. `deploy-affected.yml` deploys only `dev`, the instance the change affects.
+`atmos/plan/prod/demo` and `atmos/plan/dev/demo` commit statuses and an Atmos plan
+comment. `deploy-affected.yml` plans only `dev`, the instance the change affects.
 Run `deploy-all.yml` from the Actions tab to deploy every instance.
 
 Tear it down:
 
 ```shell
+cd "$HARNESS_DIR"
 atmos gitea down
 ```
 
@@ -104,7 +106,7 @@ atmos gitea down
 | Workflow directory | `.github/workflows/` | `.gitea/workflows/` |
 | Checkout | `actions/checkout` | `atmos git clone --ci`: the Atmos image has no Node.js for JavaScript actions |
 | Token | `GITHUB_TOKEN` | `ATMOS_CI_GITEA_TOKEN` secret; Atmos never sends `GITHUB_TOKEN` to Gitea |
-| `permissions:` | `id-token`, `checks`, `statuses`, `pull-requests` | Omitted: Gitea has no OIDC tokens or Checks API |
+| `permissions:` | `id-token`, `checks`, `statuses`, `pull-requests` | Restrict the job token where supported; Atmos reports through commit statuses |
 | Checks | Check runs | Commit statuses |
 | Apply on merge | Verifies the plan reviewed in the pull request | Plans the merged commit fresh |
 

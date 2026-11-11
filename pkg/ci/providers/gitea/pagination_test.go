@@ -39,11 +39,23 @@ func TestForEachPage(t *testing.T) {
 		wantCount int
 	}{
 		{
-			name:      "short page ends listing",
+			name:      "short page followed by empty page ends listing",
 			page:      func(page int) []pagedItem { return pageOf(int64(page*pageSize), map[int]int{1: pageSize, 2: 3}[page]) },
-			wantPages: 2,
+			wantPages: 3,
 			wantIDs:   []int64{pageSize, 2*pageSize + 2},
 			wantCount: pageSize + 3,
+		},
+		{
+			name: "multiple server-capped pages",
+			page: func(page int) []pagedItem {
+				if page > 3 {
+					return nil
+				}
+				return pageOf(int64(page*10), 2)
+			},
+			wantPages: 4,
+			wantIDs:   []int64{10, 31},
+			wantCount: 6,
 		},
 		{
 			name:      "repeated page stops without revisiting",

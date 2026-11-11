@@ -43,7 +43,7 @@ func requireGiteaActionsRuntime(t *testing.T) {
 }
 
 // TestGiteaActionsE2E runs the recommended native CI workflows, adapted for Gitea,
-// on a real Gitea server and runner: apply on push, plan and deploy-affected on a
+// on a real Gitea server and runner: apply on push, plan and affected planning on a
 // pull request, and deploy-all on workflow_dispatch. It asserts the workflows pass
 // and that Atmos reported through the Gitea provider (commit statuses and a
 // marker-based pull request comment).
@@ -93,7 +93,7 @@ func TestGiteaActionsE2E(t *testing.T) {
 	require.Equal(t, "success", api.statuses(t, mainSHA)["atmos/deploy/prod/demo"].Status)
 
 	// Change only dev in a pull request: plan.yml plans prod and posts a comment;
-	// deploy-affected.yml deploys only the affected dev instance.
+	// deploy-affected.yml plans only the affected dev instance.
 	runGit(t, repo, "checkout", "-q", "-b", "change-dev")
 	devStack := filepath.Join(repo, "stacks", "deploy", "dev.yaml")
 	content, err := os.ReadFile(devStack)
@@ -112,8 +112,9 @@ func TestGiteaActionsE2E(t *testing.T) {
 
 	statuses := api.statuses(t, headSHA)
 	require.Equal(t, "success", statuses["atmos/plan/prod/demo"].Status, "plan should report a commit status")
-	require.Equal(t, "success", statuses["atmos/deploy/dev/demo"].Status, "the affected dev instance should deploy")
-	require.NotContains(t, statuses, "atmos/deploy/prod/demo", "the unaffected prod instance must not deploy")
+	require.Equal(t, "success", statuses["atmos/plan/dev/demo"].Status, "the affected dev instance should be planned")
+	require.NotContains(t, statuses, "atmos/deploy/dev/demo", "pull requests must not deploy the affected instance")
+	require.NotContains(t, statuses, "atmos/deploy/prod/demo", "pull requests must not deploy the unaffected instance")
 	requirePlanComment(t, api, pr.Number)
 
 	// Dispatch deploy-all on main: it deploys every instance.

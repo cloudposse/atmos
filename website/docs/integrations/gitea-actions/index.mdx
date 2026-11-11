@@ -32,7 +32,7 @@ Start with [Setup and Authentication](/integrations/gitea-actions/setup) to crea
   <dd>Atmos reads `ATMOS_CI_GITEA_TOKEN` (or `GITEA_TOKEN`) and never sends `GITHUB_TOKEN` to Gitea.</dd>
 
   <dt>Permissions</dt>
-  <dd>Omit `permissions:`. Gitea has no OIDC token issuance or Checks API, so Atmos reports through commit statuses.</dd>
+  <dd>On Gitea versions that support `permissions:`, grant the job token only the scopes each job needs (for example, `contents: read` for checkout); see [Gitea token permissions](https://docs.gitea.com/usage/actions/token-permissions/). Older versions may ignore this setting, so restrict access using the server and repository settings. These settings do not restrict a separate personal access token. Atmos reports through commit statuses.</dd>
 
   <dt>Apply after merge</dt>
   <dd>Gitea cannot map a merge commit back to its pull request, so a deploy plans the merged commit fresh instead of verifying the plan reviewed in the pull request.</dd>

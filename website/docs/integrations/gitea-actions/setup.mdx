@@ -42,11 +42,19 @@ jobs:
     container:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     steps:
-      - run: atmos git clone --ci
+      - name: Clone the repository
+        env:
+          GIT_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
+        run: atmos git clone --ci
       - run: atmos terraform plan vpc -s prod
         env:
           ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}
 ```
+
+The clone step supplies the Gitea job token to Git through a process-scoped credential helper; it is not stored in the clone URL or Git configuration. Grant the job token repository read access. Public repositories can also be cloned without credentials. For older Gitea versions without a suitable job token, use a read-only repository token secret instead.
 
 ## Token
 

@@ -1,4 +1,4 @@
-name: Deploy Affected
+name: Plan Affected
 on:
   pull_request:
 
@@ -12,12 +12,14 @@ jobs:
       count: ${{ steps.affected.outputs.count }}
     steps:
       # A full clone (the default) gives describe affected the base commit.
-      - run: atmos git clone --ci
+      - run: |
+          atmos git clone --ci
+          git checkout --detach "$GITHUB_SHA"
 
       - id: affected
         run: atmos describe affected --format=matrix
 
-  deploy:
+  plan:
     needs: affected
     if: ${{ needs.affected.outputs.count != '0' }}
     runs-on: ubuntu-latest
@@ -27,10 +29,12 @@ jobs:
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
       fail-fast: false
     steps:
-      - run: atmos git clone --ci
+      - run: |
+          atmos git clone --ci
+          git checkout --detach "$GITHUB_SHA"
 
       - env:
           COMPONENT: ${{ matrix.component }}
           STACK: ${{ matrix.stack }}
           ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}
-        run: atmos terraform deploy "$COMPONENT" -s "$STACK"
+        run: atmos terraform plan "$COMPONENT" -s "$STACK"
