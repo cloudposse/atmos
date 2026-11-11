@@ -127,7 +127,15 @@ func TestMaterialize_ReplacesWithoutMergingAndStaysInsideDestination(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, materialize.DestinationDiffers, state)
 
-	require.NoError(t, materialize.Materialize(context.Background(), contentOf(t, p), out))
+	err = materialize.Materialize(context.Background(), contentOf(t, p), out)
+	if runtime.GOOS == "windows" {
+		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+		_, statErr := os.Stat(filepath.Join(out, "stale.txt"))
+		require.NoError(t, statErr, "unsupported replacement preserves the existing destination")
+		assertNoScratch(t, out)
+		return
+	}
+	require.NoError(t, err)
 	items, err := os.ReadDir(out)
 	require.NoError(t, err)
 	require.Len(t, items, 1, "no stale file is merged with the new tree")
@@ -140,6 +148,25 @@ func TestMaterialize_ReplacesWithoutMergingAndStaysInsideDestination(t *testing.
 	_, err = os.Stat(filepath.Join(root, "sibling.txt"))
 	require.NoError(t, err)
 	_ = linkOK
+}
+
+func TestMaterialize_ReplacesRestrictiveDestination(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("atomic directory replacement is unavailable on Windows")
+	}
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "new.txt", "new", 0o644)
+	p := prepared(t, src, artifact.PackagingTgz)
+	out := dest(t)
+	fixtures.WriteFile(t, out, "blocked/old.txt", "old", 0o600)
+	restricted := filepath.Join(out, "blocked")
+	require.NoError(t, os.Chmod(restricted, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(restricted, 0o700) })
+	require.NoError(t, materialize.Materialize(context.Background(), contentOf(t, p), out))
+	data, err := os.ReadFile(filepath.Join(out, "new.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "new", string(data))
+	assertNoScratch(t, out)
 }
 
 func TestInspectDestination_States(t *testing.T) {
@@ -536,6 +563,9 @@ func TestMaterialize_ReplaceGuard(t *testing.T) {
 			err := materialize.Materialize(context.Background(), contentOf(t, p), out, materialize.WithReplaceGuard(tt.guard))
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
+			} else if runtime.GOOS == "windows" {
+				require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+				tt.wantStale = true
 			} else {
 				require.NoError(t, err)
 			}
