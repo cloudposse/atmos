@@ -197,14 +197,37 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	return &configurationPlan{WorkingDigest: workingDigest, Version: 1, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), Prepared: execCtx.preparedConfiguration}, nil
 }
 
+// validatePlanOutputFlags rejects ambiguous plan destinations before hooks or Terraform run.
+func validatePlanOutputFlags(command string, args []string) error {
+	if command != "plan" {
+		return nil
+	}
+	count := 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-out" || arg == "--out" {
+			count++
+			i++
+		} else if strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=") {
+			count++
+		}
+		if count > 1 {
+			return fmt.Errorf("%w: multiple plan output flags", errUtils.ErrPlanVerificationFailed)
+		}
+	}
+	return nil
+}
+
 func plannedOutputPath(directory string, args []string) string {
 	for i, arg := range args {
 		path := ""
-		if arg == "-out" && i+1 < len(args) {
+		switch {
+		case (arg == "-out" || arg == "--out") && i+1 < len(args):
 			path = args[i+1]
-		}
-		if strings.HasPrefix(arg, "-out=") {
+		case strings.HasPrefix(arg, "-out="):
 			path = strings.TrimPrefix(arg, "-out=")
+		case strings.HasPrefix(arg, "--out="):
+			path = strings.TrimPrefix(arg, "--out=")
 		}
 		if path != "" {
 			if filepath.IsAbs(path) {
