@@ -60,7 +60,7 @@ components:
 ```
 
 :::tip Commit the lockfile
-Check `toolchain.lock.yaml` into git. It records the exact resolved version for **every platform**, so a teammate on a different OS — or a CI runner — installs byte-for-byte the same tools. This is what turns "works on my machine" into "works everywhere."
+Check `toolchain.lock.yaml` into git after populating and reviewing entries for each platform your team and CI use. The lockfile records the artifact URL and checksum for each included platform; installing on one platform does not automatically populate every other platform.
 :::
 
 ## The manual way: manage tools yourself
@@ -68,11 +68,11 @@ Check `toolchain.lock.yaml` into git. It records the exact resolved version for 
 You can also drive the toolchain directly — useful for installing everything up front, adding a tool, or checking what's resolved.
 
 ```bash
-# Install every tool declared across your stacks (reads the lockfile).
-atmos toolchain install
+# Install a specific tool and version up front.
+atmos toolchain install opentofu@1.10.10
 
-# Install or pin a specific tool and version.
-atmos toolchain add opentofu@1.10.10
+# Install the tools listed in .tool-versions, if your project uses one.
+atmos toolchain install
 
 # See what's installed and where it resolves.
 atmos toolchain list
