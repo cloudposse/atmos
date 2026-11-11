@@ -89,6 +89,23 @@ func TestSourceRefreshRemovesDanglingOwnedArtifact(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 }
 
+func TestRuntimeOwnedSymlinkStateAndInspectionError(t *testing.T) {
+	dir := t.TempDir()
+	refreshWrite(t, dir, "state", `{"version":4,"lineage":"preserved","serial":3}`)
+	link := filepath.Join(dir, "custom.data")
+	if err := os.Symlink(filepath.Join(dir, "state"), link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	owned, err := runtimeOwned(link, "custom.data", nil)
+	require.NoError(t, err)
+	require.True(t, owned, "a symlink to state must remain protected")
+
+	require.NoError(t, os.Remove(link))
+	require.NoError(t, os.Symlink(link, link))
+	_, err = runtimeOwned(link, "custom.data", nil)
+	require.Error(t, err, "symlink inspection errors other than a missing target must propagate")
+}
+
 func TestSourceExplicitWorkdirRefusesUnverifiableOwner(t *testing.T) {
 	for _, receipt := range []string{"missing", "corrupt"} {
 		t.Run(receipt, func(t *testing.T) {
