@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"golang.org/x/sync/errgroup"
 
@@ -139,7 +140,7 @@ func (s *Service) Publish(ctx context.Context, request *PublishRequest) (*Result
 		}
 		next := *request.File
 		next.Spec.Entries = append([]Entry(nil), request.File.Spec.Entries...)
-		return &next, &change{added: diff(current, &next)}, nil
+		return &next, diff(current, &next), nil
 	})
 }
 
@@ -393,18 +394,36 @@ func hasVersion(file *File, name, version string) bool {
 	return false
 }
 
-// diff lists the references a replacement snapshot adds relative to the current catalog.
-func diff(current *Loaded, next *File) []string {
-	var added []string
-	for index := range next.Spec.Entries {
-		entry := &next.Spec.Entries[index]
-		for position := range entry.Versions {
-			if current == nil || !hasVersion(current.File, entry.Name, entry.Versions[position].Version) {
-				added = append(added, artifact.Ref{Name: entry.Name, Version: entry.Versions[position].Version}.String())
+// diff reports changes to references in a replacement snapshot.
+func diff(current *Loaded, next *File) *change {
+	previous := make(map[string]string)
+	if current != nil {
+		for _, entry := range current.File.Spec.Entries {
+			for _, version := range entry.Versions {
+				label := artifact.Ref{Name: entry.Name, Version: version.Version}.String()
+				previous[label] = version.ResolvedDigest
 			}
 		}
 	}
-	return added
+	changed := &change{}
+	for _, entry := range next.Spec.Entries {
+		for _, version := range entry.Versions {
+			label := artifact.Ref{Name: entry.Name, Version: version.Version}.String()
+			old, exists := previous[label]
+			switch {
+			case !exists:
+				changed.added = append(changed.added, label)
+			case old != version.ResolvedDigest:
+				changed.updated = append(changed.updated, label)
+			}
+			delete(previous, label)
+		}
+	}
+	for label := range previous {
+		changed.removed = append(changed.removed, label)
+	}
+	sort.Strings(changed.removed)
+	return changed
 }
 
 func count(file *File) int {
