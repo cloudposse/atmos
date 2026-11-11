@@ -16,8 +16,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/artifacttest"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/artifact/report"
+	"github.com/cloudposse/atmos/pkg/artifact/service"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -583,4 +585,23 @@ func TestArtifactHandler_RetryRetainsResolvedInputs(t *testing.T) {
 	assert.Equal(t, requests[0].Version, requests[1].Version)
 	assert.Equal(t, requests[0].Metadata.Labels, requests[1].Metadata.Labels)
 	assert.Equal(t, requests[0].Execution.OperationID, requests[1].Execution.OperationID)
+}
+
+type nilDetailedService struct {
+	artifact.Service
+	err error
+}
+
+func (s nilDetailedService) PublishDetailed(context.Context, artifact.PublishRequest) (*service.PublishOutcome, error) {
+	return nil, s.err
+}
+
+func TestRecorderNormalizesNilDetailedOutcome(t *testing.T) {
+	failure := errors.New("failed")
+	recorder := artifacttest.NewRecorder(nilDetailedService{err: failure})
+	outcome, err := recorder.PublishDetailed(context.Background(), artifact.PublishRequest{})
+	require.ErrorIs(t, err, failure)
+	require.NotNil(t, outcome)
+	require.Len(t, recorder.Results(), 1)
+	assert.Equal(t, outcome.Operation, recorder.Results()[0])
 }

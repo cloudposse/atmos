@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -450,6 +451,26 @@ func TestPublish_ComponentKindReportsDefaultExclusionsAndGenericKindDoesNot(t *t
 	require.NoError(t, err)
 	assert.Empty(t, excluded(plain), "generic files never inherit component exclusions")
 	assert.Contains(t, inventoryPathsOf(&plain.Record), "terraform.tfstate")
+}
+
+func TestPublish_ExclusionDiagnosticsAreBounded(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	src := e.source("hello")
+	for i := 0; i < 103; i++ {
+		fixtures.WriteFile(t, src, fmt.Sprintf("state-%03d.tfstate", i), "{}", 0o644)
+	}
+	request := e.publishRequest("dst", src)
+	request.Kind, request.DryRun = "component/terraform", true
+	outcome, err := e.svc.PublishDetailed(context.Background(), request)
+	require.NoError(t, err)
+	var messages []string
+	for _, diagnostic := range outcome.Operation.Diagnostics {
+		if diagnostic.Code == "excluded" {
+			messages = append(messages, diagnostic.Message)
+		}
+	}
+	require.Len(t, messages, 101)
+	assert.Equal(t, "3 additional exclusions omitted", messages[100])
 }
 
 func inventoryPathsOf(record *artifact.Record) []string {
