@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,8 +17,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // shellCall is one invocation of the host's process facility.
@@ -698,15 +701,43 @@ func TestExcludedFromOperation(t *testing.T) {
 	}
 }
 
+type warningTestStreams struct{ stderr *bytes.Buffer }
+
+func (s warningTestStreams) Input() io.Reader     { return strings.NewReader("") }
+func (s warningTestStreams) Output() io.Writer    { return io.Discard }
+func (s warningTestStreams) Error() io.Writer     { return s.stderr }
+func (s warningTestStreams) RawOutput() io.Writer { return io.Discard }
+func (s warningTestStreams) RawError() io.Writer  { return s.stderr }
+
 func TestWarnOverlappingRetryOnlyForBothMechanisms(t *testing.T) {
 	retry := &schema.PreparedComponentConfiguration{Execution: &schema.ComponentExecution{Errors: &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "n"}}}}}
 	withSettings := &schema.ConfigAndStacksInfo{ComponentRetrySection: &schema.RetryConfig{Conditions: []string{"x"}}}
-	require.NotPanics(t, func() {
-		warnOverlappingRetry(withSettings, retry)
-		warnOverlappingRetry(&schema.ConfigAndStacksInfo{}, retry)
-		warnOverlappingRetry(withSettings, nil)
-		warnOverlappingRetry(withSettings, &schema.PreparedComponentConfiguration{})
-	})
+	var output bytes.Buffer
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(warningTestStreams{stderr: &output}))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.ReinitFormatter)
+	for _, tc := range []struct {
+		name        string
+		info        *schema.ConfigAndStacksInfo
+		prepared    *schema.PreparedComponentConfiguration
+		wantWarning bool
+	}{
+		{"both", withSettings, retry, true},
+		{"no settings", &schema.ConfigAndStacksInfo{}, retry, false},
+		{"no configuration", withSettings, nil, false},
+		{"no execution", withSettings, &schema.PreparedComponentConfiguration{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output.Reset()
+			require.NotPanics(t, func() { warnOverlappingRetry(tc.info, tc.prepared) })
+			if tc.wantWarning {
+				require.Contains(t, output.String(), "has both")
+			} else {
+				require.Empty(t, output.String())
+			}
+		})
+	}
 }
 
 func TestReadConfigHooksRunOncePerPrepareInTheUnitDirectory(t *testing.T) {
