@@ -75,54 +75,29 @@ func reachableHostForPublishedPorts() string {
 // runs on the container host itself and the primary port is bound to a specific
 // interface, that interface is the only address the port listens on, so it wins
 // over the generic localhost default.
-func publishedPortsHost(spec *Spec, ports map[int]int) string {
+func publishedPortsHost(bindings map[int]container.PortBinding) string {
 	host := reachableHostForPublishedPorts()
-	if host != "localhost" {
+	if host != "localhost" || strings.TrimSpace(envString(envEmulatorEndpointHost)) != "" {
 		return host
 	}
-	if bind := primaryBindAddress(spec, ports); bind != "" {
+	primary := 0
+	for port := range bindings {
+		if primary == 0 || port < primary {
+			primary = port
+		}
+	}
+	if bind := normalizeBindAddress(bindings[primary].Bind); bind != "" {
 		return bind
 	}
 	return host
 }
 
-// primaryBindAddress returns the configured bind address of the primary
-// (lowest) container port, or "" when it is unset or a wildcard address.
-func primaryBindAddress(spec *Spec, ports map[int]int) string {
-	if len(ports) == 0 {
-		return ""
-	}
-	primary := 0
-	for containerPort := range ports {
-		if primary == 0 || containerPort < primary {
-			primary = containerPort
-		}
-	}
-	specPorts, err := spec.ContainerPorts()
-	if err != nil {
-		return ""
-	}
-	var fallback string
-	found := false
-	for _, port := range specPorts {
-		if port.Container != primary {
-			continue
-		}
-		if port.Protocol != "" && port.Protocol != defaultProtocol {
-			if !found {
-				fallback = port.Bind
-				found = true
-			}
-			continue
-		}
-		return normalizeBindAddress(port.Bind)
-	}
-	return normalizeBindAddress(fallback)
-}
-
 func normalizeBindAddress(address string) string {
 	bind := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(address), "["), "]")
 	if ip := net.ParseIP(bind); ip != nil && ip.IsUnspecified() {
+		if ip.To4() == nil {
+			return "::1"
+		}
 		return ""
 	}
 	return bind

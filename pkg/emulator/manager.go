@@ -478,6 +478,7 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 
 	ports := make(map[int]int, len(info.Ports))
 	tcpPorts := make(map[int]bool, len(info.Ports))
+	bindings := make(map[int]container.PortBinding, len(info.Ports))
 	for _, binding := range info.Ports {
 		if binding.HostPort == 0 {
 			continue
@@ -485,12 +486,13 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 		isTCP := binding.Protocol == "" || binding.Protocol == defaultProtocol
 		if !tcpPorts[binding.ContainerPort] {
 			ports[binding.ContainerPort] = binding.HostPort
+			bindings[binding.ContainerPort] = binding
 			tcpPorts[binding.ContainerPort] = isTCP
 		}
 	}
 	return Endpoint{
 		Target:     target,
-		Host:       publishedPortsHost(spec, ports),
+		Host:       publishedPortsHost(bindings),
 		Ports:      ports,
 		NetworkIPs: info.NetworkIPs,
 		Region:     spec.Region,
