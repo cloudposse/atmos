@@ -73,6 +73,9 @@ func (r *Repository) readEvidenceObject(ctx context.Context, key, hexDigest stri
 		return nil, err, nil
 	}
 	raw, _, err := r.readObject(ctx, key, layout.MaxEvidenceFileBytes)
+	if errors.Is(err, errUtils.ErrArtifactTooLarge) {
+		return nil, err, nil
+	}
 	if err != nil {
 		return nil, nil, err
 	}
