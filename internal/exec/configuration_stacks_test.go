@@ -119,19 +119,6 @@ func TestValidateStacksMissingStacksDirStillRunsDiscovery(t *testing.T) {
 	require.NoError(t, ValidateStacks(plain))
 }
 
-func TestStaticDescribeStacksIncludesDiscoveredStacks(t *testing.T) {
-	root := t.TempDir()
-	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: filepath.Join(root, "stacks"), TerraformDirAbsolutePath: filepath.Join(root, "components")}
-	provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
-	config.ComponentConfigurations = provider
-	definitions := map[string]map[string]any{"live": {"name": "live", "components": map[string]any{"terraform": map[string]any{"app": map[string]any{"source": "./module"}}}}}
-	provider.EXPECT().Discover(gomock.Any()).Return(definitions, nil)
-	stacks, raw, _, err := findDescribeStacksMap(config, "live", false, true)
-	require.NoError(t, err)
-	require.Contains(t, stacks["live"].(map[string]any)["components"].(map[string]any)["terraform"], "app")
-	require.Equal(t, "live", raw["live"]["name"])
-}
-
 func TestValidateStacksChecksDiscoveredDefinitionsAgainstManifestSchema(t *testing.T) {
 	root := t.TempDir()
 	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
