@@ -35,12 +35,17 @@ func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.P
 	if err := s.validatePut(ctx, key, opts); err != nil {
 		return nil, err
 	}
-	target := s.path(key)
-	pending, err := s.stage(ctx, key, target, body, opts)
+	root, err := s.openRoot(true)
+	if err != nil {
+		return nil, wrapIO(blob.OpPut, key, err)
+	}
+	defer root.Close()
+	target := filepath.FromSlash(key)
+	pending, err := s.stage(ctx, root, key, body, opts)
 	if err != nil {
 		return nil, err
 	}
-	defer pending.discard()
+	defer pending.discard(root)
 
 	release, err := s.guard(ctx, blob.OpPut, key, opts.Condition.IsConditional())
 	if err != nil {
@@ -48,13 +53,13 @@ func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.P
 	}
 	defer release()
 
-	if err := s.checkCondition(key, target, opts.Condition); err != nil {
+	if err := s.checkCondition(root, key, target, opts.Condition); err != nil {
 		return nil, err
 	}
-	if err := s.commit(key, target, pending, fromPut(opts).empty()); err != nil {
+	if err := s.commit(root, key, target, pending, fromPut(opts).empty()); err != nil {
 		return nil, err
 	}
-	return s.statCommitted(key, target, pending)
+	return s.statCommitted(root, key, target, pending)
 }
 
 func (s *Store) validatePut(ctx context.Context, key string, opts blob.PutOptions) error {
@@ -74,30 +79,31 @@ func (s *Store) validatePut(ctx context.Context, key string, opts blob.PutOption
 }
 
 // stage writes the body (and attribute file, when needed) to temporary files next to target.
-func (s *Store) stage(ctx context.Context, key, target string, body io.Reader, opts blob.PutOptions) (*staged, error) {
-	file, err := createTemp(filepath.Dir(target), s.dirPerm, s.filePerm)
+func (s *Store) stage(ctx context.Context, root *os.Root, key string, body io.Reader, opts blob.PutOptions) (*staged, error) {
+	target := filepath.FromSlash(key)
+	file, name, err := rootCreateTemp(root, filepath.Dir(target), s.dirPerm, s.filePerm)
 	if err != nil {
-		return nil, s.classifyCreate(key, target, err)
+		return nil, s.classifyCreate(root, key, target, err)
 	}
-	pending := &staged{tempPath: file.Name()}
+	pending := &staged{tempPath: name}
 	hash := sha256.New()
 	written, copyErr := copyBody(ctx, io.MultiWriter(file, hash), body, opts.Size)
 	closeErr := file.Close()
 	if err := firstError(copyErr, closeErr); err != nil {
-		pending.discard()
+		pending.discard(root)
 		return nil, classifyCopy(key, err)
 	}
 	pending.size = written
 	pending.etag = contentETag(hash.Sum(nil))
-	if err := s.stageAttrs(pending, target, fromPut(opts)); err != nil {
-		pending.discard()
+	if err := s.stageAttrs(root, pending, target, fromPut(opts)); err != nil {
+		pending.discard(root)
 		return nil, wrapIO(blob.OpPut, key, err)
 	}
 	return pending, nil
 }
 
 // stageAttrs writes the attribute file to a temporary path when any attribute is set.
-func (s *Store) stageAttrs(pending *staged, target string, a attrs) error {
+func (s *Store) stageAttrs(root *os.Root, pending *staged, target string, a attrs) error {
 	if a.empty() {
 		return nil
 	}
@@ -105,11 +111,11 @@ func (s *Store) stageAttrs(pending *staged, target string, a attrs) error {
 	if err != nil {
 		return err
 	}
-	file, err := createTemp(filepath.Dir(target), s.dirPerm, s.filePerm)
+	file, name, err := rootCreateTemp(root, filepath.Dir(target), s.dirPerm, s.filePerm)
 	if err != nil {
 		return err
 	}
-	pending.attrsTemp = file.Name()
+	pending.attrsTemp = name
 	_, writeErr := file.Write(data)
 	return firstError(writeErr, file.Close())
 }
@@ -134,14 +140,14 @@ func copyBody(ctx context.Context, dst io.Writer, body io.Reader, size int64) (i
 }
 
 // checkCondition evaluates the put condition against the current object. Callers hold the lock.
-func (s *Store) checkCondition(key, target string, cond blob.Condition) error {
+func (s *Store) checkCondition(root *os.Root, key, target string, cond blob.Condition) error {
 	if cond.Kind == blob.ConditionNone {
 		return nil
 	}
 	if cond.Kind != blob.ConditionIfAbsent && cond.Kind != blob.ConditionIfMatch {
 		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: unknown condition %d", errUtils.ErrBlobInvalid, cond.Kind))
 	}
-	state, err := inspect(target)
+	state, err := inspect(root, target)
 	if err != nil {
 		return wrapIO(blob.OpPut, key, err)
 	}
@@ -151,7 +157,7 @@ func (s *Store) checkCondition(key, target string, cond blob.Condition) error {
 			return preconditionFailed(blob.OpPut, key, "object already exists")
 		}
 	case blob.ConditionIfMatch:
-		return matchETag(blob.OpPut, key, state, cond.ETag)
+		return matchETag(root, blob.OpPut, key, state, cond.ETag)
 	}
 	return nil
 }
@@ -164,8 +170,8 @@ type fileState struct {
 }
 
 // inspect reports whether a regular file exists at path. A missing path is not an error.
-func inspect(path string) (fileState, error) {
-	info, err := os.Stat(path)
+func inspect(root *os.Root, path string) (fileState, error) {
+	info, err := root.Stat(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fileState{}, err
 	}
@@ -174,11 +180,11 @@ func inspect(path string) (fileState, error) {
 
 // matchETag fails with NotFound when the object is missing and with a precondition failure when
 // its ETag differs from want.
-func matchETag(op, key string, state fileState, want string) error {
+func matchETag(root *os.Root, op, key string, state fileState, want string) error {
 	if !state.exists {
 		return blob.NewError(blob.KindNotFound, op, key, nil)
 	}
-	current, err := etagOf(state.path, state.info)
+	current, err := etagOf(root, state.path, state.info)
 	if err != nil {
 		return wrapIO(op, key, err)
 	}
@@ -190,22 +196,22 @@ func matchETag(op, key string, state fileState, want string) error {
 
 // commit moves the staged files into place: attributes first, so an object is only ever visible
 // together with its attributes or with stale ones until the data rename lands.
-func (s *Store) commit(key, target string, pending *staged, noAttrs bool) error {
+func (s *Store) commit(root *os.Root, key, target string, pending *staged, noAttrs bool) error {
 	switch {
 	case pending.attrsTemp != "":
-		if err := renameReplace(pending.attrsTemp, attrsPath(target)); err != nil {
+		if err := rootRenameReplace(root, pending.attrsTemp, attrsPath(target)); err != nil {
 			return wrapIO(blob.OpPut, key, err)
 		}
 		pending.attrsTemp = ""
 	case noAttrs:
-		if err := os.Remove(attrsPath(target)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := root.Remove(attrsPath(target)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return wrapIO(blob.OpPut, key, err)
 		}
 	}
-	if info, err := os.Stat(target); err == nil && info.IsDir() {
+	if info, err := root.Stat(target); err == nil && info.IsDir() {
 		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: key is also a prefix of other objects", errUtils.ErrBlobInvalid))
 	}
-	if err := renameReplace(pending.tempPath, target); err != nil {
+	if err := rootRenameReplace(root, pending.tempPath, target); err != nil {
 		return wrapIO(blob.OpPut, key, err)
 	}
 	pending.tempPath = ""
@@ -213,8 +219,8 @@ func (s *Store) commit(key, target string, pending *staged, noAttrs bool) error 
 }
 
 // statCommitted describes the object that was just written.
-func (s *Store) statCommitted(key, target string, pending *staged) (*blob.ObjectInfo, error) {
-	info, err := os.Stat(target)
+func (s *Store) statCommitted(root *os.Root, key, target string, pending *staged) (*blob.ObjectInfo, error) {
+	info, err := root.Stat(target)
 	if err != nil {
 		return nil, wrapIO(blob.OpPut, key, err)
 	}
@@ -226,11 +232,11 @@ func (s *Store) statCommitted(key, target string, pending *staged) (*blob.Object
 }
 
 // discard removes any temporary files that were not committed.
-func (p *staged) discard() {
+func (p *staged) discard(root *os.Root) {
 	if p.tempPath != "" {
-		_ = os.Remove(p.tempPath)
+		_ = root.Remove(p.tempPath)
 	}
 	if p.attrsTemp != "" {
-		_ = os.Remove(p.attrsTemp)
+		_ = root.Remove(p.attrsTemp)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact/blob"
@@ -36,12 +37,17 @@ func (s *Store) Get(ctx context.Context, key string, opts blob.GetOptions) (*blo
 	if err := checkContext(ctx, blob.OpGet, key); err != nil {
 		return nil, err
 	}
-	target := s.path(key)
-	file, err := openFile(target)
+	root, err := s.openRoot(false)
 	if err != nil {
 		return nil, wrapIO(blob.OpGet, key, err)
 	}
-	info, err := s.describe(blob.OpGet, key, target, file, false)
+	defer root.Close()
+	target := filepath.FromSlash(key)
+	file, err := rootOpenFile(root, target)
+	if err != nil {
+		return nil, wrapIO(blob.OpGet, key, err)
+	}
+	info, err := s.describe(root, blob.OpGet, key, file, false)
 	if err != nil {
 		_ = file.Close()
 		return nil, err
@@ -82,17 +88,22 @@ func (s *Store) Stat(ctx context.Context, key string, opts blob.StatOptions) (*b
 	if err := checkContext(ctx, blob.OpStat, key); err != nil {
 		return nil, err
 	}
-	target := s.path(key)
-	file, err := openFile(target)
+	root, err := s.openRoot(false)
+	if err != nil {
+		return nil, wrapIO(blob.OpStat, key, err)
+	}
+	defer root.Close()
+	target := filepath.FromSlash(key)
+	file, err := rootOpenFile(root, target)
 	if err != nil {
 		return nil, wrapIO(blob.OpStat, key, err)
 	}
 	defer file.Close()
-	return s.describe(blob.OpStat, key, target, file, opts.IncludeTags)
+	return s.describe(root, blob.OpStat, key, file, opts.IncludeTags)
 }
 
 // describe builds ObjectInfo for an open regular file. A directory is not an object.
-func (s *Store) describe(op, key, target string, file *os.File, withTags bool) (*blob.ObjectInfo, error) {
+func (s *Store) describe(root *os.Root, op, key string, file *os.File, withTags bool) (*blob.ObjectInfo, error) {
 	stat, err := file.Stat()
 	if err != nil {
 		return nil, wrapIO(op, key, err)
@@ -104,7 +115,7 @@ func (s *Store) describe(op, key, target string, file *os.File, withTags bool) (
 	if err != nil {
 		return nil, wrapIO(op, key, err)
 	}
-	a, err := readAttrs(target)
+	a, err := readAttrs(root, filepath.FromSlash(key))
 	if err != nil {
 		return nil, blob.NewError(blob.KindOther, op, key, fmt.Errorf("read attributes: %w", err))
 	}

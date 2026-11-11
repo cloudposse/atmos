@@ -94,11 +94,6 @@ func (s *Store) validate(op, key string) error {
 	return nil
 }
 
-// path maps a validated key to its file path.
-func (s *Store) path(key string) string {
-	return filepath.Join(s.root, filepath.FromSlash(key))
-}
-
 // checkContext fails fast when ctx is already done.
 func checkContext(ctx context.Context, op, key string) error {
 	if err := ctx.Err(); err != nil {
