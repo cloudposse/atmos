@@ -22,7 +22,15 @@ func findDescribeStacksMap(config *schema.AtmosConfiguration, stack string, igno
 	_, stacks, raw, deferred, err := processYAMLConfigFilesWithOptions(config, config.StacksBaseAbsolutePath,
 		config.TerraformDirAbsolutePath, config.HelmfileDirAbsolutePath, config.PackerDirAbsolutePath,
 		config.AnsibleDirAbsolutePath, files, false, true, ignoreMissing, &StackLoadOptions{SkipTemplates: true, StaticOnly: true})
-	return stacks, raw, deferred, err
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	// Discovered definitions are literal data from the provider inventory, so static
+	// inspection includes them without authenticating or evaluating templates.
+	if err := mergeConfigurationStacks(config, stacks, raw, deferred); err != nil {
+		return nil, nil, nil, err
+	}
+	return stacks, raw, deferred, nil
 }
 
 func (p *describeStacksProcessor) resolveStackName(file, manifest string, info schema.ConfigAndStacksInfo, vars map[string]any) (string, schema.Context, error) { //nolint:gocritic // Mirrors the existing read-only name resolver.
