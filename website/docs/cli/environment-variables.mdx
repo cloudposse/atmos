@@ -141,7 +141,7 @@ These environment variables configure Atmos behavior and can override settings i
 
   <dt>`FORCE_HYPERLINK`</dt>
   <dd>
-    Overrides terminal detection for clickable links when `settings.terminal.links` is `auto`: `1` shows the clickable link, `0` shows the plain URL. A convention shared with other command-line tools. Has no effect when output is not a terminal. See [Long URLs](/cli/configuration/settings/terminal#long-urls).
+    Overrides terminal detection for clickable links when the effective links mode is `auto` (`--links` > `ATMOS_TERMINAL_LINKS` > `settings.terminal.links`, default `auto`): `1` shows the clickable link, `0` shows the plain URL. A convention shared with other command-line tools. Has no effect when output is not a terminal. See [Long URLs](/cli/configuration/settings/terminal#long-urls).
   </dd>
 </dl>
 

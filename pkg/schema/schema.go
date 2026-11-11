@@ -514,6 +514,9 @@ type Terminal struct {
 	// copies the URL to the clipboard, and `raw` always prints the full URL.
 	// Overridden by ATMOS_TERMINAL_LINKS and --links. In `auto` mode,
 	// FORCE_HYPERLINK=1 or FORCE_HYPERLINK=0 overrides terminal detection.
+	// When stderr is not a terminal (piped, redirected, or in CI), every mode,
+	// including `osc8` and `clipboard`, prints the raw URL. On a terminal, a
+	// `clipboard` copy can still fail; Atmos then prints the raw URL as well.
 	Links string `yaml:"links,omitempty" json:"links,omitempty" mapstructure:"links" jsonschema:"enum=,enum=auto,enum=osc8,enum=clipboard,enum=raw"`
 }
 

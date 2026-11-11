@@ -650,7 +650,7 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 // TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage covers the
 // non-CI branch of displayVerificationPlainText, where a non-empty URL is
 // shown as a message about opening the browser rather than the plain
-// "Verification URL" message used under CI.
+// "Visit <url> and enter the code" message used under CI.
 func TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage(t *testing.T) {
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)

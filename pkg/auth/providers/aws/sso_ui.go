@@ -121,7 +121,7 @@ func displayVerificationPlainText(code, url string) {
 			ui.Writef("Opening browser for authentication...\n")
 			ui.Writef("If the browser does not open, visit %s and enter the code.\n", url)
 		} else {
-			ui.Writef("Verification URL: %s\n", url)
+			ui.Writef("Visit %s and enter the code.\n", url)
 		}
 	}
 

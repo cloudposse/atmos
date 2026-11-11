@@ -49,6 +49,14 @@ func longVerificationURL() string {
 func captureVerificationDialogOutput(t *testing.T, code, url string) string {
 	t.Helper()
 
+	return captureVerificationOutput(t, func() { displayVerificationDialog(code, url) })
+}
+
+// captureVerificationOutput runs render with the UI formatter writing to a
+// buffer and returns what it wrote to stderr.
+func captureVerificationOutput(t *testing.T, render func()) string {
+	t.Helper()
+
 	var stdout, stderr bytes.Buffer
 	ioCtx, err := iolib.NewContext(iolib.WithStreams(ssoDialogTestStreams{
 		output: &stdout,
@@ -62,7 +70,7 @@ func captureVerificationDialogOutput(t *testing.T, code, url string) string {
 		ui.InitFormatter(defaultIOCtx)
 	})
 
-	displayVerificationDialog(code, url)
+	render()
 	return stderr.String()
 }
 
@@ -219,6 +227,16 @@ func TestDisplayVerificationDialog_ShortURIStaysInBoxWithCodeInstruction(t *test
 	for _, line := range boxLines(output) {
 		assert.LessOrEqual(t, lipgloss.Width(line), maxVerificationDialogWidth)
 	}
+}
+
+func TestDisplayVerificationPlainText_CITellsUserToEnterCode(t *testing.T) {
+	t.Setenv("CI", "true")
+	short := "https://device.sso.us-east-1.amazonaws.com/"
+	output := captureVerificationOutput(t, func() { displayVerificationPlainText("ABCD-1234", short) })
+
+	assert.Contains(t, output, "ABCD-1234")
+	assert.Contains(t, output, "Visit "+short+" and enter the code.")
+	assert.NotContains(t, output, "Opening browser")
 }
 
 func TestDisplayVerificationDialog_LinkPromptEndsWithBlankLine(t *testing.T) {

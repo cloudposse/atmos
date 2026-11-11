@@ -251,7 +251,7 @@ Terminals offer no way to ask whether they support hyperlinks, so `auto` recogni
 
 Anything else gets the full URL, including `TERM=dumb`, sessions inside `tmux` or `screen` (detected by `TMUX` and `STY`), and containers that do not pass those variables through. Set `links: osc8` there if your terminal does support hyperlinks, or pass the variables into the container.
 
-`auto` also honors the `FORCE_HYPERLINK` environment variable used by other command-line tools: `FORCE_HYPERLINK=1` turns the clickable link on and `FORCE_HYPERLINK=0` turns it off, whatever the terminal, including inside `tmux`. An explicit `links` mode other than `auto` takes precedence over it.
+`auto` also honors the `FORCE_HYPERLINK` environment variable used by other command-line tools: `FORCE_HYPERLINK=1` turns the clickable link on and `FORCE_HYPERLINK=0` turns it off, whatever the terminal, including inside `tmux`. It applies only when the effective mode is `auto`: a mode other than `auto` set by `--links`, `ATMOS_TERMINAL_LINKS`, or `settings.terminal.links` takes precedence over it.
 
 When output is not a terminal (piped, redirected, or in CI), Atmos always prints the full URL and never touches the clipboard, whatever this setting says.
 
