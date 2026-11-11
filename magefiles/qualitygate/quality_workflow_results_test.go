@@ -50,6 +50,13 @@ func TestQualityWorkflowResultsIgnoreSupersededMatrixPlaceholders(t *testing.T) 
 	}
 }
 
+func TestQualityDefaultBranchReportersAreNotCIEvidence(t *testing.T) {
+	for _, path := range []string{qualityReconcileWorkflow, releaseMilestonesWorkflow, qualityReportWorkflow, ".github/workflows/test.yml"} {
+		run := qualityWorkflowRun{Run: githubapi.Run{Path: path, Event: "push"}}
+		require.Equal(t, path == qualityReconcileWorkflow || path == releaseMilestonesWorkflow, run.reporterRun(), path)
+	}
+}
+
 func workflowResultFixture(id, suite int64, conclusion string) map[string]any {
 	return map[string]any{
 		"id": id, "check_suite_id": suite, "head_sha": githubtest.SHA,
@@ -135,6 +142,89 @@ func TestQualitySupersededSuitesKeepUnprovenAndCurrentFailures(t *testing.T) {
 				complete, err := q.reportingComplete(&pr)
 				require.NoError(t, err)
 				require.False(t, complete)
+			}
+		})
+	}
+}
+
+// Bot reviews on fork PRs start Quality Gate Signal runs that wait for maintainer
+// approval indefinitely. The signal job only wakes the coordinator, so its runs
+// and checks are reporter plumbing, never evidence about the PR. Real workflows
+// awaiting approval still block, with approval guidance instead of log guidance.
+func TestQualitySignalRunsAreNotCIEvidence(t *testing.T) {
+	signal := func(id, suite int64, event, conclusion, created string) map[string]any {
+		run := workflowResultFixture(id, suite, conclusion)
+		run["path"], run["event"], run["created_at"] = qualitySignalWorkflow, event, created
+		return run
+	}
+	tests := workflowResultFixture(10, 100, "success")
+	linux := workflowCheckFixture(100, "linux", "success")
+	cases := []struct {
+		name    string
+		runs    []map[string]any
+		checks  []map[string]any
+		passed  bool
+		detail  string
+		problem string
+	}{
+		{
+			name:   "newest signal run awaits approval",
+			runs:   []map[string]any{tests, signal(20, 200, "pull_request_review_comment", "action_required", "2026-10-25T19:18:20Z")},
+			checks: []map[string]any{linux},
+			passed: true,
+			detail: "2 current PR CI results",
+		},
+		{
+			name: "older signal run and its check are dropped",
+			runs: []map[string]any{
+				signal(5, 50, "pull_request", "success", "2026-10-25T17:18:20Z"),
+				tests,
+				signal(20, 200, "pull_request_review", "action_required", "2026-10-25T19:18:20Z"),
+			},
+			checks: []map[string]any{workflowCheckFixture(50, "signal", "success"), linux},
+			passed: true,
+			detail: "2 current PR CI results",
+		},
+		{
+			name:   "signal path at an untrusted event stays evidence",
+			runs:   []map[string]any{tests, signal(20, 200, "workflow_dispatch", "failure", "2026-10-25T19:18:20Z")},
+			checks: []map[string]any{linux},
+			detail: "workflow: " + qualitySignalWorkflow + ": failure",
+		},
+		{
+			name: "newer excluded run does not hide an older untrusted run",
+			runs: []map[string]any{
+				tests,
+				signal(20, 200, "workflow_dispatch", "failure", "2026-10-25T19:18:20Z"),
+				signal(30, 300, "pull_request_review", "action_required", "2026-10-25T20:18:20Z"),
+			},
+			checks: []map[string]any{linux, workflowCheckFixture(200, "dispatched", "failure")},
+			detail: "check: github-actions/dispatched: failure; workflow: " + qualitySignalWorkflow + ": failure",
+		},
+		{
+			name:    "real workflow awaits approval",
+			runs:    []map[string]any{workflowResultFixture(10, 100, "action_required")},
+			checks:  []map[string]any{},
+			detail:  "workflow: .github/workflows/test.yml: action_required",
+			problem: "1 CI results are waiting for a maintainer to approve their workflow runs; 0 are still pending.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			q := workflowFixtureClient(t, tc.runs, tc.checks, false)
+			pr := githubtest.PR(githubtest.Run())
+			pr.MergeSHA = ""
+			gate, err := q.tests(&pr)
+			require.NoError(t, err)
+			require.Equal(t, tc.passed, gate.Passed, gate.Detail)
+			require.Contains(t, gate.Detail, tc.detail)
+			if tc.passed {
+				require.NotContains(t, gate.Detail, "signal")
+			}
+			if tc.problem != "" {
+				require.Equal(t, tc.problem, gate.Problem)
+				require.Contains(t, gate.NextAction, "Approve the waiting workflow runs")
+				require.NotContains(t, gate.NextAction, "Open the logs")
 			}
 		})
 	}

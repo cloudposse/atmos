@@ -19,7 +19,7 @@ import (
 func TestPackerBuildCmd(t *testing.T) {
 	_ = NewTestKit(t)
 
-	skipIfPackerNotInstalled(t)
+	requirePacker(t)
 
 	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
@@ -105,7 +105,7 @@ func TestPackerBuildCmd(t *testing.T) {
 func TestPackerBuildCmdInvalidComponent(t *testing.T) {
 	_ = NewTestKit(t)
 
-	skipIfPackerNotInstalled(t)
+	requirePacker(t)
 
 	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
@@ -148,7 +148,7 @@ func TestPackerBuildCmdInvalidComponent(t *testing.T) {
 func TestPackerBuildCmdMissingStack(t *testing.T) {
 	_ = NewTestKit(t)
 
-	skipIfPackerNotInstalled(t)
+	requirePacker(t)
 
 	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
@@ -167,7 +167,7 @@ func TestPackerBuildCmdMissingStack(t *testing.T) {
 func TestPackerBuildCmdWithDirectoryTemplate(t *testing.T) {
 	_ = NewTestKit(t)
 
-	skipIfPackerNotInstalled(t)
+	requirePacker(t)
 
 	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)

@@ -105,9 +105,12 @@ type JournalEntry struct {
 	Err error
 }
 
-// Journal receives publication lifecycle events. The service never blocks on or fails because of it.
+// Journal receives publication lifecycle events. The service never fails because of it, but it
+// calls Record inline and in lifecycle order, because a recovery record must not be reordered or
+// dropped. A slow Record therefore delays the publication, so an implementation must return
+// promptly and hand any slow work to its own buffer or goroutine.
 type Journal interface {
-	// Record observes one lifecycle event.
+	// Record observes one lifecycle event. It must return promptly.
 	Record(ctx context.Context, entry *JournalEntry)
 }
 

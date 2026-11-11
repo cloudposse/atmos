@@ -25,6 +25,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  pull-requests: read  # Finds the merged pull request's stored plan.
   statuses: write
   checks: write
 
@@ -42,7 +43,7 @@ jobs:
 ```
 </File>
 
-`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`. When [planfile storage](/ci/planfile-storage) is configured under `components.terraform.planfiles` in `atmos.yaml`, a CI deploy **automatically** downloads the planfile uploaded during the PR run, generates a fresh plan, and performs a semantic comparison before applying (failing on drift by default). The `--verify-plan` flag (or `ATMOS_TERRAFORM_VERIFY_PLAN=true`) is only a per-run override — it forces verification on (and `--verify-plan=false` forces it off), and it **requires planfile storage to be configured**: without it there is no stored plan to verify against, and the deploy errors. You can also run `atmos terraform apply` directly. See [Planfile Storage](/ci/planfile-storage) for details.
+`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`. When [planfile storage](/ci/planfile-storage) is configured under `components.terraform.planfiles` in `atmos.yaml`, a CI deploy **automatically** downloads the planfile uploaded during the PR run (found through the merged pull request, which is why the workflow needs `pull-requests: read`; see [Deploying after a pull request merges](/ci/planfile-storage#deploying-after-a-pull-request-merges)), generates a fresh plan, and performs a semantic comparison before applying (failing on drift by default). The `--verify-plan` flag (or `ATMOS_TERRAFORM_VERIFY_PLAN=true`) is only a per-run override — it forces verification on (and `--verify-plan=false` forces it off), and it **requires planfile storage to be configured**: without it there is no stored plan to verify against, and the deploy errors. You can also run `atmos terraform apply` directly. See [Planfile Storage](/ci/planfile-storage) for details.
 
 :::note
 Storing planfiles in the `github/artifacts` backend requires the runner's artifact credentials,

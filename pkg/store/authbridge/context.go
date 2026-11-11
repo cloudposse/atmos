@@ -2,6 +2,7 @@ package authbridge
 
 import (
 	"context"
+	"maps"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -43,6 +44,15 @@ func (r *resolvedContext) ResolveGCPAuthContext(_ context.Context, _ string) (*s
 	return &store.GCPAuthConfig{CredentialsFile: a.CredentialsFile, ProjectID: a.ProjectID, AccessToken: a.AccessToken, TokenExpiry: a.TokenExpiry}, nil
 }
 
+func (r *resolvedContext) ResolveEnvironmentAuthContext(_ context.Context, _ string) (*store.EnvironmentAuthConfig, error) {
+	defer perf.Track(nil, "authbridge.resolvedContext.ResolveEnvironmentAuthContext")()
+
+	if r.auth == nil || len(r.auth.Environment) == 0 {
+		return nil, errUtils.ErrAuthenticationUnavailable
+	}
+	return &store.EnvironmentAuthConfig{Environment: maps.Clone(r.auth.Environment)}, nil
+}
+
 // NewResolvedContext exposes already-authenticated credentials without reauthenticating.
 func NewResolvedContext(auth *schema.AuthContext) store.AuthContextResolver {
 	return &resolvedContext{auth: auth}
@@ -82,4 +92,13 @@ func (r *lazyContext) ResolveGCPAuthContext(ctx context.Context, identity string
 		return nil, err
 	}
 	return (&resolvedContext{auth: auth}).ResolveGCPAuthContext(ctx, identity)
+}
+
+func (r *lazyContext) ResolveEnvironmentAuthContext(ctx context.Context, identity string) (*store.EnvironmentAuthConfig, error) {
+	defer perf.Track(nil, "authbridge.lazyContext.ResolveEnvironmentAuthContext")()
+	auth, err := r.resolve(ctx, identity)
+	if err != nil {
+		return nil, err
+	}
+	return (&resolvedContext{auth: auth}).ResolveEnvironmentAuthContext(ctx, identity)
 }

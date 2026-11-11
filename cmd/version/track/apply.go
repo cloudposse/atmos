@@ -77,5 +77,7 @@ func init() {
 // renderTemplate adapts the Atmos template engine to manager.RenderFunc, used
 // by the template file manager for apply/verify.
 func renderTemplate(atmosConfig *schema.AtmosConfiguration, name, content string, templateData map[string]any) (string, error) {
-	return exec.ProcessTmpl(atmosConfig, name, content, templateData, false)
+	// The manager passes the managed template's file path, so policy admission attributes the
+	// template's function calls to that file.
+	return exec.ProcessTmplFromFile(atmosConfig, name, content, templateData, false)
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,6 +56,35 @@ func TestDecodeClaims_Errors(t *testing.T) {
 		_, err := decodeClaims("header.!!!notbase64!!!.sig")
 		require.ErrorIs(t, err, ErrTokenDecode)
 	})
+}
+
+func TestExpiresAt(t *testing.T) {
+	tests := []struct {
+		name    string
+		jwt     string
+		want    time.Time
+		wantErr bool
+	}{
+		{name: "integer exp", jwt: makeJWT(t, map[string]any{"exp": 1793836800}), want: time.Unix(1793836800, 0)},
+		{name: "fractional exp", jwt: makeJWT(t, map[string]any{"exp": 1793836800.75}), want: time.Unix(1793836800, 750_000_000)},
+		{name: "exp beyond int64", jwt: makeJWT(t, map[string]any{"exp": 1e19}), wantErr: true},
+		{name: "missing exp", jwt: makeJWT(t, map[string]any{"sub": "x"}), wantErr: true},
+		{name: "zero exp", jwt: makeJWT(t, map[string]any{"exp": 0}), wantErr: true},
+		{name: "non-numeric exp", jwt: makeJWT(t, map[string]any{"exp": "soon"}), wantErr: true},
+		{name: "two segments", jwt: "header.payload", wantErr: true},
+		{name: "invalid base64 payload", jwt: "header.!!!notbase64!!!.sig", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ExpiresAt(tt.jwt)
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrTokenDecode)
+				return
+			}
+			require.NoError(t, err)
+			assert.True(t, tt.want.Equal(got), "got %v, want %v", got, tt.want)
+		})
+	}
 }
 
 func TestValidateRequestURL(t *testing.T) {

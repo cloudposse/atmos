@@ -131,6 +131,9 @@ func (c *capturer) recheckSource(record *sourceRecord) error {
 	if now.Mode().Type() != record.info.Mode().Type() {
 		return fmt.Errorf("%w: %q changed type while it was being captured", errUtils.ErrArtifactSourceChanged, record.rel)
 	}
+	if now.IsDir() && now.Mode() != record.info.Mode() {
+		return fmt.Errorf("%w: %q changed mode while it was being captured", errUtils.ErrArtifactSourceChanged, record.rel)
+	}
 	switch {
 	case record.digest != "":
 		return c.recheckFile(record, now)

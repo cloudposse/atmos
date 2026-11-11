@@ -117,6 +117,7 @@ func (s *Service) checkEnumeration(alias string, info *RepositoryInfo, name stri
 func consumePages(ctx context.Context, repo artifact.Repository, request *enumeration, known map[digest.Digest]artifact.ListEntry) ([]artifact.ListEntry, error) {
 	var entries []artifact.ListEntry
 	cursor := ""
+	seen := map[string]bool{}
 	for page := 0; page < maxListPages; page++ {
 		if err := ctx.Err(); err != nil {
 			return entries, err
@@ -129,8 +130,10 @@ func consumePages(ctx context.Context, repo artifact.Repository, request *enumer
 		if result.NextCursor == "" {
 			return entries, nil
 		}
-		if result.NextCursor == cursor {
-			return entries, fmt.Errorf("%w: the repository returned the same list cursor twice", errUtils.ErrArtifactPublicationUnavailable)
+		// Any cursor already fetched means the listing cycles, not only one that repeats immediately.
+		seen[cursor] = true
+		if seen[result.NextCursor] {
+			return entries, fmt.Errorf("%w: the repository returned list cursor %q again", errUtils.ErrArtifactPublicationUnavailable, result.NextCursor)
 		}
 		cursor = result.NextCursor
 	}

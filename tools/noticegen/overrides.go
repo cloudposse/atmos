@@ -43,6 +43,17 @@ var repoOverrides = []overrideRule{
 	{"github.com/blang/semver/v4", "github.com/blang/semver", "", "v4/LICENSE", ""},
 	{"github.com/aws/aws-sdk-go-v2/internal/endpoints/v2", "github.com/aws/aws-sdk-go-v2", "internal/endpoints", "internal/endpoints/v2/LICENSE.txt", ""},
 	{"sigs.k8s.io/controller-runtime/pkg", "github.com/kubernetes-sigs/controller-runtime", "", "LICENSE", "sigs.k8s.io/controller-runtime"},
+	{"github.com/hashicorp/consul/api/v2", "github.com/hashicorp/consul", "api", "api/LICENSE", ""},
+}
+
+// deletedTagCommits maps module@version to the commit the Go module proxy
+// recorded for that version (`go mod download -json` reports it as
+// Origin.Hash) when the version's tag no longer exists upstream, so a blob URL
+// built from the tag would 404. Other versions of the same module still use
+// their tag.
+var deletedTagCommits = map[string]string{
+	// The api/v2.0.0 tag is gone from hashicorp/consul.
+	"github.com/hashicorp/consul/api/v2@v2.0.0": "782793ebb720f9798e49b125351fba1cd89406b4",
 }
 
 // pseudoVersionRe matches a Go pseudo-version's trailing 12-hex-char commit
@@ -86,6 +97,9 @@ func applyOverrides(entries []LicenseEntry, moduleVersion func(module string) (s
 		ref := gitRefFromVersion(version)
 		if rule.RefPrefix != "" {
 			ref = rule.RefPrefix + "/" + ref
+		}
+		if commit, ok := deletedTagCommits[versionModule+"@"+version]; ok {
+			ref = commit
 		}
 		entries[idx].URL = fmt.Sprintf("https://%s/blob/%s/%s", rule.Repo, ref, rule.LicensePath)
 	}

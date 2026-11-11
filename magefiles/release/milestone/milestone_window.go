@@ -45,7 +45,7 @@ func MinorMilestoneWindow(baseline string, milestones []Milestone) ([]MilestoneC
 			}
 			continue
 		}
-		changes = append(changes, MilestoneChange{Title: "v" + version})
+		changes = append(changes, MilestoneChange{Title: version})
 	}
 	return changes, nil
 }

@@ -4,7 +4,7 @@ name: Quality Gate Signal
 # completion wakes the trusted default-branch CI Timing Summary coordinator.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, labeled, unlabeled, milestoned, demilestoned, closed, enqueued, dequeued]
   pull_request_review:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
@@ -14,6 +14,12 @@ permissions: {}
 
 jobs:
   signal:
+    # Avoid allocating a signal runner for unrelated labels. A skipped workflow
+    # can still emit workflow_run; reporters always recompute live state.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      contains(fromJSON('["major","minor","patch","no-release"]'), github.event.label.name)
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:

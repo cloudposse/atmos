@@ -115,6 +115,46 @@ func TestQualityLegacyStatusReportsRefreshOnce(t *testing.T) {
 	}
 }
 
+// Reports published with a status snapshot still recorded the reporter's own
+// cancelled run, or an unapproved Quality Gate Signal run, as a CI blocker. Those
+// refresh once at any age, including reports carrying the first exclusion marker;
+// the fresh report omits the run, so the PR is not selected again.
+func TestQualitySelfBlockedReportsRefreshOnce(t *testing.T) {
+	cutoff := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
+	conclusions := map[string]string{qualityReportWorkflow: "cancelled", qualityReconcileWorkflow: "cancelled", qualitySignalWorkflow: "action_required"}
+	for _, workflow := range []string{qualityReportWorkflow, qualityReconcileWorkflow, qualitySignalWorkflow} {
+		t.Run(workflow, func(t *testing.T) {
+			server := &scheduleServer{prs: []schedulePR{{number: 42, labeled: true, notReady: true, updated: cutoff.Add(-time.Hour)}}}
+			pr := server.listed(&server.prs[0])
+			body := qualityMarker + "\n" + qualityHeadMarker(pr.Head.SHA) + "\n" + qualityBaseMarker(&pr) + "\n" +
+				qualityStatusBlockersPrefix + "[] -->\n<!-- atmos-quality-reporter-runs-excluded -->\n" +
+				"| All CI checks and workflows | Not ready | workflow: " + workflow + ": " + conclusions[workflow] + " |"
+			q := qualityTestClient(t, func(path string, response any) error {
+				if strings.Contains(path, "/comments?") {
+					comment := githubapi.Comment{ID: 17, Body: body}
+					comment.User.Login, comment.User.Type = "github-actions[bot]", "Bot"
+					return githubtest.Respond([]githubapi.Comment{comment}, response)
+				}
+				return server.get(path, response)
+			})
+			reason, err := q.scheduledReason(&pr, cutoff)
+			require.NoError(t, err)
+			require.Equal(t, qualityReasonLegacyStatus, reason)
+			body, _ = qualityMarkdown(&pr, []qualityGate{{ID: "review", Name: "Review", Detail: "Missing approval"}}, "")
+			reason, err = q.scheduledReason(&pr, cutoff)
+			require.NoError(t, err)
+			require.Empty(t, reason, "a fresh report without the reporter's run must not refresh again")
+			// An untrusted run of the reporter's path stays a blocker in the fresh
+			// report, but its unchanged verdict must not recur on every schedule.
+			body, _ = qualityMarkdown(&pr, []qualityGate{{ID: "ci", Name: "All CI checks and workflows", Detail: "workflow: " + workflow + ": failure", Signals: []qualitySignal{{Name: "workflow: " + workflow, State: "failure"}}}}, "")
+			require.Contains(t, body, "workflow: "+workflow+": failure")
+			reason, err = q.scheduledReason(&pr, cutoff)
+			require.NoError(t, err)
+			require.Empty(t, reason, "an untrusted reporter-path failure must not select the PR on every schedule")
+		})
+	}
+}
+
 func TestQualityRecoveredStatusPublicationIsStable(t *testing.T) {
 	state := &stateFixture{labels: []string{qualityNotReady}}
 	q := state.client(t)

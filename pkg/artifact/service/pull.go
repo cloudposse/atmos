@@ -67,7 +67,10 @@ func (s *Service) download(ctx context.Context, op *operation, request *artifact
 	if err := bindContent(content, source.inspection); err != nil {
 		return err
 	}
-	if err := materialize.Materialize(ctx, content, request.Destination); err != nil {
+	guard := materialize.WithReplaceGuard(func(dest string) error {
+		return recheckDestination(dest, request.Force, source.inspection.Record)
+	})
+	if err := materialize.Materialize(ctx, content, request.Destination, guard); err != nil {
 		return err
 	}
 	op.result.Outcome = artifact.OutcomeRead
@@ -101,6 +104,20 @@ func checkDestination(op *operation, request *artifact.PullRequest, record *arti
 		return false, fmt.Errorf("%w: destination %q already holds different content; use force to replace it", errUtils.ErrArtifactConflict, request.Destination)
 	}
 	return false, nil
+}
+
+// recheckDestination repeats the conflict decision right before the destination is replaced,
+// because files may have appeared in it while the artifact was downloading. An empty destination
+// and a destination that already matches are always replaceable; different content needs force.
+func recheckDestination(dest string, force bool, record *artifact.Record) error {
+	state, err := materialize.InspectDestination(dest, record)
+	if err != nil {
+		return err
+	}
+	if state == materialize.DestinationDiffers && !force {
+		return fmt.Errorf("%w: destination %q changed during the download and now holds different content; use force to replace it", errUtils.ErrArtifactConflict, dest)
+	}
+	return nil
 }
 
 // bindContent checks the content belongs to the inspected, pinned Record and fills a missing one.

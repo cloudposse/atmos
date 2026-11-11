@@ -13,7 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-	data "github.com/cloudposse/atmos/pkg/template/gomplate"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
 // manifestLoadTestTimeout bounds every describe in this file so a regression of the unbounded
@@ -352,7 +352,7 @@ func TestAtmosFuncs_Component_DuringManifestLoad(t *testing.T) {
 			atmosConfig:         &schema.AtmosConfiguration{},
 			configAndStacksInfo: &schema.ConfigAndStacksInfo{},
 			ctx:                 context.Background(),
-			gomplateData:        &data.Data{},
+			gomplateData:        &render.Data{},
 			manifestLoadFile:    manifestFile,
 		}
 	}
