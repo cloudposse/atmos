@@ -32,6 +32,18 @@ func TestCloudBackendIdentityWithoutNetwork(t *testing.T) {
 	}
 }
 
+func TestLocalBackendWithoutConfigUsesDefaults(t *testing.T) {
+	request := nativeUnit(t, `remote_state {
+ backend = "local"
+ config = null
+}`)
+	request.Phase = "backend"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(result.WorkingDir, "terraform.tfstate"), result.Backend["path"])
+	require.Equal(t, filepath.Join(result.WorkingDir, "terraform.tfstate.d"), result.Backend["workspace_dir"])
+}
+
 func TestRemoteBackendGenerationRetainsPathAndPolicy(t *testing.T) {
 	request := nativeUnit(t, `remote_state {
  backend = "s3"
