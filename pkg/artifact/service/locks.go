@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/artifact"
 )
@@ -125,6 +126,20 @@ func (l *lockSet) handleFor(alias string) artifact.LockHandle {
 	return nil
 }
 
+// handleForResource returns the handle for a specific lock target.
+func (l *lockSet) handleForResource(alias, resource string) artifact.LockHandle {
+	if l != nil {
+		for i := range l.held {
+			if l.held[i].target.alias == alias && l.held[i].target.resource == resource {
+				return l.held[i].handle
+			}
+		}
+	}
+	return nil
+}
+
+func subjectLockResource(name string) string { return "subject:" + name }
+
 // scope returns the weakest actual scope across held locks, which results report.
 func (l *lockSet) scope() artifact.LockScope {
 	if l == nil || len(l.held) == 0 {
@@ -146,11 +161,13 @@ func (l *lockSet) release(ctx context.Context, op *operation) error {
 	if l == nil {
 		return nil
 	}
-	detached := context.WithoutCancel(ctx)
 	var errs []error
 	for index := len(l.held) - 1; index >= 0; index-- {
 		held := l.held[index]
-		if err := held.handle.Release(detached); err != nil {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		err := held.handle.Release(releaseCtx)
+		cancel()
+		if err != nil {
 			op.warn("lock-release-failed", fmt.Sprintf("repository %q resource %q owner %q: operator recovery may be required: %v", held.target.alias, held.handle.Resource(), held.handle.Owner(), err))
 			errs = append(errs, fmt.Errorf("release lock %s in repository %q: %w", held.handle.Resource(), held.target.alias, err))
 		}

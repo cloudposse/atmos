@@ -102,7 +102,7 @@ type RepositoryStore interface {
 	ReferencePusher
 	// Tags lists every tag without interpreting it as a version.
 	Tags(ctx context.Context) ([]string, error)
-	// Delete removes a manifest by its full descriptor. It never deletes tags or shared blobs. A
+	// Delete removes a manifest by its full descriptor. Tags pointing to that digest may stop resolving; shared blobs are not deleted. A
 	// descriptor with only a digest deletes the manifest without reading it first.
 	Delete(ctx context.Context, target ocispec.Descriptor) error
 	// Referrers lists attachments of the subject, optionally filtered by artifact type.
