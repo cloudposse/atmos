@@ -102,8 +102,16 @@ func (r *RepositoryRegistry) Register(desc *KindDescriptor, factory RepositoryFa
 	if _, exists := r.kinds[desc.Kind]; exists {
 		return fmt.Errorf("%w: repository kind %q is already registered", errUtils.ErrArtifactConflict, desc.Kind)
 	}
-	r.kinds[desc.Kind] = registeredKind{descriptor: *desc, factory: factory}
+	r.kinds[desc.Kind] = registeredKind{descriptor: cloneKindDescriptor(desc), factory: factory}
 	return nil
+}
+
+func cloneKindDescriptor(source *KindDescriptor) KindDescriptor {
+	desc := *source
+	desc.PathOptions = append([]string(nil), desc.PathOptions...)
+	desc.Capabilities.Packagings = append([]Packaging(nil), desc.Capabilities.Packagings...)
+	desc.Capabilities.LockScopes = append([]LockScope(nil), desc.Capabilities.LockScopes...)
+	return desc
 }
 
 // Lookup returns the descriptor of a kind: the registered descriptor when a backend registered
@@ -115,7 +123,7 @@ func (r *RepositoryRegistry) Lookup(kind string) (*KindDescriptor, bool) {
 	entry, ok := r.kinds[kind]
 	r.mu.RUnlock()
 	if ok {
-		desc := entry.descriptor
+		desc := cloneKindDescriptor(&entry.descriptor)
 		return &desc, true
 	}
 	return BuiltinKind(kind)

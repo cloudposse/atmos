@@ -124,7 +124,7 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
-	return mergeResolvedImports(resolvedPaths, dst, fs)
+	return mergeResolvedImports(resolvedPaths, dst, fs, tempDir)
 }
 
 // mergeResolvedImports merges each resolved import file into dst and returns the
@@ -132,7 +132,7 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 // An optional import (SkipIfMissing) that fails to merge or re-read is skipped so a single
 // bad import does not abort the whole configuration load; a required import that fails to
 // merge returns errUtils.ErrRequiredImportFailed (fail closed).
-func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem) (string, error) {
+func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem, temporaryRoots ...string) (string, error) {
 	basePathSourceDir := ""
 	for _, resolvedPath := range resolvedPaths {
 		// Trace: log what we're about to merge (sanitized).
@@ -149,7 +149,7 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 			continue
 		}
 		log.Trace("successfully merged config from import", "import", SanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath)
-		if resolvedPath.ImportType != LOCAL {
+		if resolvedPath.ImportType != LOCAL || pathInsideAnyRoot(resolvedPath.FilePath, temporaryRoots) {
 			// Downloaded imports live in a temporary directory that is removed after loading.
 			mergedFilesReg.markEphemeral(dst, resolvedPath.FilePath)
 		}
@@ -164,6 +164,17 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 		}
 	}
 	return basePathSourceDir, nil
+}
+
+// pathInsideAnyRoot identifies downloaded files by their actual location, not import ancestry.
+func pathInsideAnyRoot(path string, roots []string) bool {
+	for _, root := range roots {
+		rel, err := filepath.Rel(root, path)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+			return true
+		}
+	}
+	return false
 }
 
 // ProcessImportsFromAdapter is the public entry point for adapters to process nested imports.

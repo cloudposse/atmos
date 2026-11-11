@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -247,6 +248,9 @@ func writeJSONString(out *bytes.Buffer, s string) {
 func ReadBounded(r io.Reader, limit int64) ([]byte, error) {
 	defer perf.Track(nil, "artifact.ReadBounded")()
 
+	if limit < 0 || limit == math.MaxInt64 {
+		return nil, fmt.Errorf("%w: invalid read limit %d", errUtils.ErrArtifactTooLarge, limit)
+	}
 	data, err := io.ReadAll(io.LimitReader(r, limit+1))
 	if err != nil {
 		return nil, err

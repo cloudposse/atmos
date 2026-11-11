@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"math"
 	"strings"
 	"testing"
 
@@ -71,6 +72,8 @@ func TestCanonicalizeJSONRejects(t *testing.T) {
 }
 
 func TestReadBounded(t *testing.T) {
+	_, limitErr := ReadBounded(strings.NewReader("x"), math.MaxInt64)
+	require.Error(t, limitErr)
 	data, err := ReadBounded(strings.NewReader("12345"), 5)
 	require.NoError(t, err)
 	assert.Equal(t, "12345", string(data))

@@ -11,6 +11,16 @@ import (
 )
 
 func TestKindDataJSONBehavior(t *testing.T) {
+	data, err := NewKindData(nil)
+	require.NoError(t, err)
+	assert.Empty(t, data)
+	record := vectorRecordB(t)
+	record.KindData = data
+	raw, err := record.Canonical()
+	require.NoError(t, err)
+	decoded, err := DecodeRecord(raw)
+	require.NoError(t, err)
+	assert.Empty(t, decoded.KindData)
 	t.Run("empty kind data marshals to null and cannot be decoded", func(t *testing.T) {
 		raw, err := KindData(nil).MarshalJSON()
 		require.NoError(t, err)
