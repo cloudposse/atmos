@@ -122,7 +122,15 @@ func validateArtifactLabelShape(step *schema.WorkflowStep) error {
 		return nil
 	}
 	switch reflect.ValueOf(step.Labels).Kind() {
-	case reflect.String, reflect.Map:
+	case reflect.String:
+		return nil
+	case reflect.Map:
+		for _, key := range reflect.ValueOf(step.Labels).MapKeys() {
+			item := unwrapInterface(reflect.ValueOf(step.Labels).MapIndex(key))
+			if !item.IsValid() || item.Kind() != reflect.String {
+				return artifactInvalidField(step, "labels", "mapping values must be strings")
+			}
+		}
 		return nil
 	case reflect.Slice:
 		for _, item := range reflect.ValueOf(step.Labels).Seq2() {

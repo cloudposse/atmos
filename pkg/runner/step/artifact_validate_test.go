@@ -134,7 +134,7 @@ func TestArtifactHandler_ValidateRejectsMalformedSteps(t *testing.T) {
 			step.Labels = valid
 			require.NoError(t, handler.Validate(step), "%T", valid)
 		}
-		for _, invalid := range []any{3, true, []any{1, 2}} {
+		for _, invalid := range []any{3, true, []any{1, 2}, map[string]any{"a": 1}, map[string]any{"a": nil}} {
 			step := artifactStepWith(artifact.ActionList)
 			step.Labels = invalid
 			require.ErrorIs(t, handler.Validate(step), errUtils.ErrArtifactStepInvalidField, "%T", invalid)

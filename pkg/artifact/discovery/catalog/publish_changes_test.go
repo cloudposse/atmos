@@ -4,9 +4,11 @@ import (
 	"context"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/discovery/catalog"
 	"github.com/cloudposse/atmos/pkg/artifact/discovery/internal/testkit"
+	"github.com/cloudposse/atmos/pkg/artifact/service"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,4 +38,12 @@ func TestPublishReportsReplacementChanges(t *testing.T) {
 	assert.Equal(t, []string{"new:1.0.0"}, result.Added)
 	assert.Equal(t, []string{"app:1.0.0"}, result.Updated)
 	assert.Equal(t, []string{"old:1.0.0"}, result.Removed)
+}
+
+func TestBuildRejectsS3BeforeOpeningRepository(t *testing.T) {
+	e := newEnv(t, false)
+	info := service.RepositoryInfo{Discovery: service.DiscoveryInfo{Kind: artifact.RepositoryKindS3, Location: "s3://bucket/prefix"}}
+	svc := catalog.NewService(&service.StaticRepositories{Repositories: map[string]artifact.Repository{"s3": e.repo}, Info: map[string]service.RepositoryInfo{"s3": info}})
+	_, err := svc.Build(context.Background(), &catalog.BuildRequest{Repository: "s3", Refs: refsOf("app:1")})
+	require.ErrorIs(t, err, errUtils.ErrArtifactCatalogInvalid)
 }
