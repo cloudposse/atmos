@@ -17,8 +17,8 @@ const contentETagLimit = 4 << 20
 const hexBase = 16
 
 // etagOf returns the ETag of the file at path described by info.
-func etagOf(path string, info os.FileInfo) (string, error) {
-	file, err := openFile(path)
+func etagOf(root *os.Root, path string, info os.FileInfo) (string, error) {
+	file, err := rootOpenFile(root, path)
 	if err != nil {
 		return "", err
 	}

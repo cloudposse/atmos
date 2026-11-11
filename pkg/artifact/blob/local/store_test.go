@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -166,7 +167,10 @@ func TestDescribeHashesOpenedFile(t *testing.T) {
 	defer file.Close()
 	require.NoError(t, os.Rename(path, path+".old"))
 	require.NoError(t, os.WriteFile(path, []byte("new"), 0o644))
-	info, err := store.describe(blob.OpGet, "k", path, file, false)
+	root, err := store.openRoot(false)
+	require.NoError(t, err)
+	defer root.Close()
+	info, err := store.describe(root, blob.OpGet, "k", file, false)
 	require.NoError(t, err)
 	sum := sha256.Sum256([]byte("old"))
 	assert.Equal(t, contentETag(sum[:]), info.ETag)
@@ -190,4 +194,30 @@ func TestPutRejectsUnknownCondition(t *testing.T) {
 	store := newStore(t)
 	_, err := store.Put(context.Background(), "k", bytes.NewReader(nil), blob.PutOptions{Condition: blob.Condition{Kind: blob.ConditionKind(999)}})
 	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
+}
+
+func TestSymlinksCannotEscapeRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks requires extra privileges on Windows")
+	}
+	store := newStore(t)
+	require.NoError(t, os.MkdirAll(store.Root(), 0o755))
+	outside := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "object"), []byte("keep"), 0o644))
+	require.NoError(t, os.Symlink(outside, filepath.Join(store.Root(), "team")))
+	ctx := context.Background()
+	_, err := store.Put(ctx, "team/object", bytes.NewReader([]byte("overwrite")), blob.PutOptions{Size: 9})
+	require.Error(t, err)
+	_, err = store.Get(ctx, "team/object", blob.GetOptions{})
+	require.Error(t, err)
+	_, err = store.Stat(ctx, "team/object", blob.StatOptions{})
+	require.Error(t, err)
+	require.Error(t, store.Delete(ctx, "team/object", blob.DeleteOptions{}))
+	page, listErr := store.List(ctx, blob.ListOptions{Prefix: "team/"})
+	if listErr == nil {
+		assert.Empty(t, page.Objects)
+	}
+	data, err := os.ReadFile(filepath.Join(outside, "object"))
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(data))
 }
