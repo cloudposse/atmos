@@ -30,6 +30,8 @@ components:
           kind: store
           name: results
           outputs: {value: .value}
+    # The consumer reads producer state and outputs, so apply producer first.
+    # For plan or describe without producer state, pass --use-mocks=always.
     consumer:
       metadata: {component: marker}
       vars:
