@@ -81,6 +81,11 @@ func TestLogsConfigFromArgs(t *testing.T) {
 		{name: "logs-level with no value ignored", args: []string{"version", "--logs-level"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
 		// A following flag is not consumed as the value; the next flag is still honored.
 		{name: "logs-level followed by flag not consumed", args: []string{"version", "--logs-level", "--verbose"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
+		// A bare "--" ends option scanning: logging flags after it are positional and ignored (so no
+		// unexpected log file is opened).
+		{name: "logs-file after -- is ignored", args: []string{"version", "--", "--logs-file=unexpected.log"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
+		{name: "logs-level after -- is ignored", args: []string{"version", "--", "--logs-level=Debug"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
+		{name: "options before -- still honored", args: []string{"version", "--logs-level=Debug", "--", "--logs-level=Off"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

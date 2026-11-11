@@ -116,6 +116,13 @@ func LogsConfigFromArgs(args []string) schema.Logs {
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+		// A bare "--" ends option parsing; everything after it is positional (and would be rejected
+		// by Cobra). Stop so a later "--logs-file" after "--" is not honored (it must not open a log
+		// file). flagValue never consumes "--" as a value (it starts with "-"), so reaching this as a
+		// standalone token always means the real delimiter.
+		if arg == "--" {
+			break
+		}
 		switch {
 		case strings.HasPrefix(arg, "--"+logsLevelFlagName):
 			if v, ok := flagValue(arg, logsLevelFlagName, args, &i); ok {
