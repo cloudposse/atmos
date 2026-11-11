@@ -96,6 +96,12 @@ func (r *Repository) admit(ctx context.Context, job *publishJob, options *artifa
 	if err != nil {
 		return nil, err
 	}
+	if current != nil && isDeletion(current.ref) {
+		if err := r.recoverDeletion(ctx, current); err != nil {
+			return nil, err
+		}
+		current = nil
+	}
 	input := layout.AdmitInput{
 		Current: refOf(current), IncomingRecord: job.recordDigest, IncomingIntent: job.prepared.IntentDigest,
 		ExpectedPrior: options.ExpectedPrior, Force: options.Force,

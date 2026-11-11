@@ -206,12 +206,23 @@ func TestDelete_PartialFailureLeavesGarbageNotADanglingReference(t *testing.T) {
 	_, err := repo.Delete(context.Background(), pinned, artifact.DeleteOptions{})
 	require.ErrorIs(t, err, errUtils.ErrArtifactDeleteFailed)
 	_, err = repo.Resolve(context.Background(), defaultRef())
-	require.ErrorIs(t, err, errUtils.ErrArtifactNotFound, "the reference was removed first")
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable, "pending deletion makes the reference unavailable while retaining ownership")
 
+	state, err := repo.loadReference(context.Background(), layout.ReferenceKey(testName, testVersion))
+	require.NoError(t, err)
+	oldClaim, err := repo.claimOf(context.Background(), state.ref)
+	require.NoError(t, err)
+	require.NotNil(t, oldClaim)
+	assert.Contains(t, oldClaim.Paths, "team/app/1.0.0", "older writers still observe the old location as claimed")
+	_, err = layout.Admit(&layout.AdmitInput{Current: state.ref, IncomingIntent: digest.FromString("old writer")})
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable, "older writers cannot steal the pending deletion")
 	spec.fake.ClearFaults()
+	repo.keyPattern = "new/{{ .Name }}/{{ .Version }}"
 	again := publish(t, repo, &prepareSpec{files: map[string]string{"a.txt": "a2", "b.txt": "b2"}, opID: "op-again"}, artifact.PublishOptions{})
 	assert.Equal(t, artifact.OutcomeCreated, again.Outcome, "leftover payload objects are still owned by the reference's representation")
 	assertIntact(t, repo, defaultRef())
+	_, exists := spec.fake.Object("team/app/1.0.0/b.txt")
+	assert.False(t, exists, "recovery deletes leftovers at the old location")
 }
 
 // A lost response to the reference delete is settled by reading the reference.
