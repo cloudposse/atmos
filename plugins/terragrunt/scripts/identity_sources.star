@@ -104,6 +104,9 @@ remote_state {
 
 
 def state_encryption():
+    if exec.which("tofu") == None:
+        ui.warning("State encryption scenario needs OpenTofu; skipped")
+        return
     root, work = new_project("atmos-terragrunt-encryption-", binary=tofu())
     write_hcl(root, "secure", MODULE_UNIT + ENCRYPTED_BACKEND.replace("@PASSPHRASE@", PASSPHRASE))
     applied = terraform(root, work, "apply", "secure")

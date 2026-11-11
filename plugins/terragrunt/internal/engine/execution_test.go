@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
@@ -597,6 +599,13 @@ func TestVariableValueRendering(t *testing.T) {
 	text, err = variableValue(map[string]any{"a": []any{1, "${x}"}})
 	require.NoError(t, err)
 	require.Equal(t, `{"a":[1,"$${x}"]}`, text)
+	text, err = variableValue(map[string]any{"literal": "%{ if true } ${x}"})
+	require.NoError(t, err)
+	expr, diags := hclsyntax.ParseExpression([]byte(text), "input", hcl.Pos{Line: 1, Column: 1})
+	require.False(t, diags.HasErrors(), diags.Error())
+	value, diags := expr.Value(nil)
+	require.False(t, diags.HasErrors(), diags.Error())
+	require.Equal(t, "%{ if true } ${x}", value.GetAttr("literal").AsString())
 	_, err = variableValue(make(chan int))
 	require.Error(t, err)
 }
@@ -617,12 +626,16 @@ func TestSignalValuesConvertToPlainJSON(t *testing.T) {
 	signals := mustSignals(t, map[string]cty.Value{
 		"text":    cty.StringVal("x"),
 		"number":  cty.NumberIntVal(3),
+		"large":   cty.NumberIntVal(9007199254740993),
 		"list":    cty.TupleVal([]cty.Value{cty.True, cty.StringVal("y")}),
 		"nothing": cty.NullVal(cty.String),
 		"unknown": cty.UnknownVal(cty.String),
 	})
 	assert.Equal(t, "x", signals["text"])
-	assert.EqualValues(t, 3, signals["number"])
+	assert.Equal(t, json.Number("3"), signals["number"])
+	data, err := json.Marshal(signals)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"large":9007199254740993`)
 	assert.Equal(t, []any{true, "y"}, signals["list"])
 	assert.Nil(t, signals["nothing"])
 	assert.Nil(t, signals["unknown"])

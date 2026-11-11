@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -125,7 +126,9 @@ func signalValues(signals map[string]cty.Value) (map[string]any, error) {
 			return nil, err
 		}
 		var plain any
-		if err := json.Unmarshal(data, &plain); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(data))
+		decoder.UseNumber()
+		if err := decoder.Decode(&plain); err != nil {
 			return nil, err
 		}
 		result[name] = plain
@@ -557,7 +560,7 @@ func tflintVariables(inputs map[string]any) ([]string, error) {
 	return variables, nil
 }
 
-// variableValue renders a string as itself and any other value as JSON, escaping interpolation.
+// variableValue renders a string as itself and any other value as JSON, escaping HCL templates.
 func variableValue(value any) (string, error) {
 	if text, ok := value.(string); ok {
 		return text, nil
@@ -566,7 +569,7 @@ func variableValue(value any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.ReplaceAll(string(data), "${", "$${"), nil
+	return strings.NewReplacer("${", "$${", "%{", "%%{").Replace(string(data)), nil
 }
 
 // tflintExtraVariables mirrors the variables Terragrunt takes from extra_arguments that apply to
