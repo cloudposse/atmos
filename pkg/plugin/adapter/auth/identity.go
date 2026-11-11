@@ -109,13 +109,13 @@ func (i *identity) Authenticate(ctx context.Context, upstream types.ICredentials
 	}
 	var result types.ICredentials
 	err = i.definition.invoke(ctx, i.name, i.realm, i.sessionSettings(), func(call *invocation) error {
-		stream, err := call.handle.Identity.Authenticate(ctx, &pluginv1.IdentityAuthenticateRequest{
+		stream, err := call.handle.Identity.Authenticate(call.ctx, &pluginv1.IdentityAuthenticateRequest{
 			Identity: &pluginv1.IdentityRequest{Invocation: call.request, Kind: i.Kind(), Name: i.name, Principal: principal, Spec: spec, Realm: i.realm}, Upstream: encoded,
 		})
 		if err != nil {
 			return err
 		}
-		envelope, err := receiveCredentials(stream)
+		envelope, err := receiveCredentials(stream, interactionHandler(call.ctx, call.request.GetInteractive(), presentDeviceCode))
 		if err != nil {
 			return err
 		}
@@ -148,7 +148,7 @@ func (i *identity) Logout(ctx context.Context) error {
 		return err
 	}
 	logoutErr := i.definition.logout(ctx, i.name, i.realm, i.sessionSettings(), func(call *invocation) error {
-		_, err := call.handle.Identity.Logout(ctx, &pluginv1.IdentityRequest{Invocation: call.request, Kind: i.Kind(), Name: i.name, Principal: principal, Spec: spec, Realm: i.realm})
+		_, err := call.handle.Identity.Logout(call.ctx, &pluginv1.IdentityRequest{Invocation: call.request, Kind: i.Kind(), Name: i.name, Principal: principal, Spec: spec, Realm: i.realm})
 		return err
 	})
 	return errors.Join(logoutErr, i.materializer.Logout(context.WithoutCancel(ctx)))

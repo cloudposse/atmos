@@ -72,9 +72,10 @@ func TestInvocationDeadlineSurfacesPluginTimeoutThroughAuthTranslation(t *testin
 	definition.Timeout = 500 * time.Millisecond
 	err := definition.invoke(t.Context(), "corporate", "realm", nil, func(operation *invocation) error {
 		require.NotNil(t, operation.request.Deadline)
-		ctx, cancel := context.WithDeadline(t.Context(), operation.request.Deadline.AsTime())
-		defer cancel()
-		return operation.handle.Command(ctx, &pluginv1.CommandRequest{Invocation: operation.request, Name: "hang"}, discard{}, discard{})
+		deadline, bounded := operation.ctx.Deadline()
+		require.True(t, bounded, "the RPC context must enforce the advertised invocation deadline")
+		require.Equal(t, operation.request.Deadline.AsTime(), deadline.UTC())
+		return operation.handle.Command(operation.ctx, &pluginv1.CommandRequest{Invocation: operation.request, Name: "hang"}, discard{}, discard{})
 	})
 	require.ErrorIs(t, err, errUtils.ErrPluginTimeout)
 	require.NotEmpty(t, errUtils.AllHints(err))

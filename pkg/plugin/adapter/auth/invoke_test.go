@@ -45,7 +45,7 @@ func TestCredentialStreamRequiresOneTerminalResult(t *testing.T) {
 				calls = append(calls, stream.EXPECT().Recv().Return(nil, tt.terminal))
 			}
 			gomock.InOrder(calls...)
-			actual, err := receiveCredentials(stream)
+			actual, err := receiveCredentials(stream, nil)
 			if tt.valid {
 				require.NoError(t, err)
 				assert.Equal(t, result, actual)
@@ -61,6 +61,7 @@ func TestTranslateErrorPreservesSafeClassification(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct{ input, target error }{
 		{nil, nil},
+		{errUtils.ErrPluginInteractionRequired, errUtils.ErrPluginInteractionRequired},
 		{status.Error(codes.FailedPrecondition, "secret"), errUtils.ErrPluginInteractionRequired},
 		{status.Error(codes.Canceled, "secret"), context.Canceled},
 		{status.Error(codes.DeadlineExceeded, "secret"), context.DeadlineExceeded},

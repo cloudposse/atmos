@@ -216,6 +216,24 @@ Authentication rereads the stores. Five-minute credentials allow reuse within th
 
 The package version is independent of the Atmos version. Releases contain all six supported platforms in an OCI index; installation downloads only your platform's executable payload. See the [official package release guide](https://github.com/cloudposse/atmos/tree/main/plugins) for publication and public GHCR setup.
 
+### Native authentication interactions
+
+Native providers and identities can emit one typed `Interaction` event before their credential result. Atmos displays a `device_code` interaction only when the host invocation is interactive. Its `fields` must contain exactly `verification_uri` and `user_code`:
+
+```json
+{
+  "kind": "device_code",
+  "fields": {
+    "verification_uri": "https://login.example.com/device",
+    "user_code": "ABCD-EFGH"
+  }
+}
+```
+
+The verification URI must be a public HTTPS URL without user information, query parameters, fragments, whitespace, or terminal controls, and at most 2048 bytes. The user code must contain 4–32 ASCII letters, digits, or hyphens. Atmos writes the validated URL and code to its UI channel on stderr. It does not display plugin-supplied titles or progress messages. Unknown interaction kinds, repeated interactions, extra fields, and invalid values stop authentication. Noninteractive invocations cannot request a device prompt.
+
+Use the host Browser API to open a complete authorization URL with query parameters. Do not put complete authorization URLs, tokens, or private diagnostics in an interaction's public fields. Authentication RPCs enforce the host invocation's cancellation and deadline.
+
 ### Native identity schema selection
 
 Native identity exports validate `principal` by default. Plugin authors whose configuration belongs in `spec` can select that target in their `plugin.yaml` capability metadata:

@@ -20,6 +20,7 @@ import (
 const maxCredentialEvents = 1024
 
 type invocation struct {
+	ctx     context.Context
 	handle  *native.Handle
 	request *pluginv1.Invocation
 }
@@ -45,7 +46,7 @@ func (d *Definition) invoke(ctx context.Context, name, realm string, settings ma
 			scope.Secrets = d.Services.Secrets(name, settings)
 		}
 		return translateError(handle.Invoke(ctx, scope, func(ctx context.Context, request *pluginv1.Invocation) error {
-			return operation(&invocation{handle: handle, request: request})
+			return operation(&invocation{ctx: ctx, handle: handle, request: request})
 		}))
 	})
 }
@@ -58,12 +59,23 @@ func toStruct(value map[string]any) (*structpb.Struct, error) {
 	return result, nil
 }
 
-func receiveCredentials(stream grpc.ServerStreamingClient[pluginv1.AuthenticateEvent]) (*pluginv1.Credentials, error) {
+func receiveCredentials(stream grpc.ServerStreamingClient[pluginv1.AuthenticateEvent], interact func(*pluginv1.Interaction) error) (*pluginv1.Credentials, error) {
 	// Progress is bounded and not blindly printed: plugin text can contain secrets.
+	interactionSeen := false
 	for range maxCredentialEvents {
 		event, err := stream.Recv()
 		if err != nil {
 			return nil, errors.Join(errUtils.ErrPluginProtocol, err)
+		}
+		if prompt := event.GetInteraction(); prompt != nil {
+			if interactionSeen || interact == nil {
+				return nil, errUtils.ErrPluginInteractionRequired
+			}
+			interactionSeen = true
+			if err := interact(prompt); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		if event.GetResult() == nil {
 			continue
@@ -101,7 +113,7 @@ func translateError(err error) error {
 }
 
 func translateLocalError(err error) error {
-	for _, cause := range []error{errUtils.ErrPluginProtocol, context.Canceled, context.DeadlineExceeded} {
+	for _, cause := range []error{errUtils.ErrPluginProtocol, errUtils.ErrPluginInteractionRequired, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, cause) {
 			return cause
 		}
