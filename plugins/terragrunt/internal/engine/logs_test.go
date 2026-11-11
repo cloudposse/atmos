@@ -7,11 +7,20 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTruncatePreservesUTF8Boundary(t *testing.T) {
+	short := strings.Repeat("a", maxLogMessage-1) + "é"
+	got := truncate(short)
+	assert.True(t, utf8.ValidString(got))
+	assert.Equal(t, strings.Repeat("a", maxLogMessage-1)+"...", got)
+	assert.Equal(t, "é", truncate("é"))
+}
 
 // logger returns a Terragrunt logger that reports to the sink, at the level the sink asks for.
 func logger(t *testing.T, sink *LogSink) log.Logger {

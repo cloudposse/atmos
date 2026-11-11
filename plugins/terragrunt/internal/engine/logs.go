@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/sirupsen/logrus"
@@ -163,5 +164,9 @@ func truncate(text string) string {
 	if len(text) <= maxLogMessage {
 		return text
 	}
-	return text[:maxLogMessage] + "..."
+	end := maxLogMessage
+	for end > 0 && !utf8.RuneStart(text[end]) {
+		end--
+	}
+	return text[:end] + "..."
 }
