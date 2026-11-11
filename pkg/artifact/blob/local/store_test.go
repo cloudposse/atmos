@@ -252,3 +252,18 @@ func TestListingPagesUseSnapshotAndFreshListingWalksAgain(t *testing.T) {
 	require.Len(t, resumed.Objects, 1)
 	assert.Equal(t, "c", resumed.Objects[0].Key, "an evicted snapshot resumes from its ordering token")
 }
+
+func TestPutDirectoryConflictPreservesExistingSidecar(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	_, err := store.Put(ctx, "prefix/child", bytes.NewReader([]byte("x")), blob.PutOptions{Size: 1})
+	require.NoError(t, err)
+	sidecar := filepath.Join(store.Root(), "prefix"+attrsSuffix)
+	original := []byte(`{"content_type":"original"}`)
+	require.NoError(t, os.WriteFile(sidecar, original, 0o644))
+	_, err = store.Put(ctx, "prefix", bytes.NewReader([]byte("x")), blob.PutOptions{Size: 1, ContentType: "new"})
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
+	got, err := os.ReadFile(sidecar)
+	require.NoError(t, err)
+	assert.Equal(t, original, got)
+}
