@@ -1,5 +1,7 @@
 package execution
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_reporter_test.go -package=execution github.com/cloudposse/atmos/pkg/component/execution Reporter
+
 import (
 	"bytes"
 	"context"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -269,23 +272,6 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// fakeReporter records what error handling reported.
-type fakeReporter struct {
-	retries []string
-	ignored []string
-	signals []string
-}
-
-func (f *fakeReporter) Retrying(policy string, attempt, maxAttempts int, sleep time.Duration) {
-	f.retries = append(f.retries, fmt.Sprintf("%s %d/%d %s", policy, attempt, maxAttempts, sleep))
-}
-
-func (f *fakeReporter) Ignored(policy, message string) {
-	f.ignored = append(f.ignored, policy+": "+message)
-}
-
-func (f *fakeReporter) SignalsWritten(path string) { f.signals = append(f.signals, path) }
-
 // recoveryRun drives a Recoverer with a scripted sequence of failures and records the pauses.
 type recoveryRun struct {
 	failures []error
@@ -341,7 +327,8 @@ func TestRecovererWithoutPolicyReturnsTheFailure(t *testing.T) {
 }
 
 func TestRecovererRetriesUntilSuccess(t *testing.T) {
-	reporter := &fakeReporter{}
+	reporter := NewMockReporter(gomock.NewController(t))
+	gomock.InOrder(reporter.EXPECT().Retrying("net", 1, 3, 7*time.Second), reporter.EXPECT().Retrying("net", 2, 3, 7*time.Second))
 	run := &recoveryRun{failures: []error{errExit, errExit}, texts: []string{"Error: connection timeout", "Error: connection timeout"}}
 	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3, SleepInterval: 7 * time.Second}}}
 	ignored, err := NewRecoverer(policy, WithReporter(reporter), WithSleep(run.sleep)).Run(t.Context(), run.attempt)
@@ -349,7 +336,6 @@ func TestRecovererRetriesUntilSuccess(t *testing.T) {
 	require.False(t, ignored)
 	require.Equal(t, 3, run.attempts)
 	require.Equal(t, []time.Duration{7 * time.Second, 7 * time.Second}, run.pauses)
-	require.Equal(t, []string{"net 1/3 7s", "net 2/3 7s"}, reporter.retries)
 }
 
 func TestRecovererStopsAtMaxAttempts(t *testing.T) {
@@ -395,7 +381,9 @@ func TestRecovererMatchesStderrOrFallsBackToError(t *testing.T) {
 
 func TestRecovererIgnorePolicyWinsOverRetryAndWritesSignals(t *testing.T) {
 	signalsFile := filepath.Join(t.TempDir(), SignalsFileName)
-	reporter := &fakeReporter{}
+	reporter := NewMockReporter(gomock.NewController(t))
+	reporter.EXPECT().Ignored("exists", "fine to reuse")
+	reporter.EXPECT().SignalsWritten(signalsFile)
 	run := &recoveryRun{failures: []error{errExit}, texts: []string{"Error: bucket already exists"}}
 	policy := &schema.ComponentErrors{
 		Retry: []schema.ComponentRetryPolicy{{Name: "any", Patterns: []string{".*"}, MaxAttempts: 5}},
@@ -408,8 +396,6 @@ func TestRecovererIgnorePolicyWinsOverRetryAndWritesSignals(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ignored)
 	require.Equal(t, 1, run.attempts)
-	require.Equal(t, []string{"exists: fine to reuse"}, reporter.ignored)
-	require.Equal(t, []string{signalsFile}, reporter.signals)
 	data, err := os.ReadFile(signalsFile)
 	require.NoError(t, err)
 	var written map[string]any
@@ -426,41 +412,43 @@ func TestRecovererSignalsDoNotFollowSymlink(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "ignore", Patterns: []string{"alpha"}, Signals: map[string]any{"x": 1}}}}
-	reporter := &fakeReporter{}
+	reporter := NewMockReporter(gomock.NewController(t))
+	reporter.EXPECT().Ignored("ignore", "")
+	reporter.EXPECT().SignalsWritten(signals)
 	ignored, err := NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(signals)).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"alpha"}}).attempt)
 	require.NoError(t, err)
 	require.True(t, ignored)
 	data, err := os.ReadFile(target)
 	require.NoError(t, err)
 	require.Equal(t, "keep", string(data))
-	require.Equal(t, []string{signals}, reporter.signals)
 }
 
 func TestRecovererIgnoreWithoutSignalsOrFileWritesNothing(t *testing.T) {
 	directory := t.TempDir()
 	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "a", Patterns: []string{"alpha"}, Signals: map[string]any{"x": 1}}, {Name: "b", Patterns: []string{"beta"}}}}
-	reporter := &fakeReporter{}
+	reporter := NewMockReporter(gomock.NewController(t))
+	reporter.EXPECT().Ignored("a", "")
 	ignored, err := NewRecoverer(policy, WithReporter(reporter)).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"alpha"}}).attempt)
 	require.NoError(t, err)
 	require.True(t, ignored)
-	require.Empty(t, reporter.signals, "without a signals file nothing is written")
 
 	// A signals file that cannot be written emits a warning and never undoes the ignore.
 	var output bytes.Buffer
 	log.Default().SetOutput(&output)
 	t.Cleanup(func() { log.Default().SetOutput(os.Stderr) })
 	blocked := filepath.Join(directory, "missing", SignalsFileName)
-	reporter = &fakeReporter{}
+	reporter = NewMockReporter(gomock.NewController(t))
+	reporter.EXPECT().Ignored("a", "")
 	ignored, err = NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(blocked)).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"alpha"}}).attempt)
 	require.NoError(t, err)
 	require.True(t, ignored)
-	require.Empty(t, reporter.signals)
 	require.NoFileExists(t, blocked)
 	require.Contains(t, output.String(), "Failed to write error signals")
 	require.Contains(t, output.String(), blocked)
 	require.Contains(t, output.String(), "error")
 
-	reporter = &fakeReporter{}
+	reporter = NewMockReporter(gomock.NewController(t))
+	reporter.EXPECT().Ignored("b", "")
 	ignored, err = NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(filepath.Join(directory, SignalsFileName))).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"beta"}}).attempt)
 	require.NoError(t, err)
 	require.True(t, ignored)
