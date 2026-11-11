@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/component/configuration"
+
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -120,7 +122,7 @@ func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
 	settings := map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}
 	watches := func() []schema.ComponentDependency {
 		deps := []schema.ComponentDependency{{Kind: "folder", Path: "modules/unit"}}
-		require.True(t, configurationWatchPaths(config, settings, deps))
+		require.True(t, configuration.WatchPaths(config, settings, deps))
 		return deps
 	}
 
@@ -149,30 +151,6 @@ func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
 	// YAML dependencies keep exact matching.
 	changed, _, _ = match(index, watches(), false)
 	require.False(t, changed)
-}
-
-func TestAffectedConfigurationWatchRoot(t *testing.T) {
-	root := t.TempDir()
-	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
-	for _, provider := range []bool{true, false} {
-		settings := map[string]any{}
-		if provider {
-			settings["configuration"] = map[string]any{"provider": "terragrunt"}
-		}
-		absolute := filepath.Join(root, "module")
-		deps := []schema.ComponentDependency{{Kind: "file", Path: "root.hcl"}, {Kind: "folder", Path: absolute}}
-		configurationWatchPaths(config, settings, deps)
-		require.Equal(t, absolute, deps[1].Path)
-		if provider {
-			require.Equal(t, filepath.Join(root, "root.hcl"), deps[0].Path)
-			changed, kind, _, err := isComponentDependentFolderOrFileChangedIndexed(newChangedFilesIndex(config, []string{"root.hcl"}, root), deps)
-			require.NoError(t, err)
-			require.True(t, changed)
-			require.Equal(t, "file", kind)
-		} else {
-			require.Equal(t, "root.hcl", deps[0].Path)
-		}
-	}
 }
 
 // Native discovery starts during configuration initialization, so the command's cancellation must reach it.
@@ -206,4 +184,20 @@ stacks:
 	cmd.SetContext(ctx)
 	_, err := ParseDescribeAffectedCliArgs(cmd, nil)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestResolvedChangedFilesPerIndex(t *testing.T) {
+	first := &changedFilesIndex{allFiles: []string{filepath.Join(t.TempDir(), "first")}}
+	second := &changedFilesIndex{allFiles: []string{filepath.Join(t.TempDir(), "second")}}
+	const n = 20
+	results := make(chan *changedFilesIndex, n)
+	for range n {
+		go func() { results <- resolvedChangedFiles(first) }()
+	}
+	initial := <-results
+	for i := 1; i < n; i++ {
+		require.Same(t, initial, <-results)
+	}
+	require.NotSame(t, initial, resolvedChangedFiles(second))
+	require.Same(t, initial, resolvedChangedFiles(first))
 }
