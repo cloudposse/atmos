@@ -45,6 +45,7 @@ func TestDeviceInteractionRejectsUnsafeOrUnknownData(t *testing.T) {
 		func(p *pluginv1.Interaction) { p.Fields["user_code"] = "BAD\nCODE" },
 		func(p *pluginv1.Interaction) { p.Fields["user_code"] = strings.Repeat("A", 33) },
 		func(p *pluginv1.Interaction) { p.Fields["verification_uri"] = "http://issuer.example/device" },
+		func(p *pluginv1.Interaction) { p.Fields["verification_uri"] = "https://issuer.example/%zz-synthetic-private" },
 		func(p *pluginv1.Interaction) {
 			p.Fields["verification_uri"] = "https://user:synthetic-private@issuer.example/device"
 		},
