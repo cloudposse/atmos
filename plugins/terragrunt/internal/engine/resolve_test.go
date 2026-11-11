@@ -89,6 +89,16 @@ remote_state {
 	require.ErrorContains(t, err, "cannot inspect selected executable")
 }
 
+func TestBackendGenerateDoesNotWriteStack(t *testing.T) {
+	root := t.TempDir()
+	fixture := filepath.Join("..", "..", "fixtures", "explicit-stack")
+	require.NoError(t, os.CopyFS(root, os.DirFS(fixture)))
+	request := model.Request{Path: filepath.Join(root, "live", "terragrunt.stack.hcl"), BasePath: root, Phase: "backend", Command: "generate", Tofu: "must-not-execute", Environment: map[string]string{}}
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NoDirExists(t, filepath.Join(root, "live", ".terragrunt-stack"))
+}
+
 func TestDiscoveryDeniesCommands(t *testing.T) {
 	request := nativeUnit(t, `locals { value = run_cmd("must-not-execute") }
 inputs = { value = local.value }

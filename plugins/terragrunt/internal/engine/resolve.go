@@ -66,8 +66,9 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 		return nil, err
 	}
 	discover := request.Phase == "discover" || request.Command == "discover"
-	if discover || request.Phase == "backend" || request.Command == "generate" {
-		environment = atmosbridge.Discovery(environment, request.Command == "generate")
+	generate := request.Command == "generate" && request.Phase != "backend"
+	if discover || request.Phase == "backend" || generate {
+		environment = atmosbridge.Discovery(environment, generate)
 	}
 	command := request.Command
 	if command == "" || command == "discover" || command == "generate" {
@@ -83,7 +84,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	pctx.AutoInit = true
 	pctx.MaxFoldersToCheck = options.DefaultMaxFoldersToCheck
 	if filepath.Base(path) == "terragrunt.stack.hcl" {
-		if request.Command == "generate" {
+		if generate {
 			if err := atmosbridge.Generate(ctx, logger, environment, path, request.Tofu); err != nil {
 				return nil, err
 			}
