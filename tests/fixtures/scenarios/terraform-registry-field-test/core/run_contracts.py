@@ -17,6 +17,13 @@ def generation(c):
     main = c.project / "components/terraform/marker/main.tf"
     main.write_text(main.read_text().replace('backend "local" {}', ''))
     c.command("generate-varfile", ["terraform", "generate", "varfile", "producer", "-s", "dev", "-f", str(c.root / "vars.json")], [0])
+    varfile = c.root / "vars.json"
+    try:
+        variables = json.loads(varfile.read_text())
+    except (OSError, ValueError) as error:
+        variables = {}
+        c.check("generated varfile readable JSON", False, str(error))
+    c.check("generated varfile contains stack variables", variables.get("name") == "dev-producer-v1" and variables.get("stage") == "dev", variables)
     c.command("generate-backend", ["terraform", "generate", "backend", "producer", "-s", "dev"], [0])
     c.command("plan", ["terraform", "plan", "producer", "-s", "dev", "-detailed-exitcode"], [2])
     plan = c.project / "components/terraform/marker/dev-producer.planfile"
@@ -38,7 +45,10 @@ def generation(c):
     c.command("deny-saved-destructive-apply", ["terraform", "apply", "producer", "-s", "dev", "--from-plan"], [77],
               env={"ATMOS_POLICY_DIR": str(c.project / "policy")})
     c.check("policy rejects saved destructive plan without state mutation", before == c.state_snapshot())
-    c.command("skip-planfile", ["terraform", "plan", "producer", "-s", "dev", "--skip-planfile"], [0])
+    result, _, _ = c.command("skip-planfile", ["terraform", "plan", "producer", "-s", "dev", "--skip-planfile"], [0])
+    plans = [entry["argv"] for entry in result["trace"] if entry["argv"] and entry["argv"][0] == "plan"]
+    c.check("skip-planfile omits plan output argument", bool(plans) and all(
+        arg != "-out" and not arg.startswith("-out=") for argv in plans for arg in argv), plans)
     c.save()
 
 
