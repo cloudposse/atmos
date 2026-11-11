@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"sort"
 	"sync"
 	"time"
@@ -43,6 +44,10 @@ func (s *Store) putMultipart(ctx context.Context, plan *putPlan, first, carry []
 	}
 	created, err := plan.api.CreateMultipartUpload(ctx, in, skipOptionalChecksums, noRetry)
 	if err != nil {
+		status, code := responseDetails(err)
+		if s.cfg.singleFallback && (status == http.StatusNotImplemented || code == "NotImplemented") {
+			return s.putFallback(ctx, plan, first, carry, body)
+		}
 		return nil, classify(plan.request(false), err)
 	}
 	upload := &multipart{store: s, plan: plan, uploadID: aws.ToString(created.UploadId)}

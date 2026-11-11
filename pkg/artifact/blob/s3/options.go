@@ -39,15 +39,16 @@ const (
 
 // settings holds the resolved configuration of a Store.
 type settings struct {
-	bucket      string
-	prefix      string
-	tags        map[string]string
-	partSize    int64
-	concurrency int
-	conditional ConditionalMode
-	opaqueKeys  bool
-	client      ClientConfig
-	api         API
+	bucket         string
+	prefix         string
+	tags           map[string]string
+	partSize       int64
+	concurrency    int
+	conditional    ConditionalMode
+	opaqueKeys     bool
+	singleFallback bool
+	client         ClientConfig
+	api            API
 }
 
 // Option configures a [Store].
@@ -173,4 +174,12 @@ func trimSlashes(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// WithSinglePutFallback retries an explicitly unsupported multipart upload as one PutObject.
+// The remaining stream is spooled to disk only if the endpoint rejects multipart creation.
+func WithSinglePutFallback() Option {
+	defer perf.Track(nil, "blob.s3.WithSinglePutFallback")()
+
+	return func(s *settings) { s.singleFallback = true }
 }

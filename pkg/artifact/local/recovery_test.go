@@ -316,3 +316,32 @@ func TestPendingOperationIDCannotBeReusedForAnotherReference(t *testing.T) {
 	_, err = repo.Resolve(context.Background(), artifact.Ref{Name: "team/first", Version: testVersion})
 	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable)
 }
+
+func TestReplacementRejectsUnmanagedFiles(t *testing.T) {
+	repo := newRepo(t, dirSpec())
+	first := publish(t, repo, &prepareSpec{files: map[string]string{"owned": "old"}}, artifact.PublishOptions{})
+	old := resolve(t, repo, defaultRef())
+	unmanaged := filepath.Join(first.Location, "user-file")
+	require.NoError(t, os.WriteFile(unmanaged, []byte("keep"), 0o644))
+	replacement := prepare(t, repo, &prepareSpec{files: map[string]string{"owned": "new"}, opID: "other"})
+	_, err := repo.Publish(context.Background(), replacement, artifact.PublishOptions{Force: true, ExpectedPrior: &old})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+	data, err := os.ReadFile(unmanaged)
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(data))
+	assertIntact(t, repo, defaultRef())
+}
+
+func TestReplacementRecoveryWithChangedInventory(t *testing.T) {
+	var fault armedFault
+	repo := newRepo(t, dirSpec().withOpts(fault.option()))
+	publish(t, repo, &prepareSpec{files: map[string]string{"old-name": "old"}}, artifact.PublishOptions{})
+	old := resolve(t, repo, defaultRef())
+	replacement := prepare(t, repo, &prepareSpec{files: map[string]string{"new-name": "new"}, opID: "replacement"})
+	fault.hook = crashAt(faultAfterMetadata)
+	_, err := repo.Publish(context.Background(), replacement, artifact.PublishOptions{Force: true, ExpectedPrior: &old})
+	require.ErrorIs(t, err, errCrash)
+	_, err = repo.Publish(context.Background(), replacement, artifact.PublishOptions{Force: true, ExpectedPrior: &old})
+	require.NoError(t, err)
+	assertIntact(t, repo, defaultRef())
+}
