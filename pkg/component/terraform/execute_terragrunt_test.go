@@ -3,11 +3,13 @@ package terraform
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
 
 // Compile-time sentinel for the schema field the hook tests depend on.
@@ -86,4 +88,25 @@ func TestExecuteTerragruntUnitSkipsHooksThatTestFixturesAlreadyRan(t *testing.T)
 
 	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, terragruntUnitRun{shouldProcess: true}))
 	require.Zero(t, hooks.ran)
+}
+
+func TestExecuteTerragruntUnitInvalidatesStateAfterFailure(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		t.Run(fmt.Sprintf("dry-run=%t", dryRun), func(t *testing.T) {
+			harness, info, _ := unitHarness(t)
+			info.DryRun = dryRun
+			info.ComponentEnvSection[testEnvProbeExit] = "1"
+			key := refcache.NewKey(nil, info.Stack, info.ComponentFromArg)
+			terraformStateCache.Store(key, terraformStateStaticCacheEntry{outputs: map[string]any{"value": "stale"}})
+			t.Cleanup(func() { terraformStateCache.Delete(key); ClearLastAuthContext() })
+			err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun)
+			if dryRun {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+			_, found := terraformStateCache.Load(key)
+			require.Equal(t, dryRun, found)
+		})
+	}
 }

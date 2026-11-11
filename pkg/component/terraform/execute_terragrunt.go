@@ -98,14 +98,11 @@ func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schem
 	}
 	err = terragruntexec.Run(ctx, &terragruntHost{executor: e, atmosConfig: atmosConfig, info: info, opts: opts}, request)
 	info.ExecMetadataRawExitCode = resolveExitCode(err)
-	if err = e.finishMainTerraformCommand(atmosConfig, info, err, false); err != nil {
-		return err
-	}
 	if !info.DryRun {
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
 		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
 	}
-	return nil
+	return e.finishMainTerraformCommand(atmosConfig, info, err, false)
 }
 
 // providerSection returns the key under `components.terraform` that enabled the provider.
