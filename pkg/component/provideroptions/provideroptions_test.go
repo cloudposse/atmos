@@ -225,6 +225,7 @@ func TestResolvePreservesExplicitFalseZeroAndEmpty(t *testing.T) {
 	assert.Equal(t, 0, values["retries"].Value)
 	assert.Equal(t, "", values["level"].Value)
 	assert.NotNil(t, values["paths"].Value)
+	assert.Equal(t, []string{}, values["paths"].Value)
 	assert.Len(t, values, 4)
 }
 
