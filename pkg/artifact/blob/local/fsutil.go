@@ -82,12 +82,16 @@ func openFile(path string) (*os.File, error) {
 	if runtime.GOOS == "windows" {
 		attempts = openAttempts
 	}
+	return openFileWith(path, attempts, openRead)
+}
+
+func openFileWith(path string, attempts int, open func(string) (*os.File, error)) (*os.File, error) {
 	var (
 		file *os.File
 		err  error
 	)
 	for i := range attempts {
-		file, err = openRead(path)
+		file, err = open(path)
 		if err == nil || errors.Is(err, os.ErrNotExist) {
 			return file, err
 		}

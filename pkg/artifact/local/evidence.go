@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"strings"
 
@@ -30,35 +31,45 @@ type loadedEvidence struct {
 // reported as diagnostics and skipped; they can never override valid matching evidence.
 func (t *tree) loadEvidence(subject digest.Digest) ([]loadedEvidence, []artifact.Diagnostic, error) {
 	dir := layout.SignatureDir(artifact.SubjectRecord, subject)
-	entries, err := fs.ReadDir(t.FS(), dir)
+	file, err := t.Open(native(dir))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("read evidence directory: %w", err)
+		return nil, nil, fmt.Errorf("open evidence directory: %w", err)
 	}
-	var (
-		loaded []loadedEvidence
-		diags  []artifact.Diagnostic
-	)
-	for _, entry := range entries {
-		stem, ok := strings.CutSuffix(entry.Name(), ".json")
-		if entry.IsDir() || !ok {
-			continue
-		}
-		locator := dir + "/" + entry.Name()
-		item, problem := t.readEvidenceFile(locator, stem)
-		if problem != nil {
-			if len(diags) >= maxMalformedEvidence {
-				diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "evidence-truncated", Message: "too many malformed evidence files; remaining entries were not read"})
+	defer file.Close()
+	var loaded []loadedEvidence
+	var diags []artifact.Diagnostic
+	ignored := 0
+	for {
+		entries, readErr := file.ReadDir(maxMalformedEvidence)
+		for _, entry := range entries {
+			stem, ok := strings.CutSuffix(entry.Name(), ".json")
+			if entry.IsDir() || !ok {
+				ignored++
+			} else {
+				locator := dir + "/" + entry.Name()
+				item, problem := t.readEvidenceFile(locator, stem)
+				if problem == nil {
+					loaded = append(loaded, loadedEvidence{evidence: item, locator: locator})
+					continue
+				}
+				ignored++
+				diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "malformed-evidence", Message: fmt.Sprintf("%s was ignored: %v", locator, problem)})
+			}
+			if ignored > maxMalformedEvidence {
+				diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "evidence-truncated", Message: "too many invalid evidence entries; remaining entries were not read"})
 				return nil, diags, errTooManyMalformedEvidence
 			}
-			diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "malformed-evidence", Message: fmt.Sprintf("%s was ignored: %v", locator, problem)})
-			continue
 		}
-		loaded = append(loaded, loadedEvidence{evidence: item, locator: locator})
+		if errors.Is(readErr, io.EOF) {
+			return loaded, diags, nil
+		}
+		if readErr != nil {
+			return nil, diags, fmt.Errorf("read evidence directory: %w", readErr)
+		}
 	}
-	return loaded, diags, nil
 }
 
 func (t *tree) readEvidenceFile(locator, hexDigest string) (*layout.Evidence, error) {

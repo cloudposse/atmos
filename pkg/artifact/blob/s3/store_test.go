@@ -179,3 +179,7 @@ func TestMultipartCreateIsNotRetriedAfterLostResponse(t *testing.T) {
 	require.Error(t, err)
 	assert.Len(t, fake.RequestsFor(s3test.OpCreateMultipartUpload), 1)
 }
+
+func TestEffectivePartSizeDoesNotOverflow(t *testing.T) {
+	assert.Equal(t, int64(math.MaxInt64/MaxParts+1), effectivePartSize(math.MaxInt64, DefaultPartSize))
+}
