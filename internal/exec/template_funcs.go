@@ -14,20 +14,24 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
-	data "github.com/cloudposse/atmos/pkg/template/gomplate"
+	templatepolicy "github.com/cloudposse/atmos/pkg/template/policy"
+	"github.com/cloudposse/atmos/pkg/template/render"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
 )
 
-// FuncMap creates and returns a map of template functions.
+// FuncMap creates and returns a map of template functions. The gomplateData
+// datasources serve `atmos.GomplateDatasource`; pass the same Data the
+// template engine renders with so both share the stack's definitions.
 func FuncMap(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	ctx context.Context,
-	gomplateData *data.Data,
+	gomplateData *render.Data,
 ) template.FuncMap {
 	defer perf.Track(atmosConfig, "exec.FuncMap")()
 
@@ -42,7 +46,7 @@ func manifestLoadFuncMap(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	ctx context.Context,
-	gomplateData *data.Data,
+	gomplateData *render.Data,
 	manifestFile string,
 ) template.FuncMap {
 	defer perf.Track(atmosConfig, "exec.manifestLoadFuncMap")()
@@ -56,7 +60,7 @@ func newFuncMap(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	ctx context.Context,
-	gomplateData *data.Data,
+	gomplateData *render.Data,
 	manifestFile string,
 ) template.FuncMap {
 	atmosFuncs := &AtmosFuncs{
@@ -78,16 +82,28 @@ type AtmosFuncs struct {
 	atmosConfig         *schema.AtmosConfiguration
 	configAndStacksInfo *schema.ConfigAndStacksInfo
 	ctx                 context.Context
-	gomplateData        *data.Data
+	gomplateData        *render.Data
 	// manifestLoadFile is the stack manifest being rendered while stacks are loading.
 	// Empty outside manifest loading.
 	manifestLoadFile string
 	sourceFile       string
 }
 
+// Policy wrapping binds the `atmos` namespace to each template file through
+// this interface; without it, calls would be attributed to no file.
+var _ templatepolicy.SourceFileBinder = (*AtmosFuncs)(nil)
+
+// BindSourceFile returns a copy of the namespace that attributes its policy
+// checks to file, the template the calls come from.
+func (f *AtmosFuncs) BindSourceFile(file string) any {
+	bound := *f
+	bound.sourceFile = file
+	return &bound
+}
+
 // Component returns component configuration for the given component and stack.
 func (f AtmosFuncs) Component(component string, stack string) (any, error) {
-	if err := guard.Function(f.ctx, "atmos.Component", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
+	if err := guard.Function(f.ctx, "atmos.Component", templatepolicy.Engine, guard.FileOrigin(f.sourceFile)); err != nil {
 		return nil, err
 	}
 	// Re-entry guard: describing a component loads and renders every stack manifest, including the
@@ -105,25 +121,37 @@ func (f AtmosFuncs) Component(component string, stack string) (any, error) {
 	return componentFunc(f.ctx, f.atmosConfig, f.configAndStacksInfo, component, stack)
 }
 
-// GomplateDatasource returns data for a gomplate datasource alias.
+// GomplateDatasource returns data for a gomplate datasource alias. Without
+// source policies, results are cached for the lifetime of the process, keyed
+// by the alias's effective definition, the arguments and the environment, so
+// a datasource referenced from many stacks and components is fetched once per
+// environment.
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
-	if err := guard.Function(f.ctx, "atmos.GomplateDatasource", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
+	if err := guard.Function(f.ctx, "atmos.GomplateDatasource", templatepolicy.Engine, guard.FileOrigin(f.sourceFile)); err != nil {
 		return nil, err
+	}
+	// A render without datasources (Gomplate disabled) reads nothing, guarded or not.
+	if f.gomplateData == nil {
+		return nil, errUtils.ErrGomplateDatasourceUnavailable
 	}
 	sourceRules, err := guard.Enabled("source")
 	if err != nil {
 		return nil, err
 	}
 	if !sourceRules {
-		// Nothing guards the read, so keep the per-alias cache that avoids fetching a datasource again.
-		return gomplateDatasourceFunc(alias, f.gomplateData, args...)
+		// Nothing guards the read, so keep the cache that avoids fetching a datasource again.
+		// The cache key includes the alias's URL and headers and the environment, so two
+		// stack manifests that define the same alias differently, or that set different
+		// templates.settings.env values, never see each other's value.
+		log.Debug("atmos.GomplateDatasource(): processing datasource", "alias", alias)
+		return render.CachedDatasource(f.gomplateData, alias, args...)
 	}
-	return policyDatasource(f.gomplateData, f.sourceFile, alias, false, args...)
+	return templatepolicy.Datasource(f.gomplateData, f.sourceFile, alias, false, args...)
 }
 
 // Store reads a value from a named store for the given stack, component, and key.
 func (f AtmosFuncs) Store(store string, stack string, component string, key string) (any, error) {
-	if err := guard.Function(f.ctx, "atmos.Store", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
+	if err := guard.Function(f.ctx, "atmos.Store", templatepolicy.Engine, guard.FileOrigin(f.sourceFile)); err != nil {
 		return nil, err
 	}
 	defer perf.Track(nil, "exec.AtmosFuncs.Store")()
@@ -151,7 +179,7 @@ func (f AtmosFuncs) Store(store string, stack string, component string, key stri
 // the same evaluation semantics as atmos.Component. A plain (untagged) string is returned
 // unchanged.
 func (f AtmosFuncs) Resolve(input string) (any, error) {
-	if err := guard.Function(f.ctx, "atmos.Resolve", policyTemplateEngine, guard.FileOrigin(f.sourceFile)); err != nil {
+	if err := guard.Function(f.ctx, "atmos.Resolve", templatepolicy.Engine, guard.FileOrigin(f.sourceFile)); err != nil {
 		return nil, err
 	}
 	defer perf.Track(f.atmosConfig, "exec.AtmosFuncs.Resolve")()

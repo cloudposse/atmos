@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
 // TestRenderMetadataAndFunctions preserves metadata while scoping functions to each render.
@@ -99,17 +100,19 @@ func TestDatasourceFileErrors(t *testing.T) {
 	}
 }
 
-// TestRenderWithBuildsFunctionsFromDatasourceURLs gives the builder the render's own datasource files.
-func TestRenderWithBuildsFunctionsFromDatasourceURLs(t *testing.T) {
-	// Not parallel: gomplate keeps a package-level cleanup hook that concurrent renderers race on.
+// TestRenderWithWrapsFunctionsWithTheRenderDatasources gives the wrapper the render's own datasource files.
+func TestRenderWithWrapsFunctionsWithTheRenderDatasources(t *testing.T) {
+	t.Parallel()
 	data := map[string]any{"name": "example"}
 
 	var topLevel, config *url.URL
-	actual, err := RenderWith(&schema.AtmosConfiguration{}, "readme", `{{ name }}|{{ (ds "config").name }}`, data,
-		func(top, cfg *url.URL) (template.FuncMap, error) {
-			topLevel, config = top, cfg
-			return template.FuncMap{"name": func() string { return "built" }}, nil
-		})
+	actual, err := RenderWith(&schema.AtmosConfiguration{}, "readme", `{{ name }}|{{ (ds "config").name }}`, data, &Options{
+		WrapFuncs: func(funcs template.FuncMap, sources *render.Data) (template.FuncMap, error) {
+			topLevel, config = sources.Sources["."].URL, sources.Sources["config"].URL
+			funcs["name"] = func() string { return "built" }
+			return funcs, nil
+		},
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "built|example", actual)
 	require.NotNil(t, topLevel)
@@ -119,12 +122,13 @@ func TestRenderWithBuildsFunctionsFromDatasourceURLs(t *testing.T) {
 	assert.NotEqual(t, topLevel.String(), config.String())
 }
 
-// TestRenderWithBuilderErrorStopsTheRender returns the builder's error before any template runs.
-func TestRenderWithBuilderErrorStopsTheRender(t *testing.T) {
+// TestRenderWithWrapperErrorStopsTheRender returns the wrapper's error before any template runs.
+func TestRenderWithWrapperErrorStopsTheRender(t *testing.T) {
 	t.Parallel()
 	failure := assert.AnError
-	actual, err := RenderWith(&schema.AtmosConfiguration{}, "readme", `unreached`, map[string]any{},
-		func(*url.URL, *url.URL) (template.FuncMap, error) { return nil, failure })
+	actual, err := RenderWith(&schema.AtmosConfiguration{}, "readme", `unreached`, map[string]any{}, &Options{
+		WrapFuncs: func(template.FuncMap, *render.Data) (template.FuncMap, error) { return nil, failure },
+	})
 	require.ErrorIs(t, err, failure)
 	assert.Empty(t, actual)
 }

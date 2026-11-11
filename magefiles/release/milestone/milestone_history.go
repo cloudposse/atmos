@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 )
@@ -19,6 +22,14 @@ type PullRequest struct {
 		Login string `json:"login"`
 	} `json:"user"`
 }
+
+// githubWebFlowLogin is the committer GitHub records for commits it creates and signs
+// itself: web merges and merge-queue merges. A direct push never carries it.
+const githubWebFlowLogin = "web-flow"
+
+// subjectPRPattern captures the PR number GitHub appends to a squash or queue
+// commit subject, for example "fix: something (#3608)".
+var subjectPRPattern = regexp.MustCompile(`\(#(\d+)\)$`)
 
 // CheckIncludedPR reports why an already merged PR makes the next release invalid.
 func CheckIncludedPR(pr *ReleasePR, milestones []Milestone, baseline string) error {
@@ -98,7 +109,7 @@ func (c *Client) commitPullRequests(commit, branch string, seen map[int]bool, la
 		return nil, err
 	}
 	if len(associated) == 0 {
-		return nil, fmt.Errorf("%w: commit %s has no associated PR", ErrMilestonePolicy, commit)
+		return c.signedSubjectPullRequest(commit, branch, seen)
 	}
 	var prs []PullRequest
 	included := false
@@ -125,6 +136,71 @@ func (c *Client) commitPullRequests(commit, branch string, seen map[int]bool, la
 		return nil, fmt.Errorf("%w: commit %s has no eligible merged PR", ErrMilestonePolicy, commit)
 	}
 	return prs, nil
+}
+
+// signedSubjectPullRequest resolves a commit that GitHub's association endpoint
+// lists no PR for. A merge-queue push can land on the default branch without the
+// PR ever being marked merged, which leaves that endpoint empty permanently.
+// The commit subject still names the PR, so trust it only when GitHub itself
+// signed the commit. Direct pushes and unsigned commits keep failing closed.
+// The PR is returned even though it is not marked merged; its milestone and
+// release label are then evaluated like any other included PR.
+func (c *Client) signedSubjectPullRequest(commit, branch string, seen map[int]bool) ([]PullRequest, error) {
+	noPR := fmt.Errorf("%w: commit %s has no associated PR", ErrMilestonePolicy, commit)
+	number, err := c.signedCommitPRNumber(commit)
+	if err != nil {
+		return nil, err
+	}
+	if number == 0 {
+		return nil, noPR
+	}
+	if seen[number] {
+		return nil, nil
+	}
+	var pr PullRequest
+	if err = c.Get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {
+		if githubapi.NotFound(err) {
+			return nil, noPR
+		}
+		return nil, err
+	}
+	if pr.Base.Ref != branch {
+		return nil, noPR
+	}
+	seen[number] = true
+	return []PullRequest{pr}, nil
+}
+
+// signedCommitPRNumber returns the PR number named by the subject of a commit that
+// GitHub signed itself, or zero when the commit is not signed by GitHub or names no PR.
+func (c *Client) signedCommitPRNumber(commit string) (int, error) {
+	var detail struct {
+		Commit struct {
+			Message      string `json:"message"`
+			Verification struct {
+				Verified bool `json:"verified"`
+			} `json:"verification"`
+		} `json:"commit"`
+		Committer *struct {
+			Login string `json:"login"`
+		} `json:"committer"`
+	}
+	if err := c.Get("commits/"+commit, &detail); err != nil {
+		return 0, err
+	}
+	if !detail.Commit.Verification.Verified || detail.Committer == nil || detail.Committer.Login != githubWebFlowLogin {
+		return 0, nil
+	}
+	subject, _, _ := strings.Cut(detail.Commit.Message, "\n")
+	match := subjectPRPattern.FindStringSubmatch(strings.TrimSpace(subject))
+	if match == nil {
+		return 0, nil
+	}
+	number, err := strconv.Atoi(match[1])
+	if err != nil {
+		return 0, fmt.Errorf("%w: commit %s names an invalid PR number", ErrMilestonePolicy, commit)
+	}
+	return number, nil
 }
 
 // CompareCommits returns the complete source delta from a published baseline.

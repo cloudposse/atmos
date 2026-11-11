@@ -715,6 +715,11 @@ truncated into ambiguous tags. Events also include the command, available CI
 commit/run identity, Atmos version, and the execution ID shared with execution
 uploads.
 
+The event message is the failure's own error text, prefixed with the command that
+failed when it is known, for example `terraform plan: subcommand exited with
+code 1`. Atmos truncates it at 8 KiB. It does not include the output of the
+command that failed; Terraform diagnostics arrive through execution uploads.
+
 Reporting applies Atmos's existing masking rules, queues up to 32 events, and
 limits envelopes to 1 MiB. Each delivery and the shared shutdown flush have a
 two-second timeout. Authentication or delivery failures do not change the

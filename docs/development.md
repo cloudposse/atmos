@@ -83,8 +83,9 @@ live progress tree; CI gets static results.
 ### Checking, formatting, and committing
 
 - `atmos check staged` checks a temporary copy of the index without changing your
-  files. `check pr` selects committed branch changes relative to `origin/main`
-  and checks their current working-tree contents; `check all` checks all tracked files.
+  files. `check pr` selects committed branch changes relative to the comparison base
+  (`origin/main` unless a stack base is set, as described below) and checks their
+  current working-tree contents; `check all` checks all tracked files.
 - `atmos format staged|pr|all` applies formatting and module cleanup as unstaged
   changes. It never stages files and reports operational failures.
 - `git commit` runs the full suite against the index. Automatic fixes are returned
@@ -102,15 +103,15 @@ Formatting exclusions are check-specific and preserve golden snapshots, generate
 SVGs, and other existing exclusions. The suite also verifies symlinks, instruction
 file sizes, YAML syntax, large files, EditorConfig, module compatibility, and
 secrets. The `branch-file-limit` check permits at most 150 files in the branch diff
-against the merge base with the resolved base, including the pending staged changes. The
-resolved base defaults to `origin/main` and is the configured stack parent when one is set.
+against the merge base with the comparison base (`origin/main` by default), including the
+pending staged changes.
 Deletions count, renames count once, and unstaged edits are excluded. Initial commits
 compare against an empty tree. This is our review-size policy; CodeRabbit's published
 file allowance varies by plan. Split larger changes into smaller PRs or a PR stack;
 `--base-ref` can select the parent branch when checking a stack. The commit hook has no
 flags, so a stacked branch records its parent once with
-`git config branch.<name>.stackbase <parent-branch>`; the hook then measures both the file
-limit and new-lint findings against that resolved base. `ATMOS_BRANCH_BASE_REF` overrides it
+`git config branch.<name>.stackbase <parent-branch>`; the hook then measures the file
+limit and new-lint findings against that parent. `ATMOS_BRANCH_BASE_REF` overrides it
 for a single command.
 Go module tidy runs once per affected module, including nested modules.
 
@@ -172,8 +173,15 @@ The recording selects actual working changes in `.atmos-git-hooks.yaml`, the che
 scripts and commands, and this guide using a temporary index. It checks those
 inputs read-only before recording `atmos git hooks run pre-commit`, verifies the
 live index and selected working files are unchanged, and removes the temporary
-index afterward. Make an intended edit to one of those files before regenerating;
-the recorder does not manufacture sample changes. Go checks are skipped when the
+index afterward. Make an intended edit to one of those files before regenerating,
+or pass `--base <rev>` to diff them against an earlier revision (default `HEAD`).
+With `--base HEAD` (the default), the tracked files are staged from the working tree. With
+any other `--base <rev>`, they are staged as they were at that revision and working-tree edits
+are ignored; a file the revision does not have keeps its `HEAD` version, because the hook
+reads its catalog from the staged tree (the check scripts always run from the working tree).
+In either mode the selection must include one of the tracked YAML files
+(`.atmos-git-hooks.yaml`, `.atmos.d/check.yaml`, or `.atmos.d/format.yaml`); otherwise
+`check-yaml` is skipped and `casts validate` rejects the recording. The recorder does not manufacture sample changes. Go checks are skipped when the
 selected changes contain no Go files.
 
 ### Repository checks in CI

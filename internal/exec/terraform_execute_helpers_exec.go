@@ -435,19 +435,51 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return nil
 	}
 
+	selectStep := workspaceStepOutput{command: "terraform workspace select -or-create", output: workspaceOutput.String()}
+
 	// Exit code 1 means the workspace doesn't exist yet; create it.
 	var exitCodeErr errUtils.ExitCodeError
 	if !errors.As(err, &exitCodeErr) || exitCodeErr.Code != 1 {
-		return err
+		return workspaceSetupError(err, info.TerraformWorkspace, selectStep)
 	}
 
-	return createWorkspaceFallback(atmosConfig, info, componentPath, opts...)
+	return createWorkspaceFallback(atmosConfig, info, componentPath, selectStep, opts...)
+}
+
+// workspaceStepOutput pairs a workspace subcommand with the output Terraform produced for it.
+// Workspace setup output is hidden on success, so it is kept to explain a failure.
+type workspaceStepOutput struct {
+	command string
+	output  string
+}
+
+// workspaceSetupError wraps a failed workspace setup step, attaching the output Terraform
+// printed so the real cause (backend auth, permissions, lock, network) is not lost behind a
+// bare exit code.  The cause stays in the error chain, so the exit code is preserved.
+func workspaceSetupError(cause error, workspace string, steps ...workspaceStepOutput) error {
+	builder := errUtils.Build(errUtils.ErrTerraformWorkspaceOp).
+		WithCause(cause).
+		WithContext("workspace", workspace).
+		WithHint("Check the backend credentials and permissions, then re-run with ATMOS_LOGS_LEVEL=debug for the full command trace")
+
+	var sections []string
+	for _, step := range steps {
+		if output := strings.TrimSpace(step.output); output != "" {
+			sections = append(sections, fmt.Sprintf("%s:\n%s", step.command, output))
+		}
+	}
+	if len(sections) > 0 {
+		builder = builder.WithExplanation(strings.Join(sections, "\n\n"))
+	}
+
+	return builder.Err()
 }
 
 // createWorkspaceFallback attempts to create a new workspace when select fails.
 // If workspace creation also fails with exit code 1 and the workspace is already
-// active (stale .terraform/environment file), it proceeds with a warning.
-func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+// active (stale .terraform/environment file), it proceeds with a warning.  Otherwise the
+// returned error carries the output of both steps (selectStep is the failed select).
+func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, selectStep workspaceStepOutput, opts ...ShellCommandOption) error {
 	redirectStdErr := info.RedirectStdErr
 	if redirectStdErr == "" {
 		redirectStdErr = "/dev/stdout"
@@ -489,7 +521,8 @@ func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schem
 		return nil
 	}
 
-	return newErr
+	newStep := workspaceStepOutput{command: "terraform workspace new", output: workspaceOutput.String()}
+	return workspaceSetupError(newErr, info.TerraformWorkspace, selectStep, newStep)
 }
 
 // checkTTYRequirement returns an error when `terraform apply` is invoked without

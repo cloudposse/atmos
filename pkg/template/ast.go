@@ -90,15 +90,36 @@ func ExtractFieldRefsByPrefix(templateStr string, prefix string) ([]string, erro
 	return result, nil
 }
 
+// branchOf returns the shared branch (pipeline, body and else body) of an
+// if, range or with node.
+func branchOf(node parse.Node) (*parse.BranchNode, bool) {
+	switch n := node.(type) {
+	case *parse.IfNode:
+		return &n.BranchNode, true
+	case *parse.RangeNode:
+		return &n.BranchNode, true
+	case *parse.WithNode:
+		return &n.BranchNode, true
+	}
+	return nil, false
+}
+
 // walkAST traverses all nodes in a template AST, calling fn for each node.
 // This handles all Go template node types including conditionals, ranges,
 // with blocks, and nested templates.
 func walkAST(node parse.Node, fn func(parse.Node)) {
-	if node == nil {
+	// Parse trees hold typed-nil pointers for absent parts, such as the else
+	// list of an `if` without `else` or the pipe of `{{ template "x" }}`.
+	if node == nil || isNilNode(node) {
 		return
 	}
 
 	fn(node)
+
+	if branch, ok := branchOf(node); ok {
+		walkBranchNode(branch.Pipe, branch.List, branch.ElseList, fn)
+		return
+	}
 
 	switch n := node.(type) {
 	case *parse.ListNode:
@@ -112,20 +133,15 @@ func walkAST(node parse.Node, fn func(parse.Node)) {
 
 	case *parse.CommandNode:
 		walkCommandNode(n, fn)
-	case *parse.ChainNode:
-		walkAST(n.Node, fn)
-
-	case *parse.IfNode:
-		walkBranchNode(n.Pipe, n.List, n.ElseList, fn)
-
-	case *parse.RangeNode:
-		walkBranchNode(n.Pipe, n.List, n.ElseList, fn)
-
-	case *parse.WithNode:
-		walkBranchNode(n.Pipe, n.List, n.ElseList, fn)
 
 	case *parse.TemplateNode:
 		walkAST(n.Pipe, fn)
+
+	case *parse.ChainNode:
+		// A chain is a field access on an expression, e.g. `(ds "cfg").name`
+		// or `atmos.Component "x" "y"`; the expression itself may contain
+		// function calls and field references.
+		walkAST(n.Node, fn)
 	}
 }
 
@@ -162,6 +178,12 @@ func walkCommandNode(n *parse.CommandNode, fn func(parse.Node)) {
 	}
 }
 
+// isNilNode reports whether node is a typed-nil pointer.
+func isNilNode(node parse.Node) bool {
+	value := reflect.ValueOf(node)
+	return value.Kind() == reflect.Pointer && value.IsNil()
+}
+
 // walkBranchNode traverses branch nodes (if/range/with) with pipe, list, and else-list.
 func walkBranchNode(pipe *parse.PipeNode, list, elseList *parse.ListNode, fn func(parse.Node)) {
 	walkAST(pipe, fn)
@@ -172,6 +194,27 @@ func walkBranchNode(pipe *parse.PipeNode, list, elseList *parse.ListNode, fn fun
 // fieldKey creates a unique key from a field path for deduplication.
 func fieldKey(ident []string) string {
 	return strings.Join(ident, ".")
+}
+
+// WalkNodes calls fn for every node in every template associated with tmpl
+// (including tmpl itself, and any template declared inside it with `define`),
+// descending into pipelines, branches and chained expressions such as
+// `(ds "cfg").name`. It exists so packages
+// outside this one can run their own analysis passes (for example, a
+// deprecation lint) over a parsed template without duplicating the AST
+// traversal.
+func WalkNodes(tmpl *template.Template, fn func(parse.Node)) {
+	defer perf.Track(nil, "template.WalkNodes")()
+
+	if tmpl == nil {
+		return
+	}
+	for _, t := range tmpl.Templates() {
+		if t.Tree == nil || t.Root == nil {
+			continue
+		}
+		walkAST(t.Root, fn)
+	}
 }
 
 // HasTemplateActions checks if a string contains Go template actions.
@@ -254,6 +297,8 @@ func ExtractPlainFieldRef(templateStr string) (FieldRef, bool, error) {
 	return ref, ok, nil
 }
 
+// Returns the template's only action node when the template consists of
+// exactly one action surrounded by nothing but whitespace.
 func singlePlainAction(tmpl *template.Template) (*parse.ActionNode, bool) {
 	if tmpl.Tree == nil || tmpl.Root == nil {
 		return nil, false
@@ -277,6 +322,8 @@ func singlePlainAction(tmpl *template.Template) (*parse.ActionNode, bool) {
 	return action, action != nil
 }
 
+// Extracts the field reference from an action that is a single, undecorated
+// field access such as .a.b with no pipeline or arguments.
 func fieldRefFromAction(action *parse.ActionNode) (FieldRef, bool) {
 	if action.Pipe == nil || len(action.Pipe.Decl) != 0 || len(action.Pipe.Cmds) != 1 {
 		return FieldRef{}, false
@@ -380,6 +427,7 @@ func LookupFieldPath(data any, path []string) (any, bool) {
 	return current, true
 }
 
+// Reads key from a map[string]any or any string-keyed map.
 func lookupMapValue(data any, key string) (any, bool) {
 	if data == nil {
 		return nil, false

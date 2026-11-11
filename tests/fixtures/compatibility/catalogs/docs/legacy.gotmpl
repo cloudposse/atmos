@@ -1,0 +1,3 @@
+{{ $cfg := ds "config" }}{{ conv.Bool $cfg.enabled }}
+{{ conv.Slice "a" "b" | toJSON }}
+{{ strings.Sort (conv.Slice "b" "a") | toJSON }}

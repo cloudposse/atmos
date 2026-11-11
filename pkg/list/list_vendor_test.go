@@ -1,6 +1,7 @@
 package list
 
 import (
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -349,6 +350,31 @@ func TestBuildVendorCSVTSV(t *testing.T) {
 		empty := buildVendorCSVTSV(headers, nil, ",")
 		assert.Contains(t, empty, "A,B\n")
 	})
+}
+
+// TestBuildVendorCSVTSV_EscapesDelimiters verifies that values containing the delimiter,
+// quotes, or newlines do not corrupt the row structure.
+func TestBuildVendorCSVTSV_EscapesDelimiters(t *testing.T) {
+	headers := []string{"Component", "Type", "Manifest", "Folder", "Tags"}
+	rows := []map[string]interface{}{
+		{"Component": "vpc", "Type": "Vendor Manifest", "Manifest": "vendor.yaml", "Folder": "components/terraform/vpc", "Tags": "a, b"},
+		{"Component": `say "hi"`, "Type": "Component Manifest", "Manifest": "component.yaml", "Folder": "x", "Tags": "c"},
+	}
+	for name, delim := range map[string]rune{"CSV": ',', "TSV": '\t'} {
+		t.Run(name, func(t *testing.T) {
+			out := buildVendorCSVTSV(headers, rows, string(delim))
+			r := csv.NewReader(strings.NewReader(out))
+			r.Comma = delim
+			records, err := r.ReadAll()
+			assert.NoError(t, err)
+			assert.Len(t, records, 3)
+			for _, rec := range records {
+				assert.Len(t, rec, len(headers))
+			}
+			assert.Equal(t, "a, b", records[1][4])
+			assert.Equal(t, `say "hi"`, records[2][0])
+		})
+	}
 }
 
 // TestRenderVendorTableOutput covers empty/filled rows and missing fields.

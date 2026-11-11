@@ -7,6 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // atmosConfigPtr is set by SetAtmosConfig from root.go before command execution.
@@ -33,10 +34,29 @@ templates. Use --file to target a specific manifest explicitly.`,
 	Args: cobra.NoArgs,
 }
 
+// legacyReplacementAnnotation records the command that replaces a deprecated legacy command.
+const legacyReplacementAnnotation = "atmos.stack.replacement"
+
+// deprecateLegacyCommand hides a legacy command and reports its replacement on the UI channel
+// (stderr) when it runs. Cobra's Deprecated field is deliberately not used: Cobra prints that
+// notice to the command's output stream, which Atmos routes to stdout for help templates, so
+// `value=$(atmos stack get ...)` and JSON output would start with the notice.
+func deprecateLegacyCommand(command *cobra.Command, replacement string) {
+	command.Hidden = true
+	if command.Annotations == nil {
+		command.Annotations = map[string]string{}
+	}
+	command.Annotations[legacyReplacementAnnotation] = replacement
+	run := command.RunE
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		ui.Warningf("Command %q is deprecated, use `%s` instead", cmd.Name(), replacement)
+		return run(cmd, args)
+	}
+}
+
 func init() {
 	for _, command := range []*cobra.Command{stackGetCmd, stackSetCmd, stackDeleteCmd, stackFormatCmd} {
-		command.Deprecated = "use `atmos stack config " + command.Name() + "` instead"
-		command.Hidden = true
+		deprecateLegacyCommand(command, "atmos stack config "+command.Name())
 	}
 	stackCmd.AddCommand(stackGetCmd)
 	stackCmd.AddCommand(stackSetCmd)

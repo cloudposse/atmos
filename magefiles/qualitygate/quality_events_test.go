@@ -56,6 +56,7 @@ func TestQualityEventSelection(t *testing.T) {
 				stacked.Number, stacked.Base.Ref = 43, "feature/prerequisite"
 				return githubtest.Respond([]githubapi.PR{pr, closed, other, stacked}, response)
 			})
+			q.trueUp = tc.path == "pulls?state=open"
 			prs, err := q.eventPRs(time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC))
 			require.NoError(t, err)
 			if tc.direct {
@@ -74,6 +75,7 @@ func TestQualityEventErrorsAndPagination(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "event.json")
 	t.Setenv("GITHUB_EVENT_PATH", path)
 	q := qualityTestClient(t, func(_ string, _ any) error { return errors.New("API unavailable") })
+	q.trueUp = true
 	_, err := q.eventPRs(time.Time{})
 	require.Error(t, err)
 	for _, data := range []string{`{`, `{"sha":"invalid"}`} {
@@ -93,17 +95,33 @@ func TestQualityEventErrorsAndPagination(t *testing.T) {
 		}
 		return githubtest.Respond([]githubapi.PR{githubtest.PR(githubtest.Run())}, response)
 	})
+	q.trueUp = true
 	prs, err := q.eventPRs(time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, []int{42}, prs)
 	require.Equal(t, 2, page)
 	q = qualityTestClient(t, func(_ string, response any) error { return githubtest.Respond(make([]githubapi.PR, 100), response) })
+	q.trueUp = true
 	_, err = q.eventPRs(time.Time{})
 	require.ErrorContains(t, err, "pagination limit")
 }
 
+// A per-PR report never falls back to every open PR when its event names none.
+func TestQualityReportEventWithoutPRSelectsNone(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "issue_comment")
+	path := filepath.Join(t.TempDir(), "event.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"issue":{"number":999}}`), 0o600))
+	t.Setenv("GITHUB_EVENT_PATH", path)
+	q := qualityTestClient(t, func(path string, _ any) error {
+		t.Fatalf("unexpected API path %s", path)
+		return nil
+	})
+	_, err := q.eventPRs(time.Time{})
+	require.ErrorContains(t, err, "use quality:reconcile")
+}
+
 func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
-	for _, scenario := range []string{"missing", "running", "recover", "reported", "closed"} {
+	for _, scenario := range []string{"missing", "running", "recover", "shared head", "reported", "closed"} {
 		t.Run(scenario, func(t *testing.T) {
 			run := githubtest.Run()
 			run.Event = "pull_request"
@@ -118,6 +136,7 @@ func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
 			getter := qualityPublishGetter(t, "create", &pr, &run, &reads)
 			fake := &githubtest.FakeAPI{T: t}
 			fake.Get = func(path string, response any) error {
+				require.NotContains(t, path, "pulls/43", "benchmark recovery must not refresh a sibling PR")
 				switch {
 				case strings.Contains(path, "actions/workflows/"):
 					runs := []githubapi.Run{run}
@@ -129,6 +148,11 @@ func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
 					}
 					return githubtest.Respond(map[string]any{"workflow_runs": runs}, response)
 				case strings.Contains(path, "/commits/") && strings.Contains(path, "/pulls?"):
+					if scenario == "shared head" {
+						sibling := pr
+						sibling.Number = 43
+						return githubtest.Respond([]githubapi.PR{sibling, pr}, response)
+					}
 					return githubtest.Respond([]githubapi.PR{pr}, response)
 				case strings.Contains(path, "/comments?") && scenario == "reported":
 					c := githubapi.Comment{ID: 17, Body: qualityMarker + qualityHeadMarker(pr.Head.SHA) + "<!-- atmos-benchmark-run:10:2 -->"}
@@ -141,6 +165,7 @@ func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
 			}
 			var body string
 			fake.Write = func(_ string, path string, r io.Reader) error {
+				require.NotContains(t, path, "issues/43", "only the selected PR may be written")
 				if strings.Contains(path, "comments") {
 					data, err := io.ReadAll(r)
 					require.NoError(t, err)
@@ -155,7 +180,7 @@ func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
 				return
 			}
 			require.Contains(t, body, "Quality Gate")
-			if scenario == "recover" {
+			if scenario == "recover" || scenario == "shared head" {
 				require.Contains(t, body, "benchmark execution failure")
 			} else if scenario != "reported" {
 				require.Contains(t, body, "pending")
@@ -237,7 +262,11 @@ func TestQualityLabelCreationAndFailures(t *testing.T) {
 }
 
 func TestQualityEntrypointValidation(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_PATH", "")
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_run")
 	require.ErrorContains(t, (Quality{}).Report("invalid"), "invalid repository")
+	t.Setenv("GITHUB_EVENT_NAME", "schedule")
+	require.ErrorContains(t, (Quality{}).Reconcile("invalid"), "invalid repository")
 	require.ErrorContains(t, (Bench{}).Report("invalid", "10"), "invalid repository")
 	for _, id := range []string{"bad", "0", "-1"} {
 		require.ErrorContains(t, (Bench{}).Report(githubtest.Repo, id), "invalid run ID")

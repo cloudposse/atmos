@@ -40,7 +40,7 @@ jobs:
       commit: ${{ steps.prepare.outputs.commit }}
       plan-artifact: ${{ steps.plan.outputs.artifact-id }}
     steps:
-      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -59,7 +59,7 @@ jobs:
             exit 1
           fi
       - id: token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
           private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
@@ -77,7 +77,7 @@ jobs:
           pr: ${{ inputs.pr }}
           github-token: ${{ steps.token.outputs.token }}
       - id: plan
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-plan.json
@@ -114,7 +114,7 @@ jobs:
     outputs:
       artifact: ${{ steps.artifacts.outputs.artifact-id }}
     steps:
-      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -127,7 +127,7 @@ jobs:
           tag: ${{ needs.prepare.outputs.tag }}
           commit: ${{ needs.prepare.outputs.commit }}
       - id: artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-build-${{ github.run_id }}-${{ github.run_attempt }}
           path: source/dist
@@ -165,7 +165,7 @@ jobs:
       actions: read
       attestations: read
     steps:
-      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -195,7 +195,7 @@ jobs:
           app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
       - id: sealed
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-sealed-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-upload
@@ -229,7 +229,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -284,7 +284,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -309,7 +309,7 @@ jobs:
             exit 1
           fi
       - id: token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
           private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}

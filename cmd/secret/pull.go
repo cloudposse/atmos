@@ -42,7 +42,7 @@ func init() {
 func runSecretPull(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretPull")()
 
-	scope, err := parseScope(cmd, args)
+	scope, err := parseScopeForStack(cmd, args, "pull")
 	if err != nil {
 		return err
 	}

@@ -244,6 +244,10 @@ the artifact itself. Missing/expired trust or missing required proofs fail witho
 Expose verification subject, evidence digests, policy fingerprint, verified claims, and failure reason
 in inspect/verify output and CI summaries. Explicit `verify` is the metadata/evidence-only check;
 payload-consuming operations additionally verify every consumed content descriptor.
+Extraction matches the signed Record's inventory exactly: reject unlisted user payload members and
+duplicate paths, and match each path, type, mode, link target, and file digest. Only generated
+`.atmos/artifact/` distribution members excluded from the inventory are permitted, and they are
+verified against their own descriptors. Tests must prove an archive with an extra member is rejected.
 
 ### Mutation locks versus dependency locks
 
@@ -326,7 +330,9 @@ Search ignores staging/journal entries. Direct digest lookup checks the Record's
 The operation journal records captured time, intent, expected prior reference, resolved location,
 and prepared representation checksums. It is an implementation recovery record, not a public catalog.
 Use local reference/location locks or S3 conditional ownership records. Reserve a location before
-overwriting it; another reference cannot claim it even when its key_pattern collides.
+overwriting it; another reference cannot claim it even when its key_pattern collides. Identical,
+ancestor, and descendant payload paths conflict: claims check and reserve overlapping locations
+atomically, so a force replacement or deletion of a parent cannot remove a child another reference owns.
 
 Publication sequence:
 
@@ -439,8 +445,10 @@ planfiles:
 
 Keep the existing `--store`, default, priority, and environment detection behavior. The adapter
 references `artifacts.repositories.shared`; it does not duplicate its backend options. Map legacy
-keys to `ci/planfiles/<sha256-of-key>:<commit-sha>` and retain the original key plus full CI metadata
-in typed kind data. Implement existing query predicates from that data, not approximate label matches.
+keys to the fixed reference `ci/planfiles/<sha256-of-key>:current`, so Download, Delete, Exists, and
+GetMetadata resolve by key alone and a new upload for the same key replaces the current version under
+the writer guard. Retain the original key, commit SHA, and full CI metadata in typed kind data.
+Implement existing query predicates from that data, not approximate label matches.
 Preserve the existing planfile overwrite contract only inside this explicit adapter; it cannot
 override plugin releases. Old store configurations and serialized archives are unchanged.
 

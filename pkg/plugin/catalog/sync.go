@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	pluginoci "github.com/cloudposse/atmos/pkg/plugin/oci"
+	"github.com/cloudposse/atmos/pkg/plugin/publicaccess"
 )
 
 // ReleaseSelection identifies a published package version to reconcile into a catalog.
@@ -23,12 +24,11 @@ type ReleaseSelection struct {
 	Repository string `json:"repository"`
 }
 
-// PublicVerifier verifies both package settings and anonymously readable OCI bytes.
+// PublicVerifier checks anonymously readable OCI bytes.
 //
 //go:generate go run go.uber.org/mock/mockgen -destination=mock_registry_sync_test.go -package=catalog github.com/cloudposse/atmos/pkg/oci Registry
 //go:generate go run go.uber.org/mock/mockgen -source=sync.go -destination=mock_sync_test.go -package=catalog
 type PublicVerifier interface {
-	RequirePublic(context.Context, string) error
 	Verify(context.Context, string, string, string) (string, error)
 }
 
@@ -45,7 +45,7 @@ type SyncOption func(*syncOptions)
 //nolint:lintroller // Functional option.
 func WithSkipMissing() SyncOption { return func(o *syncOptions) { o.skipMissing = true } }
 
-// WithPublicVerification enforces public visibility before writing and verifies published bytes afterward.
+// WithPublicVerification checks releases before listing them and the catalog after publication.
 //
 //nolint:lintroller // Functional option.
 func WithPublicVerification(verifier PublicVerifier) SyncOption {
@@ -79,11 +79,6 @@ func (s *Syncer) Sync(ctx context.Context, target string, releases []ReleaseSele
 	targetRef, err := ParseReleaseReference(target)
 	if err != nil {
 		return err
-	}
-	if settings.public != nil {
-		if err := settings.public.RequirePublic(ctx, targetRef.Context().Name()); err != nil {
-			return err
-		}
 	}
 	file, digest, err := Read(ctx, s.registry, target)
 	if missingCatalog(digest, err) {
@@ -123,10 +118,13 @@ func verifyCatalogPublication(ctx context.Context, registry atmosoci.Registry, t
 	if public != nil {
 		published, err := registry.Head(ctx, targetRef)
 		if err != nil {
-			return err
+			return publicaccess.PublicationError(targetRef.Context().Name(), targetRef.Identifier(), err)
 		}
-		_, err = public.Verify(ctx, targetRef.Context().Name(), targetRef.Identifier(), published.Digest.String())
-		return err
+		_, err = public.Verify(ctx, targetRef.Context().Name(), published.Digest.String(), published.Digest.String())
+		if err != nil {
+			return publicaccess.PublicationError(targetRef.Context().Name(), published.Digest.String(), err)
+		}
+		return nil
 	}
 	return nil
 }
@@ -162,11 +160,6 @@ func (s *Syncer) syncRelease(ctx context.Context, file *File, selected ReleaseSe
 }
 
 func fetchRelease(ctx context.Context, registry atmosoci.Registry, selected ReleaseSelection, reference name.Reference, public PublicVerifier) (*remote.Descriptor, error) {
-	if public != nil {
-		if err := public.RequirePublic(ctx, selected.Repository); err != nil {
-			return nil, err
-		}
-	}
 	descriptor, err := registry.Get(ctx, reference)
 	if err != nil {
 		if atmosoci.IsNotFound(err) {

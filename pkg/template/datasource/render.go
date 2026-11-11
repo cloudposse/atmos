@@ -2,7 +2,6 @@
 package datasource
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,10 +9,9 @@ import (
 	"os"
 	"text/template"
 
-	"github.com/hairyhenderson/gomplate/v4"
-
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/template/render"
 )
 
 const defaultDirPermissions = 0o700
@@ -108,6 +106,19 @@ func writeOuterTopLevelFile(tempDir string, fileURL string, mergedData map[strin
 	return finalTopLevelFileURL, nil
 }
 
+// Options customizes one render.
+type Options struct {
+	// Funcs are scoped to this render; their return values retain native
+	// fields and methods, bypassing datasource JSON serialization.
+	Funcs template.FuncMap
+	// WrapFuncs receives the fully assembled function map and the render's
+	// datasources, which include "." and "config". Policy enforcement uses it
+	// to guard every function call.
+	WrapFuncs render.FuncsWrapper
+	// MissingKey is the text/template "missingkey" option; empty means error.
+	MissingKey string
+}
+
 // Render applies a Gomplate template with config and root datasources.
 // Custom functions are scoped to this render and their return values retain
 // native fields and methods, bypassing datasource JSON serialization.
@@ -120,25 +131,24 @@ func Render(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "datasource.Render")()
 
-	return RenderWith(atmosConfig, tmplName, tmplValue, mergedData, func(*url.URL, *url.URL) (template.FuncMap, error) {
-		return funcs, nil
-	})
+	return RenderWith(atmosConfig, tmplName, tmplValue, mergedData, &Options{Funcs: funcs})
 }
 
-// FuncsBuilder returns the custom functions for one render. It receives the file URLs of the root
-// ("." datasource) and "config" datasources, which exist only for the duration of the render.
-type FuncsBuilder func(topLevel, config *url.URL) (template.FuncMap, error)
-
-// RenderWith is Render with functions built from the render's own datasource URLs. Callers that
-// guard or wrap the functions, such as policy enforcement, need those URLs to construct them.
+// RenderWith is Render with every option. The merged data is exposed on `.`
+// (with the historical `.Env.README_YAML` helper) and as the `config`
+// datasource; only Gomplate functions and opts.Funcs are available.
 func RenderWith(
 	atmosConfig *schema.AtmosConfiguration,
 	tmplName string,
 	tmplValue string,
 	mergedData map[string]interface{},
-	buildFuncs FuncsBuilder,
+	opts *Options,
 ) (string, error) {
 	defer perf.Track(atmosConfig, "datasource.RenderWith")()
+
+	if opts == nil {
+		opts = &Options{}
+	}
 
 	tempDir, err := createTempDirectory()
 	if err != nil {
@@ -156,36 +166,16 @@ func RenderWith(
 		return "", err
 	}
 
-	funcs, err := buildFuncs(finalTopLevelFileURL, finalFileUrl)
-	if err != nil {
-		return "", err
-	}
-
-	// Construct Gomplate Options.
-	opts := gomplate.RenderOptions{
-		Context: map[string]gomplate.DataSource{
-			".": {
-				URL: finalTopLevelFileURL,
-			},
-			"config": {
-				URL: finalFileUrl,
-			},
+	engine := render.New(render.WithSprig(false))
+	return engine.Render(context.Background(), &render.Request{
+		Name:       tmplName,
+		Text:       tmplValue,
+		Funcs:      opts.Funcs,
+		WrapFuncs:  opts.WrapFuncs,
+		MissingKey: opts.MissingKey,
+		ContextSources: map[string]render.Datasource{
+			".":      {URL: finalTopLevelFileURL.String()},
+			"config": {URL: finalFileUrl.String()},
 		},
-		Funcs: funcs,
-	}
-
-	// Render the template.
-	renderer := gomplate.NewRenderer(opts)
-	var buf bytes.Buffer
-	tpl := gomplate.Template{
-		Name:   tmplName,
-		Text:   tmplValue,
-		Writer: &buf,
-	}
-
-	if err := renderer.RenderTemplates(context.Background(), []gomplate.Template{tpl}); err != nil {
-		return "", fmt.Errorf("failed to render template: %w", err)
-	}
-
-	return buf.String(), nil
+	})
 }

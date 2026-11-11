@@ -60,7 +60,7 @@ Each provider in the `providers` map supports the following settings:
 ## Supported Providers
 
 <dl>
-  <dt>**Anthropic (Claude)** — `claude-sonnet-4-5-20250929`</dt>
+  <dt>**Anthropic (Claude)** — `claude-sonnet-5`</dt>
   <dd>API Key authentication. Advanced reasoning, default choice.</dd>
 
   <dt>**OpenAI (GPT)** — `gpt-4o`</dt>
@@ -87,7 +87,7 @@ Each provider in the `providers` map supports the following settings:
   <dt>**Ollama (Local)** — `llama4`</dt>
   <dd>No authentication (local). Privacy, offline use, zero API costs.</dd>
 
-  <dt>**AWS Bedrock** — `anthropic.claude-sonnet-4-5-20250929-v1:0`</dt>
+  <dt>**AWS Bedrock** — `global.anthropic.claude-sonnet-5`</dt>
   <dd>AWS Credentials authentication. Enterprise security, AWS integration.</dd>
 
   <dt>**Azure OpenAI** — `gpt-4o`</dt>
@@ -520,6 +520,18 @@ export AWS_PROFILE="bedrock-profile"
 Use the `global.` prefix for dynamic routing across regions, or the `anthropic.` prefix for a specific region. Cross-region inference profiles use IDs like `us.anthropic.claude-sonnet-4-6-v1:0`.
 :::
 
+:::note IAM permissions for the default model
+When `model` is not set, Atmos uses the global inference profile `global.anthropic.claude-sonnet-5`. Earlier versions defaulted to the foundation model `anthropic.claude-sonnet-4-5-20250929-v1:0`, so an IAM policy that only names that foundation-model ARN returns `AccessDenied`. Global cross-region inference needs `bedrock:InvokeModel` on all three resources (see the [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html)):
+
+- the inference profile in your region: `arn:aws:bedrock:<region>:<account>:inference-profile/global.anthropic.claude-sonnet-5`
+- the foundation model in your region: `arn:aws:bedrock:<region>::foundation-model/anthropic.claude-sonnet-5`
+- the global foundation model: `arn:aws:bedrock:::foundation-model/anthropic.claude-sonnet-5`
+
+Alternatively, set `model` explicitly to a model your policy already allows.
+
+Global inference profiles are not available in the AWS GovCloud regions (`us-gov-west-1`, `us-gov-east-1`). In those regions, set `model` to an ID that is valid there.
+:::
+
 #### Azure OpenAI
 
 :::warning Azure-Specific Configuration
@@ -590,8 +602,8 @@ Token caching (prompt caching) reduces costs by reusing frequently-sent content 
   <dt>**Grok** — 75% discount</dt>
   <dd>Automatic. No configuration required.</dd>
 
-  <dt>**Bedrock** — Up to 90% discount</dt>
-  <dd>Automatic. No configuration required.</dd>
+  <dt>**Bedrock** — 90%+ discount (Claude)</dt>
+  <dd>Manual markers, added by Atmos with the same `cache` settings as Anthropic (on by default).</dd>
 
   <dt>**Azure OpenAI** — 50-100% discount</dt>
   <dd>Automatic. No configuration required.</dd>
@@ -600,7 +612,7 @@ Token caching (prompt caching) reduces costs by reusing frequently-sent content 
   <dd>Local processing, caching not applicable.</dd>
 </dl>
 
-Most providers implement caching automatically. Only Anthropic requires explicit configuration:
+Most providers implement caching automatically. Anthropic and Bedrock (Claude) cache only content marked for caching; Atmos marks the system prompt and ATMOS.md by default, and you can change that per provider:
 
 <File title="atmos.yaml">
 ```yaml
@@ -618,7 +630,7 @@ ai:
 
 <dl>
   <dt>`cache.enabled`</dt>
-  <dd>Enable or disable prompt caching (default: `true`). Cached tokens cost 90% less for Anthropic.</dd>
+  <dd>Enable or disable prompt caching (default: `true`). Cached tokens cost at least 90% less for Anthropic and for Claude on Bedrock.</dd>
 
   <dt>`cache.cache_system_prompt`</dt>
   <dd>Cache the skill system prompt across messages (default: `true`).</dd>
@@ -627,8 +639,10 @@ ai:
   <dd>Cache the ATMOS.md project instructions content (default: `true`).</dd>
 </dl>
 
+For Anthropic and Bedrock (Claude), these settings control where cache markers go. A marker caches everything up to and including the block it is on, so a marker on ATMOS.md also caches the system prompt before it, even when `cache_system_prompt` is `false`.
+
 :::tip Maximize Cache Savings
-For Anthropic, keep your ATMOS.md content stable during conversations and use named sessions for extended work on the same topic. For all other providers, caching works transparently with no action required.
+For Anthropic and Bedrock, keep your ATMOS.md content stable during conversations and use named sessions for extended work on the same topic. For the other providers, caching works transparently with no action required.
 :::
 
 ## Multi-Provider Configuration

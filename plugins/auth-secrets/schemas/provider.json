@@ -15,14 +15,18 @@
         "additionalProperties": false,
         "required": [
           "store",
-          "key"
+          "path"
         ],
         "properties": {
           "store": {
             "type": "string",
             "minLength": 1
           },
-          "key": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "field": {
             "type": "string",
             "minLength": 1
           },

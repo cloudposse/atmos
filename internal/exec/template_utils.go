@@ -1,58 +1,51 @@
 package exec
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"os"
-	"sync"
 	"text/template"
 	"text/template/parse"
 	"time"
 
-	"github.com/Masterminds/sprig/v3"
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hairyhenderson/gomplate/v4"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/templatesource"
 	cfgpkg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	"github.com/cloudposse/atmos/pkg/template/datasource"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
-	data "github.com/cloudposse/atmos/pkg/template/gomplate"
+	templatepolicy "github.com/cloudposse/atmos/pkg/template/policy"
+	"github.com/cloudposse/atmos/pkg/template/render"
 	u "github.com/cloudposse/atmos/pkg/utils"
-)
-
-// Cache for sprig function maps to avoid repeated expensive allocations.
-// Sprig function maps are immutable once created, so caching is safe.
-// Note: Gomplate functions are NOT cached as they may have state and context dependencies.
-var (
-	sprigFuncMapCache     template.FuncMap
-	sprigFuncMapCacheOnce sync.Once
 )
 
 const (
 	logKeyTemplate = "template"
+
+	// Datasource timeout applied when neither `atmos.yaml` nor the stack
+	// manifest's `settings.templates.settings` sets `gomplate.timeout`.
+	defaultDatasourceTimeoutSeconds = 5
 )
 
-// getSprigFuncMap returns a cached copy of the sprig function map.
-// Sprig function maps are expensive to create (173MB+ allocations) and immutable,
-// so we cache and reuse them across template operations.
-// This optimization reduces heap allocations by ~3.76% (173MB) per profile run.
-func getSprigFuncMap() template.FuncMap {
-	sprigFuncMapCacheOnce.Do(func() {
-		sprigFuncMapCache = sprig.FuncMap()
-	})
-	return sprigFuncMapCache
+// missingKeyOption maps the "ignore missing template values" switch to the
+// text/template "missingkey" option. With it off, a template that indexes a map
+// with a key that is not present fails, e.g.:
+//
+//	template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
+func missingKeyOption(ignoreMissingTemplateValues bool) string {
+	if ignoreMissingTemplateValues {
+		return render.MissingKeyDefault
+	}
+	return render.MissingKeyError
 }
 
 // ProcessTmpl parses and executes Go templates in decoded scalar or arbitrary text.
@@ -69,6 +62,21 @@ func ProcessTmpl(
 	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, ignoreMissing: ignoreMissingTemplateValues})
 }
 
+// ProcessTmplFromFile is ProcessTmpl for a template read from file: the file names the template
+// and is the source policy admission attributes its function calls to. ProcessTmpl's name is
+// only a label, so its calls have unknown provenance.
+func ProcessTmplFromFile(
+	atmosConfig *schema.AtmosConfiguration,
+	file string,
+	tmplValue string,
+	tmplData any,
+	ignoreMissingTemplateValues bool,
+) (rendered string, renderErr error) {
+	defer perf.Track(atmosConfig, "exec.ProcessTmplFromFile")()
+
+	return processTmpl(atmosConfig, &tmplInput{name: file, sourceFile: file, value: tmplValue, data: tmplData, ignoreMissing: ignoreMissingTemplateValues})
+}
+
 // ProcessStepTmpl is ProcessTmpl for workflow, custom-command, and hook step templates: the text is
 // parsed with the supplied delimiters (see delimiters.ForSteps) instead of the default "{{" and "}}".
 func ProcessStepTmpl(
@@ -80,7 +88,7 @@ func ProcessStepTmpl(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStepTmpl")()
 
-	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, delims: delims})
+	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, delims: delims, stepSource: true})
 }
 
 // tmplInput describes a template to render with processTmpl.
@@ -106,6 +114,8 @@ type tmplInput struct {
 	sourceFile string
 	// yamlSource enables native-tag shielding only for YAML documents, never decoded text.
 	yamlSource bool
+	// stepSource identifies executable step text, whose auth-shaped payloads are ordinary data.
+	stepSource bool
 }
 
 // manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
@@ -129,69 +139,101 @@ func manifestLoadOnlyContextKeys(tmplData any) []string {
 	return keys
 }
 
-// processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
-// manifest-load behavior.
+// processTmpl parses and executes Go templates with the Gomplate, Sprig and Atmos function sets.
+// A non-empty in.manifestLoadFile selects the manifest-load behavior.
 func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
-	protectedSource, restoreSource, protectErr := protectTemplateSource(in)
+	authSource, restoreAuthSource, authErr := protectAuthTemplateSource(in)
+	if authErr != nil {
+		return "", authErr
+	}
+	protectedInput := *in
+	protectedInput.value = authSource
+	protectedSource, restoreSource, protectErr := protectTemplateSource(&protectedInput)
 	if protectErr != nil {
 		return "", protectErr
 	}
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreSource(rendered)
+			rendered = restoreAuthSource(restoreSource(rendered))
 		}
 	}()
 
-	// Add Gomplate, Sprig and Atmos template functions, attributed to the template's source file
-	// for policy guards.
+	tmplConfig := atmosConfig
+	if tmplConfig == nil {
+		tmplConfig = &schema.AtmosConfiguration{}
+	}
+	ctx := context.TODO()
+	if lo.FromPtr(tmplConfig.Templates.Settings.Gomplate.Experimental) {
+		ctx = render.WithExperimental(ctx)
+	}
+
+	// Gomplate, Sprig and Atmos template functions are attributed to the template's source file
+	// for policy guards. The template name is only a label: resolving it as a path would let a
+	// same-named local file (or the working directory's origin) lend it local provenance, so a
+	// template without a known source file has unknown provenance.
 	sourceFile := in.sourceFile
-	if sourceFile == "" {
-		sourceFile = in.name
-	}
-	funcs, err := buildTemplateFuncMap(atmosConfig, in.manifestLoadFile, sourceFile)
-	if err != nil {
-		return "", err
-	}
+	sources := &render.Data{}
 
 	effectiveDelims := in.delims.Normalize()
 	protectedSource, restoreLiterals := literalsource.ProtectEncoded(protectedSource, effectiveDelims.Left, effectiveDelims.Right)
-	t, err := in.delims.Apply(template.New(in.name)).Funcs(funcs).Parse(protectedSource)
+
+	result, err := render.New().Render(ctx, &render.Request{
+		Name:       in.name,
+		Text:       protectedSource,
+		Data:       literalsource.Restore(in.data),
+		Funcs:      templateAtmosFuncs(tmplConfig, ctx, sources, in.manifestLoadFile),
+		LeftDelim:  effectiveDelims.Left,
+		RightDelim: effectiveDelims.Right,
+		MissingKey: missingKeyOption(in.ignoreMissing),
+		Sources:    sources,
+		WrapFuncs:  templatepolicy.FuncsWrapper(sourceFile),
+		Prepare:    prepareTmpl(in),
+	})
 	if err != nil {
 		return "", err
 	}
 
-	// While stack manifests are loading, leave atmos.Component actions as template text for the
-	// later per-component render (which runs after all manifests are loaded) and render the rest
-	// of the manifest now. `locals` and import context values exist only in this pass, so
-	// they are resolved inside the deferred actions. Actions that cannot be deferred fail with
-	// ErrComponentFuncDuringManifestLoad.
-	if in.manifestLoadFile != "" && !in.skipComponentDeferral {
-		atmostmpl.DeferCalls(t.Tree, "atmos", "Component", in.data, manifestLoadOnlyContextKeys(in.data)...)
+	return restoreLiterals(result), nil
+}
+
+// templateAtmosFuncs returns the Atmos template functions, with the manifest-load guard when a
+// stack manifest is being loaded.
+func templateAtmosFuncs(atmosConfig *schema.AtmosConfiguration, ctx context.Context, sources *render.Data, manifestLoadFile string) template.FuncMap {
+	if manifestLoadFile != "" {
+		return manifestLoadFuncMap(atmosConfig, &schema.ConfigAndStacksInfo{}, ctx, sources, manifestLoadFile)
 	}
+	return FuncMap(atmosConfig, &schema.ConfigAndStacksInfo{}, ctx, sources)
+}
 
-	// Control the behavior during execution if a map is indexed with a key that is not present in the map.
-	// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
-	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
-	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
-
-	option := "missingkey=error"
-
-	if in.ignoreMissing {
-		option = "missingkey=default"
+// prepareTmpl returns the parse-tree rewrite for in, or nil when there is none.
+//
+// While stack manifests are loading, atmos.Component actions are left as template text for the
+// later per-component render (which runs after all manifests are loaded) and the rest of the
+// manifest renders now. `locals` and import context values exist only in this pass, so they are
+// resolved inside the deferred actions. Actions that cannot be deferred fail with
+// ErrComponentFuncDuringManifestLoad.
+func prepareTmpl(in *tmplInput) func(*template.Template) {
+	deferComponents := in.manifestLoadFile != "" && !in.skipComponentDeferral
+	if !deferComponents && in.prepare == nil {
+		return nil
 	}
-
-	t.Option(option)
-	if in.prepare != nil {
-		in.prepare(t)
+	return func(t *template.Template) {
+		if deferComponents {
+			atmostmpl.DeferCalls(t.Tree, "atmos", "Component", in.data, manifestLoadOnlyContextKeys(in.data)...)
+		}
+		if in.prepare != nil {
+			in.prepare(t)
+		}
 	}
+}
 
-	var res bytes.Buffer
-	err = t.Execute(&res, literalsource.Restore(in.data))
-	if err != nil {
-		return "", err
+// protectAuthTemplateSource defers credential templates in configuration, while executable steps
+// retain their ordinary template evaluation even when their payloads contain auth-shaped data.
+func protectAuthTemplateSource(in *tmplInput) (string, func(string) string, error) {
+	if in.stepSource {
+		return in.value, func(value string) string { return value }, nil
 	}
-
-	return restoreLiterals(res.String()), nil
+	return templatesource.Protect(in.value)
 }
 
 // protectTemplateSource shields native YAML tags only when the caller has a YAML document.
@@ -209,30 +251,6 @@ func protectTemplateSource(in *tmplInput) (string, func(string) string, error) {
 		return "", nil, err
 	}
 	return protected, func(value string) string { return restoreLiterals(restoreStarlark(value)) }, nil
-}
-
-// buildTemplateFuncMap combines template functions with the appropriate manifest-load guard and
-// wraps them with policy admission for the file the template came from.
-func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFile, sourceFile string) (template.FuncMap, error) {
-	d := data.Data{}
-	ctx := context.TODO()
-	tmplConfig := atmosConfig
-	if tmplConfig == nil {
-		tmplConfig = &schema.AtmosConfiguration{}
-	}
-
-	if lo.FromPtr(tmplConfig.Templates.Settings.Gomplate.Experimental) {
-		ctx = gomplate.SetExperimental(ctx)
-	}
-
-	var atmosFuncMap template.FuncMap
-	if manifestLoadFile != "" {
-		atmosFuncMap = manifestLoadFuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d, manifestLoadFile)
-	} else {
-		atmosFuncMap = FuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d)
-	}
-	funcs := lo.Assign(data.CreateFuncs(ctx, &d), getSprigFuncMap(), atmosFuncMap)
-	return policyTemplateFuncs(funcs, sourceFile, &d)
 }
 
 // convertRawEnvToStringMap converts a raw env value (any) to map[string]string.
@@ -373,16 +391,24 @@ func ProcessTmplWithDatasources(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
 
+	authSource, restoreAuthSource, authErr := templatesource.Protect(tmplValue)
+	if authErr != nil {
+		return "", authErr
+	}
 	protectedSource, restoreSource, protectErr := protectTemplateSource(&tmplInput{
-		name: tmplName, value: tmplValue, yamlSource: true,
+		name: tmplName, value: authSource, yamlSource: true,
 	})
 	if protectErr != nil {
 		return "", protectErr
 	}
 	tmplValue = protectedSource
+	var generatedAuthRestorers []func(string) string
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreSource(rendered)
+			for index := len(generatedAuthRestorers) - 1; index >= 0; index-- {
+				rendered = generatedAuthRestorers[index](rendered)
+			}
+			rendered = restoreAuthSource(restoreSource(rendered))
 		}
 	}()
 
@@ -437,8 +463,11 @@ func ProcessTmplWithDatasources(
 		templateSettings.Env = mergedEnv
 	}
 
-	// Add Atmos, Gomplate and Sprig functions and datasources
-	funcs := make(map[string]any)
+	// mapstructure turns an unset stack-level timeout into 0, which the merge above lets
+	// override the global timeout. Keep the global one unless the stack manifest sets its own.
+	if settingsSection.Templates.Settings.Gomplate.Timeout == 0 {
+		templateSettings.Gomplate.Timeout = atmosConfig.Templates.Settings.Gomplate.Timeout
+	}
 
 	// Number of processing evaluations/passes
 	evaluations, _ := lo.Coalesce(atmosConfig.Templates.Settings.Evaluations, 1)
@@ -479,89 +508,32 @@ func ProcessTmplWithDatasources(
 	for i := 0; i < evaluations; i++ {
 		log.Trace("ProcessTmplWithDatasources", logKeyTemplate, tmplName, "evaluation", i+1)
 
-		d := data.Data{}
-
-		// Gomplate functions and datasources
-		if atmosConfig.Templates.Settings.Gomplate.Enabled {
-			// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
-			timeoutSeconds, _ := lo.Coalesce(templateSettings.Gomplate.Timeout, 5)
-
-			ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
-			defer cancelFunc()
-
-			if lo.FromPtr(templateSettings.Gomplate.Experimental) {
-				ctx = gomplate.SetExperimental(ctx)
-			}
-
-			d = data.Data{}
-			d.Ctx = ctx
-
-			for k, v := range templateSettings.Gomplate.Datasources {
-				_, err := d.DefineDatasource(k, v.Url)
-				if err != nil {
-					return "", err
-				}
-
-				// Add datasource headers
-				if len(v.Headers) > 0 {
-					d.Sources[k].Header = v.Headers
-				}
-			}
-
-			funcs = lo.Assign(funcs, data.CreateFuncs(ctx, &d))
-		}
-
-		// Sprig functions
-		if atmosConfig.Templates.Settings.Sprig.Enabled {
-			funcs = lo.Assign(funcs, getSprigFuncMap())
-		}
-
-		// Atmos functions
-		funcs = lo.Assign(funcs, FuncMap(atmosConfig, configAndStacksInfo, context.TODO(), &d))
-
-		// Process the template
-		guardedFuncs, err := policyTemplateFuncs(funcs, tmplName, &d)
-		if err != nil {
-			return "", err
-		}
-		t := template.New(tmplName).Funcs(guardedFuncs)
-
-		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(effectiveDelimiters)
+		rendered, err := renderTemplatePass(&templatePass{
+			atmosConfig:                 atmosConfig,
+			configAndStacksInfo:         configAndStacksInfo,
+			templateSettings:            &templateSettings,
+			name:                        tmplName,
+			text:                        result,
+			data:                        tmplData,
+			delimiters:                  effectiveDelimiters,
+			ignoreMissingTemplateValues: ignoreMissingTemplateValues,
+		})
 		if err != nil {
 			return "", err
 		}
 
-		t.Delims(leftDelimiter, rightDelimiter)
-
-		// Control the behavior during execution if a map is indexed with a key that is not present in the map
-		// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
-		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
-		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
-
-		option := "missingkey=error"
-
-		if ignoreMissingTemplateValues {
-			option = "missingkey=default"
+		result = rendered
+		// A pass can emit new identity configuration. Keep its credential expressions
+		// opaque before parsing or evaluating that output again, restoring all layers
+		// only after the final pass has completed.
+		protectedAuthResult, restoreGeneratedAuth, authErr := templatesource.Protect(result)
+		if authErr != nil {
+			return "", authErr
 		}
-
-		t.Option(option)
-
-		// Parse the template, shielding envelopes for this pass's effective delimiters.
-		delimiterProtected, restoreDelimiterSettings := protectTemplateDelimiterSettings(result)
-		protectedResult, restoreLiterals := literalsource.ProtectEncoded(delimiterProtected, leftDelimiter, rightDelimiter)
-		t, err = t.Parse(protectedResult)
-		if err != nil {
-			return "", err
+		if protectedAuthResult != result {
+			generatedAuthRestorers = append(generatedAuthRestorers, restoreGeneratedAuth)
+			result = protectedAuthResult
 		}
-
-		// Execute the template
-		var res bytes.Buffer
-		err = t.Execute(&res, literalsource.Restore(tmplData))
-		if err != nil {
-			return "", err
-		}
-
-		result = restoreDelimiterSettings(restoreLiterals(res.String()))
 		resultMap, err := u.UnmarshalYAML[schema.AtmosSectionMapType](result)
 		if err != nil {
 			return "", err
@@ -624,6 +596,103 @@ func ProcessTmplWithDatasources(
 	return result, nil
 }
 
+// templatePass describes one evaluation pass of a stack manifest template.
+type templatePass struct {
+	atmosConfig                 *schema.AtmosConfiguration
+	configAndStacksInfo         *schema.ConfigAndStacksInfo
+	templateSettings            *schema.TemplatesSettings
+	name                        string
+	text                        string
+	data                        any
+	delimiters                  []string
+	ignoreMissingTemplateValues bool
+}
+
+// renderTemplatePass renders one evaluation pass of a stack manifest template
+// with the Gomplate (functions and datasources), Sprig and Atmos function sets,
+// honoring the `templates.settings` toggles from `atmos.yaml` and the merged
+// datasource definitions and timeout from the stack manifest.
+func renderTemplatePass(pass *templatePass) (string, error) {
+	gomplateEnabled := pass.atmosConfig.Templates.Settings.Gomplate.Enabled
+	sprigEnabled := pass.atmosConfig.Templates.Settings.Sprig.Enabled
+
+	scope, err := newPassScope(pass, gomplateEnabled)
+	if err != nil {
+		return "", err
+	}
+	defer scope.cancel()
+
+	leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(pass.delimiters)
+	if err != nil {
+		return "", err
+	}
+
+	// Shield envelopes for this pass's effective delimiters.
+	delimiterProtected, restoreDelimiterSettings := delimiters.ProtectSettings(pass.text)
+	protectedText, restoreLiterals := literalsource.ProtectEncoded(delimiterProtected, leftDelimiter, rightDelimiter)
+
+	engine := render.New(
+		render.WithGomplate(gomplateEnabled),
+		render.WithSprig(sprigEnabled),
+	)
+
+	rendered, err := engine.Render(scope.ctx, &render.Request{
+		Name:       pass.name,
+		Text:       protectedText,
+		Data:       literalsource.Restore(pass.data),
+		Funcs:      FuncMap(pass.atmosConfig, pass.configAndStacksInfo, context.TODO(), scope.sources),
+		LeftDelim:  leftDelimiter,
+		RightDelim: rightDelimiter,
+		MissingKey: missingKeyOption(pass.ignoreMissingTemplateValues),
+		Sources:    scope.sources,
+		// A pass renders component configuration merged from several manifests, so it has no
+		// single source file: its calls have unknown provenance. pass.name is only a label.
+		WrapFuncs: templatepolicy.FuncsWrapper(""),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return restoreDelimiterSettings(restoreLiterals(rendered)), nil
+}
+
+// passScope is the render context and the stack's datasources for one evaluation pass.
+type passScope struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	sources *render.Data
+}
+
+// newPassScope builds the scope for one pass. With gomplate enabled, the context carries the
+// datasource timeout (from `atmos.yaml` or the stack manifest, 5 seconds when neither sets it) and
+// the experimental flag, and the stack's datasources are defined with their headers. With gomplate
+// disabled, the pass has no datasources at all, so atmos.GomplateDatasource cannot read anything.
+func newPassScope(pass *templatePass, gomplateEnabled bool) (*passScope, error) {
+	scope := &passScope{ctx: context.TODO(), cancel: func() {}}
+	if !gomplateEnabled {
+		return scope, nil
+	}
+	scope.sources = &render.Data{}
+
+	timeoutSeconds, _ := lo.Coalesce(pass.templateSettings.Gomplate.Timeout, defaultDatasourceTimeoutSeconds)
+	scope.ctx, scope.cancel = context.WithTimeout(scope.ctx, time.Second*time.Duration(timeoutSeconds))
+	if lo.FromPtr(pass.templateSettings.Gomplate.Experimental) {
+		scope.ctx = render.WithExperimental(scope.ctx)
+	}
+	scope.sources.Ctx = scope.ctx
+
+	// Configured datasources (with their headers) parse like Request.Datasources, so a Windows
+	// drive-letter file URL such as file://D:/data/a.json keeps the drive in its path.
+	for alias, definition := range pass.templateSettings.Gomplate.Datasources {
+		if err := scope.sources.Define(alias, render.Datasource{URL: definition.Url, Headers: definition.Headers}); err != nil {
+			scope.cancel()
+			return nil, err
+		}
+	}
+
+	return scope, nil
+}
+
 // resolveTemplateDelimiters returns the effective left/right Go template
 // delimiters for the given configured pair, falling back to the default
 // "{{"/"}}" when none are configured. Shared by every code path that needs
@@ -682,22 +751,22 @@ func ProcessTmplWithDatasourcesGomplate(
 	tmplValue string,
 	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasourcesGomplate")()
 
-	return datasource.RenderWith(atmosConfig, tmplName, tmplValue, mergedData, func(topLevel, config *url.URL) (template.FuncMap, error) {
-		policyData := &data.Data{Ctx: context.Background(), Sources: map[string]*data.Source{".": {URL: topLevel}, "config": {URL: config}}}
-		functionPolicies, err := guard.Enabled("function")
-		if err != nil {
-			return nil, err
+	authSource, restoreAuthSource, authErr := templatesource.Protect(tmplValue)
+	if authErr != nil {
+		return "", authErr
+	}
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreAuthSource(rendered)
 		}
-		sourcePolicies, err := guard.Enabled("source")
-		if err != nil {
-			return nil, err
-		}
-		if !functionPolicies && !sourcePolicies {
-			return nil, nil
-		}
-		return policyTemplateFuncs(data.CreateFuncs(context.Background(), policyData), tmplName, policyData)
+	}()
+
+	return datasource.RenderWith(atmosConfig, tmplName, authSource, mergedData, &datasource.Options{
+		// tmplName is only a label, not a source file, so the calls have unknown provenance.
+		WrapFuncs:  templatepolicy.FuncsWrapper(""),
+		MissingKey: missingKeyOption(ignoreMissingTemplateValues),
 	})
 }
