@@ -48,15 +48,21 @@ func chdirToProfileLessDirWithProfileSet(t *testing.T) {
 	t.Helper()
 	isolateTelemetryCache(t)
 
-	// Point HOME and XDG config discovery at empty temp dirs so no user-level atmos.yaml is found.
+	// Point HOME and config discovery at an empty temp dir so no user-level atmos.yaml or profile is
+	// found. ATMOS_XDG_CONFIG_HOME takes precedence over XDG_CONFIG_HOME (pkg/xdg), so isolate it too.
 	empty := t.TempDir()
 	t.Setenv("HOME", empty)
 	t.Setenv("XDG_CONFIG_HOME", empty)
 	t.Setenv("XDG_CONFIG_DIRS", empty)
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", empty)
 
-	// Clear any inherited explicit config selection so nothing but defaults + the missing profile
-	// can contribute (empty string reads as "unset" everywhere these are consumed).
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	// Pin config discovery to the empty dir rather than clearing it. An unset ATMOS_CLI_CONFIG_PATH
+	// re-enables parent-directory and Git-root config discovery, which could find an unrelated
+	// (possibly invalid) atmos.yaml above the temp dir and fail BEFORE profile resolution — making
+	// the "profile not found" assertions flaky. Pinning to an empty dir keeps the only failure the
+	// missing profile. Clear the remaining explicit selectors so nothing but defaults + the missing
+	// profile contributes (empty string reads as "unset" everywhere these are consumed).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", empty)
 	t.Setenv("ATMOS_CONFIG", "")
 	t.Setenv("ATMOS_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")

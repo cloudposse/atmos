@@ -65,7 +65,12 @@ ATMOS_PROFILE=nonexistent atmos version
   `ATMOS_PROFILE=missing atmos version --logs-level=Debug`). `configForStartupLogger` now derives
   the level from a new `startup.LogsConfigFromArgs(os.Args[1:])`, which honors
   `--logs-level`/`--verbose`/`-v` and `ATMOS_LOGS_LEVEL`/`ATMOS_VERBOSE` (ignoring the command name
-  and unknown subcommand flags) and still defaults to `Warning` when nothing is set.
+  and unknown subcommand flags) and still defaults to `Warning` when nothing is set. It scans for the
+  three logging options as literal tokens rather than running a general flag parser over the whole
+  argv, so a subcommand's single-dash compatibility option is not read as the verbose shorthand
+  (`terraform plan -var ...` does not enable `-v`), a `--help`/`-h` does not stop the scan before a
+  later `--logs-level`, and a separate boolean value (`--verbose false`) disables verbose instead of
+  being stranded as a positional.
 - `pkg/telemetry/config_load_warning_test.go` (new): reproduces the scenario (missing
   `ATMOS_PROFILE` resolved from an empty working directory) and asserts that:
   - neither config-load site surfaces "Could not load config" at `WARN`;

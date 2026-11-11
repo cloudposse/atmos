@@ -5,12 +5,12 @@ import (
 	"io"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -34,6 +34,7 @@ const (
 	logsLevelFlagName = "logs-level"
 	logsFileFlagName  = "logs-file"
 	verboseFlagName   = "verbose"
+	verboseShorthand  = "v"
 
 	defaultLogsLevel = "Warning"
 	defaultLogsFile  = "/dev/stderr"
@@ -99,28 +100,76 @@ func LogsConfigFromCommand(cmd *cobra.Command) schema.Logs {
 // It exists for the startup path that runs BEFORE Cobra parses flags: when configuration
 // loading fails, the logger must still honor an explicitly requested level (via --logs-level,
 // --verbose/-v, or ATMOS_LOGS_LEVEL/ATMOS_VERBOSE) instead of silently falling back to Warning,
-// otherwise a legitimately requested Debug/Trace diagnostic is filtered out. Unknown flags
-// (subcommand flags, the command name, positional args) are ignored so an arbitrary argv parses
-// cleanly. Precedence matches LogsConfigFromCommand, which this delegates to.
+// otherwise a legitimately requested Debug/Trace diagnostic is filtered out.
+//
+// The argv here is the whole command line, which also carries flags meant for subcommands. A
+// general flag parser (pflag) is deliberately NOT used: it would read a subcommand's single-dash
+// compatibility option as a shorthand cluster (`-var` sets `-v`), stop at `--help`/`-h` before
+// reaching a later `--logs-level`, and leave a separate boolean value (`--verbose false`) stranded.
+// Instead this scans for exactly the three logging options as literal tokens and ignores everything
+// else, so it is immune to those quirks. Precedence matches LogsConfigFromCommand: defaults, then
+// ATMOS_LOGS_*/ATMOS_VERBOSE, then --logs-level/--logs-file, then verbose last.
 func LogsConfigFromArgs(args []string) schema.Logs {
 	defer perf.Track(nil, "startup.LogsConfigFromArgs")()
 
-	fs := pflag.NewFlagSet("atmos-logs", pflag.ContinueOnError)
-	fs.ParseErrorsAllowlist.UnknownFlags = true
-	fs.SetOutput(io.Discard)
-	fs.String(logsLevelFlagName, defaultLogsLevel, "")
-	fs.String(logsFileFlagName, defaultLogsFile, "")
-	fs.BoolP(verboseFlagName, "v", false, "")
-	// Parse errors other than unknown flags are deliberately ignored: this is a best-effort
-	// early scan, and malformed flags are reported properly once Cobra parses them.
-	_ = fs.Parse(args)
+	logs := LogsConfigFromCommand(nil) // Defaults + ATMOS_LOGS_*/ATMOS_VERBOSE.
 
-	// Reuse LogsConfigFromCommand's env+flag precedence by wrapping the pre-parsed flag set in a
-	// throwaway command. AddFlagSet preserves each flag's Changed state, so "was it explicitly
-	// set" is honored exactly as if Cobra had parsed it.
-	cmd := &cobra.Command{}
-	cmd.Flags().AddFlagSet(fs)
-	return LogsConfigFromCommand(cmd)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case strings.HasPrefix(arg, "--"+logsLevelFlagName):
+			if v, ok := flagValue(arg, logsLevelFlagName, args, &i); ok {
+				logs.Level = v
+			}
+		case strings.HasPrefix(arg, "--"+logsFileFlagName):
+			if v, ok := flagValue(arg, logsFileFlagName, args, &i); ok {
+				logs.File = v
+			}
+		case arg == "--"+verboseFlagName || strings.HasPrefix(arg, "--"+verboseFlagName+"="), arg == "-"+verboseShorthand:
+			if verboseEnabled(arg, verboseFlagName, args, &i) {
+				logs.Level = debugLogsLevel
+			}
+		}
+	}
+	return logs
+}
+
+// flagValue extracts the value of a string option written as either "--name=value" or
+// "--name value", advancing i past a consumed separate value. The option name must match exactly
+// (so "--logs-level" matches but "--logs-level-extra" does not). Returns ok=false when the token is
+// a different flag or no value is available.
+func flagValue(arg, name string, args []string, i *int) (string, bool) {
+	prefix := "--" + name
+	if value, found := strings.CutPrefix(arg, prefix+"="); found {
+		return value, true
+	}
+	if arg != prefix {
+		return "", false // A longer flag that merely shares the prefix.
+	}
+	// Space-separated form: consume the next token as the value unless it is itself a flag.
+	if *i+1 < len(args) && !strings.HasPrefix(args[*i+1], "-") {
+		*i++
+		return args[*i], true
+	}
+	return "", false
+}
+
+// verboseEnabled reports whether a --verbose/-v token enables verbose logging, consuming an
+// explicit boolean value when one follows (so "--verbose false" and "-v false" disable it, matching
+// how the normal command path folds separate boolean values before Cobra parses them).
+func verboseEnabled(arg, name string, args []string, i *int) bool {
+	if value, found := strings.CutPrefix(arg, "--"+name+"="); found {
+		enabled, err := strconv.ParseBool(value)
+		return err == nil && enabled
+	}
+	// Bare "--verbose" or "-v": an explicit boolean literal may follow as a separate token.
+	if *i+1 < len(args) {
+		if enabled, err := strconv.ParseBool(args[*i+1]); err == nil {
+			*i++
+			return enabled
+		}
+	}
+	return true
 }
 
 // ConfigureLogger applies --logs-level, --logs-file, and their ATMOS_LOGS_* variables without reading
