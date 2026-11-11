@@ -65,6 +65,8 @@ func TestSupportsHyperlinks(t *testing.T) {
 		{name: "kitty by TERM", isTTY: true, vars: map[string]string{"TERM": "xterm-kitty"}, want: true},
 		{name: "kitty by window id", isTTY: true, vars: map[string]string{"KITTY_WINDOW_ID": "1"}, want: true},
 		{name: "Windows Terminal", isTTY: true, vars: map[string]string{"WT_SESSION": "abc"}, want: true},
+		{name: "Orca terminal pane", isTTY: true, vars: map[string]string{"ORCA_PANE_KEY": "tab-1:pane-1"}, want: true},
+		{name: "Orca pane inside tmux", isTTY: true, vars: map[string]string{"ORCA_PANE_KEY": "tab-1:pane-1", "TMUX": "/tmp/tmux-501/default,1,0"}, want: false},
 		{name: "VTE at the minimum version", isTTY: true, vars: map[string]string{"VTE_VERSION": "5000"}, want: true},
 		{name: "VTE too old", isTTY: true, vars: map[string]string{"VTE_VERSION": "4999"}, want: false},
 		{name: "Konsole at the minimum version", isTTY: true, vars: map[string]string{"KONSOLE_VERSION": "201200"}, want: true},

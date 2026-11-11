@@ -31,6 +31,8 @@ const (
 	webflowSignInLinkLabel = "Open AWS sign-in"
 	// Lead-in that says when the user needs the sign-in URL.
 	webflowSignInLinkHint = "If the browser doesn't open"
+	// Ends a link prompt with a blank line, matching the dialog's bottom margin.
+	blankLine = "\n"
 )
 
 // webflowIsTTY checks if stderr is a terminal.
@@ -58,6 +60,8 @@ func displayWebflowDialog(authURL string) {
 	// A URL too long for the dialog is delivered below it, outside the border,
 	// in the form `settings.terminal.links` selects.
 	ui.WriteLinkPrompt(ui.LinkPrompt{URL: authURL, Label: webflowSignInLinkLabel, Hint: webflowSignInLinkHint})
+	// Match the blank line the dialog's bottom margin leaves before the spinner.
+	ui.Write(blankLine)
 }
 
 // renderWebflowDialog builds the browser sign-in prompt and reports whether the URL fits inside it.

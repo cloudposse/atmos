@@ -220,3 +220,9 @@ func TestDisplayVerificationDialog_ShortURIStaysInBoxWithCodeInstruction(t *test
 		assert.LessOrEqual(t, lipgloss.Width(line), maxVerificationDialogWidth)
 	}
 }
+
+func TestDisplayVerificationDialog_LinkPromptEndsWithBlankLine(t *testing.T) {
+	output := captureVerificationDialogOutput(t, "ABCD-1234", longVerificationURL())
+
+	assert.True(t, strings.HasSuffix(output, "\n\n"), "a blank line separates the link prompt from the spinner")
+}

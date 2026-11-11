@@ -358,3 +358,10 @@ func TestWebflowSpinnerModel_TickMessage(t *testing.T) {
 	// Tick forwarding returns a cmd from the spinner to schedule the next tick.
 	_ = cmd
 }
+
+func TestDisplayWebflowDialog_LinkPromptEndsWithBlankLine(t *testing.T) {
+	longURL := "https://us-east-1.signin.aws/oauth?" + strings.Repeat("x", 400)
+	output := captureWebflowDialogOutput(t, longURL)
+
+	assert.True(t, strings.HasSuffix(output, "\n\n"), "a blank line separates the link prompt from the spinner")
+}

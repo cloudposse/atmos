@@ -238,7 +238,7 @@ settings:
   </dd>
 </dl>
 
-Terminals offer no way to ask whether they support hyperlinks, so `auto` recognizes terminals by the environment variables they set. It currently recognizes iTerm2 (3.1+), VS Code (1.72+), WezTerm, Ghostty, kitty, Windows Terminal, VTE-based terminals such as GNOME Terminal (0.50+), and Konsole (20.12+). Anything else gets the full URL, including sessions inside `tmux` or `screen` and containers that do not pass those variables through. Set `links: osc8` there if your terminal does support hyperlinks.
+Terminals offer no way to ask whether they support hyperlinks, so `auto` recognizes terminals by the environment variables they set. It currently recognizes iTerm2 (3.1+), VS Code (1.72+), WezTerm, Ghostty, kitty, Windows Terminal, VTE-based terminals such as GNOME Terminal (0.50+), Konsole (20.12+), and Orca. Anything else gets the full URL, including sessions inside `tmux` or `screen` and containers that do not pass those variables through. Set `links: osc8` there if your terminal does support hyperlinks.
 
 When output is not a terminal (piped, redirected, or in CI), Atmos always prints the full URL and never touches the clipboard, whatever this setting says.
 

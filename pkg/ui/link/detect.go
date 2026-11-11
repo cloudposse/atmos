@@ -66,7 +66,8 @@ func (e Environment) terminalVariableSupports() bool {
 	case "xterm-kitty", "xterm-ghostty":
 		return true
 	}
-	if e.isSet("KITTY_WINDOW_ID") || e.isSet("WT_SESSION") {
+	// ORCA_PANE_KEY is set in every Orca terminal pane, which renders OSC 8 links.
+	if e.isSet("KITTY_WINDOW_ID") || e.isSet("WT_SESSION") || e.isSet("ORCA_PANE_KEY") {
 		return true
 	}
 	return e.intAtLeast("VTE_VERSION", minVTEVersion) || e.intAtLeast("KONSOLE_VERSION", minKonsoleVersion)

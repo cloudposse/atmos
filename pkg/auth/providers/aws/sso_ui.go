@@ -19,6 +19,8 @@ const (
 	ssoSignInLinkHint = "If the browser doesn't open"
 	// Blank line between sections of the dialog.
 	dialogSectionBreak = "\n\n"
+	// Ends a link prompt with a blank line, matching the dialog's bottom margin.
+	blankLine = "\n"
 )
 
 // fallbackVerificationURL returns the URL to show the user in case the browser
@@ -51,6 +53,8 @@ func displayVerificationDialog(code, url string) {
 	}
 
 	ui.WriteLinkPrompt(ui.LinkPrompt{URL: url, Label: ssoSignInLinkLabel, Hint: ssoSignInLinkHint})
+	// Match the blank line the dialog's bottom margin leaves before the spinner.
+	ui.Write(blankLine)
 }
 
 // renderVerificationDialog builds the device-authorization dialog and reports
