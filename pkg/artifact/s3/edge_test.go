@@ -237,14 +237,15 @@ func TestDelete_LostResponseIsReconciled(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 }
 
-// A create that never reached the endpoint is retried transparently.
-func TestLock_CreateThatNeverArrivedIsRetried(t *testing.T) {
+// An absent claim does not prove an ambiguous create cannot arrive later.
+func TestLock_MissingAfterAmbiguousCreateRemainsAmbiguous(t *testing.T) {
 	spec := noneSpec().fresh(t)
 	repo := newRepo(t, spec)
 	spec.fake.Inject(s3test.Fault{Op: s3test.OpPutObject, KeyPrefix: layout.LockPath(lockResource), Action: s3test.DropBeforeCommit})
 	handle, err := repo.Lock(context.Background(), artifact.LockRequest{Resource: lockResource, Owner: "owner-a"})
-	require.NoError(t, err)
-	require.NoError(t, handle.Release(context.Background()))
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+	assert.Nil(t, handle)
+	assert.Len(t, spec.fake.RequestsFor(s3test.OpPutObject), 1, "do not retry an unsettled create")
 }
 
 // More evidence than the read bound is reported, not silently dropped.
