@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,6 +99,13 @@ func TestPlanIdentityDetectsEveryBoundInputAndIgnoresInvocationOnlyInputs(t *tes
 			require.Equal(t, baseline, planIdentity(t, c), "apply must accept the plan reviewed with the same bound inputs")
 		})
 	}
+}
+
+func TestPlanIdentityDistinguishesBinaryNumericOptions(t *testing.T) {
+	first, second := defaultPlanCase(), defaultPlanCase()
+	first.options = map[string]any{"value": math.Float64frombits(0x3ff0000000000080)}
+	second.options = map[string]any{"value": math.Float64frombits(0x3ff0000000000081)}
+	require.NotEqual(t, planIdentity(t, first), planIdentity(t, second))
 }
 
 func TestPlanIdentityIsStableAcrossProjectRoots(t *testing.T) {

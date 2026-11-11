@@ -54,9 +54,9 @@ func (s *Session) PlanIdentity(ctx context.Context, info *schema.ConfigAndStacks
 	}
 	payload, err := json.Marshal(struct {
 		Provider string
-		Request  string
+		Request  []byte
 		Sources  map[string]string
-	}{identity, string(raw), files})
+	}{identity, raw, files})
 	if err != nil {
 		return "", err
 	}
