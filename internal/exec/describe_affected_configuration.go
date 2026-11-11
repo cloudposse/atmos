@@ -1,10 +1,10 @@
 package exec
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync/atomic"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -41,16 +41,25 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 	if len(patterns) == 0 {
 		return original, nil
 	}
-	key := config.BasePathAbsolute + "\x00" + strings.Join(patterns, "\x00")
-	if view := lastConfigurationWatchIndex.Load(); view != nil && view.source == original && view.key == key {
-		return view.filtered, nil
+	keyBytes, err := json.Marshal(append([]string{config.BasePathAbsolute}, patterns...))
+	if err != nil {
+		return nil, err
+	}
+	key := string(keyBytes)
+	original.watchMu.Lock()
+	defer original.watchMu.Unlock()
+	if filtered := original.watchIndexes[key]; filtered != nil {
+		return filtered, nil
 	}
 	files, err := unexcludedWatchFiles(config.BasePathAbsolute, original.getAllFiles(), patterns)
 	if err != nil {
 		return nil, err
 	}
 	filtered := newChangedFilesIndex(config, files, config.BasePathAbsolute)
-	lastConfigurationWatchIndex.Store(&configurationWatchIndexView{source: original, key: key, filtered: filtered})
+	if original.watchIndexes == nil {
+		original.watchIndexes = make(map[string]*changedFilesIndex)
+	}
+	original.watchIndexes[key] = filtered
 	return filtered, nil
 }
 
@@ -96,17 +105,6 @@ func unexcludedWatchFiles(root string, all []string, patterns []string) ([]strin
 	}
 	return files, nil
 }
-
-// configurationWatchIndexView pairs a change-set index and exclusion set with its filtered copy.
-type configurationWatchIndexView struct {
-	source, filtered *changedFilesIndex
-	key              string
-}
-
-// lastConfigurationWatchIndex holds the most recent filtered index, so provider
-// components that share exclusions reuse one index (and its resolved view)
-// instead of rebuilding it per component. Indexes are immutable after construction.
-var lastConfigurationWatchIndex atomic.Pointer[configurationWatchIndexView]
 
 // configurationWatchPaths resolves provider-owned watches against the project
 // root without putting checkout-specific absolute paths into stack comparisons.

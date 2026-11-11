@@ -24,6 +24,10 @@ type changedFilesIndex struct {
 	// outside a component base path, such as native Helm values_files.
 	allFilesSet map[string]struct{}
 
+	// watchMu protects filtered views for this change set.
+	watchMu      sync.Mutex
+	watchIndexes map[string]*changedFilesIndex
+
 	mu sync.RWMutex
 }
 
