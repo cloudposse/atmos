@@ -172,7 +172,7 @@ func (s *Store) Fresh(fetched time.Time) bool {
 	defer perf.Track(nil, "cache.Store.Fresh")()
 
 	age := s.now().Sub(fetched)
-	return age >= 0 && age < s.ttl
+	return age < s.ttl
 }
 
 // read returns the raw bytes of a snapshot file within the size bound, or nil when it is absent,

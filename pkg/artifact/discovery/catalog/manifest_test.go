@@ -92,8 +92,14 @@ func TestParseRejectsInvalidCatalogs(t *testing.T) {
 			doc := catalog.Document{Role: "readme", SourcePath: "README.md", MediaType: "text/markdown", Size: 1, Digest: sha("d")}
 			f.Spec.Entries[0].Versions[0].Documents = []catalog.Document{doc, doc}
 		}},
+		{"negative document size", func(f *catalog.File) {
+			f.Spec.Entries[0].Versions[0].Documents = []catalog.Document{{Role: "readme", SourcePath: "README.md", Size: -1, Digest: sha("d")}}
+		}},
+		{"empty document source", func(f *catalog.File) {
+			f.Spec.Entries[0].Versions[0].Documents = []catalog.Document{{Role: "readme", Digest: sha("d")}}
+		}},
 		{"bad document digest", func(f *catalog.File) {
-			f.Spec.Entries[0].Versions[0].Documents = []catalog.Document{{Role: "readme", Digest: "x"}}
+			f.Spec.Entries[0].Versions[0].Documents = []catalog.Document{{Role: "readme", SourcePath: "README.md", Digest: "x"}}
 		}},
 	}
 	for _, tc := range tests {

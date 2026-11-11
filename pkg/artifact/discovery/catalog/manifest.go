@@ -187,6 +187,9 @@ func checkDocuments(name string, version *Version) error {
 		if doc.Role != string(artifact.DocumentReadme) && doc.Role != string(artifact.DocumentChangelog) || roles[doc.Role] {
 			return invalid("entry %q version %q has an invalid or repeated document role %q", name, version.Version, doc.Role)
 		}
+		if doc.Size < 0 || doc.SourcePath == "" {
+			return invalid("entry %q version %q has an invalid %s document descriptor", name, version.Version, doc.Role)
+		}
 		roles[doc.Role] = true
 		if err := artifact.ValidateDigest(digest.Digest(doc.Digest)); err != nil {
 			return fmt.Errorf("%w: entry %q version %q %s: %w", errUtils.ErrArtifactCatalogInvalid, name, version.Version, doc.Role, err)
