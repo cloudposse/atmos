@@ -487,8 +487,8 @@ func finalizeLoadedConfig(v *viper.Viper, atmosConfig *schema.AtmosConfiguration
 	}
 	// Rebuild artifacts from the retained sources: Viper lowercases keys and forgets which
 	// file declared options.path once imports are merged.
-	if err := resolveArtifactsConfig(v, &atmosConfig); err != nil {
-		return atmosConfig, err
+	if err := resolveArtifactsConfig(v, atmosConfig); err != nil {
+		return err
 	}
 
 	// Post-process to preserve case-sensitive map keys.
@@ -2073,6 +2073,10 @@ func mergeConfigFile(
 // top-level `commands` key, which extractCommandsWithYamlFunctionsForFile decodes with its own
 // include scope. Git hook steps use the same step-aware decoder before generic processing.
 func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourceFile string) error {
+	return preprocessConfigYAML(content, v, sourceFile, false)
+}
+
+func preprocessConfigYAML(content []byte, v *viper.Viper, sourceFile string, skipArtifacts bool) error {
 	var root goyaml.Node
 	if err := goyaml.Unmarshal(content, &root); err != nil {
 		return err
@@ -2092,6 +2096,10 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 			}
 		}
 	}
+	evaluated, err := prepareArtifactsNode(&root, v, sourceFile, skipArtifacts)
+	if err != nil {
+		return err
+	}
 	// Process the parsed tree directly: aliases can refer to anchors under commands,
 	// so serializing the filtered tree would leave dangling aliases on the next parse.
 	if err := preprocessGitHookSteps(&root, v, sourceFile); err != nil {
@@ -2101,7 +2109,38 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 	if err := prepareDevcontainerKeys(&root, v); err != nil {
 		return err
 	}
-	return processConfigNodeWithAuthSource(&root, v, sourceFile)
+	if err := processConfigNodeWithAuthSource(&root, v, sourceFile); err != nil {
+		return err
+	}
+	if evaluated != nil {
+		mergedFilesReg.rememberArtifacts(v, sourceFile, evaluated)
+	}
+	return nil
+}
+
+// prepareArtifactsNode evaluates the artifact section once and removes its function tags.
+func prepareArtifactsNode(root *goyaml.Node, v *viper.Viper, sourceFile string, skip bool) (*evaluatedArtifacts, error) {
+	node := findYAMLMappingPath(root, artifactsSectionKey)
+	if node == nil {
+		return nil, nil
+	}
+	if skip {
+		// The profile section was already evaluated when it was merged.
+		*node = goyaml.Node{Kind: goyaml.ScalarNode, Tag: "!!null", Value: "null"}
+		return nil, nil
+	}
+	if node.Tag == "!unset" {
+		return nil, nil
+	}
+	evaluated, err := evaluateArtifactsForLoad(node, sourceFile)
+	if err != nil {
+		return nil, err
+	}
+	if err := node.Encode(evaluated.section); err != nil {
+		return nil, err
+	}
+	v.Set(artifactsSectionKey, evaluated.section)
+	return evaluated, nil
 }
 
 // processConfigNodeWithAuthSource retains identities introduced by a whole-auth include.
@@ -2203,7 +2242,7 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 	if len(imports) == 0 {
 		return nil
 	}
-	if err = preprocessAtmosYamlFuncExceptCommands(content, tempViper, path); err != nil {
+	if err = preprocessConfigYAML(content, tempViper, path, true); err != nil {
 		return err
 	}
 	overlayProfileSettings(v, tempViper.AllSettings(), "")
@@ -2238,7 +2277,7 @@ func applyProfileImports(v, tempViper *viper.Viper, path string, content []byte,
 
 func overlayProfileSettings(v *viper.Viper, settings map[string]any, prefix string) {
 	for key, value := range settings {
-		if key == "import" || key == commandsKey {
+		if key == "import" || key == commandsKey || (prefix == "" && key == artifactsSectionKey) {
 			continue
 		}
 		path := key

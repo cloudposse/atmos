@@ -12,7 +12,10 @@ const maxConfigIncludeDepth = 100
 // configYamlDecoder keeps recursive include evaluation within one config read.
 // The shared include resolver supplies the correct file context for each subtree.
 type configYamlDecoder struct {
-	includes map[string]bool
+	includes     map[string]bool
+	path         []string
+	origin       func([]string, string, bool)
+	remoteSource string
 }
 
 // evaluateInclude resolves an included subtree using its file context and

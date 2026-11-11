@@ -89,28 +89,20 @@ func GlobalViper() *SafeViper {
 // mergedFilesTracker tracks the config files merged during a single LoadConfig
 // call, guarded by its own mutex.
 type mergedFilesTracker struct {
-	mu      sync.Mutex
-	sources []mergedConfigSource
+	mu               sync.Mutex
+	sources          []mergedConfigSource
+	pendingArtifacts map[string]*evaluatedArtifacts
 }
 
 // mergedConfigSource retains the YAML even after a downloaded import is removed.
 // Content is immutable so snapshots cannot mutate another reader's source data.
 type mergedConfigSource struct {
-	path    string
-	content string
+	path      string
+	content   string
+	artifacts *evaluatedArtifacts
 	// ephemeral marks a source downloaded from a remote import. Its local path is a temporary
 	// location, so relative destinations declared in it must never anchor to that directory.
 	ephemeral bool
-}
-
-// track appends a source in effective merge order, including repeated paths.
-func (t *mergedFilesTracker) track(source mergedConfigSource) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if source.path != "" {
-		// Keep repeated merges: their position determines precedence.
-		t.sources = append(t.sources, source)
-	}
 }
 
 // markEphemeral flags every tracked merge of path as a remote (downloaded) source.
@@ -203,8 +195,30 @@ func (r *mergedFilesRegistry) track(v *viper.Viper, path string, content []byte)
 	tracker := r.trackers[v]
 	r.mu.Unlock()
 	if tracker != nil {
-		tracker.track(mergedConfigSource{path: path, content: string(content)})
+		tracker.mu.Lock()
+		artifacts := tracker.pendingArtifacts[path]
+		delete(tracker.pendingArtifacts, path)
+		if path != "" {
+			tracker.sources = append(tracker.sources, mergedConfigSource{path: path, content: string(content), artifacts: artifacts})
+		}
+		tracker.mu.Unlock()
 	}
+}
+
+// rememberArtifacts retains a source's evaluated, case-preserving artifact section until it is tracked.
+func (r *mergedFilesRegistry) rememberArtifacts(v *viper.Viper, path string, value *evaluatedArtifacts) {
+	r.mu.Lock()
+	tracker := r.trackers[v]
+	r.mu.Unlock()
+	if tracker == nil {
+		return
+	}
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	if tracker.pendingArtifacts == nil {
+		tracker.pendingArtifacts = make(map[string]*evaluatedArtifacts)
+	}
+	tracker.pendingArtifacts[path] = value
 }
 
 // markEphemeral flags a downloaded import source for the load v belongs to.
