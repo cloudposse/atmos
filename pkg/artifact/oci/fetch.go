@@ -94,6 +94,10 @@ func (l *lazyReader) Read(p []byte) (int, error) {
 }
 
 func (l *lazyReader) open() {
+	if !l.desc.Digest.Algorithm().Available() {
+		l.err = fmt.Errorf("%w: unavailable digest algorithm for %s", errUtils.ErrArtifactIntegrityFailed, l.desc.Digest)
+		return
+	}
 	l.hasher = l.desc.Digest.Algorithm().Hash()
 	source, err := l.st.Fetch(l.ctx, l.desc)
 	if err != nil {

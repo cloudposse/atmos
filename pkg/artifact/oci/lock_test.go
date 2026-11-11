@@ -171,3 +171,19 @@ func TestServicePublishesUnderTheDelegatedLockAndReportsItsScope(t *testing.T) {
 	assert.Equal(t, artifact.LockScopeRepository, outcome.Operation.LockScope)
 	assert.Empty(t, env.coordinator.HeldLocks(), "the delegated lock was released")
 }
+
+func TestDelegationDetectsIndirectCycle(t *testing.T) {
+	a := newLayoutRepo(t)
+	b := newLayoutRepo(t)
+	a.alias, b.alias = "a", "b"
+	a.delegate, b.delegate = "b", "a"
+	lookup := func(name string) (artifact.Repository, error) {
+		if name == "a" {
+			return a, nil
+		}
+		return b, nil
+	}
+	a.lookup, b.lookup = lookup, lookup
+	_, err := a.Lock(context.Background(), artifact.LockRequest{Resource: "app:1"})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+}

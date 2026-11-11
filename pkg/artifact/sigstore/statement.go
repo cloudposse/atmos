@@ -3,6 +3,7 @@ package sigstore
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -79,6 +80,9 @@ func EvidenceFormatOf(bundle []byte) (artifact.EvidenceFormat, string, error) {
 	mediaType := shape.MediaType
 	if mediaType == "" {
 		mediaType = defaultBundleMediaType
+	}
+	if !strings.HasPrefix(mediaType, BundleMediaTypePrefix) && !strings.HasPrefix(mediaType, "application/vnd.dev.sigstore.bundle+") {
+		return "", "", fmt.Errorf("%w: unsupported bundle media type %q", errUtils.ErrSignatureInvalid, mediaType)
 	}
 	return format, mediaType, nil
 }

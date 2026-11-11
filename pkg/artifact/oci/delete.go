@@ -25,6 +25,9 @@ import (
 func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference, options artifact.DeleteOptions) (*artifact.DeleteResult, error) {
 	defer perf.Track(nil, "oci.Repository.Delete")()
 
+	if options.Scope == artifact.DeleteReference && r.be.deleteScope() != artifact.DeleteReference {
+		return nil, artifact.NewUnsupportedCapability(r.alias, "delete", "delete/tag", "the registry can only delete a manifest")
+	}
 	name := pinned.Ref.Name
 	if err := artifact.ValidateName(name); err != nil {
 		return nil, err

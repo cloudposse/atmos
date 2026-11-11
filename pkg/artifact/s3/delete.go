@@ -33,17 +33,15 @@ func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference
 	if err != nil {
 		return nil, err
 	}
-	if options.Lock == nil {
-		lock, lockErr := r.acquire(ctx, record.Name+":"+record.Version, r.settings.owner, "")
-		if lockErr != nil {
-			return nil, lockErr
-		}
-		defer func() {
-			if releaseErr := lock.Release(ctx); err == nil {
-				err = releaseErr
-			}
-		}()
+	release, err := r.holdClaim(ctx, options.Lock, record.Name+":"+record.Version)
+	if err != nil {
+		return nil, err
 	}
+	defer func() {
+		if releaseErr := release(); err == nil {
+			err = releaseErr
+		}
+	}()
 	return r.deleteLocked(ctx, &pinned, &options)
 }
 

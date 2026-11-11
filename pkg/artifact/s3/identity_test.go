@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -25,6 +26,7 @@ func isolateAWS(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-test-key")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-test-secret")
 	t.Setenv("AWS_REGION", "us-east-1")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "credentials"), []byte("[default]\naws_access_key_id = test-key\naws_secret_access_key = test-secret\n"), 0o600))
 	t.Setenv("AWS_CONFIG_FILE", filepath.Join(dir, "config"))
 	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(dir, "credentials"))
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
@@ -65,7 +67,7 @@ func identityRepo(t *testing.T, fake *s3test.Server, resolver artifact.IdentityR
 func TestIdentity_IsResolvedLazily(t *testing.T) {
 	isolateAWS(t)
 	fake := s3test.NewServer(t)
-	stub := &resolverStub{values: []any{&store.AWSAuthConfig{Region: "us-east-1"}}, errs: []error{nil}}
+	stub := &resolverStub{values: []any{&store.AWSAuthConfig{Region: "us-east-1", Profile: "default"}}, errs: []error{nil}}
 	repo := identityRepo(t, fake, stub.resolve, "deploy")
 	_ = repo.Capabilities()
 	_ = repo.Location()
@@ -97,6 +99,9 @@ func TestIdentity_FailsClosed(t *testing.T) {
 		}},
 		{name: "resolver returns another cloud's credentials", resolver: func() artifact.IdentityResolver {
 			return (&resolverStub{values: []any{"azure-token"}, errs: []error{nil}}).resolve
+		}},
+		{name: "resolver returns empty AWS config", resolver: func() artifact.IdentityResolver {
+			return (&resolverStub{values: []any{store.AWSAuthConfig{Region: "us-east-1"}}, errs: []error{nil}}).resolve
 		}},
 		{name: "resolver returns a nil AWS config", resolver: func() artifact.IdentityResolver {
 			var none *store.AWSAuthConfig
@@ -131,7 +136,7 @@ func TestIdentity_TransientFailureIsRetried(t *testing.T) {
 	isolateAWS(t)
 	fake := s3test.NewServer(t)
 	stub := &resolverStub{
-		values: []any{nil, &store.AWSAuthConfig{Region: "us-east-1"}},
+		values: []any{nil, &store.AWSAuthConfig{Region: "us-east-1", Profile: "default"}},
 		errs:   []error{errors.New("temporarily unavailable"), nil},
 	}
 	repo := identityRepo(t, fake, stub.resolve, "deploy")

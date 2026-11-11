@@ -96,6 +96,9 @@ func decidePublish(ref artifact.Ref, state *tagState, incoming *incomingRoot, op
 		}
 		return artifact.OutcomeCreated, nil
 	}
+	if options.ExpectedPrior != nil && options.ExpectedPrior.ResolvedDigest != state.desc.Digest {
+		return "", fmt.Errorf("%w: %s is %s but the caller expected %s", errUtils.ErrArtifactConflict, ref, state.desc.Digest, options.ExpectedPrior.ResolvedDigest)
+	}
 	if state.desc.Digest == incoming.digest {
 		return artifact.OutcomeUnchanged, nil
 	}
@@ -107,9 +110,6 @@ func decidePublish(ref artifact.Ref, state *tagState, incoming *incomingRoot, op
 	}
 	if options.ExpectedPrior == nil {
 		return "", fmt.Errorf("%w: %s already exists (%s) but the caller expected it not to", errUtils.ErrArtifactConflict, ref, state.desc.Digest)
-	}
-	if options.ExpectedPrior.ResolvedDigest != state.desc.Digest {
-		return "", fmt.Errorf("%w: %s is %s but the caller expected %s", errUtils.ErrArtifactConflict, ref, state.desc.Digest, options.ExpectedPrior.ResolvedDigest)
 	}
 	if !options.Force {
 		return "", fmt.Errorf("%w: %s already exists with different content; use force to replace it", errUtils.ErrArtifactConflict, ref)

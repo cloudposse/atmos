@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -275,4 +276,11 @@ func TestRead_PayloadThatGrowsIsRejected(t *testing.T) {
 	require.NoError(t, err)
 	defer content.Close()
 	require.ErrorIs(t, readAll(t, content), errUtils.ErrArtifactIntegrityFailed)
+}
+
+func TestStreamsRejectUnsupportedPayloadDigest(t *testing.T) {
+	repo := newRepo(t, noneSpec())
+	v := &view{rep: &layout.Representation{Packaging: artifact.PackagingTgz, Payload: []ocispec.Descriptor{{Digest: "sha999:abcd"}}}}
+	_, err := repo.streams(context.Background(), v, nil)
+	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
 }

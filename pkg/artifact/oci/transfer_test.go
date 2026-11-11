@@ -4,9 +4,11 @@ package oci
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -252,4 +254,110 @@ func TestCrossBackendCredentialsAreNotShared(t *testing.T) {
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, errUtils.ErrArtifactNotFound, "an authentication failure is not reported as a missing artifact")
 	assert.Contains(t, err.Error(), "credential")
+}
+
+// failingFetchStore exposes a failed manifest fetch while preserving the underlying graph.
+type failingFetchStore struct{ store }
+
+func (f failingFetchStore) Fetch(context.Context, ocispec.Descriptor) (io.ReadCloser, error) {
+	return nil, errors.New("fetch failed")
+}
+
+func TestAttachmentFetchFailureIsAnError(t *testing.T) {
+	repo := newLayoutRepo(t)
+	pinned := publish(t, repo, publishSpec{content: "root"}).Pinned
+	st, loaded, err := repo.rootOf(context.Background(), &pinned)
+	require.NoError(t, err)
+	desc := ocispec.Descriptor{Digest: digest.FromString("other"), Size: loaded.desc.Size, MediaType: loaded.desc.MediaType}
+	_, _, err = repo.readAttachment(context.Background(), failingFetchStore{st}, pinned.Ref.Name, loaded.desc, desc)
+	require.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+}
+
+type manyVersionsBackend struct{ backend }
+
+func (m manyVersionsBackend) versions(context.Context, string) ([]string, error) {
+	return make([]string, maxTagsScanned+1), nil
+}
+
+func TestDigestScanFailsWhenTagBoundExceeded(t *testing.T) {
+	repo := newLayoutRepo(t)
+	repo.be = manyVersionsBackend{repo.be}
+	_, err := repo.scanForDigest(context.Background(), nil, artifact.Ref{Name: appName})
+	require.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+}
+
+type overflowingStore struct {
+	store
+	desc ocispec.Descriptor
+}
+
+func (s overflowingStore) Predecessors(context.Context, ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	return makeRepeatedDescriptors(s.desc, maxAttachments+1), nil
+}
+
+func makeRepeatedDescriptors(desc ocispec.Descriptor, count int) []ocispec.Descriptor {
+	items := make([]ocispec.Descriptor, count)
+	for i := range items {
+		items[i] = desc
+	}
+	return items
+}
+
+type overflowingBackend struct {
+	backend
+	desc ocispec.Descriptor
+}
+
+func (b overflowingBackend) open(ctx context.Context, name string, write bool) (store, error) {
+	st, err := b.backend.open(ctx, name, write)
+	if err != nil {
+		return nil, err
+	}
+	return overflowingStore{store: st, desc: b.desc}, nil
+}
+
+func TestReadEvidenceRejectsTruncatedReferrers(t *testing.T) {
+	repo := newLayoutRepo(t)
+	pinned := publish(t, repo, publishSpec{content: "root"}).Pinned
+	attachBundle(t, repo, pinned, `{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}`)
+	st, loaded, err := repo.rootOf(context.Background(), &pinned)
+	require.NoError(t, err)
+	refs, err := st.Predecessors(context.Background(), loaded.desc)
+	require.NoError(t, err)
+	require.NotEmpty(t, refs)
+	repo.be = overflowingBackend{backend: repo.be, desc: refs[0]}
+	_, err = repo.ReadEvidence(context.Background(), &pinned)
+	require.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+}
+
+func TestCopyUnchangedRootStillCopiesNewReferrer(t *testing.T) {
+	ctx := context.Background()
+	source := newLayoutRepo(t)
+	destination := newLayoutRepo(t)
+	pinned := publish(t, source, publishSpec{content: "root"}).Pinned
+	first, err := destination.CopyFrom(ctx, source, pinned, artifact.CopyFromOptions{})
+	require.NoError(t, err)
+	attached := attachBundle(t, source, pinned, `{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}`)
+	second, err := destination.CopyFrom(ctx, source, pinned, artifact.CopyFromOptions{ExpectedPrior: &first.Pinned})
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeUnchanged, second.Outcome)
+	set, err := destination.attachments(ctx, mustStore(t, destination, pinned.Ref.Name), pinned.Ref.Name, targetPinnedDescriptor(t, destination, second.Pinned))
+	require.NoError(t, err)
+	require.Len(t, set.valid, 1)
+	assert.Equal(t, attached.Digest, set.valid[0].layer.Digest)
+}
+
+func TestExportRejectsAnotherRootAndImportPrefersNamedRoot(t *testing.T) {
+	ctx := context.Background()
+	repo := newLayoutRepo(t)
+	first := publish(t, repo, publishSpec{content: "one"}).Pinned
+	second := publish(t, repo, publishSpec{version: "2.0.0", content: "two"}).Pinned
+	dir := t.TempDir()
+	_, err := repo.ExportLayout(ctx, first, dir)
+	require.NoError(t, err)
+	_, err = repo.ExportLayout(ctx, second, dir)
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+	root, err := layoutRoot(dir, "")
+	require.NoError(t, err)
+	assert.Equal(t, first.ResolvedDigest, root.Digest)
 }

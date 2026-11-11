@@ -327,11 +327,11 @@ func withReference(entries []ocispec.Descriptor, named ocispec.Descriptor) []oci
 func (l *Layout) Untag(ctx context.Context, reference string) error {
 	defer perf.Track(nil, "oci.Layout.Untag")()
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if err := l.store.Untag(ctx, reference); err != nil {
 		return layoutError(err)
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	kept := l.index[:0:0]
 	for i := range l.index {
 		if l.index[i].Annotations[ocispec.AnnotationRefName] != reference {

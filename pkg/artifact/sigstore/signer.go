@@ -51,6 +51,9 @@ func (s *Signer) Sign(ctx context.Context, subject artifact.SignatureSubject) (*
 	if err != nil {
 		return nil, fmt.Errorf("%w: sign %s %s: %w", errUtils.ErrArtifactVerificationFailed, subject.Kind, subject.Digest, err)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	format, mediaType, err := EvidenceFormatOf(bundle)
 	if err != nil {
 		return nil, err

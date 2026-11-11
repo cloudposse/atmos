@@ -7,6 +7,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote/errcode"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // IsAlreadyExists reports whether a push found the identical content already stored, which
@@ -31,4 +33,14 @@ func IsNotFound(err error) bool {
 		return remote.StatusCode == http.StatusNotFound
 	}
 	return errors.Is(err, errdef.ErrNotFound)
+}
+
+// IsCatalogUnavailable identifies responses indicating that a registry does not expose a catalog.
+func IsCatalogUnavailable(err error) bool {
+	defer perf.Track(nil, "oci.IsCatalogUnavailable")()
+	if IsNotFound(err) {
+		return true
+	}
+	code := statusOf(err)
+	return code == http.StatusMethodNotAllowed || code == http.StatusNotImplemented
 }

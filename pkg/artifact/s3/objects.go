@@ -160,7 +160,12 @@ func (r *Repository) forEach(ctx context.Context, count int, fn func(ctx context
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(max(r.settings.concurrency, 1))
 	for index := range count {
-		group.Go(func() error { return fn(groupCtx, index) })
+		group.Go(func() error {
+			if err := groupCtx.Err(); err != nil {
+				return err
+			}
+			return fn(groupCtx, index)
+		})
 	}
 	return group.Wait()
 }

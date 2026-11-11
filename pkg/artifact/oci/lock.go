@@ -78,9 +78,21 @@ func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (ar
 	return r.acquireHost(ctx, request.Resource, owner)
 }
 
+type lockChainKey struct{}
+
 // delegateLock takes the lock from the configured delegate repository. The resource is scoped by
 // this repository's location, so unrelated registries sharing one coordinator never contend.
 func (r *Repository) delegateLock(ctx context.Context, request artifact.LockRequest) (artifact.LockHandle, error) {
+	chain, _ := ctx.Value(lockChainKey{}).(map[*Repository]bool)
+	if chain[r] {
+		return nil, fmt.Errorf("%w: cyclic lock delegation at repository %q", errUtils.ErrArtifactConfigInvalid, r.alias)
+	}
+	next := make(map[*Repository]bool, len(chain)+1)
+	for repo := range chain {
+		next[repo] = true
+	}
+	next[r] = true
+	ctx = context.WithValue(ctx, lockChainKey{}, next)
 	if r.lookup == nil {
 		return nil, fmt.Errorf("%w: repository %q delegates locking to %q but no repository lookup was supplied", errUtils.ErrArtifactConfigInvalid, r.alias, r.delegate)
 	}
@@ -100,7 +112,7 @@ func (r *Repository) delegateLock(ctx context.Context, request artifact.LockRequ
 		return nil, artifact.NewUnsupportedCapability(r.delegate, opLock, "lock/"+string(required),
 			fmt.Sprintf("the lock delegate of repository %q cannot provide %s-scope coordination", r.alias, required))
 	}
-	request.Resource = r.lockNamespace() + "/" + request.Resource
+	request.Resource = fmt.Sprintf("%d:%s/%s", len(r.lockNamespace()), r.lockNamespace(), request.Resource)
 	handle, err := delegate.Lock(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("lock delegate %q of repository %q: %w", r.delegate, r.alias, err)

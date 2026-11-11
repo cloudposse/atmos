@@ -75,8 +75,8 @@ func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (ar
 
 // acquire takes the claim for resource, waiting for a competing owner.
 func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*claimHandle, error) {
-	if !r.store.Capabilities().ConditionalPut {
-		return nil, artifact.NewUnsupportedCapability(r.alias, opLock, "lock/repository", "the S3 endpoint cannot enforce conditional writes, which owner claims require")
+	if !r.store.Capabilities().ConditionalPut || !r.store.Capabilities().ConditionalDelete {
+		return nil, artifact.NewUnsupportedCapability(r.alias, opLock, "lock/repository", "the S3 endpoint cannot enforce conditional writes and deletes, which owner claims require")
 	}
 	doc := claimDoc{
 		SchemaVersion: layout.SchemaVersion, Resource: resource, Owner: owner, OperationID: operationID,
@@ -188,12 +188,12 @@ func (r *Repository) heldError(ctx context.Context, key, resource string, cause 
 	readCtx, cancel := detached(ctx)
 	defer cancel()
 	holder, _, _ := r.readClaim(readCtx, key)
-	message := fmt.Sprintf("lock %q is held through claim object %s", resource, r.uri(key))
+	message := fmt.Sprintf("lock %q claim object %s is no longer present", resource, r.uri(key))
 	if holder != nil {
 		message = fmt.Sprintf("lock %q is held by owner %q (operation %q, since %s) through claim object %s",
 			resource, holder.Owner, holder.OperationID, holder.AcquiredAt, r.uri(key))
+		message += "; claims never expire and are never taken over automatically. If that writer has stopped, confirm it is no longer running and delete the claim object to recover"
 	}
-	message += "; claims never expire and are never taken over automatically. If that writer has stopped, confirm it is no longer running and delete the claim object to recover"
 	if cause != nil {
 		return fmt.Errorf("%w: %s: %w", errUtils.ErrArtifactConflict, message, cause)
 	}
@@ -281,4 +281,34 @@ func (l *claimHandle) goneAfter(ctx context.Context, err error) bool {
 	}
 	current, _, readErr := l.repo.readClaim(ctx, l.key)
 	return readErr == nil && current == nil
+}
+
+// holdClaim validates an existing claim or acquires one, and keeps it held through a mutation.
+func (r *Repository) holdClaim(ctx context.Context, supplied artifact.LockHandle, resource string) (func() error, error) {
+	if supplied == nil {
+		handle, err := r.acquire(ctx, resource, r.settings.owner, "")
+		if err != nil {
+			return nil, err
+		}
+		return func() error { return handle.Release(ctx) }, nil
+	}
+	handle, ok := supplied.(*claimHandle)
+	if !ok || handle.repo != r || handle.resource != resource {
+		return nil, fmt.Errorf("%w: supplied lock does not guard %s", errUtils.ErrArtifactConflict, resource)
+	}
+	handle.mu.Lock()
+	if handle.released {
+		handle.mu.Unlock()
+		return nil, fmt.Errorf("%w: supplied lock is released", errUtils.ErrArtifactConflict)
+	}
+	claim, _, err := r.readClaim(ctx, handle.key)
+	if err != nil {
+		handle.mu.Unlock()
+		return nil, err
+	}
+	if claim == nil || claim.Token != handle.token {
+		handle.mu.Unlock()
+		return nil, fmt.Errorf("%w: supplied lock is no longer held", errUtils.ErrArtifactConflict)
+	}
+	return func() error { handle.mu.Unlock(); return nil }, nil
 }

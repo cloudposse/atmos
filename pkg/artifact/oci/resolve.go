@@ -151,7 +151,7 @@ func (r *Repository) scanForDigest(ctx context.Context, st store, ref artifact.R
 	}
 	sort.Strings(versions)
 	if len(versions) > maxTagsScanned {
-		versions = versions[:maxTagsScanned]
+		return ocispec.Descriptor{}, fmt.Errorf("%w: %s has %d tags; digest lookup inspects at most %d", errUtils.ErrArtifactDownloadFailed, ref.Name, len(versions), maxTagsScanned)
 	}
 	for _, version := range versions {
 		desc, found, err := r.digestAt(ctx, st, ref, version)
