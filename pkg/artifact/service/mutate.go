@@ -43,7 +43,8 @@ func validateRepositoryRef(repository string, ref artifact.Ref) error {
 
 func (s *Service) runDelete(ctx context.Context, op *operation, request *artifact.DeleteRequest, info *RepositoryInfo, repo artifact.Repository) error {
 	resource := lockTarget{alias: request.Repository, repo: repo, info: info, resource: request.Ref.String()}
-	locks, err := s.acquireLocks(ctx, op, opDelete, []lockTarget{resource})
+	subjectResource := lockTarget{alias: request.Repository, repo: repo, info: info, resource: subjectLockResource(request.Ref.Name)}
+	locks, err := s.acquireLocks(ctx, op, opDelete, []lockTarget{resource, subjectResource})
 	if err != nil {
 		return err
 	}
@@ -53,7 +54,7 @@ func (s *Service) runDelete(ctx context.Context, op *operation, request *artifac
 	if err != nil {
 		return err
 	}
-	result, err := repo.Delete(ctx, pinned, artifact.DeleteOptions{ExpectedCurrent: &pinned, Scope: info.Capabilities.Delete, Lock: locks.handleFor(request.Repository)})
+	result, err := repo.Delete(ctx, pinned, artifact.DeleteOptions{ExpectedCurrent: &pinned, Scope: info.Capabilities.Delete, Lock: locks.handleForResource(request.Repository, resource.resource)})
 	if err != nil {
 		return fmt.Errorf("delete %s in repository %q: %w", request.Ref, request.Repository, err)
 	}

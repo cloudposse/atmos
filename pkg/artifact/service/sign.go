@@ -40,13 +40,21 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	if err := checkSigningCapability(request.Repository, &info, s.signer, subject); err != nil {
 		return err
 	}
-	locks, err := s.acquireLocks(ctx, op, opSign, []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: request.Ref.String()}})
+	resource := subjectLockResource(request.Ref.Name)
+	locks, err := s.acquireLocks(ctx, op, opSign, []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: resource}})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = locks.release(ctx, op) }()
 
-	evidence, err := repo.Sign(ctx, subject, s.signer, artifact.SignOptions{OperationID: op.id, Lock: locks.handleFor(request.Repository)})
+	current, err := repo.Resolve(ctx, request.Ref)
+	if err != nil {
+		return fmt.Errorf("resolve %s after locking: %w", request.Ref, err)
+	}
+	if current.ResolvedDigest != pinned.ResolvedDigest || current.RecordDigest != pinned.RecordDigest {
+		return fmt.Errorf("%w: subject %s changed while acquiring its lock", errUtils.ErrArtifactConflict, request.Ref)
+	}
+	evidence, err := repo.Sign(ctx, subject, s.signer, artifact.SignOptions{OperationID: op.id, Lock: locks.handleForResource(request.Repository, resource)})
 	if err != nil {
 		return fmt.Errorf("sign %s in repository %q: %w", request.Ref, request.Repository, err)
 	}

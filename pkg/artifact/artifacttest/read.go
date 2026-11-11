@@ -201,12 +201,13 @@ func (r *Repository) page(entries []artifact.ListEntry, query artifact.ListQuery
 	if query.Cursor != "" {
 		start = sort.Search(len(entries), func(i int) bool { return listKey(&entries[i]) > query.Cursor })
 	}
-	end := start + size
+	end := len(entries)
+	if size < len(entries)-start {
+		end = start + size
+	}
 	page := &artifact.ListPage{}
 	if end < len(entries) {
 		page.NextCursor = listKey(&entries[end-1])
-	} else {
-		end = len(entries)
 	}
 	page.Entries = append(page.Entries, entries[start:end]...)
 	return page

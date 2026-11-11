@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -196,3 +198,15 @@ func TestReconcileGraphComparesTheSourceRoot(t *testing.T) {
 }
 
 var ocispecRoot = ocispecDescriptor()
+
+func TestRemoveStagedTreeRestoresDirectoryAccess(t *testing.T) {
+	tree := filepath.Join(t.TempDir(), "tree")
+	dir := filepath.Join(tree, "restricted")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file"), []byte("x"), 0o600))
+	require.NoError(t, os.Chmod(dir, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	require.NoError(t, removeStagedTree(tree))
+	_, err := os.Lstat(tree)
+	require.True(t, os.IsNotExist(err))
+}

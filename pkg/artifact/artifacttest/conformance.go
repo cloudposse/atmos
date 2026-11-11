@@ -222,6 +222,10 @@ func (c *conformance) enumeration(t *testing.T) {
 	for _, item := range []struct{ name, version string }{{"b/app", "1"}, {"a/app", "2"}, {"a/app", "1"}} {
 		c.publish(t, repo, spec{name: item.name, version: item.version, content: item.name + item.version}, artifact.PublishOptions{})
 	}
+	if !caps.EnumerateNamed {
+		_, err := repo.List(context.Background(), artifact.ListQuery{Name: "a/app"})
+		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+	}
 	if !caps.EnumerateCollection {
 		_, err := repo.List(context.Background(), artifact.ListQuery{})
 		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)

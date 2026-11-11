@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,8 +53,20 @@ func TestTrustHTTPClientUsesVerificationContext(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrSignatureOffline)
 }
 
+type countingTransport struct{ requests atomic.Int32 }
+
+func (t *countingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	t.requests.Add(1)
+	return nil, errUtils.ErrSignatureOffline
+}
+
 func TestOfflineTrustCannotFetch(t *testing.T) {
+	transport := &countingTransport{}
+	original := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() { http.DefaultTransport = original })
 	t.Setenv("ATMOS_XDG_DATA_HOME", t.TempDir())
 	_, err := LoadPublicRoot(t.Context(), true)
 	require.Error(t, err)
+	require.Zero(t, transport.requests.Load())
 }

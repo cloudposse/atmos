@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/archive"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Constants for staged payloads.
@@ -97,7 +98,7 @@ func (a *assembly) documentBlobs() []artifact.StagedBlob {
 }
 
 // archiveBlob writes the deterministic archive into staging, hashing it as it is written. The
-// context is checked before every member is opened, so cancellation stops a large assembly.
+// context is checked while members are opened and read, so cancellation stops a large assembly.
 func (a *assembly) archiveBlob(ctx context.Context, packaging artifact.Packaging) (artifact.StagedBlob, error) {
 	format, mediaType := archiveFormat(packaging)
 	path := filepath.Join(a.stagingDir, "payload."+format)
@@ -124,7 +125,7 @@ func (a *assembly) archiveBlob(ctx context.Context, packaging artifact.Packaging
 	}, nil
 }
 
-// withContext makes every file member fail to open once ctx is canceled.
+// withContext checks cancellation when opening and reading every file member.
 func withContext(ctx context.Context, members []archive.Member) []archive.Member {
 	for index := range members {
 		open := members[index].Open
@@ -135,10 +136,28 @@ func withContext(ctx context.Context, members []archive.Member) []archive.Member
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			return open()
+			reader, err := open()
+			if err != nil {
+				return nil, err
+			}
+			return &contextReader{ctx: ctx, ReadCloser: reader}, nil
 		}
 	}
 	return members
+}
+
+type contextReader struct {
+	ctx context.Context
+	io.ReadCloser
+}
+
+func (r *contextReader) Read(p []byte) (int, error) {
+	defer perf.Track(nil, "produce.contextReader.Read")()
+
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.ReadCloser.Read(p)
 }
 
 func archiveFormat(packaging artifact.Packaging) (string, string) {

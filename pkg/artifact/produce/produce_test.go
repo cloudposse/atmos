@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -114,7 +115,9 @@ func TestFilesProducer_PerFileBlobs(t *testing.T) {
 	for index := range blobs {
 		files = append(files, blobs[index].Path)
 		assert.NotEmpty(t, blobs[index].Path)
-		assert.Equal(t, int64(len(readBlob(t, &blobs[index]))), blobs[index].Descriptor.Size)
+		data := readBlob(t, &blobs[index])
+		assert.Equal(t, int64(len(data)), blobs[index].Descriptor.Size)
+		assert.Equal(t, digest.FromBytes(data), blobs[index].Descriptor.Digest)
 	}
 	want := []string{"README.md", "bin/helper.sh", "empty.txt", "nested/deep/file.txt", fixtures.UnicodeName}
 	assert.ElementsMatch(t, want, files, "directories and symlinks have no blob (symlinks=%v)", pkg.Symlinks)

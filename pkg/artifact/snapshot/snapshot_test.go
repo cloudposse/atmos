@@ -93,8 +93,14 @@ func TestCapture_ClearsPrivilegedBitsAndIgnoresOwnership(t *testing.T) {
 	src := t.TempDir()
 	fixtures.WriteFile(t, src, "a.txt", "x", 0o644)
 	path := filepath.Join(src, "a.txt")
-	// Setuid is not representable on every platform; failure to set it only weakens the assertion.
-	_ = os.Chmod(path, 0o755|os.ModeSetuid)
+	if err := os.Chmod(path, 0o755|os.ModeSetuid); err != nil {
+		t.Skipf("setuid unavailable: %v", err)
+	}
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	if info.Mode()&os.ModeSetuid == 0 {
+		t.Skip("filesystem did not apply setuid")
+	}
 	snap, err := snapshot.Capture(context.Background(), src, snapshot.WithStagingRoot(t.TempDir()))
 	require.NoError(t, err)
 	defer snap.Close()

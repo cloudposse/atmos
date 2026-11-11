@@ -87,8 +87,8 @@ func TestDelete_ReportsAffectedReferences(t *testing.T) {
 	pinned := artifact.PinnedReference{Ref: ref("x/y", "1"), ResolvedDigest: recordDigest, RecordDigest: recordDigest}
 
 	repo.EXPECT().Capabilities().Return(caps).AnyTimes()
-	repo.EXPECT().Lock(gomock.Any(), gomock.Any()).Return(handle, nil)
-	handle.EXPECT().Release(gomock.Any()).Return(nil)
+	repo.EXPECT().Lock(gomock.Any(), gomock.Any()).Return(handle, nil).Times(2)
+	handle.EXPECT().Release(gomock.Any()).Return(nil).Times(2)
 	handle.EXPECT().Resource().Return("x/y:1").AnyTimes()
 	handle.EXPECT().Owner().Return("test-owner").AnyTimes()
 	handle.EXPECT().Scope().Return(artifact.LockScopeHost).AnyTimes()
