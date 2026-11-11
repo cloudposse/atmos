@@ -3,11 +3,15 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
@@ -416,4 +420,116 @@ func TestLoadConfig_ArtifactsDescribeRoundTrip(t *testing.T) {
 	assert.Equal(t, expected, describedJSON.Artifacts)
 	assert.Equal(t, expected, describedYAML.Artifacts)
 	assert.NotContains(t, string(jsonBytes), "PathOrigin")
+}
+
+func TestLoadConfig_ArtifactsSectionUnsetClearsPriorSources(t *testing.T) {
+	dir := artifactsTestDir(t, "import:\n  - ./base.yaml\nartifacts: !unset\n")
+	writeArtifactsFile(t, filepath.Join(dir, "base.yaml"), "artifacts:\n  repositories:\n    old:\n      kind: local/dir\n      options:\n        path: old\n")
+	cfg, err := loadArtifactsDir(t, dir)
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Artifacts.Repositories)
+}
+
+func TestPathInsideAnyRoot(t *testing.T) {
+	root := t.TempDir()
+	assert.True(t, pathInsideAnyRoot(filepath.Join(root, "nested", "file.yaml"), []string{root}))
+	assert.False(t, pathInsideAnyRoot(root+"-other/file.yaml", []string{root}))
+}
+
+func TestLoadConfig_ArtifactsIncludesRetainDeclaringFiles(t *testing.T) {
+	dir := artifactsTestDir(t, "artifacts: !include ./included/artifacts.yaml | eval\n")
+	writeArtifactsFile(t, filepath.Join(dir, "included", "artifacts.yaml"), `verification:
+  trusted_keys: [global.pub]
+repositories:
+  local: !include ./nested/repository.yaml | eval
+`)
+	writeArtifactsFile(t, filepath.Join(dir, "included", "nested", "repository.yaml"), `kind: local/dir
+options:
+  path: store
+verification:
+  trusted_keys: [repo.pub]
+`)
+	cfg, err := loadArtifactsDir(t, dir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Artifacts.Verification)
+	assert.Equal(t, []string{filepath.Join(dir, "included", "global.pub")}, cfg.Artifacts.Verification.TrustedKeys)
+	repo := cfg.Artifacts.Repositories["local"]
+	assert.Equal(t, filepath.Join(dir, "included", "nested", "store"), repo.Options["path"])
+	require.NotNil(t, repo.Verification)
+	assert.Equal(t, []string{filepath.Join(dir, "included", "nested", "repo.pub")}, repo.Verification.TrustedKeys)
+}
+
+func TestLoadConfig_ArtifactsExecEvaluatedOnce(t *testing.T) {
+	dir := t.TempDir()
+	countPath := filepath.Join(dir, "count")
+	t.Setenv(mergeConfigFileExecHelperEnv, "1")
+	config := fmt.Sprintf("artifacts:\n  repositories:\n    local:\n      kind: local/dir\n      options:\n        path: !exec >-\n          %s -test.run=^TestMergeConfigFileExecHelper$ -- %s\n", shellQuote(os.Args[0]), shellQuote(countPath))
+	root := artifactsTestDir(t, config)
+	cfg, err := loadArtifactsDir(t, root)
+	require.NoError(t, err)
+	count, err := os.ReadFile(countPath)
+	require.NoError(t, err)
+	assert.Equal(t, "1", string(count))
+	assert.Equal(t, filepath.Join(root, "resolved-description"), cfg.Artifacts.Repositories["local"].Options["path"])
+}
+
+func TestProfileImportArtifactsExecEvaluatedOnce(t *testing.T) {
+	setupTestAdapters()
+	dir := t.TempDir()
+	countPath := filepath.Join(dir, "count")
+	t.Setenv(mergeConfigFileExecHelperEnv, "1")
+	writeArtifactsFile(t, filepath.Join(dir, "import.yaml"), "logs:\n  level: Info\n")
+	profile := filepath.Join(dir, "profile.yaml")
+	writeArtifactsFile(t, profile, fmt.Sprintf("base_path: %s\nimport: [./import.yaml]\nartifacts:\n  repositories:\n    local:\n      kind: local/dir\n      options:\n        path: !exec >-\n          %s -test.run=^TestMergeConfigFileExecHelper$ -- %s\n", dir, shellQuote(os.Args[0]), shellQuote(countPath)))
+	v := viper.New()
+	v.SetConfigType("yaml")
+	resetMergedConfigFiles(v)
+	defer mergedFilesReg.finish(v)
+	require.NoError(t, mergeConfigFileWithImports(profile, v))
+	var cfg schema.AtmosConfiguration
+	require.NoError(t, resolveArtifactsConfig(v, &cfg))
+	count, err := os.ReadFile(countPath)
+	require.NoError(t, err)
+	assert.Equal(t, "1", string(count))
+	assert.Equal(t, filepath.Join(dir, "resolved-description"), cfg.Artifacts.Repositories["local"].Options["path"])
+}
+
+func TestLoadConfig_ArtifactsPlainIncludeRetainsDeclaringFile(t *testing.T) {
+	dir := artifactsTestDir(t, "artifacts: !include ./included/artifacts.yaml\n")
+	writeArtifactsFile(t, filepath.Join(dir, "included", "artifacts.yaml"), "repositories:\n  local:\n    kind: local/dir\n    options:\n      path: store\n")
+	cfg, err := loadArtifactsDir(t, dir)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, "included", "store"), cfg.Artifacts.Repositories["local"].Options["path"])
+}
+
+func TestLoadConfig_ArtifactsRemoteIncludeDoesNotAnchorPaths(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, "repositories:\n  remote:\n    kind: local/dir\n    options:\n      path: remote-store\n")
+	}))
+	defer server.Close()
+	for _, suffix := range []string{"", " | eval"} {
+		t.Run(fmt.Sprintf("eval=%t", suffix != ""), func(t *testing.T) {
+			dir := artifactsTestDir(t, "artifacts: !include "+server.URL+"/artifacts.yaml"+suffix+"\n")
+			cfg, err := loadArtifactsDir(t, dir)
+			require.NoError(t, err)
+			repo := cfg.Artifacts.Repositories["remote"]
+			assert.Equal(t, "remote-store", repo.Options["path"])
+			assert.True(t, repo.PathOrigin.Remote)
+		})
+	}
+}
+
+func TestLoadConfig_ArtifactsIncludedExecEvaluatedOnce(t *testing.T) {
+	dir := t.TempDir()
+	countPath := filepath.Join(dir, "count")
+	t.Setenv(mergeConfigFileExecHelperEnv, "1")
+	root := artifactsTestDir(t, "artifacts: !include ./sub/artifacts.yaml | eval\n")
+	contents := fmt.Sprintf("repositories:\n  local:\n    kind: local/dir\n    options:\n      path: !exec >-\n        %s -test.run=^TestMergeConfigFileExecHelper$ -- %s\n", shellQuote(os.Args[0]), shellQuote(countPath))
+	writeArtifactsFile(t, filepath.Join(root, "sub", "artifacts.yaml"), contents)
+	cfg, err := loadArtifactsDir(t, root)
+	require.NoError(t, err)
+	count, err := os.ReadFile(countPath)
+	require.NoError(t, err)
+	assert.Equal(t, "1", string(count))
+	assert.Equal(t, filepath.Join(root, "sub", "resolved-description"), cfg.Artifacts.Repositories["local"].Options["path"])
 }

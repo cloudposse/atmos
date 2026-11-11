@@ -561,12 +561,13 @@ func TestMaterialize_ReplaceGuard(t *testing.T) {
 			out := dest(t)
 			fixtures.WriteFile(t, out, "stale.txt", "stale", 0o644)
 			err := materialize.Materialize(context.Background(), contentOf(t, p), out, materialize.WithReplaceGuard(tt.guard))
-			if tt.wantErr != nil {
+			switch {
+			case tt.wantErr != nil:
 				require.ErrorIs(t, err, tt.wantErr)
-			} else if runtime.GOOS == "windows" {
+			case runtime.GOOS == "windows":
 				require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
 				tt.wantStale = true
-			} else {
+			default:
 				require.NoError(t, err)
 			}
 			_, staleErr := os.Stat(filepath.Join(out, "stale.txt"))

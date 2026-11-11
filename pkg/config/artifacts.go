@@ -36,6 +36,58 @@ func newArtifactOrigins() *artifactOrigins {
 	}
 }
 
+// evaluatedArtifacts retains the first evaluation and the file declaring each path-valued setting.
+type evaluatedArtifacts struct {
+	section map[string]any
+	origins map[string]artifactFileOrigin
+}
+
+type artifactFileOrigin struct {
+	file   string
+	remote bool
+}
+
+// evaluateArtifactsForLoad resolves tags once before Viper processes the section.
+func evaluateArtifactsForLoad(node *yaml.Node, sourceFile string) (*evaluatedArtifacts, error) {
+	result := &evaluatedArtifacts{origins: make(map[string]artifactFileOrigin)}
+	decoder := configYamlDecoder{includes: make(map[string]bool)}
+	decoder.origin = result.recordOrigin
+	value, err := decoder.decode(node, sourceFile)
+	if err != nil {
+		return nil, err
+	}
+	if value == nil {
+		return result, nil
+	}
+	section, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: artifacts in %s must be a mapping, got %T", errUtils.ErrArtifactConfigInvalid, sourceFile, value)
+	}
+	result.section = section
+	return result, nil
+}
+
+func (result *evaluatedArtifacts) recordOrigin(path []string, file string, remote bool) {
+	origin := artifactFileOrigin{file: file, remote: remote}
+	if len(path) == 2 && strings.EqualFold(path[0], "verification") && strings.EqualFold(path[1], "trusted_keys") {
+		result.origins["global"] = origin
+		return
+	}
+	if len(path) != 4 || !strings.EqualFold(path[0], "repositories") {
+		return
+	}
+	switch strings.ToLower(path[2]) {
+	case "options":
+		if strings.EqualFold(path[3], "path") {
+			result.origins["path\x00"+path[1]] = origin
+		}
+	case "verification":
+		if strings.EqualFold(path[3], "trusted_keys") {
+			result.origins["keys\x00"+path[1]] = origin
+		}
+	}
+}
+
 // resolveArtifactsConfig rebuilds atmosConfig.Artifacts from the retained configuration sources.
 //
 // Viper cannot be used for this section: it lowercases keys (repository aliases, label keys, and
@@ -53,7 +105,24 @@ func resolveArtifactsConfig(v *viper.Viper, atmosConfig *schema.AtmosConfigurati
 	origins := newArtifactOrigins()
 	declared := false
 	for _, source := range collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed()) {
-		section, ok, err := artifactsSectionFromSource(source)
+		var document yaml.Node
+		if err := yaml.Unmarshal([]byte(source.content), &document); err != nil {
+			return fmt.Errorf("%w: parse %s: %w", errUtils.ErrArtifactConfigInvalid, source.path, err)
+		}
+		if node := policyMappingValue(&document, artifactsSectionKey); node != nil && node.Tag == "!unset" {
+			merged = map[string]any{}
+			origins = newArtifactOrigins()
+			declared = true
+			continue
+		}
+		var section map[string]any
+		var ok bool
+		var err error
+		if source.artifacts != nil {
+			section, ok = source.artifacts.section, source.artifacts.section != nil
+		} else {
+			section, ok, err = artifactsSectionFromSource(source)
+		}
 		if err != nil {
 			return err
 		}
@@ -62,6 +131,20 @@ func resolveArtifactsConfig(v *viper.Viper, atmosConfig *schema.AtmosConfigurati
 		}
 		declared = true
 		origins.record(section, source)
+		if source.artifacts != nil {
+			for key, file := range source.artifacts.origins {
+				origin := artifactconfig.NewOrigin(file.file, source.ephemeral || file.remote)
+				kind, alias, found := strings.Cut(key, "\x00")
+				switch {
+				case key == "global":
+					origins.globalKeys = origin
+				case found && kind == "path":
+					origins.repoPath[alias] = origin
+				case found && kind == "keys":
+					origins.repoKeys[alias] = origin
+				}
+			}
+		}
 		combined, err := merge.MergeWithOptions(nil, []map[string]any{merged, section}, false, false)
 		if err != nil {
 			return fmt.Errorf("%w: merge artifacts from %s: %w", errUtils.ErrArtifactConfigInvalid, source.path, err)

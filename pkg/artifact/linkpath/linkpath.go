@@ -13,7 +13,10 @@ import (
 )
 
 // maxLinkHops bounds the symlinks followed while resolving one path, so a loop terminates.
-const maxLinkHops = 255
+const (
+	maxLinkHops     = 255
+	parentComponent = ".."
+)
 
 // Resolve returns the physical absolute path that target refers to. It follows every symlink it
 // meets, like filepath.EvalSymlinks. Unlike EvalSymlinks, it also resolves a path whose tail does
@@ -63,16 +66,10 @@ func (w *walker) step() (done, ok bool) {
 	component := w.pending[0]
 	w.pending = w.pending[1:]
 	if len(w.missing) > 0 {
-		switch component {
-		case ".":
-		case "..":
-			w.missing = w.missing[:len(w.missing)-1]
-		default:
-			w.missing = append(w.missing, component)
-		}
+		w.stepMissing(component)
 		return false, true
 	}
-	if component == "." || component == ".." {
+	if component == "." || component == parentComponent {
 		w.resolved = stepDot(w.resolved, component)
 		return false, true
 	}
@@ -95,6 +92,17 @@ func (w *walker) step() (done, ok bool) {
 	return w.follow(next)
 }
 
+// stepMissing resolves the missing tail lexically until it returns to an existing directory.
+func (w *walker) stepMissing(component string) {
+	switch component {
+	case ".":
+	case parentComponent:
+		w.missing = w.missing[:len(w.missing)-1]
+	default:
+		w.missing = append(w.missing, component)
+	}
+}
+
 // follow splices the target of the symlink at link in front of the pending components.
 func (w *walker) follow(link string) (done, ok bool) {
 	w.hops++
@@ -109,9 +117,9 @@ func (w *walker) follow(link string) (done, ok bool) {
 	return false, true
 }
 
-// stepDot applies a "." or ".." component to a fully resolved directory.
+// stepDot applies a current or parent directory component to a fully resolved directory.
 func stepDot(resolved, component string) string {
-	if component == ".." {
+	if component == parentComponent {
 		return filepath.Dir(resolved)
 	}
 	return resolved
@@ -133,7 +141,7 @@ func Within(root, target string) bool {
 	defer perf.Track(nil, "linkpath.Within")()
 
 	relative, err := filepath.Rel(root, target)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+	return err == nil && relative != parentComponent && !strings.HasPrefix(relative, parentComponent+string(filepath.Separator))
 }
 
 // splitComponents splits a path into its non-empty components.
