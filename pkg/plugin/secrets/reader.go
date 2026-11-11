@@ -3,6 +3,7 @@ package secrets
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -55,7 +56,7 @@ func (r *reader) ReadSecret(ctx context.Context, name string) (string, error) {
 	}
 	value, err := r.readValue(ctx, reference)
 	if err != nil {
-		return "", errUtils.ErrAuthenticationFailed
+		return "", sanitizedReadError(err)
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -66,6 +67,17 @@ func (r *reader) ReadSecret(ctx context.Context, name string) (string, error) {
 	}
 	atmosio.RegisterSecret(text)
 	return text, nil
+}
+
+// sanitizedReadError preserves cancellation causes without retaining backend diagnostics.
+func sanitizedReadError(err error) error {
+	result := errUtils.ErrAuthenticationFailed
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		if errors.Is(err, cause) {
+			result = errors.Join(result, cause)
+		}
+	}
+	return result
 }
 
 type secretReference struct {
