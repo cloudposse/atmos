@@ -25,10 +25,21 @@ import (
 // credentials, and its credentials are never presented to another registry. Constructing the
 // client authenticates nothing; the identity authenticates on the first registry request. The
 // preparation, when non-nil, lets an identity provided by an installed auth plugin authenticate.
+// For an identity-bound registry, an injected cloud IdentityResolver is rejected; use a custom
+// transport factory to define how that resolver supplies registry credentials.
 func NewTransportFactory(config *schema.AtmosConfiguration, preparation registryauth.Preparation) artifactoci.TransportFactory {
 	defer perf.Track(config, "compose.NewTransportFactory")()
 
-	return func(_ context.Context, alias string, repo *schema.ArtifactRepositoryConfig, _ artifact.IdentityResolver) (atmosoci.Transport, error) {
+	return transportFactory(config, preparation, true)
+}
+
+// transportFactory rejects a cloud identity resolver when it was explicitly injected: registry
+// authentication requires registry-specific credentials, not the cloud contexts it returns.
+func transportFactory(config *schema.AtmosConfiguration, preparation registryauth.Preparation, rejectResolver bool) artifactoci.TransportFactory {
+	return func(_ context.Context, alias string, repo *schema.ArtifactRepositoryConfig, resolve artifact.IdentityResolver) (atmosoci.Transport, error) {
+		if repo.Identity != "" && rejectResolver && resolve != nil {
+			return nil, artifact.NewUnsupportedCapability(alias, "open", "identity-resolver", "the default OCI transport uses registry authentication; supply a custom transport factory to use an injected identity resolver")
+		}
 		clientOptions := []atmosoci.ClientOption{atmosoci.WithCredentialFallback(credentialChain(config))}
 		if repo.Identity != "" {
 			resolver, err := identityBinding(config, alias, repo, preparation)

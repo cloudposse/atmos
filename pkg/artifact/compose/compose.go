@@ -61,11 +61,11 @@ func New(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Composition, 
 	if applied.registry == nil {
 		applied.registry = artifact.NewRepositoryRegistry()
 	}
-	if err := registerKinds(applied.registry, &applied); err != nil {
-		return nil, err
-	}
 	cfg := atmosConfig.Artifacts
 	if err := artifactconfig.NewValidator(artifactconfig.WithRegistry(applied.registry)).Validate(&cfg); err != nil {
+		return nil, err
+	}
+	if err := registerKinds(applied.registry, &applied); err != nil {
 		return nil, err
 	}
 
@@ -92,11 +92,11 @@ func (s *settings) defaults(atmosConfig *schema.AtmosConfiguration) {
 	if s.immutability == nil {
 		s.immutability = oci.PluginImmutability()
 	}
+	if s.transport == nil {
+		s.transport = transportFactory(atmosConfig, s.preparation, s.identity != nil)
+	}
 	if s.identity == nil {
 		s.identity = NewIdentityResolver(atmosConfig)
-	}
-	if s.transport == nil {
-		s.transport = NewTransportFactory(atmosConfig, s.preparation)
 	}
 }
 

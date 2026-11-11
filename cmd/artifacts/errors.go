@@ -37,7 +37,7 @@ var hintRules = []hintRule{
 		return []string{"Run `atmos artifacts list --repository=<alias>` to see the published artifacts and versions."}
 	}},
 	{errUtils.ErrArtifactConflict, "", func([]string) []string {
-		return []string{"Re-run with `--force` to replace the existing reference. Force never bypasses verification or immutable release formats."}
+		return []string{"Check the conflicting reference or repository constraint before retrying."}
 	}},
 	{errUtils.ErrArtifactVerificationFailed, "", func([]string) []string {
 		return []string{"Configure `artifacts.verification` with the signer identities or keys you trust, then run `atmos artifacts verify`."}

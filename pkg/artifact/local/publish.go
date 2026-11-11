@@ -55,7 +55,7 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 			err = releaseErr
 		}
 	}()
-	if options.Lock == nil {
+	if _, localLock := options.Lock.(*fileLock); !localLock {
 		lock, lockErr := r.acquire(ctx, prepared.Record.Name+":"+prepared.Record.Version, r.settings.owner, job.opID)
 		if lockErr != nil {
 			return nil, lockErr
