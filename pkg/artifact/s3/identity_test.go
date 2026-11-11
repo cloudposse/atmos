@@ -79,7 +79,7 @@ func TestIdentity_IsResolvedLazily(t *testing.T) {
 	require.NoError(t, err)
 	_, err = repo.List(context.Background(), artifact.ListQuery{})
 	require.NoError(t, err)
-	assert.Equal(t, int32(1), stub.calls.Load(), "the resolved client is reused")
+	assert.GreaterOrEqual(t, stub.calls.Load(), int32(2), "identity credentials are re-resolved for later operations")
 	assert.NotEmpty(t, fake.Requests())
 }
 

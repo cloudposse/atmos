@@ -53,10 +53,23 @@ func TestDelete_IsScopedToTheSelectedArtifact(t *testing.T) {
 				assert.True(t, ok, "an unmanaged object inside the payload prefix stays")
 			}
 
-			deletes := spec.fake.RequestsFor(s3test.OpDeleteObject)
-			require.NotEmpty(t, deletes)
-			assert.Equal(t, layout.ReferencePath(layout.ReferenceKey(testName, "2.0.0")), deletes[0].Key, "the reference is removed first")
-			assert.NotEmpty(t, deletes[0].Header.Get("If-Match"), "and conditionally on the observed ETag")
+			refKey := layout.ReferencePath(layout.ReferenceKey(testName, "2.0.0"))
+			var pendingSeq, firstPayloadDelete, referenceDelete int
+			for _, request := range spec.fake.Requests() {
+				if request.Op == s3test.OpPutObject && request.Key == refKey && request.Header.Get("If-Match") != "" {
+					pendingSeq = request.Seq
+				}
+				if request.Op == s3test.OpDeleteObject && firstPayloadDelete == 0 {
+					firstPayloadDelete = request.Seq
+				}
+				if request.Op == s3test.OpDeleteObject && request.Key == refKey {
+					referenceDelete = request.Seq
+					assert.NotEmpty(t, request.Header.Get("If-Match"))
+				}
+			}
+			require.Positive(t, pendingSeq, "reference is made unavailable conditionally")
+			assert.Less(t, pendingSeq, firstPayloadDelete)
+			assert.Greater(t, referenceDelete, firstPayloadDelete, "ownership remains until cleanup")
 		})
 	}
 }
