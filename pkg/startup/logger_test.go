@@ -77,6 +77,10 @@ func TestLogsConfigFromArgs(t *testing.T) {
 		{name: "prefix-sharing flag ignored", args: []string{"version", "--logs-level-extra=x"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
 		// Space-separated value form.
 		{name: "logs-level space separated", args: []string{"version", "--logs-level", "Info"}, wantLevel: "Info", wantFile: "/dev/stderr"},
+		// A dangling --logs-level with no value (end of args) is ignored, keeping the default.
+		{name: "logs-level with no value ignored", args: []string{"version", "--logs-level"}, wantLevel: "Warning", wantFile: "/dev/stderr"},
+		// A following flag is not consumed as the value; the next flag is still honored.
+		{name: "logs-level followed by flag not consumed", args: []string{"version", "--logs-level", "--verbose"}, wantLevel: "Debug", wantFile: "/dev/stderr"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
