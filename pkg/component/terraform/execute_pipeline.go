@@ -65,6 +65,9 @@ func (e *Executor) prepareComponentExecution(
 	}
 
 	if prepared != nil && !info.DryRun {
+		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
+			return nil, err
+		}
 		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
 			return nil, err
 		}

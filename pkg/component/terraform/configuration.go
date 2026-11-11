@@ -13,6 +13,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -138,4 +140,37 @@ func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
 		return fmt.Errorf("%w: TF_WORKSPACE %q differs from the prepared workspace %q", errUtils.ErrPluginInvalidConfig, workspace, info.TerraformWorkspace)
 	}
 	return nil
+}
+
+// Workdir runtime paths generated artifacts must never write. They mirror the paths the
+// workdir sync preserves: Terraform data and workspace-state directories, Atmos metadata,
+// provider lock files at any depth, and the default local-backend state files at the root.
+var (
+	runtimeArtifactDirs  = map[string]bool{".terraform": true, "terraform.tfstate.d": true, workdir.AtmosDir: true}
+	runtimeArtifactFiles = map[string]bool{"terraform.tfstate": true, "terraform.tfstate.backup": true, ".terraform.tfstate.lock.info": true}
+)
+
+// rejectRuntimeArtifacts checks the whole artifact set before any file is written, so a
+// generated file can never replace Terraform state, provider locks, or workdir metadata,
+// even with an overwrite policy.
+func rejectRuntimeArtifacts(files []schema.ComponentConfigurationFile) error {
+	for _, file := range files {
+		if isRuntimeArtifact(file.Path) {
+			return fmt.Errorf("%w: generated file %s overlaps Terraform state or workdir runtime files", errUtils.ErrPluginInvalidConfig, file.Path)
+		}
+	}
+	return nil
+}
+
+func isRuntimeArtifact(path string) bool {
+	path = filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
+	if runtimeArtifactFiles[path] || strings.HasSuffix(path, provisioner.CanonicalLockFilename) {
+		return true
+	}
+	for _, segment := range strings.Split(path, "/") {
+		if runtimeArtifactDirs[segment] {
+			return true
+		}
+	}
+	return false
 }

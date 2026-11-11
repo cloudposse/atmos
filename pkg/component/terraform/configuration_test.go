@@ -118,3 +118,14 @@ func TestCheckConfigurationWorkspace(t *testing.T) {
 		})
 	}
 }
+
+func TestRejectRuntimeArtifacts(t *testing.T) {
+	require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}}))
+	for _, path := range []string{"examples/terraform.tfstate", "nested/provider.tf"} {
+		require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: path}}), path)
+	}
+	for _, path := range []string{"terraform.tfstate", "terraform.tfstate.backup", ".terraform.tfstate.lock.info", ".terraform/environment", "nested/.terraform/modules/modules.json", "terraform.tfstate.d/stage/terraform.tfstate", ".terraform.lock.hcl", "nested/.dev-app.terraform.lock.hcl", ".atmos/metadata.json"} {
+		files := []schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}, {Path: path, IfExists: "overwrite"}}
+		require.ErrorIs(t, rejectRuntimeArtifacts(files), errUtils.ErrPluginInvalidConfig, path)
+	}
+}
