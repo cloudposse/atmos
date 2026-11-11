@@ -3,11 +3,13 @@ package cmd
 import (
 	"bytes"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	terraformcmd "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/pkg/ansi"
@@ -1459,13 +1461,18 @@ func TestPrintFlagsGroupsProviderFlagsUnderTheirProvider(t *testing.T) {
 }
 
 func TestRegisterProviderFlagsWithoutEnabledProvidersChangesNothing(t *testing.T) {
-	before := plan().Flags().NFlag()
+	flagNames := func() []string {
+		var names []string
+		plan().Flags().VisitAll(func(flag *pflag.Flag) { names = append(names, flag.Name) })
+		return names
+	}
+	before := flagNames()
 	for _, args := range [][]string{{"terraform", "plan"}, {"version"}, nil} {
 		if err := terraformcmd.RegisterProviderFlags(&schema.AtmosConfiguration{}, args); err != nil {
 			t.Errorf("args %v: %v", args, err)
 		}
 	}
-	if plan().Flags().NFlag() != before {
+	if !slices.Equal(flagNames(), before) {
 		t.Error("registration without a provider changed the flags")
 	}
 }

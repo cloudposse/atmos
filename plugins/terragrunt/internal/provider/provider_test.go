@@ -585,9 +585,7 @@ func TestManifestDeclaresExactlyTheOptionsThePluginAccepts(t *testing.T) {
 	for _, option := range declared.Options {
 		names = append(names, option.Name)
 		require.NotEmpty(t, option.Commands, option.Name)
-		if option.Sensitive {
-			require.Equal(t, "iam_assume_role_web_identity_token", option.Name)
-		}
+		require.Equal(t, option.Name == "iam_assume_role_web_identity_token", option.Sensitive, option.Name)
 	}
 	accepted := []string{"feature"}
 	for name := range toolEnvironment {
