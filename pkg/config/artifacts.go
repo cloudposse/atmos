@@ -17,7 +17,10 @@ import (
 )
 
 // artifactsSectionKey is the top-level atmos.yaml key of the artifact configuration.
-const artifactsSectionKey = "artifacts"
+const (
+	artifactsSectionKey    = "artifacts"
+	verificationSectionKey = "verification"
+)
 
 // artifactOrigins records, per setting, the configuration file that supplied the final value. It is
 // tracked independently of the merged map because deep merging fuses the fields of several files
@@ -69,7 +72,7 @@ func evaluateArtifactsForLoad(node *yaml.Node, sourceFile string) (*evaluatedArt
 
 func (result *evaluatedArtifacts) recordOrigin(path []string, file string, remote bool) {
 	origin := artifactFileOrigin{file: file, remote: remote}
-	if len(path) == 2 && strings.EqualFold(path[0], "verification") && strings.EqualFold(path[1], "trusted_keys") {
+	if len(path) == 2 && strings.EqualFold(path[0], verificationSectionKey) && strings.EqualFold(path[1], "trusted_keys") {
 		result.origins["global"] = origin
 		return
 	}
@@ -81,7 +84,7 @@ func (result *evaluatedArtifacts) recordOrigin(path []string, file string, remot
 		if strings.EqualFold(path[3], "path") {
 			result.origins["path\x00"+path[1]] = origin
 		}
-	case "verification":
+	case verificationSectionKey:
 		if strings.EqualFold(path[3], "trusted_keys") {
 			result.origins["keys\x00"+path[1]] = origin
 		}
@@ -105,51 +108,26 @@ func resolveArtifactsConfig(v *viper.Viper, atmosConfig *schema.AtmosConfigurati
 	origins := newArtifactOrigins()
 	declared := false
 	for _, source := range collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed()) {
-		var document yaml.Node
-		if err := yaml.Unmarshal([]byte(source.content), &document); err != nil {
-			return fmt.Errorf("%w: parse %s: %w", errUtils.ErrArtifactConfigInvalid, source.path, err)
+		section, state, err := artifactSectionForReplay(source)
+		if err != nil {
+			return err
 		}
-		if node := policyMappingValue(&document, artifactsSectionKey); node != nil && node.Tag == "!unset" {
+		if state == artifactSectionUnset {
 			merged = map[string]any{}
 			origins = newArtifactOrigins()
 			declared = true
 			continue
 		}
-		var section map[string]any
-		var ok bool
-		var err error
-		if source.artifacts != nil {
-			section, ok = source.artifacts.section, source.artifacts.section != nil
-		} else {
-			section, ok, err = artifactsSectionFromSource(source)
-		}
-		if err != nil {
-			return err
-		}
-		if !ok {
+		if state == artifactSectionAbsent {
 			continue
 		}
 		declared = true
 		origins.record(section, source)
-		if source.artifacts != nil {
-			for key, file := range source.artifacts.origins {
-				origin := artifactconfig.NewOrigin(file.file, source.ephemeral || file.remote)
-				kind, alias, found := strings.Cut(key, "\x00")
-				switch {
-				case key == "global":
-					origins.globalKeys = origin
-				case found && kind == "path":
-					origins.repoPath[alias] = origin
-				case found && kind == "keys":
-					origins.repoKeys[alias] = origin
-				}
-			}
-		}
-		combined, err := merge.MergeWithOptions(nil, []map[string]any{merged, section}, false, false)
+		origins.recordEvaluated(source)
+		merged, err = merge.MergeWithOptions(nil, []map[string]any{merged, section}, false, false)
 		if err != nil {
 			return fmt.Errorf("%w: merge artifacts from %s: %w", errUtils.ErrArtifactConfigInvalid, source.path, err)
 		}
-		merged = combined
 	}
 	if !declared {
 		return nil
@@ -161,6 +139,58 @@ func resolveArtifactsConfig(v *viper.Viper, atmosConfig *schema.AtmosConfigurati
 	origins.apply(&cfg)
 	atmosConfig.Artifacts = cfg
 	return nil
+}
+
+type artifactSectionState uint8
+
+const (
+	artifactSectionAbsent artifactSectionState = iota
+	artifactSectionPresent
+	artifactSectionUnset
+)
+
+// artifactSectionForReplay returns the evaluated section or an explicit removal.
+func artifactSectionForReplay(source mergedConfigSource) (map[string]any, artifactSectionState, error) {
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(source.content), &document); err != nil {
+		return nil, artifactSectionAbsent, fmt.Errorf("%w: parse %s: %w", errUtils.ErrArtifactConfigInvalid, source.path, err)
+	}
+	if node := policyMappingValue(&document, artifactsSectionKey); node != nil && node.Tag == "!unset" {
+		return nil, artifactSectionUnset, nil
+	}
+	if source.artifacts != nil {
+		if source.artifacts.section == nil {
+			return nil, artifactSectionAbsent, nil
+		}
+		return source.artifacts.section, artifactSectionPresent, nil
+	}
+	section, present, err := artifactsSectionFromSource(source)
+	if err != nil {
+		return nil, artifactSectionAbsent, err
+	}
+	if !present {
+		return nil, artifactSectionAbsent, nil
+	}
+	return section, artifactSectionPresent, nil
+}
+
+// recordEvaluated applies the origins of values declared inside included files.
+func (o *artifactOrigins) recordEvaluated(source mergedConfigSource) {
+	if source.artifacts == nil {
+		return
+	}
+	for key, file := range source.artifacts.origins {
+		origin := artifactconfig.NewOrigin(file.file, source.ephemeral || file.remote)
+		kind, alias, found := strings.Cut(key, "\x00")
+		switch {
+		case key == "global":
+			o.globalKeys = origin
+		case found && kind == "path":
+			o.repoPath[alias] = origin
+		case found && kind == "keys":
+			o.repoKeys[alias] = origin
+		}
+	}
 }
 
 // artifactsSectionFromSource parses the `artifacts` section of one retained source with its
@@ -191,7 +221,7 @@ func artifactsSectionFromSource(source mergedConfigSource) (map[string]any, bool
 // record notes which source declares each path-valued setting present in section.
 func (o *artifactOrigins) record(section map[string]any, source mergedConfigSource) {
 	origin := artifactconfig.NewOrigin(source.path, source.ephemeral)
-	if keysDeclared(mapOf(mapValue(section, "verification"))) {
+	if keysDeclared(mapOf(mapValue(section, verificationSectionKey))) {
 		o.globalKeys = origin
 	}
 	repos, _ := mapValue(section, "repositories").(map[string]any)
@@ -203,7 +233,7 @@ func (o *artifactOrigins) record(section map[string]any, source mergedConfigSour
 		if _, isString := mapValue(mapOf(mapValue(repo, "options")), artifact.OptionPath).(string); isString {
 			o.repoPath[alias] = origin
 		}
-		if keysDeclared(mapOf(mapValue(repo, "verification"))) {
+		if keysDeclared(mapOf(mapValue(repo, verificationSectionKey))) {
 			o.repoKeys[alias] = origin
 		}
 	}
