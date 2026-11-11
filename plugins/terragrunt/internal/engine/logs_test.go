@@ -160,20 +160,31 @@ func TestLogSinkForwardsEventsInOrderInsteadOfCollectingThem(t *testing.T) {
 
 func TestLogSinkForwardingKeepsOrderAcrossConcurrentUnits(t *testing.T) {
 	sink := NewLogSink("debug", "")
-	var forwarded []int
-	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, len(entry.Fields["unit"])) })
+	forwarded := make(map[string][]string)
+	var total int
+	sink.Forward(func(entry *model.LogEntry) {
+		forwarded[entry.Fields["unit"]] = append(forwarded[entry.Fields["unit"]], entry.Message)
+		total++
+	})
 	l := logger(t, sink)
 	var wg sync.WaitGroup
 	for unit := range 8 {
 		wg.Go(func() {
-			for range 50 {
-				l.WithField("unit", strings.Repeat("u", unit+1)).Info("working")
+			for sequence := range 50 {
+				l.WithField("unit", strings.Repeat("u", unit+1)).Info(fmt.Sprint(sequence))
 			}
 		})
 	}
 	wg.Wait()
 	// The deliverer is never called concurrently, so it needs no lock of its own.
-	assert.Len(t, forwarded, 400)
+	assert.Equal(t, 400, total)
+	for unit := range 8 {
+		var want []string
+		for sequence := range 50 {
+			want = append(want, fmt.Sprint(sequence))
+		}
+		assert.Equal(t, want, forwarded[strings.Repeat("u", unit+1)])
+	}
 }
 
 func TestLogSinkEventsFollowTheLevelAndAreRelativeToTheRoot(t *testing.T) {

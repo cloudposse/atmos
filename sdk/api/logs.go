@@ -65,8 +65,9 @@ func WithLogFlush(wait time.Duration) LogOption {
 // when Atmos renders more slowly than the plugin logs, Send waits for room in the queue, so the plugin slows to
 // the speed of the terminal. Send never fails the call, and it stops waiting when the call is cancelled.
 //
-// Entries that Atmos did not take, because the log service is unavailable, come back from Close so the plugin
-// can return them in its response, where Atmos renders them when the call ends. Entries delivered live are
+// Entries that Atmos did not take, because the log service is unavailable, are retained up to the queue
+// capacity for Close to return in the response; further entries are counted as omitted. The default capacity
+// is 1,024 entries and WithLogQueue changes it. Entries delivered live are
 // never returned, so nothing is shown twice. An entry whose delivery was cut off in flight, by cancellation or
 // an optional flush cap, is counted as omitted rather than returned: it may already be on screen.
 type LogStream struct {
@@ -92,8 +93,8 @@ type LogStream struct {
 }
 
 // OpenLogs starts delivering log entries for the invocation. It never fails: when the Atmos API is not
-// configured or the invocation is unknown, every entry comes back from Close instead, which is how plugins
-// returned entries before live delivery existed. The caller must call Close before it returns the result.
+// configured or the invocation is unknown, Close returns up to the queue capacity (1,024 by default),
+// followed by an omission warning if more entries were sent. The caller must call Close before returning.
 //
 //nolint:lintroller // Pure SDK helper; the standalone SDK cannot import host perf tracking.
 func (c *Client) OpenLogs(ctx context.Context, invocationID string, options ...LogOption) *LogStream {
