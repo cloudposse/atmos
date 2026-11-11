@@ -280,3 +280,14 @@ func TestResolveStoreAuthWarnsWhenDisabledBypassesPinnedIdentity(t *testing.T) {
 		assert.Empty(t, warnings)
 	})
 }
+
+func TestOperationIdentityRejectsMissingIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	backend := &operationStore{store.NewMockIdentityAwareStore(ctrl)}
+	ac := &schema.AtmosConfiguration{
+		AuthManager: authdeferred.NewManager(authdeferred.AuthOptions{Factory: authdeferred.NewMockAuthFactory(ctrl)}),
+		Stores:      store.StoreRegistry{"remote": backend},
+	}
+	backend.EXPECT().ResetAuthContext()
+	require.ErrorIs(t, resolveStoreAuth(ac, nil, "remote"), store.ErrIdentityNotConfigured)
+}

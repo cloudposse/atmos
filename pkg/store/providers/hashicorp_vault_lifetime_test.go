@@ -119,3 +119,34 @@ func TestVaultContextCancellationReleasesBeforeReturning(t *testing.T) {
 	assert.Equal(t, 1, *releases)
 	assert.Empty(t, fake.token)
 }
+
+func TestVaultOperationLifetimeRejectsMissingCredentials(t *testing.T) {
+	for _, environment := range []map[string]string{nil, {}, {"VAULT_TOKEN": ""}} {
+		s, fake, _ := scopedVault(t, nil)
+		resolver := store.NewMockScopedEnvironmentAuthContextResolver(gomock.NewController(t))
+		resolver.EXPECT().WithEnvironmentAuthContext(gomock.Any(), "openbao", gomock.Any()).DoAndReturn(
+			func(ctx context.Context, _ string, operation func(context.Context, *store.EnvironmentAuthConfig) error) error {
+				if environment == nil {
+					return operation(ctx, nil)
+				}
+				return operation(ctx, &store.EnvironmentAuthConfig{Environment: environment})
+			})
+		s.SetAuthContext(resolver, "openbao")
+		value, err := s.GetKey("key")
+		require.ErrorIs(t, err, store.ErrAuthContextNotAvailable)
+		require.Nil(t, value)
+		require.Zero(t, fake.getCalls, "invalid identity credentials must never reach the store")
+		require.Empty(t, fake.token)
+	}
+}
+
+func TestVaultOperationLifetimeRejectsCanceledCallsBeforeAcquisition(t *testing.T) {
+	s, fake, releases := scopedVault(t, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	value, err := s.GetKeyContext(ctx, "key")
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, value)
+	require.Zero(t, *releases, "a canceled operation must not acquire an identity")
+	require.Zero(t, fake.getCalls)
+}

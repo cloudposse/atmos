@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -154,4 +155,53 @@ func TestManagerAuthenticateIsolatedDisabled(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrAuthenticationUnavailable)
 	require.Nil(t, got)
 	require.False(t, manager.baseReady, "a disabled manager must not initialize providers or credential storage")
+}
+
+func TestManagerDelegatesScopedIdentityOwnership(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	scoped := types.NewMockScopedAuthManager(ctrl)
+	manager := NewManager(AuthOptions{})
+	manager.baseManager = struct {
+		types.AuthManager
+		types.ScopedAuthManager
+	}{types.NewMockAuthManager(ctrl), scoped}
+	manager.baseReady = true
+	events := []string{}
+	scoped.EXPECT().WithIsolatedIdentity(gomock.Any(), "reader", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, _ string, operation func(context.Context, *schema.AuthContext) error) error {
+			events = append(events, "acquired")
+			err := operation(ctx, &schema.AuthContext{Environment: map[string]string{"VAULT_TOKEN": "synthetic-reader"}})
+			events = append(events, "released")
+			return err
+		})
+	err := manager.WithIsolatedIdentity(t.Context(), "reader", func(ctx context.Context, auth *schema.AuthContext) error {
+		events = append(events, "operation")
+		require.Same(t, t.Context(), ctx)
+		require.Equal(t, "synthetic-reader", auth.Environment["VAULT_TOKEN"])
+		return assert.AnError
+	})
+	require.ErrorIs(t, err, assert.AnError)
+	require.Equal(t, []string{"acquired", "operation", "released"}, events)
+}
+
+func TestManagerRejectsUnavailableScopedIdentity(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		options  AuthOptions
+		delegate types.AuthManager
+		want     error
+	}{
+		{name: "disabled", options: AuthOptions{Disabled: true}, want: errUtils.ErrAuthenticationUnavailable},
+		{name: "no configuration", want: errUtils.ErrInvalidAuthConfig},
+		{name: "unsupported delegate", delegate: types.NewMockAuthManager(gomock.NewController(t)), want: errUtils.ErrAuthenticationUnavailable},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := NewManager(tt.options)
+			if tt.delegate != nil {
+				manager.baseManager, manager.baseReady = tt.delegate, true
+			}
+			err := manager.WithIsolatedIdentity(t.Context(), "reader", func(context.Context, *schema.AuthContext) error { t.Fatal("operation must not run"); return nil })
+			require.ErrorIs(t, err, tt.want)
+		})
+	}
 }

@@ -49,9 +49,6 @@ func (m *manager) releaseOperationIdentity(ctx context.Context) error {
 
 	name := m.operationScope.target
 	logout := m.identities[name].Logout(ctx)
-	if errors.Is(logout, errUtils.ErrLogoutNotSupported) {
-		logout = nil
-	}
 	removed := m.credentialStore.Delete(name, m.realm.Value)
 	if errors.Is(removed, credentials.ErrCredentialsNotFound) {
 		removed = nil

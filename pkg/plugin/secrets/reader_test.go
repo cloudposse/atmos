@@ -230,3 +230,52 @@ func TestSharedSecretDependenciesAndDepthLimit(t *testing.T) {
 	}
 	require.ErrorIs(t, validateGraph(config, "identity:identity-0", make(map[string]bool)), errUtils.ErrInvalidAuthConfig)
 }
+
+func TestReadSecretPassesCancellationToContextualStores(t *testing.T) {
+	for _, field := range []bool{false, true} {
+		for _, scoped := range []bool{false, true} {
+			t.Run(fmt.Sprintf("field=%v/scoped=%v", field, scoped), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				backend := contextualSecretStore(t, ctx, field, scoped)
+				config := secretConfig(backend)
+				ref := config.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)
+				if field {
+					ref["field"] = "apiToken"
+				}
+				if scoped {
+					ref["stack"], ref["component"] = "dev", "app"
+				}
+				reader := Factory(config)("vault", map[string]any{"kind": "secrets/store"})
+				value, err := reader.ReadSecret(ctx, "token")
+				require.NoError(t, err)
+				require.Equal(t, "synthetic-selected", value)
+			})
+		}
+	}
+}
+
+func contextualSecretStore(t *testing.T, ctx context.Context, field, scoped bool) store.Store {
+	t.Helper()
+	if field {
+		return contextualFieldSecretStore(t, ctx, scoped)
+	}
+	contextual := store.NewMockContextStore(gomock.NewController(t))
+	if scoped {
+		contextual.EXPECT().GetContext(ctx, "dev", "app", "private/path").Return("synthetic-selected", nil)
+	} else {
+		contextual.EXPECT().GetKeyContext(ctx, "private/path").Return("synthetic-selected", nil)
+	}
+	return contextual
+}
+
+func contextualFieldSecretStore(t *testing.T, ctx context.Context, scoped bool) store.Store {
+	t.Helper()
+	contextual := store.NewMockContextFieldStore(gomock.NewController(t))
+	if scoped {
+		contextual.EXPECT().GetFieldContext(ctx, "dev", "app", "private/path", "apiToken").Return("synthetic-selected", nil)
+	} else {
+		contextual.EXPECT().GetKeyFieldContext(ctx, "private/path", "apiToken").Return("synthetic-selected", nil)
+	}
+	return contextual
+}

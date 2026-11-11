@@ -12,8 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/cloudposse/atmos/pkg/auth/types"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -82,23 +83,25 @@ func TestScopedCleanupPreservesAncestorsAndProvider(t *testing.T) {
 func TestScopedCleanupToleratesAbsentKeyringAndPreservesFailures(t *testing.T) {
 	notFound := errors.Join(credentials.ErrCredentialStore, credentials.ErrCredentialsNotFound)
 	for _, tt := range []struct {
-		name                    string
+		name                      string
 		deletion, logout, wantErr error
 	}{
 		{name: "no keyring entry", deletion: notFound},
 		{name: "logout failure", deletion: notFound, logout: assert.AnError, wantErr: assert.AnError},
 		{name: "deletion failure", deletion: assert.AnError, wantErr: assert.AnError},
 		{name: "existing keyring entry"},
+		{name: "logout unsupported", logout: errUtils.ErrLogoutNotSupported, wantErr: errUtils.ErrLogoutNotSupported},
+		{name: "wrapped unsupported logout", logout: errors.Join(errUtils.ErrLogoutNotSupported, assert.AnError), wantErr: errUtils.ErrLogoutNotSupported},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			identity, storage := types.NewMockIdentity(ctrl), types.NewMockCredentialStore(ctrl)
 			scope := &identityOperationScope{target: "owned", realm: "operation-test"}
 			m := &manager{
-				identities: map[string]types.Identity{"owned": identity},
+				identities:      map[string]types.Identity{"owned": identity},
 				credentialStore: &operationCredentialStore{CredentialStore: storage, scope: scope},
-				operationScope: scope,
-				chain: []string{"root", "owned"},
+				operationScope:  scope,
+				chain:           []string{"root", "owned"},
 			}
 			key := m.chainCacheKey()
 			processCredentialCache.Store(key, &processCachedCreds{})
@@ -110,6 +113,9 @@ func TestScopedCleanupToleratesAbsentKeyringAndPreservesFailures(t *testing.T) {
 				require.NoError(t, err)
 			} else {
 				require.ErrorIs(t, err, tt.wantErr)
+			}
+			if tt.logout != nil {
+				require.ErrorIs(t, err, tt.logout, "cleanup must retain every logout failure")
 			}
 			require.NotErrorIs(t, err, credentials.ErrCredentialsNotFound)
 			_, cached := processCredentialCache.Load(key)
@@ -182,4 +188,39 @@ func TestScopedTargetBypassesProcessCredentialReuse(t *testing.T) {
 	preserved, ok := processCredentialCache.Load(oldKey)
 	require.True(t, ok)
 	assert.Same(t, previous, preserved.(*processCachedCreds).credentials)
+}
+
+func TestScopedIdentityRejectsInvalidOperations(t *testing.T) {
+	parent := isolatedTestManager(t).(*manager)
+	require.ErrorIs(t, parent.WithIsolatedIdentity(t.Context(), "automation", nil), errUtils.ErrNilParam)
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	called := false
+	operation := func(context.Context, *schema.AuthContext) error { called = true; return nil }
+	require.ErrorIs(t, parent.WithIsolatedIdentity(canceled, "automation", operation), context.Canceled)
+	require.Error(t, parent.WithIsolatedIdentity(t.Context(), "missing", operation))
+	require.False(t, called, "an invalid acquisition must never dispatch the operation")
+	_, _, err := parent.newOperationManager("missing")
+	require.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
+	parent.config.Providers["mock"] = schema.Provider{Kind: "unsupported/provider"}
+	err = parent.WithIsolatedIdentity(t.Context(), "automation", operation)
+	require.ErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
+	require.False(t, called)
+}
+
+func TestOperationCredentialStoreKeepsAncestorExpiryRealm(t *testing.T) {
+	for _, alias := range []string{"owned", "ancestor"} {
+		t.Run(alias, func(t *testing.T) {
+			backend := types.NewMockCredentialStore(gomock.NewController(t))
+			scoped := &operationCredentialStore{CredentialStore: backend, scope: &identityOperationScope{target: "owned", realm: "operation-test"}}
+			expectedRealm := "parent-realm"
+			if alias == "owned" {
+				expectedRealm = "operation-test"
+			}
+			backend.EXPECT().IsExpired(alias, expectedRealm).Return(true, assert.AnError)
+			expired, err := scoped.IsExpired(alias, "parent-realm")
+			require.True(t, expired)
+			require.ErrorIs(t, err, assert.AnError)
+		})
+	}
 }
