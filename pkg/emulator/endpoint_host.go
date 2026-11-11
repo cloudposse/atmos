@@ -102,17 +102,30 @@ func primaryBindAddress(spec *Spec, ports map[int]int) string {
 	if err != nil {
 		return ""
 	}
+	var fallback string
+	found := false
 	for _, port := range specPorts {
 		if port.Container != primary {
 			continue
 		}
-		bind := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(port.Bind), "["), "]")
-		if ip := net.ParseIP(bind); ip != nil && ip.IsUnspecified() {
-			return ""
+		if port.Protocol != "" && port.Protocol != defaultProtocol {
+			if !found {
+				fallback = port.Bind
+				found = true
+			}
+			continue
 		}
-		return bind
+		return normalizeBindAddress(port.Bind)
 	}
-	return ""
+	return normalizeBindAddress(fallback)
+}
+
+func normalizeBindAddress(address string) string {
+	bind := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(address), "["), "]")
+	if ip := net.ParseIP(bind); ip != nil && ip.IsUnspecified() {
+		return ""
+	}
+	return bind
 }
 
 // hostDockerInternalResolves reports whether hostDockerInternal resolves to at

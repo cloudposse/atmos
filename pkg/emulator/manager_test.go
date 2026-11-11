@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // runningEmulatorInfo builds a container.Info that FindInstance will match for
@@ -45,6 +46,28 @@ func TestManager_Resolve_Running(t *testing.T) {
 	assert.Equal(t, "http://127.0.0.1:54321", profile.Env["AWS_ENDPOINT_URL"])
 	assert.Equal(t, "1", profile.Env["TEST_DRIVER"], "manager returns the resolved driver's profile env")
 	assert.Equal(t, true, profile.Provider["test_flag"], "manager returns the resolved driver's provider fragment")
+}
+
+func TestManager_EndpointPrefersTCPBinding(t *testing.T) {
+	t.Setenv(envEmulatorEndpointHost, "")
+	restore := stubEndpointHostDetection(t, false, "")
+	defer restore()
+	info := runningEmulatorInfo(54321)
+	info.Ports = []container.PortBinding{
+		{ContainerPort: 4566, HostPort: 54321, Protocol: "tcp"},
+		{ContainerPort: 4566, HostPort: 54322, Protocol: "udp"},
+	}
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{info}, nil)
+	runtime.EXPECT().Inspect(gomock.Any(), "container-abc").Return(&container.Info{}, nil)
+	spec := &Spec{Driver: testDriverName, Container: &schema.ContainerRunStep{Ports: []schema.ContainerPort{
+		{Container: 4566, Protocol: "udp", Bind: "::1"},
+		{Container: 4566, Protocol: "tcp", Bind: "127.0.0.1"},
+	}}}
+	endpoint, err := newManagerWithRuntime(runtime).endpoint(context.Background(), runtime, spec, "dev", "aws")
+	require.NoError(t, err)
+	assert.Equal(t, "http://127.0.0.1:54321", endpoint.URL("http"))
 }
 
 func TestManager_Resolve_GitHubJobContainerUsesNetworkAliasEndpoint(t *testing.T) {

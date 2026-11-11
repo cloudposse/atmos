@@ -161,6 +161,10 @@ func TestPublishedPortsHost(t *testing.T) {
 		spec        *Spec
 		want        string
 	}{
+		{name: "TCP wins over earlier UDP", spec: spec(schema.ContainerPort{Bind: "::1", Container: 4566, Protocol: "udp"}, schema.ContainerPort{Bind: "127.0.0.1", Container: 4566, Protocol: "tcp"}), want: "127.0.0.1"},
+		{name: "default TCP wins over UDP", spec: spec(schema.ContainerPort{Bind: "::1", Container: 4566, Protocol: "udp"}, schema.ContainerPort{Bind: "192.168.1.5", Container: 4566}), want: "192.168.1.5"},
+		{name: "wildcard TCP wins over UDP", spec: spec(schema.ContainerPort{Bind: "::1", Container: 4566, Protocol: "udp"}, schema.ContainerPort{Bind: "0.0.0.0", Container: 4566, Protocol: "tcp"}), want: "localhost"},
+		{name: "UDP only fallback", spec: spec(schema.ContainerPort{Bind: "::1", Container: 4566, Protocol: "udp"}), want: "::1"},
 		{name: "IPv6 bind on primary port", spec: spec(schema.ContainerPort{Bind: "::1", Container: 4566}), want: "::1"},
 		{name: "bracketed IPv6 bind", spec: spec(schema.ContainerPort{Bind: "[::1]", Container: 4566}), want: "::1"},
 		{name: "IPv4 interface bind", spec: spec(schema.ContainerPort{Bind: "192.168.1.5", Container: 4566}), want: "192.168.1.5"},
