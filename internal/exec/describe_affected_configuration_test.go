@@ -396,6 +396,21 @@ func TestConfigurationWatchExclusionsFailClosedOnPathsOutsideTheProject(t *testi
 	require.Equal(t, []string{sibling}, filtered.getAllFiles())
 }
 
+func TestConfigurationWatchExclusionsResolveRootAliases(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	require.NoError(t, os.Mkdir(root, 0o755))
+	alias := filepath.Join(parent, "alias")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	cache := filepath.Join(root, "live", ".terragrunt-cache", "deleted.tf")
+	ordinary := filepath.Join(root, "live", "main.tf")
+	files, err := filterWatchedFiles(alias, []string{cache, ordinary}, []string{"**/.terragrunt-cache/**"})
+	require.NoError(t, err)
+	require.Equal(t, []string{ordinary}, files)
+}
+
 func TestDependencyChangeCheckReportsInvalidWatchExclusions(t *testing.T) {
 	root := t.TempDir()
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root}

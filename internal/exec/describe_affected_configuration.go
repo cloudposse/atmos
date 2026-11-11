@@ -74,10 +74,17 @@ func watchExcludePatterns(settings map[string]any) ([]string, error) {
 // filterWatchedFiles drops every file whose path relative to the project root matches an exclusion pattern.
 func filterWatchedFiles(root string, all, patterns []string) ([]string, error) {
 	files := make([]string, 0, len(all))
+	resolvedRoot := evalSymlinksBestEffort(root)
 	for _, path := range all {
 		relative, err := filepath.Rel(root, path)
 		if err != nil {
 			return nil, err
+		}
+		if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			relative, err = filepath.Rel(resolvedRoot, evalSymlinksBestEffort(path))
+			if err != nil {
+				return nil, err
+			}
 		}
 		// A file outside the project cannot match a project-relative exclusion; keep it watched
 		// rather than letting a pattern such as `**` swallow a `../` path.
