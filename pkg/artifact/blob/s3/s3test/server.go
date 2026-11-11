@@ -190,7 +190,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request, key, op string) 
 		OpCreateMultipartUpload:   func() { s.createUpload(w, r, key) },
 		OpUploadPart:              func() { s.uploadPart(w, r, key) },
 		OpCompleteMultipartUpload: func() { s.completeUpload(w, r, key) },
-		OpAbortMultipartUpload:    func() { s.abortUpload(w, r) },
+		OpAbortMultipartUpload:    func() { s.abortUpload(w, r, key) },
 	}
 	if handler, ok := handlers[op]; ok {
 		handler()

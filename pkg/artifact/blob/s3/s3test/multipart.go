@@ -182,11 +182,11 @@ func (s *Server) assemble(up *upload, req completeRequest) (*object, string) {
 	return obj, ""
 }
 
-func (s *Server) abortUpload(w http.ResponseWriter, r *http.Request) {
+func (s *Server) abortUpload(w http.ResponseWriter, r *http.Request, key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id := r.URL.Query().Get("uploadId")
-	if _, ok := s.uploads[id]; !ok {
+	if up, ok := s.uploads[id]; !ok || up.key != key {
 		writeError(w, http.StatusNotFound, "NoSuchUpload", "The specified upload does not exist.")
 		return
 	}
