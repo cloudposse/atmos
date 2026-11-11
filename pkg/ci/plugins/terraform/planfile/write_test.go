@@ -1,6 +1,7 @@
 package planfile
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -289,5 +290,26 @@ func TestWritePlanfileResultsKeepsThePlanRecordOwnerOnly(t *testing.T) {
 	assert.Equal(t, "{\"secret\":true}", string(data))
 	plan, err := os.Stat(planPath)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o644), plan.Mode().Perm(), "the plan file keeps its usual mode")
+	assert.Equal(t, os.FileMode(0), plan.Mode().Perm()&^os.FileMode(0o644), "the plan file respects the umask")
+}
+
+func TestWritePlanfileResultsPreservesExistingPlanPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use POSIX permission bits")
+	}
+	for _, verification := range []bool{false, true} {
+		t.Run(fmt.Sprintf("verification=%t", verification), func(t *testing.T) {
+			planPath := filepath.Join(t.TempDir(), "plan")
+			require.NoError(t, os.WriteFile(planPath, []byte("old"), 0o600))
+			results := []FileResult{{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("new"))}}
+			if verification {
+				require.NoError(t, WritePlanfileResultsForVerification(results, planPath, planPath+"-canonical"))
+			} else {
+				require.NoError(t, WritePlanfileResults(results, planPath))
+			}
+			info, err := os.Stat(planPath)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		})
+	}
 }
