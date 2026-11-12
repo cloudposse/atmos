@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -231,15 +232,15 @@ func TestImportConflictsRejectOnlyDifferentUnits(t *testing.T) {
 		return map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": source}}}
 	}
 	fragment := func(name string, component map[string]any) map[string]any {
-		return ImportFragment(map[string]any{name: component})
+		return configuration.ImportFragment(map[string]any{name: component})
 	}
 	yaml := map[string]any{"components": map[string]any{"terraform": map[string]any{"vpc": map[string]any{"vars": map[string]any{"a": 1}}}}}
 
-	require.NoError(t, CheckImportConflicts("stacks/dev.yaml", nil))
-	require.NoError(t, CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("vpc", unitComponent("live/vpc/terragrunt.hcl")), fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))}), "the same unit imported twice is one component")
-	require.NoError(t, CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("app", unitComponent("live/app/terragrunt.hcl")), yaml}))
+	require.NoError(t, configuration.CheckImportConflicts("stacks/dev.yaml", nil))
+	require.NoError(t, configuration.CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("vpc", unitComponent("live/vpc/terragrunt.hcl")), fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))}), "the same unit imported twice is one component")
+	require.NoError(t, configuration.CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("app", unitComponent("live/app/terragrunt.hcl")), yaml}))
 
-	err := CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("vpc", unitComponent("live/dev/vpc/terragrunt.hcl")), fragment("vpc", unitComponent("live/prod/vpc/terragrunt.hcl"))})
+	err := configuration.CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("vpc", unitComponent("live/dev/vpc/terragrunt.hcl")), fragment("vpc", unitComponent("live/prod/vpc/terragrunt.hcl"))})
 	require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
 	require.ErrorContains(t, err, "live/dev/vpc/terragrunt.hcl")
 	require.ErrorContains(t, err, "live/prod/vpc/terragrunt.hcl")
@@ -250,15 +251,15 @@ func TestImportConflictsRejectOnlyDifferentUnits(t *testing.T) {
 		{yaml, fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))},
 		{fragment("vpc", unitComponent("live/vpc/terragrunt.hcl")), yaml, fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))},
 	} {
-		require.NoError(t, CheckImportConflicts("stacks/dev.yaml", configs))
+		require.NoError(t, configuration.CheckImportConflicts("stacks/dev.yaml", configs))
 	}
 }
 
 func TestOwnsComponentRecognizesProviderSections(t *testing.T) {
 	owned := map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}}
-	require.True(t, OwnsComponent(owned))
-	require.False(t, OwnsComponent(map[string]any{"settings": map[string]any{"team": "platform"}}))
-	require.False(t, OwnsComponent(nil))
+	require.True(t, configuration.OwnsComponent(owned))
+	require.False(t, configuration.OwnsComponent(map[string]any{"settings": map[string]any{"team": "platform"}}))
+	require.False(t, configuration.OwnsComponent(nil))
 }
 
 // An explicit import of a configured provider whose settings are invalid reports the setting and

@@ -237,6 +237,35 @@ func TestAfterHooksFollowRunOnErrorWhenTheCommandFails(t *testing.T) {
 	require.Equal(t, []string{"terraform plan", "hook-always arg"}, shell.names())
 }
 
+func TestDetailedPlanChangesRunAfterHooksNotErrorHooks(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		code int
+		want []string
+	}{
+		{"changes present with -detailed-exitcode", []string{"plan", "-detailed-exitcode"}, 2, []string{"terraform plan", "hook-after arg"}},
+		{"genuine failure with -detailed-exitcode", []string{"plan", "-detailed-exitcode"}, 1, []string{"terraform plan", "hook-failed arg"}},
+		{"exit 2 without -detailed-exitcode is a failure", []string{"plan"}, 2, []string{"terraform plan", "hook-failed arg"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			shell := &fakeShell{run: func(call *shellCall) error {
+				if call.command == "terraform" {
+					return errUtils.ExitCodeError{Code: test.code}
+				}
+				return nil
+			}}
+			info := hookInfo("plan", &schema.ComponentExecution{
+				AfterHooks: []schema.ComponentHook{execHook("after", "plan")},
+				ErrorHooks: []schema.ComponentHook{{Name: "failed", Commands: []string{"plan"}, Execute: []string{"hook-failed", "arg"}, OnErrors: []string{".*"}}},
+			})
+			err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, test.args, t.TempDir())
+			require.Equal(t, test.code, resolveExitCode(err), "the plan's own exit status is preserved")
+			require.Equal(t, test.want, shell.names())
+		})
+	}
+}
+
 func TestErrorHookMatchesTheFailedCommandOutput(t *testing.T) {
 	for _, test := range []struct {
 		name     string

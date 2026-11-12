@@ -97,12 +97,7 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded s
 	digest := contentDigest(file.Content)
 	existing, exists := fileDigest(root, file.Path)
 	if exists && existing == digest {
-		if file.IfExists == "skip" && recorded != existing {
-			// A file the module already ships stays the module's, so removing the block keeps it.
-			return "", nil
-		}
-		// Already what would be written, so even if_exists = "error" has nothing to protect.
-		return digest, ensureMode(root, file.Path)
+		return unchangedFileOutcome(root, file, recorded, digest)
 	}
 	if exists {
 		if keep, owned, err := existingFileOutcome(file, recorded, existing, digest); keep || err != nil {
@@ -110,6 +105,16 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded s
 		}
 	}
 	return digest, replaceFile(root, file, exists)
+}
+
+// unchangedFileOutcome retains ownership only when an identical file belongs to this host.
+func unchangedFileOutcome(root *os.Root, file schema.ComponentConfigurationFile, recorded, digest string) (string, error) {
+	if file.IfExists == "skip" && recorded != digest {
+		// A file the module already ships stays the module's, so removing the block keeps it.
+		return "", nil
+	}
+	// Already what would be written, so even if_exists = "error" has nothing to protect.
+	return digest, ensureMode(root, file.Path)
 }
 
 // existingFileOutcome applies the policy to a file that exists with different bytes. It reports

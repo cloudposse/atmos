@@ -109,7 +109,9 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 }
 
 func engineName(binary string) string {
-	if strings.TrimSuffix(filepath.Base(binary), ".exe") == "tofu" {
+	// Match the host's executable-name detection, which treats any basename containing
+	// "tofu", case-insensitively, as OpenTofu.
+	if strings.Contains(strings.ToLower(filepath.Base(binary)), "tofu") {
 		return "opentofu"
 	}
 	return "terraform"

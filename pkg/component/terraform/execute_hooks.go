@@ -46,6 +46,9 @@ type executionPhase struct {
 	componentPath string
 }
 
+// mainCommandArgsKey carries the effective main command arguments to plan binding.
+type mainCommandArgsKey struct{}
+
 // runMainShellCommand runs the requested Terraform subprocess, wrapped by the component's
 // provider-supplied hooks and extra arguments. They match the requested command, which is
 // "destroy" for `apply -destroy`.
@@ -59,6 +62,9 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		componentPath:    componentPath,
 	}
 	return e.runExecutionPhase(atmosConfig, info, phase, opts, func(phaseInfo *schema.ConfigAndStacksInfo, phaseArgs []string, phaseOpts []component.ExecutionOption) error {
+		if captured, ok := component.ContextFromOptions(phaseOpts...).Value(mainCommandArgsKey{}).(*[]string); ok {
+			*captured = slices.Clone(phaseArgs)
+		}
 		return ExecuteShellCommandWithRetry(
 			atmosConfig,
 			phaseInfo,
@@ -102,6 +108,9 @@ type phaseAction func(info *schema.ConfigAndStacksInfo, args []string, opts []co
 func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, phase *executionPhase, opts []component.ExecutionOption, action phaseAction) error {
 	config := info.ComponentExecution
 	if config.IsEmpty() {
+		if err := validatePlanOutputFlags(phase.command, phase.args); err != nil {
+			return err
+		}
 		return action(info, phase.args, opts)
 	}
 
@@ -113,6 +122,9 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		WorkingDirectory: phase.componentPath,
 	})
 	if err != nil {
+		return err
+	}
+	if err := validatePlanOutputFlags(phase.command, applied.Args); err != nil {
 		return err
 	}
 	// Extra environment applies to this phase and to its hooks, as it does for Terragrunt.

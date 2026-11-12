@@ -263,7 +263,10 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	// lookalike) can poison the exec-metadata parser's extraction even though the
 	// real plan/apply's own output is correct (research.md Decision 32).
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
-	mainOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
+	var effectiveArgs []string
+	captureCtx := context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs)
+	captureArgs := component.WithProcessContext(captureCtx)
+	mainOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf), captureArgs)
 
 	// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
 	// (plan/apply/destroy/…) into its own collapsible group, separate from init
@@ -272,12 +275,20 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
-	if mainErr == nil {
-		return recordConfigurationPlan(component.ContextFromOptions(opts...), atmosConfig, info, execCtx, allArgsAndFlags)
+	if mainErr != nil {
+		mainErr = e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
+			mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, append(slices.Clone(opts), captureArgs)...)
 	}
-
-	return e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
-		mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, opts...)
+	if mainErr != nil {
+		return mainErr
+	}
+	// Policy plans run against a private artifact that is removed after the guard
+	// publishes it to the original output path. The effective arguments were
+	// validated before execution; bind the published destination instead.
+	if execCtx.planPolicy != nil && info.SubCommand == "plan" && !info.DryRun {
+		effectiveArgs = allArgsAndFlags
+	}
+	return recordConfigurationPlan(component.ContextFromOptions(opts...), atmosConfig, info, execCtx, effectiveArgs)
 }
 
 // recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command

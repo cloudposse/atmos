@@ -54,7 +54,9 @@ def install_and_discover(work, package, release):
     fixtures.check("path" not in installed, "Installed package still uses a development path")
     result = fixtures.run(project, ["list", "instances", "--format=json"])
     rows = json.decode(result.stdout)
-    fixtures.check(len(rows) == 4, "Installed plugin did not discover four explicit-stack units")
+    identities = sorted([(row["Component"], row["Stack"]) for row in rows])
+    expected = [(name, "live") for name in ["dev/app", "dev/network", "prod/app", "prod/network"]]
+    fixtures.check(identities == expected, "Unexpected installed unit identities: " + str(identities))
     fixtures.check(all([row["Type"] == "terraform" for row in rows]), "Installed units lost their component type")
     fixtures.check(not fs.exists(project + "/live/.terragrunt-stack"), "Installed discovery wrote generated stacks")
 

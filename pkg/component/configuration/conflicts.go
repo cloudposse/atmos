@@ -1,6 +1,9 @@
 package configuration
 
 import (
+	"fmt"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -9,7 +12,7 @@ import (
 func ImportFragment(components map[string]any) map[string]any {
 	defer perf.Track(nil, "configuration.ImportFragment")()
 
-	return map[string]any{componentsKey: map[string]any{terraformType: components}}
+	return map[string]any{"components": map[string]any{"terraform": components}}
 }
 
 // unitSource returns the source file of a provider-owned component, or "" for a YAML component.
@@ -31,15 +34,15 @@ func CheckImportConflicts(manifest string, configs []map[string]any) error {
 
 	units := map[string]string{}
 	for _, config := range configs {
-		section, _ := config[componentsKey].(map[string]any)
-		terraform, _ := section[terraformType].(map[string]any)
+		section, _ := config["components"].(map[string]any)
+		terraform, _ := section["terraform"].(map[string]any)
 		for name, component := range terraform {
 			source := unitSource(component)
 			if source == "" {
 				continue
 			}
 			if previous, seen := units[name]; seen && previous != source {
-				return importConflict(name, previous, source, manifest)
+				return ImportConflict(name, previous, source, manifest)
 			}
 			units[name] = source
 		}
@@ -55,4 +58,16 @@ func OwnsComponent(component map[string]any) bool {
 	settings, _ := component["settings"].(map[string]any)
 	configuration, _ := settings["configuration"].(map[string]any)
 	return configuration["provider"] != nil
+}
+
+// ImportConflict reports two units that would become one component of the importing stack.
+func ImportConflict(component, first, second, where string) error {
+	defer perf.Track(nil, "configuration.ImportConflict")()
+
+	return errUtils.Build(fmt.Errorf("%w: units %s and %s both become component %q (%s)", errUtils.ErrConfigurationImportConflict, first, second, component, where)).
+		WithContext("component", component).
+		WithContext("unit", first).
+		WithContext("other_unit", second).
+		WithHint("Import the units from different stack files, or import a narrower directory or a single `terragrunt.hcl`").
+		Err()
 }

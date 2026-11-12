@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -100,6 +101,13 @@ func TestPlanIdentityDetectsEveryBoundInputAndIgnoresInvocationOnlyInputs(t *tes
 	}
 }
 
+func TestPlanIdentityDistinguishesBinaryNumericOptions(t *testing.T) {
+	first, second := defaultPlanCase(), defaultPlanCase()
+	first.options = map[string]any{"value": math.Float64frombits(0x3ff0000000000080)}
+	second.options = map[string]any{"value": math.Float64frombits(0x3ff0000000000081)}
+	require.NotEqual(t, planIdentity(t, first), planIdentity(t, second))
+}
+
 func TestPlanIdentityIsStableAcrossProjectRoots(t *testing.T) {
 	// Different checkouts of identical content must accept each other's saved plans.
 	first, info := planSession(t, defaultPlanCase())
@@ -152,7 +160,7 @@ func TestPlanIdentityBindsWatchedSources(t *testing.T) {
 	// Runtime artifacts and state never invalidate a plan, at any depth.
 	for _, ignored := range []string{
 		"modules/.terraform/providers.json", "modules/.git/HEAD", "modules/terraform.tfstate", "modules/terraform.tfstate.backup",
-		"modules/saved.planfile", "modules/unit.atmos.json", "modules/.terragrunt-cache/x/main.tf", "modules/.terragrunt-stack/stack.hcl",
+		"modules/saved.planfile", "modules/saved.planfile.atmos.json", "modules/.terragrunt-cache/x/main.tf", "modules/.terragrunt-stack/stack.hcl",
 		"modules/nested/.atmos/state", "modules/nested/.terraform/x",
 	} {
 		write(ignored, "noise")
@@ -270,7 +278,7 @@ func TestSourceDigests(t *testing.T) {
 func TestExcludedPlanSource(t *testing.T) {
 	for name, excluded := range map[string]bool{
 		".atmos": true, ".git": true, ".terraform": true, ".terragrunt-cache": true, ".terragrunt-stack": true,
-		"terraform.tfstate": true, "terraform.tfstate.backup": true, "a.planfile": true, "b.atmos.json": true,
+		"terraform.tfstate": true, "terraform.tfstate.backup": true, "a.planfile": true, "a.planfile.atmos.json": true, "settings.atmos.json": false,
 		"main.tf": false, "terragrunt.hcl": false, ".terraform.lock.hcl": false, "state.json": false,
 	} {
 		require.Equal(t, excluded, excludedPlanSource(name), name)

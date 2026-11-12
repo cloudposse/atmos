@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
@@ -60,15 +61,21 @@ func (s *Session) ImportComponents(ctx context.Context, uri string) (map[string]
 			s.imported[instance.Source] = instance
 		}
 	}
+	components, err := importedComponents(instances)
+	return components, true, err
+}
+
+// importedComponents translates resolved units without changing the cached provider results.
+func importedComponents(instances []*pluginv1.DiscoveredComponent) (map[string]any, error) {
 	components := make(map[string]any, len(instances))
 	for _, instance := range instances {
 		config, err := instanceConfig(instance, true)
 		if err != nil {
-			return nil, true, err
+			return nil, err
 		}
 		components[instance.Address.Component] = config
 	}
-	return components, true, nil
+	return components, nil
 }
 
 // importKey validates an import path and returns its canonical URI. The path must be a
@@ -129,19 +136,9 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 	names := make(map[string]*pluginv1.DiscoveredComponent, len(discovered.Components))
 	for _, instance := range discovered.Components {
 		if previous := names[instance.Address.Component]; previous != nil {
-			return nil, importConflict(instance.Address.Component, previous.Source, instance.Source, key)
+			return nil, configuration.ImportConflict(instance.Address.Component, previous.Source, instance.Source, key)
 		}
 		names[instance.Address.Component] = instance
 	}
 	return discovered.Components, nil
-}
-
-// importConflict reports two units that would become one component of the importing stack.
-func importConflict(component, first, second, where string) error {
-	return errUtils.Build(fmt.Errorf("%w: units %s and %s both become component %q (%s)", errUtils.ErrConfigurationImportConflict, first, second, component, where)).
-		WithContext("component", component).
-		WithContext("unit", first).
-		WithContext("other_unit", second).
-		WithHint("Import the units from different stack files, or import a narrower directory or a single `terragrunt.hcl`").
-		Err()
 }

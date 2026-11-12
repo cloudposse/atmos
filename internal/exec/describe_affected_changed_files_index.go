@@ -30,9 +30,9 @@ type changedFilesIndex struct {
 	directories     map[string]struct{}
 	directoriesOnce sync.Once
 
-	// filtered caches the per-provider views built by configurationWatchIndex, keyed by
-	// exclusion patterns, so the views are built once per run instead of once per component.
-	filtered map[string]*changedFilesIndex
+	// watchMu protects filtered views for this change set.
+	watchMu      sync.Mutex
+	watchIndexes map[string]*changedFilesIndex
 
 	mu sync.RWMutex
 }

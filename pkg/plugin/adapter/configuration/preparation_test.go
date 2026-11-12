@@ -65,9 +65,8 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 }
 
 func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {
-	session, provider, info := preparationSession(t)
+	session, _, info := preparationSession(t)
 	info.Command = "terraform"
-	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{}}, nil)
 
 	_, err := session.Prepare(t.Context(), info)
 
@@ -87,9 +86,9 @@ func TestPrepareFailsClosed(t *testing.T) {
 		{"provider failure", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
 			p.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(nil, failure)
 		}, failure},
-		{"engine changed by a command override", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
+		{"provider returns an unexpected engine", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
 			p.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{}}, nil)
-		}, errUtils.ErrConfigurationOverrideUnsupported},
+		}, errUtils.ErrPluginProtocol},
 		{"saved plan", func(_ *MockProvider, info *schema.ConfigAndStacksInfo) { info.UseTerraformPlan = true }, errUtils.ErrPluginUnsupportedExtension},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -98,6 +97,33 @@ func TestPrepareFailsClosed(t *testing.T) {
 			prepared, err := session.Prepare(t.Context(), info)
 			require.ErrorIs(t, err, test.want)
 			require.Nil(t, prepared)
+		})
+	}
+}
+
+func TestPrepareAcceptsTheEngineOfTheSelectedCommand(t *testing.T) {
+	for _, test := range []struct {
+		name, command, engine string
+		want                  error
+	}{
+		{"command override selects OpenTofu", "/opt/bin/tofu", "opentofu", nil},
+		{"versioned OpenTofu binary", "/opt/bin/TOFU-1.8", "opentofu", nil},
+		{"command override selects Terraform", "/opt/bin/terraform", "terraform", nil},
+		{"provider disagrees with the command", "/opt/bin/terraform", "opentofu", errUtils.ErrPluginProtocol},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session, provider, info := preparationSession(t)
+			info.Command, info.ComponentCommand = test.command, test.command
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+				require.Equal(t, test.command, request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
+				return &pluginv1.PrepareComponentResponse{Engine: test.engine, State: &pluginv1.ComponentStateIdentity{}}, nil
+			})
+			_, err := session.Prepare(t.Context(), info)
+			if test.want == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, test.want)
 		})
 	}
 }
