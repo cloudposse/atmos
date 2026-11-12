@@ -2,9 +2,11 @@ package step
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/artifact/report"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -26,11 +29,12 @@ import (
 // with the same Variables, so the session is where an operation keeps its identity between
 // attempts. Clones of a Variables share the session, so a parallel branch and its parent agree.
 type artifactSession struct {
-	mu         sync.Mutex
-	collector  report.Collector
-	operations map[string]*artifactOperation
-	inputs     map[string]invoke.Params
-	root       *artifactScope
+	mu             sync.Mutex
+	collector      report.Collector
+	operations     map[string]*artifactOperation
+	inputs         map[string]invoke.Params
+	root           *artifactScope
+	fingerprintKey [32]byte
 }
 
 // artifactScope numbers the logical operations of one sequential flow, and positions the parallel
@@ -79,7 +83,12 @@ type artifactOperation struct {
 }
 
 func newArtifactSession() *artifactSession {
-	return &artifactSession{collector: report.Discard{}, operations: make(map[string]*artifactOperation), inputs: make(map[string]invoke.Params), root: &artifactScope{}}
+	session := &artifactSession{collector: report.Discard{}, operations: make(map[string]*artifactOperation), inputs: make(map[string]invoke.Params), root: &artifactScope{}}
+	// Go 1.26+ guarantees Read fills the key or terminates the process on entropy failure.
+	if _, err := rand.Read(session.fingerprintKey[:]); err != nil {
+		panic("generate artifact session fingerprint key: " + err.Error())
+	}
+	return session
 }
 
 // Clocks and ID generation are variables so tests can pin them.
@@ -199,14 +208,14 @@ func (s *artifactSession) finish(key string, succeeded bool) {
 	delete(s.operations, key)
 }
 
-// artifactStepKey identifies the authored call independently of resolved templates.
-func artifactStepKey(step *schema.WorkflowStep) string {
+// stepKey identifies the authored call independently of resolved templates. The fingerprint is
+// scoped to this session and keyed with a secret, since step environment values may be sensitive.
+func (s *artifactSession) stepKey(step *schema.WorkflowStep) (string, error) {
 	encoded, err := json.Marshal(step)
 	if err != nil {
-		return step.Name + "\x00" + step.Action
+		return "", fmt.Errorf("%w: cannot identify artifact step: %w", errUtils.ErrArtifactStepInvalidField, err)
 	}
-	digest := sha256.Sum256(encoded)
-	return hex.EncodeToString(digest[:])
+	return s.fingerprint("authored-step", encoded), nil
 }
 
 func (s *artifactSession) retainedInput(key string) (*invoke.Params, bool) {
@@ -228,28 +237,26 @@ func (s *artifactSession) forgetInput(key string) {
 	delete(s.inputs, key)
 }
 
-// artifactOperationLabel domain-separates operation keys; it is a public label, not a secret.
-var artifactOperationLabel = []byte("atmos.artifact.step.operation.v1")
+// fingerprint produces a session-local, domain-separated identifier without retaining a
+// deterministic digest of potentially sensitive authored or resolved values.
+func (s *artifactSession) fingerprint(domain string, encoded []byte) string {
+	mac := hmac.New(sha256.New, s.fingerprintKey[:])
+	mac.Write([]byte(domain + "\x00"))
+	mac.Write(encoded)
+	return hex.EncodeToString(mac.Sum(nil))
+}
 
-// artifactOperationKey identifies a logical operation by the scope it runs in, the step, and its
-// fully resolved input. Explicit user metadata participates in the identity; the execution fields
-// do not. The scope keeps identical steps of overlapping parallel branches separate operations,
-// while the retries of one branch, which run in the same scope, stay one.
-func artifactOperationKey(scope *artifactScope, stepName string, params *invoke.Params) string {
+// operationKey identifies a logical operation by its scheduling scope, step, and resolved input.
+// Explicit user metadata participates in the identity; the execution fields do not.
+func (s *artifactSession) operationKey(scope *artifactScope, stepName string, params *invoke.Params) string {
 	identity := *params
 	identity.Execution.OperationID = ""
 	identity.Execution.PreparedAt = time.Time{}
 	identity.Execution.MaxAttempts = 0
 	encoded, err := json.Marshal(&identity)
 	if err != nil {
-		// Params holds only strings, booleans, and string maps, so encoding cannot fail; falling
-		// back to the step name still yields a stable, if coarser, identity.
-		return scope.key() + "\x00" + stepName
+		// Params holds only strings, booleans, and string maps, so encoding cannot fail.
+		return s.fingerprint("operation-fallback", []byte(scope.key()+"\x00"+stepName))
 	}
-	// The key only names an in-memory operation. A fixed public label keys the digest so it is not
-	// mistaken for hashing a credential that the encoded parameters may carry.
-	mac := hmac.New(sha256.New, artifactOperationLabel)
-	mac.Write([]byte(scope.key() + "\x00" + stepName + "\x00"))
-	mac.Write(encoded)
-	return hex.EncodeToString(mac.Sum(nil))
+	return s.fingerprint("operation", append([]byte(scope.key()+"\x00"+stepName+"\x00"), encoded...))
 }

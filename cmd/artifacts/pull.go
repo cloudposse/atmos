@@ -17,7 +17,8 @@ func newPullCommand() *cobra.Command {
 		Short: "Verify and materialize an artifact into a directory",
 		Long: `Download an artifact, verify every consumed descriptor (and its signature when policy requires it), and
 materialize it at --output. The content is validated in staging first; an existing, different output
-directory needs --force and is replaced, never overlaid.`,
+directory needs --force and is replaced, never overlaid. On Windows, atomic replacement of an
+existing directory is unavailable; use a new output path.`,
 		Example: markdown.ArtifactsPullUsageMarkdown,
 		Args:    exactArgs("atmos artifacts pull <ref> --repository=<alias> --output=<dir>"),
 		RunE:    c.execute,

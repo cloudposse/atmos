@@ -647,3 +647,36 @@ func TestArtifactHandler_RetainedInputsAreScopedToScheduledBranches(t *testing.T
 	assert.NotEqual(t, requests[0].Execution.OperationID, requests[1].Execution.OperationID)
 	assert.Equal(t, requests[0].Execution.OperationID, requests[2].Execution.OperationID)
 }
+
+func TestArtifactSessionFingerprintIsScopedAndPreservesIdentity(t *testing.T) {
+	first := newArtifactSession()
+	second := newArtifactSession()
+	step := &schema.WorkflowStep{Name: "publish", Action: "publish", Env: map[string]string{"TOKEN": "sensitive-value"}}
+	key, err := first.stepKey(step)
+	require.NoError(t, err)
+	again, err := first.stepKey(step)
+	require.NoError(t, err)
+	otherSession, err := second.stepKey(step)
+	require.NoError(t, err)
+	assert.Equal(t, key, again, "retries in the same session retain their key")
+	assert.NotEqual(t, key, otherSession, "sessions do not expose a reusable fingerprint")
+	assert.NotContains(t, key, "sensitive-value")
+	step.Env["TOKEN"] = "different-value"
+	different, err := first.stepKey(step)
+	require.NoError(t, err)
+	assert.NotEqual(t, key, different, "authored inputs still participate in identity")
+
+	params := &invoke.Params{Action: artifact.ActionPublish, Labels: map[string]string{"token": "sensitive-value"}}
+	operation := first.operationKey(first.root, step.Name, params)
+	assert.Equal(t, operation, first.operationKey(first.root, step.Name, params))
+	assert.NotEqual(t, operation, first.operationKey(&artifactScope{path: []int{1}}, step.Name, params))
+	assert.NotEqual(t, operation, second.operationKey(first.root, step.Name, params))
+	params.Labels["token"] = "different-value"
+	assert.NotEqual(t, operation, first.operationKey(first.root, step.Name, params))
+}
+
+func TestArtifactSessionRejectsUnserializableStepIdentity(t *testing.T) {
+	step := &schema.WorkflowStep{Name: "publish", Action: "publish", With: map[string]any{"invalid": make(chan int)}}
+	_, err := newArtifactSession().stepKey(step)
+	require.ErrorIs(t, err, errUtils.ErrArtifactStepInvalidField)
+}
