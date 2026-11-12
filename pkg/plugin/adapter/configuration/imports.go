@@ -106,6 +106,18 @@ func (s *Session) importKey(ctx context.Context, scheme, provider, path string) 
 
 // resolveImport asks the provider for the units under one import. The caller holds importMu.
 func (s *Session) resolveImport(ctx context.Context, template *pluginv1.DiscoverComponentsRequest, key string) ([]*pluginv1.DiscoveredComponent, error) {
+	// Keep caller deadlines and values while also stopping work when the session ends.
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(s.ctx, cancel)
+	defer stop()
+	defer cancel()
+	// Cancellation may have happened while this import waited for importMu.
+	if err := s.ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	registry, err := s.providers(ctx)
 	if err != nil {
 		return nil, err

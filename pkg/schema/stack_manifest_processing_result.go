@@ -3,6 +3,8 @@ package schema
 // StackManifestProcessingResult is the result of recursively processing a stack
 // manifest file and deep-merging all its imports.
 type StackManifestProcessingResult struct {
+	// ImportedUnitSources records provider unit identity independently of merged YAML settings.
+	ImportedUnitSources map[string]string
 	// ImportMetadata preserves literal metadata separately from rendered configuration.
 	ImportMetadata StackImportMetadata
 	// DeepMergedConfig is the final stack configuration after the manifest and

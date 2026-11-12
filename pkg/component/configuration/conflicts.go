@@ -15,7 +15,7 @@ func ImportFragment(components map[string]any) map[string]any {
 	return map[string]any{"components": map[string]any{"terraform": components}}
 }
 
-// unitSource returns the source file of a provider-owned component, or "" for a YAML component.
+// unitSource reads the source identity of an unmerged provider-owned component.
 func unitSource(component any) string {
 	section, _ := component.(map[string]any)
 	settings, _ := section["settings"].(map[string]any)
@@ -24,27 +24,43 @@ func unitSource(component any) string {
 	return source
 }
 
-// CheckImportConflicts rejects a manifest in which two different units become one component
-// name. A YAML component of the same name as a unit is not a conflict: the unit's fragment is
-// the base layer of the ordinary import merge, so the YAML component deep-merges over (or under,
-// when it comes from an earlier import) the unit like any other stack configuration. Configs are
-// the manifest's imports in order, followed by the manifest's own content.
-func CheckImportConflicts(manifest string, configs []map[string]any) error {
-	defer perf.Track(nil, "configuration.CheckImportConflicts")()
+// ImportUnitSources extracts identity from a provider import fragment before YAML merging.
+// Callers must not pass ordinary YAML or merged stack configuration.
+func ImportUnitSources(fragment map[string]any) map[string]string {
+	defer perf.Track(nil, "configuration.ImportUnitSources")()
 
 	units := map[string]string{}
-	for _, config := range configs {
-		section, _ := config["components"].(map[string]any)
-		terraform, _ := section["terraform"].(map[string]any)
-		for name, component := range terraform {
-			source := unitSource(component)
-			if source == "" {
-				continue
-			}
-			if previous, seen := units[name]; seen && previous != source {
-				return ImportConflict(name, previous, source, manifest)
-			}
+	section, _ := fragment["components"].(map[string]any)
+	terraform, _ := section["terraform"].(map[string]any)
+	for name, component := range terraform {
+		if source := unitSource(component); source != "" {
 			units[name] = source
+		}
+	}
+	return units
+}
+
+// MergeImportUnitSources accumulates provider provenance across recursive imports.
+func MergeImportUnitSources(manifest string, units, incoming map[string]string) error {
+	defer perf.Track(nil, "configuration.MergeImportUnitSources")()
+
+	for name, source := range incoming {
+		if previous, seen := units[name]; seen && previous != source {
+			return ImportConflict(name, previous, source, manifest)
+		}
+		units[name] = source
+	}
+	return nil
+}
+
+// CheckImportConflicts checks unmerged provider fragments for duplicate unit names.
+// Ordinary YAML and merged stack configurations must not be passed here.
+func CheckImportConflicts(manifest string, configs []map[string]any) error {
+	defer perf.Track(nil, "configuration.CheckImportConflicts")()
+	units := map[string]string{}
+	for _, config := range configs {
+		if err := MergeImportUnitSources(manifest, units, ImportUnitSources(config)); err != nil {
+			return err
 		}
 	}
 	return nil

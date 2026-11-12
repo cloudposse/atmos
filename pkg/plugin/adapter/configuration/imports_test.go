@@ -69,6 +69,8 @@ func TestImportedUnitsBecomeComponentsOfTheImportingStack(t *testing.T) {
 	appConfig := first["app"].(map[string]any)
 	require.Equal(t, []any{map[string]any{"name": "network", "kind": "terraform"}}, appConfig["dependencies"].(map[string]any)["components"], "an imported unit depends on its siblings in the importing stack")
 	require.Equal(t, "live/app/terragrunt.hcl", appConfig["settings"].(map[string]any)["configuration"].(map[string]any)["source"])
+	appConfig["settings"].(map[string]any)["configuration"].(map[string]any)["source"] = "corrupt"
+	require.Equal(t, "live/app/terragrunt.hcl", second["app"].(map[string]any)["settings"].(map[string]any)["configuration"].(map[string]any)["source"])
 	first["app"] = "corrupt"
 	require.IsType(t, map[string]any{}, second["app"])
 

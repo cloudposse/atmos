@@ -962,6 +962,7 @@ func ProcessYAMLConfigFileWithContext(
 
 // importFileResult holds the result of processing a single import file in parallel.
 type importFileResult struct {
+	importedUnitSources          map[string]string
 	importMetadata               schema.StackImportMetadata
 	index                        int
 	importFile                   string
@@ -1234,6 +1235,7 @@ func processYAMLConfigFileWithContextInternal(
 	// Units imported from a configuration provider are the base layer of the manifest: any YAML
 	// component of the same name, wherever it is imported, merges over the unit's own data.
 	var unitFragments []map[string]any
+	importedUnitSources := map[string]string{}
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
 		localBasePath = basePath
@@ -1642,6 +1644,9 @@ func processYAMLConfigFileWithContextInternal(
 			if importErr != nil {
 				return nil, nil, importErr
 			}
+			if err := configurationadapter.MergeImportUnitSources(relativeFilePath, importedUnitSources, configurationadapter.ImportUnitSources(fragment)); err != nil {
+				return nil, nil, err
+			}
 			unitFragments = append(unitFragments, fragment)
 			continue
 		}
@@ -1855,6 +1860,7 @@ func processYAMLConfigFileWithContextInternal(
 					importFile:                   file,
 					yamlConfig:                   importResult.DeepMergedConfig,
 					importMetadata:               importResult.ImportMetadata,
+					importedUnitSources:          importResult.ImportedUnitSources,
 					yamlConfigRaw:                importResult.StackConfig,
 					terraformOverridesInline:     importResult.TerraformOverridesInline,
 					terraformOverridesImports:    importResult.TerraformOverridesImports,
@@ -1875,6 +1881,10 @@ func processYAMLConfigFileWithContextInternal(
 		for _, result := range results {
 			if result.err != nil {
 				return nil, nil, result.err
+			}
+
+			if err := configurationadapter.MergeImportUnitSources(relativeFilePath, importedUnitSources, result.importedUnitSources); err != nil {
+				return nil, nil, err
 			}
 
 			importedMetadata, err = metadataScope.Merge(importedMetadata, result.importMetadata)
@@ -2016,9 +2026,6 @@ func processYAMLConfigFileWithContextInternal(
 		applyUnitOverrides(unitFragments, finalTerraformOverrides)
 		stackConfigs = append(slices.Clone(unitFragments), stackConfigs...)
 	}
-	if err := configurationadapter.CheckImportConflicts(relativeFilePath, stackConfigs); err != nil {
-		return nil, nil, err
-	}
 
 	// Deep-merge the stack manifest and all the imports
 	stackConfigsDeepMerged, err := m.MergeWithContext(atmosConfig, stackConfigs, mergeContext)
@@ -2040,6 +2047,7 @@ func processYAMLConfigFileWithContextInternal(
 	}
 	return &schema.StackManifestProcessingResult{
 		DeepMergedConfig:          stackConfigsDeepMerged,
+		ImportedUnitSources:       importedUnitSources,
 		ImportMetadata:            finalMetadata,
 		ImportsConfig:             importsConfig,
 		StackConfig:               stackConfigMap,
