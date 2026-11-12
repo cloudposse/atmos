@@ -56,7 +56,7 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 }
 
 func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.PreparedComponentConfiguration, error) {
-	inputs, err := adapter.DecodeObject(result.Inputs)
+	inputs, sensitiveKeys, err := adapter.DecodeObjectWithSensitiveKeys(result.Inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	if result.State.BackendType == "local" {
 		resolveLocalBackend(backend, result.State.WorkingDirectory)
 	}
-	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace}
+	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, SensitiveInputKeys: sensitiveKeys, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace}
 	for _, file := range result.Files {
 		if file.IfExists == "overwrite_terragrunt" {
 			return nil, errUtils.ErrPluginUnsupportedExtension

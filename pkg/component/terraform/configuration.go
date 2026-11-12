@@ -47,6 +47,7 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 		return prepared, err
 	}
 	info.ComponentVarsSection = prepared.Inputs
+	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
 	info.ComponentSection["vars"] = prepared.Inputs

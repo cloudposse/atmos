@@ -277,6 +277,14 @@ func ComputeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 		keys[k] = true
 	}
 
+	// Provider sensitivity is authoritative even for empty containers and when
+	// output masking is disabled; it must never depend on registered leaf values.
+	for key, sensitive := range info.ConfigurationSensitiveInputKeys {
+		if _, supplied := info.ComponentVarsSection[key]; supplied && sensitive {
+			keys[key] = true
+		}
+	}
+
 	// Terraform's `sensitive = true` is an explicit declaration that an input must
 	// not be persisted in a generated tfvars file. When masking is disabled, retain
 	// the established compatibility behavior that keeps typed sensitive values in

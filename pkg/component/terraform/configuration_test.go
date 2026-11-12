@@ -9,6 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -127,5 +128,32 @@ func TestRejectRuntimeArtifacts(t *testing.T) {
 	for _, path := range []string{"terraform.tfstate", "terraform.tfstate.backup", ".terraform.tfstate.lock.info", ".terraform/environment", "nested/.terraform/modules/modules.json", "terraform.tfstate.d/stage/terraform.tfstate", ".terraform.lock.hcl", "nested/.dev-app.terraform.lock.hcl", ".atmos/metadata.json"} {
 		files := []schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}, {Path: path, IfExists: "overwrite"}}
 		require.ErrorIs(t, rejectRuntimeArtifacts(files), errUtils.ErrPluginInvalidConfig, path)
+	}
+}
+
+func TestPreparedConfigurationSensitiveInputsNeverHitDisk(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	for _, disabled := range []bool{false, true} {
+		atmosio.ApplyMaskingConfig(&atmosio.Config{DisableMasking: disabled})
+		runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+		config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+		binary, err := os.Executable()
+		require.NoError(t, err)
+		info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+		inputs := map[string]any{"credentials": map[string]any{"secret-input-key": ""}, "empty": map[string]any{}, "null": nil, "public": "visible"}
+		prepared := &schema.PreparedComponentConfiguration{Inputs: inputs, SensitiveInputKeys: map[string]bool{"credentials": true, "empty": true, "null": true, "absent": true}}
+		runtime.EXPECT().Prepare(gomock.Any(), info).Return(prepared, nil)
+		_, err = prepareConfiguration(t.Context(), config, info)
+		require.NoError(t, err)
+		// Partition repeatedly without relying on registered secret strings.
+		ComputeTerraformSecretVarKeys(info)
+		ComputeTerraformSecretVarKeys(info)
+		require.Equal(t, map[string]bool{"credentials": true, "empty": true, "null": true}, info.TerraformSecretVarKeys)
+		require.Equal(t, map[string]any{"public": "visible"}, DiskSafeVars(info))
+		env, err := SecretVarEnv(info)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{`TF_VAR_credentials={"secret-input-key":""}`, `TF_VAR_empty={}`, `TF_VAR_null=null`}, env)
 	}
 }

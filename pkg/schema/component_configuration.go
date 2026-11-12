@@ -51,6 +51,8 @@ type PreparedComponentConfiguration struct {
 	Backend     map[string]any
 	Workspace   string
 	Files       []ComponentConfigurationFile
+	// SensitiveInputKeys projects provider sensitivity paths onto whole input variables.
+	SensitiveInputKeys map[string]bool
 }
 
 // ComponentConfigurationFile must bypass template rendering.

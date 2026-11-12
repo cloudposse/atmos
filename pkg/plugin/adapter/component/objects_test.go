@@ -83,3 +83,51 @@ func TestObjectSensitivePaths(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 	}
 }
+
+func TestObjectStructuredSensitivity(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	value := cty.ObjectVal(map[string]cty.Value{
+		"credentials": cty.ObjectVal(map[string]cty.Value{"private-map-key": cty.StringVal("")}),
+		"empty":       cty.EmptyObjectVal,
+		"public":      cty.StringVal("visible"),
+	})
+	attr := func(name string) *pluginv1.ComponentValueStep {
+		return &pluginv1.ComponentValueStep{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: name}}
+	}
+	for _, test := range []struct {
+		name  string
+		paths []*pluginv1.ComponentValuePath
+		keys  map[string]bool
+	}{
+		{name: "map with empty value", paths: []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{attr("credentials")}}}, keys: map[string]bool{"credentials": true}},
+		{name: "empty descendant", paths: []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{attr("credentials"), attr("private-map-key")}}}, keys: map[string]bool{"credentials": true}},
+		{name: "empty object", paths: []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{attr("empty")}}}, keys: map[string]bool{"empty": true}},
+		{name: "root", paths: []*pluginv1.ComponentValuePath{{}}, keys: map[string]bool{"credentials": true, "empty": true, "public": true}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			encoded := objectWireValue(t, value)
+			encoded.SensitivePaths = test.paths
+			decoded, keys, err := DecodeObjectWithSensitiveKeys(encoded)
+			require.NoError(t, err)
+			require.Equal(t, test.keys, keys)
+			require.Equal(t, map[string]any{"private-map-key": ""}, decoded["credentials"])
+		})
+	}
+	require.Equal(t, "<MASKED>", atmosio.MaskString("private-map-key"))
+	rendered, err := json.Marshal(map[string]any{"credentials": map[string]any{"private-map-key": ""}})
+	require.NoError(t, err)
+	require.NotContains(t, atmosio.MaskString(string(rendered)), "private-map-key")
+	encoded := objectWireValue(t, cty.MapVal(map[string]cty.Value{"empty": cty.EmptyObjectVal}))
+	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Index{Index: objectWireValue(t, cty.StringVal("empty"))}}}}}
+	_, keys, err := DecodeObjectWithSensitiveKeys(encoded)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"empty": true}, keys)
+	_, keys, err = DecodeObjectWithSensitiveKeys(nil)
+	require.NoError(t, err)
+	require.Empty(t, keys)
+	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{nil}
+	_, _, err = DecodeObjectWithSensitiveKeys(encoded)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}

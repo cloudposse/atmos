@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -239,4 +240,17 @@ func TestPreparedConfigurationRejectsUnsupportedValues(t *testing.T) {
 	response.State.Backend = &pluginv1.ComponentValue{}
 	_, err = preparedConfiguration(response)
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
+func TestPreparedConfigurationRetainsSensitiveInputs(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	inputs, err := adapter.EncodeObject(map[string]any{"credentials": map[string]any{"private-input-key": ""}, "public": "visible"})
+	require.NoError(t, err)
+	inputs.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "credentials"}}}}}
+	prepared, err := preparedConfiguration(&pluginv1.PrepareComponentResponse{Inputs: inputs, State: &pluginv1.ComponentStateIdentity{}})
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"credentials": true}, prepared.SensitiveInputKeys)
+	require.Equal(t, map[string]any{"private-input-key": ""}, prepared.Inputs["credentials"])
 }

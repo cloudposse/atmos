@@ -75,6 +75,39 @@ func DecodeObject(input *pluginv1.ComponentValue) (map[string]any, error) {
 	return object, nil
 }
 
+// DecodeObjectWithSensitiveKeys retains validated sensitivity paths as top-level
+// input keys. Terraform partitions whole variables, so a sensitive descendant
+// makes its containing input sensitive even when it has no non-empty leaves.
+func DecodeObjectWithSensitiveKeys(input *pluginv1.ComponentValue) (map[string]any, map[string]bool, error) {
+	defer perf.Track(nil, "componentadapter.DecodeObjectWithSensitiveKeys")()
+
+	object, err := DecodeObject(input)
+	if err != nil {
+		return nil, nil, err
+	}
+	keys := make(map[string]bool)
+	for _, path := range input.GetSensitivePaths() {
+		if len(path.Steps) == 0 {
+			for key := range object {
+				keys[key] = true
+			}
+			continue
+		}
+		switch selector := path.Steps[0].GetSelector().(type) {
+		case *pluginv1.ComponentValueStep_Attribute:
+			keys[selector.Attribute] = true
+		case *pluginv1.ComponentValueStep_Index:
+			// DecodeObject already validated this path against an object or map.
+			index, err := sensitiveIndex(selector.Index)
+			if err != nil || index.Type() != cty.String {
+				return nil, nil, errUtils.ErrPluginProtocol
+			}
+			keys[index.AsString()] = true
+		}
+	}
+	return object, keys, nil
+}
+
 // Float64Bits is the bit size strconv uses for float64 formatting.
 const float64Bits = 64
 
@@ -159,7 +192,8 @@ func objectJSON(value cty.Value) (any, error) {
 func registerSensitive(value any) {
 	switch value := value.(type) {
 	case map[string]any:
-		for _, child := range value {
+		for key, child := range value {
+			atmosio.RegisterSecretValue(key)
 			registerSensitive(child)
 		}
 	case []any:
