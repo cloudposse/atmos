@@ -12,7 +12,7 @@ Field testing found that fork-only branches were requested from the base reposit
 
 ## Changes
 
-Ordinary pull request contexts select the validated fork head repository and prefer the payload head branch over the runner ref-name fallback; elevated events retain the base checkout and safety gate. Workflow checkout steps provide the job token through a process-scoped Git credential helper. Pull request context selection is factored into a helper to keep the provider context readable.
+Ordinary pull request contexts select the validated fork head repository and prefer the payload head branch over the runner ref-name fallback; elevated events select the base branch and retain the base checkout and safety gate, failing closed when the base branch is unavailable. Workflow checkout steps provide the job token through a process-scoped Git credential helper. Pull request context selection is factored into a helper to keep the provider context readable.
 
 ## Validation
 

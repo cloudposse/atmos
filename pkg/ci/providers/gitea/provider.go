@@ -128,10 +128,24 @@ func setPullRequestContext(c *provider.Context) error {
 		return err
 	}
 	c.PullRequest = pr
-	if c.EventName != "pull_request" || !pr.Fork {
+	if c.EventName == "pull_request_target" {
+		return setBaseBranch(c, pr)
+	}
+	if !pr.Fork {
 		return nil
 	}
 	return setForkContext(c, pr)
+}
+
+func setBaseBranch(c *provider.Context, pr *provider.PRInfo) error {
+	c.Branch = pr.BaseRef
+	if c.Branch == "" {
+		c.Branch = env("BASE_REF")
+	}
+	if c.Branch == "" {
+		return fmt.Errorf("%w: Gitea pull request base branch is missing", errUtils.ErrCIPullRequestUnknown)
+	}
+	return nil
 }
 
 func setForkContext(c *provider.Context, pr *provider.PRInfo) error {
