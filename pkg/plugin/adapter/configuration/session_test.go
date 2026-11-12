@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
@@ -41,7 +42,7 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 		require.Nil(t, request.Effects)
 		require.Equal(t, "tofu", request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
 		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil
-	})
+	}).Times(2)
 	calls := 0
 	session, err := New(t.Context(), config, "apply", func(_ context.Context, names []string) (map[string]Provider, error) {
 		calls++
@@ -253,4 +254,126 @@ func TestPreparedConfigurationRetainsSensitiveInputs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{"credentials": true}, prepared.SensitiveInputKeys)
 	require.Equal(t, map[string]any{"private-input-key": ""}, prepared.Inputs["credentials"])
+}
+
+func TestPreparationRevalidatesDependencyPaths(t *testing.T) {
+	for _, change := range []string{"target", "removed", "added", "kind", "source", "selected source", "missing selected", "discovery error", "unchanged", "reordered"} {
+		t.Run(change, func(t *testing.T) {
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform")
+			network, other, app := unit(t, "network"), unit(t, "other"), unit(t, "app")
+			app.Dependencies = []*pluginv1.ComponentDependency{
+				{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT},
+				{Target: other.Address, Kind: pluginv1.ComponentDependency_ORDER},
+			}
+			initial := &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, other, app}}
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(initial, nil)
+			session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			_, err = session.Discover(t.Context())
+			require.NoError(t, err)
+			originalRequest := proto.Clone(session.requests[0])
+			current := proto.Clone(initial).(*pluginv1.DiscoverComponentsResponse)
+			selected := current.Components[2]
+			switch change {
+			case "target":
+				selected.Dependencies[0].Target = other.Address
+			case "removed":
+				selected.Dependencies = selected.Dependencies[1:]
+			case "added":
+				selected.Dependencies = append(selected.Dependencies, &pluginv1.ComponentDependency{Target: app.Address})
+			case "kind":
+				selected.Dependencies[0].Kind = pluginv1.ComponentDependency_ORDER
+			case "source":
+				current.Components[0].Source = "changed/terragrunt.hcl"
+			case "selected source":
+				selected.Source = "changed/app/terragrunt.hcl"
+			case "missing selected":
+				current.Components = current.Components[:2]
+			case "reordered":
+				selected.Dependencies[0], selected.Dependencies[1] = selected.Dependencies[1], selected.Dependencies[0]
+			}
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+				require.Equal(t, map[string]string{"DEPENDENCY": "component", "IDENTITY": "selected", "TF_WORKSPACE": "stage", "ATMOS_TERRAFORM_BINARY": "tofu"}, request.Invocation.Environment)
+				require.Equal(t, "apply", request.Operation.Command)
+				require.Nil(t, request.Effects)
+				require.Equal(t, []string{"live/**"}, request.IncludePaths)
+				if change == "discovery error" {
+					return nil, context.Canceled
+				}
+				return current, nil
+			})
+			if change == "unchanged" || change == "reordered" {
+				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil)
+			}
+			result, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{
+				Stack: "live", ComponentFromArg: "app", Command: "tofu", SubCommand: "apply", TerraformWorkspace: "stage",
+				ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"IDENTITY=selected", "DEPENDENCY=identity"}, ComponentEnvList: []string{"DEPENDENCY=component"},
+			})
+			switch change {
+			case "unchanged", "reordered":
+				require.NoError(t, err)
+				require.NotNil(t, result)
+			case "discovery error":
+				require.ErrorIs(t, err, context.Canceled)
+			default:
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+				require.Nil(t, result)
+			}
+			// Revalidation must leave the scheduled inventory and request untouched.
+			require.True(t, proto.Equal(originalRequest, session.requests[0]))
+			require.Equal(t, "network", app.Dependencies[0].Target.Component)
+			require.Equal(t, "live/network/terragrunt.hcl", network.Source)
+		})
+	}
+}
+
+func TestRevisionDiscoveryIsolated(t *testing.T) {
+	config := enabledConfig(t)
+	baseRoot := t.TempDir()
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").Times(2)
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		require.Nil(t, request.Effects, "revision discovery cannot read state or run commands")
+		require.Equal(t, "plan", request.Operation.Command)
+		name := "head"
+		if request.RootDirectory == baseRoot {
+			name = "base"
+		} else {
+			require.Equal(t, config.BasePathAbsolute, request.RootDirectory)
+		}
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, name)}}, nil
+	}).Times(2)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	head, err := New(ctx, config, "plan", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	headDefinitions, err := head.Discover(t.Context())
+	require.NoError(t, err)
+	revision, err := head.ForRevision(baseRoot)
+	require.NoError(t, err)
+	baseDefinitions, err := revision.Discover(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, baseDefinitions["live"]["components"].(map[string]any)["terraform"], "base")
+	again, err := head.Discover(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, headDefinitions, again)
+	require.Contains(t, again["live"]["components"].(map[string]any)["terraform"], "head")
+	// A revision's request data must not alias the HEAD request in either direction.
+	base := revision.(*Session)
+	base.requests[0].IncludePaths[0] = "base/**"
+	require.Equal(t, "live/**", head.requests[0].IncludePaths[0])
+	head.requests[0].Invocation.Environment["REVISION"] = "head"
+	require.NotContains(t, base.requests[0].Invocation.Environment, "REVISION")
+	_, err = head.ForRevision("relative")
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	cancel()
+	_, err = head.ForRevision(baseRoot)
+	require.ErrorIs(t, err, context.Canceled)
+	_, err = revision.Discover(t.Context())
+	require.ErrorIs(t, err, context.Canceled)
 }
