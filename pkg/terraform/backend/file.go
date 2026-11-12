@@ -28,7 +28,13 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	if err != nil {
 		return err
 	}
-	return u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode)
+	if err := u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode); err != nil {
+		return err
+	}
+	if _, owned := info.ComponentSettingsSection["configuration"]; owned {
+		return recordHostBackend(workingDir)
+	}
+	return nil
 }
 
 const backendFileMode = 0o600

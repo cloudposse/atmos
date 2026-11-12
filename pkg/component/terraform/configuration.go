@@ -12,9 +12,11 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/backend"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -175,4 +177,14 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 		return nil, err
 	}
 	return tenv, nil
+}
+
+// writePreparedConfiguration relinquishes the host backend before applying provider file policies.
+func writePreparedConfiguration(directory string, prepared *schema.PreparedComponentConfiguration) error {
+	if prepared.BackendGenerated {
+		if err := backend.RemoveHostBackend(directory); err != nil {
+			return err
+		}
+	}
+	return configuration.WriteFiles(directory, prepared.Files)
 }
