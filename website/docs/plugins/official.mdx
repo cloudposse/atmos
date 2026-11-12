@@ -2,7 +2,7 @@
 title: Official Plugins
 sidebar_label: Official Plugins
 slug: /plugins/official
-description: Discover native Atmos plugin packages maintained by Cloud Posse, including secret-store authentication with auth-secrets.
+description: Discover native Atmos plugin packages maintained by Cloud Posse, including secret-store authentication with auth-secrets and SSH key identities with ssh.
 ---
 
 import Intro from '@site/src/components/Intro'
@@ -68,3 +68,197 @@ identity when running an Atmos command that supports identities.
 See the [package README](https://github.com/cloudposse/atmos/tree/main/plugins/auth-secrets)
 for credential validation and lifecycle details, or the
 [official release guide](https://github.com/cloudposse/atmos/tree/main/plugins) for maintainer instructions.
+
+## SSH key identities
+
+The **`cloudposse/ssh`** package makes an SSH key an Atmos identity. Git signing, SSH logins, and
+private Git fetches then use a key that Atmos knows by name. On a Mac the private key is generated in
+the Secure Enclave and cannot be exported. On other platforms it is an ordinary key file.
+
+It exports three capabilities in one package:
+
+| Kind | Capability | Purpose |
+|---|---|---|
+| `ssh/self` | Authentication provider | Supply no upstream credential. Use it when nobody vouches for the key, or when you add the public key yourself. |
+| `ssh/key` | Credential-exchange identity | Create the key, enroll it with an authority, and point tools at it. |
+| `ssh` | Command | Inspect and manage keys and the agent that serves them. |
+
+A key unattended work can use is the main reason to choose this package. By default the key works while
+the screen is locked, so a coding agent or a scheduled job can sign commits and reach hosts. Add
+`require: unlocked` and the Secure Enclave refuses the key while the screen is locked.
+
+### Install
+
+OCI source:
+
+```text
+oci://ghcr.io/cloudposse/atmos/plugins/ssh
+```
+
+```shell
+atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/ssh --as=ssh
+```
+
+### Configure
+
+This example enrolls the key on a GitHub account. The token comes from a secret store through the
+`secrets/store` provider of the [`auth-secrets` package](#secret-store-authentication).
+
+```yaml
+plugins:
+  packages:
+    ssh:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/ssh
+      version: "^0.1.0"
+    secrets:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
+      version: "^1.1.0"
+aliases:
+  ssh: plugin run ssh --
+stores:
+  keychain:
+    type: keychain
+    secret: true
+auth:
+  providers:
+    github-token:
+      kind: secrets/store
+      spec:
+        credentials:
+          token: {store: keychain, path: github/ssh-keys}
+  identities:
+    ops:
+      kind: ssh/key
+      via: {provider: github-token}
+      spec:
+        authority: github
+        store: secure-enclave
+        allow: [signing, authentication]
+        require: unlocked
+        user: deploy
+git:
+  repositories:
+    infra:
+      auth: {identity: ops}
+      commit: {signing: always}
+```
+
+Without a token, use the `ssh/self` provider and `authority: self`, then give the public key to whoever
+needs it. `atmos ssh key show <name> --format github` prints the form GitHub expects.
+
+```yaml
+auth:
+  providers:
+    local:
+      kind: ssh/self
+  identities:
+    ops:
+      kind: ssh/key
+      via: {provider: local}
+      spec:
+        store: secure-enclave
+        allow: [signing]
+```
+
+Create the key and enroll it once per machine with [`atmos auth login`](/cli/commands/auth/login):
+
+```shell
+atmos auth login --identity ops
+atmos auth exec --identity ops -- git commit -m "signed with the enclave key"
+```
+
+The configuration is shared across a team, but each person's login creates and enrolls that machine's own
+key. Login is idempotent: when nothing has changed it makes no network call.
+
+### Identity fields
+
+Set these under `spec` of an `ssh/key` identity.
+
+<dl>
+  <dt>`authority`</dt>
+  <dd>Who vouches for the key: `self` (default) or `github`. With `github`, the upstream credential's `token` entry is used to enroll the key on the account the token belongs to.</dd>
+  <dt>`store`</dt>
+  <dd>Required. `secure-enclave` holds the key in macOS hardware. `file` is an ordinary key file that works on every platform and is not hardware-protected.</dd>
+  <dt>`allow`</dt>
+  <dd>Required. `signing`, `authentication`, or both. It limits the identity's agent socket to Git signing, SSH logins, or both, and it decides what is enrolled.</dd>
+  <dt>`require`</dt>
+  <dd>One term or a list. The only term is `unlocked`: the key is refused while the screen is locked. The key store enforces it and it is fixed when the key is created. The `file` store cannot enforce it and rejects it.</dd>
+  <dt>`user`</dt>
+  <dd>The SSH login name on the remote side. Exported as `ANSIBLE_REMOTE_USER` when `authentication` is allowed.</dd>
+  <dt>`key`</dt>
+  <dd>The key's name in the store. Defaults to the identity's name. Identities that share a key must agree on `store` and `require`.</dd>
+  <dt>`rewrite_https`</dt>
+  <dd>Hosts whose HTTPS Git URLs are rewritten to SSH.</dd>
+  <dt>`root`</dt>
+  <dd>The plugin's data directory, when it is not the default. The plugin cannot see Atmos's environment, so a relocated Atmos data directory must be named here and in the command's `config`.</dd>
+</dl>
+
+### What the identity sets
+
+<dl>
+  <dt>`SSH_AUTH_SOCK`</dt>
+  <dd>Always. The identity's own agent socket.</dd>
+  <dt>`GIT_CONFIG_GLOBAL`</dt>
+  <dd>When `signing` is allowed or `rewrite_https` is set. A generated file that includes your own Git configuration first, then enables SSH signing with the identity's key and applies the URL rewrites.</dd>
+  <dt>`ANSIBLE_REMOTE_USER`</dt>
+  <dd>When `user` is set and `authentication` is allowed.</dd>
+</dl>
+
+### Commands
+
+Run `atmos plugin run ssh -- <arguments>`, or `atmos ssh <arguments>` with the alias shown above.
+
+```text
+key list
+key show <name> [--format authorized-key|allowed-signers|github|json]
+key status [<name>]
+key delete <name> --yes
+agent start | stop | status | log [--lines N]
+test <identity> [--soak <duration>] [--interval <duration>]
+```
+
+<dl>
+  <dt>`key list`, `key show`</dt>
+  <dd>List the keys on this machine, or print one key's public half in the format a service expects.</dd>
+  <dt>`key status`</dt>
+  <dd>Show what this machine has enrolled, when the enrollment expires, and the last login result and error. Atmos does not show plugin text during login, so this is where to read why a login failed.</dd>
+  <dt>`key delete`</dt>
+  <dd>Delete the local key. The authority is updated at the next `atmos auth login` or `atmos auth logout`. Requires `--yes`.</dd>
+  <dt>`agent start`, `stop`, `status`, `log`</dt>
+  <dd>Control the per-user agent that serves the identities' sockets and read its audit log.</dd>
+  <dt>`test`</dt>
+  <dd>Sign a Git payload through the identity's socket and verify it. With `--soak` it repeats every `--interval` and prints one line per attempt (`ok`, `refused`, `locked`, or `unreachable`). It exits non-zero if any attempt failed. Run it, then lock the screen, to check what `require` does.</dd>
+</dl>
+
+Commands never contact an authority and never prompt. Changes at an authority go through `atmos auth login`
+and `atmos auth logout`. Use `--root <dir>` when the data directory is not the default, and `--store <kind>`
+to pick a store when a key name exists in more than one.
+
+### GitHub enrollment
+
+With `authority: github`, login adds the public key to the account the token belongs to: as a signing key
+when `signing` is allowed, and as an authentication key when `authentication` is allowed. The token needs
+`write:ssh_signing_key` for signing, plus `write:public_key` for authentication. Grant it no other scopes.
+
+The identity keeps a copy of the token in its private state so that logout can revoke the enrollment, and
+the host removes that copy at logout. An enrollment is revoked once its key is gone, so logging out alone
+never strips the key from a machine that still uses it. To retire a machine, run
+`atmos ssh key delete ops --yes`, then `atmos auth logout ops`.
+
+### Security model
+
+- The key cannot leave the machine. A stolen disk, backup, or copied key blob is useless elsewhere. After a reboot nothing signs until the first login.
+- A per-user daemon (a LaunchAgent on macOS, a systemd user unit on Linux) serves the sockets. It rejects connections from other users, and each identity's socket signs only what `allow` permits.
+- `require: unlocked` is enforced by the key store, so it holds even against other processes running as you.
+- Any other process running as the same user can read the key file and use it directly, bypassing the `allow` limits. Do not mount the key directory into a sandbox.
+
+### Current limits
+
+- There is no GitHub device login yet. Enrollment needs a token from a secret store, or you add the public key yourself with `authority: self`.
+- Atmos does not show plugin error text during login, so a failed login is a generic failure. Read the reason with `atmos ssh key status`.
+- Hardware-backed keys exist on macOS only. The `file` store works everywhere and is not hardware-protected.
+- The daemon does not run on Windows yet. An `ssh/key` identity fails there with a "not supported" error.
+- Atmos components do not all receive an identity's environment yet; Ansible needs a core change.
+
+See the [package README](https://github.com/cloudposse/atmos/tree/main/plugins/ssh) and the
+[plugin configuration reference](/cli/configuration/plugins) for more.

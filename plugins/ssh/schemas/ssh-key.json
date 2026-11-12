@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ssh/key identity",
+  "description": "An SSH key, its enrollment with an authority, and the environment that makes tools use it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "store",
+    "allow"
+  ],
+  "properties": {
+    "authority": {
+      "enum": [
+        "self",
+        "github"
+      ],
+      "default": "self",
+      "description": "Who vouches for the key. self means nobody does; github registers it on the account the upstream token belongs to."
+    },
+    "store": {
+      "enum": [
+        "secure-enclave",
+        "file"
+      ],
+      "description": "Where the key is held. secure-enclave is macOS hardware; file is an ordinary key file and is not hardware-protected."
+    },
+    "allow": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "signing",
+          "authentication"
+        ]
+      },
+      "description": "What the key may do. It limits the identity's agent socket and decides what is enrolled."
+    },
+    "require": {
+      "description": "What must hold for the key to be used. The only term is unlocked. It is fixed when the key is created.",
+      "oneOf": [
+        {
+          "enum": [
+            "unlocked"
+          ]
+        },
+        {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "unlocked"
+            ]
+          }
+        }
+      ]
+    },
+    "user": {
+      "type": "string",
+      "pattern": "^[^\\s\\x00-\\x1f\\x7f]{1,64}$",
+      "description": "The SSH login name on the remote side. Set as ANSIBLE_REMOTE_USER when authentication is allowed."
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+      "description": "The key's name in the store. Defaults to the identity's name. Identities that share a key must agree on store and require."
+    },
+    "rewrite_https": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$"
+      },
+      "description": "Hosts whose HTTPS Git URLs are rewritten to SSH."
+    },
+    "root": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The plugin's data directory, when it is not the default. The plugin cannot see Atmos's environment, so a relocated Atmos data directory must be named here."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "store": {
+            "const": "file"
+          }
+        },
+        "required": [
+          "store"
+        ]
+      },
+      "then": {
+        "properties": {
+          "require": {
+            "type": "array",
+            "maxItems": 0,
+            "description": "The file store cannot enforce any requirement. Use secure-enclave for require: unlocked."
+          }
+        }
+      }
+    }
+  ]
+}
