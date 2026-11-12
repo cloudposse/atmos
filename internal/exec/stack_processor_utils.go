@@ -2038,7 +2038,7 @@ func processYAMLConfigFileWithContextInternal(
 		if err := applyHelmTypeOverrides(atmosConfig, yamlConfig, relativeFilePath); err != nil {
 			return nil, nil, err
 		}
-		applyUnitOverrides(unitFragments, finalTerraformOverrides)
+		configurationadapter.ApplyUnitOverrides(unitFragments, finalTerraformOverrides)
 		stackConfigs = append(slices.Clone(unitFragments), stackConfigs...)
 	}
 

@@ -84,10 +84,15 @@ func TestConfigurationImportRouting(t *testing.T) {
 		_, _, err := ImportComponents(config, "terragrunt://live", &declaration, false)
 		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	}
-	_, handled, err = ImportComponents(config, "terragrunt://live", &schema.StackImport{}, false)
+	_, handled, err = ImportComponents(config, "terragrunt://live", &schema.StackImport{}, true)
+	require.True(t, handled)
+	require.ErrorIs(t, err, errUtils.ErrInvalidImport, "static loads must not enter the provider runtime")
+	require.Empty(t, runtime.imports)
+	fragment, handled, err := ImportComponents(config, "terragrunt://live", &schema.StackImport{}, false)
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
+	require.Equal(t, map[string]any{"components": map[string]any{"terraform": map[string]any{"app": map[string]any{}}}}, fragment)
 	runtime.err = errors.New("registration failed")
 	_, _, err = ImportComponents(config, "terragrunt://live", &schema.StackImport{}, false)
 	require.ErrorIs(t, err, runtime.err)
@@ -107,4 +112,24 @@ func TestWatchExcludes(t *testing.T) {
 	}
 	_, err = UnexcludedWatchFiles("relative", files, patterns)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+}
+
+func TestApplyUnitOverridesCopiesEachUnit(t *testing.T) {
+	unit := map[string]any{"vars": map[string]any{"a": 1}}
+	terraform := map[string]any{"app": unit, "invalid": "not a section"}
+	fragments := []map[string]any{{"components": map[string]any{"terraform": terraform}}, {}}
+
+	ApplyUnitOverrides(fragments, nil)
+	require.Equal(t, map[string]any{"vars": map[string]any{"a": 1}}, terraform["app"], "empty overrides must leave units untouched")
+
+	overrides := map[string]any{"vars": map[string]any{"region": "us-west-2"}}
+	ApplyUnitOverrides(fragments, overrides)
+	app := terraform["app"].(map[string]any)
+	require.Equal(t, overrides, app["overrides"])
+	require.Equal(t, map[string]any{"a": 1}, app["vars"])
+	require.NotContains(t, unit, "overrides", "the provider's unit must not be changed")
+	require.Equal(t, "not a section", terraform["invalid"])
+
+	unit["vars"] = "changed later"
+	require.Equal(t, map[string]any{"a": 1}, app["vars"], "replacing a source section must not reach the attached unit")
 }

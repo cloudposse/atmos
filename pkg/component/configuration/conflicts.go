@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"fmt"
+	"maps"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -13,6 +14,30 @@ func ImportFragment(components map[string]any) map[string]any {
 	defer perf.Track(nil, "configuration.ImportFragment")()
 
 	return map[string]any{"components": map[string]any{"terraform": components}}
+}
+
+// ApplyUnitOverrides attaches a manifest's Terraform `overrides` to the units it imports, like the
+// manifest's own components. Each unit section is copied first, so a provider's cached import result
+// is never changed.
+func ApplyUnitOverrides(fragments []map[string]any, overrides map[string]any) {
+	defer perf.Track(nil, "configuration.ApplyUnitOverrides")()
+
+	if len(overrides) == 0 {
+		return
+	}
+	for _, fragment := range fragments {
+		section, _ := fragment["components"].(map[string]any)
+		terraform, _ := section["terraform"].(map[string]any)
+		for name, component := range terraform {
+			unit, ok := component.(map[string]any)
+			if !ok {
+				continue
+			}
+			unit = maps.Clone(unit)
+			unit["overrides"] = overrides
+			terraform[name] = unit
+		}
+	}
 }
 
 // unitSource reads the source identity of an unmerged provider-owned component.
