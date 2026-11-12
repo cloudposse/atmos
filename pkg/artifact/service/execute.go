@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -52,14 +53,19 @@ func (s *Service) execute(ctx context.Context, pub *publication, cur *current, d
 // It returns a recovered result when the write is proven committed, retry when it is proven
 // uncommitted and worth repeating, and otherwise the error to report.
 func (s *Service) afterFailure(ctx context.Context, pub *publication, cur *current, writeErr error, attempt int) (*artifact.PublishResult, bool, error) {
-	found := reconcile(context.WithoutCancel(ctx), pub.tgt, pub.in, cur)
+	reconcileCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	found := reconcile(reconcileCtx, pub.tgt, pub.in, cur)
+	cancel()
 	switch found.state {
 	case reconcileCommitted:
 		s.event(ctx, pub, PhaseReconciled, attempt, nil)
 		pub.op.info("reconciled", fmt.Sprintf("the repository reported %q but the completed reference holds the expected digests; success was confirmed by reading it", writeErr))
 		return syntheticResult(&found.pinned, found.inspection), false, nil
 	case reconcileNotCommitted:
-		if !isTemporary(writeErr) || attempt >= pub.op.attempts || ctx.Err() != nil {
+		if ctx.Err() != nil {
+			return nil, false, errors.Join(writeErr, ctx.Err())
+		}
+		if !isTemporary(writeErr) || attempt >= pub.op.attempts {
 			return nil, false, writeErr
 		}
 		if sleepErr := s.sleep(ctx, s.backoff<<(attempt-1)); sleepErr != nil {

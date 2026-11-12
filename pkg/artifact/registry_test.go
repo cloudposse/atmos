@@ -17,13 +17,16 @@ import (
 
 // fakeKind registers a kind whose factory records its inputs and returns a mock repository.
 type fakeKind struct {
+	ctx     context.Context
+	cfg     *schema.ArtifactRepositoryConfig
 	calls   int
 	alias   string
 	options RepositoryOptions
 	repo    *MockRepository
 }
 
-func (f *fakeKind) factory(_ context.Context, alias string, _ *schema.ArtifactRepositoryConfig, opts ...RepositoryOption) (Repository, error) {
+func (f *fakeKind) factory(ctx context.Context, alias string, cfg *schema.ArtifactRepositoryConfig, opts ...RepositoryOption) (Repository, error) {
+	f.ctx, f.cfg = ctx, cfg
 	f.calls++
 	f.alias = alias
 	f.options = ApplyRepositoryOptions(opts...)
@@ -102,9 +105,14 @@ func TestRepositoryRegistry_NewConstructsThroughFactoryWithoutNetworkOrCredentia
 	resolved := 0
 	resolver := func(context.Context, string) (any, error) { resolved++; return nil, nil }
 	lookup := func(string) (Repository, error) { return nil, nil }
-	got, err := registry.New(context.Background(), "local", localDirConfig(t.TempDir()), WithIdentityResolver(resolver), WithRepositoryLookup(lookup))
+	type contextKey struct{}
+	ctx := context.WithValue(context.Background(), contextKey{}, "test")
+	cfg := localDirConfig(t.TempDir())
+	got, err := registry.New(ctx, "local", cfg, WithIdentityResolver(resolver), WithRepositoryLookup(lookup))
 	require.NoError(t, err)
 	assert.Same(t, repo, got)
+	assert.Same(t, ctx, fake.ctx)
+	assert.Same(t, cfg, fake.cfg)
 	assert.Equal(t, 1, fake.calls)
 	assert.Equal(t, "local", fake.alias)
 	assert.NotNil(t, fake.options.ResolveIdentity)
@@ -212,4 +220,25 @@ func TestApplyRepositoryOptions_IgnoresNilOptions(t *testing.T) {
 	require.NotNil(t, applied.LookupRepository)
 	_, err := applied.LookupRepository("x")
 	require.EqualError(t, err, "lookup x")
+}
+
+func TestRepositoryRegistryDescriptorIsolation(t *testing.T) {
+	r := NewRepositoryRegistry()
+	desc, _ := BuiltinKind(RepositoryKindLocalDir)
+	require.NoError(t, r.Register(desc, (&fakeKind{}).factory))
+	desc.PathOptions[0] = "changed"
+	desc.Capabilities.Packagings[0] = PackagingZip
+	desc.Capabilities.LockScopes[0] = "changed"
+	got, ok := r.Lookup(desc.Kind)
+	require.True(t, ok)
+	assert.Equal(t, OptionPath, got.PathOptions[0])
+	assert.Equal(t, PackagingNone, got.Capabilities.Packagings[0])
+	assert.NotEqual(t, LockScope("changed"), got.Capabilities.LockScopes[0])
+	got.PathOptions[0] = "changed"
+	got.Capabilities.Packagings[0] = PackagingZip
+	got.Capabilities.LockScopes[0] = "changed"
+	again, _ := r.Lookup(desc.Kind)
+	assert.Equal(t, OptionPath, again.PathOptions[0])
+	assert.Equal(t, PackagingNone, again.Capabilities.Packagings[0])
+	assert.NotEqual(t, LockScope("changed"), again.Capabilities.LockScopes[0])
 }

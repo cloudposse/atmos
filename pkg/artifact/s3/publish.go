@@ -56,17 +56,16 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 	scope := artifact.LockScopeRepository
 	if options.Lock != nil {
 		scope = options.Lock.Scope()
-	} else {
-		lock, lockErr := r.acquire(ctx, prepared.Record.Name+":"+prepared.Record.Version, r.settings.owner, job.opID)
-		if lockErr != nil {
-			return nil, lockErr
-		}
-		defer func() {
-			if releaseErr := lock.Release(ctx); err == nil {
-				err = releaseErr
-			}
-		}()
 	}
+	release, err := r.holdClaim(ctx, options.Lock, prepared.Record.Name+":"+prepared.Record.Version, job.opID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if releaseErr := release(); err == nil {
+			err = releaseErr
+		}
+	}()
 	return r.publishLocked(ctx, job, &options, scope)
 }
 
@@ -95,6 +94,12 @@ func (r *Repository) admit(ctx context.Context, job *publishJob, options *artifa
 	current, err := r.loadReference(ctx, job.key)
 	if err != nil {
 		return nil, err
+	}
+	if current != nil && isDeletion(current.ref) {
+		if err := r.recoverDeletion(ctx, current); err != nil {
+			return nil, err
+		}
+		current = nil
 	}
 	input := layout.AdmitInput{
 		Current: refOf(current), IncomingRecord: job.recordDigest, IncomingIntent: job.prepared.IntentDigest,
@@ -153,6 +158,19 @@ func (r *Repository) unchanged(ctx context.Context, job *publishJob, plan *publi
 	}
 	if rep == nil || rep.RecordDigest != current.RecordDigest {
 		return nil, fmt.Errorf("%w: %s:%s is completed but has no matching representation", errUtils.ErrArtifactIntegrityFailed, current.Name, current.Version)
+	}
+	journal, err := r.loadOperation(ctx, current.OperationID)
+	if err != nil {
+		return nil, err
+	}
+	if journal != nil && journal.Prior != nil {
+		keep, err := setOfRecord(record).keys(rep.Packaging, rep.Location)
+		if err != nil {
+			return nil, err
+		}
+		if err := r.retirePrior(ctx, journal.Prior, job, keep); err != nil {
+			return nil, err
+		}
 	}
 	r.tidyOperation(ctx, current.OperationID)
 	return r.result(record, current.RecordDigest, rep, layout.AdmitUnchanged.Outcome(), plan.scope), nil

@@ -63,6 +63,11 @@ func TestPublishIsIdempotentAndGuardsTheReference(t *testing.T) {
 		assert.Equal(t, artifact.OutcomeUnchanged, again.Outcome)
 		assert.Equal(t, first.Pinned.ResolvedDigest, again.Pinned.ResolvedDigest)
 
+		staleSame := first.Pinned
+		staleSame.ResolvedDigest = digest.FromString("stale")
+		_, err = repo.Publish(ctx, prepare(t, publishSpec{content: "base"}), artifact.PublishOptions{ExpectedPrior: &staleSame})
+		require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+
 		changed := prepare(t, publishSpec{content: "changed"})
 		_, err = repo.Publish(ctx, changed, artifact.PublishOptions{})
 		require.ErrorIs(t, err, errUtils.ErrArtifactConflict, "an existing reference expected to be absent")

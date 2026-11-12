@@ -204,15 +204,20 @@ func TestAmbiguousWriteThatDidNotLandIsAnError(t *testing.T) {
 }
 
 func TestRejectedWriteIsNotReconciledOrRetriedAnonymously(t *testing.T) {
-	var anonymous atomic.Int32
+	var anonymous, anonymousAfterRejection atomic.Int32
+	var rejected atomic.Bool
 	server := newFlakyRegistry(t, func(w http.ResponseWriter, r *http.Request, _ http.Handler) bool {
 		if _, _, ok := r.BasicAuth(); !ok {
 			anonymous.Add(1)
+			if rejected.Load() {
+				anonymousAfterRejection.Add(1)
+			}
 			w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
 			w.WriteHeader(http.StatusUnauthorized)
 			return true
 		}
 		if r.Method == http.MethodPut {
+			rejected.Store(true)
 			w.WriteHeader(http.StatusForbidden)
 			return true
 		}
@@ -228,6 +233,8 @@ func TestRejectedWriteIsNotReconciledOrRetriedAnonymously(t *testing.T) {
 		"a definite rejection must not trigger destination reconciliation")
 	assert.Empty(t, server.duplicates(http.MethodPut), "a rejected mutation is not retried")
 	assert.Positive(t, anonymous.Load(), "the registry challenged the first request")
+	assert.True(t, rejected.Load(), "the authenticated write was rejected")
+	assert.Zero(t, anonymousAfterRejection.Load(), "no anonymous fallback after rejection")
 }
 
 func TestDeleteIsReconciledByResolvingTheDigest(t *testing.T) {
@@ -428,6 +435,18 @@ func (l *landingDestination) PushReference(ctx context.Context, expected ocispec
 	return l.err
 }
 
+type movingSource struct {
+	oci.ReadOnlyStore
+	calls atomic.Int32
+}
+
+func (s *movingSource) Resolve(ctx context.Context, ref string) (ocispec.Descriptor, error) {
+	if s.calls.Add(1) > 1 {
+		return ocispec.Descriptor{}, errors.New("source tag moved")
+	}
+	return s.ReadOnlyStore.Resolve(ctx, ref)
+}
+
 func TestCopyReconcilesAmbiguousFailuresAgainstTheDestination(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "source")
 	index := testIndex(t)
@@ -452,8 +471,10 @@ func TestCopyReconcilesAmbiguousFailuresAgainstTheDestination(t *testing.T) {
 			layout, err := oci.OpenLayout(t.Context(), filepath.Join(t.TempDir(), "target"))
 			require.NoError(t, err)
 			destination := &landingDestination{Store: layout, land: tc.land, err: tc.err}
-			root, err := oci.Copy(t.Context(), oci.Source{Store: source, Reference: digest.String()}, oci.Destination{Store: destination, Reference: "1.0.0"})
+			moving := &movingSource{ReadOnlyStore: source}
+			root, err := oci.Copy(t.Context(), oci.Source{Store: moving, Reference: digest.String()}, oci.Destination{Store: destination, Reference: "1.0.0"})
 			assert.Equal(t, int32(1), destination.pushes.Load(), "the mutation is attempted exactly once")
+			assert.Equal(t, int32(1), moving.calls.Load(), "reconciliation must use the selected root")
 			if tc.wantErr {
 				require.Error(t, err)
 				return

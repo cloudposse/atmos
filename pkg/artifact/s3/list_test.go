@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"testing"
@@ -65,6 +66,11 @@ func TestList_PaginatesInLexicalOrderAndFiltersByLabel(t *testing.T) {
 	require.Len(t, page.Entries, 2)
 	assert.Equal(t, "a/app:10", page.Entries[0].Name+":"+page.Entries[0].Version)
 	assert.NotEmpty(t, page.NextCursor, "the label filter pages too")
+
+	large, err := repo.List(context.Background(), artifact.ListQuery{PageSize: math.MaxInt})
+	require.NoError(t, err)
+	assert.Len(t, large.Entries, 5)
+	assert.Empty(t, large.NextCursor)
 
 	named, err := repo.List(context.Background(), artifact.ListQuery{Name: "a/app"})
 	require.NoError(t, err)
@@ -147,4 +153,16 @@ func seedReferences(t *testing.T, repo *Repository, template *artifact.Record, n
 		}
 		return repo.putBytes(ctx, layout.ReferencePath(completed.Key()), encoded)
 	}))
+}
+
+func TestListEntrySkipsRetiredReference(t *testing.T) {
+	repo := newRepo(t, noneSpec())
+	first := publish(t, repo, &prepareSpec{files: map[string]string{"file": "old"}}, artifact.PublishOptions{})
+	state, err := repo.loadReference(context.Background(), layout.ReferenceKey(first.Pinned.Ref.Name, first.Pinned.Ref.Version))
+	require.NoError(t, err)
+	candidate := listCandidate{name: state.ref.Name, version: state.ref.Version, digest: state.ref.RecordDigest, generation: state.ref.Generation}
+	publish(t, repo, &prepareSpec{files: map[string]string{"file": "new"}, opID: "new"}, artifact.PublishOptions{ExpectedPrior: &first.Pinned, Force: true})
+	_, found, err := repo.listEntry(context.Background(), &candidate, nil)
+	require.NoError(t, err)
+	assert.False(t, found)
 }

@@ -173,6 +173,9 @@ func TestMultipartMinimumPartSizeAndAbort(t *testing.T) {
 	})
 	assert.Equal(t, "InvalidPart", apiCode(t, err), "a non-final part below the minimum is rejected")
 
+	_, err = client.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{Bucket: aws.String(srv.Bucket()), Key: aws.String("wrong"), UploadId: created.UploadId})
+	assert.Equal(t, "NoSuchUpload", apiCode(t, err))
+	assert.Len(t, srv.OpenUploads(), 1)
 	_, err = client.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{Bucket: aws.String(srv.Bucket()), Key: aws.String("m"), UploadId: created.UploadId})
 	require.NoError(t, err)
 	assert.Equal(t, 1, srv.AbortedUploads())
@@ -216,8 +219,8 @@ func TestRanges(t *testing.T) {
 			return "", err
 		}
 		defer out.Body.Close()
-		data, _ := io.ReadAll(out.Body)
-		return string(data), nil
+		data, err := io.ReadAll(out.Body)
+		return string(data), err
 	}
 	got, err := get("bytes=2-4")
 	require.NoError(t, err)
@@ -324,6 +327,10 @@ func TestRequestLogRecordsOrderAndHeaders(t *testing.T) {
 	assert.Equal(t, "a/b", requests[0].Key)
 	assert.Equal(t, "*", requests[0].Header.Get("If-None-Match"))
 	assert.Equal(t, http.StatusOK, requests[0].Status)
+	requests[0].Header.Set("If-None-Match", "changed")
+	requests[0].Query.Set("injected", "changed")
+	assert.Equal(t, "*", srv.Requests()[0].Header.Get("If-None-Match"))
+	assert.Empty(t, srv.Requests()[0].Query.Get("injected"))
 	assert.Equal(t, OpHeadObject, requests[1].Op)
 	assert.Len(t, srv.RequestsFor(OpHeadObject), 1)
 	srv.ResetRequests()
@@ -336,6 +343,8 @@ func TestDecodeAWSChunked(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello world", string(got))
 	_, err = decodeAWSChunked([]byte("zz\r\n"))
+	require.Error(t, err)
+	_, err = decodeAWSChunked([]byte("5\r\nhelloXX0\r\n"))
 	require.Error(t, err)
 	_, err = decodeAWSChunked([]byte("5\r\nhel"))
 	require.Error(t, err)
@@ -365,4 +374,27 @@ func TestEmulatorFromEnvSkipsWhenUnset(t *testing.T) {
 	t.Setenv(EmulatorBucketEnv, "b")
 	emulator := EmulatorFromEnv(t)
 	assert.Equal(t, Emulator{Endpoint: "http://localhost:4566", Bucket: "b", Region: "us-east-1"}, emulator)
+}
+
+func TestWeakIfMatchAndEmptyRange(t *testing.T) {
+	srv := NewServer(t)
+	first, err := putObject(t, srv.Client(), srv, "k", "value")
+	require.NoError(t, err)
+	_, err = putObject(t, srv.Client(), srv, "k", "new", func(in *s3.PutObjectInput) { in.IfMatch = aws.String("W/" + aws.ToString(first.ETag)) })
+	assert.Equal(t, "PreconditionFailed", apiCode(t, err))
+	srv.Seed("empty", nil, nil)
+	_, err = srv.Client().GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String(srv.Bucket()), Key: aws.String("empty"), Range: aws.String("bytes=0-")})
+	assert.Equal(t, "InvalidRange", apiCode(t, err))
+}
+
+func TestPageCapMustBePositive(t *testing.T) {
+	for _, cap := range []int{0, -1} {
+		assert.Panics(t, func() { NewServer(t, WithPageCap(cap)) })
+	}
+}
+
+func TestRangeEndMaxIntDoesNotOverflow(t *testing.T) {
+	got, ok := parseRange("bytes=0-9223372036854775807", 10)
+	require.True(t, ok)
+	assert.Equal(t, int64(10), got.end)
 }

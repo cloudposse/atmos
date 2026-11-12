@@ -153,10 +153,11 @@ func Copy(ctx context.Context, src Source, dst Destination, options ...CopyOptio
 		dst.Reference = src.Reference
 	}
 	config := newCopyConfig(options)
-	root, err := oras.Copy(ctx, guardedSource{ReadOnlyStore: src.Store}, src.Reference, guardedStore{Store: dst.Store}, dst.Reference,
+	var selected ocispec.Descriptor
+	root, err := oras.Copy(ctx, guardedSource{ReadOnlyStore: src.Store, selected: &selected}, src.Reference, guardedStore{Store: dst.Store}, dst.Reference,
 		oras.CopyOptions{CopyGraphOptions: config.graphOptions()})
 	if err != nil {
-		return reconcile(ctx, err, src.Store, src.Reference, dst)
+		return reconcile(ctx, err, selected, dst)
 	}
 	return root, nil
 }
@@ -173,13 +174,14 @@ func ExtendedCopy(ctx context.Context, src GraphSource, dst Destination, options
 		dst.Reference = src.Reference
 	}
 	config := newCopyConfig(options)
-	graph := guardedGraphSource{guardedSource: guardedSource{ReadOnlyStore: src.Store}, graph: src.Store}
+	var selected ocispec.Descriptor
+	graph := guardedGraphSource{guardedSource: guardedSource{ReadOnlyStore: src.Store, selected: &selected}, graph: src.Store}
 	root, err := oras.ExtendedCopy(ctx, graph, src.Reference, guardedStore{Store: dst.Store}, dst.Reference,
 		oras.ExtendedCopyOptions{ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{CopyGraphOptions: config.graphOptions()}})
 	if err == nil {
 		return root, nil
 	}
-	want, reconcileErr := reconcile(ctx, err, src.Store, src.Reference, dst)
+	want, reconcileErr := reconcile(ctx, err, selected, dst)
 	if reconcileErr != nil {
 		return want, reconcileErr
 	}
@@ -218,13 +220,9 @@ func referrersPresent(ctx context.Context, src ReadOnlyGraphStore, dst Store, ro
 }
 
 // reconcile decides the outcome of a failed copy by looking at the destination.
-func reconcile(ctx context.Context, cause error, src ReadOnlyStore, srcRef string, dst Destination) (ocispec.Descriptor, error) {
+func reconcile(ctx context.Context, cause error, want ocispec.Descriptor, dst Destination) (ocispec.Descriptor, error) {
 	failure := classifyCopyError(cause)
-	if !ambiguousWrite(ctx, failure) {
-		return ocispec.Descriptor{}, failure
-	}
-	want, err := src.Resolve(ctx, srcRef)
-	if err != nil {
+	if !ambiguousWrite(ctx, failure) || want.Digest == "" {
 		return ocispec.Descriptor{}, failure
 	}
 	have, err := dst.Store.Resolve(ctx, dst.Reference)
@@ -242,7 +240,18 @@ func classifyCopyError(err error) error {
 }
 
 // guardedSource aborts as soon as the context ends, even for stores that ignore it.
-type guardedSource struct{ ReadOnlyStore }
+type guardedSource struct {
+	ReadOnlyStore
+	selected *ocispec.Descriptor
+}
+
+func (g guardedSource) Resolve(ctx context.Context, reference string) (ocispec.Descriptor, error) {
+	desc, err := g.ReadOnlyStore.Resolve(ctx, reference)
+	if err == nil && g.selected != nil {
+		*g.selected = desc
+	}
+	return desc, err
+}
 
 func (g guardedSource) Fetch(ctx context.Context, target ocispec.Descriptor) (io.ReadCloser, error) {
 	if err := ctx.Err(); err != nil {

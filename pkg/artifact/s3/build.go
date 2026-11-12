@@ -78,34 +78,44 @@ func (r *Repository) retire(ctx context.Context, job *publishJob, plan *publishP
 		return
 	}
 	if plan.abandoned != nil {
-		r.removePayload(cleanup, plan.abandoned, keep)
+		if err := r.removePayload(cleanup, plan.abandoned, keep); err != nil {
+			return
+		}
 	}
 	if plan.prior != nil {
-		r.retirePrior(cleanup, plan.prior, job, keep)
+		if err := r.retirePrior(cleanup, plan.prior, job, keep); err != nil {
+			return
+		}
 	}
 	_ = r.deleteObject(cleanup, layout.OperationPath(job.opID))
 }
 
 // retirePrior removes the payload, Record, and evidence of the replaced publication.
-func (r *Repository) retirePrior(ctx context.Context, prior *layout.Prior, job *publishJob, keep []string) {
+func (r *Repository) retirePrior(ctx context.Context, prior *layout.Prior, job *publishJob, keep []string) error {
 	if prior.RecordDigest == "" || prior.RecordDigest == job.recordDigest {
-		return
+		return nil
 	}
 	if prior.Location != "" {
-		if record, _, err := r.loadRecord(ctx, prior.RecordDigest); err == nil {
-			r.removePayload(ctx, &ownedPayload{packaging: prior.Packaging, location: prior.Location, set: setOfRecord(record)}, keep)
+		record, _, err := r.loadRecord(ctx, prior.RecordDigest)
+		if err != nil {
+			return err
+		}
+		if err := r.removePayload(ctx, &ownedPayload{packaging: prior.Packaging, location: prior.Location, set: setOfRecord(record)}, keep); err != nil {
+			return err
 		}
 	}
-	_ = r.deleteEvidence(ctx, prior.RecordDigest)
-	_ = r.deleteObject(ctx, layout.RecordPath(prior.RecordDigest))
+	if err := r.deleteEvidence(ctx, prior.RecordDigest); err != nil {
+		return err
+	}
+	return r.deleteObject(ctx, layout.RecordPath(prior.RecordDigest))
 }
 
 // removePayload deletes the objects of a payload that the new publication does not reuse.
-func (r *Repository) removePayload(ctx context.Context, owned *ownedPayload, keep []string) {
+func (r *Repository) removePayload(ctx context.Context, owned *ownedPayload, keep []string) error {
 	keys, err := owned.set.keys(owned.packaging, owned.location)
 	if err != nil {
-		return
+		return err
 	}
 	keys = slices.DeleteFunc(keys, func(key string) bool { return slices.Contains(keep, key) })
-	_ = r.deleteAll(ctx, keys)
+	return r.deleteAll(ctx, keys)
 }

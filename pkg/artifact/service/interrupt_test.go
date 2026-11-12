@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -141,6 +142,35 @@ func TestPublish_TemporaryFailureExhaustsAttempts(t *testing.T) {
 	var temporary *temporaryError
 	require.ErrorAs(t, err, &temporary)
 	assert.Equal(t, 3, e.repos["dst"].Calls("Publish"))
+}
+
+func TestPublish_CancellationDuringUncommittedWriteIsPreserved(t *testing.T) {
+	caps := artifacttest.DefaultCapabilities()
+	m := newMockSetup(t, &caps)
+	m.expectLock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	gomock.InOrder(
+		m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(artifact.PinnedReference{}, errUtils.ErrArtifactNotFound),
+		m.repo.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *artifact.PreparedArtifact, artifact.PublishOptions) (*artifact.PublishResult, error) {
+			cancel()
+			return nil, errTransport
+		}),
+		m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(artifact.PinnedReference{}, errUtils.ErrArtifactNotFound),
+	)
+	_, err := m.svc.Publish(ctx, m.e.publishRequest("dst", m.e.source("hello")))
+	require.ErrorIs(t, err, errTransport)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestPublish_ExecutionAttemptLimitIsHonored(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	e.repos["dst"].InjectFailure(artifacttest.FailBeforePayload, &temporaryError{"throttled"}, 10)
+	request := e.publishRequest("dst", e.source("hello"))
+	request.Execution.MaxAttempts = 1
+	_, err := e.svc.PublishDetailed(context.Background(), request)
+	require.Error(t, err)
+	assert.Equal(t, 1, e.repos["dst"].Calls("Publish"))
 }
 
 func TestPublish_TemporaryFailureAfterCommitIsReconciledWithoutRetry(t *testing.T) {

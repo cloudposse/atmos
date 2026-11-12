@@ -163,6 +163,8 @@ func CleanLocation(location string) (string, error) {
 		switch {
 		case segment == "" || segment == "." || segment == "..":
 			return "", fmt.Errorf("%w: location %q has an empty, '.', or '..' segment", errUtils.ErrArtifactUnsafePath, location)
+		case strings.HasSuffix(segment, ".") || strings.HasSuffix(segment, " ") || windowsDeviceName(segment):
+			return "", fmt.Errorf("%w: location %q contains a Windows-reserved name", errUtils.ErrArtifactUnsafePath, location)
 		case strings.EqualFold(segment, artifact.ReservedNamespace):
 			return "", fmt.Errorf("%w: location %q enters the reserved %s namespace", errUtils.ErrArtifactUnsafePath, location, artifact.ReservedNamespace)
 		}
@@ -183,6 +185,17 @@ func checkLocationShape(location string) error {
 		return fmt.Errorf("%w: location %q contains control or reserved characters", errUtils.ErrArtifactUnsafePath, location)
 	}
 	return nil
+}
+
+// windowsDeviceName identifies reserved device basenames, including names with extensions.
+func windowsDeviceName(segment string) bool {
+	base, _, _ := strings.Cut(segment, ".")
+	base = strings.ToUpper(base)
+	switch base {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	return len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) && base[3] >= '1' && base[3] <= '9'
 }
 
 func isControl(r rune) bool {

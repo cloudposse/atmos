@@ -378,7 +378,8 @@ func TestNativeImagePluginAndLegacyCosignSignatures(t *testing.T) {
 	t.Run("image signed through the signer", func(t *testing.T) {
 		image := pushImage(t, reg, testPrefix+"/tools/img", "v1")
 		pinned := mustResolveRef(t, repo, artifact.Ref{Name: "tools/img", Version: "v1"})
-		subject := artifact.SignatureSubject{Kind: artifact.SubjectOCIRoot, Digest: image.manifest, MediaType: "application/vnd.oci.image.manifest.v1+json"}
+		desc := targetPinnedDescriptor(t, repo, pinned)
+		subject := artifact.SignatureSubject{Kind: artifact.SubjectOCIRoot, Digest: image.manifest, MediaType: desc.MediaType}
 		_, err := repo.Verify(ctx, subject, policy)
 		require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
 		_, err = repo.Sign(ctx, subject, tr.keyless, artifact.SignOptions{})
@@ -492,4 +493,18 @@ func reconstructedIndex(t *testing.T, reg *registry, image foreignImage, childDi
 	require.NoError(t, err)
 	assert.NotEmpty(t, image.children)
 	return digest.Digest(rebuilt.String())
+}
+
+func TestBindSubjectRequiresRootDescriptorMetadata(t *testing.T) {
+	desc := ocispec.Descriptor{Digest: digest.FromString("root"), MediaType: "application/example", Size: 42}
+	loaded := &root{desc: desc}
+	subject := artifact.SignatureSubject{Kind: artifact.SubjectOCIRoot, Digest: desc.Digest, MediaType: desc.MediaType, Size: desc.Size}
+	require.NoError(t, bindSubject(subject, loaded))
+	subject.Size = 0
+	require.NoError(t, bindSubject(subject, loaded))
+	subject.Size = 41
+	require.ErrorIs(t, bindSubject(subject, loaded), errUtils.ErrArtifactRefInvalid)
+	subject.Size = 42
+	subject.MediaType = "application/other"
+	require.ErrorIs(t, bindSubject(subject, loaded), errUtils.ErrArtifactRefInvalid)
 }

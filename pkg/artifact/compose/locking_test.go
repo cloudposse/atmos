@@ -2,6 +2,9 @@ package compose_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,9 +13,11 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
 	"github.com/cloudposse/atmos/pkg/artifact/compose"
 	"github.com/cloudposse/atmos/pkg/artifact/s3"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // A local (host-scope) repository that delegates locking to an S3 coordinator is coordinated with
@@ -93,4 +98,63 @@ func TestInsufficientLocalScopeIsRejectedBeforeAnyWrite(t *testing.T) {
 	}
 	_, err := compose.New(&schema.AtmosConfiguration{Artifacts: schema.ArtifactConfig{Repositories: repos}})
 	require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid, "configuration requires a delegate that can provide the scope")
+}
+
+// The coordinator is opened from configuration with its own identity, rather than the target's.
+func TestDelegatedMutationResolvesCoordinatorIdentity(t *testing.T) {
+	fake := s3test.NewServer(t)
+	creds := filepath.Join(t.TempDir(), "credentials")
+	require.NoError(t, os.WriteFile(creds, []byte("[default]\naws_access_key_id = test\naws_secret_access_key = test\n"), 0o600))
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	repos := map[string]schema.ArtifactRepositoryConfig{
+		"work": {
+			Kind: artifact.RepositoryKindLocalDir, Identity: "target-identity", Options: map[string]any{"path": t.TempDir()},
+			Locking: &schema.ArtifactLockingConfig{RequiredScope: "repository", Repository: "coord"},
+		},
+		"coord": {
+			Kind: artifact.RepositoryKindS3, Identity: "coordinator-identity",
+			Options: map[string]any{"bucket": fake.Bucket(), "endpoint": fake.Endpoint(), "region": "us-east-1", "path_style": true},
+		},
+	}
+	var mu sync.Mutex
+	var identities []string
+	resolver := func(_ context.Context, identity string) (any, error) {
+		mu.Lock()
+		identities = append(identities, identity)
+		mu.Unlock()
+		return &store.AWSAuthConfig{CredentialsFile: creds, Profile: "default", Region: "us-east-1"}, nil
+	}
+	composition := build(t, repos, nil, compose.WithIdentityResolver(resolver))
+	_, err := composition.Repositories.Open(context.Background(), "work")
+	require.NoError(t, err)
+	_, err = composition.Repositories.Open(context.Background(), "coord")
+	require.NoError(t, err)
+	assert.Empty(t, identities, "opening repositories must not authenticate")
+	_, err = composition.Service.Publish(context.Background(), publishRequest("work", source(t, "hello")))
+	require.NoError(t, err)
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, identities)
+	for _, identity := range identities {
+		assert.Equal(t, "coordinator-identity", identity)
+	}
+}
+
+func TestDelegatedS3MutationsUseTheirOwnReferenceClaim(t *testing.T) {
+	bucket := newS3Fixture(t)
+	trust := newTrustFixture(t)
+	work := bucket.repository()
+	work.Options["prefix"] = "work"
+	work.Locking = &schema.ArtifactLockingConfig{RequiredScope: "repository", Repository: "coord"}
+	coord := bucket.repository()
+	coord.Options["prefix"] = "coord"
+	composition := build(t, map[string]schema.ArtifactRepositoryConfig{"work": work, "coord": coord}, nil,
+		trust.option, trust.signer, compose.WithS3Options(bucket.option))
+	ctx := context.Background()
+	published, err := composition.Service.Publish(ctx, publishRequest("work", source(t, "hello")))
+	require.NoError(t, err)
+	_, err = composition.Service.Sign(ctx, artifact.SignRequest{Repository: "work", Ref: artifact.Ref{Name: appName, Digest: published.RecordDigest}})
+	require.NoError(t, err)
+	_, err = composition.Service.Delete(ctx, artifact.DeleteRequest{Repository: "work", Ref: appRef()})
+	require.NoError(t, err)
 }

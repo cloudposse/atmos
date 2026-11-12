@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// Delete implements [artifact.Service]. The reference is resolved once; deletion is scoped to the
-// pinned subject within the repository's declared delete capability and guarded by the writer lock.
+// Delete implements [artifact.Service]. Deletion is scoped to the pinned subject within the
+// repository's declared delete capability and guarded by the writer locks. Digest references are
+// inspected before locking to identify the canonical reference, then resolved again under lock.
 func (s *Service) Delete(ctx context.Context, request artifact.DeleteRequest) (*artifact.OperationResult, error) {
 	defer perf.Track(nil, "service.Service.Delete")()
 
@@ -43,7 +45,24 @@ func validateRepositoryRef(repository string, ref artifact.Ref) error {
 
 func (s *Service) runDelete(ctx context.Context, op *operation, request *artifact.DeleteRequest, info *RepositoryInfo, repo artifact.Repository) error {
 	resource := lockTarget{alias: request.Repository, repo: repo, info: info, resource: request.Ref.String()}
-	locks, err := s.acquireLocks(ctx, op, opDelete, []lockTarget{resource})
+	subjectResource := lockTarget{alias: request.Repository, repo: repo, info: info, resource: subjectLockResource(request.Ref.Name)}
+	targets := []lockTarget{resource, subjectResource}
+	canonical := resource.resource
+	if request.Ref.IsDigest() {
+		prePinned, err := repo.Resolve(ctx, request.Ref)
+		if err != nil {
+			return err
+		}
+		preInspection, err := repo.Inspect(ctx, prePinned)
+		if err != nil {
+			return err
+		}
+		if preInspection.Record != nil {
+			canonical = preInspection.Record.Name + ":" + preInspection.Record.Version
+			targets = append(targets, lockTarget{alias: request.Repository, repo: repo, info: info, resource: canonical})
+		}
+	}
+	locks, err := s.acquireLocks(ctx, op, opDelete, targets)
 	if err != nil {
 		return err
 	}
@@ -53,7 +72,10 @@ func (s *Service) runDelete(ctx context.Context, op *operation, request *artifac
 	if err != nil {
 		return err
 	}
-	result, err := repo.Delete(ctx, pinned, artifact.DeleteOptions{ExpectedCurrent: &pinned, Scope: info.Capabilities.Delete, Lock: locks.handleFor(request.Repository)})
+	if request.Ref.IsDigest() && inspection.Record != nil && canonical != inspection.Record.Name+":"+inspection.Record.Version {
+		return fmt.Errorf("%w: reference changed while acquiring the delete locks", errUtils.ErrArtifactConflict)
+	}
+	result, err := repo.Delete(ctx, pinned, artifact.DeleteOptions{ExpectedCurrent: &pinned, Scope: info.Capabilities.Delete, Lock: locks.handleForResource(request.Repository, canonical)})
 	if err != nil {
 		return fmt.Errorf("delete %s in repository %q: %w", request.Ref, request.Repository, err)
 	}

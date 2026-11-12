@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -128,6 +129,13 @@ func TestLegacyCIFixtureStillReadsThroughCurrentStore(t *testing.T) {
 	assert.Equal(t, map[string]string{"plan.tfplan": legacyPlanBody, ".terraform.lock.hcl": legacyLockBody}, bodies)
 	assert.Equal(t, legacyMetadata().Stack, metadata.Stack)
 	assert.Equal(t, legacyMetadata().SHA, metadata.SHA)
+	assert.Equal(t, legacyMetadata().Component, metadata.Component)
+	assert.Equal(t, legacyMetadata().BaseSHA, metadata.BaseSHA)
+	assert.Equal(t, legacyMetadata().Branch, metadata.Branch)
+	assert.Equal(t, legacyMetadata().RunID, metadata.RunID)
+	assert.Equal(t, legacyMetadata().Repository, metadata.Repository)
+	assert.Equal(t, legacyMetadata().AtmosVersion, metadata.AtmosVersion)
+	assert.True(t, legacyMetadata().CreatedAt.Equal(metadata.CreatedAt))
 	assert.Equal(t, 42, metadata.PRNumber)
 	assert.Equal(t, legacyTarSHA256, metadata.SHA256)
 	assert.Equal(t, map[string]string{"env": "dev", "zone": "a"}, metadata.Custom)
@@ -192,6 +200,11 @@ func TestPluginReleaseFixtureDigestsAreStable(t *testing.T) {
 			got, err := os.ReadFile(filepath.Join(destination, "bin", "plugin"))
 			require.NoError(t, err)
 			assert.Equal(t, want, got, platform)
+			if runtime.GOOS != "windows" {
+				info, err := os.Stat(filepath.Join(destination, "bin", "plugin"))
+				require.NoError(t, err)
+				assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
+			}
 		}
 	})
 }

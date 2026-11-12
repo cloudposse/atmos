@@ -130,6 +130,19 @@ func applyOverrides(r *jsonschema.Reflector, root *jsonschema.Schema) {
 	overrideSchemasSection(r, root)
 	applyPolymorphicOverrides(root)
 	allowYamlFunctions(root)
+	// Artifact trusted keys are decoded strictly and do not use the generic
+	// string-to-slice coercion that other configuration fields support.
+	if def := root.Definitions["ArtifactVerificationConfig"]; def != nil {
+		if keys, ok := def.Properties.Get("trusted_keys"); ok {
+			filtered := keys.AnyOf[:0]
+			for _, branch := range keys.AnyOf {
+				if branch.Type != typeString {
+					filtered = append(filtered, branch)
+				}
+			}
+			keys.AnyOf = filtered
+		}
+	}
 }
 
 // applyPolymorphicOverrides relaxes shapes that custom unmarshalers accept

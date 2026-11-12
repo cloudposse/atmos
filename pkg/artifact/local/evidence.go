@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"strings"
 
@@ -15,9 +16,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// maxEvidenceFiles bounds how many evidence files one verification or export reads. More than
-// this is reported, not silently dropped.
-const maxEvidenceFiles = 64
+// maxMalformedEvidence bounds diagnostics and reads for invalid evidence entries.
+const maxMalformedEvidence = 64
+
+var errTooManyMalformedEvidence = errors.New("too many malformed evidence files")
 
 // loadedEvidence is one stored evidence file that parsed and matched its file name.
 type loadedEvidence struct {
@@ -27,34 +29,47 @@ type loadedEvidence struct {
 
 // loadEvidence reads the evidence stored for a Record subject. Malformed or oversize files are
 // reported as diagnostics and skipped; they can never override valid matching evidence.
-func (t *tree) loadEvidence(subject digest.Digest) ([]loadedEvidence, []artifact.Diagnostic) {
+func (t *tree) loadEvidence(subject digest.Digest) ([]loadedEvidence, []artifact.Diagnostic, error) {
 	dir := layout.SignatureDir(artifact.SubjectRecord, subject)
-	entries, err := fs.ReadDir(t.FS(), dir)
+	file, err := t.Open(native(dir))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, nil
+	}
 	if err != nil {
-		return nil, nil
+		return nil, nil, fmt.Errorf("open evidence directory: %w", err)
 	}
-	var (
-		loaded []loadedEvidence
-		diags  []artifact.Diagnostic
-	)
-	for _, entry := range entries {
-		if len(loaded) >= maxEvidenceFiles {
-			diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "evidence-truncated", Message: fmt.Sprintf("more than %d evidence files; the rest were not read", maxEvidenceFiles)})
-			break
+	defer file.Close()
+	var loaded []loadedEvidence
+	var diags []artifact.Diagnostic
+	ignored := 0
+	for {
+		entries, readErr := file.ReadDir(maxMalformedEvidence)
+		for _, entry := range entries {
+			stem, ok := strings.CutSuffix(entry.Name(), ".json")
+			if entry.IsDir() || !ok {
+				ignored++
+			} else {
+				locator := dir + "/" + entry.Name()
+				item, problem := t.readEvidenceFile(locator, stem)
+				if problem == nil {
+					loaded = append(loaded, loadedEvidence{evidence: item, locator: locator})
+					continue
+				}
+				ignored++
+				diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "malformed-evidence", Message: fmt.Sprintf("%s was ignored: %v", locator, problem)})
+			}
+			if ignored > maxMalformedEvidence {
+				diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "evidence-truncated", Message: "too many invalid evidence entries; remaining entries were not read"})
+				return nil, diags, errTooManyMalformedEvidence
+			}
 		}
-		stem, ok := strings.CutSuffix(entry.Name(), ".json")
-		if entry.IsDir() || !ok {
-			continue
+		if errors.Is(readErr, io.EOF) {
+			return loaded, diags, nil
 		}
-		locator := dir + "/" + entry.Name()
-		item, problem := t.readEvidenceFile(locator, stem)
-		if problem != nil {
-			diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "malformed-evidence", Message: fmt.Sprintf("%s was ignored: %v", locator, problem)})
-			continue
+		if readErr != nil {
+			return nil, diags, fmt.Errorf("read evidence directory: %w", readErr)
 		}
-		loaded = append(loaded, loadedEvidence{evidence: item, locator: locator})
 	}
-	return loaded, diags
 }
 
 func (t *tree) readEvidenceFile(locator, hexDigest string) (*layout.Evidence, error) {
@@ -71,7 +86,7 @@ func (t *tree) readEvidenceFile(locator, hexDigest string) (*layout.Evidence, er
 
 // listEvidence returns the stored evidence descriptors for a subject, skipping malformed files.
 func (t *tree) listEvidence(subject digest.Digest) []artifact.SignatureEvidence {
-	loaded, _ := t.loadEvidence(subject)
+	loaded, _, _ := t.loadEvidence(subject)
 	out := make([]artifact.SignatureEvidence, 0, len(loaded))
 	for index := range loaded {
 		out = append(out, loaded[index].evidence.Reference(loaded[index].locator))
@@ -108,7 +123,7 @@ func (r *Repository) checkSubject(operation string, subject artifact.SignatureSu
 // and stores it as a detached file named by the evidence digest. Evidence lives beside the Record,
 // so signing never changes the Record, the reference, or the payload. A signature added after
 // publication covers the Record that describes the archive, not the original archive bytes.
-func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, _ artifact.SignOptions) ([]artifact.SignatureEvidence, error) {
+func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, options artifact.SignOptions) (result []artifact.SignatureEvidence, err error) {
 	defer perf.Track(nil, "local.Repository.Sign")()
 
 	if err := r.checkSubject("sign", subject); err != nil {
@@ -122,6 +137,22 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 		return nil, r.missingRoot(err, artifact.Ref{Name: "(subject)", Digest: subject.Digest})
 	}
 	defer t.Close()
+	held, err := r.lockEvidenceReference(ctx, t, &artifact.PinnedReference{RecordDigest: subject.Digest}, options.Lock)
+	if err != nil {
+		return nil, err
+	}
+	if held != nil {
+		defer func() {
+			if releaseErr := held.Release(context.WithoutCancel(ctx)); err == nil {
+				err = releaseErr
+			}
+		}()
+	}
+	return r.signLocked(ctx, t, subject, signer)
+}
+
+// signLocked writes evidence while the reference lock is held.
+func (r *Repository) signLocked(ctx context.Context, t *tree, subject artifact.SignatureSubject, signer artifact.Signer) ([]artifact.SignatureEvidence, error) {
 	raw, err := r.requireCurrentRecord(t, subject.Digest)
 	if err != nil {
 		return nil, err
@@ -185,9 +216,15 @@ func (r *Repository) Verify(ctx context.Context, subject artifact.SignatureSubje
 	if _, err := r.requireCurrentRecord(t, subject.Digest); err != nil {
 		return nil, err
 	}
-	loaded, diags := t.loadEvidence(subject.Digest)
+	loaded, diags, loadErr := t.loadEvidence(subject.Digest)
+	if loadErr != nil {
+		diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "evidence-read-failed", Message: loadErr.Error()})
+	}
 	blobs := evidenceBlobs(subject, loaded, &diags)
 	result := &artifact.VerificationResult{Subject: subject, Status: artifact.VerificationFailed, Diagnostics: diags}
+	if loadErr != nil {
+		return result, fmt.Errorf("%w: %w", errUtils.ErrArtifactVerificationFailed, loadErr)
+	}
 	if fingerprint, fingerprintErr := policy.Fingerprint(); fingerprintErr == nil {
 		result.PolicyFingerprint = fingerprint
 	}
@@ -231,7 +268,7 @@ func (r *Repository) finishVerification(base, verified *artifact.VerificationRes
 		return result, verifyErr
 	case verifyErr != nil:
 		return result, fmt.Errorf("%w: %w", errUtils.ErrArtifactVerificationFailed, verifyErr)
-	case result.Status == artifact.VerificationFailed:
+	case result.Status != artifact.VerificationVerified:
 		return result, fmt.Errorf("%w: no valid permitted signature satisfies the policy for %s", errUtils.ErrArtifactVerificationFailed, result.Subject.Digest)
 	}
 	return result, nil
@@ -254,7 +291,10 @@ func (r *Repository) ReadEvidence(ctx context.Context, pinned *artifact.PinnedRe
 	if _, err := r.requireCurrentRecord(t, pinned.RecordDigest); err != nil {
 		return nil, err
 	}
-	loaded, _ := t.loadEvidence(pinned.RecordDigest)
+	loaded, _, err := t.loadEvidence(pinned.RecordDigest)
+	if err != nil {
+		return nil, err
+	}
 	blobs := make([]artifact.EvidenceBlob, 0, len(loaded))
 	for index := range loaded {
 		blobs = append(blobs, loaded[index].evidence.Blob(loaded[index].locator))
@@ -265,7 +305,7 @@ func (r *Repository) ReadEvidence(ctx context.Context, pinned *artifact.PinnedRe
 // WriteEvidence implements [artifact.EvidenceWriter]: it imports evidence for an artifact this
 // repository already holds. The evidence must bind to the pinned Record and carry matching bytes;
 // importing never changes the Record or the reference.
-func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedReference, evidence []artifact.EvidenceBlob, _ artifact.LockHandle) ([]artifact.SignatureEvidence, error) {
+func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedReference, evidence []artifact.EvidenceBlob, lock artifact.LockHandle) (stored []artifact.SignatureEvidence, err error) {
 	defer perf.Track(nil, "local.Repository.WriteEvidence")()
 
 	if err := ctx.Err(); err != nil {
@@ -276,9 +316,25 @@ func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedR
 		return nil, r.missingRoot(err, pinned.Ref)
 	}
 	defer t.Close()
+	held, err := r.lockEvidenceReference(ctx, t, pinned, lock)
+	if err != nil {
+		return nil, err
+	}
+	if held != nil {
+		defer func() {
+			if releaseErr := held.Release(context.WithoutCancel(ctx)); err == nil {
+				err = releaseErr
+			}
+		}()
+	}
 	if _, err := r.requireCurrentRecord(t, pinned.RecordDigest); err != nil {
 		return nil, err
 	}
+	return r.writeEvidenceLocked(t, pinned, evidence)
+}
+
+// writeEvidenceLocked validates and stores each evidence blob under the reference lock.
+func (r *Repository) writeEvidenceLocked(t *tree, pinned *artifact.PinnedReference, evidence []artifact.EvidenceBlob) ([]artifact.SignatureEvidence, error) {
 	stored := make([]artifact.SignatureEvidence, 0, len(evidence))
 	for index := range evidence {
 		blob := &evidence[index]
@@ -299,4 +355,20 @@ func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedR
 		stored = append(stored, item)
 	}
 	return stored, nil
+}
+
+// lockEvidenceReference reuses a matching caller lock or acquires the reference lock.
+func (r *Repository) lockEvidenceReference(ctx context.Context, t *tree, pinned *artifact.PinnedReference, lock artifact.LockHandle) (*fileLock, error) {
+	record, _, err := t.loadRecord(pinned.RecordDigest)
+	if err != nil {
+		return nil, err
+	}
+	resource := record.Name + ":" + record.Version
+	if localLock, ok := lock.(*fileLock); ok {
+		if localLock.Resource() != resource {
+			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, resource)
+		}
+		return nil, nil
+	}
+	return r.acquire(ctx, resource, r.settings.owner, "")
 }

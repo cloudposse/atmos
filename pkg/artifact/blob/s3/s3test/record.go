@@ -85,7 +85,16 @@ func (s *Server) Requests() []Request {
 
 	s.rec.mu.Lock()
 	defer s.rec.mu.Unlock()
-	return append([]Request(nil), s.rec.requests...)
+	requests := append([]Request(nil), s.rec.requests...)
+	for i := range requests {
+		query := make(url.Values, len(requests[i].Query))
+		for key, values := range requests[i].Query {
+			query[key] = append([]string(nil), values...)
+		}
+		requests[i].Query = query
+		requests[i].Header = requests[i].Header.Clone()
+	}
+	return requests
 }
 
 // RequestsFor returns the recorded requests of one operation.
