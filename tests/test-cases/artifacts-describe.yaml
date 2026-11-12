@@ -17,5 +17,5 @@ tests:
         - '"shared"'
         - '"bucket": "example-artifacts"'
         - '"require_signature": true'
-        - '"/keys/release.pub"'
+        - '"trusted_keys":\s*\[\s*"[^"]*(?:/|\\\\)keys(?:/|\\\\)release\.pub"'
       exit_code: 0
