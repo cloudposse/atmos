@@ -31,7 +31,7 @@ type Store interface {
 	// with ErrBlobNotFound.
 	Get(ctx context.Context, key string, opts GetOptions) (*Object, error)
 
-	// Stat returns object attributes without reading the body. A missing object fails with
+	// Stat returns object attributes. Some backends read the body to compute an ETag. A missing object fails with
 	// ErrBlobNotFound.
 	Stat(ctx context.Context, key string, opts StatOptions) (*ObjectInfo, error)
 
