@@ -26,7 +26,10 @@ func gitTestEnv(t *testing.T) []string {
 
 	env := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
-		if strings.HasPrefix(entry, "GIT_DIR=") || strings.HasPrefix(entry, "GIT_INDEX_FILE=") || strings.HasPrefix(entry, "GIT_WORK_TREE=") || strings.HasPrefix(entry, "GIT_COMMON_DIR=") {
+		key, _, _ := strings.Cut(entry, "=")
+		switch key {
+		case "GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+			"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES":
 			continue
 		}
 		env = append(env, entry)
@@ -38,6 +41,34 @@ func gitTestEnv(t *testing.T) []string {
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_TERMINAL_PROMPT=0",
 	)
+}
+
+// TestGitTestEnvIsolatesObjectStorage verifies inherited overrides cannot redirect
+// object writes or make temporary repositories depend on external object stores.
+func TestGitTestEnvIsolatesObjectStorage(t *testing.T) {
+	requireGitBinary(t)
+
+	externalObjects := t.TempDir()
+	for _, key := range []string{
+		"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+		"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	} {
+		t.Setenv(key, externalObjects)
+	}
+	env := gitTestEnv(t)
+	repo := t.TempDir()
+	gitRun(t, env, "", "init", repo)
+	file := filepath.Join(repo, "content.txt")
+	writeFile(t, file, "isolated object storage\n")
+	sha := strings.TrimSpace(gitRun(t, env, repo, "hash-object", "-w", file))
+	require.Contains(t, []int{40, 64}, len(sha))
+	assert.FileExists(t, filepath.Join(repo, ".git", "objects", sha[:2], sha[2:]))
+	entries, err := os.ReadDir(externalObjects)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "Git must not write to the inherited object store")
+	for _, entry := range env {
+		assert.False(t, strings.HasPrefix(entry, "GIT_ALTERNATE_OBJECT_DIRECTORIES="))
+	}
 }
 
 // gitRun executes a raw git command for test setup/verification.
