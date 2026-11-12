@@ -6,12 +6,14 @@ on:
       - '**.md'
       - '!website/**'
       - 'lychee.toml'
+      - '.github/workflows/link-check.yml'
   push:
     branches: [main]
     paths:
       - '**.md'
       - '!website/**'
       - 'lychee.toml'
+      - '.github/workflows/link-check.yml'
   workflow_dispatch:
 
 permissions:
@@ -37,10 +39,39 @@ jobs:
         with:
           persist-credentials: false
 
+      # Cursor's marketplace intermittently sends HTTP/2 responses Lychee cannot parse on
+      # GitHub runners. Check this exact URL over HTTP/1.1 and fail on any non-2xx response;
+      # all other URLs continue through the normal Lychee configuration.
+      - name: Check Cursor marketplace over HTTP/1.1
+        shell: bash
+        run: |
+          status=$(curl --http1.1 --fail --location --silent --show-error --max-time 60 --retry 3 \
+            --proto '=https' --proto-redir '=https' --output /dev/null --write-out '%{http_code}' \
+            'https://cursor.com/marketplace')
+          case "$status" in
+            2??) ;;
+            *) echo "Cursor marketplace returned HTTP $status" >&2; exit 1 ;;
+          esac
+
+      - name: Prepare Lychee CI configuration
+        shell: bash
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+
+          config = Path("lychee.toml").read_text()
+          marker = "exclude = ["
+          if config.count(marker) != 1:
+              raise SystemExit("expected exactly one Lychee URL exclusion list")
+          pattern = r"  '^https://cursor\.com/marketplace/?$'," + "\n"
+          Path(os.environ["RUNNER_TEMP"], "lychee-ci.toml").write_text(config.replace(marker, marker + "\n" + pattern, 1))
+          PYTHON
+
       - name: Check links with lychee
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
-          args: --config lychee.toml --root-dir ${{ github.workspace }} '**/*.md'
+          args: --config ${{ runner.temp }}/lychee-ci.toml --root-dir ${{ github.workspace }} '**/*.md'
           fail: true
           jobSummary: true
           token: ${{ secrets.GITHUB_TOKEN }}

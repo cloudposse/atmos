@@ -1,0 +1,75 @@
+---
+slug: terminal-links
+title: "Clickable Terminal Links"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+When a CLI needs you to open a page in a browser, it usually prints a URL and leaves the rest to you:
+select it, copy it, paste it. Sign-in URLs make that painful. They're full of tokens, they often run
+to hundreds of characters, and they wrap across the screen. Atmos can now deliver those links the way
+your terminal handles best: as a short clickable link, as a copy on your clipboard, or as the plain URL.
+
+<!--truncate-->
+
+## The Problem
+
+Several Atmos commands hand you a URL to open yourself. [`atmos auth login`](/cli/commands/auth/login)
+shows the AWS sign-in URL in case the browser doesn't open, and
+[`atmos auth console`](/cli/commands/auth/console) shows a console sign-in URL when it doesn't launch a
+browser. AWS IAM Identity Center URLs now exceed 500 characters, and console sign-in URLs carry a full
+session token. Printing the raw URL was the only option, even though most modern terminals can show a
+short label as a clickable hyperlink and every desktop has a clipboard.
+
+## The Fix
+
+A new [`settings.terminal.links`](/cli/configuration/settings/terminal#long-urls) option controls how
+Atmos delivers these links:
+
+- `auto` (default): a short clickable link, such as "Open AWS sign-in", when your terminal is known to
+  support hyperlinks. Otherwise, the plain URL.
+- `osc8`: always the clickable link. Use this when your terminal supports hyperlinks but Atmos can't
+  tell, which is common inside a container or over SSH.
+- `clipboard`: copy the URL straight to your clipboard. If no clipboard is reachable, Atmos asks the
+  terminal to copy it and also prints the URL.
+- `raw`: always the plain URL.
+
+In `auto` mode, Atmos recognizes iTerm2, VS Code, WezTerm, Ghostty, kitty, Windows Terminal, GNOME
+Terminal and other VTE-based terminals, Konsole, and Orca. Inside `tmux` or `screen`, or anywhere it can't
+identify the terminal, it falls back to the plain URL. When output isn't a terminal, such as in CI or
+when piped, Atmos always prints the plain URL and never touches the clipboard. Atmos also honors
+the `FORCE_HYPERLINK` convention other command-line tools use: `1` forces the clickable link and `0`
+turns it off.
+
+The AWS sign-in prompts are tidier too. A URL that fits in 80 columns stays inside the prompt's box. A
+longer one is delivered below the box, so the border no longer wraps into the URL or ends up in the text
+you copy.
+
+## How to Use It
+
+Most people don't need to change anything: `auto` already gives you a clickable link in a supported
+terminal.
+
+To pick a mode for your project, set it in `atmos.yaml`:
+
+```yaml
+settings:
+  terminal:
+    links: clipboard   # auto, osc8, clipboard, or raw
+```
+
+To override it for a shell session or a single command, use the
+[`ATMOS_TERMINAL_LINKS`](/cli/environment-variables) environment variable or the
+[`--links`](/cli/global-flags#core-global-flags) global flag:
+
+```shell
+export ATMOS_TERMINAL_LINKS=osc8
+atmos auth console --no-open --links=clipboard
+```
+
+The flag takes precedence over the environment variable, which takes precedence over `atmos.yaml`.
+
+## Get Involved
+
+If your terminal supports hyperlinks but `auto` doesn't recognize it, let us know in
+[GitHub Issues](https://github.com/cloudposse/atmos/issues) so we can add it.

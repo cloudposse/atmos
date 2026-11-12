@@ -20,6 +20,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/link"
 )
 
 type webflowDialogTestStreams struct {
@@ -173,13 +174,13 @@ func TestRenderWebflowDialog_URLPlacement(t *testing.T) {
 	}{
 		{
 			name:             "80-column URL stays in dialog",
-			authURL:          urlWithWidth(maxWebflowDialogURLWidth),
+			authURL:          urlWithWidth(link.MaxInlineWidth),
 			containsURL:      true,
 			wantFallbackHint: false,
 		},
 		{
 			name:             "81-column URL stays outside dialog",
-			authURL:          urlWithWidth(maxWebflowDialogURLWidth + 1),
+			authURL:          urlWithWidth(link.MaxInlineWidth + 1),
 			containsURL:      false,
 			wantFallbackHint: true,
 		},
@@ -356,4 +357,11 @@ func TestWebflowSpinnerModel_TickMessage(t *testing.T) {
 	assert.False(t, result.done)
 	// Tick forwarding returns a cmd from the spinner to schedule the next tick.
 	_ = cmd
+}
+
+func TestDisplayWebflowDialog_LinkPromptEndsWithBlankLine(t *testing.T) {
+	longURL := "https://us-east-1.signin.aws/oauth?" + strings.Repeat("x", 400)
+	output := captureWebflowDialogOutput(t, longURL)
+
+	assert.True(t, strings.HasSuffix(output, "\n\n"), "a blank line separates the link prompt from the spinner")
 }

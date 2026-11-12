@@ -1,0 +1,47 @@
+---
+title: "browser.open"
+sidebar_label: "browser.open"
+sidebar_class_name: command
+description: Open an HTTP or HTTPS URL in the default browser from Starlark.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Open a URL in the system's default browser using Atmos's native cross-platform browser opener.
+</Intro>
+
+## Usage
+
+```python
+browser.open("http://localhost:3000")
+browser.open(url="https://atmos.tools")
+```
+
+The URL must be absolute, use HTTP or HTTPS, and contain no embedded username or password.
+The function returns `None` after requesting the launch. It does not wait for the page to load,
+check service readiness, or control whether the browser reuses a tab or opens a window.
+
+The browser opens on the machine running Atmos. A desktop session and an available default
+browser are required. Launch errors fail the script. Dry runs do not launch a browser.
+
+## Custom Commands
+
+Expose a local dashboard through a custom command in `atmos.yaml`:
+
+```yaml
+commands:
+  - name: portal
+    commands:
+      - name: open
+        description: Open the local dashboard
+        steps:
+          - type: script
+            interpreter: starlark
+            script: |
+              browser.open("http://localhost:3000")
+```
+
+Run `atmos portal open` after the service is running. The function is also available to
+standalone scripts and functions loaded with `module.load(...)`; no shell command or
+operating-system detection is needed.

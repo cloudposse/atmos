@@ -295,3 +295,29 @@ func TestExecRunExitCodeSeventySevenIsNotAPolicyDenial(t *testing.T) {
 	assert.NotContains(t, err.Error(), "policy")
 	assert.Equal(t, 1, errUtils.GetExitCode(err))
 }
+
+func TestAtmosForwardsHostColorOnlyForStreamedOutput(t *testing.T) {
+	for _, mode := range []string{"stream", "capture"} {
+		t.Run(mode, func(t *testing.T) {
+			runner := NewMockRunner(gomock.NewController(t))
+			forwarded := false
+			runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+				assert.Equal(t, mode == "stream", forwarded)
+				assert.Equal(t, mode == "stream", envpkg.SliceToMap(spec.Env)["ATMOS_FORCE_COLOR"] == "true")
+				assert.Nil(t, spec.Streams.Stdin, "color must not grant interactive input")
+				return process.Result{}
+			})
+			_, err := New(WithProcessRunner(runner)).Execute(t.Context(), script.Spec{
+				Source: `atmos.run(["version"], output="` + mode + `")`,
+				ChildEnvironment: func(env []string, stream bool) []string {
+					if !stream {
+						return env
+					}
+					forwarded = true
+					return append(env, "ATMOS_FORCE_COLOR=true")
+				},
+			})
+			require.NoError(t, err)
+		})
+	}
+}

@@ -612,6 +612,10 @@ var RootCmd = &cobra.Command{
 		// (tables, help output). Zero leaves the detected width unclamped.
 		templates.SetTerminalWidthLimit(tmpConfig.Settings.Terminal.MaxWidth)
 
+		// Honor settings.terminal.links wherever a long URL (such as an AWS SSO
+		// sign-in link) is handed to the user outside a dialog box.
+		ui.SetLinkMode(resolveLinksSetting(cmd, tmpConfig.Settings.Terminal.Links))
+
 		// Configure lipgloss color profile based on terminal capabilities.
 		// Forced color is intentionally honored even when stdout is non-TTY,
 		// which is how deterministic asciicast generation runs in CI.
@@ -1690,8 +1694,16 @@ func configForStartupLogger(atmosConfig *schema.AtmosConfiguration, initErr erro
 	if initErr == nil {
 		return atmosConfig
 	}
+	// Configuration failed to load (for example a missing ATMOS_PROFILE), so atmosConfig.Logs is
+	// unreliable. Still honor an explicitly requested log level from ATMOS_LOGS_LEVEL/ATMOS_VERBOSE
+	// instead of hardcoding Warning; otherwise a Debug/Trace level the user explicitly asked for is
+	// dropped and best-effort diagnostics (such as telemetry's "Could not load config") are silently
+	// filtered out. Only the environment variables are honored here: Cobra has not parsed flags yet,
+	// and the raw argv cannot be parsed safely without the full flag registry (a token can be the
+	// operand of another value-taking flag), so flag-level requests are left to the full command path.
+	// LogsConfigFromCommand(nil) reads ATMOS_LOGS_*/ATMOS_VERBOSE and defaults to Warning.
 	return &schema.AtmosConfiguration{
-		Logs: schema.Logs{File: "/dev/stderr", Level: "Warning"},
+		Logs: startup.LogsConfigFromCommand(nil),
 	}
 }
 

@@ -13,6 +13,8 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -87,6 +89,12 @@ func warnDestroyIncludesDependencies(info *schema.ConfigAndStacksInfo) {
 func HandleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "terraform.shared.HandleInteractiveIdentitySelection")()
 
+	// Policy admission must not depend on the identity picked here: a denied
+	// command fails before the selector authenticates anything.
+	if err := admitBeforeIdentitySelection(info); err != nil {
+		return err
+	}
+
 	atmosConfig, err := initCliConfig(*info, false)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
@@ -116,6 +124,25 @@ func HandleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error 
 
 	info.Identity = selectedIdentity
 	return nil
+}
+
+// admitBeforeIdentitySelection runs component admission (policy `component.command`)
+// for a single-component invocation without credentials. A configuration error
+// fails here too, so the user never selects and authenticates an identity for a
+// command that cannot run.
+func admitBeforeIdentitySelection(info *schema.ConfigAndStacksInfo) error {
+	if info.ComponentFromArg == "" || info.Stack == "" {
+		return nil
+	}
+	enabled, err := admission.HasRules(policy.ComponentCommand)
+	if err != nil || !enabled {
+		return err
+	}
+	atmosConfig, err := initCliConfig(*info, true)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
+	}
+	return e.AdmitComponent(&atmosConfig, info, nil)
 }
 
 // ResolveAndPromptForArgs handles path resolution and interactive prompts for component/stack.

@@ -87,6 +87,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
+		Links:          v.GetString("links"),
 		Version:        v.GetBool("version"),
 		Docs:           v.GetString("docs"),
 		Example:        v.GetBool("example"),
@@ -486,6 +487,14 @@ func registerTerminalFlags(registry *FlagRegistry) {
 		Default:     "",
 		Description: "Redirect stderr to file",
 		EnvVars:     []string{"ATMOS_REDIRECT_STDERR"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "links",
+		Shorthand:   "",
+		Default:     "",
+		Description: "How long URLs (such as sign-in links) are shown: auto, osc8, clipboard, or raw",
+		EnvVars:     []string{"ATMOS_TERMINAL_LINKS"},
 	})
 }
 

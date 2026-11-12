@@ -131,3 +131,31 @@ func TestReleasePreviewWorkflowSuppliesSummaryKeyToTrustedCode(t *testing.T) {
 	require.Equal(t, "${{ inputs.openai-api-key }}", run.Env["OPENAI_API_KEY"])
 	require.Equal(t, "${{ inputs.github-token }}", run.Env["GH_TOKEN"])
 }
+
+// PR events belong to the no-permission signal; privileged reporters execute
+// only default-branch tooling, never PR source or artifacts as code.
+func TestReportingWorkflowTrustBoundaries(t *testing.T) {
+	for _, name := range []string{"quality-report", "quality-reconcile", "release-milestones"} {
+		t.Run(name, func(t *testing.T) {
+			var wf pipelineWorkflow
+			pipelineYAML(t, ".github/workflows/"+name+".yml", &wf)
+			require.NotContains(t, wf.On, "pull_request_target")
+			require.NotContains(t, wf.On, "pull_request")
+			require.Empty(t, wf.Permissions)
+			for _, job := range wf.Jobs {
+				checkout := pipelineUses(t, job.Steps, "actions/checkout")
+				require.Equal(t, "${{ github.event.repository.default_branch }}", checkout.With["ref"])
+				require.Equal(t, "false", checkout.With["persist-credentials"])
+			}
+		})
+	}
+	var signal pipelineWorkflow
+	pipelineYAML(t, ".github/workflows/quality-signal.yml", &signal)
+	require.Empty(t, signal.Permissions)
+	for _, job := range signal.Jobs {
+		require.Empty(t, job.Permissions)
+		require.Len(t, job.Steps, 1)
+		require.Empty(t, job.Steps[0].Uses)
+		require.Equal(t, "true", job.Steps[0].Run)
+	}
+}
