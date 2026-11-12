@@ -14,9 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/api"
 )
 
-// processTreeTimeout is long enough for the helper tree to start on a loaded CI runner and short
-// enough to keep the test quick.
-const processTreeTimeout = "3s"
+// Give both race-instrumented helper processes time to start on a loaded CI runner before
+// testing that the step timeout terminates the entire process tree.
+const processTreeTimeout = "15s"
 
 // startedStepHelpers waits until both helpers of the spawn-grandchild tree recorded their pids.
 func startedStepHelpers(t *testing.T, dir string) (int, int) {
