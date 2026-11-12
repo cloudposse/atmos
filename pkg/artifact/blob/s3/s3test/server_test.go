@@ -15,6 +15,8 @@ import (
 	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func apiCode(t *testing.T, err error) string {
@@ -345,7 +347,7 @@ func TestDecodeAWSChunked(t *testing.T) {
 	_, err = decodeAWSChunked([]byte("zz\r\n"))
 	require.Error(t, err)
 	_, err = decodeAWSChunked([]byte("5\r\nhelloXX0\r\n"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalidChunkTerminator)
 	_, err = decodeAWSChunked([]byte("5\r\nhel"))
 	require.Error(t, err)
 }
