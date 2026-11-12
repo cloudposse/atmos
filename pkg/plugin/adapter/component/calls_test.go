@@ -11,6 +11,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 	"github.com/zclconf/go-cty/cty/msgpack"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -171,4 +172,38 @@ func TestTransportCancellationAndErrorClassification(t *testing.T) {
 	require.ErrorIs(t, invocationError(status.Error(codes.Canceled, "secret")), context.Canceled)
 	require.ErrorIs(t, invocationError(status.Error(codes.DeadlineExceeded, "secret")), context.DeadlineExceeded)
 	require.ErrorIs(t, invocationError(context.Canceled), context.Canceled)
+}
+
+func TestDiscoveryDiagnosticContract(t *testing.T) {
+	for _, test := range []struct {
+		name, domain, reason, file string
+		safe                       bool
+	}{
+		{"inline", "atmos.terragrunt.discovery.v1", "MISSING_TERRAFORM_SOURCE", "live/app/terragrunt.hcl", true},
+		{"evaluation", "atmos.terragrunt.discovery.v1", "EVALUATION_FAILED", "live/terragrunt.stack.hcl", true},
+		{"source", "atmos.terragrunt.discovery.v1", "NONLOCAL_SOURCE", "live/app/terragrunt.hcl", true},
+		{"unknown domain", "secret", "EVALUATION_FAILED", "live/app/terragrunt.hcl", false},
+		{"unknown reason", "atmos.terragrunt.discovery.v1", "secret", "live/app/terragrunt.hcl", false},
+		{"absolute", "atmos.terragrunt.discovery.v1", "EVALUATION_FAILED", "/secret/terragrunt.hcl", false},
+		{"traversal", "atmos.terragrunt.discovery.v1", "EVALUATION_FAILED", "../secret/terragrunt.hcl", false},
+		{"control", "atmos.terragrunt.discovery.v1", "EVALUATION_FAILED", "secret\nterragrunt.hcl", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			wire, err := status.New(codes.InvalidArgument, "secret RPC payload").WithDetails(&errdetails.ErrorInfo{Domain: test.domain, Reason: test.reason, Metadata: map[string]string{"file": test.file}})
+			require.NoError(t, err)
+			// Round-trip the status protobuf as the RPC transport does.
+			data, err := proto.Marshal(wire.Proto())
+			require.NoError(t, err)
+			decoded := wire.Proto()
+			require.NoError(t, proto.Unmarshal(data, decoded))
+			result := invocationError(status.FromProto(decoded).Err())
+			require.ErrorIs(t, result, errUtils.ErrPluginAPI)
+			require.NotContains(t, result.Error(), "secret")
+			if test.safe {
+				require.Contains(t, result.Error(), test.file)
+			} else {
+				require.Equal(t, errUtils.ErrPluginAPI, result)
+			}
+		})
+	}
 }

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,29 @@ import (
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
+
+// DiscoveryError carries only a filesystem identity and a fixed category across
+// the RPC boundary. Cause remains local for debugging and cancellation checks.
+type DiscoveryError struct {
+	File     string
+	Category string
+	Cause    error
+}
+
+func (e *DiscoveryError) Error() string { return e.Cause.Error() }
+func (e *DiscoveryError) Unwrap() error { return e.Cause }
+
+func discoveryError(root, path, category string, cause error) error {
+	var existing *DiscoveryError
+	if errors.As(cause, &existing) {
+		return cause
+	}
+	relative, err := filepath.Rel(root, path)
+	if err != nil || !filepath.IsLocal(relative) {
+		return cause
+	}
+	return &DiscoveryError{File: filepath.ToSlash(relative), Category: category, Cause: cause}
+}
 
 // canonicalPath preserves physical ancestor identity for files generated only in
 // the discovery overlay. Actual existence is checked through the active FS.
@@ -74,7 +98,11 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 		if generate {
 			req.Command = "generate"
 		}
-		return resolve(ctx, req, overlay)
+		resolved, err := resolve(ctx, req, overlay)
+		if err != nil {
+			return nil, discoveryError(root, path, "EVALUATION_FAILED", err)
+		}
+		return resolved, nil
 	}
 	var visit func(string, string, string, string, []string, []string, int) error
 	visit = func(path, stack, name, generationRoot string, files, folders []string, depth int) error {
@@ -110,13 +138,13 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 			}
 			for _, entry := range entries {
 				if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), ".tf.json")) {
-					return fmt.Errorf("discovery of inline Terraform modules without terraform.source is not implemented: %s", path)
+					return discoveryError(root, path, "MISSING_TERRAFORM_SOURCE", fmt.Errorf("inline Terraform modules require terraform.source"))
 				}
 			}
 			return nil
 		} // Shared include, not a runnable local-source unit.
 		if !plainLocalSource(resolved.Folders[0]) {
-			return fmt.Errorf("discovery only supports local sources: %s", path)
+			return discoveryError(root, path, "NONLOCAL_SOURCE", fmt.Errorf("discovery requires local sources"))
 		}
 		resolved.Files = append(resolved.Files, files...)
 		resolved.Folders = append(resolved.Folders, folders...)

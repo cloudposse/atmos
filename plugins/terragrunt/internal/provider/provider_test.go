@@ -3,12 +3,14 @@ package provider
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -147,5 +149,31 @@ func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
 	case <-secondGeneration:
 	default:
 		t.Fatal("second generation did not run")
+	}
+}
+
+func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
+	for _, test := range []struct{ name, content, reason string }{
+		{"inline", "locals { password = \"secret-evaluated-value\" }", "MISSING_TERRAFORM_SOURCE"},
+		{"parse", "locals { password = \"secret-evaluated-value\"", "EVALUATION_FAILED"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := componentRequest(t)
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "terragrunt.hcl"), []byte(test.content), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "main.tf"), []byte("terraform {}"), 0o600))
+			_, err := New(nil).Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
+				RootDirectory: request.RootDirectory, Provider: request.Provider,
+				ProviderConfiguration: request.ProviderConfiguration, Operation: request.Operation, IncludePaths: []string{"**"},
+			})
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			details := status.Convert(err).Details()
+			require.Len(t, details, 1)
+			info := details[0].(*errdetails.ErrorInfo)
+			require.Equal(t, "atmos.terragrunt.discovery.v1", info.Domain)
+			require.Equal(t, test.reason, info.Reason)
+			require.Equal(t, map[string]string{"file": "terragrunt.hcl"}, info.Metadata)
+			require.NotContains(t, status.Convert(err).Proto().String(), "secret-evaluated-value")
+			require.NotContains(t, status.Convert(err).Proto().String(), request.RootDirectory)
+		})
 	}
 }

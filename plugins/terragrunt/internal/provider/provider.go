@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	ctyjson "github.com/zclconf/go-cty/cty/json"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -161,7 +162,19 @@ func rpcError(err error) error {
 	if errors.Is(err, ErrUnsupported) {
 		return status.Error(codes.Unimplemented, ErrUnsupported.Error())
 	}
-	return status.Error(codes.InvalidArgument, "Terragrunt evaluation failed")
+	result := status.New(codes.InvalidArgument, "Terragrunt evaluation failed")
+	var diagnostic *engine.DiscoveryError
+	if errors.As(err, &diagnostic) {
+		// Never serialize the wrapped evaluator error or any evaluated HCL values.
+		detailed, detailErr := result.WithDetails(&errdetails.ErrorInfo{
+			Domain: "atmos.terragrunt.discovery.v1", Reason: diagnostic.Category,
+			Metadata: map[string]string{"file": diagnostic.File},
+		})
+		if detailErr == nil {
+			return detailed.Err()
+		}
+	}
+	return result.Err()
 }
 
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
