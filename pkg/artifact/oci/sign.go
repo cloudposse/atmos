@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -99,13 +100,17 @@ func bindSubject(subject artifact.SignatureSubject, loaded *root) error {
 			return fmt.Errorf("%w: the subject declares %d bytes but the Record is %d", errUtils.ErrArtifactRefInvalid, subject.Size, loaded.manifest.Config.Size)
 		}
 	case artifact.SubjectOCIRoot:
-		if loaded.desc.Digest != subject.Digest || loaded.desc.MediaType != subject.MediaType || (subject.Size != 0 && loaded.desc.Size != subject.Size) {
+		if !matchesRootSubject(subject, loaded.desc) {
 			return fmt.Errorf("%w: %s is not the manifest or index digest of the located root", errUtils.ErrArtifactRefInvalid, subject.Digest)
 		}
 	default:
 		return fmt.Errorf("%w: unsupported subject kind %q", errUtils.ErrArtifactRefInvalid, subject.Kind)
 	}
 	return nil
+}
+
+func matchesRootSubject(subject artifact.SignatureSubject, desc ocispec.Descriptor) bool {
+	return desc.Digest == subject.Digest && desc.MediaType == subject.MediaType && (subject.Size == 0 || desc.Size == subject.Size)
 }
 
 // Sign implements [artifact.Repository]. The signer produces evidence over the subject; the

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -162,10 +163,13 @@ func incrementWithRetry(t *testing.T, store blob.Store) {
 			t.Errorf("get: %v", err)
 			return
 		}
-		raw := make([]byte, counterBuffer)
-		n, _ := object.Body.Read(raw)
+		raw, readErr := io.ReadAll(object.Body)
 		_ = object.Body.Close()
-		current, err := strconv.Atoi(string(raw[:n]))
+		if readErr != nil {
+			t.Errorf("read counter: %v", readErr)
+			return
+		}
+		current, err := strconv.Atoi(string(raw))
 		if err != nil {
 			continue
 		}

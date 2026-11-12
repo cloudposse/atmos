@@ -139,22 +139,7 @@ func (r *Repository) track(name string, loaded *root) {
 		return
 	}
 	if len(r.tracked) >= manifestCacheEntries {
-		old := r.tracked[0]
-		r.tracked = r.tracked[1:]
-		delete(r.pinned, cacheKey(old.name, old.desc))
-		for _, key := range old.keys {
-			items := r.roots[key][:0]
-			for _, item := range r.roots[key] {
-				if item.name != old.name || item.desc.Digest != old.desc.Digest {
-					items = append(items, item)
-				}
-			}
-			if len(items) == 0 {
-				delete(r.roots, key)
-			} else {
-				r.roots[key] = items
-			}
-		}
+		r.evictTrackedRoot()
 	}
 	r.tracked = append(r.tracked, trackedRoot{name: name, desc: loaded.desc, keys: keys})
 	for _, key := range keys {
@@ -168,6 +153,26 @@ func (r *Repository) track(name string, loaded *root) {
 		}
 	}
 	r.pinned[keyName] = loaded.desc
+}
+
+// evictTrackedRoot removes the oldest root and all of its lookup entries; caller holds r.mu.
+func (r *Repository) evictTrackedRoot() {
+	old := r.tracked[0]
+	r.tracked = r.tracked[1:]
+	delete(r.pinned, cacheKey(old.name, old.desc))
+	for _, key := range old.keys {
+		items := r.roots[key][:0]
+		for _, item := range r.roots[key] {
+			if item.name != old.name || item.desc.Digest != old.desc.Digest {
+				items = append(items, item)
+			}
+		}
+		if len(items) == 0 {
+			delete(r.roots, key)
+		} else {
+			r.roots[key] = items
+		}
+	}
 }
 
 // descriptorFor returns the descriptor remembered for a resolved digest of a name.

@@ -36,3 +36,11 @@ func WithLockAllWrites() Option {
 
 	return func(s *Store) { s.lockAll = true }
 }
+
+// WithLiteralBackslashes permits literal backslashes on filesystems where they are not separators.
+// This supports legacy local artifact names; other key validation remains in effect.
+func WithLiteralBackslashes() Option {
+	defer perf.Track(nil, "blob.local.WithLiteralBackslashes")()
+
+	return func(s *Store) { s.allowBackslash = true }
+}

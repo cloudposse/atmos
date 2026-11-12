@@ -3,9 +3,11 @@ package artifact
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -159,7 +161,7 @@ func (o *S3Options) Validate() error {
 	var errs []error
 	if o.Bucket == "" {
 		errs = append(errs, fmt.Errorf("%w: option %q is required", errUtils.ErrArtifactConfigInvalid, "bucket"))
-	} else if !s3BucketPattern.MatchString(o.Bucket) {
+	} else if !s3BucketPattern.MatchString(o.Bucket) || net.ParseIP(o.Bucket) != nil {
 		errs = append(errs, fmt.Errorf("%w: bucket %q is not a valid S3 bucket name", errUtils.ErrArtifactConfigInvalid, o.Bucket))
 	}
 	if o.Region != "" && !regionPattern.MatchString(o.Region) {
@@ -214,7 +216,7 @@ func (o *OCIRegistryOptions) Validate() error {
 	var errs []error
 	if o.Registry == "" {
 		errs = append(errs, fmt.Errorf("%w: option %q is required", errUtils.ErrArtifactConfigInvalid, "registry"))
-	} else if !registryHostPattern.MatchString(o.Registry) {
+	} else if !validRegistryHost(o.Registry) {
 		errs = append(errs, fmt.Errorf("%w: registry %q must be a host with an optional port, without a scheme, path, or credentials", errUtils.ErrArtifactConfigInvalid, o.Registry))
 	}
 	errs = append(errs, validatePrefix(o.Prefix))
@@ -227,6 +229,20 @@ func (o *OCIRegistryOptions) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+const registryPortBits = 16
+
+func validRegistryHost(host string) bool {
+	if !registryHostPattern.MatchString(host) {
+		return false
+	}
+	_, port, found := strings.Cut(host, ":")
+	if !found {
+		return true
+	}
+	_, err := strconv.ParseUint(port, decimalBase, registryPortBits)
+	return err == nil
 }
 
 // OCILayoutOptions are the options of an oci/layout repository.

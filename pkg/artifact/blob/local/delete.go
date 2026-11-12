@@ -26,26 +26,34 @@ func (s *Store) Delete(ctx context.Context, key string, opts blob.DeleteOptions)
 	}
 	defer release()
 
-	target := s.path(key)
+	root, err := s.openRoot(false)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return wrapIO(blob.OpDelete, key, err)
+	}
+	defer root.Close()
+	target := filepath.FromSlash(key)
 	if opts.IfMatch != "" {
-		if err := checkDeleteETag(key, target, opts.IfMatch); err != nil {
+		if err := checkDeleteETag(root, key, target, opts.IfMatch); err != nil {
 			return err
 		}
 	}
 	for _, path := range []string{target, attrsPath(target)} {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := root.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return wrapIO(blob.OpDelete, key, err)
 		}
 	}
-	removeEmptyDirs(s.root, filepath.Dir(target))
+	rootRemoveEmptyDirs(root, filepath.Dir(target))
 	return nil
 }
 
 // checkDeleteETag verifies the if-match token of a conditional delete. Callers hold the lock.
-func checkDeleteETag(key, target, want string) error {
-	state, err := inspect(target)
+func checkDeleteETag(root *os.Root, key, target, want string) error {
+	state, err := inspect(root, target)
 	if err != nil {
 		return wrapIO(blob.OpDelete, key, err)
 	}
-	return matchETag(blob.OpDelete, key, state, want)
+	return matchETag(root, blob.OpDelete, key, state, want)
 }

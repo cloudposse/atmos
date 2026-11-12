@@ -39,11 +39,8 @@ func (r *Repository) loadEvidence(ctx context.Context, subject digest.Digest) ([
 	)
 	attempted := 0
 	for index := range objects {
-		stem, ok := strings.CutSuffix(strings.TrimPrefix(objects[index].Key, dir), ".json")
-		if !ok || strings.Contains(stem, "/") {
-			continue
-		}
-		if digest.NewDigestFromEncoded(digest.SHA256, stem).Validate() != nil {
+		stem, ok := evidenceObjectStem(objects[index].Key, dir)
+		if !ok {
 			continue
 		}
 		if attempted >= maxEvidenceFiles {
@@ -65,6 +62,11 @@ func (r *Repository) loadEvidence(ctx context.Context, subject digest.Digest) ([
 		}
 	}
 	return loaded, diags, nil
+}
+
+func evidenceObjectStem(key, dir string) (string, bool) {
+	stem, ok := strings.CutSuffix(strings.TrimPrefix(key, dir), ".json")
+	return stem, ok && !strings.Contains(stem, "/") && digest.NewDigestFromEncoded(digest.SHA256, stem).Validate() == nil
 }
 
 func (r *Repository) readEvidenceObject(ctx context.Context, key, hexDigest string) (*layout.Evidence, error, error) {
@@ -190,23 +192,30 @@ func (r *Repository) storeEvidence(ctx context.Context, subject artifact.Signatu
 		return artifact.SignatureEvidence{}, err
 	}
 	if existing == nil {
-		loaded, diagnostics, err := r.loadEvidence(ctx, subject.Digest)
-		if err != nil {
+		if err := r.checkEvidenceCapacity(ctx, subject.Digest); err != nil {
 			return artifact.SignatureEvidence{}, err
-		}
-		if len(loaded) >= maxEvidenceFiles {
-			return artifact.SignatureEvidence{}, fmt.Errorf("%w: evidence limit reached", errUtils.ErrArtifactTooLarge)
-		}
-		for _, diagnostic := range diagnostics {
-			if diagnostic.Code == "evidence-truncated" {
-				return artifact.SignatureEvidence{}, fmt.Errorf("%w: %s", errUtils.ErrArtifactTooLarge, diagnostic.Message)
-			}
 		}
 	}
 	if err := r.putImmutable(ctx, key, raw, contentTypeJSON, layout.MaxEvidenceFileBytes); err != nil {
 		return artifact.SignatureEvidence{}, wrapWrite("store evidence", err)
 	}
 	return evidence.Reference(r.uri(key)), nil
+}
+
+func (r *Repository) checkEvidenceCapacity(ctx context.Context, subject digest.Digest) error {
+	loaded, diagnostics, err := r.loadEvidence(ctx, subject)
+	if err != nil {
+		return err
+	}
+	if len(loaded) >= maxEvidenceFiles {
+		return fmt.Errorf("%w: evidence limit reached", errUtils.ErrArtifactTooLarge)
+	}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == "evidence-truncated" {
+			return fmt.Errorf("%w: %s", errUtils.ErrArtifactTooLarge, diagnostic.Message)
+		}
+	}
+	return nil
 }
 
 // deleteEvidence removes every evidence object stored for a Record subject.

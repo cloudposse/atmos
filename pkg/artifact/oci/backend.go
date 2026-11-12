@@ -153,13 +153,7 @@ func (b *registryBackend) names(ctx context.Context) ([]string, error) {
 	}
 	repositories, err := catalog.Repositories(ctx, b.registry)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		if atmosoci.IsCatalogUnavailable(err) {
-			return nil, b.unsupportedEnumeration(fmt.Sprintf("the registry did not provide a repository catalog (%v)", err))
-		}
-		return nil, fmt.Errorf("%w: list registry catalog: %w", errUtils.ErrArtifactListFailed, err)
+		return nil, b.catalogError(ctx, err)
 	}
 	scope := ""
 	if b.prefix != "" {
@@ -175,6 +169,16 @@ func (b *registryBackend) names(ctx context.Context) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+func (b *registryBackend) catalogError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if atmosoci.IsCatalogUnavailable(err) {
+		return b.unsupportedEnumeration(fmt.Sprintf("the registry did not provide a repository catalog (%v)", err))
+	}
+	return fmt.Errorf("%w: list registry catalog: %w", errUtils.ErrArtifactListFailed, err)
 }
 
 func (b *registryBackend) unsupportedEnumeration(reason string) error {

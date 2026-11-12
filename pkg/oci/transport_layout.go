@@ -135,6 +135,8 @@ func (l *Layout) Exists(ctx context.Context, target ocispec.Descriptor) (bool, e
 // recorded as an unnamed root, because that is the only way its relationship to the
 // subject survives reopening the layout.
 func (l *Layout) Push(ctx context.Context, expected ocispec.Descriptor, content io.Reader) error {
+	defer perf.Track(nil, "oci.Layout.Push")()
+
 	err := l.store.Push(ctx, expected, content)
 	if err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
 		return layoutError(err)

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=schema.json
+tests:
+  - name: describe config with artifacts
+    enabled: true
+    snapshot: false
+    workdir: "fixtures/scenarios/artifacts-describe"
+    command: "atmos"
+    env:
+      ATMOS_PAGER: false
+    args:
+      - describe
+      - config
+    expect:
+      valid:
+        - json
+      stdout:
+        - '"shared"'
+        - '"bucket": "example-artifacts"'
+        - '"require_signature": true'
+        - '"/keys/release.pub"'
+      exit_code: 0

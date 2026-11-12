@@ -4,5 +4,5 @@
 //
 // It lives apart from pkg/artifact so the core domain package never imports pkg/ci or pkg/plugin.
 // Fixture bytes under testdata are committed and must never be regenerated to hide an
-// incompatible change; see compat_test.go for the generation rules.
+// incompatible change; see fixtures_test.go for the generation rules.
 package compat

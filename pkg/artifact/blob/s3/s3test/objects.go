@@ -153,7 +153,7 @@ func parseRange(header string, size int64) (byteRange, bool) {
 		return byteRange{}, false
 	}
 	start, err := strconv.ParseInt(first, decimalBase, bitSize64)
-	if err != nil || start > size || (start == size && size > 0) {
+	if err != nil || start < 0 || start >= size {
 		return byteRange{}, false
 	}
 	end, ok := rangeEnd(last, start, size)
@@ -169,7 +169,10 @@ func rangeEnd(last string, start, size int64) (int64, bool) {
 	if err != nil || through < start {
 		return 0, false
 	}
-	return min(through+1, size), true
+	if through >= size {
+		return size, true
+	}
+	return through + 1, true
 }
 
 func (s *Server) deleteObject(w http.ResponseWriter, r *http.Request, key string) {

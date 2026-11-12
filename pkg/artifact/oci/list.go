@@ -70,20 +70,6 @@ func (c listCursor) skipsVersion(name, version string) bool {
 	return c.set && name == c.name && version <= c.version
 }
 
-// remaining returns the entries of name that follow the cursor.
-func (c listCursor) remaining(name string, items []artifact.ListEntry) []artifact.ListEntry {
-	if !c.set || name != c.name {
-		return items
-	}
-	var rest []artifact.ListEntry
-	for index := range items {
-		if items[index].Version > c.version {
-			rest = append(rest, items[index])
-		}
-	}
-	return rest
-}
-
 // namesFor returns the names to list: the requested one, or the enumerated collection.
 func (r *Repository) namesFor(ctx context.Context, name string) ([]string, error) {
 	if name != "" {

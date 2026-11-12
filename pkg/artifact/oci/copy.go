@@ -228,7 +228,7 @@ func layoutRoot(directory, selector string) (ocispec.Descriptor, error) {
 	}
 	var matches []ocispec.Descriptor
 	for _, entry := range index.Manifests {
-		if (selector == "" && entry.Annotations[ocispec.AnnotationRefName] != "") || (selector != "" && (entry.Digest.String() == selector || entry.Annotations[ocispec.AnnotationRefName] == selector)) {
+		if matchesLayoutSelector(entry, selector) {
 			matches = append(matches, entry)
 		}
 	}
@@ -239,4 +239,12 @@ func layoutRoot(directory, selector string) (ocispec.Descriptor, error) {
 		return ocispec.Descriptor{}, fmt.Errorf("%w: %d roots in %q match %q; select exactly one by reference name or digest", errUtils.ErrArtifactRefInvalid, len(matches), directory, selector)
 	}
 	return ocispec.Descriptor{MediaType: matches[0].MediaType, Digest: matches[0].Digest, Size: matches[0].Size}, nil
+}
+
+func matchesLayoutSelector(entry ocispec.Descriptor, selector string) bool {
+	name := entry.Annotations[ocispec.AnnotationRefName]
+	if selector == "" {
+		return name != ""
+	}
+	return entry.Digest.String() == selector || name == selector
 }

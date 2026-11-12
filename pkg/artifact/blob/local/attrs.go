@@ -24,9 +24,9 @@ func attrsPath(objectPath string) string {
 }
 
 // readAttrs loads the attribute file of objectPath; a missing file yields empty attributes.
-func readAttrs(objectPath string) (attrs, error) {
+func readAttrs(root *os.Root, objectPath string) (attrs, error) {
 	var a attrs
-	data, err := readFile(attrsPath(objectPath))
+	data, err := rootReadFile(root, attrsPath(objectPath))
 	if errors.Is(err, os.ErrNotExist) {
 		return a, nil
 	}
