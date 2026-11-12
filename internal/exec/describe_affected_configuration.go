@@ -45,21 +45,38 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 		return nil, err
 	}
 	key := string(keyBytes)
-	original.watchMu.Lock()
-	defer original.watchMu.Unlock()
-	if filtered := original.watchIndexes[key]; filtered != nil {
+	if filtered := original.cachedWatchIndex(key); filtered != nil {
 		return filtered, nil
 	}
-	files, err := configuration.UnexcludedWatchFiles(config.BasePathAbsolute, original.getAllFiles(), patterns)
+	result, err, _ := original.watchBuilds.Do(key, func() (any, error) {
+		// Another caller may have stored the view after our first lookup.
+		if filtered := original.cachedWatchIndex(key); filtered != nil {
+			return filtered, nil
+		}
+		files, err := configuration.UnexcludedWatchFiles(config.BasePathAbsolute, original.getAllFiles(), patterns)
+		if err != nil {
+			return nil, err
+		}
+		filtered := newChangedFilesIndex(config, files, config.BasePathAbsolute)
+		original.watchMu.Lock()
+		defer original.watchMu.Unlock()
+		if original.watchIndexes == nil {
+			original.watchIndexes = make(map[string]*changedFilesIndex)
+		}
+		original.watchIndexes[key] = filtered
+		return filtered, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	filtered := newChangedFilesIndex(config, files, config.BasePathAbsolute)
-	if original.watchIndexes == nil {
-		original.watchIndexes = make(map[string]*changedFilesIndex)
-	}
-	original.watchIndexes[key] = filtered
-	return filtered, nil
+	return result.(*changedFilesIndex), nil
+}
+
+// cachedWatchIndex reads a completed view without waiting for other views to build.
+func (index *changedFilesIndex) cachedWatchIndex(key string) *changedFilesIndex {
+	index.watchMu.Lock()
+	defer index.watchMu.Unlock()
+	return index.watchIndexes[key]
 }
 
 // configurationWatchPaths resolves provider-owned watches against the project

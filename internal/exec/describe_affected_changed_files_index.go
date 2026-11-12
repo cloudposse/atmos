@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/sync/singleflight"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -33,6 +35,9 @@ type changedFilesIndex struct {
 	// watchMu protects filtered views for this change set.
 	watchMu      sync.Mutex
 	watchIndexes map[string]*changedFilesIndex
+
+	// watchBuilds coalesces concurrent builds of the same exclusion set.
+	watchBuilds singleflight.Group
 
 	mu sync.RWMutex
 }

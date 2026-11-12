@@ -24,8 +24,9 @@ import (
 var RemoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 
 const (
-	shaString = "SHA"
-	refString = "ref"
+	shaString      = "SHA"
+	refString      = "ref"
+	signalExitBase = 128
 )
 
 // ExecuteDescribeAffectedWithTargetRefClone clones the remote reference,
@@ -349,28 +350,71 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 // exitProcess ends the process after signal cleanup; tests replace it.
 var exitProcess = os.Exit
 
-// removeOnSignal runs cleanup when the process receives SIGINT or SIGTERM and then exits with
-// the conventional 128+signal status. The returned function stops the watcher and must be
-// called once the protected resource is released normally.
+// affectedSignalCleanups serializes registration, normal release and signal cleanup.
+// A single watcher owns all active worktrees, so none can exit ahead of another.
+var affectedSignalCleanups = struct {
+	sync.Mutex
+	watcher *affectedSignalWatcher
+}{}
+
+type affectedSignalWatcher struct {
+	signals  chan os.Signal
+	done     chan struct{}
+	cleanups map[*signalWorktreeCleanup]struct{}
+}
+
+type signalWorktreeCleanup struct {
+	run func()
+}
+
+// removeOnSignal runs all active cleanups on SIGINT or SIGTERM before exiting with
+// the conventional 128+signal status. Call the returned function after normal cleanup.
 func removeOnSignal(cleanup func()) func() {
-	signals := make(chan os.Signal, 1)
-	done := make(chan struct{})
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		select {
-		case received := <-signals:
-			cleanup()
-			code := 1
-			if number, ok := received.(syscall.Signal); ok {
-				code = 128 + int(number)
-			}
-			exitProcess(code)
-		case <-done:
+	affectedSignalCleanups.Lock()
+	defer affectedSignalCleanups.Unlock()
+	watcher := affectedSignalCleanups.watcher
+	if watcher == nil {
+		watcher = &affectedSignalWatcher{
+			signals:  make(chan os.Signal, 1),
+			done:     make(chan struct{}),
+			cleanups: make(map[*signalWorktreeCleanup]struct{}),
 		}
-	}()
-	return func() {
-		signal.Stop(signals)
-		close(done)
+		affectedSignalCleanups.watcher = watcher
+		signal.Notify(watcher.signals, syscall.SIGINT, syscall.SIGTERM)
+		go watcher.run()
+	}
+	key := &signalWorktreeCleanup{run: cleanup}
+	watcher.cleanups[key] = struct{}{}
+	return sync.OnceFunc(func() {
+		affectedSignalCleanups.Lock()
+		defer affectedSignalCleanups.Unlock()
+		delete(watcher.cleanups, key)
+		if len(watcher.cleanups) == 0 {
+			signal.Stop(watcher.signals)
+			close(watcher.done)
+			affectedSignalCleanups.watcher = nil
+		}
+	})
+}
+
+func (watcher *affectedSignalWatcher) run() {
+	select {
+	case received := <-watcher.signals:
+		affectedSignalCleanups.Lock()
+		defer affectedSignalCleanups.Unlock()
+		// Normal release may have retired this watcher while the signal arrived.
+		if affectedSignalCleanups.watcher != watcher {
+			return
+		}
+		for cleanup := range watcher.cleanups {
+			cleanup.run()
+		}
+		code := 1
+		if number, ok := received.(syscall.Signal); ok {
+			code = signalExitBase + int(number)
+		}
+		exitProcess(code)
+	case <-watcher.done:
 	}
 }
 
