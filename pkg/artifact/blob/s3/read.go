@@ -78,6 +78,13 @@ func objectSize(out *s3.GetObjectOutput) int64 {
 }
 
 // Stat implements [blob.Store].
+//
+// With IncludeTags, the tags are read for the exact object version HeadObject returned when the
+// bucket reports a real version ID, so metadata and tags describe the same object even if the key
+// is overwritten between the two requests. That read requires s3:GetObjectVersionTagging; a denial
+// fails the call rather than falling back to the current version's tags. Unversioned buckets and
+// the replaceable "null" version read the current tags with s3:GetObjectTagging, so a concurrent
+// overwrite can still pair metadata from one write with tags from another there.
 func (s *Store) Stat(ctx context.Context, key string, opts blob.StatOptions) (*blob.ObjectInfo, error) {
 	defer perf.Track(nil, "blob.s3.Stat")()
 
@@ -101,16 +108,25 @@ func (s *Store) Stat(ctx context.Context, key string, opts blob.StatOptions) (*b
 		Metadata:     out.Metadata,
 	}
 	if opts.IncludeTags {
-		if info.Tags, err = s.tags(ctx, api, key); err != nil {
+		if info.Tags, err = s.tags(ctx, api, key, out.VersionId); err != nil {
 			return nil, err
 		}
 	}
 	return info, nil
 }
 
-// tags loads the object tags.
-func (s *Store) tags(ctx context.Context, api API, key string) (map[string]string, error) {
-	out, err := api.GetObjectTagging(ctx, &s3.GetObjectTaggingInput{Bucket: aws.String(s.cfg.bucket), Key: aws.String(s.objectKey(key))})
+// nullVersionID is the version ID S3 reports for objects written while versioning was never
+// enabled or was suspended. A later write replaces that version in place, so it does not identify
+// one immutable object.
+const nullVersionID = "null"
+
+// tags loads the object tags, pinned to versionID when it names an immutable object version.
+func (s *Store) tags(ctx context.Context, api API, key string, versionID *string) (map[string]string, error) {
+	in := &s3.GetObjectTaggingInput{Bucket: aws.String(s.cfg.bucket), Key: aws.String(s.objectKey(key))}
+	if pinnedVersion(versionID) {
+		in.VersionId = versionID
+	}
+	out, err := api.GetObjectTagging(ctx, in)
 	if err != nil {
 		return nil, classify(request{op: "tags", key: key}, err)
 	}
@@ -119,4 +135,10 @@ func (s *Store) tags(ctx context.Context, api API, key string) (map[string]strin
 		tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 	}
 	return tags, nil
+}
+
+// pinnedVersion reports whether a HeadObject version ID identifies one immutable object version.
+func pinnedVersion(versionID *string) bool {
+	id := aws.ToString(versionID)
+	return id != "" && id != nullVersionID
 }

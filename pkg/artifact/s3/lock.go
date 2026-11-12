@@ -160,7 +160,7 @@ func (r *Repository) settleClaim(ctx context.Context, key string, doc *claimDoc)
 	current, _, err := r.readClaim(readCtx, key)
 	switch {
 	case err != nil:
-		return nil, fmt.Errorf("%w: settle claim %s: %w", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key), err)
+		return nil, fmt.Errorf("%w: settle %s: %w", errUtils.ErrArtifactPublicationAmbiguous, r.attempt(key, doc), err)
 	case current != nil && current.Token == doc.Token:
 		return r.adopt(ctx, key, doc)
 	case current == nil:
@@ -170,7 +170,7 @@ func (r *Repository) settleClaim(ctx context.Context, key string, doc *claimDoc)
 		}
 		return nil, errors.Join(fenceErr, ctx.Err())
 	}
-	return nil, errors.Join(ctx.Err(), errUtils.ErrArtifactConflict, fmt.Errorf("%w: claim %s is held by another owner, but the prior create may still commit after it is released", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key)))
+	return nil, errors.Join(ctx.Err(), errUtils.ErrArtifactConflict, fmt.Errorf("%w: %s found the claim held by another owner, but the prior create may still commit after it is released", errUtils.ErrArtifactPublicationAmbiguous, r.attempt(key, doc)))
 }
 
 // fenceUnknownClaim leaves a visible claim at an empty key while the first PUT may still arrive.
@@ -186,7 +186,7 @@ func (r *Repository) fenceUnknownClaim(originalCtx, ctx context.Context, key str
 	}
 	_, err = r.putConditional(ctx, key, raw, contentTypeJSON, blob.IfAbsent())
 	if err == nil {
-		return nil, fmt.Errorf("%w: claim %s is fenced pending reconciliation of a possibly late create; do not delete the fence until the original request is known to have finished", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key))
+		return nil, fmt.Errorf("%w: %s is fenced (fence lock ID %s) pending reconciliation of a possibly late create; do not delete the fence until the original request is known to have finished", errUtils.ErrArtifactPublicationAmbiguous, r.attempt(key, original), fence.Token)
 	}
 	if blob.IsPreconditionFailed(err) {
 		current, _, readErr := r.readClaim(ctx, key)
@@ -194,7 +194,15 @@ func (r *Repository) fenceUnknownClaim(originalCtx, ctx context.Context, key str
 			return r.adopt(originalCtx, key, original)
 		}
 	}
-	return nil, fmt.Errorf("%w: could not conclusively fence claim %s; its original create or fence may still commit: %w", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key), err)
+	return nil, fmt.Errorf("%w: could not conclusively fence %s; its original create or fence may still commit: %w", errUtils.ErrArtifactPublicationAmbiguous, r.attempt(key, original), err)
+}
+
+// attempt describes one acquisition attempt so an operator can match an ambiguous outcome to the
+// claim object it may have left behind: the claim content carries the same owner, operation, and
+// lock ID.
+func (r *Repository) attempt(key string, doc *claimDoc) string {
+	return fmt.Sprintf("lock %q attempt by owner %q (operation %q, lock ID %s) at claim object %s",
+		doc.Resource, doc.Owner, doc.OperationID, doc.Token, r.uri(key))
 }
 
 // adopt turns a created claim into a handle. A context that ended while the claim was being created

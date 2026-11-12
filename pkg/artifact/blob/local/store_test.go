@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ func TestNewRequiresRoot(t *testing.T) {
 }
 
 func TestWritesPlainFilesWithoutExtraArtifacts(t *testing.T) {
-	store := newStore(t)
+	store := newStore(t, WithPlainFileCompatibility())
 	_, err := store.Put(context.Background(), "stack/component/sha.tar", bytes.NewReader([]byte("tar")), blob.PutOptions{Size: 3})
 	require.NoError(t, err)
 
@@ -109,15 +110,25 @@ func TestObjectAndPrefixCannotShareAPath(t *testing.T) {
 	assert.True(t, blob.IsNotFound(err), "a prefix is not an object")
 }
 
-func TestLargeObjectGetsWeakETag(t *testing.T) {
+func TestLargeObjectContentETag(t *testing.T) {
 	store := newStore(t)
-	big := bytes.Repeat([]byte("x"), contentETagLimit+1)
+	big := bytes.Repeat([]byte("x"), (4<<20)+1)
 	info, err := store.Put(context.Background(), "big", bytes.NewReader(big), blob.PutOptions{Size: int64(len(big))})
 	require.NoError(t, err)
-	assert.Contains(t, info.ETag, `W/"`)
+	stamp := time.Unix(1700000000, 0)
+	require.NoError(t, os.Chtimes(filepath.Join(store.Root(), "big"), stamp, stamp))
 	stat, err := store.Stat(context.Background(), "big", blob.StatOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, info.ETag, stat.ETag)
+	big[len(big)-1] = 'y'
+	_, err = store.Put(context.Background(), "big", bytes.NewReader(big), blob.PutOptions{Size: int64(len(big))})
+	require.NoError(t, err)
+	require.NoError(t, os.Chtimes(filepath.Join(store.Root(), "big"), stamp, stamp))
+	updated, err := store.Stat(context.Background(), "big", blob.StatOptions{})
+	require.NoError(t, err)
+	assert.NotEqual(t, stat.ETag, updated.ETag)
+	_, err = store.Put(context.Background(), "big", bytes.NewReader(big), blob.PutOptions{Size: int64(len(big)), Condition: blob.IfMatch(stat.ETag)})
+	assert.ErrorIs(t, err, errUtils.ErrBlobPreconditionFailed)
 }
 
 func TestListRejectsEscapingPrefix(t *testing.T) {

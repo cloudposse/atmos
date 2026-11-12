@@ -51,6 +51,16 @@
 // (for example with the AWS console or "aws s3 rm"); nothing else needs to change. The brief
 // repository-wide claim taken while a location is reserved is recovered the same way.
 //
+// An acquisition whose create outcome is uncertain stops without a lock, and nothing protected by
+// that lock is mutated. The error names the claim object and the attempt's owner, operation, and
+// lock ID. An empty read or an elapsed timeout never proves the uncertain create cannot still
+// commit, so the attempt may leave behind either its own claim (with that lock ID) or a
+// reconciliation fence whose owner starts with "pending reconciliation". Neither expires or is
+// removed automatically, and another owner's claim is never deleted. To recover, the operator
+// confirms the writer that reported the error has exited, checks that the claim object still names
+// that attempt, and deletes that one object deliberately. Later attempts report the claim as held
+// until then.
+//
 // # Signatures
 //
 // Evidence is stored as digest-named objects below the signature directory of the canonical Record
