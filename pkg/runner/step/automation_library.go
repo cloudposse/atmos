@@ -135,8 +135,11 @@ func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowSt
 	result, err := l.execute(ctx, step)
 	l.rememberEnvironment(before)
 	if err == nil {
-		// A handler may report success after its background work was canceled.
-		err = ctx.Err()
+		// A handler may report success after its background work was canceled by its own deadline.
+		// Parent cancellation must not turn a successful handler into an error.
+		if timeoutErr := deadline.Expired(); errors.Is(timeoutErr, errUtils.ErrStepTimeout) {
+			err = timeoutErr
+		}
 	}
 
 	if err != nil {

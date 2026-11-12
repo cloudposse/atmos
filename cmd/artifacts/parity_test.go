@@ -43,11 +43,20 @@ func TestCLIAndArtifactStepReportTheSamePublication(t *testing.T) {
 	fromStep, ok := result.Metadata[runnerstep.ArtifactMetadataKey].(*invoke.Result)
 	require.True(t, ok)
 
-	assert.Equal(t, f.Normalize(&fromCLI.OperationResult), sibling.Normalize(&fromStep.OperationResult), "the command and the step report the same result")
+	// SizeMeasured is internal state omitted from JSON; compare the public wire values while
+	// independently checking that the typed step remembers the measurement.
+	assert.True(t, fromStep.SizeMeasured)
+	cliOperation, err := json.Marshal(f.Normalize(&fromCLI.OperationResult))
+	require.NoError(t, err)
+	stepOperation, err := json.Marshal(sibling.Normalize(&fromStep.OperationResult))
+	require.NoError(t, err)
+	assert.JSONEq(t, string(cliOperation), string(stepOperation), "the command and the step report the same result")
 	assert.Equal(t, fromCLI.Record, fromStep.Record)
 
 	var named map[string]any
 	require.NoError(t, json.Unmarshal([]byte(cli.stdout), &named))
+	require.Contains(t, result.Outputs, "size")
+	require.Contains(t, named, "size")
 	for name, value := range result.Outputs {
 		if name == "location" {
 			continue // Rooted in each fixture's own repository directory.
