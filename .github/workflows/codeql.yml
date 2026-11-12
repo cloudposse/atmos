@@ -179,7 +179,7 @@ jobs:
       - name: Add swap space
         uses: ./.github/actions/swap-space
         with:
-          size-gb: '20'
+          size-gb: '30'
 
       - name: Run govulncheck
         shell: bash
@@ -201,6 +201,10 @@ jobs:
           # (govulncheck's SSA construction parallelizes via goroutines, which
           # -p doesn't govern) while nearly tripling run time.
           GOMEMLIMIT: "32GiB"
+          # Controlled scanner-only comparison against the GOGC=100 baseline.
+          # GC traces report live heap and collection cost on scanner stderr.
+          ATMOS_VULNCHECK_GOGC: "50"
+          ATMOS_VULNCHECK_GCTRACE: "1"
         # The target also removes exact duplicate stacks from the report: the
         # SARIF schema requires them to be unique and the upload rejects the
         # report otherwise. See internal/ci/vulncheck.
