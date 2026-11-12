@@ -51,9 +51,11 @@ type Session struct {
 	// importResults caches each resolved import by URI; imported indexes the same units by
 	// source so Prepare can find a unit under whichever stack imported it.
 	importResults map[string][]*pluginv1.DiscoveredComponent
-	imported      map[string]*pluginv1.DiscoveredComponent
-	started       bool
-	loadMu        sync.Mutex
+	// validationImports caches extra manifest reads without registering executable units.
+	validationImports map[string][]*pluginv1.DiscoveredComponent
+	imported          map[string]*pluginv1.DiscoveredComponent
+	started           bool
+	loadMu            sync.Mutex
 	// configErr holds a settings problem found while reading configuration. Reading never fails on it,
 	// so `atmos config set` can always repair the file; the first use of the provider reports it.
 	configErr error

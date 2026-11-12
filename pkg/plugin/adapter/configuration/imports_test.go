@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -284,4 +285,127 @@ func TestImportOfAProviderWithInvalidSettingsReportsTheSetting(t *testing.T) {
 	_, handled, err = session.ImportComponents(t.Context(), "other://live")
 	require.NoError(t, err)
 	require.False(t, handled)
+}
+
+func TestValidationImportsDoNotChangeRunningDiscovery(t *testing.T) {
+	config := enabledConfig(t)
+	directories(t, config.BasePathAbsolute, "live/app")
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	started, finish := make(chan struct{}), make(chan struct{})
+	app := unit(t, "app")
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		if len(req.Imports) == 0 {
+			close(started)
+			<-finish
+		}
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{app}}, nil
+	}).Times(2)
+	session, err := New(t.Context(), config, "describe affected", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	go func() { _, err := session.Discover(t.Context()); done <- err }()
+	<-started
+	validation := session.ForValidation().(schema.ComponentConfigurationImportRuntime)
+	var workers sync.WaitGroup
+	for range 10 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			components, handled, err := validation.ImportComponents(t.Context(), "terragrunt://live/app")
+			if err != nil || !handled || components["app"] == nil {
+				t.Errorf("validation import: handled=%v, err=%v, components=%v", handled, err, components)
+			}
+		}()
+	}
+	workers.Wait()
+	close(finish)
+	require.NoError(t, <-done)
+	definitions, err := session.Discover(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, definitions["live"]["components"].(map[string]any)["terraform"], "app")
+	require.Empty(t, session.imported, "validation must not register preparation sources")
+	_, _, err = session.ImportComponents(t.Context(), "terragrunt://live/app")
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig, "a validation cache entry does not authorize a late execution import")
+	first, _, err := validation.ImportComponents(t.Context(), "terragrunt://live/app")
+	require.NoError(t, err)
+	first["app"].(map[string]any)["settings"] = "corrupt"
+	again, _, err := validation.ImportComponents(t.Context(), "terragrunt://live/app")
+	require.NoError(t, err)
+	require.IsType(t, map[string]any{}, again["app"].(map[string]any)["settings"])
+	revision, err := session.ForRevision(t.TempDir())
+	require.NoError(t, err)
+	require.Empty(t, revision.(*Session).validationImports)
+}
+
+func TestImportInProgressCancellation(t *testing.T) {
+	for _, phase := range []string{"loader", "discovery"} {
+		for _, origin := range []string{"session", "caller", "deadline"} {
+			t.Run(phase+"/"+origin, func(t *testing.T) {
+				sessionCtx, cancelSession := context.WithCancel(t.Context())
+				defer cancelSession()
+				callerCtx, cancelCaller := context.WithCancel(t.Context())
+				defer cancelCaller()
+				// A generous caller deadline also verifies that composition retains the deadline.
+				deadline := time.Now().Add(time.Minute)
+				if origin == "deadline" {
+					deadline = time.Now().Add(time.Second)
+				}
+				callerCtx, cancelDeadline := context.WithDeadline(callerCtx, deadline)
+				defer cancelDeadline()
+				started := make(chan context.Context, 1)
+				block := func(ctx context.Context) error {
+					started <- ctx
+					<-ctx.Done()
+					return ctx.Err()
+				}
+				provider := NewMockProvider(gomock.NewController(t))
+				if phase == "discovery" {
+					provider.EXPECT().ComponentType().Return("terraform")
+					provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+						return nil, block(ctx)
+					})
+				}
+				session, err := New(sessionCtx, importOnlyConfig(t), "list", func(ctx context.Context, _ []string) (map[string]Provider, error) {
+					if phase == "loader" {
+						return nil, block(ctx)
+					}
+					return map[string]Provider{"terragrunt": provider}, nil
+				})
+				require.NoError(t, err)
+				done := make(chan error, 1)
+				go func() {
+					_, _, err := session.ImportComponents(callerCtx, "terragrunt://live")
+					done <- err
+				}()
+				select {
+				case ctx := <-started:
+					got, ok := ctx.Deadline()
+					require.True(t, ok)
+					require.Equal(t, deadline, got)
+				case <-time.After(5 * time.Second):
+					t.Fatal("import did not reach provider")
+				}
+				switch origin {
+				case "session":
+					cancelSession()
+				case "caller":
+					cancelCaller()
+				}
+				select {
+				case err := <-done:
+					want := context.Canceled
+					if origin == "deadline" {
+						want = context.DeadlineExceeded
+					}
+					require.ErrorIs(t, err, want)
+				case <-time.After(5 * time.Second):
+					t.Fatal("cancellation did not unblock import")
+				}
+				require.Empty(t, session.importResults, "failed imports must not be cached")
+			})
+		}
+	}
 }

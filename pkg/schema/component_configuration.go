@@ -49,6 +49,12 @@ type ComponentConfigurationRevisionRuntime interface {
 	ForRevision(root string) (ComponentConfigurationRuntime, error)
 }
 
+// ComponentConfigurationValidationRuntime supplies a manifest-reading view that can
+// resolve additional imports without changing discovery or preparation inventory.
+type ComponentConfigurationValidationRuntime interface {
+	ForValidation() ComponentConfigurationRuntime
+}
+
 // PreparedComponentConfiguration contains evaluated inputs and literal artifacts.
 type PreparedComponentConfiguration struct {
 	Sources          []ComponentConfigurationSource

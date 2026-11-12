@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // importRejectedCharacters cannot appear in a provider import path.
@@ -27,6 +28,10 @@ const importRejectedCharacters = `\?#*[{`
 func (s *Session) ImportComponents(ctx context.Context, uri string) (map[string]any, bool, error) {
 	defer perf.Track(nil, "configuration.Session.ImportComponents")()
 
+	return s.importComponents(ctx, uri, false)
+}
+
+func (s *Session) importComponents(ctx context.Context, uri string, validation bool) (map[string]any, bool, error) {
 	name, path, found := strings.Cut(uri, "://")
 	if !found {
 		return nil, false, nil
@@ -44,25 +49,51 @@ func (s *Session) ImportComponents(ctx context.Context, uri string) (map[string]
 		return nil, true, err
 	}
 
-	// Imports are resolved one at a time; the lock also orders them before discovery starts.
-	s.importMu.Lock()
-	defer s.importMu.Unlock()
-	instances, resolved := s.importResults[key]
-	if !resolved {
-		// Stack manifests may be read again after discovery; only a new import is too late.
-		if s.started {
-			return nil, true, fmt.Errorf("%w: cannot add import %q after configuration discovery", errUtils.ErrPluginInvalidConfig, key)
-		}
-		if instances, err = s.resolveImport(ctx, template, key); err != nil {
-			return nil, true, err
-		}
-		s.importResults[key] = instances
-		for _, instance := range instances {
-			s.imported[instance.Source] = instance
-		}
+	instances, err := s.resolveCachedImport(ctx, template, key, validation)
+	if err != nil {
+		return nil, true, err
 	}
 	components, err := importedComponents(instances)
 	return components, true, err
+}
+
+// resolveCachedImport serializes import evaluation and orders executable imports
+// before discovery starts. Validation reads share results without changing inventory.
+func (s *Session) resolveCachedImport(ctx context.Context, template *pluginv1.DiscoverComponentsRequest, key string, validation bool) ([]*pluginv1.DiscoveredComponent, error) {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
+	instances, resolved := s.importResults[key]
+	if validation && !resolved {
+		instances, resolved = s.validationImports[key]
+	}
+	if resolved {
+		return instances, nil
+	}
+	if s.started && !validation {
+		return nil, fmt.Errorf("%w: cannot add import %q after configuration discovery", errUtils.ErrPluginInvalidConfig, key)
+	}
+	instances, err := s.resolveImport(ctx, template, key)
+	if err != nil {
+		return nil, err
+	}
+	s.cacheImport(key, instances, validation)
+	return instances, nil
+}
+
+// cacheImport stores successful results under importMu. Validation-only units must
+// never become discovery exclusions or preparation sources.
+func (s *Session) cacheImport(key string, instances []*pluginv1.DiscoveredComponent, validation bool) {
+	if validation {
+		if s.validationImports == nil {
+			s.validationImports = make(map[string][]*pluginv1.DiscoveredComponent)
+		}
+		s.validationImports[key] = instances
+		return
+	}
+	s.importResults[key] = instances
+	for _, instance := range instances {
+		s.imported[instance.Source] = instance
+	}
 }
 
 // importedComponents translates resolved units without changing the cached provider results.
@@ -153,4 +184,17 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 		names[instance.Address.Component] = instance
 	}
 	return discovered.Components, nil
+}
+
+// ForValidation shares cached imports but never registers additional executable units.
+func (s *Session) ForValidation() schema.ComponentConfigurationRuntime {
+	defer perf.Track(nil, "configuration.Session.ForValidation")()
+	return &validationSession{Session: s}
+}
+
+type validationSession struct{ *Session }
+
+func (s *validationSession) ImportComponents(ctx context.Context, uri string) (map[string]any, bool, error) {
+	defer perf.Track(nil, "configuration.validationSession.ImportComponents")()
+	return s.importComponents(ctx, uri, true)
 }

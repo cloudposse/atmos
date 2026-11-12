@@ -11,6 +11,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	configurationadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
+	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -302,6 +304,61 @@ func TestStaticLoadsRejectProviderImportsBeforeRuntime(t *testing.T) {
 			require.True(t, handled)
 			require.ErrorIs(t, err, errUtils.ErrInvalidImport)
 			require.Len(t, runtime.imports, 1)
+		})
+	}
+}
+
+// validationImportProvider returns a unit both through discovery and through an unreferenced mixin.
+type validationImportProvider struct {
+	configurationadapter.Provider
+	imports int
+}
+
+func (*validationImportProvider) ComponentType() string { return "terraform" }
+
+func (p *validationImportProvider) Discover(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+	if len(request.Imports) > 0 {
+		p.imports++
+	}
+	return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{{
+		Address:  &pluginv1.ComponentAddress{Stack: "live", Component: "app", ComponentType: "terraform"},
+		Provider: "terragrunt", Engine: "opentofu", Source: "live/app/terragrunt.hcl",
+	}}}, nil
+}
+
+func TestValidateStacksResolvesUnreferencedProviderImports(t *testing.T) {
+	for _, path := range []string{"live/app", "missing"} {
+		t.Run(path, func(t *testing.T) {
+			root := t.TempDir()
+			stacks := filepath.Join(root, "stacks")
+			require.NoError(t, os.MkdirAll(stacks, 0o755))
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "live", "app"), 0o755))
+			mixin := filepath.Join(stacks, "mixin.yaml")
+			require.NoError(t, os.WriteFile(mixin, []byte("import:\n  - terragrunt://"+path+"\n"), 0o600))
+			config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: stacks, TerraformDirAbsolutePath: filepath.Join(root, "components")}
+			config.Stacks.BasePath = "stacks"
+			config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true, Discovery: schema.ComponentDiscoveryConfig{Enabled: true, IncludedPaths: []string{"live/**"}}}}
+			provider := &validationImportProvider{}
+			session, err := configurationadapter.New(t.Context(), config, "describe affected", func(context.Context, []string) (map[string]configurationadapter.Provider, error) {
+				return map[string]configurationadapter.Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			config.ComponentConfigurations = session
+			// No stack manifest includes the mixin. Validation must still read it after discovery,
+			// as it does before describe affected compares the HEAD and target inventories.
+			before, err := session.Discover(t.Context())
+			require.NoError(t, err)
+			if path == "missing" {
+				require.ErrorContains(t, ValidateStacks(config), "does not exist in the project")
+				return
+			}
+			require.NoError(t, ValidateStacks(config))
+			require.NoError(t, ValidateStacks(config))
+			require.Equal(t, 1, provider.imports, "both validation passes and repeat validation share the import cache")
+			require.Same(t, session, config.ComponentConfigurations)
+			after, err := session.Discover(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, before, after, "validation must not remove the discovered unit")
 		})
 	}
 }
