@@ -126,7 +126,7 @@ func TestPreventDestroyGuardFailsClosedWhenConfigCannotBeParsed(t *testing.T) {
 	require.NotContains(t, err.Error(), "protected by prevent_destroy", "the failure is a parse error, not a protection verdict")
 }
 
-func TestPlainGenerateBlockThatWritesABackendReplacesTheHostBackend(t *testing.T) {
+func TestPlainGenerateBlockRejectsUnverifiedBackendIdentity(t *testing.T) {
 	for name, test := range map[string]struct {
 		path, contents string
 		want           bool
@@ -144,8 +144,13 @@ func TestPlainGenerateBlockThatWritesABackendReplacesTheHostBackend(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			request := nativeUnit(t, "generate \"x\" {\n path = \""+test.path+"\"\n if_exists = \"overwrite\"\n disable_signature = true\n contents = <<-EOT\n"+test.contents+"\nEOT\n}\n")
 			result, err := Resolve(t.Context(), request)
+			if test.want {
+				require.ErrorContains(t, err, "Cannot verify the backend identity")
+				require.Nil(t, result)
+				return
+			}
 			require.NoError(t, err)
-			require.Equal(t, test.want, result.BackendGenerated)
+			require.False(t, result.BackendGenerated)
 			require.True(t, result.SensitiveGenerated[test.path], "all enabled generate blocks may contain credentials")
 		})
 	}

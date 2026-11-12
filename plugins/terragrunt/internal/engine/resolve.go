@@ -211,6 +211,9 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	var cfg *config.TerragruntConfig
 	if request.Phase == "backend" {
 		cfg, err = config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
+		if err == nil {
+			err = checkBackendGeneration(environment.FS, append(pctx.FilesRead.Paths(), path))
+		}
 	} else {
 		cfg, err = config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
 	}

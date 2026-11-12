@@ -46,8 +46,8 @@ func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.Terragru
 		}
 		result.GeneratedPolicies[path] = policy
 		if !generated.Disable && declaresBackend(path, result.Generated[path]) {
-			// A generate block that writes a backend replaces Atmos's own backend file.
-			result.BackendGenerated = true
+			// Arbitrary Terraform text has no verified state-reader identity.
+			return unresolvedGeneratedBackend(result.Path)
 		}
 	}
 	if err := unitLockFile(result); err != nil {
