@@ -102,6 +102,11 @@ func createAndAuthenticateAuthManagerWithDeps(
 ) (auth.AuthManager, error) {
 	defer perf.Track(atmosConfig, "exec.createAndAuthenticateAuthManager")()
 
+	// Deny before login: policy admission must not depend on valid credentials.
+	if err := AdmitComponent(atmosConfig, info, nil); err != nil {
+		return nil, err
+	}
+
 	// Get merged auth config (global + component-specific if available).
 	mergedAuthConfig, err := getMergedAuthConfigWithFetcher(atmosConfig, info, configFetcher)
 	if err != nil {

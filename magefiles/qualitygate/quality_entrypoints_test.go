@@ -65,6 +65,7 @@ func TestQualityEntrypointScopes(t *testing.T) {
 	}{
 		{"schedule", "schedule", `{}`, true},
 		{"manual", "workflow_dispatch", `{}`, true},
+		{"default branch advanced", "push", `{}`, true},
 		{"milestone", "milestone", `{"action":"created"}`, true},
 		{"release", "release", `{"action":"published"}`, true},
 		{"release removed", "release", `{"action":"unpublished"}`, true},
@@ -91,6 +92,35 @@ func TestQualityEntrypointScopes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestQualityReportPRIgnoresEventAndRejectsInvalidInput(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "schedule")
+	// Explicit recovery must not inspect a payload or select all open PRs.
+	t.Setenv("GITHUB_EVENT_PATH", filepath.Join(t.TempDir(), "absent.json"))
+	var requested []string
+	githubtest.Server(t, func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		require.Equal(t, "/repos/cloudposse/atmos/pulls/42", r.URL.Path)
+		pr := githubtest.PR(githubtest.Run())
+		pr.State = "closed"
+		githubtest.JSON(t, w, pr)
+	})
+	for _, number := range []string{"", "0", "-1", "+42", "042", "42.0", " 42", "42; echo bad", "999999999999999999999999"} {
+		require.ErrorContains(t, (Quality{}).ReportPR(githubtest.Repo, number), "invalid PR number")
+	}
+	require.ErrorContains(t, (Quality{}).ReportPR("invalid", "42"), "invalid repository")
+	require.Empty(t, requested)
+	require.NoError(t, (Quality{}).ReportPR(githubtest.Repo, "42"))
+	require.Equal(t, []string{"/repos/cloudposse/atmos/pulls/42"}, requested)
+}
+
+func TestQualityReportPRPropagatesFailure(t *testing.T) {
+	githubtest.Server(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/repos/cloudposse/atmos/pulls/42", r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	})
+	require.Error(t, (Quality{}).ReportPR(githubtest.Repo, "42"))
 }
 
 // A per-PR report reconciles exactly the PR its event names.

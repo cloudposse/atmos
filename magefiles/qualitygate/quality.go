@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,16 @@ func (Quality) Report(repo string) error {
 	return runQuality(repo, false)
 }
 
+// ReportPR refreshes exactly one PR from live repository state. It deliberately
+// ignores the Actions event, so manual recovery cannot fall back to a true-up.
+func (Quality) ReportPR(repo, number string) error {
+	pr, err := strconv.Atoi(number)
+	if err != nil || pr <= 0 || strconv.Itoa(pr) != number {
+		return bench.Error("invalid PR number: use a positive decimal integer")
+	}
+	return runQuality(repo, false, pr)
+}
+
 // Reconcile trues up every PR a repository-wide event can affect. Scheduled runs
 // reconcile PRs with a recent head commit or no report for their current head and
 // base; merges, milestone and release changes, and manual runs reconcile all open
@@ -88,7 +99,7 @@ func (Quality) Reconcile(repo string) error {
 	return runQuality(repo, true)
 }
 
-func runQuality(repo string, trueUp bool) error {
+func runQuality(repo string, trueUp bool, prs ...int) error {
 	started := time.Now().UTC()
 	if !githubapi.RepoPattern.MatchString(repo) {
 		return bench.Error("invalid repository")
@@ -100,9 +111,11 @@ func runQuality(repo string, trueUp bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), qualityRunBudget)
 	defer cancel()
 	q := qualityClient{ctx: ctx, api: client, repo: repo, trueUp: trueUp}
-	prs, err := q.eventPRs(started)
-	if err != nil {
-		return err
+	if len(prs) == 0 {
+		prs, err = q.eventPRs(started)
+		if err != nil {
+			return err
+		}
 	}
 	return q.reconcileAll(prs)
 }
@@ -112,7 +125,7 @@ func runQuality(repo string, trueUp bool) error {
 // true-up. An unreadable event payload is left to eventPRs to report.
 func qualityRepositoryEvent() bool {
 	switch os.Getenv("GITHUB_EVENT_NAME") {
-	case "schedule", "workflow_dispatch", "milestone", "release":
+	case "schedule", "workflow_dispatch", "milestone", "release", "push":
 		return true
 	case "pull_request_target":
 		var event struct {
@@ -272,9 +285,12 @@ func (q *qualityClient) reconcile(number int) error {
 func (q *qualityClient) recoverBenchmarkReport(number int, run *githubapi.Run) error {
 	published := 0
 	err := bench.ReportRun(q.ctx, q.api, q.repo, run.ID, func(n int, body string, reported *githubapi.Run) error {
-		if n == number {
-			published++
+		// Multiple PRs can share a benchmark head. This invocation owns only
+		// the selected PR, including when recovering benchmark evidence.
+		if n != number {
+			return nil
 		}
+		published++
 		return q.refresh(n, body, reported)
 	})
 	if err == nil {

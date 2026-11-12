@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
@@ -1137,7 +1138,7 @@ func processComponentSectionTemplates(
 	}
 	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
 		templateInput,
-		effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+		delimiters.ForComponent(atmosConfig, &settingsSectionStruct),
 	)
 	if err != nil {
 		return nil, err

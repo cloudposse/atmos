@@ -84,6 +84,26 @@ type LabelReader interface {
 	Labels(ctx context.Context, run *Context) ([]string, error)
 }
 
+// PullRequestRevision identifies the immutable PR head selected for plan verification.
+type PullRequestRevision struct {
+	// Number is the pull request number.
+	Number int
+
+	// HeadSHA is the pull request's head commit, where its plan ran before the merge.
+	HeadSHA string
+}
+
+// MergedPullRequestResolver is an optional capability for mapping a commit on the base branch
+// back to the pull request it came from. After a squash, merge, or rebase merge, the commit that
+// lands on the base branch differs from the pull request's head commit. Workflows dispatched
+// after the merge run on the landed commit, while the pull request's plan was stored under its
+// head commit.
+type MergedPullRequestResolver interface {
+	// MergedPullRequest returns the merged pull request whose merge commit is sha. It returns
+	// nil and no error when sha is not the merge commit of any merged pull request.
+	MergedPullRequest(ctx context.Context, run *Context, sha string) (*PullRequestRevision, error)
+}
+
 // DebugModeDetector is an optional capability for providers that expose a
 // "debug mode" signal set at the runner / step / job level (for example,
 // GitHub Actions' ACTIONS_RUNNER_DEBUG and ACTIONS_STEP_DEBUG). Providers

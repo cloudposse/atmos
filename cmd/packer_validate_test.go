@@ -16,7 +16,7 @@ import (
 func TestPackerValidateCmd(t *testing.T) {
 	_ = NewTestKit(t)
 
-	skipIfPackerNotInstalled(t)
+	requirePacker(t)
 
 	// Windows acceptance shard 1 runs this cmd test binary concurrently with
 	// internal/exec's TestExecutePacker_Validate. Both commands generate and

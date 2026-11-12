@@ -3,9 +3,10 @@ name: Quality Gate Reconcile
 # Repository-wide true-up. Per-PR reports (label and milestone changes, CI
 # completion) live in quality-report.yml with per-PR concurrency.
 on:
-  # A merged PR changes release viability for every remaining open PR.
-  pull_request_target:
-    types: [closed]
+  # A new default-branch commit changes the base and release viability. This
+  # also covers merges when the unprivileged fork signal awaits approval.
+  push:
+    branches: [main]
   # Release eligibility can change without a new commit. Always run trusted
   # default-branch code; these events never execute pull request source.
   milestone:

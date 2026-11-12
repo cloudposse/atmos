@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/viper"
 
@@ -331,12 +329,9 @@ func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizatio
 		code = *authResp.UserCode
 	}
 
-	verificationURL := ""
-	if authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
-		verificationURL = *authResp.VerificationUriComplete
-	} else if authResp.VerificationUri != nil {
-		verificationURL = *authResp.VerificationUri
-	}
+	// The browser opens the complete URL (code embedded); the prompt shows the
+	// short fallback URL, where the user enters the code shown in the dialog.
+	verificationURL := fallbackVerificationURL(authResp)
 
 	// Always display the prompt - even if CI env vars are set, the user might be running make locally.
 	log.Debug("Displaying authentication prompt", "url", verificationURL, "code", code, "isCI", telemetry.IsCI())
@@ -363,70 +358,6 @@ func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizatio
 // isTTY checks if stderr is a terminal.
 func isTTY() bool {
 	return isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
-}
-
-// displayVerificationDialog shows a styled dialog with the verification code.
-func displayVerificationDialog(code, url string) {
-	// Styles using Atmos theme colors.
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
-		PaddingLeft(1).
-		PaddingRight(1)
-
-	codeStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
-		Background(lipgloss.Color(theme.GetCurrentColorScheme().Surface)).
-		Padding(0, 1)
-
-	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
-		Italic(true)
-
-	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
-		Padding(1, 2).
-		MarginTop(1).
-		MarginBottom(1)
-
-	// Build the content.
-	var content strings.Builder
-	content.WriteString(titleStyle.Render("🔐 AWS SSO Authentication Required"))
-	content.WriteString("\n\n")
-	content.WriteString("Verification Code: ")
-	content.WriteString(codeStyle.Render(code))
-	content.WriteString("\n\n")
-
-	if url != "" {
-		content.WriteString(urlStyle.Render(url))
-		content.WriteString("\n\n")
-		content.WriteString(instructionStyle.Render("Opening browser... If it doesn't open, visit the URL above."))
-	}
-
-	// Render the box and display it.
-	ui.Writef("%s\n", boxStyle.Render(content.String()))
-}
-
-// displayVerificationPlainText shows verification code in plain text (for non-TTY/CI).
-func displayVerificationPlainText(code, url string) {
-	ui.Writef("🔐 **AWS SSO Authentication Required**\n")
-	ui.Writef("Verification Code: **%s**\n", code)
-
-	if url != "" {
-		if !telemetry.IsCI() {
-			ui.Writef("Opening browser to: %s\n", url)
-			ui.Writef("If the browser does not open, visit the URL above and enter the code.\n")
-		} else {
-			ui.Writef("Verification URL: %s\n", url)
-		}
-	}
-
-	ui.Writef("Waiting for authentication...\n")
 }
 
 // Validate validates the provider configuration.
