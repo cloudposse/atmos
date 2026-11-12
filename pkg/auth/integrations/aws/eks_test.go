@@ -392,11 +392,13 @@ func TestEKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
 				ARN:                      clusterARN,
 				Region:                   "us-east-2",
 			}
-			clusterConfig := kube.BuildClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), tt.alias)
+			clusterInfo, buildErr := awsCloud.BuildKubeClusterInfo(info, "dev-admin")
+			require.NoError(t, buildErr)
+			clusterConfig := kube.BuildClusterConfig(clusterInfo, tt.alias)
 
 			mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 			require.NoError(t, err)
-			_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), tt.alias, "merge")
+			_, err = mgr.WriteClusterConfig(clusterInfo, tt.alias, "merge")
 			require.NoError(t, err)
 
 			// Verify entries exist.
@@ -727,7 +729,9 @@ func TestEKSIntegration_Cleanup_NoAliasWithARNInKubeconfig(t *testing.T) {
 	}
 	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 	require.NoError(t, err)
-	_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), "", "merge")
+	clusterInfo, buildErr := awsCloud.BuildKubeClusterInfo(info, "dev-admin")
+	require.NoError(t, buildErr)
+	_, err = mgr.WriteClusterConfig(clusterInfo, "", "merge")
 	require.NoError(t, err)
 
 	// Verify entry exists.
@@ -780,7 +784,9 @@ func TestEKSIntegration_FindClusterARN_MultipleCluster(t *testing.T) {
 			ARN:                      cluster.arn,
 			Region:                   "us-east-2",
 		}
-		_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "admin"), cluster.alias, "merge")
+		clusterInfo, buildErr := awsCloud.BuildKubeClusterInfo(info, "admin")
+		require.NoError(t, buildErr)
+		_, err = mgr.WriteClusterConfig(clusterInfo, cluster.alias, "merge")
 		require.NoError(t, err)
 	}
 
@@ -814,7 +820,9 @@ func TestEKSIntegration_FindClusterARN_NoMatch(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/other-cluster",
 		Region:                   "us-east-2",
 	}
-	_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "admin"), "other", "merge")
+	clusterInfo, buildErr := awsCloud.BuildKubeClusterInfo(info, "admin")
+	require.NoError(t, buildErr)
+	_, err = mgr.WriteClusterConfig(clusterInfo, "other", "merge")
 	require.NoError(t, err)
 
 	integration := &EKSIntegration{
