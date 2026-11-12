@@ -130,6 +130,25 @@ func (i *identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 	return i.materializer.Apply(ctx, params)
 }
 
+// materializerRestorer is implemented by materializers whose state lives only in memory, so a
+// credential read back from the credential store must be handed to them explicitly.
+type materializerRestorer interface {
+	Restore(context.Context, types.ICredentials) error
+}
+
+// RestoreCredentials implements types.CredentialRestorer. It hands a stored credential to an
+// in-memory materializer so the passive path, which skips Authenticate, can still produce the
+// identity's environment. Materializers backed by files need nothing.
+func (i *identity) RestoreCredentials(ctx context.Context, stored types.ICredentials) error {
+	defer perf.Track(nil, "auth.identity.RestoreCredentials")()
+
+	restorer, ok := i.materializer.(materializerRestorer)
+	if !ok {
+		return nil
+	}
+	return restorer.Restore(ctx, stored)
+}
+
 //nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
 func (i *identity) Environment() (map[string]string, error) { return i.materializer.Environment() }
 

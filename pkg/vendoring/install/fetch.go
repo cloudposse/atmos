@@ -54,6 +54,10 @@ type fetchOptions struct {
 	SourceIsLocalFile bool
 	// Retry carries a source's configured retry policy through to the go-getter downloader.
 	Retry *schema.RetryConfig
+	// Identity is the Atmos Auth identity the source itself names. The global --identity flag
+	// (carried on the context) overrides it and vendor.identity is the fallback; see
+	// downloader.WithIdentity.
+	Identity string
 }
 
 // fetchToTempDir fetches uri (classified by pType) into tempDir, dispatching to go-getter
@@ -70,7 +74,11 @@ type fetchOptions struct {
 func fetchToTempDir(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri string, pType PkgType, tempDir string, opts fetchOptions) (string, downloader.FetchMetadata, error) {
 	switch pType {
 	case PkgTypeRemote:
-		return fetchRemote(ctx, atmosConfig, uri, tempDir, opts)
+		identityCtx, err := withSourceIdentity(ctx, atmosConfig, opts.Identity)
+		if err != nil {
+			return "", downloader.FetchMetadata{}, err
+		}
+		return fetchRemote(identityCtx, atmosConfig, uri, tempDir, opts)
 	case PkgTypeOci:
 		// OCI goes through the same downloader as every other remote source. An image is always a
 		// whole directory fetched straight into tempDir, so the single-file and sanitized-name
@@ -88,6 +96,19 @@ func fetchToTempDir(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 	default:
 		return "", downloader.FetchMetadata{}, fmt.Errorf("%w %s", errUtils.ErrUnknownPackageType, pType.String())
 	}
+}
+
+// withSourceIdentity scopes ctx to the identity that applies to one source: the global --identity
+// flag, then the source's own identity, then vendor.identity. Fetches made with the returned context
+// run their Git subprocesses with that identity's environment and nothing is written to the process
+// environment, so sources fetched concurrently can use different identities. A source with no
+// identity gets ctx back unchanged, so it behaves exactly as before.
+func withSourceIdentity(ctx context.Context, atmosConfig *schema.AtmosConfiguration, entry string) (context.Context, error) {
+	sectionDefault := ""
+	if atmosConfig != nil {
+		sectionDefault = atmosConfig.Vendor.Identity
+	}
+	return downloader.WithIdentity(ctx, atmosConfig, entry, sectionDefault)
 }
 
 func fetchRemote(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string, opts fetchOptions) (string, downloader.FetchMetadata, error) {

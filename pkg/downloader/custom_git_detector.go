@@ -295,7 +295,7 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host, rawHost string
 	// If an auth broker (e.g. github/sts) has already exported a GIT_CONFIG_* insteadOf rewrite that
 	// matches this host/owner, skip URL injection: injecting userinfo here would prevent git's
 	// insteadOf left-side from matching, silently shadowing the broker's correct minted token.
-	if brokerInsteadOfMatchesURL(parsedURL, host) {
+	if brokerInsteadOfMatchesURLContext(d.ctx, parsedURL, host) {
 		maskedURL, _ := maskBasicAuth(parsedURL.String())
 		log.Debug("Skipping token injection: a broker GIT_CONFIG insteadOf already covers this host/owner; letting git's rewrite win", keyURL, maskedURL)
 		return
@@ -312,14 +312,17 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host, rawHost string
 	}
 }
 
-// brokerInsteadOfMatchesURL reports whether a live GIT_CONFIG_* insteadOf rewrite (exported by an
+// brokerInsteadOfMatchesURLContext reports whether a live GIT_CONFIG_* insteadOf rewrite (exported by an
 // auth broker, e.g. github/sts) would match this URL's host and owner — "match" being git's own
 // term for insteadOf: any URL beginning with the rewrite's value is rewritten (git help config,
 // url.<base>.insteadOf). When it matches, URL token injection must be skipped so git's rewrite —
 // carrying the correct minted token — wins instead of being shadowed by userinfo in the URL.
-func brokerInsteadOfMatchesURL(parsedURL *url.URL, host string) bool {
-	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
-	count, err := strconv.Atoi(os.Getenv("GIT_CONFIG_COUNT"))
+//
+// It is evaluated per fetch (the ctx parameter): it reads GIT_CONFIG_* from the fetch's per-fetch
+// environment (see WithEnvironment) first, then from the process environment. A named identity's `insteadOf` rewrite is exported to its Git subprocesses through
+// that per-fetch environment, so it must be visible here too or URL token injection would shadow it.
+func brokerInsteadOfMatchesURLContext(ctx context.Context, parsedURL *url.URL, host string) bool {
+	count, err := strconv.Atoi(fetchEnvironmentValue(ctx, "GIT_CONFIG_COUNT"))
 	if err != nil || count <= 0 {
 		return false
 	}
@@ -330,7 +333,7 @@ func brokerInsteadOfMatchesURL(parsedURL *url.URL, host string) bool {
 	}
 
 	for i := 0; i < count; i++ {
-		if gitConfigInsteadOfMatches(i, host, owner) {
+		if gitConfigInsteadOfMatches(ctx, i, host, owner) {
 			return true
 		}
 	}
@@ -345,12 +348,10 @@ func brokerInsteadOfMatchesURL(parsedURL *url.URL, host string) bool {
 //     rewrites live inside the file (so the inline-key check below can never see them).
 //
 // Only an https rewrite matches an https clone — an ssh-only rewrite must not suppress injection.
-func gitConfigInsteadOfMatches(i int, host, owner string) bool {
+func gitConfigInsteadOfMatches(ctx context.Context, i int, host, owner string) bool {
 	idx := strconv.Itoa(i)
-	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
-	key := os.Getenv("GIT_CONFIG_KEY_" + idx)
-	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
-	value := os.Getenv("GIT_CONFIG_VALUE_" + idx)
+	key := fetchEnvironmentValue(ctx, "GIT_CONFIG_KEY_"+idx)
+	value := fetchEnvironmentValue(ctx, "GIT_CONFIG_VALUE_"+idx)
 
 	// File mode: the rewrites are inside the included gitconfig, not in this env entry.
 	if key == gitConfigIncludePath {

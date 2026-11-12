@@ -264,6 +264,29 @@ Cached sources, including pulled OCI artifacts, live under the XDG cache directo
 
 `ttl` accepts durations like `0s` (always re-fetch), `5m`, `1h`, `7d`, or keywords like `daily`. Pin to an immutable `?ref=<tag>` (or commit SHA) with a longer `ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the catalog stays fresh.
 
+### Private Repositories and Authentication
+
+A remote import of a private repository normally relies on the credentials already in your environment. To fetch it with an [Atmos Auth identity](/cli/configuration/auth/identities) instead, use the object form of `import` and set `identity`:
+
+```yaml
+import:
+  - path: "git::ssh://git@github.com/acme/stacks.git//catalog/vpc?ref=v2"
+    identity: source-reader
+```
+
+To name the identity once for every remote import, set it in `atmos.yaml`:
+
+```yaml title="atmos.yaml"
+imports:
+  identity: source-reader
+```
+
+The identity is chosen in this order: `identity` on the import, then `imports.identity`. With neither, fetching works as before. The `--identity` flag does not reach stack processing, so it does not change which identity an import uses.
+
+The identity's environment is applied only to the `git` commands that fetch that import, so imports fetched concurrently can use different identities. Outside CI, an identity without a valid session fails with a hint to run `atmos auth login --identity <name>`. Atmos never prompts for a login in the middle of a fetch. The default applies to every remote import, but only Git sources use the identity's environment.
+
+A remote `import` in `atmos.yaml` cannot name an identity. See [CLI configuration imports](/cli/configuration/imports#private-repositories-and-authentication).
+
 ### Best Practices for Remote Imports
 
 1. **Pin Versions:** Always use `?ref=` with a specific tag or commit SHA for Git imports to ensure reproducible builds.
@@ -392,6 +415,9 @@ The `import` section supports the following fields:
 
   <dt>`when` - (string, list, or map)</dt>
   <dd>An optional condition gating whether the import is processed at all, for example `ci` to import a file only in a CI pipeline. An unset condition always imports. See [Conditional Imports](#conditional-imports).</dd>
+
+  <dt>`identity` - (string)</dt>
+  <dd>The name of an Atmos Auth identity used to fetch a remote import. Ignored for local imports. Overrides `imports.identity` in `atmos.yaml`. See [Private Repositories and Authentication](#private-repositories-and-authentication).</dd>
 
   <dt>`ttl` - (string)</dt>
   <dd>Cache duration for the cloned source repository of a remote (Git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache), skipping the re-clone. Within a single invocation a source repo is always cloned at most once regardless of `ttl`. When unset, the source is re-cloned once per invocation. Accepts durations like `0s`, `5m`, `1h`, `7d`, or keywords like `daily`. Set a default for all imports with the top-level `imports.ttl` setting in `atmos.yaml`. See [Caching Remote Imports](#caching-remote-imports).</dd>

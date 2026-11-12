@@ -162,7 +162,7 @@ func PlanVendorPull(cmd *cobra.Command, args []string) (*VendorPullPlan, error) 
 		return nil, err
 	}
 	atmosConfig.Vendor.MaxConcurrency = n
-	plan := &VendorPullPlan{Config: atmosConfig, Options: install.InstallOptions{DryRun: vendorFlags.DryRun, RefreshLock: vendorFlags.RefreshLock, LockEnforcement: vendorFlags.LockEnforcement, MaxConcurrency: n}}
+	plan := &VendorPullPlan{Config: atmosConfig, Options: install.InstallOptions{DryRun: vendorFlags.DryRun, RefreshLock: vendorFlags.RefreshLock, LockEnforcement: vendorFlags.LockEnforcement, MaxConcurrency: n, Identity: info.Identity}}
 	vendorFlags.ctx = ctx
 	vendorFlags.collect = &plan.Packages
 	if err := handleVendorConfig(&plan.Config, &vendorFlags, args); err != nil {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/gitenv"
 	"github.com/cloudposse/atmos/pkg/ci"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -574,4 +576,52 @@ func TestComposeEnv_EmptyIdentity(t *testing.T) {
 	require.NoError(t, err)
 	// Should at least contain PATH.
 	assert.NotEmpty(t, env)
+}
+
+// ---- composeEnv identity precedence ----
+
+type fakeIdentityManager struct{ envs map[string]map[string]string }
+
+func (f fakeIdentityManager) GetDefaultIdentity(bool) (string, error) { return "", nil }
+
+func (f fakeIdentityManager) EnsureIdentityEnvironment(_ context.Context, identity string) (map[string]string, error) {
+	return f.envs[identity], nil
+}
+
+func TestComposeEnv_IdentityReachesSubprocessEnvironment(t *testing.T) {
+	original := envComposer
+	t.Cleanup(func() { envComposer = original })
+	envComposer = gitenv.NewComposer(gitenv.WithManagerFactory(func(*schema.AtmosConfiguration) (gitenv.IdentityManager, error) {
+		return fakeIdentityManager{envs: map[string]map[string]string{
+			"repo-id": {"ATMOS_TEST_GIT_SOCK": "repo"},
+			"flag-id": {"ATMOS_TEST_GIT_SOCK": "flag"},
+		}}, nil
+	}))
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
+	t.Setenv("ATMOS_TEST_GIT_SOCK", "ambient")
+
+	tests := []struct {
+		name, flag, repo string
+		want             string
+	}{
+		{"no identity keeps the process environment", "", "", "ambient"},
+		{"repository identity", "", "repo-id", "repo"},
+		{"flag overrides repository identity", "flag-id", "repo-id", "flag"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Set("identity", tt.flag)
+			t.Cleanup(func() { viper.Set("identity", "") })
+
+			env, err := composeEnv(context.Background(), tt.repo)
+			require.NoError(t, err)
+			var got []string
+			for _, entry := range env {
+				if strings.HasPrefix(entry, "ATMOS_TEST_GIT_SOCK=") {
+					got = append(got, strings.TrimPrefix(entry, "ATMOS_TEST_GIT_SOCK="))
+				}
+			}
+			assert.Equal(t, []string{tt.want}, got)
+		})
+	}
 }

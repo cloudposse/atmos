@@ -17,6 +17,9 @@ type VendorComponentSource struct {
 	// Constraints controls which upstream versions `atmos vendor update` may select for this
 	// source. Mirrors AtmosVendorSource.Constraints (vendor.yaml).
 	Constraints *VendorConstraints `yaml:"constraints,omitempty" json:"constraints,omitempty" mapstructure:"constraints"`
+	// Identity names the Atmos Auth identity used to fetch this source (and a component.yaml's
+	// mixins). It overrides `vendor.identity` and is overridden by the global `--identity` flag.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 type VendorComponentMixins struct {

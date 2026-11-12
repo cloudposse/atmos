@@ -1453,6 +1453,10 @@ var (
 	ErrScaffoldComputedFieldNotSettable       = errors.New("computed field cannot be set")
 	ErrScaffoldFileDelimitersInvalid          = errors.New("spec.files[].delimiters must be exactly two non-empty strings")
 
+	// Remote-read identity errors (identity: on vendor sources, component sources, and remote imports).
+	ErrRemoteIdentityLoginRequired       = errors.New("remote read identity is not logged in")
+	ErrRemoteIdentityResolverUnavailable = errors.New("remote read identity cannot be resolved")
+
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")
 	ErrSourceNotFound        = errors.New("source not found")

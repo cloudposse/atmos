@@ -77,6 +77,12 @@ For more details on the `ansible-playbook` command and options, refer to [Ansibl
         The command line flag takes precedence.
     </dd>
 
+    <dt>`--identity`<em>(optional)</em></dt>
+    <dd>
+        Atmos Auth identity for this run. Its environment is passed to `ansible-playbook`, so credentials
+        made of environment variables, such as `SSH_AUTH_SOCK`, reach the playbook.
+    </dd>
+
     <dt>`--dry-run`<em>(optional)</em></dt>
     <dd>
         Perform a dry run without executing the playbook. Shows what commands would be run.

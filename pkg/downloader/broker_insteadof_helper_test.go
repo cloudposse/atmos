@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"net/url"
 	"strings"
 	"testing"
@@ -80,7 +81,7 @@ func TestBrokerInsteadOfMatchesURL(t *testing.T) {
 
 			parsed, err := url.Parse(tt.urlStr)
 			require.NoError(t, err)
-			got := brokerInsteadOfMatchesURL(parsed, strings.ToLower(parsed.Hostname()))
+			got := brokerInsteadOfMatchesURLContext(context.Background(), parsed, strings.ToLower(parsed.Hostname()))
 			assert.Equal(t, tt.want, got)
 		})
 	}

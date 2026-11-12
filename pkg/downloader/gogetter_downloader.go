@@ -79,7 +79,9 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	// the process env, which the git subprocess this client spawns inherits. Process-once and
 	// gated (CI + configured), so local-only fetches and non-Pro repos pay nothing.
 	remote := f.atmosConfig != nil && isRemoteSource(src)
-	if remote {
+	// A source that names an identity carries its own per-fetch environment (see WithEnvironment),
+	// which takes precedence over the ambient broker, so the broker is not consulted for it.
+	if remote && len(EnvironmentFromContext(ctx)) == 0 {
 		broker.EnsureCredentials(ctx, f.atmosConfig)
 	}
 

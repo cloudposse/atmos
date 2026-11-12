@@ -103,6 +103,7 @@ func (p *componentVendorInstaller) prepareComponent(ctx context.Context, tempDir
 		JoinSanitizedFilename: true,
 		SourceIsLocalFile:     p.localFile,
 		Retry:                 p.retry(),
+		Identity:              p.identity(),
 	})
 	if err != nil {
 		return nil, err
@@ -163,6 +164,7 @@ func (p *componentVendorInstaller) prepareMixin(ctx context.Context, tempDir str
 		ClientMode: downloader.ClientModeFile,
 		Target:     filepath.Join(tempDir, p.mixinFile),
 		Retry:      p.retry(),
+		Identity:   p.identity(),
 	})
 	if err != nil {
 		return nil, err
@@ -265,6 +267,15 @@ func (p *componentVendorInstaller) retry() *schema.RetryConfig {
 		return nil
 	}
 	return p.spec.Source.Retry
+}
+
+// identity returns the Atmos Auth identity the component's source names, if any. Mixins fetched
+// for the same component use it too.
+func (p *componentVendorInstaller) identity() string {
+	if p.spec == nil {
+		return ""
+	}
+	return p.spec.Source.Identity
 }
 
 func (p *componentVendorInstaller) includedPaths() []string {

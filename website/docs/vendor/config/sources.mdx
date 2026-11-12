@@ -29,6 +29,7 @@ spec:
         - "**/test/**"
       tags:
         - networking
+      identity: source-reader
       retry:
         max_attempts: 5
         initial_delay: 2s
@@ -73,6 +74,28 @@ spec:
       </dd>
     </dl>
 
+  </dd>
+
+  <dt>`identity`</dt>
+  <dd>
+    The name of an [Atmos Auth identity](/cli/configuration/auth/identities) used to fetch this source, for private repositories that need credentials the process does not already have. The identity's environment is applied only to the `git` commands that fetch this source, so sources vendored concurrently can use different identities.
+
+    ```yaml
+    spec:
+      sources:
+        - component: "vpc"
+          source: "git::ssh://git@github.com/acme/modules.git//vpc?ref={{.Version}}"
+          version: "1.4.0"
+          identity: source-reader
+          targets:
+            - "components/terraform/vpc"
+    ```
+
+    The identity is chosen in this order: the `--identity` flag of [`atmos vendor pull`](/cli/commands/vendor/pull), then `identity` on the source, then [`vendor.identity`](/cli/configuration/vendor) in `atmos.yaml`. With none of these, fetching works as before, with the credentials already in your environment.
+
+    Outside CI, an identity without a valid session fails with a hint to run `atmos auth login --identity <name>`. Atmos never prompts for a login in the middle of a fetch.
+
+    Only Git sources use the identity's environment. S3 and OCI sources authenticate as before. `atmos vendor update` and `atmos vendor diff` do not use the identity when they list available versions.
   </dd>
 
   <dt>`targets`</dt>

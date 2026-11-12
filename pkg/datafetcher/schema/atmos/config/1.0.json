@@ -6851,6 +6851,17 @@
             }
           ],
           "description": "TTL is the default cache duration for the cloned source repos of remote (git)\nimports, applied when a per-import `ttl` is not set. See StackImport.TTL for the\ncaching semantics and accepted formats."
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity is the default Atmos Auth identity for remote imports that do not name their own.\nSee StackImport.Identity."
         }
       },
       "type": "object",
@@ -14764,6 +14775,17 @@
             }
           ],
           "description": "Lock configures how `atmos vendor pull` reacts to vendor.lock.yaml drift."
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity is the default Atmos Auth identity for vendored sources that do not name their own."
         }
       },
       "type": "object"

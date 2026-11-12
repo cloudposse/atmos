@@ -76,6 +76,9 @@ import (
 	// Import the Atmos Pro credential broker so it registers itself (init) and is consulted
 	// before the first remote read in CI (lazily provisions the github/sts integration).
 	_ "github.com/cloudposse/atmos/pkg/auth/providers/atmospro/broker"
+	// Import the remote-read identity resolver so `identity:` on vendored sources, component sources,
+	// and remote imports resolves through Atmos Auth (registers itself with the downloader in init).
+	_ "github.com/cloudposse/atmos/pkg/auth/remoteread"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cistartup "github.com/cloudposse/atmos/pkg/ci/startup"
 	// Import component providers to register them with the component registry.

@@ -464,6 +464,10 @@
                     "type": "string",
                     "description": "Cache duration for the cloned source repo of a remote (git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache). Within a single invocation a source repo is cloned at most once regardless of TTL. Examples: '0s', '5m', '1h', '7d', 'daily'."
                   },
+                  "identity": {
+                    "type": "string",
+                    "description": "Atmos Auth identity used to fetch this remote import. Overrides settings.imports.identity and is overridden by the global --identity flag. Ignored for local imports."
+                  },
                   "when": {
                     "$ref": "#/definitions/import_condition",
                     "description": "Optional condition gating whether this import is processed. Evaluated against CI detection, the process environment (env), and native stack labels and tags. An unset condition always imports."

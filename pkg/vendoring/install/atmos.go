@@ -74,6 +74,7 @@ func (p *atmosVendorInstaller) prepare(ctx context.Context, tempDir string, atmo
 		ClientMode:        downloader.ClientModeAny,
 		SourceIsLocalFile: p.localFile,
 		Retry:             p.source.Retry,
+		Identity:          p.source.Identity,
 	})
 	if err != nil {
 		return nil, err

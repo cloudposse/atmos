@@ -81,8 +81,9 @@ func TestProcessStacksWithAuthPassesAuthManager(t *testing.T) {
 		Identity:         "terraform",
 	}
 
-	err := processStacksWithAuth(&schema.AtmosConfiguration{}, info)
+	gotManager, err := processStacksWithAuth(&schema.AtmosConfiguration{}, info)
 	require.NoError(t, err)
+	assert.Equal(t, mockAuthManager, gotManager)
 	assert.True(t, info.ComponentIsEnabled)
 }
 
@@ -111,8 +112,9 @@ func TestProcessStacksWithAuthSkipsAuthWhenIdentityIsEmpty(t *testing.T) {
 		Stack:            "cicd-prd",
 	}
 
-	err := processStacksWithAuth(&schema.AtmosConfiguration{}, info)
+	gotManager, err := processStacksWithAuth(&schema.AtmosConfiguration{}, info)
 	require.NoError(t, err)
+	assert.Nil(t, gotManager)
 	assert.True(t, info.ComponentIsEnabled)
 }
 
@@ -1305,4 +1307,49 @@ func TestExecutePlaybookCommandWithRetry_NonMatchingError_FailsFast(t *testing.T
 	counterBytes, readErr := os.ReadFile(counterFile)
 	require.NoError(t, readErr)
 	assert.Len(t, counterBytes, 1, "non-matching error must fail fast on the first attempt")
+}
+
+// TestPlaybookEnvVars_DeliversIdentityEnvironment proves the identity's prepared environment
+// (for example SSH_AUTH_SOCK from an environment credential) reaches the ansible subprocess
+// environment, the way it does for Helmfile and Packer.
+func TestPlaybookEnvVars_DeliversIdentityEnvironment(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: filepath.Join("cfg", "atmos.yaml"), BasePath: "."}
+
+	t.Run("identity environment reaches the subprocess", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		manager := types.NewMockAuthManager(ctrl)
+		manager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "ssh-id", gomock.Any()).
+			DoAndReturn(func(_ context.Context, _ string, current []string) ([]string, error) {
+				return append(slices.Clone(current), "SSH_AUTH_SOCK=/run/agent.sock"), nil
+			})
+		info := &schema.ConfigAndStacksInfo{Identity: "ssh-id", ComponentEnvList: []string{"FOO=bar"}}
+
+		env, err := playbookEnvVars(atmosConfig, info, manager)
+		require.NoError(t, err)
+		assert.Contains(t, env, "SSH_AUTH_SOCK=/run/agent.sock")
+		assert.Contains(t, env, "FOO=bar")
+		assert.Contains(t, env, "ATMOS_CLI_CONFIG_PATH="+atmosConfig.CliConfigPath)
+	})
+
+	t.Run("no auth manager leaves the environment unchanged", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{ComponentEnvList: []string{"FOO=bar"}}
+
+		env, err := playbookEnvVars(atmosConfig, info, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "FOO=bar", env[0])
+		for _, entry := range env {
+			assert.False(t, strings.HasPrefix(entry, "SSH_AUTH_SOCK="))
+		}
+	})
+
+	t.Run("preparation failure is returned", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		manager := types.NewMockAuthManager(ctrl)
+		manager.EXPECT().PrepareShellEnvironment(gomock.Any(), "ssh-id", gomock.Any()).Return(nil, errUtils.ErrAuthenticationFailed)
+		info := &schema.ConfigAndStacksInfo{Identity: "ssh-id"}
+
+		_, err := playbookEnvVars(atmosConfig, info, manager)
+		require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	})
 }

@@ -2567,6 +2567,9 @@ type ImportsSettings struct {
 	// imports, applied when a per-import `ttl` is not set. See StackImport.TTL for the
 	// caching semantics and accepted formats.
 	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+	// Identity is the default Atmos Auth identity for remote imports that do not name their own.
+	// See StackImport.Identity.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 type StackImport struct {
@@ -2592,6 +2595,10 @@ type StackImport struct {
 	// regardless of TTL. When unset, the source is re-cloned once per invocation.
 	// Examples: "0s" (always re-fetch), "5m", "1h", "7d", or keywords like "daily".
 	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+	// Identity names the Atmos Auth identity used to fetch this remote import. It overrides
+	// `settings.imports.identity` and is overridden by the global `--identity` flag. Ignored for
+	// local imports.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 // Dependencies
@@ -2660,6 +2667,9 @@ type AtmosVendorSource struct {
 	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
 	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	Constraints   *VendorConstraints `yaml:"constraints,omitempty" json:"constraints,omitempty" mapstructure:"constraints"`
+	// Identity names the Atmos Auth identity used to fetch this source. It overrides
+	// `vendor.identity` and is overridden by the global `--identity` flag.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 // VendorConstraints controls which upstream versions `atmos vendor update` may
@@ -2718,6 +2728,8 @@ type Vendor struct {
 	CI VendorCIConfig `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
 	// Lock configures how `atmos vendor pull` reacts to vendor.lock.yaml drift.
 	Lock VendorLockConfig `yaml:"lock,omitempty" json:"lock,omitempty" mapstructure:"lock"`
+	// Identity is the default Atmos Auth identity for vendored sources that do not name their own.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 type ChromaStyle struct {

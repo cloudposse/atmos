@@ -1,5 +1,7 @@
 package types
 
+import "context"
+
 // CredentialPersistence is the optional interface implemented by identities whose
 // credentials must never be written to the Atmos credential store (the keyring).
 //
@@ -21,4 +23,13 @@ func PersistsCredentialsInKeyring(identity Identity) bool {
 		return policy.PersistsCredentials()
 	}
 	return true
+}
+
+// CredentialRestorer is implemented by identities whose runtime state is derived from the stored
+// credential and is kept only in memory (for example a credential made of environment variables).
+// The auth manager calls it when a valid stored credential is reused without authenticating, so
+// the identity can serve Environment and PrepareEnvironment in a fresh process. A non-nil error
+// means the stored credential cannot be used and the caller should authenticate instead.
+type CredentialRestorer interface {
+	RestoreCredentials(ctx context.Context, creds ICredentials) error
 }
