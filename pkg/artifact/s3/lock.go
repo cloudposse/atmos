@@ -320,16 +320,16 @@ func (l *claimHandle) goneAfter(ctx context.Context, err error) bool {
 }
 
 // holdClaim validates an existing claim or acquires one, and keeps it held through a mutation.
-func (r *Repository) holdClaim(ctx context.Context, supplied artifact.LockHandle, resource string) (func() error, error) {
-	if supplied == nil {
-		handle, err := r.acquire(ctx, resource, r.settings.owner, "")
+func (r *Repository) holdClaim(ctx context.Context, supplied artifact.LockHandle, resource, operationID string) (func() error, error) {
+	handle, local := supplied.(*claimHandle)
+	if !local || handle == nil || handle.repo != r {
+		handle, err := r.acquire(ctx, resource, r.settings.owner, operationID)
 		if err != nil {
 			return nil, err
 		}
 		return func() error { return handle.Release(ctx) }, nil
 	}
-	handle, ok := supplied.(*claimHandle)
-	if !ok || handle.repo != r || handle.resource != resource {
+	if handle.resource != resource {
 		return nil, fmt.Errorf("%w: supplied lock does not guard %s", errUtils.ErrArtifactConflict, resource)
 	}
 	handle.mu.Lock()

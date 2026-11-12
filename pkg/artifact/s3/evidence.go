@@ -138,7 +138,7 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 	if err != nil {
 		return nil, err
 	}
-	release, err := r.holdClaim(ctx, options.Lock, record.Name+":"+record.Version)
+	release, err := r.holdClaim(ctx, options.Lock, record.Name+":"+record.Version, "")
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +347,7 @@ func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedR
 	if err != nil {
 		return nil, err
 	}
-	release, err := r.holdClaim(ctx, lock, record.Name+":"+record.Version)
+	release, err := r.holdClaim(ctx, lock, record.Name+":"+record.Version, "")
 	if err != nil {
 		return nil, err
 	}
