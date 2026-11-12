@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -309,7 +310,7 @@ func TestArtifactsLifecycleOnRealLocalRepositories(t *testing.T) {
 	require.NoError(t, changelog.err)
 	assert.Equal(t, "- first\n", changelog.stdout)
 
-	// Pull materializes the content; a different existing output needs --force and is replaced, not overlaid.
+	// Pull materializes content; replacing a different output requires force and atomic exchange.
 	out := filepath.Join(p.root, "out")
 	pulled := p.atmosArtifacts("pull", "team/app:2.0.0", "--repository=work", "--output="+out)
 	require.NoError(t, pulled.err)
@@ -320,8 +321,23 @@ func TestArtifactsLifecycleOnRealLocalRepositories(t *testing.T) {
 	refused := p.atmosArtifacts("pull", "team/app:2.0.0", "--repository=work", "--output="+out)
 	require.Error(t, refused.err, "an existing, different output directory needs --force")
 	forcedPull := p.atmosArtifacts("pull", "team/app:2.0.0", "--repository=work", "--output="+out, "--force")
-	require.NoError(t, forcedPull.err)
-	assert.NoFileExists(t, filepath.Join(out, "stale.txt"), "stale files are never overlaid")
+	if runtime.GOOS == "windows" {
+		require.ErrorIs(t, forcedPull.err, errUtils.ErrArtifactUnsupportedCapability)
+		stale, readErr := os.ReadFile(filepath.Join(out, "stale.txt"))
+		require.NoError(t, readErr)
+		assert.Equal(t, "stale", string(stale), "unsupported replacement leaves existing files untouched")
+		original, readErr := os.ReadFile(filepath.Join(out, "data.txt"))
+		require.NoError(t, readErr)
+		assert.Equal(t, "hello\n", string(original))
+		fresh := filepath.Join(p.root, "fresh")
+		require.NoError(t, p.atmosArtifacts("pull", "team/app:2.0.0", "--repository=work", "--output="+fresh, "--force").err)
+		freshBody, readErr := os.ReadFile(filepath.Join(fresh, "data.txt"))
+		require.NoError(t, readErr)
+		assert.Equal(t, "hello\n", string(freshBody))
+	} else {
+		require.NoError(t, forcedPull.err)
+		assert.NoFileExists(t, filepath.Join(out, "stale.txt"), "stale files are never overlaid")
+	}
 
 	// Copy from the directory repository to the archive repository.
 	copied := p.atmosArtifacts("copy", "team/app:1.0.0", "--from=work", "--to=backups", "--format=json")
