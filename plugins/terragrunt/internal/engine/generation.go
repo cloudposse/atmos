@@ -41,12 +41,13 @@ func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.Terragru
 				return err
 			}
 			result.Generated[path] = string(content)
+			// Any generate block can interpolate credentials, regardless of its target.
+			markSensitive(result, path)
 		}
 		result.GeneratedPolicies[path] = policy
 		if !generated.Disable && declaresBackend(path, result.Generated[path]) {
 			// A generate block that writes a backend replaces Atmos's own backend file.
 			result.BackendGenerated = true
-			markSensitive(result, path)
 		}
 	}
 	if err := unitLockFile(result); err != nil {
@@ -84,7 +85,7 @@ func generatedBackend(ctx context.Context, logger log.Logger, cfg *config.Terrag
 	return nil
 }
 
-// markSensitive records a generated file whose bytes can hold backend credentials.
+// markSensitive records a generated file whose bytes can hold credentials.
 func markSensitive(result *model.Resolution, path string) {
 	if result.SensitiveGenerated == nil {
 		result.SensitiveGenerated = map[string]bool{}

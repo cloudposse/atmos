@@ -38,7 +38,7 @@ type Resolution struct {
 	Backend            map[string]any    `json:"backend"`
 	Generated          map[string]string `json:"generated"`
 	GeneratedPolicies  map[string]string `json:"generated_policies,omitempty"`
-	// SensitiveGenerated names generated files that carry backend settings, which can hold
+	// SensitiveGenerated names generated files whose contents can hold
 	// credentials. The host masks their bytes and keeps them out of saved-plan records.
 	SensitiveGenerated map[string]bool   `json:"sensitive_generated,omitempty"`
 	Units              map[string]string `json:"units,omitempty"`

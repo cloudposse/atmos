@@ -201,32 +201,43 @@ func TestConfigurationPlanRecordHoldsNoInputsOrBackendValues(t *testing.T) {
 	require.Equal(t, "backend-secret-value", prepared.Backend["access_key"])
 }
 
-// A generated backend file can hold credentials, so the record keeps no bytes of a sensitive file;
-// apply reads them back from the verified workdir.
+// Generated files can hold credentials; apply restores them from the verified workdir.
 func TestConfigurationPlanRecordHoldsNoSensitiveGeneratedFiles(t *testing.T) {
-	config, info, execCtx, _, path := planFixture(t)
-	secret := `terraform { backend "s3" { access_key = "generated-secret-value" } }`
-	require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, "backend.tf"), []byte(secret), 0o600))
-	execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{
-		{Path: "backend.tf", Content: []byte(secret), IfExists: "overwrite", Sensitive: true},
-		{Path: "provider.tf", Content: []byte("provider-content"), IfExists: "overwrite"},
+	for _, policy := range []string{"overwrite", "overwrite_terragrunt", "skip", "error"} {
+		t.Run(policy, func(t *testing.T) {
+			config, info, execCtx, _, path := planFixture(t)
+			backend := `terraform { backend "s3" { access_key = "generated-backend-secret" } }`
+			provider := `provider "aws" { secret_key = "generated-provider-secret" }`
+			execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{
+				{Path: "backend.tf", Content: []byte(backend), IfExists: policy, Sensitive: true},
+				{Path: "provider.tf", Content: []byte(provider), IfExists: policy, Sensitive: true},
+				{Path: "public.txt", Content: []byte("public-content"), IfExists: "overwrite"},
+				{Path: "obsolete.tf", IfExists: "remove"},
+			}
+			for _, file := range execCtx.preparedConfiguration.Files[:2] {
+				require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, file.Path), file.Content, 0o600))
+			}
+			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+			data, err := os.ReadFile(path + configurationPlanSuffix)
+			require.NoError(t, err)
+			var record configurationPlan
+			require.NoError(t, json.Unmarshal(data, &record))
+			require.Len(t, record.Prepared.Files, 4)
+			for i, file := range execCtx.preparedConfiguration.Files[:2] {
+				require.Empty(t, record.Prepared.Files[i].Content, "the decoded record holds no sensitive bytes")
+				require.NotEmpty(t, file.Content, "the caller's preparation is untouched")
+				require.Equal(t, policy, record.Prepared.Files[i].IfExists)
+			}
+			require.Equal(t, []byte("public-content"), record.Prepared.Files[2].Content)
+			info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+			prepared, err := restoreConfigurationPlan(t.Context(), config, info)
+			require.NoError(t, err)
+			require.Equal(t, []byte(backend), prepared.Files[0].Content)
+			require.Equal(t, []byte(provider), prepared.Files[1].Content)
+			require.Equal(t, []byte("public-content"), prepared.Files[2].Content)
+			require.Empty(t, prepared.Files[3].Content)
+		})
 	}
-	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
-
-	data, err := os.ReadFile(path + configurationPlanSuffix)
-	require.NoError(t, err)
-	var record configurationPlan
-	require.NoError(t, json.Unmarshal(data, &record))
-	require.Len(t, record.Prepared.Files, 2)
-	require.Empty(t, record.Prepared.Files[0].Content, "the decoded record holds no sensitive bytes")
-	require.Equal(t, []byte("provider-content"), record.Prepared.Files[1].Content)
-	require.Equal(t, []byte(secret), execCtx.preparedConfiguration.Files[0].Content, "the caller's preparation is untouched")
-
-	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
-	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
-	require.NoError(t, err)
-	require.Equal(t, []byte(secret), prepared.Files[0].Content)
-	require.Equal(t, []byte("provider-content"), prepared.Files[1].Content)
 }
 
 // --from-plan=<path> names the same file as the canonical location, so it must verify the same
