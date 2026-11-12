@@ -56,6 +56,13 @@ func CopyToTarget(srcDir, dstDir string, opts CopyOptions) error {
 	return cp.Copy(srcDir, dstDir, copyOptions)
 }
 
+// CanCopySymlink reports whether the copier follows a link, including its source
+// containment and resolved-target exclusion checks. Callers must also apply
+// CreateSkipFunc to the link itself.
+func CanCopySymlink(srcDir, src string, opts CopyOptions) bool {
+	return createSymlinkHandler(srcDir, opts)(src) == cp.Deep
+}
+
 // createSymlinkHandler returns an OnSymlink handler that validates symlink targets
 // resolve within srcDir before following them, and applies the same skip policy
 // (e.g., .git exclusion, exclude patterns) to the resolved target path.

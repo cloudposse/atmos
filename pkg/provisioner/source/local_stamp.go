@@ -16,8 +16,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
-// localStampSkippedDirs are directories a local module copy never carries into a workdir.
-// Editing them must not refresh the workdir.
+// localStampSkippedDirs are runtime directories omitted from the ordinary stamp walk.
+// A copied directory link can expose their contents outside these runtime paths.
 var localStampSkippedDirs = map[string]struct{}{".git": {}, ".terraform": {}, ".terragrunt-cache": {}}
 
 // localSourceRoot returns the directory a local directory source copies from, resolved the same
@@ -54,6 +54,7 @@ func localSourceStamp(spec *schema.VendorComponentSource) string {
 		root = resolved
 	}
 	hash := fnv.New128a()
+	links := &stampLinks{root: root, spec: spec, seen: make(map[string]bool)}
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -64,12 +65,81 @@ func localSourceStamp(spec *schema.VendorComponentSource) string {
 			}
 			return nil
 		}
-		return stampEntry(hash, root, path, entry)
+		if err := stampEntry(hash, root, path, entry); err != nil {
+			return err
+		}
+		return links.stampTarget(hash, path, entry)
 	})
 	if walkErr != nil {
 		return ""
 	}
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// stampLinks covers directories exposed by copied links, even when their real
+// paths are runtime directories skipped by the ordinary walk. Real target paths
+// make the traversal finite for directory cycles and repeated aliases.
+type stampLinks struct {
+	root string
+	spec *schema.VendorComponentSource
+	seen map[string]bool
+}
+
+func (links *stampLinks) stampTarget(hash io.Writer, path string, entry fs.DirEntry) error {
+	if entry.Type()&os.ModeSymlink == 0 {
+		return nil
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return err
+	}
+	skip := vendor.CreateSkipFunc(links.root, links.spec.IncludedPaths, links.spec.ExcludedPaths)
+	if excluded, err := skip(info, path, ""); err != nil || excluded {
+		return err
+	}
+	opts := vendor.CopyOptions{IncludedPaths: links.spec.IncludedPaths, ExcludedPaths: links.spec.ExcludedPaths}
+	if !vendor.CanCopySymlink(links.root, path, opts) {
+		return nil
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	targetInfo, err := os.Stat(target)
+	if err != nil {
+		return err
+	}
+	if !targetInfo.IsDir() || links.seen[target] {
+		return nil
+	}
+	links.seen[target] = true
+	return links.stampDirectory(hash, target)
+}
+
+func (links *stampLinks) stampDirectory(hash io.Writer, target string) error {
+	skip := vendor.CreateSkipFunc(links.root, links.spec.IncludedPaths, links.spec.ExcludedPaths)
+	return filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if excluded, err := skip(info, path, ""); err != nil || excluded {
+			if err == nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if err := stampEntry(hash, links.root, path, entry); err != nil {
+			return err
+		}
+		return links.stampTarget(hash, path, entry)
+	})
 }
 
 // stampEntry adds one non-directory entry to the manifest digest.

@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 func writeStampFile(t *testing.T, path, content string) {
@@ -218,4 +219,90 @@ func TestLocalSourceChangedReportsAMissingUnstampedSource(t *testing.T) {
 	writeStampFile(t, filepath.Join(present, "main.tf"), "# one")
 	changed, _ = localSourceChanged(&workdir.WorkdirMetadata{SourceStamp: localSourceStamp(&schema.VendorComponentSource{Uri: present})}, &schema.VendorComponentSource{Uri: present})
 	assert.False(t, changed)
+}
+
+func TestLocalSourceStampCopiedDirectoryLinks(t *testing.T) {
+	for _, dir := range []string{".terraform", ".terragrunt-cache"} {
+		t.Run(dir, func(t *testing.T) {
+			root := t.TempDir()
+			file := filepath.Join(root, dir, "nested", "main.tf")
+			writeStampFile(t, file, "# before")
+			require.NoError(t, os.Symlink(dir, filepath.Join(root, "linked")))
+			spec := &schema.VendorComponentSource{Uri: root}
+			before := localSourceStamp(spec)
+			require.NotEmpty(t, before)
+			assert.Equal(t, before, localSourceStamp(spec))
+			first := t.TempDir()
+			require.NoError(t, vendor.CopyToTarget(root, first, vendor.CopyOptions{}))
+			data, err := os.ReadFile(filepath.Join(first, "linked", "nested", "main.tf"))
+			require.NoError(t, err)
+			assert.Equal(t, "# before", string(data))
+			parentInfo, err := os.Stat(filepath.Dir(file))
+			require.NoError(t, err)
+			writeStampFile(t, file, "# after, longer")
+			// No directory metadata change can explain the changed stamp.
+			require.NoError(t, os.Chtimes(filepath.Dir(file), parentInfo.ModTime(), parentInfo.ModTime()))
+			assert.NotEqual(t, before, localSourceStamp(spec))
+			changed, _ := localSourceChanged(&workdir.WorkdirMetadata{SourceStamp: before}, spec)
+			assert.True(t, changed)
+			second := t.TempDir()
+			require.NoError(t, vendor.CopyToTarget(root, second, vendor.CopyOptions{}))
+			data, err = os.ReadFile(filepath.Join(second, "linked", "nested", "main.tf"))
+			require.NoError(t, err)
+			assert.Equal(t, "# after, longer", string(data))
+		})
+	}
+}
+
+func TestLocalSourceStampDirectoryLinkExclusions(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		target   string
+		excludes []string
+		includes []string
+		external bool
+	}{
+		{name: "git target", target: ".git"},
+		{name: "external target", external: true},
+		{name: "excluded link", target: ".terraform", excludes: []string{"linked"}},
+		{name: "excluded target", target: ".terraform", excludes: []string{".terraform"}},
+		{name: "excluded descendant", target: ".terraform", excludes: []string{"**/main.tf"}},
+		{name: "include filter", target: ".terraform", includes: []string{"**/*.txt"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			target := filepath.Join(root, tc.target)
+			if tc.external {
+				target = t.TempDir()
+			}
+			file := filepath.Join(target, "nested", "main.tf")
+			writeStampFile(t, file, "# before")
+			require.NoError(t, os.Symlink(target, filepath.Join(root, "linked")))
+			spec := &schema.VendorComponentSource{Uri: root, ExcludedPaths: tc.excludes, IncludedPaths: tc.includes}
+			before := localSourceStamp(spec)
+			require.NotEmpty(t, before)
+			writeStampFile(t, file, "# after, longer")
+			assert.Equal(t, before, localSourceStamp(spec))
+			copyDir := t.TempDir()
+			require.NoError(t, vendor.CopyToTarget(root, copyDir, vendor.CopyOptions{IncludedPaths: tc.includes, ExcludedPaths: tc.excludes}))
+			assert.NoFileExists(t, filepath.Join(copyDir, "linked", "nested", "main.tf"))
+		})
+	}
+}
+
+func TestLocalSourceStampDirectoryLinkCycles(t *testing.T) {
+	root := t.TempDir()
+	cache := filepath.Join(root, ".terraform")
+	file := filepath.Join(cache, "main.tf")
+	writeStampFile(t, file, "# before")
+	require.NoError(t, os.Symlink(cache, filepath.Join(root, "linked")))
+	require.NoError(t, os.Symlink(cache, filepath.Join(root, "alias")))
+	require.NoError(t, os.Symlink(root, filepath.Join(cache, "back")))
+	require.NoError(t, os.Symlink("missing", filepath.Join(cache, "dangling")))
+	spec := &schema.VendorComponentSource{Uri: root}
+	before := localSourceStamp(spec)
+	require.NotEmpty(t, before)
+	assert.Equal(t, before, localSourceStamp(spec))
+	writeStampFile(t, file, "# after, longer")
+	assert.NotEqual(t, before, localSourceStamp(spec))
 }
