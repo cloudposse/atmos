@@ -41,6 +41,8 @@ type interrupt struct {
 	received atomic.Value
 }
 
+// newInterrupt cancels on SIGINT or SIGTERM unless the parent already owns
+// credential cleanup and must retain control of signal-driven shutdown.
 func newInterrupt(parent context.Context) *interrupt {
 	ctx, cancel := context.WithCancel(parent)
 	i := &interrupt{ctx: ctx, cancel: cancel, signals: make(chan os.Signal, 1)}

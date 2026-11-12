@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/signals"
 )
 
+// main runs Atmos and coordinates signal-driven credential and process cleanup.
 func main() {
 	// Set up signal handling for graceful shutdown.
 	sigChan := make(chan os.Signal, 1)

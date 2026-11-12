@@ -133,6 +133,7 @@ func WaitForCleanup() bool {
 	return waitForCleanup(ctx)
 }
 
+// waitForCleanup reports whether registered cleanup drains before the context expires.
 func waitForCleanup(ctx context.Context) bool {
 	cleanupScopes.Lock()
 	drained := cleanupScopes.drained

@@ -76,6 +76,8 @@ func (m *manager) WithIsolatedIdentity(ctx context.Context, identityName string,
 	})
 }
 
+// newIsolatedManager rebuilds independent provider and identity instances with
+// copied configuration and stack selection, sharing the credential infrastructure.
 func (m *manager) newIsolatedManager() (*manager, *schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(nil, "auth.Manager.newIsolatedManager")()
 

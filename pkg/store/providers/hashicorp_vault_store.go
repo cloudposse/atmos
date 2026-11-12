@@ -291,6 +291,8 @@ func (s *VaultStore) UsesOperationIdentity() bool {
 	return s.identityLifetime == vaultIdentityLifetimeOperation
 }
 
+// withAuth runs an operation with the configured identity lifetime. Operation-scoped
+// calls serialize token use and clear the client token before resolver cleanup returns.
 func (s *VaultStore) withAuth(ctx context.Context, operation func(context.Context) error) error {
 	defer perf.Track(nil, "providers.VaultStore.withAuth")()
 	if err := ctx.Err(); err != nil {
@@ -385,6 +387,7 @@ func (s *VaultStore) GetKeyContext(ctx context.Context, key string) (any, error)
 	return s.getByPath(ctx, path)
 }
 
+// getByPath unwraps Atmos's value field or returns a document written by another client.
 func (s *VaultStore) getByPath(ctx context.Context, path string) (any, error) {
 	data, err := s.getDocumentByPath(ctx, path)
 	if err != nil {
@@ -397,6 +400,8 @@ func (s *VaultStore) getByPath(ctx context.Context, path string) (any, error) {
 	return data, nil
 }
 
+// getDocumentByPath reads a KV document under store authentication and rejects
+// an absent data map after authentication and operation cleanup have completed.
 func (s *VaultStore) getDocumentByPath(ctx context.Context, path string) (map[string]any, error) {
 	var data map[string]any
 	err := s.withAuth(ctx, func(ctx context.Context) error {
@@ -461,6 +466,8 @@ func (s *VaultStore) GetKeyFieldContext(ctx context.Context, key, field string) 
 	return s.getFieldByPath(ctx, s.getRawKeyPath(key), field)
 }
 
+// getFieldByPath selects an exact top-level field and reports missing fields
+// without including document contents in the error.
 func (s *VaultStore) getFieldByPath(ctx context.Context, path, field string) (any, error) {
 	data, err := s.getDocumentByPath(ctx, path)
 	if err != nil {

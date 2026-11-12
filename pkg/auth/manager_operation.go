@@ -37,6 +37,7 @@ func (m *manager) newOperationManager(name string) (*manager, *schema.ConfigAndS
 	return isolated, info, nil
 }
 
+// identityCredentialRealm selects the private realm only for the operation's target.
 func (m *manager) identityCredentialRealm(name string) string {
 	if m.operationScope != nil && m.operationScope.target == name {
 		return m.operationScope.realm
@@ -44,6 +45,8 @@ func (m *manager) identityCredentialRealm(name string) string {
 	return m.realm.Value
 }
 
+// releaseOperationIdentity attempts target logout and local credential removal,
+// clears the chain cache, and combines cleanup failures without logging out ancestors.
 func (m *manager) releaseOperationIdentity(ctx context.Context) error {
 	defer perf.Track(nil, "auth.Manager.releaseOperationIdentity")()
 
@@ -64,6 +67,7 @@ type operationCredentialStore struct {
 	scope *identityOperationScope
 }
 
+// realmFor redirects the target alias to its operation realm, retaining ancestor realms.
 func (s *operationCredentialStore) realmFor(alias, realm string) string {
 	if alias == s.scope.target {
 		return s.scope.realm

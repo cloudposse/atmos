@@ -110,6 +110,8 @@ func (r *reader) reference(name string) (*secretReference, error) {
 	return ref, nil
 }
 
+// readValue resolves store authentication independently and reads the selected
+// path or field, passing the request context when the backend supports it.
 func (r *reader) readValue(ctx context.Context, ref *secretReference) (any, error) {
 	backend := r.config.Stores[ref.store]
 	// A fresh resolver avoids re-entering the manager currently authenticating this

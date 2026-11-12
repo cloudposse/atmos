@@ -311,6 +311,8 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	return result, err
 }
 
+// authenticateResolvedIdentity authenticates the chain and materializes the
+// target identity's context before returning its identity metadata.
 func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
