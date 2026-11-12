@@ -153,7 +153,7 @@ func TestEarlyCommandAdmissionSkipsUnresolvableCommands(t *testing.T) {
 func TestCommandAdmissionUsesCanonicalPolicyCommandAnnotation(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ATMOS_POLICY_DIR", dir)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "deny.yaml"), []byte("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    canonical:\n      on: command\n      action: deny\n      rule: input.command == 'terraform plan' && input.path == ['terraform', 'plan']\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "deny.yaml"), []byte("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    canonical:\n      on: command\n      action: deny\n      rule: input.command == 'terraform plan' && input.command_path == ['terraform', 'plan'] && input.path == input.command_path\n"), 0o600))
 	root := &cobra.Command{Use: "atmos", SilenceErrors: true, SilenceUsage: true}
 	alias := &cobra.Command{Use: "tf-plan", Annotations: map[string]string{"policy-command": "terraform plan"}, Run: func(*cobra.Command, []string) {}}
 	other := &cobra.Command{Use: "other", Run: func(*cobra.Command, []string) {}}
@@ -260,4 +260,16 @@ func TestCommandAdmissionDestroyInputDuringExecution(t *testing.T) {
 		_, err := Execute(root)
 		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 	})
+}
+
+func TestPolicyCommandPath(t *testing.T) {
+	root := &cobra.Command{Use: "atmos"}
+	secret := &cobra.Command{Use: "secret"}
+	shell := &cobra.Command{Use: "shell"}
+	alias := &cobra.Command{Use: "tf-plan", Annotations: map[string]string{"policy-command": "terraform plan"}}
+	secret.AddCommand(shell)
+	root.AddCommand(secret, alias)
+
+	require.Equal(t, []string{"secret", "shell"}, PolicyCommandPath(shell))
+	require.Equal(t, []string{"terraform", "plan"}, PolicyCommandPath(alias), "aliases use the canonical path")
 }

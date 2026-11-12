@@ -182,6 +182,19 @@ atmos container exec api -s dev -- sh # run a command inside the container
 atmos container down api -s dev       # stop + rm
 ```
 
+`atmos container exec` allocates a TTY only when stdin is a terminal. It also
+works in scripts and pipelines, preserving piped stdin without requesting a TTY.
+
+## Additional Runtime Arguments
+
+`run.run_args` forwards additional arguments to Docker or Podman for both
+`atmos container up` and `atmos container run`, for example `run_args: [--init]`.
+An explicit `--network` or `--net` argument takes precedence over Atmos's automatic
+shared stack network.
+
+Changes to runtime arguments require removing and recreating
+the container with `atmos container down` followed by `atmos container up`.
+
 Each instance is named and labeled from its canonical address `<stack>/container/<component>` (e.g., `atmos-dev-container-api`), so lifecycle commands discover it by label — there are no local state files.
 
 Containers in the same stack automatically join a shared network and can resolve each other by a `<stack>-<component>` DNS alias, with no configuration required — see [Networking](/components/container#networking).

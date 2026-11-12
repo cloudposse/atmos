@@ -46,7 +46,13 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 	// Load Atmos configuration from config file
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		log.Warn("Could not load config", "error", err)
+		// Telemetry is best-effort and must degrade quietly. A config-load failure here
+		// (for example ErrProfileNotFound when ATMOS_PROFILE points at a profile that does
+		// not exist in the current directory) is not user-actionable for telemetry: a
+		// command that actually needs config surfaces its own enriched error. Logging at
+		// WARN turned trivial commands like `atmos version` into noisy "Could not load
+		// config" warnings, so keep this at DEBUG for diagnostics only.
+		log.Debug("Could not load config", "error", err)
 		return nil
 	}
 
@@ -83,7 +89,8 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 func atmosProWorkspaceID() string {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		log.Warn("Could not load config", "error", err)
+		// Best-effort: degrade quietly (see getTelemetryFromConfig). DEBUG, not WARN.
+		log.Debug("Could not load config", "error", err)
 		return ""
 	}
 

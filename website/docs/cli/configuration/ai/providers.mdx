@@ -602,8 +602,8 @@ Token caching (prompt caching) reduces costs by reusing frequently-sent content 
   <dt>**Grok** — 75% discount</dt>
   <dd>Automatic. No configuration required.</dd>
 
-  <dt>**Bedrock** — Up to 90% discount</dt>
-  <dd>Automatic. No configuration required.</dd>
+  <dt>**Bedrock** — 90%+ discount (Claude)</dt>
+  <dd>Manual markers, added by Atmos with the same `cache` settings as Anthropic (on by default).</dd>
 
   <dt>**Azure OpenAI** — 50-100% discount</dt>
   <dd>Automatic. No configuration required.</dd>
@@ -612,7 +612,7 @@ Token caching (prompt caching) reduces costs by reusing frequently-sent content 
   <dd>Local processing, caching not applicable.</dd>
 </dl>
 
-Most providers implement caching automatically. Only Anthropic requires explicit configuration:
+Most providers implement caching automatically. Anthropic and Bedrock (Claude) cache only content marked for caching; Atmos marks the system prompt and ATMOS.md by default, and you can change that per provider:
 
 <File title="atmos.yaml">
 ```yaml
@@ -630,7 +630,7 @@ ai:
 
 <dl>
   <dt>`cache.enabled`</dt>
-  <dd>Enable or disable prompt caching (default: `true`). Cached tokens cost 90% less for Anthropic.</dd>
+  <dd>Enable or disable prompt caching (default: `true`). Cached tokens cost at least 90% less for Anthropic and for Claude on Bedrock.</dd>
 
   <dt>`cache.cache_system_prompt`</dt>
   <dd>Cache the skill system prompt across messages (default: `true`).</dd>
@@ -639,8 +639,10 @@ ai:
   <dd>Cache the ATMOS.md project instructions content (default: `true`).</dd>
 </dl>
 
+For Anthropic and Bedrock (Claude), these settings control where cache markers go. A marker caches everything up to and including the block it is on, so a marker on ATMOS.md also caches the system prompt before it, even when `cache_system_prompt` is `false`.
+
 :::tip Maximize Cache Savings
-For Anthropic, keep your ATMOS.md content stable during conversations and use named sessions for extended work on the same topic. For all other providers, caching works transparently with no action required.
+For Anthropic and Bedrock, keep your ATMOS.md content stable during conversations and use named sessions for extended work on the same topic. For the other providers, caching works transparently with no action required.
 :::
 
 ## Multi-Provider Configuration

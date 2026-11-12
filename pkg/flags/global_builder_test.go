@@ -74,6 +74,7 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 
 		// System flags.
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("redirect-stderr"), "redirect-stderr flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("links"), "links flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("use-version"), "use-version flag should be registered")
 		// Note: --version is NOT a global persistent flag - it's a local flag on RootCmd only.
 		// See global_builder.go registerSystemFlags() for explanation.

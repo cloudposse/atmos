@@ -2,6 +2,41 @@ commands:
   - name: dev
     description: Development workflow commands for Atmos development
     commands:
+      - name: quality
+        description: Refresh or read the quality gate for one pull request
+        working_directory: !repo-root .
+        commands:
+          - name: refresh
+            description: Request a trusted main-branch quality refresh for one PR (does not rerun CI)
+            arguments:
+              - name: pr
+                description: Positive pull request number in cloudposse/atmos
+                required: true
+            steps:
+              - type: script
+                interpreter: starlark
+                script: |
+                  number = ctx.arguments["pr"]
+                  if int(number) <= 0 or str(int(number)) != number:
+                      fail("PR number must be a positive decimal integer")
+                  exec.run(["gh", "workflow", "run", "quality-report.yml", "--repo", "cloudposse/atmos", "--ref", "main", "-f", "pr_number=" + number])
+                  ui.info("Quality refresh requested for PR #" + number + ". Read its result with atmos dev quality status " + number + ".")
+
+          - name: status
+            description: Print the PR's quality snapshot as JSON (run from a trusted checkout)
+            arguments:
+              - name: pr
+                description: Positive pull request number in cloudposse/atmos
+                required: true
+            steps:
+              - type: script
+                interpreter: starlark
+                script: |
+                  number = ctx.arguments["pr"]
+                  if int(number) <= 0 or str(int(number)) != number:
+                      fail("PR number must be a positive decimal integer")
+                  exec.run(["go", "tool", "mage", "quality:status", "cloudposse/atmos", number])
+
       - name: checks-build
         description: Build Atmos with native Git sandbox support outside commit time
         working_directory: !repo-root .
