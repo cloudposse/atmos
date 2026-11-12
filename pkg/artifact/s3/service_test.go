@@ -156,3 +156,62 @@ func TestService_ReconcilesALostResponseAfterCommit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, artifact.OutcomeRead, pulled.Outcome)
 }
+
+// The shared service must hold both the subject lock and the canonical S3 reference lock.
+func TestService_SignAndDeleteS3ByDigest(t *testing.T) {
+	isolateAWS(t)
+	fake := s3test.NewServer(t)
+	registry := artifact.NewRepositoryRegistry()
+	require.NoError(t, RegisterWith(registry, WithVerifier(&artifacttest.FakeVerifier{})))
+	cfg := &schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
+		"bucket": {Kind: artifact.RepositoryKindS3, Packaging: "none", Options: map[string]any{"bucket": fake.Bucket(), "endpoint": fake.Endpoint(), "region": "us-east-1"}},
+	}}
+	svc, err := service.New(service.FromConfig(cfg, registry), nil, service.WithSigner(newSigner()), service.WithStagingRoot(t.TempDir()))
+	require.NoError(t, err)
+	source := t.TempDir()
+	fixtures.WriteFilePackage(t, source)
+	published, err := svc.Publish(context.Background(), artifact.PublishRequest{Repository: "bucket", Source: source, Name: testName, Version: testVersion})
+	require.NoError(t, err)
+	ref := artifact.Ref{Name: testName, Digest: published.RecordDigest}
+	_, err = svc.Sign(context.Background(), artifact.SignRequest{Repository: "bucket", Ref: ref})
+	require.NoError(t, err)
+	deleted, err := svc.Delete(context.Background(), artifact.DeleteRequest{Repository: "bucket", Ref: ref})
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeDeleted, deleted.Outcome)
+}
+
+// A delegated service lock must coexist with the S3 destination's own reference claim.
+func TestService_DelegatedS3EvidenceAndDelete(t *testing.T) {
+	isolateAWS(t)
+	fake := s3test.NewServer(t)
+	registry := artifact.NewRepositoryRegistry()
+	require.NoError(t, local.RegisterWith(registry))
+	require.NoError(t, RegisterWith(registry, WithVerifier(&artifacttest.FakeVerifier{})))
+	options := func(prefix string) map[string]any {
+		return map[string]any{"bucket": fake.Bucket(), "endpoint": fake.Endpoint(), "region": "us-east-1", "prefix": prefix}
+	}
+	cfg := &schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
+		"coordinator": {Kind: artifact.RepositoryKindLocalDir, Options: map[string]any{"path": filepath.Join(t.TempDir(), "coordinator")}},
+		"source":      {Kind: artifact.RepositoryKindS3, Packaging: "none", Options: options("source")},
+		"target":      {Kind: artifact.RepositoryKindS3, Packaging: "none", Options: options("target"), Locking: &schema.ArtifactLockingConfig{Repository: "coordinator"}},
+	}}
+	svc, err := service.New(service.FromConfig(cfg, registry), nil, service.WithSigner(newSigner()), service.WithStagingRoot(t.TempDir()))
+	require.NoError(t, err)
+	ctx := context.Background()
+	src := t.TempDir()
+	fixtures.WriteFilePackage(t, src)
+	published, err := svc.Publish(ctx, artifact.PublishRequest{Repository: "source", Source: src, Name: testName, Version: testVersion})
+	require.NoError(t, err)
+	digestRef := artifact.Ref{Name: testName, Digest: published.RecordDigest}
+	_, err = svc.Sign(ctx, artifact.SignRequest{Repository: "source", Ref: digestRef})
+	require.NoError(t, err)
+	_, err = svc.Copy(ctx, artifact.CopyRequest{From: "source", To: "target", Ref: defaultRef()})
+	require.NoError(t, err)
+	inspection, err := svc.Inspect(ctx, artifact.InspectRequest{Repository: "target", Ref: defaultRef()})
+	require.NoError(t, err)
+	require.NotEmpty(t, inspection.Inspection.Evidence, "copy carries evidence through the delegated lock")
+	_, err = svc.Sign(ctx, artifact.SignRequest{Repository: "target", Ref: digestRef})
+	require.NoError(t, err)
+	_, err = svc.Delete(ctx, artifact.DeleteRequest{Repository: "target", Ref: defaultRef()})
+	require.NoError(t, err)
+}

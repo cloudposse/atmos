@@ -37,7 +37,7 @@ func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference
 	if err != nil {
 		return nil, err
 	}
-	release, err := r.holdClaim(ctx, options.Lock, record.Name+":"+record.Version)
+	release, err := r.holdClaim(ctx, options.Lock, record.Name+":"+record.Version, "")
 	if err != nil {
 		return nil, err
 	}

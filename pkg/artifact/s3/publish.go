@@ -56,17 +56,16 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 	scope := artifact.LockScopeRepository
 	if options.Lock != nil {
 		scope = options.Lock.Scope()
-	} else {
-		lock, lockErr := r.acquire(ctx, prepared.Record.Name+":"+prepared.Record.Version, r.settings.owner, job.opID)
-		if lockErr != nil {
-			return nil, lockErr
-		}
-		defer func() {
-			if releaseErr := lock.Release(ctx); err == nil {
-				err = releaseErr
-			}
-		}()
 	}
+	release, err := r.holdClaim(ctx, options.Lock, prepared.Record.Name+":"+prepared.Record.Version, job.opID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if releaseErr := release(); err == nil {
+			err = releaseErr
+		}
+	}()
 	return r.publishLocked(ctx, job, &options, scope)
 }
 
