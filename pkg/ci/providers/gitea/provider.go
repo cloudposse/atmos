@@ -19,6 +19,8 @@ import (
 // ProviderName identifies Gitea Actions.
 const ProviderName = "gitea-actions"
 
+const pullRequestTargetEvent = "pull_request_target"
+
 // Provider implements Gitea Actions metadata and reporting.
 type Provider struct{}
 
@@ -107,7 +109,7 @@ func (p *Provider) Context() (*provider.Context, error) {
 		c.Branch = env("REF_NAME")
 	}
 	setRepositoryURLs(c)
-	c.ElevatedEvent = c.EventName == "pull_request_target" || c.EventName == "workflow_run"
+	c.ElevatedEvent = c.EventName == pullRequestTargetEvent || c.EventName == "workflow_run"
 	if err := setPullRequestContext(c); err != nil {
 		return nil, err
 	}
@@ -120,7 +122,7 @@ func (p *Provider) Context() (*provider.Context, error) {
 
 // setPullRequestContext selects a fork head only for unprivileged PR events.
 func setPullRequestContext(c *provider.Context) error {
-	if c.EventName != "pull_request" && c.EventName != "pull_request_target" {
+	if c.EventName != "pull_request" && c.EventName != pullRequestTargetEvent {
 		return nil
 	}
 	pr, err := pullRequestContext()
@@ -128,7 +130,7 @@ func setPullRequestContext(c *provider.Context) error {
 		return err
 	}
 	c.PullRequest = pr
-	if c.EventName == "pull_request_target" {
+	if c.EventName == pullRequestTargetEvent {
 		return setBaseBranch(c, pr)
 	}
 	if !pr.Fork {
@@ -169,7 +171,7 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 	defer perf.Track(nil, "gitea.ResolveBase")()
 
 	name := env("EVENT_NAME")
-	if name != "pull_request" && name != "pull_request_target" && name != "push" {
+	if name != "pull_request" && name != pullRequestTargetEvent && name != "push" {
 		return nil, nil
 	}
 	e, err := readEvent()
