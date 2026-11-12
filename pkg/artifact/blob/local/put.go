@@ -22,6 +22,7 @@ type staged struct {
 	attrsTemp string
 	size      int64
 	etag      string
+	preserve  bool
 }
 
 // Put implements [blob.Store]. The body is streamed to a temporary file and renamed into place,
@@ -184,7 +185,7 @@ func matchETag(root *os.Root, op, key string, state fileState, want string) erro
 	if !state.exists {
 		return blob.NewError(blob.KindNotFound, op, key, nil)
 	}
-	current, err := etagOf(root, state.path, state.info)
+	current, err := etagOf(root, state.path)
 	if err != nil {
 		return wrapIO(op, key, err)
 	}
@@ -203,6 +204,9 @@ func (s *Store) commit(root *os.Root, key, target string, pending *staged, noAtt
 	}
 	if err == nil && info.IsDir() {
 		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: key is also a prefix of other objects", errUtils.ErrBlobInvalid))
+	}
+	if !s.plainFiles {
+		return s.commitManaged(root, key, pending, noAttrs, rootRenameReplace)
 	}
 	switch {
 	case pending.attrsTemp != "":
@@ -228,15 +232,14 @@ func (s *Store) statCommitted(root *os.Root, key, target string, pending *staged
 	if err != nil {
 		return nil, wrapIO(blob.OpPut, key, err)
 	}
-	etag := pending.etag
-	if info.Size() > contentETagLimit {
-		etag = weakETag(info)
-	}
-	return &blob.ObjectInfo{Key: key, Size: pending.size, ETag: etag, LastModified: info.ModTime()}, nil
+	return &blob.ObjectInfo{Key: key, Size: pending.size, ETag: pending.etag, LastModified: info.ModTime()}, nil
 }
 
 // discard removes any temporary files that were not committed.
 func (p *staged) discard(root *os.Root) {
+	if p.preserve {
+		return
+	}
 	if p.tempPath != "" {
 		_ = root.Remove(p.tempPath)
 	}

@@ -32,6 +32,7 @@ type Store struct {
 	dirPerm        os.FileMode
 	filePerm       os.FileMode
 	lockAll        bool
+	plainFiles     bool
 	allowBackslash bool
 	snapshotMu     sync.Mutex
 	snapshots      map[string]listSnapshot

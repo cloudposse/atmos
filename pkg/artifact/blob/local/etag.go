@@ -3,34 +3,22 @@ package local
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"os"
-	"strconv"
 )
 
-// contentETagLimit is the largest object whose ETag is its SHA-256. Larger objects get a weak
-// size/mtime token so a head request never reads gigabytes.
-const contentETagLimit = 4 << 20
-
-// hexBase formats sizes and times inside weak ETags.
-const hexBase = 16
-
-// etagOf returns the ETag of the file at path described by info.
-func etagOf(root *os.Root, path string, info os.FileInfo) (string, error) {
+// etagOf returns the content-based ETag of the file at path.
+func etagOf(root *os.Root, path string) (string, error) {
 	file, err := rootOpenFile(root, path)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
-	return etagOpen(file, info)
+	return etagOpen(file)
 }
 
 // etagOpen hashes the opened file and restores its position for the caller.
-func etagOpen(file *os.File, info os.FileInfo) (string, error) {
-	if info.Size() > contentETagLimit {
-		return weakETag(info), nil
-	}
+func etagOpen(file *os.File) (string, error) {
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", err
@@ -44,9 +32,4 @@ func etagOpen(file *os.File, info os.FileInfo) (string, error) {
 // contentETag formats a content hash as an ETag.
 func contentETag(sum []byte) string {
 	return `"` + hex.EncodeToString(sum) + `"`
-}
-
-// weakETag derives a token from size and modification time for objects over the content limit.
-func weakETag(info os.FileInfo) string {
-	return fmt.Sprintf(`W/"%s-%s"`, strconv.FormatInt(info.Size(), hexBase), strconv.FormatInt(info.ModTime().UnixNano(), hexBase))
 }

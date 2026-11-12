@@ -29,12 +29,20 @@ func WithFilePerm(perm os.FileMode) Option {
 	return func(s *Store) { s.filePerm = perm }
 }
 
-// WithLockAllWrites serializes unconditional writes and deletes with conditional ones through the
-// per-root lock. Enable it when one key is written both conditionally and unconditionally.
+// WithLockAllWrites serializes unconditional writes and deletes with conditional ones. Managed
+// stores already do this; it can also be used with plain-file compatibility.
 func WithLockAllWrites() Option {
 	defer perf.Track(nil, "blob.local.WithLockAllWrites")()
 
 	return func(s *Store) { s.lockAll = true }
+}
+
+// WithPlainFileCompatibility preserves the legacy CI layout and unlocked unconditional operations.
+// Do not mix this mode with managed stores on the same root when consistency is required.
+func WithPlainFileCompatibility() Option {
+	defer perf.Track(nil, "local.WithPlainFileCompatibility")()
+
+	return func(s *Store) { s.plainFiles = true }
 }
 
 // WithLiteralBackslashes permits literal backslashes on filesystems where they are not separators.

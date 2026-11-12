@@ -56,8 +56,23 @@ func (s *Store) lockRoot(ctx context.Context, op, key string) (func(), error) {
 
 // guard returns the lock release for a write or delete, or a no-op when no lock is needed.
 func (s *Store) guard(ctx context.Context, op, key string, conditional bool) (func(), error) {
-	if !conditional && !s.lockAll {
+	if s.plainFiles && !conditional && !s.lockAll {
 		return func() {}, nil
 	}
-	return s.lockRoot(ctx, op, key)
+	release, err := s.lockRoot(ctx, op, key)
+	if err != nil {
+		return nil, err
+	}
+	if !s.plainFiles {
+		root, openErr := s.openRoot(false)
+		if openErr == nil {
+			openErr = s.recoverCommit(root)
+			_ = root.Close()
+		}
+		if openErr != nil {
+			release()
+			return nil, wrapIO(op, key, openErr)
+		}
+	}
+	return release, nil
 }
