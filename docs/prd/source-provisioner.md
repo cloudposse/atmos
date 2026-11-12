@@ -107,6 +107,25 @@ local state, saved plans, provider locks and custom backend paths, or retain the
 No journaled literal defaults change. State-preservation, dry-run, and authentication fixes apply to all
 editions; they do not retain destructive behavior behind an edition pin.
 
+### Concurrent use of a shared component directory
+
+Terraform source refresh holds a cross-process lock while it stages and publishes. The lock file
+lives under the process temporary directory, so it coordinates only processes using the same temporary
+directory on the same host; separate hosts or temporary directories need external coordination.
+A second process waits under the caller's context and warns while blocked. The context may have no
+deadline; the vendor download timeout begins after the lock is acquired.
+
+**Remaining work (required before this feature is complete):** the refresh lock covers only the
+source refresh itself (staging and publication), not the rest of the command: backend generation,
+init, plan and apply run after it is released. Without workdir provisioning, every stack that uses a component shares its directory
+for the whole command: generated `backend.tf.json`, varfiles and provider overrides, `.terraform`
+(init, provider installation and its incomplete-package cleanup, the selected workspace), the
+planfile, and plan/apply. Parallel atmos processes on such a directory can still interleave those
+steps. The complete fix is one per-directory lock held from provisioning to the end of the command
+for non-workdir components, re-entrant within one invocation so in-process callers (such as
+`plan --all`) do not deadlock on themselves. It serializes stacks that share a component directory;
+workdir provisioning remains the way to run them in parallel.
+
 ---
 
 ## CLI Commands

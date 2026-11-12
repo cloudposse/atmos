@@ -23,9 +23,10 @@ symlinks so aliases of the same physical directory cannot publish concurrently.
 
 Windows acceptance testing exposed that the cache lock used for publication is deliberately
 best-effort on Windows. Source publication now uses `pkg/filelock` directly for native and
-in-process exclusion on every platform. It retains the existing two-second acquisition bound
-and lock path, observes caller cancellation while waiting, and does not impose that acquisition
-deadline on the subsequent download. The legacy workdir migration guard checks the path type
+in-process exclusion on every platform. A second publisher waits for the lock under the caller's
+context instead of failing after a fixed two-second bound, and warns after two seconds that another
+Atmos process is refreshing the directory. Once it acquires the lock it finds the target up to date
+or republishes the same files. The legacy workdir migration guard checks the path type
 before reading it: Windows can classify `ReadDir` on a regular file as not-found, which must
 not allow Atmos to switch away from existing caller data.
 The unused pre-receipt download wrapper is removed, and source progress setup passes its
@@ -34,7 +35,9 @@ expanded target options by pointer rather than copying them.
 Terraform `source:` refresh and `terraform source pull --force` stage the complete download
 before changing the live source. A `.atmos/source-files.json` receipt identifies files owned by
 the fetched source. Refresh removes obsolete owned files, installs the new source, and preserves
-files created by Terraform, Atmos, or hooks. The component directory and runtime artifacts stay
+files created by Terraform, Atmos, or hooks, provided those paths are not recorded as source-owned.
+Generators must avoid inventoried source paths: rewriting one does not transfer its ownership, and a
+later refresh can replace or remove it. The component directory and runtime artifacts stay
 in place. Publication journals each touched source file and its provenance receipts; a copy,
 publication, metadata, or cancellation failure rolls back the changed files. A rollback that
 itself fails retains its journal and reports its location.
@@ -48,9 +51,26 @@ lock markers and destination symlink traversal also prevent publication. Separat
 separate target locks; this does not introduce a universal scheduler for independent Terraform
 processes sharing one mutable directory.
 
+When `auto_generate_backend_file` is enabled, a source that ships `backend.tf.json` in a module root
+is rejected before publication: the source copy and the generated backend would otherwise overwrite
+each other. A source update that changes a path between a file and a directory is also rejected
+before publication, because refresh replaces files in place and cannot change a path's type
+transactionally. The error names the conflicting path. To recover, move only that path out of the
+component directory, keeping anything it holds that is still needed, and refresh again. Back up and
+migrate local state, saved plans, and other runtime artifacts in that path, and update their configured
+paths before running Terraform again. If the source replaces a directory with a file, its former
+contents cannot be restored at their original paths. Do not delete
+the whole component directory or run `source delete`: that also removes local state, `.terraform`,
+and saved plans.
+
 Legacy workdirs have no source ownership inventory. Their unknown files are retained, ordinary
 incoming Terraform configuration is adopted as source, and ambiguous non-Terraform collisions
-fail safely. This intentionally cannot prove that an unmatched legacy file is stale. Once an
+fail safely. This intentionally cannot prove that an unmatched legacy file is stale. Incoming `.tf`
+and `.tf.json` files are adopted without comparing contents, so on the first refresh of a legacy
+workdir a source file with the same name as a hook-generated or hand-written configuration file
+(for example `generated.tf`) replaces it. Before that first refresh, back up any generated
+configuration that shares a name with a source file, or change the generator to write a name the
+source does not ship. Once an
 inventory has been recorded, subsequent refreshes remove obsolete source-owned files. A source
 fixture named `examples/terraform.tfstate` remains ordinary source content unless it is the
 configured runtime location or contains actual state; the filename alone does not protect it.
@@ -59,7 +79,9 @@ Successful source provisioning is reused across hooks and nested lookups for the
 invocation. The cache key includes the destination checkout, component instance, full source
 specification, and authentication scope. Failed attempts are not cached; changed sources or
 missing targets are reprovisioned. The next invocation starts a new scope, so zero TTL continues
-to refresh on the next command. A reused result preserves the runtime's already-resolved module
+to refresh on the next command. Outside an invocation scope, a component's own completion marker is reused only
+while the workdir metadata still names the same instance, stack, and source; a target re-vendored
+by another selector is provisioned again. A reused result preserves the runtime's already-resolved module
 subdirectory. Refresh retains `.terraform`; normal init fingerprinting decides whether changed
 inputs require initialization or backend reconfiguration.
 

@@ -15,13 +15,27 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filelock"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const sourceFilesManifest = ".atmos/source-files.json"
 
-const sourceRefreshLockTimeout = 2 * time.Second
+// sourceRefreshLockWarnAfter is how long a refresh waits for another process's publication before
+// it tells the user why it is blocked. The wait itself is bounded only by the caller's context.
+var sourceRefreshLockWarnAfter = 2 * time.Second
+
+// warnSourceRefreshLockWait reports a refresh blocked by another publisher. It is a seam for tests.
+var warnSourceRefreshLockWait = func(ctx context.Context, target string) {
+	if workdir.OutputSuppressed(ctx) {
+		log.Debug("Waiting for another Atmos process to finish refreshing the component source", "target", target)
+		return
+	}
+	ui.Warningf("Waiting for another Atmos process to finish refreshing the component source in %s", target)
+}
 
 // sourceFiles records only downloaded files, never files created by Terraform or hooks.
 // An absent manifest is a legacy checkout: unrecognized files remain caller-owned.
@@ -50,10 +64,15 @@ func vendorSourcePreserving(ctx context.Context, config *schema.AtmosConfigurati
 	}
 	// Publication protects caller state and ownership, so it requires a real lock
 	// on every platform; the best-effort cache lock is intentionally a no-op on Windows.
+	// Concurrent publishers of one checkout run one after another: a waiter later finds the target
+	// up to date or republishes the same files. The wait is bounded by the caller's context.
 	lock := filelock.New(provisioner.LockCoordPath(canonical+".source-refresh") + ".lock")
-	lockCtx, cancel := context.WithTimeout(ctx, sourceRefreshLockTimeout)
-	defer cancel()
-	err = lock.WithExclusive(lockCtx, func() error { return stageSourceRefresh(ctx, config, spec, target, opts) })
+	warning := time.AfterFunc(sourceRefreshLockWarnAfter, func() { warnSourceRefreshLockWait(ctx, target) })
+	defer warning.Stop()
+	err = lock.WithExclusive(ctx, func() error {
+		warning.Stop()
+		return stageSourceRefresh(ctx, config, spec, target, opts)
+	})
 	if errors.Is(err, filelock.ErrAcquire) {
 		return errors.Join(errUtils.ErrCacheLocked, err)
 	}
@@ -79,12 +98,38 @@ func stageSourceRefresh(ctx context.Context, config *schema.AtmosConfiguration, 
 	if err := vendorSource(ctx, config, spec, stage, stagedOpts); err != nil {
 		return err
 	}
+	if err := rejectGeneratedBackendCollision(config, stage, target, opts.componentConfig); err != nil {
+		return err
+	}
 	if opts.metadata != nil {
 		if err := opts.metadata(stage); err != nil {
 			return err
 		}
 	}
 	return publishSource(ctx, stage, target, opts.componentConfig, os.Rename)
+}
+
+// generatedBackendFile is the backend configuration Atmos writes into the module root.
+const generatedBackendFile = "backend.tf.json"
+
+// rejectGeneratedBackendCollision fails a refresh whose source ships the backend file Atmos generates.
+// Installing it would replace the generated backend, and the next generation would overwrite the
+// source's copy, so neither owner's version could be trusted.
+func rejectGeneratedBackendCollision(config *schema.AtmosConfiguration, stage, target string, componentConfig map[string]any) error {
+	if config == nil || !config.Components.Terraform.AutoGenerateBackendFile {
+		return nil
+	}
+	for _, root := range moduleRoots(target, componentConfig) {
+		rel, err := filepath.Rel(target, root)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(stage, rel, generatedBackendFile)); err == nil {
+			return fmt.Errorf("%w: source ships %s, which Atmos generates because components.terraform.auto_generate_backend_file is enabled; exclude it with source.excluded_paths or disable backend generation",
+				errUtils.ErrSourceCopyFailed, filepath.ToSlash(filepath.Join(rel, generatedBackendFile)))
+		}
+	}
+	return nil
 }
 
 type sourceRename func(string, string) error
@@ -288,18 +333,36 @@ func rejectActiveStateLock(target string) error {
 
 // runtimePaths accounts for nested module roots and custom local backend locations.
 func runtimePaths(target string, config map[string]any) map[string]bool {
-	roots := []string{target}
-	if component := extractComponentName(config); component != "" {
-		roots = append(roots, filepath.Join(target, component))
-	}
 	protected := map[string]bool{}
-	for _, root := range roots {
+	for _, root := range moduleRoots(target, config) {
 		for _, name := range []string{".terraform", "terraform.tfstate", "terraform.tfstate.backup", "terraform.tfstate.d"} {
 			protected[filepath.Join(root, name)] = true
 		}
 		protectLocalBackendPaths(protected, root, config)
 	}
 	return protected
+}
+
+// moduleRoots lists every directory Terraform may run in under target: the target itself, the
+// component name and the metadata.component subpath joined onto it, and an already-resolved
+// workdir path. The subpath candidates are included before they exist, because refresh runs
+// before the module root is resolved against the downloaded tree.
+func moduleRoots(target string, config map[string]any) []string {
+	roots := []string{target}
+	candidates := []string{extractComponentName(config)}
+	if metadata, ok := config["metadata"].(map[string]any); ok {
+		subpath, _ := metadata["component"].(string)
+		candidates = append(candidates, subpath)
+	}
+	for _, candidate := range candidates {
+		if candidate != "" && filepath.IsLocal(candidate) {
+			roots = append(roots, filepath.Join(target, candidate))
+		}
+	}
+	if resolved, ok := config[workdir.WorkdirPathKey].(string); ok && resolved != "" && isWithinBase(resolved, target) {
+		roots = append(roots, filepath.Clean(resolved))
+	}
+	return roots
 }
 
 // protectLocalBackendPaths marks custom local backend locations as runtime-owned. The state reader
@@ -327,7 +390,8 @@ func protectLocalBackendPaths(protected map[string]bool, root string, config map
 }
 
 func runtimeOwned(path, relative string, protected map[string]bool) (bool, error) {
-	if _, err := os.Lstat(path); os.IsNotExist(err) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
 		return false, nil
 	} else if err != nil {
 		return false, err
@@ -336,6 +400,9 @@ func runtimeOwned(path, relative string, protected map[string]bool) (bool, error
 		return true, nil
 	}
 	state, err := isTerraformState(path)
+	if info.Mode()&os.ModeSymlink != 0 && os.IsNotExist(err) {
+		return false, nil
+	}
 	if err != nil || state {
 		return state, err
 	}
@@ -349,6 +416,38 @@ func protectedRuntimePath(path, relative string, protected map[string]bool) bool
 		}
 	}
 	return strings.HasSuffix(filepath.Base(path), ".terraform.lock.hcl") || relative == ".atmos/metadata.json" || relative == ".atmos/source.json"
+}
+
+// checkSourceDestination rejects a destination that traverses a symlink and, for an incoming file,
+// one whose type differs from the source path.
+func checkSourceDestination(target, name string, install bool) error {
+	if err := rejectSourceSymlinkAncestors(target, name); err != nil {
+		return err
+	}
+	if !install {
+		return nil
+	}
+	return rejectSourceTypeChange(target, name)
+}
+
+// rejectSourceTypeChange fails before publication when an incoming file would replace a nonempty
+// directory, or would need a directory where a file exists. Refresh replaces files in place and cannot
+// change a path's type transactionally, so the error names the path and how to recover. An empty
+// directory is still replaced by publication, as before.
+func rejectSourceTypeChange(target, name string) error {
+	const recovery = "; refresh cannot change a path between a file and a directory in place. Move only that path out of the component directory (keep anything it holds that you still need), then refresh again; do not delete the whole directory, which would also remove local state, `.terraform` and saved plans"
+	local := filepath.FromSlash(name)
+	if entries, err := os.ReadDir(filepath.Join(target, local)); err == nil && len(entries) > 0 {
+		return fmt.Errorf("%w: source file %s conflicts with a nonempty directory in the target%s",
+			errUtils.ErrSourceCopyFailed, name, recovery)
+	}
+	for dir := filepath.Dir(local); dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
+		if info, err := os.Lstat(filepath.Join(target, dir)); err == nil && info.Mode().IsRegular() {
+			return fmt.Errorf("%w: source path %s needs a directory where the target has the file %s%s",
+				errUtils.ErrSourceCopyFailed, name, filepath.ToSlash(dir), recovery)
+		}
+	}
+	return nil
 }
 
 func isTerraformPlan(path string) bool {
@@ -370,7 +469,7 @@ type sourceChangeFlags struct{ install, owned bool }
 
 func sourceChange(stage, target, name string, flags sourceChangeFlags, protected map[string]bool) (bool, error) {
 	install, owned := flags.install, flags.owned
-	if err := rejectSourceSymlinkAncestors(target, name); err != nil {
+	if err := checkSourceDestination(target, name, install); err != nil {
 		return false, err
 	}
 	path := filepath.Join(target, filepath.FromSlash(name))

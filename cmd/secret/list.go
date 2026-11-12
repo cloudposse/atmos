@@ -144,6 +144,7 @@ func enumeratedSecretRows(facet secretScope, verify bool) ([]map[string]any, err
 				Component:     entry.Component,
 				ComponentType: facet.ComponentType,
 				Identity:      facet.Identity,
+				CommandPath:   facet.CommandPath,
 			}, true)
 			if loadErr != nil {
 				progress.Error(fmt.Sprintf("Secret verification failed for %s/%s", entry.Stack, entry.Component))

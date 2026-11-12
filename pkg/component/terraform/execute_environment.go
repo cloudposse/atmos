@@ -282,10 +282,25 @@ func (e *Executor) handleVersionSubcommand(atmosConfig *schema.AtmosConfiguratio
 	}, baseOpts...)
 }
 
+// admitBeforeAuth evaluates component admission policy. Policy admission must not
+// depend on valid credentials: a command that policy denies (for example, an agent
+// running destroy on production) fails here, before any identity is resolved or
+// logged in to.
+func (e *Executor) admitBeforeAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if e.services.AdmitComponent == nil {
+		return nil
+	}
+	return e.services.AdmitComponent(atmosConfig, info, nil)
+}
+
 func (e *Executor) setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	// Log the identity-selection decision point for easy debugging.
 	log.Debug("Resolving auth config for component command",
 		"stack", info.Stack, "component", info.ComponentFromArg, "subcommand", info.SubCommand)
+
+	if err := e.admitBeforeAuth(atmosConfig, info); err != nil {
+		return nil, err
+	}
 
 	// Get merged auth config (global + component-specific if stack/component are set).
 	// getMergedAuthConfig logs on debug when falling back to global config after an error.

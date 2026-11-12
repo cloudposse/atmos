@@ -78,12 +78,27 @@ func TestSourceRefreshSerializesAncestorAliasOwners(t *testing.T) {
 	case err := <-firstResult:
 		t.Fatalf("first source failed before staging: %v", err)
 	}
-	// The winner still owns the publication lock. The aliased contender must
-	// time out acquiring that same lock, rather than publish into the same tree.
-	secondErr := VendorSource(t.Context(), nil, secondSpec, secondTarget.Dir, WithRuntimePreservation(nil), withProvenance(secondTarget, "dev", secondSpec, nil))
+	// The winner still owns the publication lock. The aliased contender must wait
+	// for that same lock (and say so), rather than publish into the same tree.
+	waiting := make(chan string, 1)
+	restoreWarn, restoreDelay := warnSourceRefreshLockWait, sourceRefreshLockWarnAfter
+	t.Cleanup(func() { warnSourceRefreshLockWait, sourceRefreshLockWarnAfter = restoreWarn, restoreDelay })
+	sourceRefreshLockWarnAfter = time.Millisecond
+	warnSourceRefreshLockWait = func(_ context.Context, target string) { waiting <- target }
+	secondResult := make(chan error, 1)
+	go func() {
+		secondResult <- VendorSource(t.Context(), nil, secondSpec, secondTarget.Dir, WithRuntimePreservation(nil), withProvenance(secondTarget, "dev", secondSpec, nil))
+	}()
+	select {
+	case blocked := <-waiting:
+		require.Equal(t, secondTarget.Dir, blocked)
+	case err := <-secondResult:
+		t.Fatalf("aliased contender did not wait for the publication lock: %v", err)
+	}
 	unblock()
 	require.NoError(t, <-firstResult)
-	require.ErrorIs(t, secondErr, errUtils.ErrCacheLocked)
+	// Once the winner publishes, the contender sees a target owned by another instance.
+	require.ErrorIs(t, <-secondResult, errUtils.ErrWorkdirProvision)
 	metadata, err := workdir.ReadMetadata(firstTarget.Dir)
 	require.NoError(t, err)
 	require.Equal(t, "first", metadata.Component)
