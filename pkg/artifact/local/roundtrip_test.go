@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -235,7 +236,19 @@ func TestPullReplacementRemovesStaleFilesInsideTheOutputOnly(t *testing.T) {
 			state, err := materialize.InspectDestination(out, content.Record)
 			require.NoError(t, err)
 			assert.NotEqual(t, materialize.DestinationMatches, state)
-			require.NoError(t, materialize.Materialize(context.Background(), content, out))
+			err = materialize.Materialize(context.Background(), content, out)
+			if runtime.GOOS == "windows" {
+				require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+				old, readErr := os.ReadFile(filepath.Join(out, "stale", "old.txt"))
+				require.NoError(t, readErr)
+				assert.Equal(t, "old", string(old), "unsupported replacement preserves the original output")
+				readme, readErr := os.ReadFile(filepath.Join(out, "README.md"))
+				require.NoError(t, readErr)
+				assert.Equal(t, "old readme", string(readme))
+				assert.FileExists(t, sibling)
+				return
+			}
+			require.NoError(t, err)
 
 			assert.NoFileExists(t, filepath.Join(out, "stale", "old.txt"), "stale files inside the output are removed, not merged")
 			assert.FileExists(t, sibling, "nothing outside the requested output root is touched")
