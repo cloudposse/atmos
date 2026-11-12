@@ -77,7 +77,7 @@ func (s *Store) transport() (*blobLocal.Store, error) {
 	if root == "" {
 		root = "."
 	}
-	return blobLocal.New(root, blobLocal.WithLiteralBackslashes())
+	return blobLocal.New(root, blobLocal.WithLiteralBackslashes(), blobLocal.WithPlainFileCompatibility())
 }
 
 // key maps a validated artifact name to the transport key. Names are cleaned the same way the

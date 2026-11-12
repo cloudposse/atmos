@@ -2144,6 +2144,10 @@ var (
 	// ErrBlobIdentityUnresolved is returned when a configured identity cannot be resolved to credentials.
 	// The generic blob transport fails closed instead of falling back to ambient credentials.
 	ErrBlobIdentityUnresolved = errors.New("blob identity could not be resolved")
+
+	// ErrBlobInvalidChunkTerminator is returned by the S3 test endpoint when an aws-chunked request
+	// body has a chunk that is not followed by the required CRLF terminator.
+	ErrBlobInvalidChunkTerminator = errors.New("invalid aws-chunked chunk terminator")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
