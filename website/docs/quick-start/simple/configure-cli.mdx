@@ -49,7 +49,9 @@ Terraform components and Atmos stacks. Almost everything in Atmos is configurabl
 Below is the minimum recommended configuration for Atmos to work with Terraform and to configure [Atmos components](/components)
 and [Atmos stacks](/learn/stacks). Copy this YAML config below into your `atmos.yaml` file.
 
-<EmbedFile filePath="examples/demo-stacks/atmos.yaml" />
+<EmbedFile filePath="examples/quick-start-simple/atmos.yaml" />
+
+This configuration selects OpenTofu (`tofu`). The station catalog declares its version in `dependencies.tools`, so Atmos installs it when a Terraform command needs it.
 
 <Note>For the description of all the sections, refer to [CLI Configuration](/cli/configuration).</Note>
 </Step>
@@ -96,8 +98,6 @@ Well-known paths are how Atmos finds all your stack configurations, components, 
   <dt>`stacks.excluded_paths`</dt>
   <dd>List of file paths to the top-level stacks in the `stacks` directory to exclude from search when Atmos searches for the stack where the component is defined when executing `atmos` commands</dd>
 
-  <dt>`workflows.base_path`</dt>
-  <dd>The base path to Atmos [Workflows](/workflows) files</dd>
 </dl>
 
 
