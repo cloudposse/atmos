@@ -22,4 +22,6 @@ logs, files or the process environment is high. Command execution by explicitly 
 workflows in the user's own config is intended behavior and out of scope. DoS from malformed input is low/medium.
 
 ## Anything to leave alone
-Do not report findings that require the attacker to already control the local `atmos.yaml` or the user's shell.
+Do not report findings that require the attacker to already control the user's shell.
+Do not report findings that require the attacker to already control a local `atmos.yaml` that the user has explicitly authored and trusts.
+An `atmos.yaml` or `atmos.d/` fragment supplied by a third-party pull request or repository is untrusted and stays in scope.
