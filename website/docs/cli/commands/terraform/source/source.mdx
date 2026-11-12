@@ -133,6 +133,11 @@ source:
   <dt>`excluded_paths`</dt>
   <dd>Glob patterns for files to exclude. Applied after included_paths filtering.</dd>
 
+  <dt>`identity`</dt>
+  <dd>
+  The name of an [Atmos Auth identity](/cli/configuration/auth/identities) used to fetch this source, for example `identity: source-reader`. It overrides [`vendor.identity`](/cli/configuration/vendor) in `atmos.yaml`, and the `--identity` flag overrides both. The identity's environment is applied only to the `git` commands that fetch this source. Outside CI, an identity without a valid session fails with a hint to run `atmos auth login --identity <name>`. See [`identity` in `vendor.yaml`](/vendor/config/sources#attributes) for the limits.
+  </dd>
+
   <dt>`ttl`</dt>
   <dd>
   Cache duration for JIT-vendored sources. Controls how long a cached source is reused before re-pulling from the remote. When set, Atmos checks the source's last update time against this TTL. If expired, the source is re-pulled automatically on the next command invocation. If not set, cached sources are reused indefinitely (only re-pulled on version or URI changes).

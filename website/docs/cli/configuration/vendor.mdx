@@ -45,6 +45,9 @@ vendor:
     max_delay: 30s
     backoff_strategy: exponential
 
+  # Default Atmos Auth identity for sources that do not name their own (optional)
+  identity: source-reader
+
   # Path to the vendor lock file (optional)
   lock_file: vendor.lock.yaml
 
@@ -151,6 +154,21 @@ vendor:
 
     Override per invocation with `--lock-enforcement <strict|warn|silent>` on `atmos vendor pull`
     or `atmos vendor update --pull`.
+  </dd>
+</dl>
+
+## Default Identity
+
+<dl>
+  <dt>`identity`</dt>
+  <dd>
+    The name of an [Atmos Auth identity](/cli/configuration/auth/identities) used to fetch every vendored source that does not set its own `identity`. Set it once here instead of repeating it on each source in `vendor.yaml`.
+
+    The identity is chosen in this order: the `--identity` flag of [`atmos vendor pull`](/cli/commands/vendor/pull), then `identity` on the source in [`vendor.yaml`](/vendor/config/sources#attributes) or `component.yaml`, then `vendor.identity`. With none of these, fetching works as before.
+
+    The default applies to every remote go-getter source, including HTTPS and S3 sources, but only Git sources use the identity's environment. `atmos vendor update` and `atmos vendor diff` do not use it when listing versions.
+
+    **Default:** none
   </dd>
 </dl>
 
