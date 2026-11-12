@@ -32,6 +32,14 @@ const (
 
 	// DocumentMediaType is the default media type of README and CHANGELOG documents.
 	DocumentMediaType = "text/markdown"
+
+	// DistributionDir is the source directory reserved for distribution metadata (the package
+	// README and CHANGELOG, and the generated manifest inside packaged representations). Consumers
+	// that materialize a package for generation or provisioning never expose it.
+	DistributionDir = ".atmos/artifact"
+
+	// DistributionParent is the directory that holds [DistributionDir].
+	DistributionParent = ".atmos"
 )
 
 // OCI media types from the artifact PRD. Existing plugin and foreign OCI graphs keep their own types.
