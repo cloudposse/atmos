@@ -65,12 +65,13 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		if captured, ok := component.ContextFromOptions(phaseOpts...).Value(mainCommandArgsKey{}).(*[]string); ok {
 			*captured = slices.Clone(phaseArgs)
 		}
-		return ExecuteShellCommandWithRetry(
+		var changesPresent error
+		err := ExecuteShellCommandWithRetry(
 			atmosConfig,
 			phaseInfo,
 			info.SubCommand,
 			func(o ...component.ExecutionOption) error {
-				return e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
+				err := e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
 					componentPath:  componentPath,
 					args:           phaseArgs,
 					gatePhase:      info.SubCommand,
@@ -78,9 +79,20 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 					redirectStdErr: info.RedirectStdErr,
 					shellOpts:      o,
 				})
+				// Classify with the effective arguments and environment before legacy
+				// output matching can retry a plan that already succeeded.
+				if isDetailedExitCodeChanges(phase.command, phaseArgs, phaseInfo.ComponentEnvList, err, o...) {
+					changesPresent = err
+					return nil
+				}
+				return err
 			},
 			phaseOpts...,
 		)
+		if err != nil {
+			return err
+		}
+		return changesPresent
 	})
 }
 
