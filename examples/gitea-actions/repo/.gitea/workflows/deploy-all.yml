@@ -13,7 +13,12 @@ jobs:
       matrix: ${{ steps.list.outputs.matrix }}
       count: ${{ steps.list.outputs.count }}
     steps:
-      - run: atmos git clone --ci
+      - env:
+          GIT_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
+        run: atmos git clone --ci
 
       - id: list
         run: atmos list instances --format=matrix
@@ -28,7 +33,12 @@ jobs:
       matrix: ${{ fromJson(needs.inventory.outputs.matrix) }}
       fail-fast: false
     steps:
-      - run: atmos git clone --ci
+      - env:
+          GIT_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
+        run: atmos git clone --ci
 
       - env:
           COMPONENT: ${{ matrix.component }}

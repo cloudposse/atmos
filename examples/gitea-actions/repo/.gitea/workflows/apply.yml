@@ -9,7 +9,12 @@ jobs:
     container:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     steps:
-      - run: atmos git clone --ci
+      - env:
+          GIT_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
+        run: atmos git clone --ci
 
       # Gitea cannot map a merge commit back to its pull request, so deploy plans
       # the merged commit fresh instead of verifying the plan reviewed in the PR.

@@ -12,7 +12,12 @@ jobs:
       count: ${{ steps.affected.outputs.count }}
     steps:
       # A full clone (the default) gives describe affected the base commit.
-      - run: |
+      - env:
+          GIT_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
+        run: |
           atmos git clone --ci
           git checkout --detach "$GITHUB_SHA"
 
@@ -29,7 +34,12 @@ jobs:
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
       fail-fast: false
     steps:
-      - run: |
+      - env:
+          GIT_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
+        run: |
           atmos git clone --ci
           git checkout --detach "$GITHUB_SHA"
 

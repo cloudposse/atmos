@@ -54,7 +54,7 @@ jobs:
           ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}
 ```
 
-The clone step supplies the Gitea job token to Git through a process-scoped credential helper; it is not stored in the clone URL or Git configuration. Grant the job token repository read access. Public repositories can also be cloned without credentials. For older Gitea versions without a suitable job token, use a read-only repository token secret instead.
+The clone step supplies the Gitea job token to Git through a process-scoped credential helper; it is not stored in the clone URL or Git configuration. Grant the job token repository read access. The workflow guides include the same helper in every checkout job. Public repositories can also be cloned without credentials. For older Gitea versions without a suitable job token, use a read-only repository token secret instead.
 
 ## Token
 

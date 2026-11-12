@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,8 @@ const ProviderName = "gitea-actions"
 type Provider struct{}
 
 var _ provider.Provider = (*Provider)(nil)
+
+var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
 // NewProvider creates a provider. Credentials are read only when making API requests.
 func NewProvider() *Provider {
@@ -111,6 +114,21 @@ func (p *Provider) Context() (*provider.Context, error) {
 			return nil, err
 		}
 		c.PullRequest = pr
+		// Unprivileged PR jobs need the head repository when the branch belongs
+		// to a fork. Elevated events retain the base URL and fork safety gate.
+		if c.EventName == "pull_request" && pr.Fork {
+			e, err := readEvent()
+			if err != nil {
+				return nil, err
+			}
+			if e.PullRequest.Head.Repo == nil || !validRepositoryName(e.PullRequest.Head.Repo.FullName) || c.ServerURL == "" {
+				return nil, fmt.Errorf("%w: Gitea fork head repository is missing or invalid", errUtils.ErrCIPullRequestUnknown)
+			}
+			c.CloneURL = c.ServerURL + "/" + e.PullRequest.Head.Repo.FullName + ".git"
+			if c.Branch == "" {
+				c.Branch = pr.HeadRef
+			}
+		}
 	}
 	// An unsupported privileged event must not silently bypass fork checkout protection.
 	if c.EventName == "workflow_run" {
@@ -173,6 +191,14 @@ func pullRequestContext() (*provider.PRInfo, error) {
 	}
 	fork := pr.Head.Repo == nil || pr.Base.Repo == nil || pr.Head.Repo.FullName == "" || pr.Base.Repo.FullName == "" || pr.Head.Repo.FullName != pr.Base.Repo.FullName
 	return &provider.PRInfo{Number: n, HeadRef: pr.Head.Ref, BaseRef: pr.Base.Ref, URL: pr.URL, Fork: fork}, nil
+}
+
+func validRepositoryName(name string) bool {
+	if !repositoryName.MatchString(name) {
+		return false
+	}
+	owner, repo, _ := strings.Cut(name, "/")
+	return owner != "." && owner != ".." && repo != "." && repo != ".."
 }
 
 func setRepositoryURLs(c *provider.Context) {
