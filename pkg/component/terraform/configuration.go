@@ -1,20 +1,27 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"maps"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclparse"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/backend"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -179,12 +186,102 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 	return tenv, nil
 }
 
-// writePreparedConfiguration relinquishes the host backend before applying provider file policies.
+// writePreparedConfiguration verifies retained files before relinquishing the host backend
+// and applying provider file policies.
 func writePreparedConfiguration(directory string, prepared *schema.PreparedComponentConfiguration) error {
+	if err := validateRetainedConfiguration(directory, prepared.Files); err != nil {
+		return err
+	}
 	if prepared.BackendGenerated {
 		if err := backend.RemoveHostBackend(directory); err != nil {
 			return err
 		}
 	}
 	return configuration.WriteFiles(directory, prepared.Files)
+}
+
+// validateRetainedConfiguration runs before any backend cleanup or file writes.
+// A skipped Terraform file may disagree with the provider's resolved state identity.
+// Accept different bytes only when both versions are provably free of backend/cloud
+// declarations; otherwise fail closed without replacing the user's retained file.
+func validateRetainedConfiguration(directory string, files []schema.ComponentConfigurationFile) error {
+	defer perf.Track(nil, "terraform.validateRetainedConfiguration")()
+
+	for _, file := range files {
+		if file.IfExists != "skip" || !terraformConfigurationPath(file.Path) {
+			continue
+		}
+		if err := validateRetainedFile(directory, file); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateRetainedFile(directory string, file schema.ComponentConfigurationFile) error {
+	if !filepath.IsLocal(file.Path) {
+		return errUtils.ErrPluginProtocol
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	stat, err := root.Lstat(file.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !stat.Mode().IsRegular() {
+		return retainedBackendError(file.Path)
+	}
+	retained, err := root.ReadFile(file.Path)
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(retained, file.Content) {
+		return nil
+	}
+	if configurationHasBackend(file.Path, retained) || configurationHasBackend(file.Path, file.Content) {
+		return retainedBackendError(file.Path)
+	}
+	return nil
+}
+
+func retainedBackendError(path string) error {
+	return fmt.Errorf("%w: cannot verify backend identity for retained generated file %s (if_exists = \"skip\"); use matching generated content or an explicit overwrite policy", errUtils.ErrPluginInvalidConfig, path)
+}
+
+func terraformConfigurationPath(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json")
+}
+
+// configurationHasBackend also returns true for unparseable configuration: absence
+// of a backend cannot then be established. Diagnostics never expose retained secrets.
+func configurationHasBackend(path string, content []byte) bool {
+	parser := hclparse.NewParser()
+	var file *hcl.File
+	var diagnostics hcl.Diagnostics
+	if strings.HasSuffix(strings.ToLower(path), ".json") {
+		file, diagnostics = parser.ParseJSON(content, path)
+	} else {
+		file, diagnostics = parser.ParseHCL(content, path)
+	}
+	if diagnostics.HasErrors() {
+		return true
+	}
+	body, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}}})
+	if diagnostics.HasErrors() {
+		return true
+	}
+	for _, block := range body.Blocks {
+		nested, _, diags := block.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "backend", LabelNames: []string{"type"}}, {Type: "cloud"}}})
+		if diags.HasErrors() || len(nested.Blocks) != 0 {
+			return true
+		}
+	}
+	return false
 }
