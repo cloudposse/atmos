@@ -108,33 +108,45 @@ func (p *Provider) Context() (*provider.Context, error) {
 	}
 	setRepositoryURLs(c)
 	c.ElevatedEvent = c.EventName == "pull_request_target" || c.EventName == "workflow_run"
-	if c.EventName == "pull_request" || c.EventName == "pull_request_target" {
-		pr, err := pullRequestContext()
-		if err != nil {
-			return nil, err
-		}
-		c.PullRequest = pr
-		// Unprivileged PR jobs need the head repository when the branch belongs
-		// to a fork. Elevated events retain the base URL and fork safety gate.
-		if c.EventName == "pull_request" && pr.Fork {
-			e, err := readEvent()
-			if err != nil {
-				return nil, err
-			}
-			if e.PullRequest.Head.Repo == nil || !validRepositoryName(e.PullRequest.Head.Repo.FullName) || c.ServerURL == "" {
-				return nil, fmt.Errorf("%w: Gitea fork head repository is missing or invalid", errUtils.ErrCIPullRequestUnknown)
-			}
-			c.CloneURL = c.ServerURL + "/" + e.PullRequest.Head.Repo.FullName + ".git"
-			if env("HEAD_REF") == "" && pr.HeadRef != "" {
-				c.Branch = pr.HeadRef
-			}
-		}
+	if err := setPullRequestContext(c); err != nil {
+		return nil, err
 	}
 	// An unsupported privileged event must not silently bypass fork checkout protection.
 	if c.EventName == "workflow_run" {
 		return nil, fmt.Errorf("%w: Gitea workflow_run context", errUtils.ErrCIOperationNotSupported)
 	}
 	return c, nil
+}
+
+// setPullRequestContext selects a fork head only for unprivileged PR events.
+func setPullRequestContext(c *provider.Context) error {
+	if c.EventName != "pull_request" && c.EventName != "pull_request_target" {
+		return nil
+	}
+	pr, err := pullRequestContext()
+	if err != nil {
+		return err
+	}
+	c.PullRequest = pr
+	if c.EventName != "pull_request" || !pr.Fork {
+		return nil
+	}
+	return setForkContext(c, pr)
+}
+
+func setForkContext(c *provider.Context, pr *provider.PRInfo) error {
+	e, err := readEvent()
+	if err != nil {
+		return err
+	}
+	if e.PullRequest.Head.Repo == nil || !validRepositoryName(e.PullRequest.Head.Repo.FullName) || c.ServerURL == "" {
+		return fmt.Errorf("%w: Gitea fork head repository is missing or invalid", errUtils.ErrCIPullRequestUnknown)
+	}
+	c.CloneURL = c.ServerURL + "/" + e.PullRequest.Head.Repo.FullName + ".git"
+	if env("HEAD_REF") == "" && pr.HeadRef != "" {
+		c.Branch = pr.HeadRef
+	}
+	return nil
 }
 
 // ResolveBase resolves PR head checkouts and push events. Unknown PR checkouts are
