@@ -111,7 +111,7 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		if err := validatePlanOutputFlags(phase.command, phase.args); err != nil {
 			return err
 		}
-		return action(info, phase.args, opts)
+		return successfulPlanResult(phase.command, phase.args, info.ComponentEnvList, action(info, phase.args, opts), opts...)
 	}
 
 	applied, err := execution.ApplyExtraArguments(config.ExtraArguments, &execution.ArgumentsRequest{
@@ -142,7 +142,7 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	var changesPresent error
 	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (string, error) {
 		output, actionErr := runObservedAction(&phaseInfo, applied.Args, opts, config, action)
-		if isDetailedExitCodeChanges(phase.command, applied.Args, phaseInfo.ComponentEnvList, actionErr) {
+		if isDetailedExitCodeChanges(phase.command, applied.Args, phaseInfo.ComponentEnvList, actionErr, opts...) {
 			changesPresent = actionErr
 			return output, nil
 		}
@@ -151,7 +151,23 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	if err != nil {
 		return err
 	}
-	return changesPresent
+	return successfulPlanResult(phase.command, applied.Args, phaseInfo.ComponentEnvList, changesPresent, opts...)
+}
+
+// successfulPlanChanges distinguishes a completed plan (including its hooks) from a
+// failed command or hook that happens to return the same exit status.
+type successfulPlanChanges struct{ error }
+
+func (e *successfulPlanChanges) Unwrap() error {
+	defer perf.Track(nil, "terraform.successfulPlanChanges.Unwrap")()
+	return e.error
+}
+
+func successfulPlanResult(command string, args, env []string, err error, opts ...component.ExecutionOption) error {
+	if isDetailedExitCodeChanges(command, args, env, err, opts...) {
+		return &successfulPlanChanges{error: err}
+	}
+	return err
 }
 
 // runObservedAction runs the wrapped subprocess, capturing its output for error hooks when any exist.
@@ -171,21 +187,21 @@ const detailedExitCodeChanges = 2
 
 // isDetailedExitCodeChanges reports whether err is exit status 2 of a command run with
 // -detailed-exitcode, which Terragrunt treats as success for hooks and the success of the unit.
-func isDetailedExitCodeChanges(command string, args, env []string, err error) bool {
-	if err == nil || errUtils.GetExitCode(err) != detailedExitCodeChanges {
+func isDetailedExitCodeChanges(command string, args, env []string, err error, opts ...component.ExecutionOption) bool {
+	if command != "plan" || err == nil || errUtils.GetExitCode(err) != detailedExitCodeChanges {
 		return false
 	}
-	return detailedExitCodeEnabled(command, args, env)
+	return detailedExitCodeEnabled(command, args, env, opts...)
 }
 
 // detailedExitCodeEnabled reports whether -detailed-exitcode is in effect for the command.
 // Terraform inserts TF_CLI_ARGS_<command>, then TF_CLI_ARGS, before the command-line arguments,
 // and the last setting of a flag wins, so an explicit command-line setting takes precedence.
-func detailedExitCodeEnabled(command string, args, env []string) bool {
+func detailedExitCodeEnabled(command string, args, env []string, opts ...component.ExecutionOption) bool {
 	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(command)
 	words := slices.Concat(
-		strings.Fields(environmentValue(env, "TF_CLI_ARGS_"+suffix)),
-		strings.Fields(environmentValue(env, "TF_CLI_ARGS")),
+		strings.Fields(environmentValue(env, "TF_CLI_ARGS_"+suffix, opts...)),
+		strings.Fields(environmentValue(env, "TF_CLI_ARGS", opts...)),
 		args,
 	)
 	enabled := false
@@ -206,9 +222,17 @@ func detailedExitCodeEnabled(command string, args, env []string) bool {
 }
 
 // environmentValue returns the value of key the subprocess sees: the component environment is
-// appended to the inherited process environment, so its last entry wins.
-func environmentValue(env []string, key string) string {
-	merged := slices.Concat(os.Environ(), env)
+// appended to the selected process environment, so its last entry wins.
+func environmentValue(env []string, key string, opts ...component.ExecutionOption) string {
+	var options component.ExecutionOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	base := options.ProcessEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	merged := slices.Concat(base, env)
 	for i := len(merged) - 1; i >= 0; i-- {
 		if name, value, found := strings.Cut(merged[i], "="); found && name == key {
 			return value

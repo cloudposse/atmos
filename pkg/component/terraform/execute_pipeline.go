@@ -275,11 +275,11 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
-	if mainErr != nil {
+	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		mainErr = e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
 			mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, append(slices.Clone(opts), captureArgs)...)
 	}
-	if mainErr != nil {
+	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		return mainErr
 	}
 	// Policy plans run against a private artifact that is removed after the guard
@@ -288,7 +288,17 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	if execCtx.planPolicy != nil && info.SubCommand == "plan" && !info.DryRun {
 		effectiveArgs = allArgsAndFlags
 	}
-	return recordConfigurationPlan(component.ContextFromOptions(opts...), atmosConfig, info, execCtx, effectiveArgs)
+	if err := recordConfigurationPlan(component.ContextFromOptions(opts...), atmosConfig, info, execCtx, effectiveArgs); err != nil {
+		return err
+	}
+	return mainErr
+}
+
+// completedPlanWithChanges accepts only the completed phase itself, not a joined
+// or wrapped failure that also contains a status-two result.
+func completedPlanWithChanges(err error) bool {
+	var changes *successfulPlanChanges
+	return errors.As(err, &changes) && err == changes //nolint:err113,errorlint // Identity is required: errors.Is would also accept joined failures.
 }
 
 // recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command
