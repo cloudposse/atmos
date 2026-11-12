@@ -43,7 +43,7 @@ Atmos resolves the reference once and reads only that pinned content, so a tag t
 
 When the effective policy requires a signature or supplies trust constraints, verification runs before anything is materialized, and a failure leaves the output untouched. Without trust configuration the artifact is consumed as unchecked and is not reported as verified.
 
-An existing output directory with different content needs `--force`. The new content is validated in staging and then replaces the directory; stale files are never overlaid. `--force` does not bypass signature verification.
+An existing output directory with different content needs `--force`. The new content is validated in staging and then replaces the directory; stale files are never overlaid. On Windows, atomic replacement of an existing directory is unavailable: the command fails without changing it, even with `--force`. Choose a new output path. `--force` does not bypass signature verification.
 
 ## Arguments
 
@@ -71,7 +71,7 @@ An existing output directory with different content needs `--force`. The new con
 
     <dt>`--force`, `-f` <em>(optional)</em></dt>
     <dd>
-        Replace an existing, different output directory.
+        Replace an existing, different output directory where atomic replacement is supported.
         Environment variable: `ATMOS_ARTIFACTS_FORCE`
     </dd>
 
@@ -99,7 +99,7 @@ Stdout carries `outcome` (`read`), `ref`, `location` (the output directory), the
     <dd>The hint points to `atmos artifacts list`.</dd>
 
     <dt>Existing different output</dt>
-    <dd>Fails until you pass `--force`.</dd>
+    <dd>On supported platforms, pass `--force` to replace it. On Windows, use a new output path; the existing directory is preserved.</dd>
 
     <dt>Integrity or verification failure</dt>
     <dd>A digest mismatch, or a required signature that is missing or untrusted, fails before materialization.</dd>
