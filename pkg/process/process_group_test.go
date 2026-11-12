@@ -43,8 +43,10 @@ const (
 	// the child is killed, and then sleeps.
 	modeHolder = "holder"
 	// Mode detach spawns a grandchild that inherits stdout and keeps running,
-	// then exits 0 immediately.
+	// then waits for release and exits 0.
 	modeDetach = "detach"
+	// Mode delayedDetach simulates startup slower than the drain budget.
+	modeDelayedDetach = "delayed-detach"
 
 	helperSleep = 30 * time.Second
 	pidWait     = 10 * time.Second
@@ -82,7 +84,10 @@ func runProcessHelper(mode string) {
 	case modeInput:
 		writePIDFile(dir, "child")
 		_, _ = io.Copy(io.Discard, os.Stdin)
-	case modeDetach:
+	case modeDetach, modeDelayedDetach:
+		if mode == modeDelayedDetach {
+			time.Sleep(childShutdownGrace + 4*time.Second)
+		}
 		spawnGrandchild(modeSleep, true)
 		writePIDFile(dir, "parent")
 		// Wait for the test to release us after both processes have started.
@@ -492,31 +497,82 @@ func TestStdinIsTerminal(t *testing.T) {
 	assert.False(t, stdinIsTerminal(f), "a regular file is not a terminal")
 }
 
+// awaitOutputDrain applies the same five-second bound to both real and deliberately unbounded drains.
+func awaitOutputDrain(done <-chan runOutcome) (Result, bool) {
+	timer := time.NewTimer(childShutdownGrace + 3*time.Second)
+	defer timer.Stop()
+	select {
+	case outcome := <-done:
+		return outcome.result, true
+	case <-timer.C:
+		return Result{}, false
+	}
+}
+
 func TestRun_BackgroundedOutputHolderDoesNotHangOrFail(t *testing.T) {
+	skipOnWindows(t)
+	for _, mode := range []string{modeDetach, modeDelayedDetach} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			killAtCleanup(t, dir, "child")
+			var out bytes.Buffer
+			reader, writer, err := os.Pipe()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			spec := helperSpec(t, mode, dir, &out)
+			spec.Streams.Stdin = reader
+			started := time.Now()
+			done := runAsync(ctx, &spec)
+			waitForPID(t, dir, "parent")
+			child := waitForPID(t, dir, "child")
+			if mode == modeDelayedDetach {
+				require.Greater(t, time.Since(started), childShutdownGrace+3*time.Second, "startup exceeds the drain budget")
+			}
+
+			// Measure the bounded pipe drain after both helpers start, not process startup under load.
+			start := time.Now()
+			require.NoError(t, writer.Close())
+			res, completed := awaitOutputDrain(done)
+			require.True(t, completed, "output drain must finish within the five-second bound")
+			assert.True(t, res.Success(), "exit 0 must stay a success even if a grandchild holds stdout: %v", res.Err)
+			assert.Less(t, time.Since(start), childShutdownGrace+3*time.Second)
+			assert.False(t, processGone(child), "the deliberately detached grandchild stays alive")
+		})
+	}
+}
+
+func TestOutputDrainDeadlineRejectsUnboundedPipe(t *testing.T) {
 	skipOnWindows(t)
 	dir := t.TempDir()
 	killAtCleanup(t, dir, "child")
-
-	var out bytes.Buffer
 	reader, writer, err := os.Pipe()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
+	spec := helperSpec(t, modeDetach, dir, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	spec := helperSpec(t, modeDetach, dir, &out)
-	spec.Streams.Stdin = reader
-	done := runAsync(ctx, &spec)
+	cmd := exec.CommandContext(ctx, spec.Command)
+	cmd.Dir, cmd.Env, cmd.Stdin = spec.Dir, spec.Env, reader
+	var out bytes.Buffer
+	cmd.Stdout = &out // A non-file writer makes os/exec copy from a pipe held open by the grandchild.
+	require.NoError(t, cmd.Start())
+	done := make(chan runOutcome, 1)
+	go func() { done <- runOutcome{result: Result{Err: cmd.Wait()}} }()
 	waitForPID(t, dir, "parent")
 	child := waitForPID(t, dir, "child")
-
-	// Measure the bounded pipe drain after both helpers start, not process startup under load.
-	start := time.Now()
 	require.NoError(t, writer.Close())
-	res := awaitRun(t, done)
-	assert.True(t, res.Success(), "exit 0 must stay a success even if a grandchild holds stdout: %v", res.Err)
-	assert.Less(t, time.Since(start), childShutdownGrace+3*time.Second)
-	// The deliberately detached grandchild is left alone on a normal exit.
-	assert.False(t, processGone(child))
+	_, completed := awaitOutputDrain(done)
+	assert.False(t, completed, "an unbounded drain must fail the same five-second check")
+	process, err := os.FindProcess(child)
+	require.NoError(t, err)
+	require.NoError(t, process.Kill())
+	select {
+	case <-done:
+	case <-time.After(goneWait):
+		t.Fatal("unbounded drain did not end after the pipe holder was killed")
+	}
 }
 
 func TestTolerateWaitDelay(t *testing.T) {
