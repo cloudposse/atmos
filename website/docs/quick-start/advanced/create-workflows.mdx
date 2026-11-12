@@ -69,11 +69,6 @@ workflows:
         type: stage
         title: Component catalog
 
-      - name: list-components
-        type: spin
-        title: Preparing component catalog command
-        command: true
-
       - name: show-components
         command: list components --identity=false --process-functions=false --process-templates=false
 
