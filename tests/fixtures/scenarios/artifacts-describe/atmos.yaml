@@ -8,4 +8,4 @@ artifacts:
   verification:
     require_signature: true
     trusted_keys:
-      - /keys/release.pub
+      - keys/release.pub
