@@ -335,3 +335,12 @@ func prepareComponentAuthEnvironment(authManager auth.AuthManager, identity stri
 	}
 	return preparedEnv, nil
 }
+
+// PrepareComponentAuthEnvironment is the exported form of prepareComponentAuthEnvironment for
+// component packages (such as Ansible) that run their own subprocess. It layers the resolved
+// identity's prepared environment over envVars, exactly as the Helmfile and Packer paths do.
+func PrepareComponentAuthEnvironment(authManager auth.AuthManager, identity string, envVars []string) ([]string, error) {
+	defer perf.Track(nil, "exec.PrepareComponentAuthEnvironment")()
+
+	return prepareComponentAuthEnvironment(authManager, identity, envVars)
+}

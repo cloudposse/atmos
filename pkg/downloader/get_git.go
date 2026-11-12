@@ -310,6 +310,11 @@ func defaultBrokeredAuthRetryConfig() *schema.RetryConfig {
 
 // getRunCommandWithRetry wraps getRunCommand with retry logic for transient errors.
 func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.Cmd) error {
+	// Every git subprocess of a fetch (clone, fetch, checkout, submodules) passes through here, so
+	// this is the one place the per-fetch environment (see WithEnvironment) is applied. Retries copy
+	// cmd.Env, so they inherit it.
+	applyFetchEnvironment(ctx, cmd)
+
 	cfg := g.RetryConfig
 	shouldRetry := isRetryableGitError
 

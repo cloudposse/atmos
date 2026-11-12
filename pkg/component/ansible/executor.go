@@ -24,8 +24,9 @@ import (
 )
 
 var (
-	setupComponentAuthForCLI = e.SetupComponentAuthForCLI
-	processStacks            = e.ProcessStacks
+	setupComponentAuthForCLI    = e.SetupComponentAuthForCLI
+	processStacks               = e.ProcessStacks
+	prepareComponentAuthEnvVars = e.PrepareComponentAuthEnvironment
 )
 
 // Flags represents Ansible command-line flags.
@@ -49,7 +50,10 @@ func checkConfig(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+// processStacksWithAuth processes the stack and returns the auth manager used for it (nil when no
+// explicit identity was given), so the caller can also hand the identity's environment to the
+// playbook subprocess.
+func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	var authManager auth.AuthManager
 	if info.Identity != "" {
 		// Ansible owns -i for inventory, so only explicit --identity/ATMOS_IDENTITY
@@ -57,17 +61,29 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 		var err error
 		authManager, err = setupComponentAuthForCLI(atmosConfig, info)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	processedInfo, err := processStacks(atmosConfig, *info, true, true, true, nil, authManager)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	*info = processedInfo
-	return nil
+	return authManager, nil
+}
+
+// playbookEnvVars builds the environment variables for the ansible subprocess: the component
+// environment plus the Atmos paths, with the identity's prepared environment layered on top when
+// an auth manager is present. This is how Helmfile and Packer deliver identity environments, so a
+// credential made of plain environment variables (for example SSH_AUTH_SOCK) reaches Ansible.
+func playbookEnvVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager) ([]string, error) {
+	envVars, err := prepareEnvVars(atmosConfig, info.ComponentEnvList)
+	if err != nil {
+		return nil, err
+	}
+	return prepareComponentAuthEnvVars(authManager, info.Identity, envVars)
 }
 
 // ExecutePlaybook executes an Ansible playbook command.
@@ -97,7 +113,8 @@ func ExecutePlaybook(
 		}
 	}
 
-	if err := processStacksWithAuth(&atmosConfig, info); err != nil {
+	authManager, err := processStacksWithAuth(&atmosConfig, info)
+	if err != nil {
 		return err
 	}
 
@@ -219,7 +236,7 @@ func ExecutePlaybook(
 	e.ConvertComponentEnvSectionToList(info)
 
 	// Prepare ENV vars.
-	envVars, err := prepareEnvVars(&atmosConfig, info.ComponentEnvList)
+	envVars, err := playbookEnvVars(&atmosConfig, info, authManager)
 	if err != nil {
 		return err
 	}

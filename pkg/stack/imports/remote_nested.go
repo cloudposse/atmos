@@ -43,13 +43,13 @@ type sourceMetadata struct {
 func (r *RemoteImporter) ResolveNested(uri, nestedImports string) ([]RemoteImportMatch, error) {
 	defer perf.Track(nil, "imports.RemoteImporter.ResolveNested")()
 
-	return r.resolveNested(uri, nestedImports, "")
+	return r.resolveNested(context.Background(), uri, nestedImports, "")
 }
 
 // resolveNested is the ttl-aware implementation behind ResolveNested. The ttl controls
 // cross-run reuse of the cloned source repo (see ensureSourceDir).
-func (r *RemoteImporter) resolveNested(uri, nestedImports, ttl string) (result []RemoteImportMatch, resultErr error) {
-	if err := guard.Source(context.Background(), "import", uri, ""); err != nil {
+func (r *RemoteImporter) resolveNested(ctx context.Context, uri, nestedImports, ttl string) (result []RemoteImportMatch, resultErr error) {
+	if err := guard.Source(ctx, "import", uri, ""); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -62,17 +62,17 @@ func (r *RemoteImporter) resolveNested(uri, nestedImports, ttl string) (result [
 			}
 		}
 	}()
-	return r.resolveNestedUnguarded(uri, nestedImports, ttl)
+	return r.resolveNestedUnguarded(ctx, uri, nestedImports, ttl)
 }
 
 // resolveNestedUnguarded resolves a remote import honoring its nested_imports mode without the
 // source-policy guard. In "remote" mode the import must be a Git or oci:// source with a "//" path that
 // contains the stack base path, so nested imports can resolve from the remote source.
-func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) (result []RemoteImportMatch, resultErr error) {
+func (r *RemoteImporter) resolveNestedUnguarded(ctx context.Context, uri, nestedImports, ttl string) (result []RemoteImportMatch, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.resolveNested")()
 
 	if nestedImports == "" || nestedImports == schema.StackImportNestedImportsLocal {
-		return r.resolve(uri, ttl)
+		return r.resolve(ctx, uri, ttl)
 	}
 	if nestedImports != schema.StackImportNestedImportsRemote {
 		return nil, errUtils.Build(errUtils.ErrInvalidImport).
@@ -106,7 +106,7 @@ func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) 
 		return matches, nil
 	}
 
-	matches, err := r.resolveSourceSubdirWithRemoteBase(uri, sourceURI, subdir, ttl)
+	matches, err := r.resolveSourceSubdirWithRemoteBase(ctx, uri, sourceURI, subdir, ttl)
 	if err != nil {
 		return nil, err
 	}
@@ -116,8 +116,8 @@ func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) 
 
 // resolveSourceSubdirWithRemoteBase resolves a Git or oci:// subdirectory import in place from the shared
 // source directory, returning each file with the remote stack base path inferred from the import path.
-func (r *RemoteImporter) resolveSourceSubdirWithRemoteBase(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
-	sourceRoot, err := r.ensureSourceDir(sourceURI, ttl)
+func (r *RemoteImporter) resolveSourceSubdirWithRemoteBase(ctx context.Context, originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
+	sourceRoot, err := r.ensureSourceDir(ctx, sourceURI, ttl)
 	if err != nil {
 		return nil, err
 	}
@@ -156,34 +156,37 @@ func (r *RemoteImporter) resolveSourceSubdirWithRemoteBase(originalURI, sourceUR
 //   - Across runs: the persisted clone is reused only when ttl is set and the clone is
 //     still fresh per its recorded UpdatedAt. With no ttl, the clone is re-fetched once
 //     per run (mutable refs like `main` stay fresh) while still deduped within the run.
-func (r *RemoteImporter) ensureSourceDir(sourceURI, ttl string) (string, error) {
+func (r *RemoteImporter) ensureSourceDir(ctx context.Context, sourceURI, ttl string) (string, error) {
 	// OCI sources authenticate through go-containerregistry (docker keychain, ghcr.io token), never
 	// through the git/GitHub credential brokers or the git detector, so they skip that setup.
 	if !IsOCIURI(sourceURI) {
-		sourceURI = r.prepareGitSource(sourceURI)
+		sourceURI = r.prepareGitSource(ctx, sourceURI)
 	}
 	destDir := filepath.Join(r.cache.BaseDir(), uriToTempName(sourceURI)+".source")
-	return r.reuseOrFetchSourceDir(sourceURI, destDir, ttl)
+	return r.reuseOrFetchSourceDir(ctx, sourceURI, destDir, ttl)
 }
 
 // prepareGitSource provisions credentials for a git source and returns the detected source URI.
-func (r *RemoteImporter) prepareGitSource(sourceURI string) string {
+func (r *RemoteImporter) prepareGitSource(ctx context.Context, sourceURI string) string {
 	// Provision ambient credential brokers (e.g. Atmos Pro github/sts) before the eager detect below.
 	// detectGitSource runs CustomGitDetector.Detect directly — not through the downloader — so unlike
 	// downloader.Fetch it does not itself trigger the broker. Without provisioning here, the detector
 	// runs before the broker has exported its GIT_CONFIG_* insteadOf rewrite into the process env,
 	// misses the rewrite, and injects the ambient GITHUB_TOKEN — shadowing the minted least-privilege
 	// token and 404ing a cross-repo import. EnsureCredentials is process-once and gated (CI + config).
-	if r.atmosConfig != nil {
-		broker.EnsureCredentials(context.Background(), r.atmosConfig)
+	//
+	// A source that names an identity carries its own per-fetch environment, which takes precedence
+	// over the ambient broker, so the broker is not consulted for it.
+	if r.atmosConfig != nil && len(downloader.EnvironmentFromContext(ctx)) == 0 {
+		broker.EnsureCredentials(ctx, r.atmosConfig)
 	}
 
-	return r.detectGitSource(sourceURI)
+	return r.detectGitSource(ctx, sourceURI)
 }
 
 // reuseOrFetchSourceDir returns the cached source directory at destDir when it can be reused
 // (within this run, or across runs while its ttl is fresh) and fetches sourceURI into it otherwise.
-func (r *RemoteImporter) reuseOrFetchSourceDir(sourceURI, destDir, ttl string) (string, error) {
+func (r *RemoteImporter) reuseOrFetchSourceDir(ctx context.Context, sourceURI, destDir, ttl string) (string, error) {
 	r.sourceMu.Lock()
 	defer r.sourceMu.Unlock()
 
@@ -200,7 +203,7 @@ func (r *RemoteImporter) reuseOrFetchSourceDir(sourceURI, destDir, ttl string) (
 		return destDir, nil
 	}
 
-	if err := r.fetchSourceDir(sourceURI, destDir); err != nil {
+	if err := r.fetchSourceDir(ctx, sourceURI, destDir); err != nil {
 		return "", err
 	}
 	r.sessionFetched[sourceURI] = true
@@ -209,14 +212,14 @@ func (r *RemoteImporter) reuseOrFetchSourceDir(sourceURI, destDir, ttl string) (
 
 // fetchSourceDir clones sourceURI into a temp dir, writes the freshness marker, and
 // atomically swaps it into destDir.
-func (r *RemoteImporter) fetchSourceDir(sourceURI, destDir string) error {
+func (r *RemoteImporter) fetchSourceDir(ctx context.Context, sourceURI, destDir string) error {
 	tempDir, err := os.MkdirTemp(r.cache.BaseDir(), filepath.Base(destDir)+"-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tempDir)
 
-	if err := r.downloader.Fetch(sourceURI, tempDir, downloader.ClientModeDir, defaultDownloadTimeout); err != nil {
+	if err := r.fetch(ctx, sourceURI, tempDir, downloader.ClientModeDir); err != nil {
 		return err
 	}
 	if err := writeSourceMetadata(tempDir, sourceURI); err != nil {
@@ -330,5 +333,27 @@ func ResolveRemoteImportNested(atmosConfig *schema.AtmosConfiguration, uri, nest
 	if err != nil {
 		return nil, err
 	}
-	return importer.resolveNested(uri, nestedImports, ttl)
+	return importer.resolveNested(context.Background(), uri, nestedImports, ttl)
+}
+
+// ResolveRemoteImportNestedIdentity is ResolveRemoteImportNested for one import that may name an
+// Atmos Auth identity. The identity (the import's own, else settings.imports.identity) is resolved
+// to a per-fetch environment that the import's Git subprocesses run with; nothing is written to
+// the process environment. An import that names no identity behaves exactly as before.
+func ResolveRemoteImportNestedIdentity(atmosConfig *schema.AtmosConfiguration, uri, nestedImports, ttl, identity string) ([]RemoteImportMatch, error) {
+	defer perf.Track(atmosConfig, "imports.ResolveRemoteImportNestedIdentity")()
+
+	sectionDefault := ""
+	if atmosConfig != nil {
+		sectionDefault = atmosConfig.Imports.Identity
+	}
+	ctx, err := downloader.WithIdentity(context.Background(), atmosConfig, identity, sectionDefault)
+	if err != nil {
+		return nil, err
+	}
+	importer, err := getGlobalImporter(atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	return importer.resolveNested(ctx, uri, nestedImports, ttl)
 }

@@ -521,6 +521,14 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
+	// Hand the stored credential to identities that keep their state only in memory. This path
+	// skips Authenticate, so without it a fresh process has no environment to serve.
+	if restorer, ok := m.identities[identityName].(types.CredentialRestorer); ok {
+		if err := restorer.RestoreCredentials(ctx, creds); err != nil {
+			return nil, fmt.Errorf("%w: identity=%s: restoring stored credentials: %w", errUtils.ErrNoCredentialsFound, identityName, err)
+		}
+	}
+
 	return m.buildWhoamiInfo(identityName, creds), nil
 }
 

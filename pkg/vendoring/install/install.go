@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/downloader"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -46,6 +47,9 @@ type InstallOptions struct {
 	// LockEnforcement is one of LockEnforcementSilent/Warn/Strict, governing how FilterPending
 	// reacts to a drifted package. Empty is treated as LockEnforcementWarn, the config default.
 	LockEnforcement string
+	// Identity is the global --identity flag value. When set it overrides the identity a source
+	// names and vendor.identity; see downloader.WithIdentity. Empty means "not given".
+	Identity string
 }
 
 // Result reports the outcome of installing a single VendorPackage.
@@ -70,6 +74,7 @@ func Install(atmosConfig *schema.AtmosConfiguration, pkg VendorPackage, opts Ins
 func InstallContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, pkg VendorPackage, opts InstallOptions) (Result, error) {
 	defer perf.Track(atmosConfig, "install.InstallContext")()
 
+	ctx = downloader.WithIdentityOverride(ctx, opts.Identity)
 	if opts.DryRun {
 		if err := pkg.installer.dryRunCheck(ctx, atmosConfig); err != nil {
 			return Result{Name: pkg.Name, Err: err}, nil
