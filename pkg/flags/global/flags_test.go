@@ -65,6 +65,7 @@ func TestFlags_AllFields(t *testing.T) {
 		Heatmap:         true,
 		HeatmapMode:     "sparkline",
 		RedirectStderr:  "/dev/null",
+		Links:           "osc8",
 		Version:         true,
 	}
 
@@ -87,6 +88,7 @@ func TestFlags_AllFields(t *testing.T) {
 	assert.True(t, flags.Heatmap)
 	assert.Equal(t, "sparkline", flags.HeatmapMode)
 	assert.Equal(t, "/dev/null", flags.RedirectStderr)
+	assert.Equal(t, "osc8", flags.Links)
 	assert.True(t, flags.Version)
 }
 
@@ -130,6 +132,7 @@ func TestFlags_ZeroValues(t *testing.T) {
 	assert.Empty(t, flags.ProfileType)
 	assert.Empty(t, flags.HeatmapMode)
 	assert.Empty(t, flags.RedirectStderr)
+	assert.Empty(t, flags.Links)
 
 	// Bool fields should be false.
 	assert.False(t, flags.NoColor)
