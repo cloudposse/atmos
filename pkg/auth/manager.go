@@ -100,6 +100,8 @@ type manager struct {
 	chain []string
 	// realm provides credential isolation between different repositories.
 	realm realm.RealmInfo
+	// awsFilesBasePath is inherited by nested Atmos commands during GitLab auth exec.
+	awsFilesBasePath string
 }
 
 // resolveIdentityName performs case-insensitive identity name lookup.
@@ -158,15 +160,22 @@ func NewAuthManager(
 
 	log.Debug("Auth realm computed", "realm", realmInfo.Value, "source", realmInfo.Source)
 
+	// Use a local binding so invocation state never leaks into global configuration.
+	inheritedFileConfig := viper.New()
+	if err := inheritedFileConfig.BindEnv(AuthExecAWSFilesBasePathEnv); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
+
 	m := &manager{
-		config:          config,
-		providers:       make(map[string]types.Provider),
-		identities:      make(map[string]types.Identity),
-		credentialStore: credentialStore,
-		validator:       validator,
-		stackInfo:       stackInfo,
-		cliConfigPath:   cliConfigPath,
-		realm:           realmInfo,
+		config:           config,
+		providers:        make(map[string]types.Provider),
+		identities:       make(map[string]types.Identity),
+		credentialStore:  credentialStore,
+		validator:        validator,
+		stackInfo:        stackInfo,
+		cliConfigPath:    cliConfigPath,
+		realm:            realmInfo,
+		awsFilesBasePath: inheritedFileConfig.GetString(AuthExecAWSFilesBasePathEnv),
 	}
 
 	// Initialize providers.
@@ -212,6 +221,7 @@ func NewAuthManager(
 		}
 	}
 
+	m.configureScopedAWSFiles()
 	return m, nil
 }
 
@@ -310,6 +320,8 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	return result, err
 }
 
+// authenticateResolvedIdentity authenticates the resolved chain, prepares identity files and integrations,
+// and removes superseded legacy credentials.
 func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
@@ -362,7 +374,10 @@ func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName
 	// Clean up legacy (pre-realm) keyring and file entries to prevent realm mismatch warnings.
 	// This runs after successful authentication so legacy credentials remain as a fallback
 	// if authentication fails.
-	m.deleteLegacyCredentialFiles()
+	// Invocation-owned files do not replace shared storage, so leave legacy profiles intact.
+	if !m.usesScopedAWSFiles(identityName) {
+		m.deleteLegacyCredentialFiles()
+	}
 	for _, step := range m.chain {
 		m.deleteLegacyKeyringEntry(step)
 	}

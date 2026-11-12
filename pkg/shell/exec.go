@@ -5,6 +5,7 @@
 package shell
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +14,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // RunCommand executes args[0] with args[1:] using the supplied environment
@@ -31,28 +34,14 @@ import (
 func RunCommand(args []string, env []string) error {
 	defer perf.Track(nil, "shell.RunCommand")()
 
-	if len(args) == 0 {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
-	}
-
-	// Prepare the command.
-	cmdName := args[0]
-	cmdArgs := args[1:]
-
-	// Look for the command in PATH.
-	cmdPath, err := exec.LookPath(cmdName)
+	cmdPath, err := commandPath(args)
 	if err != nil {
-		return errUtils.Build(errUtils.ErrCommandNotFound).
-			WithCause(err).
-			WithContext("command", cmdName).
-			WithHintf("Ensure %q is installed and available on your PATH", cmdName).
-			WithExitCode(127).
-			Err()
+		return err
 	}
 
 	// Execute the command.
 	// #nosec G204 -- This is intentional: exec is designed to run user-specified commands.
-	execCmd := exec.Command(cmdPath, cmdArgs...)
+	execCmd := exec.Command(cmdPath, args[1:]...)
 	execCmd.Env = env
 	execCmd.Stdin = os.Stdin
 	execCmd.Stdout = os.Stdout
@@ -72,4 +61,47 @@ func RunCommand(args []string, env []string) error {
 	}
 
 	return nil
+}
+
+// RunCommandContext waits for graceful signal shutdown before returning the
+// child's actual exit status. The caller retains ownership of signal cleanup.
+func RunCommandContext(ctx context.Context, args []string, env []string) error {
+	defer perf.Track(nil, "shell.RunCommandContext")()
+
+	path, err := commandPath(args)
+	if err != nil {
+		return err
+	}
+	result := process.NewDefaultRunner().Run(ctx, process.TaskSpec{
+		Command: path, Path: path, Args: args[1:], Env: env,
+		Streams: process.OSStreams(), SkipMetrics: true, ForwardSignals: true,
+	})
+	if result.Started && result.ExitCode >= 0 {
+		if result.ExitCode == 0 {
+			return nil
+		}
+		return errUtils.ExitCodeError{Code: result.ExitCode}
+	}
+	if sig := signals.CancellationSignal(ctx); sig != nil {
+		return errUtils.WithExitCode(result.Err, signals.ExitCodeForSignal(sig))
+	}
+	return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrSubcommandFailed, result.Err)
+}
+
+// commandPath validates command arguments and resolves the executable, returning a structured command-not-
+// found error when lookup fails.
+func commandPath(args []string) (string, error) {
+	if len(args) == 0 {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
+	}
+	path, err := exec.LookPath(args[0])
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrCommandNotFound).
+			WithCause(err).
+			WithContext("command", args[0]).
+			WithHintf("Ensure %q is installed and available on your PATH", args[0]).
+			WithExitCode(127).
+			Err()
+	}
+	return path, nil
 }

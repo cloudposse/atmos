@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/signals"
 )
 
+// main installs coordinated shutdown handling and exits with the application result after cleanup.
 func main() {
 	// Set up signal handling for graceful shutdown.
 	sigChan := make(chan os.Signal, 1)
@@ -24,6 +25,9 @@ func main() {
 			// While an interactive/TTY step owns the terminal, SIGINT belongs to
 			// the foreground child process - keep waiting instead of exiting.
 			if !shouldExitOnSignal(sig) {
+				continue
+			}
+			if signals.HandleShutdownSignal(sig) {
 				continue
 			}
 			// Run registered exit cleanups (e.g. restore the terminal from raw

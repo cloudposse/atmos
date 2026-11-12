@@ -1,10 +1,13 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
@@ -54,4 +57,27 @@ func TestRevokeEphemeralAuthExec(t *testing.T) {
 
 		assert.NotPanics(t, func() { revokeEphemeralAuthExec(&authExecContext{authManager: m, identity: "id"}) })
 	})
+}
+
+func TestRevokeEphemeralAuthExecAfterShutdown(t *testing.T) {
+	t.Setenv("CI", "true")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var revokeCtx context.Context
+	manager := authTypes.NewMockAuthManager(gomock.NewController(t))
+	manager.EXPECT().RevokeEphemeralIntegrations(gomock.Any(), "id", gomock.Any()).
+		DoAndReturn(func(cleanupCtx context.Context, _ string, _ *bool) error {
+			revokeCtx = cleanupCtx
+			assert.NoError(t, cleanupCtx.Err(), "shutdown must not prevent token revocation")
+			return nil
+		})
+
+	started := time.Now()
+	revokeEphemeralAuthExec(&authExecContext{authManager: manager, identity: "id", ctx: ctx})
+
+	require.NotNil(t, revokeCtx)
+	deadline, ok := revokeCtx.Deadline()
+	require.True(t, ok, "revocation must have a deadline during graceful shutdown")
+	assert.WithinRange(t, deadline, started.Add(30*time.Second), time.Now().Add(30*time.Second))
+	assert.ErrorIs(t, revokeCtx.Err(), context.Canceled, "returning from revocation must release its timeout")
 }

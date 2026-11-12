@@ -182,6 +182,57 @@ than once per identity. A request that times out, fails on the network, or gets 
 is retried with exponential backoff, up to four attempts in total.
 :::
 
+## GitLab CI/CD OIDC
+
+For GitLab CI/CD jobs that provide an OIDC ID token.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    gitlab:
+      kind: gitlab/oidc
+      spec:
+        token_environment_variable: ATMOS_OIDC_TOKEN
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gitlab/oidc`.</dd>
+
+  <dt>`spec.token_environment_variable`</dt>
+  <dd>Optional. Name of the environment variable containing the job's ID token. Defaults to `ATMOS_OIDC_TOKEN`. The variable must contain a nonempty token when authenticating.</dd>
+</dl>
+
+Use this provider with an [`aws/assume-role` identity](/cli/configuration/auth/identities).
+For job token and AWS trust configuration, follow [GitLab's AWS OIDC guide](https://docs.gitlab.com/ci/cloud_services/aws/).
+
+:::info Credential persistence
+Atmos never caches the token or derived AWS credentials in the keyring or the process-level
+credential cache. Each authentication through an `aws/assume-role` identity reads the current
+job token and exchanges it with AWS STS through the identity chain. AWS credentials are written to
+managed credential files for external tools.
+The [`atmos auth exec`](/cli/commands/auth/exec) command uses a private temporary directory for AWS
+credential and config files, separate from existing login profiles and overlapping invocations.
+It removes that directory when the command returns, including on errors.
+
+To validate AWS authentication and role trust, run `atmos auth login --identity=<aws-role-identity>`
+with an `aws/assume-role` identity. Provider-only login checks that the configured token variable
+is nonempty without contacting AWS. GitLab identity login uses a private temporary directory and
+removes its AWS files before returning, including on failure. Use `auth exec` to run external tools
+with credentials from the current job token.
+
+If directory removal fails, Atmos reports a cleanup error and unexpired credentials may remain.
+Resolve the error and remove the affected invocation's private directory and any remaining files.
+
+On `SIGINT` or `SIGTERM`, `auth exec` stops and waits for its child before cleaning up the private files.
+Uncatchable termination (`SIGKILL`), a process crash, or loss of the runner can skip cleanup and leave
+unexpired credentials on disk. Later Atmos invocations do not discover the private files. Use a
+job-owned temporary directory (`TMPDIR` on Unix, `TMP` or `TEMP` on Windows) with independent
+cleanup on persistent runners, or disposable job filesystems.
+:::
+
 </TabItem>
 <TabItem value="azure" label="Azure">
 

@@ -13,6 +13,11 @@ import (
 // (e.g., ambient credential brokers in pkg/auth/broker) that must build a manager without taking
 // a dependency on the command layer.
 func NewDefaultManager(authConfig *schema.AuthConfig, cliConfigPath string) (types.AuthManager, error) {
+	return NewDefaultManagerWithOptions(authConfig, cliConfigPath)
+}
+
+// NewDefaultManagerWithOptions constructs a default manager with invocation-specific options.
+func NewDefaultManagerWithOptions(authConfig *schema.AuthConfig, cliConfigPath string, options ...ManagerOption) (types.AuthManager, error) {
 	defer perf.Track(nil, "auth.NewDefaultManager")()
 
 	authStackInfo := &schema.ConfigAndStacksInfo{
@@ -26,5 +31,9 @@ func NewDefaultManager(authConfig *schema.AuthConfig, cliConfigPath string) (typ
 	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 
-	return NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
+	m, err := NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	return applyManagerOptions(m, options...), nil
 }

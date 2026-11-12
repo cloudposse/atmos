@@ -51,6 +51,7 @@ type assumeRootIdentity struct {
 	manager          types.AuthManager
 	rootProviderName string
 	realm            string // Credential isolation realm set by auth manager.
+	fileBasePath     string // Runtime directory for invocation-scoped AWS files.
 }
 
 // NewAssumeRootIdentity creates a new AWS assume root identity.
@@ -81,6 +82,11 @@ func (i *assumeRootIdentity) Kind() string {
 // SetRealm sets the credential isolation realm for this identity.
 func (i *assumeRootIdentity) SetRealm(realm string) {
 	i.realm = realm
+}
+
+// SetAWSFilesBasePath configures invocation-owned AWS file storage.
+func (i *assumeRootIdentity) SetAWSFilesBasePath(basePath string) {
+	i.fileBasePath = basePath
 }
 
 // Validate validates the identity configuration.
@@ -305,7 +311,7 @@ func (i *assumeRootIdentity) Environment() (map[string]string, error) {
 
 	// Get AWS file environment variables.
 	// Uses realm for credential isolation between different repositories.
-	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
+	awsFileManager, err := awsCloud.NewAWSFileManager(i.fileBasePath, i.realm)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -348,7 +354,7 @@ func (i *assumeRootIdentity) PrepareEnvironment(ctx context.Context, environ map
 	}
 
 	// Uses realm for credential isolation between different repositories.
-	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
+	awsFileManager, err := awsCloud.NewAWSFileManager(i.fileBasePath, i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -457,7 +463,7 @@ func (i *assumeRootIdentity) PostAuthenticate(ctx context.Context, params *types
 
 	// Setup AWS files using shared AWS cloud package.
 	// Use realm from params for credential isolation.
-	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", params.Realm); err != nil {
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, i.fileBasePath, params.Realm); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 
@@ -468,7 +474,7 @@ func (i *assumeRootIdentity) PostAuthenticate(ctx context.Context, params *types
 		ProviderName: params.ProviderName,
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
-		BasePath:     "",
+		BasePath:     i.fileBasePath,
 		Manager:      params.Manager,
 		Realm:        params.Realm,
 	}); err != nil {
@@ -494,7 +500,7 @@ func (i *assumeRootIdentity) CredentialsExist() (bool, error) {
 	}
 
 	// Uses realm for credential isolation between different repositories.
-	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
+	mgr, err := awsCloud.NewAWSFileManager(i.fileBasePath, i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -557,7 +563,7 @@ func (i *assumeRootIdentity) Logout(ctx context.Context) error {
 	log.Debug("Logout assume-root identity", logKeyIdentity, i.name, "provider", providerName)
 
 	// Uses realm for credential isolation between different repositories.
-	basePath := ""
+	basePath := i.fileBasePath
 	fileManager, err := awsCloud.NewAWSFileManager(basePath, i.realm)
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", logKeyIdentity, i.name, "error", err)

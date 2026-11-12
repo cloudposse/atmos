@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestNewProvider_Registry covers built-in provider construction and rejects invalid provider configurations.
 func TestNewProvider_Registry(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -80,6 +81,12 @@ func TestNewProvider_Registry(t *testing.T) {
 			name:         "github-oidc-valid",
 			providerName: "github-oidc",
 			config:       &schema.Provider{Kind: "github/oidc", Region: "us-east-1"},
+			expectError:  false,
+		},
+		{
+			name:         "gitlab-oidc-valid",
+			providerName: "gitlab-oidc",
+			config:       &schema.Provider{Kind: "gitlab/oidc"},
 			expectError:  false,
 		},
 		{

@@ -28,6 +28,26 @@ Use `exec` for single commands or automation. Use [`shell`](/cli/commands/auth/s
 atmos auth exec [--identity <name>] -- <command> [args...]
 ```
 
+:::info GitLab OIDC credential cleanup
+For identities rooted at [`gitlab/oidc`](/cli/configuration/auth/providers#gitlab-cicd-oidc), Atmos
+writes AWS credentials and config to a private temporary directory for each invocation. Credentials
+remain usable throughout the command, and overlapping invocations use separate files. Atmos removes
+its directory when the command returns, including on errors or failed authentication setup. This file
+cleanup preserves existing login profiles and does not log out linked integrations such as Docker
+ECR authentication. Existing configured ephemeral-token revocation still applies.
+
+If directory removal fails, Atmos reports a cleanup error and unexpired credentials may remain.
+Resolve the error and remove the affected invocation's private directory and any remaining files.
+
+On `SIGINT` or `SIGTERM`, Atmos waits for the child to stop before removing its credential files.
+Children that do not stop gracefully are forcibly terminated after a bounded shutdown grace period.
+
+Uncatchable termination of Atmos (`SIGKILL`), a process crash, or loss of the runner can prevent cleanup and
+leave unexpired credentials on disk. Later Atmos invocations do not discover these private files.
+On persistent runners, use a job-owned temporary directory (`TMPDIR` on Unix, `TMP` or `TEMP` on
+Windows) and arrange independent cleanup of that directory, or run jobs on disposable filesystems.
+:::
+
 :::note Justification for privileged identities
 Authenticating an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity activates the role and requires a justification. Supply it with the [`--justification`](/cli/global-flags#authentication-flags) global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable (resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt). In a non-interactive context with none supplied, the command fails fast.
 :::

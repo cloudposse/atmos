@@ -104,6 +104,15 @@ func (m *manager) chainRootIsStandalone() bool {
 	return ok && standalone.IsStandalone()
 }
 
+// chainRootIsGitLabOIDC identifies chains that must exchange the current GitLab job
+// token on every authentication instead of using the shared process credential cache.
+func (m *manager) chainRootIsGitLabOIDC() bool {
+	if len(m.chain) == 0 || m.config == nil {
+		return false
+	}
+	return m.config.Providers[m.chain[0]].Kind == types.ProviderKindGitLabOIDC
+}
+
 // chainRootHasPrivateCache forces configuration-bound session validation before cache reuse.
 func (m *manager) chainRootHasPrivateCache() bool {
 	if len(m.chain) == 0 {
