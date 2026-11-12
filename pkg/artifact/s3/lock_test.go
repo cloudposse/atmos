@@ -330,6 +330,8 @@ func TestSettleClaimDoesNotRetryBehindForeignOwner(t *testing.T) {
 	before := len(spec.fake.RequestsFor(s3test.OpPutObject))
 	handle, err := repo.settleClaim(ctx, layout.LockPath(lockResource), &claimDoc{Resource: lockResource, Owner: "original", Token: "original-token"})
 	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+	assert.ErrorContains(t, err, `owner "original"`, "the error identifies the uncertain attempt")
+	assert.ErrorContains(t, err, "lock ID original-token", "an operator can match a late claim to this attempt")
 	assert.Nil(t, handle)
 	assert.Len(t, spec.fake.RequestsFor(s3test.OpPutObject), before, "a foreign claim does not prove the original request has finished")
 }
