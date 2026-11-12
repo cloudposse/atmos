@@ -274,10 +274,11 @@ func TestConvertWorkflowMounts_ExpandsHome(t *testing.T) {
 }
 
 func TestConvertWorkflowPorts(t *testing.T) {
-	ports := convertWorkflowPorts([]schema.ContainerPort{
-		{Bind: "127.0.0.1", Host: 8080, Container: 80},
+	ports, err := convertWorkflowPorts([]schema.ContainerPort{
+		{Host: "127.0.0.1:8080", Container: 80},
 		{Host: 53, Container: 53, Protocol: "udp"},
 	})
+	require.NoError(t, err)
 	require.Len(t, ports, 2)
 	assert.Equal(t, "127.0.0.1", ports[0].Bind)
 	assert.Equal(t, "tcp", ports[0].Protocol) // defaulted.
@@ -353,7 +354,8 @@ func TestBuildEphemeralStepConfig(t *testing.T) {
 		Env:     map[string]string{"C": "9"},
 	}
 
-	got := buildEphemeralStepConfig(params, cfg, "/abs/work")
+	got, err := buildEphemeralStepConfig(params, cfg, "/abs/work")
+	require.NoError(t, err)
 	assert.Equal(t, "atmos-step-build", got.Name)
 	assert.Equal(t, "alpine", got.Image)
 	assert.Equal(t, []string{"/bin/bash", "-lc", "echo hi"}, got.Command)

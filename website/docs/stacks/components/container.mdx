@@ -79,9 +79,9 @@ Inheritance (`metadata.inherits`), catalogs, mixins, and deep-merge work exactly
 
 ## Port Bindings
 
-Use `run.ports` to publish container ports. `host` is the host port, `container`
-is the container port, and optional `bind` restricts the binding to a host
-interface. `protocol` defaults to `tcp`.
+Use `run.ports` to publish container ports. `host` accepts a port number or a
+quoted `IP:port` string. `container` is the container port, and `protocol`
+defaults to `tcp`.
 
 ```yaml
 components:
@@ -90,16 +90,21 @@ components:
       image: my-portal:local
       run:
         ports:
-          - bind: 127.0.0.1
-            host: 3000
+          - host: "127.0.0.1:3000"
             container: 3000
 ```
 
-Omitting `bind` preserves the container runtime's default interface binding.
-Omitting `host` (or setting it to `0`) requests an automatically assigned host
-port; `bind` still restricts the interface. IPv6 addresses such as `::1` are
-also supported. The same port mapping fields work in container workflow steps,
-workflow sandboxes, and emulators.
+A numeric `host: 3000` preserves the container runtime's default interface
+binding. Use `host: "127.0.0.1:3000"` for IPv4 loopback or
+`host: "0.0.0.0:3000"` for all IPv4 interfaces. IPv6 requires brackets, for
+example `host: "[::1]:3000"` for loopback or `host: "[::]:3000"` for all IPv6
+interfaces. The address must be an IP literal, not a hostname or interface name.
+
+Omitting `host` or setting it to `0` requests an automatically assigned host
+port. To request one on a specific address, use `host: "127.0.0.1:0"` or
+`host: "[::1]:0"`. Host ports must be between 0 and 65535; quoted port numbers
+such as `host: "3000"` are also accepted. The same syntax works in container
+workflow steps, workflow sandboxes, background container services, and emulators.
 
 Changes to port bindings require removing and recreating the container with
 `atmos container down` followed by `atmos container up`.

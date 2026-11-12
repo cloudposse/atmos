@@ -5,7 +5,7 @@ authors: [osterman]
 tags: [enhancement]
 ---
 
-Publishing a container port usually exposes it on every network interface of the host. For a local database, an admin portal, or a cloud emulator, that means anything on the same network can reach a service that was only ever meant for your own machine. Container port mappings in Atmos now accept a `bind` address, so you can keep a published port on loopback, or on any single interface you choose.
+Publishing a container port usually exposes it on every network interface of the host. For a local database, an admin portal, or a cloud emulator, that means anything on the same network can reach a service that was only ever meant for your own machine. Container port mappings in Atmos now accept an `IP:port` string in `host`, so you can keep a published port on loopback, or on any single interface you choose.
 
 <!--truncate-->
 
@@ -15,11 +15,11 @@ A port mapping such as `host: 3000` / `container: 3000` asks the container runti
 
 ## The Fix
 
-Every container port mapping now has an optional `bind` field. When it's set, Atmos publishes the port only on that host address. When it's omitted, the runtime's default binding applies as before, so existing configuration is unchanged.
+The existing `host` field now accepts either a port number or an `IP:port` string. For example, `host: "127.0.0.1:3000"` publishes port 3000 only on loopback. Numeric values retain the runtime's default binding, so existing configuration is unchanged.
 
 ## How to Use It
 
-Add `bind` to any entry under [`run.ports`](/stacks/components/container#port-bindings):
+Set `host` to an address and port in any entry under [`run.ports`](/stacks/components/container#port-bindings):
 
 ```yaml
 components:
@@ -28,13 +28,12 @@ components:
       image: my-portal:local
       run:
         ports:
-          - bind: 127.0.0.1
-            host: 3000
+          - host: "127.0.0.1:3000"
             container: 3000
 ```
 
-- IPv6 addresses such as `::1` work too.
-- Leaving `host` empty (or `0`) still lets the runtime assign a free host port. It's assigned only on the bound interface.
+- IPv6 addresses require brackets: `host: "[::1]:3000"`. Use an IP literal, not a hostname.
+- Omitting `host` or setting it to `0` lets the runtime assign a free host port. Use `host: "127.0.0.1:0"` to restrict that automatic assignment to loopback.
 - The same field works in container workflow steps, background container services, and emulators.
 
 Binding to loopback narrows where the runtime listens, but it isn't a firewall. Docker Engine versions before 28.0.0 can expose localhost-published ports to hosts on the same network segment, and some network configurations allow direct routing to container ports. See Docker's [port publishing](https://docs.docker.com/engine/network/port-publishing/) documentation for details.

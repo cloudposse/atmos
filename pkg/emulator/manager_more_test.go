@@ -517,6 +517,7 @@ func TestNewManagerNoRecovery_SkipsRecoveryDetection(t *testing.T) {
 func TestPortBindings_HostInterface(t *testing.T) {
 	t.Parallel()
 
-	ports := portBindings([]schema.ContainerPort{{Bind: "127.0.0.1", Container: 4566}})
+	ports, err := portBindings([]schema.ContainerPort{{Host: "127.0.0.1:0", Container: 4566}})
+	require.NoError(t, err)
 	require.Equal(t, []container.PortBinding{{Bind: "127.0.0.1", ContainerPort: 4566, Protocol: "tcp"}}, ports)
 }

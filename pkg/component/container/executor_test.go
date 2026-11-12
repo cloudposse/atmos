@@ -66,7 +66,7 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 
 	section := map[string]any{
 		"image": "localhost:5001/api:abc",
-		"run":   map[string]any{"command": "./api", "ports": []any{map[string]any{"bind": "127.0.0.1", "host": 8080, "container": 8080}}},
+		"run":   map[string]any{"command": "./api", "ports": []any{map[string]any{"host": "127.0.0.1:8080", "container": 8080}}},
 	}
 	withStubs(t, section, []string{"PORT=8080"}, rt)
 
@@ -663,4 +663,15 @@ func TestMounts_EmptyComponentPathLeavesSourcesUnanchored(t *testing.T) {
 
 	require.Len(t, mounts, 1)
 	assert.Equal(t, "app/public", mounts[0].Source)
+}
+
+func TestExecuteUp_RejectsInvalidHostBeforeRuntime(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	rt := NewMockRuntime(ctrl)
+	withStubs(t, map[string]any{
+		"image": "api:dev",
+		"run":   map[string]any{"ports": []any{map[string]any{"host": "localhost:8080", "container": 8080}}},
+	}, nil, rt)
+	err := ExecuteUp(context.Background(), infoFor("api"))
+	require.ErrorContains(t, err, "ports[0].host")
 }

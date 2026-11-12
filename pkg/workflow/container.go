@@ -156,7 +156,11 @@ func buildContainerConfig(params *ContainerStepParams, cfg *schema.WorkflowConta
 	containerCfg.WorkspaceFolder = defaultString(cfg.Workspace, "/workspace")
 	containerCfg.WorkspaceReadOnly = cfg.WorkspaceReadOnly
 	containerCfg.Mounts = convertWorkflowMounts(cfg.Mounts)
-	containerCfg.Ports = convertWorkflowPorts(cfg.Ports)
+	ports, err := convertWorkflowPorts(cfg.Ports)
+	if err != nil {
+		return container.SandboxConfig{}, err
+	}
+	containerCfg.Ports = ports
 	containerCfg.Env = envMapToSlice(cfg.Env)
 	containerCfg.RuntimeEnv = params.RuntimeEnv
 	containerCfg.User = cfg.User
@@ -247,7 +251,10 @@ func RunStepContainerOverride(ctx context.Context, params *ContainerStepParams) 
 	if err != nil {
 		return err
 	}
-	ephemeral := buildEphemeralStepConfig(params, cfg, absHostWorkspace)
+	ephemeral, err := buildEphemeralStepConfig(params, cfg, absHostWorkspace)
+	if err != nil {
+		return err
+	}
 	if params.DryRun {
 		ui.Writeln(container.BuildEphemeralPreview(runtimePreviewName(cfg.Provider), ephemeral))
 		return nil
@@ -279,7 +286,11 @@ func resolveStepHostWorkspace(params *ContainerStepParams) (string, error) {
 }
 
 // buildEphemeralStepConfig assembles the one-shot container config for a step override.
-func buildEphemeralStepConfig(params *ContainerStepParams, cfg *schema.WorkflowContainer, absHostWorkspace string) *container.EphemeralConfig {
+func buildEphemeralStepConfig(params *ContainerStepParams, cfg *schema.WorkflowContainer, absHostWorkspace string) (*container.EphemeralConfig, error) {
+	ports, err := convertWorkflowPorts(cfg.Ports)
+	if err != nil {
+		return nil, err
+	}
 	step := params.Step
 	shell := defaultString(cfg.Shell, workflowContainerDefaultShell)
 	cmd, stdin := containerStepCommand(step, shell, params.Command)
@@ -291,7 +302,7 @@ func buildEphemeralStepConfig(params *ContainerStepParams, cfg *schema.WorkflowC
 		WorkspaceFolder:   defaultString(cfg.Workspace, "/workspace"),
 		WorkspaceReadOnly: cfg.WorkspaceReadOnly,
 		Mounts:            convertWorkflowMounts(cfg.Mounts),
-		Ports:             convertWorkflowPorts(cfg.Ports),
+		Ports:             ports,
 		Env:               mergeEnvSlices(envMapToSlice(cfg.Env), params.StepEnv),
 		User:              cfg.User,
 		RunArgs:           cfg.RunArgs,
@@ -305,7 +316,7 @@ func buildEphemeralStepConfig(params *ContainerStepParams, cfg *schema.WorkflowC
 			container.SandboxLabelWorkflow:     params.Workflow,
 			container.SandboxLabelWorkflowPath: params.WorkflowPath,
 		},
-	}
+	}, nil
 }
 
 func containerStepCommand(step *schema.WorkflowStep, shell, command string) ([]string, io.Reader) {
@@ -452,21 +463,8 @@ func convertWorkflowMounts(mounts []schema.ContainerMount) []container.Mount {
 	return result
 }
 
-func convertWorkflowPorts(ports []schema.ContainerPort) []container.PortBinding {
-	result := make([]container.PortBinding, 0, len(ports))
-	for _, port := range ports {
-		protocol := port.Protocol
-		if protocol == "" {
-			protocol = "tcp"
-		}
-		result = append(result, container.PortBinding{
-			Bind:          port.Bind,
-			HostPort:      port.Host,
-			ContainerPort: port.Container,
-			Protocol:      protocol,
-		})
-	}
-	return result
+func convertWorkflowPorts(ports []schema.ContainerPort) ([]container.PortBinding, error) {
+	return container.PortBindingsFromSchema(ports)
 }
 
 func envMapToSlice(env map[string]string) []string {

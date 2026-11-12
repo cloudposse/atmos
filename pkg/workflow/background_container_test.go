@@ -19,12 +19,15 @@ func TestFirstNonEmpty(t *testing.T) {
 }
 
 func TestToPortBindings(t *testing.T) {
-	assert.Nil(t, toPortBindings(nil))
+	empty, err := toPortBindings(nil)
+	require.NoError(t, err)
+	assert.Nil(t, empty)
 
-	out := toPortBindings([]schema.ContainerPort{
-		{Bind: "127.0.0.1", Host: 8080, Container: 80}, // default protocol -> tcp.
+	out, err := toPortBindings([]schema.ContainerPort{
+		{Host: "127.0.0.1:8080", Container: 80}, // default protocol -> tcp.
 		{Host: 53, Container: 53, Protocol: "udp"},
 	})
+	require.NoError(t, err)
 	require.Len(t, out, 2)
 	assert.Equal(t, container.PortBinding{Bind: "127.0.0.1", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}, out[0])
 	assert.Equal(t, container.PortBinding{HostPort: 53, ContainerPort: 53, Protocol: "udp"}, out[1])

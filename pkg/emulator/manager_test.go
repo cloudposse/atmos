@@ -63,9 +63,9 @@ func TestManager_EndpointPrefersTCPBinding(t *testing.T) {
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{info}, nil)
 	runtime.EXPECT().Inspect(gomock.Any(), "container-abc").Return(&container.Info{}, nil)
 	spec := &Spec{Driver: testDriverName, Container: &schema.ContainerRunStep{Ports: []schema.ContainerPort{
-		{Container: 4566, Protocol: "tcp", Bind: "::1"},
-		{Container: 4566, Protocol: "tcp", Bind: "127.0.0.1"},
-		{Container: 4566, Protocol: "udp", Bind: "::1"},
+		{Container: 4566, Protocol: "tcp", Host: "[::1]:54323"},
+		{Container: 4566, Protocol: "tcp", Host: "127.0.0.1:54321"},
+		{Container: 4566, Protocol: "udp", Host: "[::1]:54322"},
 	}}}
 	endpoint, err := newManagerWithRuntime(runtime).endpoint(context.Background(), runtime, spec, "dev", "aws")
 	require.NoError(t, err)

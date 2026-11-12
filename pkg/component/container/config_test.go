@@ -163,10 +163,11 @@ func TestContainerSpec_Mounts(t *testing.T) {
 
 func TestContainerSpec_Ports(t *testing.T) {
 	spec := ContainerSpec{Run: &schema.ContainerRunStep{Ports: []schema.ContainerPort{
-		{Bind: "127.0.0.1", Host: 8080, Container: 80},
+		{Host: "127.0.0.1:8080", Container: 80},
 		{Host: 53, Container: 53, Protocol: "udp"},
 	}}}
-	ports := spec.Ports()
+	ports, err := spec.Ports()
+	require.NoError(t, err)
 	require.Len(t, ports, 2)
 	assert.Equal(t, "127.0.0.1", ports[0].Bind)
 	assert.Equal(t, 8080, ports[0].HostPort)
@@ -175,5 +176,7 @@ func TestContainerSpec_Ports(t *testing.T) {
 	assert.Equal(t, 53, ports[1].ContainerPort)
 	assert.Equal(t, "udp", ports[1].Protocol)
 
-	assert.Nil(t, (&ContainerSpec{}).Ports())
+	ports, err = (&ContainerSpec{}).Ports()
+	require.NoError(t, err)
+	assert.Nil(t, ports)
 }

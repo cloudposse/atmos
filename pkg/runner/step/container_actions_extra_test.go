@@ -498,10 +498,11 @@ func TestEffectiveRunStepHostRuntime(t *testing.T) {
 func TestConvertContainerPorts(t *testing.T) {
 	t.Parallel()
 
-	ports := convertContainerPorts([]schema.ContainerPort{
-		{Bind: "127.0.0.1", Host: 8080, Container: 80},
+	ports, err := convertContainerPorts([]schema.ContainerPort{
+		{Host: "127.0.0.1:8080", Container: 80},
 		{Host: 53, Container: 53, Protocol: "udp"},
 	})
+	require.NoError(t, err)
 	require.Len(t, ports, 2)
 	assert.Equal(t, "127.0.0.1", ports[0].Bind)
 	assert.Equal(t, "tcp", ports[0].Protocol)

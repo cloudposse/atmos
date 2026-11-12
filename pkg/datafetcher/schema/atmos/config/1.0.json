@@ -4802,8 +4802,11 @@
     },
     "ContainerPort": {
       "properties": {
-        "bind": {
-          "anyOf": [
+        "host": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
             {
               "type": "string"
             },
@@ -4811,20 +4814,7 @@
               "type": "null"
             }
           ],
-          "description": "Bind binds the published port to a host interface; empty uses the runtime default."
-        },
-        "host": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ]
+          "description": "Host is a port number or an IP:port string (IPv6 addresses require brackets)."
         },
         "container": {
           "anyOf": [
