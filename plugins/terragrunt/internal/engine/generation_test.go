@@ -170,6 +170,7 @@ func TestLockFileBesideTheUnitIsHandedToTheHost(t *testing.T) {
 		result, err := Resolve(t.Context(), request)
 		require.NoError(t, err)
 		require.NotContains(t, result.Generated, ".terraform.lock.hcl")
+		require.Empty(t, result.UnitFileCopies)
 	})
 	t.Run("present", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(lock, []byte("# pinned\n"), 0o600))
@@ -177,15 +178,19 @@ func TestLockFileBesideTheUnitIsHandedToTheHost(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "# pinned\n", result.Generated[".terraform.lock.hcl"])
 		require.Equal(t, "overwrite", result.GeneratedPolicies[".terraform.lock.hcl"])
+		require.True(t, result.UnitFileCopies[".terraform.lock.hcl"])
 	})
-	t.Run("an explicit generate block for it wins", func(t *testing.T) {
-		explicit := nativeUnit(t, "generate \"lock\" {\n path = \".terraform.lock.hcl\"\n if_exists = \"skip\"\n disable_signature = true\n contents = \"# generated\\n\"\n}\n")
-		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(explicit.Path), ".terraform.lock.hcl"), []byte("# pinned\n"), 0o600))
-		result, err := Resolve(t.Context(), explicit)
-		require.NoError(t, err)
-		require.Equal(t, "# generated\n", result.Generated[".terraform.lock.hcl"])
-		require.Equal(t, "skip", result.GeneratedPolicies[".terraform.lock.hcl"])
-	})
+	for _, policy := range []string{"skip", "overwrite", "error", "overwrite_terragrunt"} {
+		t.Run("explicit generate wins with "+policy, func(t *testing.T) {
+			explicit := nativeUnit(t, "generate \"lock\" {\n path = \".terraform.lock.hcl\"\n if_exists = \""+policy+"\"\n disable_signature = true\n contents = \"# generated\\n\"\n}\n")
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(explicit.Path), ".terraform.lock.hcl"), []byte("# pinned\n"), 0o600))
+			result, err := Resolve(t.Context(), explicit)
+			require.NoError(t, err)
+			require.Equal(t, "# generated\n", result.Generated[".terraform.lock.hcl"])
+			require.Equal(t, policy, result.GeneratedPolicies[".terraform.lock.hcl"])
+			require.False(t, result.UnitFileCopies[".terraform.lock.hcl"])
+		})
+	}
 }
 
 func TestProviderGenerateCredentialsAreSensitiveAcrossPolicies(t *testing.T) {

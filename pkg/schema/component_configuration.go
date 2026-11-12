@@ -70,6 +70,8 @@ type ComponentConfigurationFile struct {
 	Content   []byte
 	IfExists  string
 	Sensitive bool
+	// UnitFileCopy identifies a literal adjacent unit-file copy, not explicit generation.
+	UnitFileCopy bool
 }
 
 // HasComponentDiscovery reports an explicit opt-in without consulting plugins or the filesystem.

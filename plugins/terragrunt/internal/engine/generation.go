@@ -14,6 +14,7 @@ import (
 
 func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.TerragruntConfig, result *model.Resolution) error {
 	result.GeneratedPolicies = make(map[string]string)
+	result.UnitFileCopies = make(map[string]bool)
 	for _, generated := range cfg.GenerateConfigs {
 		if generated.Disable && (generated.IfDisabledStr == "" || generated.IfDisabledStr == "skip") {
 			continue

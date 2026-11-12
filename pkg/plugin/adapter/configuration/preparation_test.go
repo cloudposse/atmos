@@ -42,6 +42,7 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 			Files: []*pluginv1.ComponentGeneratedFile{
 				{Path: "backend.tf.json", Content: []byte("{}"), IfExists: "overwrite", Sensitive: true},
 				{Path: "provider.tf", Content: []byte("p"), IfExists: "skip"},
+				{Path: ".terraform.lock.hcl", Content: []byte("pins"), IfExists: "overwrite", UnitFileCopy: true},
 			},
 			Sources: []*pluginv1.ComponentSource{
 				{Path: "root.hcl", Kind: pluginv1.ComponentSource_FILE},
@@ -56,6 +57,7 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 	require.Equal(t, []schema.ComponentConfigurationFile{
 		{Path: "backend.tf.json", Content: []byte("{}"), IfExists: "overwrite", Sensitive: true},
 		{Path: "provider.tf", Content: []byte("p"), IfExists: "skip"},
+		{Path: ".terraform.lock.hcl", Content: []byte("pins"), IfExists: "overwrite", UnitFileCopy: true},
 	}, prepared.Files)
 	require.Equal(t, []schema.ComponentConfigurationSource{{Path: "root.hcl"}, {Path: "modules", Directory: true}}, prepared.Sources)
 

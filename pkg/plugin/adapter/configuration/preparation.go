@@ -209,7 +209,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	}
 	prepared.Execution = execution
 	for _, file := range result.Files {
-		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive})
+		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive, UnitFileCopy: file.UnitFileCopy})
 	}
 	for _, source := range result.Sources {
 		prepared.Sources = append(prepared.Sources, schema.ComponentConfigurationSource{Path: source.Path, Directory: source.Kind == pluginv1.ComponentSource_DIRECTORY})

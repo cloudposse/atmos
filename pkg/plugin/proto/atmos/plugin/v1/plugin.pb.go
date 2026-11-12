@@ -3024,8 +3024,11 @@ type ComponentGeneratedFile struct {
 	Content []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	// The adapter must reject unknown ownership policies, never overwrite by
 	// default. Content is evaluated bytes, not another template language.
-	IfExists      string `protobuf:"bytes,3,opt,name=if_exists,json=ifExists,proto3" json:"if_exists,omitempty"`
-	Sensitive     bool   `protobuf:"varint,4,opt,name=sensitive,proto3" json:"sensitive,omitempty"`
+	IfExists  string `protobuf:"bytes,3,opt,name=if_exists,json=ifExists,proto3" json:"if_exists,omitempty"`
+	Sensitive bool   `protobuf:"varint,4,opt,name=sensitive,proto3" json:"sensitive,omitempty"`
+	// True only for a literal file copied from beside the configuration unit,
+	// never for an explicit generate block. Absent means normal policy handling.
+	UnitFileCopy  bool `protobuf:"varint,5,opt,name=unit_file_copy,json=unitFileCopy,proto3" json:"unit_file_copy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3084,6 +3087,13 @@ func (x *ComponentGeneratedFile) GetIfExists() string {
 func (x *ComponentGeneratedFile) GetSensitive() bool {
 	if x != nil {
 		return x.Sensitive
+	}
+	return false
+}
+
+func (x *ComponentGeneratedFile) GetUnitFileCopy() bool {
+	if x != nil {
+		return x.UnitFileCopy
 	}
 	return false
 }
@@ -4156,12 +4166,13 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\fbackend_type\x18\x01 \x01(\tR\vbackendType\x129\n" +
 	"\abackend\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\abackend\x12\x1c\n" +
 	"\tworkspace\x18\x03 \x01(\tR\tworkspace\x12+\n" +
-	"\x11working_directory\x18\x04 \x01(\tR\x10workingDirectory\"\x81\x01\n" +
+	"\x11working_directory\x18\x04 \x01(\tR\x10workingDirectory\"\xa7\x01\n" +
 	"\x16ComponentGeneratedFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\x12\x1b\n" +
 	"\tif_exists\x18\x03 \x01(\tR\bifExists\x12\x1c\n" +
-	"\tsensitive\x18\x04 \x01(\bR\tsensitive\"\xb9\x02\n" +
+	"\tsensitive\x18\x04 \x01(\bR\tsensitive\x12$\n" +
+	"\x0eunit_file_copy\x18\x05 \x01(\bR\funitFileCopy\"\xb9\x02\n" +
 	"\x1fComponentExecutionConfiguration\x12Q\n" +
 	"\x0fextra_arguments\x18\x01 \x03(\v2(.atmos.plugin.v1.ComponentExtraArgumentsR\x0eextraArguments\x12A\n" +
 	"\fbefore_hooks\x18\x02 \x03(\v2\x1e.atmos.plugin.v1.ComponentHookR\vbeforeHooks\x12?\n" +

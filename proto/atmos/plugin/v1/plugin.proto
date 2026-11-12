@@ -312,6 +312,9 @@ message ComponentGeneratedFile {
   // default. Content is evaluated bytes, not another template language.
   string if_exists = 3;
   bool sensitive = 4;
+  // True only for a literal file copied from beside the configuration unit,
+  // never for an explicit generate block. Absent means normal policy handling.
+  bool unit_file_copy = 5;
 }
 // Evaluated command metadata; the host executes it with the invocation's
 // environment, toolchain, cancellation, and I/O. Lists retain declaration order.
