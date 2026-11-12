@@ -131,13 +131,16 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	}
 	if discover {
 		cfg, err := config.PartialParseConfigFile(ctx, logger, environment,
-			pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource, config.TerraformBlock, config.TerragruntFlags, config.TerragruntVersionConstraints, config.FeatureFlagsBlock, config.ExcludeBlock, config.ErrorsBlock), path, nil)
+			pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource, config.TerragruntFlags, config.TerragruntVersionConstraints, config.FeatureFlagsBlock, config.ExcludeBlock, config.ErrorsBlock), path, nil)
 		if err != nil {
 			return nil, err
 		}
 		// Reject unsupported settings now, so every selected unit is validated before any
 		// infrastructure command runs.
 		if err := rejectUnsupported(cfg, path); err != nil {
+			return nil, err
+		}
+		if err := checkExecutionSyntax(environment.FS, cfg, path); err != nil {
 			return nil, err
 		}
 		result := &model.Resolution{Path: path, Files: append(pctx.FilesRead.Paths(), path)}

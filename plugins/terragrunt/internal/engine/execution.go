@@ -4,8 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
+
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/gohcl"
+	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/spf13/afero"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 
@@ -139,6 +146,115 @@ func validateHook(kind string, hook *model.Hook) error {
 		return setting(model.CodeUnsupportedHook, fmt.Sprintf("%s %q", kind, hook.Name), "", fmt.Sprintf("Unsupported built-in `%s` hook in %s %q", hook.Execute[0], kind, hook.Name),
 			fmt.Sprintf("Terragrunt intercepts a hook that executes `%s` and runs its own integration, which Atmos does not implement.", hook.Execute[0]),
 			"Run the tool through a wrapper script, for example `execute = [\"./run-tflint.sh\"]`, or run it as a separate workflow step before the Terraform command.")
+	}
+	return nil
+}
+
+// checkExecutionSyntax validates declaration shapes and literal hook restrictions without
+// a Terragrunt evaluation context. Dynamic values (including dependency outputs and
+// run_cmd) are validated by executionFromConfig during preparation.
+func checkExecutionSyntax(filesystem afero.Fs, cfg *config.TerragruntConfig, path string) error {
+	paths := []string{path}
+	for _, name := range slices.Sorted(maps.Keys(cfg.ProcessedIncludes)) {
+		include := cfg.ProcessedIncludes[name]
+		strategy, err := include.GetMergeStrategy()
+		if err != nil {
+			return err
+		}
+		if strategy == config.NoMerge {
+			continue
+		}
+		included := include.Path
+		if !filepath.IsAbs(included) {
+			included = filepath.Join(filepath.Dir(path), included)
+		}
+		paths = append(paths, included)
+	}
+	for _, path := range paths {
+		data, err := afero.ReadFile(filesystem, path)
+		if err != nil {
+			return err
+		}
+		parser := hclparse.NewParser()
+		var file *hcl.File
+		var diagnostics hcl.Diagnostics
+		if strings.HasSuffix(path, ".json") {
+			file, diagnostics = parser.ParseJSON(data, path)
+		} else {
+			file, diagnostics = parser.ParseHCL(data, path)
+		}
+		if diagnostics.HasErrors() {
+			return diagnostics
+		}
+		content, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}}})
+		if diagnostics.HasErrors() {
+			return diagnostics
+		}
+		for _, terraform := range content.Blocks {
+			schema, _ := gohcl.ImpliedBodySchema(&config.TerraformConfig{})
+			declarations, diagnostics := terraform.Body.Content(schema)
+			if diagnostics.HasErrors() {
+				return diagnostics
+			}
+			for _, block := range declarations.Blocks {
+				if err := checkExecutionBlock(block); err != nil {
+					return hookProblem(err, path)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func checkExecutionBlock(block *hcl.Block) error {
+	var target any
+	switch block.Type {
+	case "extra_arguments":
+		target = &config.TerraformExtraArguments{}
+	case "before_hook", "after_hook":
+		target = &config.Hook{}
+	case "error_hook":
+		target = &config.ErrorHook{}
+	default:
+		return nil
+	}
+	schema, _ := gohcl.ImpliedBodySchema(target)
+	content, diagnostics := block.Body.Content(schema)
+	if diagnostics.HasErrors() {
+		return diagnostics
+	}
+	if block.Type == "extra_arguments" {
+		return nil
+	}
+	// A dynamic condition may disable the hook. Decide only during preparation.
+	if condition, ok := content.Attributes["if"]; ok {
+		var enabled bool
+		if diagnostics := gohcl.DecodeExpression(condition.Expr, nil, &enabled); diagnostics.HasErrors() || !enabled {
+			return nil
+		}
+	}
+	hook := model.Hook{Name: block.Labels[0], Execute: []string{"deferred"}}
+	if attribute, ok := content.Attributes["commands"]; ok {
+		var commands []string
+		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &commands); !diagnostics.HasErrors() {
+			hook.Commands = commands
+		}
+	}
+	if attribute, ok := content.Attributes["execute"]; ok {
+		var execute []string
+		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &execute); !diagnostics.HasErrors() {
+			hook.Execute = execute
+		}
+	}
+	if err := validateHook(block.Type, &hook); err != nil {
+		return err
+	}
+	if attribute, ok := content.Attributes["on_errors"]; ok {
+		var patterns []string
+		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &patterns); !diagnostics.HasErrors() {
+			_, err := errorHooksFromConfig([]config.ErrorHook{{Name: hook.Name, Commands: hook.Commands, Execute: hook.Execute, OnErrors: patterns}})
+			return err
+		}
 	}
 	return nil
 }
