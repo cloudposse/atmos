@@ -125,7 +125,7 @@ func (p *Provider) Context() (*provider.Context, error) {
 				return nil, fmt.Errorf("%w: Gitea fork head repository is missing or invalid", errUtils.ErrCIPullRequestUnknown)
 			}
 			c.CloneURL = c.ServerURL + "/" + e.PullRequest.Head.Repo.FullName + ".git"
-			if c.Branch == "" {
+			if env("HEAD_REF") == "" && pr.HeadRef != "" {
 				c.Branch = pr.HeadRef
 			}
 		}

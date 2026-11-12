@@ -277,6 +277,9 @@ func TestAPIErrorAndCancellation(t *testing.T) {
 }
 
 func TestForkCheckoutContext(t *testing.T) {
+	for _, name := range []string{"GITEA_HEAD_REF", "GITHUB_HEAD_REF", "GITEA_REF_NAME", "GITHUB_REF_NAME"} {
+		t.Setenv(name, "")
+	}
 	t.Chdir(t.TempDir())
 	t.Setenv("GITEA_REPOSITORY", "owner/repo")
 	t.Setenv("GITEA_SERVER_URL", "https://git.example.com")
@@ -288,6 +291,14 @@ func TestForkCheckoutContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://git.example.com/contributor/repo.git", c.CloneURL)
 	require.Equal(t, "fork-only", c.Branch)
+	t.Setenv("GITHUB_REF_NAME", "base-branch")
+	c, err = NewProvider().Context()
+	require.NoError(t, err)
+	require.Equal(t, "fork-only", c.Branch)
+	t.Setenv("GITEA_HEAD_REF", "explicit-head")
+	c, err = NewProvider().Context()
+	require.NoError(t, err)
+	require.Equal(t, "explicit-head", c.Branch)
 	t.Setenv("GITEA_EVENT_NAME", "pull_request_target")
 	c, err = NewProvider().Context()
 	require.NoError(t, err)
