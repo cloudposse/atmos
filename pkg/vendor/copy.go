@@ -60,6 +60,8 @@ func CopyToTarget(srcDir, dstDir string, opts CopyOptions) error {
 // containment and resolved-target exclusion checks. Callers must also apply
 // CreateSkipFunc to the link itself.
 func CanCopySymlink(srcDir, src string, opts CopyOptions) bool {
+	defer perf.Track(nil, "vendor.CanCopySymlink")()
+
 	return createSymlinkHandler(srcDir, opts)(src) == cp.Deep
 }
 
