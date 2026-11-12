@@ -120,8 +120,13 @@ func TestNeedsProvisioningLocalSourceStamp(t *testing.T) {
 	})
 	t.Run("a removed source is refreshed so the failure names it", func(t *testing.T) {
 		// Keep the same spec, so URI-change detection cannot be what reports it.
-		require.NoError(t, os.RemoveAll(sourceDir))
+		stamp := localSourceStamp(spec)
+		require.NotEmpty(t, stamp)
+		recordSourceStamp(target, stamp, ui.New(nil))
 		needs, reason := needsProvisioning(target, spec, true)
+		require.False(t, needs, reason)
+		require.NoError(t, os.RemoveAll(sourceDir))
+		needs, reason = needsProvisioning(target, spec, true)
 		assert.True(t, needs)
 		assert.Contains(t, reason, "Local source changed")
 	})

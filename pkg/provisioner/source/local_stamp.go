@@ -38,9 +38,9 @@ func localSourceRoot(spec *schema.VendorComponentSource) (string, bool) {
 	return dir, true
 }
 
-// localSourceStamp digests a stat manifest (relative path, size, modification time, mode) of the
-// local directory source. It reads no file contents, so refreshing decisions stay cheap for
-// modules with many or large files. It returns an empty string for any other kind of source.
+// localSourceStamp digests file metadata and contents of the local directory source.
+// Contents are streamed so equal-size edits with unchanged timestamps are detected without
+// buffering entire files. It returns an empty string for other sources or unreadable files.
 //
 // The stamp is a change-detection token compared across processes, not a credential hash, so it uses
 // a non-cryptographic 128-bit FNV-1a digest. It stays stable for an unchanged source.
@@ -55,8 +55,19 @@ func localSourceStamp(spec *schema.VendorComponentSource) string {
 	}
 	hash := fnv.New128a()
 	links := &stampLinks{root: root, spec: spec, seen: make(map[string]bool)}
+	skip := vendor.CreateSkipFunc(root, spec.IncludedPaths, spec.ExcludedPaths)
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if excluded, err := skip(info, path, ""); err != nil || excluded {
+			if err == nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
 			return err
 		}
 		if entry.IsDir() {
@@ -109,6 +120,9 @@ func (links *stampLinks) stampTarget(hash io.Writer, path string, entry fs.DirEn
 	if err != nil {
 		return err
 	}
+	if targetInfo.Mode().IsRegular() {
+		return stampFileContents(hash, target)
+	}
 	if !targetInfo.IsDir() || links.seen[target] {
 		return nil
 	}
@@ -153,6 +167,9 @@ func stampEntry(hash io.Writer, root, path string, entry fs.DirEntry) error {
 		return err
 	}
 	fmt.Fprintf(hash, "%s\x00%d\x00%d\x00%d\n", filepath.ToSlash(relative), info.Size(), info.ModTime().UnixNano(), info.Mode())
+	if info.Mode().IsRegular() {
+		return stampFileContents(hash, path)
+	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		// A link edited through its target changes the module without touching the link.
 		if target, statErr := os.Stat(path); statErr == nil {
@@ -160,6 +177,21 @@ func stampEntry(hash io.Writer, root, path string, entry fs.DirEntry) error {
 		}
 	}
 	return nil
+}
+
+// stampFileContents adds a fixed-size content digest, keeping entry boundaries unambiguous.
+func stampFileContents(hash io.Writer, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	content := fnv.New128a()
+	if _, err := io.Copy(content, file); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(hash, "content:%x\n", content.Sum(nil))
+	return err
 }
 
 // localSourceChanged reports whether a local directory source was edited, or removed, since the
