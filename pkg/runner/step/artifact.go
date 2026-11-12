@@ -68,14 +68,13 @@ func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 	defer perf.Track(nil, "step.ArtifactHandler.Execute")()
 
 	session := vars.artifactSession()
-	stepKey := artifactStepKey(step)
-	params, retained := session.retainedInput(stepKey)
-	if !retained {
-		var err error
-		params, err = h.artifactParams(step, vars)
-		if err != nil {
-			return nil, err
-		}
+	stepKey, err := session.stepKey(step)
+	if err != nil {
+		return nil, err
+	}
+	params, retained, err := h.sessionParams(session, stepKey, step, vars)
+	if err != nil {
+		return nil, err
 	}
 	if err := checkResolvedArtifactParams(step, params); err != nil {
 		return nil, err
@@ -112,11 +111,19 @@ func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 	return result, deadline.Wrap(runErr)
 }
 
+func (h *ArtifactHandler) sessionParams(session *artifactSession, key string, step *schema.WorkflowStep, vars *Variables) (*invoke.Params, bool, error) {
+	if params, retained := session.retainedInput(key); retained {
+		return params, true, nil
+	}
+	params, err := h.artifactParams(step, vars)
+	return params, false, err
+}
+
 // runOperation runs one attempt of the operation under the retained logical identity, records the
 // attempt into the report collector, and builds the step result.
 func (h *ArtifactHandler) runOperation(ctx context.Context, step *schema.WorkflowStep, vars *Variables, svc artifact.Service, params *invoke.Params) (*StepResult, error) {
 	session := vars.artifactSession()
-	key := artifactOperationKey(step.Name, params)
+	key := session.operationKey(step.Name, params)
 	operation, collector := session.begin(key)
 	params.Execution = artifact.Execution{OperationID: operation.id, PreparedAt: operation.preparedAt}
 	if step.Retry != nil {
