@@ -192,13 +192,18 @@ func TestEKSSeamsDefaultToRealImplementations(t *testing.T) {
 
 // Exercise the real SDK and kubeconfig writer with an omitted region, as in #3674.
 func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
-	for _, unavailable := range []bool{false, true} {
-		name := "preserves auth context"
-		if unavailable {
-			name = "working directory unavailable"
-		}
-		t.Run(name, func(t *testing.T) {
-			if unavailable && runtime.GOOS != "linux" {
+	for _, tt := range []struct {
+		name         string
+		unavailable  bool
+		writeFailure bool
+		wantErr      error
+	}{
+		{name: "preserves auth context"},
+		{name: "working directory unavailable", unavailable: true, wantErr: errUtils.ErrWorkingDirAccessFailed},
+		{name: "kubeconfig parent is a file", writeFailure: true, wantErr: errUtils.ErrKubeconfigWrite},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.unavailable && runtime.GOOS != "linux" {
 				t.Skip("Only Linux reliably fails Getwd after removing the current directory")
 			}
 			restoreEKSSeams(t)
@@ -224,7 +229,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/clusters/bar", r.URL.Path)
 				assert.Equal(t, http.MethodGet, r.Method)
-				if unavailable {
+				if tt.unavailable {
 					assert.NoError(t, os.Remove(projectDir))
 				}
 				w.Header().Set("Content-Type", "application/json")
@@ -234,11 +239,17 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			defer server.Close()
 			t.Setenv("AWS_ENDPOINT_URL_EKS", server.URL)
 			path := filepath.Join(configDir, "kubeconfig")
+			if tt.writeFailure {
+				// The existing AWS config is a file, so it cannot contain a kubeconfig.
+				path = filepath.Join(configDir, "config", "kubeconfig")
+			}
 			err = executeEKSUpdateKubeconfigDirect("bar", "", path, "bar-context", "foo")
-			if unavailable {
+			if tt.wantErr != nil {
 				require.ErrorIs(t, err, errUtils.ErrEKSIntegrationFailed)
-				require.ErrorIs(t, err, errUtils.ErrWorkingDirAccessFailed)
-				assert.NoFileExists(t, path)
+				require.ErrorIs(t, err, tt.wantErr)
+				if tt.unavailable {
+					assert.NoFileExists(t, path)
+				}
 				return
 			}
 			require.NoError(t, err)

@@ -3,7 +3,9 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -838,4 +840,36 @@ func TestEKSIntegration_FindClusterARN_NoMatch(t *testing.T) {
 	_, err = integration.findClusterARN(mgr)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no cluster ARN found matching missing-cluster")
+}
+
+func TestEKSIntegration_Execute_WorkingDirectoryUnavailable(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Only Linux reliably fails Getwd after removing the current directory")
+	}
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	require.NoError(t, os.Remove(projectDir))
+
+	origFactory, origDescribe := eksClientFactory, eksDescribeCluster
+	t.Cleanup(func() {
+		eksClientFactory, eksDescribeCluster = origFactory, origDescribe
+	})
+	eksClientFactory = func(context.Context, types.ICredentials, string) (awsCloud.EKSClient, error) {
+		return nil, nil
+	}
+	eksDescribeCluster = func(context.Context, awsCloud.EKSClient, string, string) (*awsCloud.EKSClusterInfo, error) {
+		return &awsCloud.EKSClusterInfo{Name: "dev-cluster", Region: "us-east-2"}, nil
+	}
+	integration := &EKSIntegration{
+		identity: "dev-admin",
+		cluster: &schema.Cluster{
+			Name: "dev-cluster", Region: "us-east-2",
+			Kubeconfig: &schema.KubeconfigSettings{Path: kubeconfigPath},
+		},
+	}
+	err := integration.Execute(t.Context(), nil)
+	require.ErrorIs(t, err, errUtils.ErrEKSIntegrationFailed)
+	require.ErrorIs(t, err, errUtils.ErrWorkingDirAccessFailed)
+	assert.NoFileExists(t, kubeconfigPath)
 }
