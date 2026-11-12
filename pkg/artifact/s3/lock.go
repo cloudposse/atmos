@@ -332,7 +332,7 @@ func (l *claimHandle) goneAfter(ctx context.Context, err error) bool {
 // holdClaim validates an existing claim or acquires one, and keeps it held through a mutation.
 func (r *Repository) holdClaim(ctx context.Context, supplied artifact.LockHandle, resource, operationID string) (func() error, error) {
 	handle, local := supplied.(*claimHandle)
-	if !local || handle.repo != r {
+	if !local || handle == nil || handle.repo != r {
 		handle, err := r.acquire(ctx, resource, r.settings.owner, operationID)
 		if err != nil {
 			return nil, err
