@@ -92,6 +92,8 @@ func (i *identity) Validate() error {
 	return i.definition.Schema(i.config.Principal)
 }
 
+// Authenticate exchanges upstream credentials with the identity plugin using
+// the invocation's context and validated interaction handler.
 func (i *identity) Authenticate(ctx context.Context, upstream types.ICredentials) (types.ICredentials, error) {
 	defer perf.Track(nil, "auth.identity.Authenticate")()
 
@@ -136,6 +138,8 @@ func (i *identity) Environment() (map[string]string, error) { return i.materiali
 //nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
 func (i *identity) Paths() ([]types.Path, error) { return i.materializer.Paths() }
 
+// Logout combines plugin revocation and private-session cleanup with
+// cancellation-independent removal of materialized credentials.
 func (i *identity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "auth.identity.Logout")()
 

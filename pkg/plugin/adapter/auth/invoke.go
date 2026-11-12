@@ -25,6 +25,8 @@ type invocation struct {
 	request *pluginv1.Invocation
 }
 
+// invoke runs a namespaced plugin transaction and passes the invocation's
+// deadline-bound context to the operation.
 func (d *Definition) invoke(ctx context.Context, name, realm string, settings map[string]any, operation func(*invocation) error) error {
 	namespace, err := d.sessionNamespace(name, realm, settings)
 	if err != nil {
@@ -59,6 +61,8 @@ func toStruct(value map[string]any) (*structpb.Struct, error) {
 	return result, nil
 }
 
+// receiveCredentials handles at most one interaction and requires the credential
+// result to terminate the bounded event stream.
 func receiveCredentials(stream grpc.ServerStreamingClient[pluginv1.AuthenticateEvent], interact func(*pluginv1.Interaction) error) (*pluginv1.Credentials, error) {
 	// Progress is bounded and not blindly printed: plugin text can contain secrets.
 	interactionSeen := false
@@ -112,6 +116,8 @@ func translateError(err error) error {
 	}
 }
 
+// translateLocalError preserves recognized protocol and cancellation causes
+// while hiding unclassified plugin error details.
 func translateLocalError(err error) error {
 	for _, cause := range []error{errUtils.ErrPluginProtocol, errUtils.ErrPluginInteractionRequired, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, cause) {

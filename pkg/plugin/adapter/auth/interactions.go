@@ -38,6 +38,8 @@ func interactionHandler(ctx context.Context, interactive bool, present func(stri
 	}
 }
 
+// parseDeviceCode accepts only the device prompt fields that are safe to render
+// and rejects unsupported interaction kinds or malformed protocol data.
 func parseDeviceCode(event *pluginv1.Interaction) (string, string, error) {
 	if event.GetKind() != deviceCodeInteractionKind {
 		return "", "", errUtils.ErrPluginInteractionRequired
@@ -50,8 +52,8 @@ func parseDeviceCode(event *pluginv1.Interaction) (string, string, error) {
 	return uri, code, nil
 }
 
-// A public verification URI is distinct from a complete authorization URL.
-// Browser API calls can open URLs with queries without writing them to the UI.
+// publicVerificationURI permits printable HTTPS verification links without
+// credentials, queries or fragments. Complete authorization URLs use the browser API.
 func publicVerificationURI(raw string) bool {
 	if len(raw) > maxVerificationURILength || strings.IndexFunc(raw, func(r rune) bool { return r < '!' || r > '~' }) >= 0 {
 		return false
