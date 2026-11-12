@@ -179,7 +179,7 @@ jobs:
       - name: Add swap space
         uses: ./.github/actions/swap-space
         with:
-          size-gb: '20'
+          size-gb: '30'
 
       - name: Run govulncheck
         shell: bash
