@@ -158,8 +158,10 @@ func TestAuthRPCsEnforceInvocationDeadline(t *testing.T) {
 			definition.Timeout = 500 * time.Millisecond
 			definition.Credentials = credential.New()
 			p := &provider{name: authDeadlineFixtureName, realm: "fixture", definition: definition, config: providerConfig(nil)}
-			i := &identity{name: authDeadlineFixtureName, realm: "fixture", definition: definition, config: &schema.Identity{Kind: "plugin/broker"},
-				accepts: []string{"aws/v1"}, materializer: EnvironmentMaterializer(authDeadlineFixtureName, nil)}
+			i := &identity{
+				name: authDeadlineFixtureName, realm: "fixture", definition: definition, config: &schema.Identity{Kind: "plugin/broker"},
+				accepts: []string{"aws/v1"}, materializer: EnvironmentMaterializer(authDeadlineFixtureName, nil),
+			}
 			err := tt.run(t.Context(), p, i)
 			require.ErrorIs(t, err, errUtils.ErrPluginTimeout)
 			require.ErrorIs(t, err, context.DeadlineExceeded)
