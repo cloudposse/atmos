@@ -225,7 +225,7 @@ func handleBrowserOpen(consoleURL string, skipOpen bool, opener browser.Opener) 
 			// Show URL on error so user can manually open it.
 			printConsoleURL(consoleURL)
 			ui.Warningf("Failed to open browser: %v", err)
-			ui.Writeln("Please copy the URL above and open it manually.")
+			ui.Writeln("Use the link above to open the console manually.")
 		} else {
 			ui.Success("Opened console in browser")
 		}
@@ -269,13 +269,19 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 	}
 }
 
-// printConsoleURL prints the console URL in a formatted way.
+// consoleLinkLabel introduces the console URL and is the clickable text when
+// the URL is delivered as a terminal hyperlink.
+const consoleLinkLabel = "Open console"
+
+// printConsoleURL hands the console sign-in URL to the user. Federation URLs
+// run to well over a thousand characters, so the URL is delivered in the form
+// `settings.terminal.links` selects: a short clickable link, a clipboard copy,
+// or the raw URL.
 func printConsoleURL(consoleURL string) {
 	defer perf.Track(nil, "auth.printConsoleURL")()
 
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
-	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
-	ui.Writef("\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
+	ui.Writeln("")
+	ui.WriteLinkPrompt(ui.LinkPrompt{URL: consoleURL, Label: consoleLinkLabel})
 }
 
 // getConsoleProvider returns a ConsoleAccessProvider for the given identity.

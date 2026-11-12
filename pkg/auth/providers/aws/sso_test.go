@@ -406,44 +406,6 @@ func TestIsTTY(t *testing.T) {
 	assert.False(t, result, "isTTY should return false in test environment (stderr is not a terminal)")
 }
 
-func TestDisplayVerificationDialog(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-		url  string
-	}{
-		{
-			name: "with verification code and URL",
-			code: "ABCD-1234",
-			url:  "https://device.sso.us-east-1.amazonaws.com/",
-		},
-		{
-			name: "with empty code",
-			code: "",
-			url:  "https://device.sso.us-east-1.amazonaws.com/",
-		},
-		{
-			name: "with empty URL",
-			code: "WXYZ-5678",
-			url:  "",
-		},
-		{
-			name: "with both empty",
-			code: "",
-			url:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// This function outputs to stderr, so we just verify it doesn't panic.
-			assert.NotPanics(t, func() {
-				displayVerificationDialog(tt.code, tt.url)
-			})
-		})
-	}
-}
-
 func TestDisplayVerificationPlainText(t *testing.T) {
 	tests := []struct {
 		name string
@@ -688,7 +650,7 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 // TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage covers the
 // non-CI branch of displayVerificationPlainText, where a non-empty URL is
 // shown as a message about opening the browser rather than the plain
-// "Verification URL" message used under CI.
+// "Visit <url> and enter the code" message used under CI.
 func TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage(t *testing.T) {
 	currentEnvVars := telemetry.PreserveCIEnvVars()
 	defer telemetry.RestoreCIEnvVars(currentEnvVars)

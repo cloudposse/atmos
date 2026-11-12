@@ -101,6 +101,11 @@ test('renders <dl><dt><dd> as a bulleted definition list', async () => {
   assert.match(out, /Another description\./);
 });
 
+test('keeps definition descriptions and inline code together', async () => {
+  const out = await normalize('<dl>\n  <dt>`--command`</dt>\n  <dd>Compatibility alias for `--other`. Specify one flag.</dd>\n</dl>');
+  assert.match(out, /\*\*`--command`\*\* — Compatibility alias for `--other`\. Specify one flag\./);
+});
+
 test('renders <ActionCard> as title + body + cta link', async () => {
   const src = `<ActionCard title="Get Started" href="/quick-start" ctaLabel="Begin">\n\nQuick guide.\n\n</ActionCard>`;
   const out = await normalize(src);

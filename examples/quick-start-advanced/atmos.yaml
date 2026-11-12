@@ -17,22 +17,6 @@
 # are considered paths relative to 'base_path'.
 base_path: "."
 
-# Toolchain management configures HOW required tools are installed; WHICH tools and
-# versions are declared in the stacks via `dependencies.tools` (e.g. OpenTofu in
-# stacks/orgs/acme/_defaults.yaml). Tools are resolved from the Aqua registry and
-# locked in `toolchain.lock.yaml` (commit it) for reproducible installs.
-# https://atmos.tools/cli/commands/toolchain
-toolchain:
-  # Where installed tool binaries live (relative to the base path).
-  install_path: .tools
-  # Resolve installs against the committed lockfile for reproducibility.
-  use_lock_file: true
-  registries:
-    # The official Aqua registry provides metadata for standard tools (opentofu, …).
-    - name: aqua
-      type: aqua
-      priority: 100
-
 components:
   terraform:
     # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands

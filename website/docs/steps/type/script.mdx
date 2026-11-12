@@ -341,6 +341,7 @@ output = steps.parallel(
 | `steps.parallel(functions=..., tasks=..., max_concurrency=4, fail_fast=False)` | Supply exactly one collection; empty collections return `[]`. Nested groups each have their own limit. |
 | `steps.task(name, function, args=[], kwargs={}, retry=None, timeout="")` | Named deferred call. Names must be unique within a parallel group. |
 | `exec.run(argv, working_directory=..., env={...}, output="stream", check=True, timeout="", retry=None, stdin=None)` | Runs an argument list without a shell. Returns `.stdout`, `.stderr`, `.exit_code`, and `.data` (parsed JSON stdout). By default, output streams live and failure raises an error. |
+| [`browser.open(url)`](/functions/automation/browser.open) | Open an absolute HTTP(S) URL in the default system browser. Returns `None`; launch errors fail the script. |
 | `ui.info(message)`, `ui.success(message)`, `ui.warning(message)` | Write through Atmos's UI channel. |
 | `log.trace(message, **fields)`, `log.debug(...)`, `log.info(...)`, `log.warn(...)`, `log.error(...)` | Write diagnostics to the Atmos logger, filtered by the configured log level. See [Logging](#logging). |
 | `json.encode(value)`, `json.decode(text)` | Convert structured values and JSON. |
