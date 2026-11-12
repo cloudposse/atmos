@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,6 +54,13 @@ func within(path, directory string) bool {
 // discoverProject uses an invocation-local copy-on-write overlay. Generated HCL
 // retains its original virtual path; no source files or state are moved/written.
 func discoverProject(ctx context.Context, request model.Request) (*model.Resolution, error) {
+	return discoverProjectWithResolver(ctx, request, resolve)
+}
+
+func discoverProjectWithResolver(ctx context.Context, request model.Request, evaluate func(context.Context, model.Request, afero.Fs) (*model.Resolution, error)) (*model.Resolution, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	root, err := canonicalPath(request.BasePath)
 	if err != nil {
 		return nil, err
@@ -86,7 +94,14 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 		if generate {
 			req.Command = "generate"
 		}
-		return resolve(ctx, req, overlay)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		resolved, err := evaluate(ctx, req, overlay)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return nil, contextErr
+		}
+		return resolved, err
 	}
 	// A generated child that fails is recorded at its own address so its siblings stay usable.
 	// The generation root is kept to drop failures of stacks that turn out to be templates.
@@ -114,6 +129,9 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 				templates[source] = true
 				childName := filepath.Join(name, resolved.Stacks[child])
 				if err := visit(childPath, stack, childName, generationRoot, files, append(append([]string{}, folders...), source), depth+1); err != nil {
+					if isDiscoveryCancellation(err) {
+						return err
+					}
 					recordChild(stack, childName, generationRoot, childPath, err)
 				}
 			}
@@ -122,6 +140,9 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 				templates[source] = true
 				childName := filepath.Join(name, child)
 				if err := visit(childPath, stack, childName, generationRoot, files, append(append([]string{}, folders...), source), depth+1); err != nil {
+					if isDiscoveryCancellation(err) {
+						return err
+					}
 					recordChild(stack, childName, generationRoot, childPath, err)
 				}
 			}
@@ -161,10 +182,16 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 			continue
 		}
 		if _, err := parse(path, true); err != nil {
+			if isDiscoveryCancellation(err) {
+				return nil, err
+			}
 			failures[path] = err
 			continue
 		}
 		if err := visit(path, nameFor(filepath.Dir(path)), "", path, nil, nil, 0); err != nil {
+			if isDiscoveryCancellation(err) {
+				return nil, err
+			}
 			failures[path] = err
 		}
 	}
@@ -192,6 +219,9 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 		}
 		// One failing unit is recorded and reported on its own; the other units stay usable.
 		if err := visit(path, stack, name, "", nil, nil, 0); err != nil {
+			if isDiscoveryCancellation(err) {
+				return nil, err
+			}
 			result.Failures = append(result.Failures, model.UnitFailure{Stack: stack, Name: filepath.ToSlash(name), Err: problemFor(err, path)})
 		}
 	}
@@ -208,4 +238,8 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 		identities[key] = unit.Config.Path
 	}
 	return result, nil
+}
+
+func isDiscoveryCancellation(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
