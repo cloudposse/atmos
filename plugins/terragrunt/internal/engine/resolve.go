@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
@@ -174,7 +175,13 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 				if _, err := environment.FS.Stat(physical); err != nil {
 					return nil, dependencyProblem(path, dependency, err)
 				}
-				result.OutputDependencies = append(result.OutputDependencies, physical)
+				if !slices.Contains(result.OutputDependencies, physical) {
+					result.OutputDependencies = append(result.OutputDependencies, physical)
+				}
+				// Output reads also require a scheduling edge before preparation.
+				if !slices.Contains(result.Dependencies, physical) {
+					result.Dependencies = append(result.Dependencies, physical)
+				}
 			}
 		}
 		if cfg.Dependencies != nil {
@@ -193,7 +200,9 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 				if err != nil {
 					return nil, dependencyProblem(path, dependency, err)
 				}
-				result.Dependencies = append(result.Dependencies, physical)
+				if !slices.Contains(result.Dependencies, physical) {
+					result.Dependencies = append(result.Dependencies, physical)
+				}
 			}
 		}
 		return result, nil
