@@ -962,6 +962,8 @@ func ProcessYAMLConfigFileWithContext(
 
 // importFileResult holds the result of processing a single import file in parallel.
 type importFileResult struct {
+	unitFragments                []map[string]any
+	yamlOnlyConfig               map[string]any
 	importedUnitSources          map[string]string
 	importMetadata               schema.StackImportMetadata
 	index                        int
@@ -1859,6 +1861,8 @@ func processYAMLConfigFileWithContextInternal(
 					index:                        index,
 					importFile:                   file,
 					yamlConfig:                   importResult.DeepMergedConfig,
+					yamlOnlyConfig:               importResult.YAMLConfig,
+					unitFragments:                importResult.UnitFragments,
 					importMetadata:               importResult.ImportMetadata,
 					importedUnitSources:          importResult.ImportedUnitSources,
 					yamlConfigRaw:                importResult.StackConfig,
@@ -1917,8 +1921,10 @@ func processYAMLConfigFileWithContextInternal(
 				return nil, nil, err
 			}
 
-			// Append to stackConfigs in order.
-			stackConfigs = append(stackConfigs, result.yamlConfig)
+			// Keep provider defaults below all YAML layers, even when a unit arrives
+			// through a nested mixin after an earlier catalog override.
+			unitFragments = append(unitFragments, result.unitFragments...)
+			stackConfigs = append(stackConfigs, result.yamlOnlyConfig)
 
 			// Record metadata for this import.
 			// We record every time we encounter an import to track all files that import it,
@@ -2019,10 +2025,19 @@ func processYAMLConfigFileWithContextInternal(
 		stackConfigs = append(stackConfigs, stackConfigMap)
 	}
 
+	var yamlConfig map[string]any
 	// Imported units are the lowest layer, so the imports and the manifest itself deep-merge over
 	// them with the usual rules. Only two different units that share a component name conflict,
 	// including units that arrive through different YAML imports, so every manifest checks.
 	if len(unitFragments) > 0 {
+		// Preserve YAML separately before adding defaults, without recording provenance twice.
+		yamlConfig, err = m.Merge(atmosConfig, stackConfigs)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := applyHelmTypeOverrides(atmosConfig, yamlConfig, relativeFilePath); err != nil {
+			return nil, nil, err
+		}
 		applyUnitOverrides(unitFragments, finalTerraformOverrides)
 		stackConfigs = append(slices.Clone(unitFragments), stackConfigs...)
 	}
@@ -2036,6 +2051,9 @@ func processYAMLConfigFileWithContextInternal(
 	if err := applyHelmTypeOverrides(atmosConfig, stackConfigsDeepMerged, relativeFilePath); err != nil {
 		return nil, nil, err
 	}
+	if len(unitFragments) == 0 {
+		yamlConfig = stackConfigsDeepMerged
+	}
 
 	// NOTE: We don't store merge context here because ProcessYAMLConfigFileWithContext
 	// can be called from parallel goroutines in ProcessYAMLConfigFiles, which would create
@@ -2047,6 +2065,8 @@ func processYAMLConfigFileWithContextInternal(
 	}
 	return &schema.StackManifestProcessingResult{
 		DeepMergedConfig:          stackConfigsDeepMerged,
+		YAMLConfig:                yamlConfig,
+		UnitFragments:             unitFragments,
 		ImportedUnitSources:       importedUnitSources,
 		ImportMetadata:            finalMetadata,
 		ImportsConfig:             importsConfig,

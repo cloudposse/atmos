@@ -126,6 +126,38 @@ func TestYAMLComponentOverridesAnImportedUnit(t *testing.T) {
 	require.Equal(t, "live/app/terragrunt.hcl", app["settings"].(map[string]any)["configuration"].(map[string]any)["source"])
 }
 
+func TestNestedUnitImportsPreserveYAMLPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		imports string
+		mixin   string
+		want    string
+	}{
+		{"catalog before nested unit", "catalog, outer", "import: [terragrunt://live]\n", "green"},
+		{"catalog after nested unit", "outer, catalog", "import: [terragrunt://live]\n", "green"},
+		{"explicit mixin workspace wins", "catalog, outer", "import: [terragrunt://live]\ncomponents:\n  terraform:\n    app:\n      metadata:\n        terraform_workspace: blue\n", "blue"},
+		{"explicit default remains YAML", "catalog, outer", "import: [terragrunt://live]\ncomponents:\n  terraform:\n    app:\n      metadata:\n        terraform_workspace: default\n", "default"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			for name, body := range map[string]string{
+				"catalog": "components:\n  terraform:\n    app:\n      metadata:\n        terraform_workspace: green\n      vars:\n        from_catalog: true\n",
+				"mixin":   tc.mixin,
+				"outer":   "import: [mixin]\n",
+			} {
+				require.NoError(t, os.WriteFile(filepath.Join(root, name+".yaml"), []byte(body), 0o600))
+			}
+			unit := placeholderUnit()
+			runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: unit}
+			app := processUnitManifest(t, root, "stack.yaml", "import: ["+tc.imports+"]\n", runtime)
+			require.Equal(t, tc.want, app["metadata"].(map[string]any)["terraform_workspace"])
+			require.Equal(t, true, app["vars"].(map[string]any)["from_catalog"])
+			require.Equal(t, "live/app/terragrunt.hcl", app["settings"].(map[string]any)["configuration"].(map[string]any)["source"])
+			require.Equal(t, placeholderUnit(), unit, "loading must not mutate provider data")
+		})
+	}
+}
+
 func TestTwoUnitsWithOneComponentNameStillConflict(t *testing.T) {
 	root := t.TempDir()
 	first := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: placeholderUnit()}

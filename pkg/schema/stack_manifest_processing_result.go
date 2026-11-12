@@ -3,6 +3,11 @@ package schema
 // StackManifestProcessingResult is the result of recursively processing a stack
 // manifest file and deep-merging all its imports.
 type StackManifestProcessingResult struct {
+	// UnitFragments retain provider defaults separately through recursive imports.
+	UnitFragments []map[string]any
+	// YAMLConfig excludes provider defaults, so a parent can place all units below
+	// every YAML layer without discarding explicit YAML values equal to defaults.
+	YAMLConfig map[string]any
 	// ImportedUnitSources records provider unit identity independently of merged YAML settings.
 	ImportedUnitSources map[string]string
 	// ImportMetadata preserves literal metadata separately from rendered configuration.
