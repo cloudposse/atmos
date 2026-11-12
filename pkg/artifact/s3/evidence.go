@@ -37,16 +37,21 @@ func (r *Repository) loadEvidence(ctx context.Context, subject digest.Digest) ([
 		loaded []loadedEvidence
 		diags  []artifact.Diagnostic
 	)
+	attempted := 0
 	for index := range objects {
-		stem, ok := strings.CutSuffix(strings.TrimPrefix(objects[index].Key, dir), ".json")
-		if !ok || strings.Contains(stem, "/") {
+		stem, ok := evidenceObjectStem(objects[index].Key, dir)
+		if !ok {
 			continue
 		}
-		if len(loaded) >= maxEvidenceFiles {
+		if attempted >= maxEvidenceFiles {
 			diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "evidence-truncated", Message: fmt.Sprintf("more than %d evidence files; the rest were not read", maxEvidenceFiles)})
 			break
 		}
-		item, problem := r.readEvidenceObject(ctx, objects[index].Key, stem)
+		attempted++
+		item, problem, readErr := r.readEvidenceObject(ctx, objects[index].Key, stem)
+		if readErr != nil {
+			return nil, nil, readErr
+		}
 		switch {
 		case errors.Is(problem, context.Canceled), errors.Is(problem, context.DeadlineExceeded):
 			return nil, nil, problem
@@ -59,19 +64,28 @@ func (r *Repository) loadEvidence(ctx context.Context, subject digest.Digest) ([
 	return loaded, diags, nil
 }
 
-func (r *Repository) readEvidenceObject(ctx context.Context, key, hexDigest string) (*layout.Evidence, error) {
+func evidenceObjectStem(key, dir string) (string, bool) {
+	stem, ok := strings.CutSuffix(strings.TrimPrefix(key, dir), ".json")
+	return stem, ok && !strings.Contains(stem, "/") && digest.NewDigestFromEncoded(digest.SHA256, stem).Validate() == nil
+}
+
+func (r *Repository) readEvidenceObject(ctx context.Context, key, hexDigest string) (*layout.Evidence, error, error) {
 	want := digest.NewDigestFromEncoded(digest.SHA256, hexDigest)
 	if err := want.Validate(); err != nil {
-		return nil, err
+		return nil, err, nil
 	}
 	raw, _, err := r.readObject(ctx, key, layout.MaxEvidenceFileBytes)
+	if errors.Is(err, errUtils.ErrArtifactTooLarge) {
+		return nil, err, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%w: evidence object disappeared", errUtils.ErrArtifactNotFound)
+		return nil, nil, fmt.Errorf("%w: evidence object disappeared", errUtils.ErrArtifactNotFound)
 	}
-	return layout.DecodeEvidence(raw, want)
+	item, err := layout.DecodeEvidence(raw, want)
+	return item, err, nil
 }
 
 // evidenceRefs converts loaded evidence into descriptors.
@@ -111,7 +125,7 @@ func (r *Repository) checkSubject(operation string, subject artifact.SignatureSu
 // Sign implements [artifact.Repository]: it asks the signer for evidence over the Record subject
 // and stores it as an object named by the evidence digest below the subject's directory. Evidence
 // lives beside the Record, so signing never changes the Record, the reference, or the payload.
-func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, _ artifact.SignOptions) ([]artifact.SignatureEvidence, error) {
+func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, options artifact.SignOptions) (result []artifact.SignatureEvidence, err error) {
 	defer perf.Track(nil, "s3.Repository.Sign")()
 
 	if err := r.checkSubject("sign", subject); err != nil {
@@ -120,6 +134,23 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 	if signer == nil {
 		return nil, fmt.Errorf("%w: no signer supplied", errUtils.ErrArtifactConfigInvalid)
 	}
+	record, _, err := r.loadRecord(ctx, subject.Digest)
+	if err != nil {
+		return nil, err
+	}
+	release, err := r.holdClaim(ctx, options.Lock, record.Name+":"+record.Version, "")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if releaseErr := release(); err == nil {
+			err = releaseErr
+		}
+	}()
+	return r.signLocked(ctx, subject, signer)
+}
+
+func (r *Repository) signLocked(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer) ([]artifact.SignatureEvidence, error) {
 	raw, err := r.requireCurrentRecord(ctx, subject.Digest)
 	if err != nil {
 		return nil, err
@@ -156,10 +187,35 @@ func (r *Repository) storeEvidence(ctx context.Context, subject artifact.Signatu
 		return artifact.SignatureEvidence{}, err
 	}
 	key := layout.SignaturePath(subject.Kind, subject.Digest, evidence.Digest())
+	existing, _, err := r.readObject(ctx, key, layout.MaxEvidenceFileBytes)
+	if err != nil {
+		return artifact.SignatureEvidence{}, err
+	}
+	if existing == nil {
+		if err := r.checkEvidenceCapacity(ctx, subject.Digest); err != nil {
+			return artifact.SignatureEvidence{}, err
+		}
+	}
 	if err := r.putImmutable(ctx, key, raw, contentTypeJSON, layout.MaxEvidenceFileBytes); err != nil {
 		return artifact.SignatureEvidence{}, wrapWrite("store evidence", err)
 	}
 	return evidence.Reference(r.uri(key)), nil
+}
+
+func (r *Repository) checkEvidenceCapacity(ctx context.Context, subject digest.Digest) error {
+	loaded, diagnostics, err := r.loadEvidence(ctx, subject)
+	if err != nil {
+		return err
+	}
+	if len(loaded) >= maxEvidenceFiles {
+		return fmt.Errorf("%w: evidence limit reached", errUtils.ErrArtifactTooLarge)
+	}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == "evidence-truncated" {
+			return fmt.Errorf("%w: %s", errUtils.ErrArtifactTooLarge, diagnostic.Message)
+		}
+	}
+	return nil
 }
 
 // deleteEvidence removes every evidence object stored for a Record subject.
@@ -188,8 +244,12 @@ func (r *Repository) Verify(ctx context.Context, subject artifact.SignatureSubje
 	if verifier == nil {
 		return nil, artifact.NewUnsupportedCapability(r.alias, "verify", "evidence/verify", "no signature verifier is configured for this repository")
 	}
-	if _, err := r.requireCurrentRecord(ctx, subject.Digest); err != nil {
+	raw, err := r.requireCurrentRecord(ctx, subject.Digest)
+	if err != nil {
 		return nil, err
+	}
+	if subject.Size != 0 && subject.Size != int64(len(raw)) {
+		return nil, fmt.Errorf("%w: subject size differs from the Record", errUtils.ErrArtifactRefInvalid)
 	}
 	loaded, diags, err := r.loadEvidence(ctx, subject.Digest)
 	if err != nil {
@@ -240,7 +300,7 @@ func finishVerification(base, verified *artifact.VerificationResult, verifyErr e
 		return result, verifyErr
 	case verifyErr != nil:
 		return result, fmt.Errorf("%w: %w", errUtils.ErrArtifactVerificationFailed, verifyErr)
-	case result.Status == artifact.VerificationFailed:
+	case result.Status != artifact.VerificationVerified:
 		return result, fmt.Errorf("%w: no valid permitted signature satisfies the policy for %s", errUtils.ErrArtifactVerificationFailed, result.Subject.Digest)
 	}
 	return result, nil
@@ -258,9 +318,14 @@ func (r *Repository) ReadEvidence(ctx context.Context, pinned *artifact.PinnedRe
 	if _, err := r.requireCurrentRecord(ctx, pinned.RecordDigest); err != nil {
 		return nil, err
 	}
-	loaded, _, err := r.loadEvidence(ctx, pinned.RecordDigest)
+	loaded, diags, err := r.loadEvidence(ctx, pinned.RecordDigest)
 	if err != nil {
 		return nil, err
+	}
+	for _, diag := range diags {
+		if diag.Code == "evidence-truncated" {
+			return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactDownloadFailed, diag.Message)
+		}
 	}
 	blobs := make([]artifact.EvidenceBlob, 0, len(loaded))
 	for index := range loaded {
@@ -272,15 +337,33 @@ func (r *Repository) ReadEvidence(ctx context.Context, pinned *artifact.PinnedRe
 // WriteEvidence implements [artifact.EvidenceWriter]: it imports evidence for an artifact this
 // repository already holds. The evidence must bind to the pinned Record and carry matching bytes;
 // importing never changes the Record or the reference.
-func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedReference, evidence []artifact.EvidenceBlob, _ artifact.LockHandle) ([]artifact.SignatureEvidence, error) {
+func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedReference, evidence []artifact.EvidenceBlob, lock artifact.LockHandle) (stored []artifact.SignatureEvidence, err error) {
 	defer perf.Track(nil, "s3.Repository.WriteEvidence")()
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if _, err := r.requireCurrentRecord(ctx, pinned.RecordDigest); err != nil {
+	record, _, err := r.loadRecord(ctx, pinned.RecordDigest)
+	if err != nil {
 		return nil, err
 	}
+	release, err := r.holdClaim(ctx, lock, record.Name+":"+record.Version, "")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if releaseErr := release(); err == nil {
+			err = releaseErr
+		}
+	}()
+	raw, err := r.requireCurrentRecord(ctx, pinned.RecordDigest)
+	if err != nil {
+		return nil, err
+	}
+	return r.writeEvidenceLocked(ctx, pinned, evidence, raw)
+}
+
+func (r *Repository) writeEvidenceLocked(ctx context.Context, pinned *artifact.PinnedReference, evidence []artifact.EvidenceBlob, raw []byte) ([]artifact.SignatureEvidence, error) {
 	stored := make([]artifact.SignatureEvidence, 0, len(evidence))
 	for index := range evidence {
 		blobEvidence := &evidence[index]
@@ -291,7 +374,10 @@ func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedR
 		if subject.Digest != pinned.RecordDigest {
 			return stored, fmt.Errorf("%w: evidence is bound to %s, not to the pinned Record %s", errUtils.ErrArtifactRefInvalid, subject.Digest, pinned.RecordDigest)
 		}
-		if blobEvidence.Evidence.Descriptor.Digest != digest.FromBytes(blobEvidence.Data) {
+		if subject.Size != 0 && subject.Size != int64(len(raw)) {
+			return stored, fmt.Errorf("%w: subject size differs from the Record", errUtils.ErrArtifactRefInvalid)
+		}
+		if blobEvidence.Evidence.Descriptor.Size != int64(len(blobEvidence.Data)) || blobEvidence.Evidence.Descriptor.Digest != digest.FromBytes(blobEvidence.Data) {
 			return stored, fmt.Errorf("%w: evidence bytes do not match their descriptor %s", errUtils.ErrArtifactIntegrityFailed, blobEvidence.Evidence.Descriptor.Digest)
 		}
 		item, err := r.storeEvidence(ctx, subject, &artifact.EvidencePayload{Format: blobEvidence.Evidence.Format, MediaType: blobEvidence.Evidence.Descriptor.MediaType, Data: blobEvidence.Data})

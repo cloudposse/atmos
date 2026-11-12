@@ -38,7 +38,11 @@ func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference
 		return nil, err
 	}
 	var held *fileLock
-	if options.Lock == nil {
+	if localLock, ok := options.Lock.(*fileLock); ok {
+		if localLock.Resource() != record.Name+":"+record.Version {
+			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s:%s", errUtils.ErrArtifactConflict, record.Name, record.Version)
+		}
+	} else {
 		if held, err = r.acquire(ctx, record.Name+":"+record.Version, r.settings.owner, ""); err != nil {
 			return nil, err
 		}

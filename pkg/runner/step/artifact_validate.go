@@ -34,6 +34,11 @@ func (h *ArtifactHandler) Validate(step *schema.WorkflowStep) error {
 	if err := validateArtifactOtherFields(step); err != nil {
 		return err
 	}
+	return validateArtifactActionFields(step, spec)
+}
+
+// validateArtifactActionFields checks the action-specific field contract.
+func validateArtifactActionFields(step *schema.WorkflowStep, spec invoke.Spec) error {
 	set := artifactFieldsSet(step)
 	for _, field := range invoke.AllFields() {
 		if set[field] && !spec.Accepts(field) {
@@ -158,13 +163,8 @@ func validateArtifactLabelShape(step *schema.WorkflowStep) error {
 	case reflect.String:
 		return nil
 	case reflect.Map:
-		for _, key := range reflect.ValueOf(step.Labels).MapKeys() {
-			item := unwrapInterface(reflect.ValueOf(step.Labels).MapIndex(key))
-			if !item.IsValid() || item.Kind() != reflect.String {
-				return artifactInvalidField(step, "labels", "mapping values must be strings")
-			}
-		}
-		return nil
+		return validateArtifactLabelMapping(step)
+
 	case reflect.Slice:
 		for _, item := range reflect.ValueOf(step.Labels).Seq2() {
 			if item.Kind() == reflect.Interface {
@@ -178,6 +178,17 @@ func validateArtifactLabelShape(step *schema.WorkflowStep) error {
 	default:
 		return artifactInvalidField(step, "labels", "use a key=value string, a list of them, or a mapping")
 	}
+}
+
+func validateArtifactLabelMapping(step *schema.WorkflowStep) error {
+	mapping := reflect.ValueOf(step.Labels)
+	for _, key := range mapping.MapKeys() {
+		item := unwrapInterface(mapping.MapIndex(key))
+		if !item.IsValid() || item.Kind() != reflect.String {
+			return artifactInvalidField(step, "labels", "mapping values must be strings")
+		}
+	}
+	return nil
 }
 
 // artifactFieldsSet reports which operation inputs the authored step sets. A boolean counts as set

@@ -2,11 +2,13 @@ package oci
 
 import (
 	"context"
-	"errors"
+	"net/http"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -56,6 +58,24 @@ func TestCollectionListingIsScopedSortedAndPaged(t *testing.T) {
 	})
 }
 
+func TestPaginationRetainsKnownDigestMetadata(t *testing.T) {
+	backends(t, func(t *testing.T, repo *Repository) {
+		for _, version := range []string{"1", "2", "3"} {
+			publish(t, repo, publishSpec{name: "app", version: version, content: version})
+		}
+		all, err := repo.List(context.Background(), artifact.ListQuery{Name: "app"})
+		require.NoError(t, err)
+		require.Len(t, all.Entries, 3)
+		known := make(map[digest.Digest]artifact.ListEntry)
+		for _, entry := range all.Entries {
+			entry.Labels = map[string]string{"cached": "yes"}
+			known[entry.Pinned.ResolvedDigest] = entry
+		}
+		query := artifact.ListQuery{Name: "app", Cursor: "app|1", PageSize: 1, Known: known, Labels: []artifact.Label{{Key: "cached", Value: "yes"}}}
+		assert.Equal(t, []string{"app:2", "app:3"}, listAll(t, repo, query), "pagination skips preceding versions while reusing cached metadata")
+	})
+}
+
 func TestRegistryListingStaysInsideThePrefix(t *testing.T) {
 	reg := newRegistry(t, nil)
 	inside := newRegistryRepo(t, reg)
@@ -94,7 +114,7 @@ func TestNamedListingWorksWithoutACatalogAndCollectionListingFailsLoudly(t *test
 	tests := map[string]atmosoci.Transport{
 		"transport without a catalog": withoutCatalog{reg.transport},
 		"registry rejects the catalog": failingCatalog{
-			Transport: reg.transport, err: errors.New("GET _catalog: response status code 404"),
+			Transport: reg.transport, err: &errcode.ErrorResponse{StatusCode: http.StatusNotFound},
 		},
 	}
 	for name, transport := range tests {
@@ -129,4 +149,12 @@ func TestListingNeverPresentsForeignImagesOrPluginsAsArtifacts(t *testing.T) {
 
 	assert.Equal(t, []string{"shared/thing:1.0.0"}, listAll(t, repo, artifact.ListQuery{Name: "shared/thing"}))
 	assert.Equal(t, []string{"shared/thing:1.0.0"}, listAll(t, repo, artifact.ListQuery{}))
+}
+
+func TestCatalogFailuresAreNotUnsupported(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError} {
+		b := newRegistryBackend("example.test", "", failingCatalog{err: &errcode.ErrorResponse{StatusCode: status}}, false)
+		_, err := b.names(context.Background())
+		require.ErrorIs(t, err, errUtils.ErrArtifactListFailed)
+	}
 }

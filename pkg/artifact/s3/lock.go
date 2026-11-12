@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,8 @@ import (
 
 // opLock names the lock operation in capability errors.
 const opLock = "lock"
+
+const reconciliationOwnerPrefix = "pending reconciliation (do not delete until original remote request is known to have finished): "
 
 // maxClaimBytes bounds a claim object read.
 const maxClaimBytes int64 = 64 << 10
@@ -85,8 +88,8 @@ func (r *Repository) LockNamespace() string {
 
 // acquire takes the claim for resource, waiting for a competing owner.
 func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*claimHandle, error) {
-	if !r.store.Capabilities().ConditionalPut {
-		return nil, artifact.NewUnsupportedCapability(r.alias, opLock, "lock/repository", "the S3 endpoint cannot enforce conditional writes, which owner claims require")
+	if !r.store.Capabilities().ConditionalPut || !r.store.Capabilities().ConditionalDelete {
+		return nil, artifact.NewUnsupportedCapability(r.alias, opLock, "lock/repository", "the S3 endpoint cannot enforce conditional writes and deletes, which owner claims require")
 	}
 	doc := claimDoc{
 		SchemaVersion: layout.SchemaVersion, Resource: resource, Owner: owner, OperationID: operationID,
@@ -160,9 +163,38 @@ func (r *Repository) settleClaim(ctx context.Context, key string, doc *claimDoc)
 		return nil, fmt.Errorf("%w: settle claim %s: %w", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key), err)
 	case current != nil && current.Token == doc.Token:
 		return r.adopt(ctx, key, doc)
+	case current == nil:
+		handle, fenceErr := r.fenceUnknownClaim(ctx, readCtx, key, doc)
+		if handle != nil {
+			return handle, nil
+		}
+		return nil, errors.Join(fenceErr, ctx.Err())
 	}
-	// Another owner's claim, or no claim at all: the create did not take effect.
-	return nil, nil
+	return nil, errors.Join(ctx.Err(), errUtils.ErrArtifactConflict, fmt.Errorf("%w: claim %s is held by another owner, but the prior create may still commit after it is released", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key)))
+}
+
+// fenceUnknownClaim leaves a visible claim at an empty key while the first PUT may still arrive.
+// The fence is intentionally not released: a finite wait or an empty read cannot prove that the
+// first request has stopped executing. Legacy writers understand the existing claim format.
+func (r *Repository) fenceUnknownClaim(originalCtx, ctx context.Context, key string, original *claimDoc) (*claimHandle, error) {
+	fence := *original
+	fence.Token = uuid.NewString()
+	fence.Owner = reconciliationOwnerPrefix + original.Owner
+	raw, err := json.Marshal(&fence)
+	if err != nil {
+		return nil, fmt.Errorf("%w: encode claim fence: %w", errUtils.ErrArtifactPublicationAmbiguous, err)
+	}
+	_, err = r.putConditional(ctx, key, raw, contentTypeJSON, blob.IfAbsent())
+	if err == nil {
+		return nil, fmt.Errorf("%w: claim %s is fenced pending reconciliation of a possibly late create; do not delete the fence until the original request is known to have finished", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key))
+	}
+	if blob.IsPreconditionFailed(err) {
+		current, _, readErr := r.readClaim(ctx, key)
+		if readErr == nil && current != nil && current.Token == original.Token {
+			return r.adopt(originalCtx, key, original)
+		}
+	}
+	return nil, fmt.Errorf("%w: could not conclusively fence claim %s; its original create or fence may still commit: %w", errUtils.ErrArtifactPublicationAmbiguous, r.uri(key), err)
 }
 
 // adopt turns a created claim into a handle. A context that ended while the claim was being created
@@ -198,12 +230,16 @@ func (r *Repository) heldError(ctx context.Context, key, resource string, cause 
 	readCtx, cancel := detached(ctx)
 	defer cancel()
 	holder, _, _ := r.readClaim(readCtx, key)
-	message := fmt.Sprintf("lock %q is held through claim object %s", resource, r.uri(key))
+	message := fmt.Sprintf("lock %q claim object %s is no longer present", resource, r.uri(key))
 	if holder != nil {
 		message = fmt.Sprintf("lock %q is held by owner %q (operation %q, since %s) through claim object %s",
 			resource, holder.Owner, holder.OperationID, holder.AcquiredAt, r.uri(key))
+		if strings.HasPrefix(holder.Owner, reconciliationOwnerPrefix) {
+			message += "; this claim fences an ambiguous create. Do not delete it until the original remote request is known to have finished"
+		} else {
+			message += "; claims never expire and are never taken over automatically. If that writer has stopped, confirm it is no longer running and delete the claim object to recover"
+		}
 	}
-	message += "; claims never expire and are never taken over automatically. If that writer has stopped, confirm it is no longer running and delete the claim object to recover"
 	if cause != nil {
 		return fmt.Errorf("%w: %s: %w", errUtils.ErrArtifactConflict, message, cause)
 	}
@@ -291,4 +327,34 @@ func (l *claimHandle) goneAfter(ctx context.Context, err error) bool {
 	}
 	current, _, readErr := l.repo.readClaim(ctx, l.key)
 	return readErr == nil && current == nil
+}
+
+// holdClaim validates an existing claim or acquires one, and keeps it held through a mutation.
+func (r *Repository) holdClaim(ctx context.Context, supplied artifact.LockHandle, resource, operationID string) (func() error, error) {
+	handle, local := supplied.(*claimHandle)
+	if !local || handle.repo != r {
+		handle, err := r.acquire(ctx, resource, r.settings.owner, operationID)
+		if err != nil {
+			return nil, err
+		}
+		return func() error { return handle.Release(ctx) }, nil
+	}
+	if handle.resource != resource {
+		return nil, fmt.Errorf("%w: supplied lock does not guard %s", errUtils.ErrArtifactConflict, resource)
+	}
+	handle.mu.Lock()
+	if handle.released {
+		handle.mu.Unlock()
+		return nil, fmt.Errorf("%w: supplied lock is released", errUtils.ErrArtifactConflict)
+	}
+	claim, _, err := r.readClaim(ctx, handle.key)
+	if err != nil {
+		handle.mu.Unlock()
+		return nil, err
+	}
+	if claim == nil || claim.Token != handle.token {
+		handle.mu.Unlock()
+		return nil, fmt.Errorf("%w: supplied lock is no longer held", errUtils.ErrArtifactConflict)
+	}
+	return func() error { handle.mu.Unlock(); return nil }, nil
 }

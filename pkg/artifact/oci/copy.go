@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -90,7 +91,7 @@ func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphSto
 	if err != nil {
 		return nil, err
 	}
-	if outcome != artifact.OutcomeUnchanged {
+	{
 		_, err = atmosoci.ExtendedCopy(ctx,
 			atmosoci.GraphSource{Store: src, Reference: loaded.desc.Digest.String()},
 			atmosoci.Destination{Store: dst, Reference: reference},
@@ -173,6 +174,9 @@ func (r *Repository) ExportLayout(ctx context.Context, pinned artifact.PinnedRef
 	if err != nil {
 		return ocispec.Descriptor{}, fmt.Errorf("%w: open layout %q: %w", errUtils.ErrArtifactUploadFailed, directory, err)
 	}
+	if err := validateExportRoots(ctx, destination, directory, loaded.desc.Digest); err != nil {
+		return ocispec.Descriptor{}, err
+	}
 	reference := pinned.Ref.String()
 	if _, err := atmosoci.ExtendedCopy(ctx,
 		atmosoci.GraphSource{Store: st, Reference: loaded.desc.Digest.String()},
@@ -181,6 +185,35 @@ func (r *Repository) ExportLayout(ctx context.Context, pinned artifact.PinnedRef
 		return ocispec.Descriptor{}, fmt.Errorf("%w: export %s: %w", errUtils.ErrArtifactUploadFailed, pinned.Ref, err)
 	}
 	return loaded.desc, nil
+}
+
+// validateExportRoots permits the requested root and unnamed referrers, but rejects other roots.
+func validateExportRoots(ctx context.Context, destination store, directory string, target digest.Digest) error {
+	raw, err := os.ReadFile(filepath.Join(directory, ocispec.ImageIndexFile))
+	if err != nil {
+		return fmt.Errorf("%w: read export index: %w", errUtils.ErrArtifactUploadFailed, err)
+	}
+	var index ocispec.Index
+	if err := json.Unmarshal(raw, &index); err != nil {
+		return fmt.Errorf("%w: parse export index: %w", errUtils.ErrArtifactUploadFailed, err)
+	}
+	for _, entry := range index.Manifests {
+		if entry.Digest == target {
+			continue
+		}
+		if entry.Annotations[ocispec.AnnotationRefName] == "" {
+			raw, err := fetchBounded(ctx, destination, entry, maxManifestSize)
+			if err != nil {
+				return err
+			}
+			var manifest ocispec.Manifest
+			if json.Unmarshal(raw, &manifest) == nil && manifest.Subject != nil {
+				continue
+			}
+		}
+		return fmt.Errorf("%w: export layout already contains another root %s", errUtils.ErrArtifactConflict, entry.Digest)
+	}
+	return nil
 }
 
 // layoutRoot reads a layout's index.json and picks the root to import.
@@ -195,12 +228,23 @@ func layoutRoot(directory, selector string) (ocispec.Descriptor, error) {
 	}
 	var matches []ocispec.Descriptor
 	for _, entry := range index.Manifests {
-		if selector == "" || entry.Digest.String() == selector || entry.Annotations[ocispec.AnnotationRefName] == selector {
+		if matchesLayoutSelector(entry, selector) {
 			matches = append(matches, entry)
 		}
+	}
+	if selector == "" && len(matches) == 0 && len(index.Manifests) == 1 {
+		matches = index.Manifests
 	}
 	if len(matches) != 1 {
 		return ocispec.Descriptor{}, fmt.Errorf("%w: %d roots in %q match %q; select exactly one by reference name or digest", errUtils.ErrArtifactRefInvalid, len(matches), directory, selector)
 	}
 	return ocispec.Descriptor{MediaType: matches[0].MediaType, Digest: matches[0].Digest, Size: matches[0].Size}, nil
+}
+
+func matchesLayoutSelector(entry ocispec.Descriptor, selector string) bool {
+	name := entry.Annotations[ocispec.AnnotationRefName]
+	if selector == "" {
+		return name != ""
+	}
+	return entry.Digest.String() == selector || name == selector
 }

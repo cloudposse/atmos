@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -69,6 +71,7 @@ func (s *Service) copyArtifact(ctx context.Context, op *operation, request *arti
 	defer cw.cleanup()
 
 	pub := &publication{op: op, tgt: plan.dst, in: cw.in, force: request.Force, write: cw.write, state: &publishState{}}
+	pub.afterWrite = func(ctx context.Context, lock artifact.LockHandle) error { return s.carryEvidence(ctx, op, plan, lock) }
 	if err := s.commit(ctx, pub); err != nil {
 		return err
 	}
@@ -76,9 +79,6 @@ func (s *Service) copyArtifact(ctx context.Context, op *operation, request *arti
 		op.result.Outcome = artifact.OutcomeCreated
 	}
 	op.result.Repository = request.To
-	// Evidence is carried even when the destination already holds the Record, because signatures
-	// added to the source after the first copy would otherwise never reach the destination.
-	s.carryEvidence(ctx, op, plan)
 	return nil
 }
 
@@ -206,7 +206,11 @@ func (s *Service) stageCopy(ctx context.Context, op *operation, plan *copyPlan) 
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: create copy staging: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
-	cleanup := func() { _ = os.RemoveAll(tree) }
+	cleanup := func() {
+		if err := removeStagedTree(tree); err != nil {
+			op.warn("staging-cleanup-failed", fmt.Sprintf("remove copy staging %q: %v", tree, err))
+		}
+	}
 	files := filepath.Join(tree, "files")
 	if err := materialize.Materialize(ctx, content, files); err != nil {
 		cleanup()
@@ -283,38 +287,38 @@ func documentRoleFor(record *artifact.Record, digestValue string) (artifact.Docu
 // Evidence is never invented: without both optional interfaces, a diagnostic explains that the
 // destination holds no signatures. Evidence is written only to the exact record the copy produced
 // or found, never to a record a concurrent writer repointed the destination reference to.
-func (s *Service) carryEvidence(ctx context.Context, op *operation, plan *copyPlan) {
+func (s *Service) carryEvidence(ctx context.Context, op *operation, plan *copyPlan, lock artifact.LockHandle) error {
 	reader, canRead := plan.src.repo.(artifact.EvidenceReader)
 	writer, canWrite := plan.dst.repo.(artifact.EvidenceWriter)
 	if !canRead || !canWrite {
 		if verificationRequired(plan.dst.info.Policy) {
 			op.warn("evidence-not-carried", "the destination policy requires verification but the repositories cannot transfer signature evidence; consumers of the destination copy must verify against the source evidence")
 		}
-		return
+		return nil
 	}
 	blobs, err := reader.ReadEvidence(ctx, &plan.pinned)
 	if err != nil {
 		op.warn("evidence-read-failed", err.Error())
-		return
+		return fmt.Errorf("read copy evidence: %w", err)
 	}
 	if len(blobs) == 0 {
-		return
+		return nil
 	}
 	dstPinned, err := resolveWritten(ctx, op, plan)
 	if err == nil {
 		blobs = missingEvidence(ctx, plan.dst.repo, &dstPinned, blobs)
 		if len(blobs) > 0 {
-			_, err = writer.WriteEvidence(ctx, &dstPinned, blobs, nil)
+			_, err = writer.WriteEvidence(ctx, &dstPinned, blobs, lock)
 		}
 	}
 	if err != nil {
 		op.warn("evidence-write-failed", err.Error())
 	}
+	return nil
 }
 
 // resolveWritten resolves the destination reference and confirms it still points at the digest the
-// copy wrote or found. A mismatch means another writer repointed the reference after the
-// destination lock was released.
+// copy wrote or found. A mismatch means the reference no longer has the expected digest.
 func resolveWritten(ctx context.Context, op *operation, plan *copyPlan) (artifact.PinnedReference, error) {
 	dstRef, err := nativeRef(plan)
 	if err != nil {
@@ -353,4 +357,27 @@ func missingEvidence(ctx context.Context, repo artifact.Repository, pinned *arti
 		}
 	}
 	return missing
+}
+
+// removeStagedTree restores owner access as it walks directories, without following symlinks.
+func removeStagedTree(tree string) error {
+	root, err := os.OpenRoot(tree)
+	if err != nil {
+		return err
+	}
+	walkErr := fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			return root.Chmod(path, info.Mode().Perm()|0o700)
+		}
+		return nil
+	})
+	closeErr := root.Close()
+	return errors.Join(walkErr, closeErr, os.RemoveAll(tree))
 }

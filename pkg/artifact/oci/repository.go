@@ -28,11 +28,12 @@ type Repository struct {
 	delegate string
 	lookup   artifact.RepositoryLookup
 
-	mu     sync.Mutex
-	cache  map[string][]byte
-	order  []string
-	roots  map[digest.Digest][]located
-	pinned map[string]ocispec.Descriptor
+	mu      sync.Mutex
+	cache   map[string][]byte
+	order   []string
+	roots   map[digest.Digest][]located
+	pinned  map[string]ocispec.Descriptor
+	tracked []trackedRoot
 }
 
 var (
@@ -48,6 +49,12 @@ var (
 type located struct {
 	name string
 	desc ocispec.Descriptor
+}
+
+type trackedRoot struct {
+	name string
+	desc ocispec.Descriptor
+	keys []digest.Digest
 }
 
 func newRepositoryCore(alias string, be backend, applied settings, delegate string, lookup artifact.RepositoryLookup) *Repository {
@@ -127,6 +134,14 @@ func (r *Repository) track(name string, loaded *root) {
 	if loaded.class == classAtmos {
 		keys = append(keys, loaded.manifest.Config.Digest)
 	}
+	keyName := cacheKey(name, loaded.desc)
+	if _, exists := r.pinned[keyName]; exists {
+		return
+	}
+	if len(r.tracked) >= manifestCacheEntries {
+		r.evictTrackedRoot()
+	}
+	r.tracked = append(r.tracked, trackedRoot{name: name, desc: loaded.desc, keys: keys})
 	for _, key := range keys {
 		known := r.roots[key]
 		duplicate := false
@@ -137,7 +152,27 @@ func (r *Repository) track(name string, loaded *root) {
 			r.roots[key] = append(known, located{name: name, desc: loaded.desc})
 		}
 	}
-	r.pinned[cacheKey(name, loaded.desc)] = loaded.desc
+	r.pinned[keyName] = loaded.desc
+}
+
+// evictTrackedRoot removes the oldest root and all of its lookup entries; caller holds r.mu.
+func (r *Repository) evictTrackedRoot() {
+	old := r.tracked[0]
+	r.tracked = r.tracked[1:]
+	delete(r.pinned, cacheKey(old.name, old.desc))
+	for _, key := range old.keys {
+		items := r.roots[key][:0]
+		for _, item := range r.roots[key] {
+			if item.name != old.name || item.desc.Digest != old.desc.Digest {
+				items = append(items, item)
+			}
+		}
+		if len(items) == 0 {
+			delete(r.roots, key)
+		} else {
+			r.roots[key] = items
+		}
+	}
 }
 
 // descriptorFor returns the descriptor remembered for a resolved digest of a name.
@@ -158,7 +193,11 @@ func (r *Repository) locations(dgst digest.Digest) []located {
 // loadCachedRoot loads a root through the verified cache.
 func (r *Repository) loadCachedRoot(ctx context.Context, st store, name string, desc ocispec.Descriptor) (*root, error) {
 	if raw, ok := r.cached(name, desc); ok {
-		return classify(desc, raw)
+		loaded, err := classify(desc, raw)
+		if err == nil {
+			r.track(name, loaded)
+		}
+		return loaded, err
 	}
 	loaded, err := loadRoot(ctx, st, desc)
 	if err != nil {

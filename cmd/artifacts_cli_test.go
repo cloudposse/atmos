@@ -274,7 +274,7 @@ func TestArtifactsLifecycleOnRealLocalRepositories(t *testing.T) {
 	conflict := p.atmosArtifacts("publish", p.source, "--repository=work", "--name=team/app", "--version=1.0.0", "--labels=team=platform,env=dev", "--format=json")
 	require.ErrorIs(t, conflict.err, errUtils.ErrArtifactConflict, "different content at the same reference fails without --force")
 	assert.Equal(t, "failed", jsonObject(t, conflict.stdout)["outcome"], "the envelope is still emitted")
-	assert.Contains(t, strings.Join(cockroach.GetAllHints(conflict.err), "\n"), "--force")
+	assert.Contains(t, strings.Join(cockroach.GetAllHints(conflict.err), "\n"), "conflicting reference")
 	forced := p.atmosArtifacts("publish", p.source, "--repository=work", "--name=team/app", "--version=1.0.0", "--labels=team=platform,env=dev", "--force", "--format=json")
 	require.NoError(t, forced.err)
 	assert.Equal(t, "replaced", jsonObject(t, forced.stdout)["outcome"])

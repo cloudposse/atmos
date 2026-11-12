@@ -74,9 +74,9 @@ func (s *Service) showDocument(ctx context.Context, op *operation, request *arti
 	if err != nil {
 		return err
 	}
-	pinned, err := repo.Resolve(ctx, request.Ref)
+	pinned, inspection, err := s.pinAndInspect(ctx, op, repo, request.Repository, request.Ref)
 	if err != nil {
-		return fmt.Errorf("resolve %s in repository %q: %w", request.Ref, request.Repository, err)
+		return err
 	}
 	if err := s.gatePinned(ctx, op, &target{alias: request.Repository, repo: repo, info: &info}, &pinned); err != nil {
 		return err
@@ -86,6 +86,9 @@ func (s *Service) showDocument(ctx context.Context, op *operation, request *arti
 		return fmt.Errorf("open %s of %s in repository %q: %w", request.Role, request.Ref, request.Repository, err)
 	}
 	defer stream.Reader.Close()
+	if !documentMatchesRecord(inspection.Record, request.Role, stream.Document) {
+		return fmt.Errorf("%w: document does not match the pinned record", errUtils.ErrArtifactIntegrityFailed)
+	}
 	content, err := readDocument(stream)
 	if err != nil {
 		return err
@@ -95,6 +98,17 @@ func (s *Service) showDocument(ctx context.Context, op *operation, request *arti
 	op.result.Size = int64(len(content))
 	op.result.SizeMeasured = true
 	return nil
+}
+
+func documentMatchesRecord(record *artifact.Record, role artifact.DocumentRole, document artifact.Document) bool {
+	if record != nil {
+		for _, expected := range record.Documents {
+			if expected.Role == role && expected == document {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateShow(request *artifact.ShowDocumentRequest) error {
@@ -181,10 +195,10 @@ func (s *Service) runEnumeration(ctx context.Context, request *enumeration, resu
 	gates := make(chan struct{}, s.concurrency)
 	var wg sync.WaitGroup
 	for index := range aliases {
+		gates <- struct{}{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			gates <- struct{}{}
 			defer func() { <-gates }()
 			outcomes[index] = s.listRepository(ctx, aliases[index], request)
 		}()

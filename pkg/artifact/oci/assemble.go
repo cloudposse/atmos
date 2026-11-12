@@ -120,7 +120,12 @@ func stagedLayers(prepared *artifact.PreparedArtifact) (stagedBlob, []stagedBlob
 			if err != nil {
 				return stagedBlob{}, nil, err
 			}
+			if _, exists := documents[blob.DocumentRole]; exists {
+				return stagedBlob{}, nil, fmt.Errorf("%w: duplicate %s document", errUtils.ErrArtifactPackagingInvalid, blob.DocumentRole)
+			}
 			documents[blob.DocumentRole] = doc
+		default:
+			return stagedBlob{}, nil, fmt.Errorf("%w: unsupported blob role %q", errUtils.ErrArtifactPackagingInvalid, blob.Role)
 		}
 	}
 	if payload == nil {
