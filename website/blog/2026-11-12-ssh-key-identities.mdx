@@ -1,0 +1,86 @@
+---
+slug: ssh-key-identities
+title: "SSH keys as Atmos identities, held in the Secure Enclave"
+authors: [osterman]
+tags: [feature, security, experimental]
+---
+Coding agents and unattended jobs need to sign commits and log in to hosts. Today that usually means one of two things: a private key sitting on disk that anything can copy, or a desktop SSH agent that stops signing the moment the screen locks. The first is easy to leak, and the second breaks the agent you left running overnight.
+
+<!--truncate-->
+
+## The Problem
+
+An SSH key that a script can read is a key a script can steal. Backups, shared home directories, and sandboxes that mount your files all become places the key can leak from. Moving the key into hardware fixes that, but desktop agents tie the hardware key to an unlocked session. When the screen locks, signing fails, and a coding agent working in the background stops with a cryptic error.
+
+Teams also have to keep track of which key belongs to which person and machine, and remember to remove it from GitHub when a laptop is retired.
+
+## The Fix
+
+The official `cloudposse/ssh` [plugin](/plugins/official#ssh-key-identities) makes an SSH key an Atmos identity. On a Mac the private key is generated inside the Secure Enclave and cannot be exported. On other platforms it is a plain key file.
+
+By default the key works while the screen is locked, so an unattended agent can keep signing commits and reaching hosts. If you want the opposite, add `require: unlocked` and the Secure Enclave refuses the key whenever the screen is locked. Each identity also gets its own agent socket, limited by `allow` to Git signing, SSH logins, or both.
+
+A key proves nothing on its own, so each identity names an authority. With `authority: github`, login enrolls the key on the GitHub account that a token from a secret store belongs to. Login is idempotent: when the key and its enrollment have not changed, it makes no network call.
+
+## How to Use It
+
+Install the package and describe the identity. This example keeps the GitHub token in the system keychain and signs every commit in the `infra` repository:
+
+```yaml
+plugins:
+  packages:
+    ssh:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/ssh
+      version: "^0.1.0"
+    secrets:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
+      version: "^1.1.0"
+stores:
+  keychain:
+    type: keychain
+    secret: true
+auth:
+  providers:
+    github-token:
+      kind: secrets/store
+      spec:
+        credentials:
+          token: {store: keychain, path: github/ssh-keys}
+  identities:
+    ops:
+      kind: ssh/key
+      via: {provider: github-token}
+      spec:
+        authority: github
+        store: secure-enclave
+        allow: [signing, authentication]
+        require: unlocked
+git:
+  repositories:
+    infra:
+      auth: {identity: ops}
+      commit: {signing: always}
+```
+
+Log in once per machine. Login creates this machine's key and enrolls it:
+
+```shell
+atmos auth login --identity ops
+atmos auth exec --identity ops -- git commit -m "signed with the enclave key"
+```
+
+To let an unattended agent keep working with the screen locked, drop the `require` line. To check the difference, run `atmos ssh test ops --soak 10m --interval 30s` and lock the screen while it runs. Each attempt prints `ok`, `refused`, `locked`, or `unreachable`.
+
+If you would rather add the public key to GitHub yourself, use the `ssh/self` provider with `authority: self` and print the key with `atmos ssh key show ops --format github`. The full list of fields, commands, and token scopes is on the [official plugins page](/plugins/official#ssh-key-identities).
+
+### Current limits
+
+- Hardware-backed keys exist on macOS only for now. Elsewhere the `file` store works but is not hardware-protected.
+- There is no GitHub device login yet, so enrollment needs a token from a secret store.
+- The agent daemon does not run on Windows yet.
+- Atmos does not show plugin text during login, so a failed login is a generic failure. The reason is in `atmos ssh key status`.
+- Any process running as the same user can use the key file directly, so do not mount the key directory into a sandbox.
+
+## Get Involved
+
+The plugin is experimental. Try it on a machine you use for agents, and tell us what breaks in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or on the [pull request](https://github.com/cloudposse/atmos/pulls).
