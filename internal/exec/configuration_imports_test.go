@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	configurationadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -391,6 +392,138 @@ func TestValidateStacksResolvesUnreferencedProviderImports(t *testing.T) {
 			after, err := session.Discover(t.Context())
 			require.NoError(t, err)
 			require.Equal(t, before, after, "validation must not remove the discovered unit")
+		})
+	}
+}
+
+// Exercise real provider import translation, YAML merging, stack compilation and preparation.
+func TestImportedUnitBackendOptionsBeforeNormalization(t *testing.T) {
+	for _, tc := range []struct {
+		name, yaml string
+		rejected   bool
+	}{
+		{"component local", "components:\n  terraform:\n    app:\n      backend:\n        local:\n          path: other.tfstate\n", true},
+		{"component backend type", "components:\n  terraform:\n    app:\n      backend_type: s3\n      backend:\n        s3:\n          bucket: other\n", true},
+		{"inherited local", "components:\n  terraform:\n    base:\n      metadata:\n        type: abstract\n      backend:\n        local:\n          path: inherited.tfstate\n    app:\n      metadata:\n        inherits: [base]\n", true},
+		{"global local", "terraform:\n  backend_type: local\n  backend:\n    local:\n      path: global.tfstate\n", false},
+		{"global s3", "terraform:\n  backend_type: s3\n  backend:\n    s3:\n      bucket: global\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "live", "app"), 0o755))
+			file := filepath.Join(root, "dev.yaml")
+			require.NoError(t, os.WriteFile(file, []byte("import: [terragrunt://live/app]\n"+tc.yaml), 0o600))
+			config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: root}
+			config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
+			provider := &backendOptionsProvider{}
+			placeholder, err := componentadapter.EncodeObject(map[string]any{"backend_type": "local", "backend": map[string]any{"local": map[string]any{}}})
+			require.NoError(t, err)
+			provider.configuration = placeholder
+			t.Cleanup(func() {
+				want := 1
+				if tc.rejected {
+					want = 0
+				}
+				require.Equal(t, want, provider.prepares)
+			})
+			session, err := configurationadapter.New(t.Context(), config, "plan", func(context.Context, []string) (map[string]configurationadapter.Provider, error) {
+				return map[string]configurationadapter.Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			config.ComponentConfigurations = session
+			loaded, err := ProcessYAMLConfigFile(config, root, file, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
+			require.NoError(t, err)
+			compiled, _, err := ProcessStackConfig(config, root, "", "", "", "", file, loaded.DeepMergedConfig, false, false, "", nil, loaded.ImportsConfig, false)
+			if tc.rejected {
+				require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
+				require.ErrorContains(t, err, "app")
+				require.ErrorContains(t, err, "dev")
+				return // The cleanup assertion verifies rejection before provider effects.
+			}
+			require.NoError(t, err)
+			app := compiled["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)
+			backend, err := componentadapter.EncodeObject(map[string]any{"path": "unit.tfstate"})
+			require.NoError(t, err)
+			provider.response = &pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, WorkingDirectory: root}}
+			prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", SubCommand: "plan", ComponentSection: app, ComponentSettingsSection: app["settings"].(map[string]any)})
+			require.NoError(t, err)
+			require.Equal(t, filepath.Join(root, "unit.tfstate"), prepared.Backend["path"])
+		})
+	}
+}
+
+type backendOptionsProvider struct {
+	configurationadapter.Provider
+	configuration *pluginv1.ComponentValue
+	response      *pluginv1.PrepareComponentResponse
+	prepares      int
+}
+
+func (*backendOptionsProvider) ComponentType() string { return "terraform" }
+func (p *backendOptionsProvider) Discover(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+	return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{{Address: &pluginv1.ComponentAddress{Stack: "live", Component: "app", ComponentType: "terraform"}, Provider: "terragrunt", Engine: "terraform", Source: "live/app/terragrunt.hcl", Configuration: p.configuration}}}, nil
+}
+
+func (p *backendOptionsProvider) Prepare(context.Context, *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+	p.prepares++
+	return p.response, nil
+}
+
+type provenanceImportRuntime struct {
+	*MockComponentConfigurationRuntime
+}
+
+func (r *provenanceImportRuntime) ImportComponents(_ context.Context, uri string) (map[string]any, bool, error) {
+	return map[string]any{"app": map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": uri}}}}, true, nil
+}
+
+func TestConfigurationImportProvenance(t *testing.T) {
+	for _, tc := range []struct {
+		name, first, second string
+		conflict            bool
+		source              string
+	}{
+		{name: "ordinary YAML source settings", first: "", second: "", source: ""},
+		{name: "same unit with different YAML overrides", first: "terragrunt://same", second: "terragrunt://same", source: "terragrunt://same"},
+		{name: "distinct units hidden by YAML overrides", first: "terragrunt://first", second: "terragrunt://second", conflict: true},
+		{name: "unit and YAML source setting", first: "terragrunt://first", second: "", source: "terragrunt://first"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			write := func(name, content string) {
+				require.NoError(t, os.WriteFile(filepath.Join(root, name+".yaml"), []byte(content), 0o600))
+			}
+			for i, unit := range []string{tc.first, tc.second} {
+				name := []string{"first", "second"}[i]
+				content := ""
+				if unit != "" {
+					content = "import:\n  - " + unit + "\n"
+				}
+				// Distinct units get the same YAML source to ensure merging cannot hide the conflict.
+				yamlSource := name
+				if tc.conflict {
+					yamlSource = "same-override"
+				}
+				write(name, content+"components:\n  terraform:\n    app:\n      settings:\n        configuration:\n          source: "+yamlSource+"\n")
+				write(name+"-nested", "import:\n  - "+name+"\n")
+			}
+			write("stack", "import:\n  - first-nested\n  - second-nested\n")
+			runtime := &provenanceImportRuntime{NewMockComponentConfigurationRuntime(gomock.NewController(t))}
+			config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: runtime}
+			config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
+			result, err := ProcessYAMLConfigFile(config, root, filepath.Join(root, "stack.yaml"), map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
+			if tc.conflict {
+				require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
+				return
+			}
+			require.NoError(t, err)
+			if tc.source == "" {
+				require.Empty(t, result.ImportedUnitSources)
+			} else {
+				require.Equal(t, map[string]string{"app": tc.source}, result.ImportedUnitSources)
+			}
+			app := result.DeepMergedConfig["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)
+			require.Equal(t, "second", app["settings"].(map[string]any)["configuration"].(map[string]any)["source"])
 		})
 	}
 }
