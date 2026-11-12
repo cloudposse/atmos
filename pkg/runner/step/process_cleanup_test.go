@@ -14,9 +14,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/api"
 )
 
-// processTreeTimeout is long enough for the helper tree to start on a loaded CI runner and short
-// enough to keep the test quick.
-const processTreeTimeout = "3s"
+// Each helper re-executes this test binary, including all package initialization under -race.
+// Give startup its own budget before the step deadline; a short deadline can kill the helpers
+// before they record their pids and never exercise descendant cleanup at all.
+const (
+	processTreeStartupBudget = 20 * time.Second
+	processTreeTimeout       = 30 * time.Second
+)
 
 // startedStepHelpers waits until both helpers of the spawn-grandchild tree recorded their pids.
 func startedStepHelpers(t *testing.T, dir string) (int, int) {
@@ -25,7 +29,7 @@ func startedStepHelpers(t *testing.T, dir string) (int, int) {
 	require.Eventually(t, func() bool {
 		parent, child = stepHelperPID(dir, "parent"), stepHelperPID(dir, "child")
 		return parent > 0 && child > 0
-	}, 10*time.Second, 25*time.Millisecond, "the helper process tree never started; the step timeout may be too short for this machine")
+	}, processTreeStartupBudget, 25*time.Millisecond, "the helper process tree never started within its startup budget")
 	return parent, child
 }
 
@@ -67,7 +71,7 @@ func TestStepTimeoutEndsTheWholeProcessTree(t *testing.T) {
 			killStepHelpersAtCleanup(t, dir)
 			marker := "wp5-orphan-marker-" + time.Now().Format("150405.000000000")
 			fields := tc.fields(marker)
-			fields["timeout"] = processTreeTimeout
+			fields["timeout"] = processTreeTimeout.String()
 			fields["env"] = map[string]string{
 				"_ATMOS_STEP_FAKE":  "spawn-grandchild",
 				stepHelperPIDDirEnv: dir,
@@ -75,10 +79,34 @@ func TestStepTimeoutEndsTheWholeProcessTree(t *testing.T) {
 			}
 
 			library := NewAutomationLibrary(NewVariables(), nil)
-			_, runErr := library.Run(t.Context(), &api.StepCall{Type: tc.stepType, Configuration: fields, WorkingDirectory: dir})
+			ctx, cancel := context.WithCancel(t.Context())
+			returnTimer := time.NewTimer(processTreeTimeout + stepTimeoutBudget)
+			defer returnTimer.Stop()
+			done := make(chan struct{})
+			var runErr error
+			go func() {
+				defer close(done)
+				_, runErr = library.Run(ctx, &api.StepCall{Type: tc.stepType, Configuration: fields, WorkingDirectory: dir})
+			}()
+			t.Cleanup(func() {
+				cancel()
+				select {
+				case <-done:
+				case <-time.After(stepTimeoutBudget):
+					t.Error("step did not return after cleanup cancellation")
+				}
+			})
+
+			// Observe readiness while the step is alive, rather than waiting for pid files after
+			// the deadline has already killed a potentially half-initialized process tree.
+			parent, child := startedStepHelpers(t, dir)
+			select {
+			case <-done:
+			case <-returnTimer.C:
+				t.Fatal("step did not return after its deadline")
+			}
 
 			require.ErrorIs(t, runErr, errUtils.ErrStepTimeout, "a step that outlives its timeout reports the step timeout")
-			parent, child := startedStepHelpers(t, dir)
 			requireStepProcessesGone(t, map[string]int{"command started by the step": parent, "grandchild of that command": child})
 		})
 	}
