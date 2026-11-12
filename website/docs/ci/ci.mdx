@@ -360,7 +360,7 @@ Atmos auto-detects the CI environment and selects the appropriate provider:
   <dd>Integrates with GitHub job summaries, commit status checks, and output variables. Requires `GITHUB_TOKEN` for checks and PR features.</dd>
 
   <dt>**Gitea Actions**</dt>
-  <dd>Integrates with Gitea commit statuses, PR comments, and runner output files. See the [Gitea Actions workflow guides](/integrations/gitea-actions) and [Gitea Actions](#gitea-actions) for credentials and capabilities.</dd>
+  <dd>Integrates with Gitea commit statuses, PR comments, and runner output files. See the [Gitea Actions integration](/integrations/gitea-actions) for setup and workflow guides.</dd>
 
   <dt>**Generic CI**</dt>
   <dd>Prints summaries, checks, and outputs to stdout. Useful for local development and testing, or any CI provider without native integration.</dd>
@@ -374,50 +374,3 @@ Atmos auto-detects the CI environment and selects the appropriate provider:
 - [`atmos vendor update`](/cli/commands/vendor/vendor-update) - Update vendored components and open pull requests from CI
 - [Deprecated GitHub Actions](/deprecated/github-actions) - Full list of legacy actions and their native replacements
 - [Auth](/stacks/auth) - Configure OIDC authentication for CI
-
-## Gitea Actions
-
-Atmos detects `GITEA_ACTIONS=true` and selects the `gitea-actions` provider, even when
-Gitea also sets `GITHUB_ACTIONS=true`. Enable `ci` with the configuration above and run
-ordinary Atmos commands in `.gitea/workflows/`. The [Gitea Actions workflow guides](/integrations/gitea-actions)
-cover plan, apply, deploy-affected, and deploy-all workflows. Check out the repository with
-`atmos git clone --ci`, because the Atmos container image has no Node.js for `actions/checkout`:
-
-```yaml
-- run: atmos git clone --ci
-- name: Plan infrastructure
-  env:
-    ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}
-  run: atmos terraform plan vpc -s dev
-```
-
-Create a Gitea token with access to the repository's commit statuses and issue/PR
-comments, and store it as the repository Actions secret `ATMOS_CI_GITEA_TOKEN`.
-For a scoped personal access token, use `write:repository`, `write:issue`, and
-`read:user` (used to identify which comments Atmos may update).
-Alternatively, explicitly export a suitable job token as `GITEA_TOKEN`; available
-job-token permissions depend on your Gitea version. Atmos never uses `GITHUB_TOKEN`
-for Gitea API calls.
-
-The provider supports commit statuses, marker-based PR comment updates, status
-queries, job output/environment files, and log groups. It reads `GITEA_*` metadata
-first, falling back to the runner's compatible `GITHUB_*` variables. PR comments
-are updated only when owned by the authenticated account. Job summary files are
-written when the runner supplies one; their display depends on the runner version.
-
-The API URL comes from `ATMOS_CI_GITEA_API_URL`, then the runner's API URL, then its
-server URL plus `/api/v1`. HTTPS is required by default. For a local emulator only,
-set `ATMOS_CI_GITEA_ALLOW_INSECURE=true` to allow HTTP. Redirects are rejected.
-
-For affected-component detection, check out the PR's **head SHA**. Atmos resolves
-its base SHA from the event payload; unknown PR checkouts remain unresolved. Push
-runs use the event's `before` SHA. A new branch with an all-zero `before` has no
-inferred base.
-
-Gitea does not automatically use GitHub artifact storage. Configure a shared
-[planfile store](/ci/planfile-storage) when plans need
-to survive between jobs. Without one, Atmos uses local storage. This provider does
-not yet support remote Actions cache, GitHub Checks annotations, commit comments,
-or merged-PR plan provenance resolution. An apply-after-merge workflow should
-create a fresh plan for the merged commit rather than claiming to apply the PR's
-saved plan.

@@ -3,7 +3,7 @@ title: Native CI on Gitea Actions
 tags: [Automation, Emulators]
 related_docs:
   - label: "Gitea Actions provider"
-    url: /ci#gitea-actions
+    url: /integrations/gitea-actions
   - label: "Native CI configuration"
     url: /cli/configuration/ci
   - label: "Emulator commands"

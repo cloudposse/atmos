@@ -38,8 +38,16 @@ Start with [Setup and Authentication](/integrations/gitea-actions/setup) to crea
   <dd>Gitea cannot map a merge commit back to its pull request, so a deploy plans the merged commit fresh instead of verifying the plan reviewed in the pull request.</dd>
 
   <dt>Not available</dt>
-  <dd>Deployment approvals (Gitea ignores `environment:`), OIDC cloud authentication, merge queues, annotations, and GitHub artifact storage. Configure a shared [planfile store](/ci/planfile-storage) when plans must survive between jobs.</dd>
+  <dd>Deployment approvals (Gitea ignores `environment:`), OIDC cloud authentication, and merge queues.</dd>
 </dl>
+
+## Provider Capabilities
+
+The Gitea provider supports commit statuses, marker-based pull request comment updates, status queries, job output and environment files, and log groups. It reads `GITEA_*` metadata first, falling back to the runner's compatible `GITHUB_*` variables. Atmos updates only comments owned by the authenticated account. Job summary files are written when the runner supplies one; their display depends on the runner version.
+
+For affected-component detection, check out the pull request's **head SHA**. Atmos resolves its base SHA from the event payload; unknown pull request checkouts remain unresolved. Push runs use the event's `before` SHA. A new branch with an all-zero `before` has no inferred base.
+
+Gitea does not automatically use GitHub artifact storage. Configure a shared [planfile store](/ci/planfile-storage) when plans need to survive between jobs; otherwise, Atmos uses local storage. The provider does not yet support remote Actions cache, GitHub Checks annotations, commit comments, or merged-pull-request plan provenance resolution.
 
 ## Workflow Guides
 
