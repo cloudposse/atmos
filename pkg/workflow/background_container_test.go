@@ -150,3 +150,13 @@ func TestContainerRunner_Start_Errors(t *testing.T) {
 		assert.Contains(t, err.Error(), "command")
 	})
 }
+
+func TestContainerRunnerRejectsInvalidHost(t *testing.T) {
+	cr := &ContainerRunner{Stack: "test-stack", DryRun: true}
+	handle, err := cr.Start(context.Background(), &schema.WorkflowStep{
+		Name: "svc",
+		Run:  &schema.ContainerRunStep{Image: "alpine", Command: "echo ok", Ports: []schema.ContainerPort{{Host: "localhost:8080", Container: 80}}},
+	}, nil)
+	require.ErrorContains(t, err, "ports[0].host")
+	assert.Nil(t, handle)
+}

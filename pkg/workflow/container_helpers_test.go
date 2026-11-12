@@ -548,3 +548,23 @@ func TestExecShell_DryRunWhenIDEqualsName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, fake.command) // Exec not called.
 }
+
+func TestWorkflowContainersRejectInvalidHost(t *testing.T) {
+	cfg := &schema.WorkflowContainer{Image: "alpine", Ports: []schema.ContainerPort{{Host: "localhost:8080", Container: 80}}}
+	params := &ContainerStepParams{
+		WorkflowDef: &schema.WorkflowDefinition{Container: cfg},
+		Step:        &schema.WorkflowStep{Name: "test", Container: cfg},
+		DryRun:      true,
+	}
+	t.Run("workflow container", func(t *testing.T) {
+		session, err := StartWorkflowContainer(context.Background(), params)
+		require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+		require.ErrorContains(t, err, "ports[0].host")
+		assert.Nil(t, session)
+	})
+	t.Run("step override", func(t *testing.T) {
+		err := RunStepContainerOverride(context.Background(), params)
+		require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+		require.ErrorContains(t, err, "ports[0].host")
+	})
+}

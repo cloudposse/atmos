@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	ctr "github.com/cloudposse/atmos/pkg/container"
@@ -665,15 +666,23 @@ func TestMounts_EmptyComponentPathLeavesSourcesUnanchored(t *testing.T) {
 	assert.Equal(t, "app/public", mounts[0].Source)
 }
 
-func TestExecuteUp_RejectsInvalidHostBeforeRuntime(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	rt := NewMockRuntime(ctrl)
-	withStubs(t, map[string]any{
-		"image": "api:dev",
-		"run":   map[string]any{"ports": []any{map[string]any{"host": "localhost:8080", "container": 8080}}},
-	}, nil, rt)
-	err := ExecuteUp(context.Background(), infoFor("api"))
-	require.ErrorContains(t, err, "ports[0].host")
+func TestExecute_RejectsInvalidHostBeforeRuntime(t *testing.T) {
+	for _, operation := range []struct {
+		name string
+		run  func(context.Context, *schema.ConfigAndStacksInfo) error
+	}{{"up", ExecuteUp}, {"run", ExecuteRun}} {
+		t.Run(operation.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			rt := NewMockRuntime(ctrl)
+			withStubs(t, map[string]any{
+				"image": "api:dev",
+				"run":   map[string]any{"command": "echo ok", "ports": []any{map[string]any{"host": "localhost:8080", "container": 8080}}},
+			}, nil, rt)
+			err := operation.run(context.Background(), infoFor("api"))
+			require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+			require.ErrorContains(t, err, "ports[0].host")
+		})
+	}
 }
 
 // Runtime arguments must survive both component execution paths. In particular,

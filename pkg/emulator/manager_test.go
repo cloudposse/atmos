@@ -54,6 +54,7 @@ func TestManager_EndpointPrefersTCPBinding(t *testing.T) {
 	defer restore()
 	info := runningEmulatorInfo(54321)
 	info.Ports = []container.PortBinding{
+		{ContainerPort: 4566, HostPort: 0, Protocol: "tcp", Bind: "::1"},
 		{ContainerPort: 4566, HostPort: 54322, Protocol: "udp", Bind: "::1"},
 		{ContainerPort: 4566, HostPort: 54321, Protocol: "tcp", Bind: "127.0.0.1"},
 		{ContainerPort: 4566, HostPort: 54323, Protocol: "tcp", Bind: "::1"},
@@ -121,4 +122,15 @@ func TestManager_Ps_FiltersByStack(t *testing.T) {
 	assert.Equal(t, testDriverImage, statuses[0].Image)
 	assert.Equal(t, "atmos-dev-emulator-aws", statuses[0].Container)
 	assert.Equal(t, "container-abc", statuses[0].ID)
+}
+
+func TestManagerNamedConfigRejectsInvalidHost(t *testing.T) {
+	m := newManagerWithRuntime(nil)
+	cfg, err := m.namedConfig(&Spec{
+		Driver:    testDriverName,
+		Container: &schema.ContainerRunStep{Ports: []schema.ContainerPort{{Host: "localhost:4566", Container: 4566}}},
+	}, "dev", "aws", nil, false)
+	require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+	require.ErrorContains(t, err, "ports[0].host")
+	assert.Nil(t, cfg)
 }
