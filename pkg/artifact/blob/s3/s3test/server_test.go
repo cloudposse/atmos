@@ -219,8 +219,8 @@ func TestRanges(t *testing.T) {
 			return "", err
 		}
 		defer out.Body.Close()
-		data, _ := io.ReadAll(out.Body)
-		return string(data), nil
+		data, err := io.ReadAll(out.Body)
+		return string(data), err
 	}
 	got, err := get("bytes=2-4")
 	require.NoError(t, err)
