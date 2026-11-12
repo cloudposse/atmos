@@ -244,7 +244,7 @@ func collect(t *testing.T, stream grpc.ServerStreamingClient[pluginv1.CommandEve
 	for {
 		event, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
-			return
+			return stdout, stderr, exits, maxChunk
 		}
 		require.NoError(t, err)
 		switch e := event.GetEvent().(type) {
