@@ -3,14 +3,13 @@ package s3test
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
-)
 
-var errInvalidChunkTerminator = errors.New("invalid chunk terminator")
+	errUtils "github.com/cloudposse/atmos/errors"
+)
 
 // hexBase is the radix of aws-chunked chunk sizes.
 const hexBase = 16
@@ -58,7 +57,7 @@ func decodeAWSChunked(raw []byte) ([]byte, error) {
 			return nil, err
 		}
 		if terminator != [2]byte{'\r', '\n'} {
-			return nil, errInvalidChunkTerminator
+			return nil, errUtils.ErrBlobInvalidChunkTerminator
 		}
 	}
 }
