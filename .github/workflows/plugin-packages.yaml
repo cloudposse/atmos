@@ -31,6 +31,8 @@ jobs:
       # version bump in every layer that touches a package input. Compare such pull requests with the merge
       # base of the default branch instead, the same range the whole stack is released against. Pushes and
       # pull requests that target the default branch keep the provider's default base.
+      # The inventory --check also compares packed bytes with any published version in the registry,
+      # so a child cannot reuse its parent's published version for different package bytes.
       - name: Resolve the release comparison base
         id: base
         if: github.event_name == 'pull_request' && github.event.pull_request.base.ref != github.event.repository.default_branch
