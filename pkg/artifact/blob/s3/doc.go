@@ -10,6 +10,10 @@
 // cannot enforce conditions fails the operation with a clear error, and an optional probe detects
 // endpoints that silently ignore the headers.
 //
+// Stat with tags pins the tag read to the version HeadObject returned when the bucket is versioned,
+// which needs s3:GetObjectVersionTagging in addition to s3:GetObjectTagging. Bucket versioning is
+// not required; without it, tags come from the current object and are not version-matched.
+//
 // Credentials are resolved lazily on first use. The generic store fails closed: a configured
 // identity that cannot be resolved is an error, never a silent fall back to ambient credentials.
 package s3
