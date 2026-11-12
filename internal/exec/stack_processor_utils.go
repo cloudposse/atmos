@@ -1638,7 +1638,7 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, impErr
 		}
 		imp = renderedImp
-		if fragment, handled, importErr := importConfigurationComponents(atmosConfig, imp, &importStruct); handled || importErr != nil {
+		if fragment, handled, importErr := importConfigurationComponents(atmosConfig, imp, &importStruct, loadOptions); handled || importErr != nil {
 			if importErr != nil {
 				return nil, nil, importErr
 			}

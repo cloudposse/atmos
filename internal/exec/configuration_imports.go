@@ -15,7 +15,7 @@ import (
 // importConfigurationComponents routes configured provider schemes before YAML or
 // remote-source resolution. The provider's units come back as a manifest fragment that
 // joins the importing manifest, so they are components of the importing stack.
-func importConfigurationComponents(config *schema.AtmosConfiguration, uri string, declaration *schema.StackImport) (map[string]any, bool, error) {
+func importConfigurationComponents(config *schema.AtmosConfiguration, uri string, declaration *schema.StackImport, loadOptions *StackLoadOptions) (map[string]any, bool, error) {
 	scheme, _, found := strings.Cut(uri, "://")
 	if !found || config == nil {
 		return nil, false, nil
@@ -23,6 +23,10 @@ func importConfigurationComponents(config *schema.AtmosConfiguration, uri string
 	settings, configured := config.Components.Terraform.ConfigurationProviders[scheme]
 	if !configured {
 		return nil, false, nil
+	}
+	// Provider discovery can evaluate HCL; static loads must not enter the runtime.
+	if loadOptions != nil && loadOptions.StaticOnly {
+		return nil, true, fmt.Errorf("%w: cannot inspect provider import %q without evaluating provider configuration", errUtils.ErrInvalidImport, uri)
 	}
 	if err := checkProviderImport(config, scheme, &settings, declaration); err != nil {
 		return nil, true, err

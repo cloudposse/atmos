@@ -33,32 +33,32 @@ func (r *importRuntime) ImportComponents(_ context.Context, uri string) (map[str
 func TestConfigurationImportRouting(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	for _, uri := range []string{"ordinary", "https://example.com/config.yaml"} {
-		_, handled, err := importConfigurationComponents(config, uri, &schema.StackImport{})
+		_, handled, err := importConfigurationComponents(config, uri, &schema.StackImport{}, nil)
 		require.NoError(t, err)
 		require.False(t, handled)
 	}
-	_, handled, err := importConfigurationComponents(nil, "terragrunt://live", &schema.StackImport{})
+	_, handled, err := importConfigurationComponents(nil, "terragrunt://live", &schema.StackImport{}, nil)
 	require.NoError(t, err)
 	require.False(t, handled)
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {}}
-	_, _, err = importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{})
+	_, _, err = importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{}, nil)
 	require.ErrorContains(t, err, "disabled")
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = schema.ComponentConfiguration{Enabled: true}
-	_, _, err = importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{})
+	_, _, err = importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{}, nil)
 	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t))}
 	config.ComponentConfigurations = runtime
 	for _, declaration := range []schema.StackImport{{Context: map[string]any{"stage": "dev"}}, {SkipIfMissing: true}, {TTL: "1h"}, {NestedImports: "local"}} {
-		_, _, err := importConfigurationComponents(config, "terragrunt://live", &declaration)
+		_, _, err := importConfigurationComponents(config, "terragrunt://live", &declaration, nil)
 		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	}
-	fragment, handled, err := importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{})
+	fragment, handled, err := importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{}, nil)
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
 	require.Contains(t, fragment["components"].(map[string]any)["terraform"], "app")
 	runtime.err = errors.New("registration failed")
-	_, _, err = importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{})
+	_, _, err = importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{}, nil)
 	require.ErrorIs(t, err, runtime.err)
 }
 
@@ -246,4 +246,43 @@ func TestStackOverridesApplyToImportedUnits(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "mixin.yaml"), []byte("import:\n  - terragrunt://live\n"), 0o600))
 	app = processUnitManifest(t, root, "nested.yaml", "import:\n  - mixin\n"+overrides, runtime)
 	require.Equal(t, map[string]any{"vars": map[string]any{"region": "us-west-2"}}, app["overrides"])
+}
+
+func TestStaticLoadsRejectProviderImportsBeforeRuntime(t *testing.T) {
+	for _, nested := range []bool{false, true} {
+		name := "direct"
+		if nested {
+			name = "nested"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			file := filepath.Join(root, "dev.yaml")
+			imports := "terragrunt://live"
+			if nested {
+				require.NoError(t, os.WriteFile(filepath.Join(root, "mixin.yaml"), []byte("import: [terragrunt://live]\n"), 0o600))
+				imports = "mixin"
+			}
+			require.NoError(t, os.WriteFile(file, []byte("name: dev\nimport: ["+imports+"]\n"), 0o600))
+			runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t))}
+			config := &schema.AtmosConfiguration{BasePathAbsolute: root, StacksBaseAbsolutePath: root, StackConfigFilesAbsolutePaths: []string{file}, ComponentConfigurations: runtime}
+			config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
+			_, err := ExecuteDescribeStacksWithOptions(config, "dev", nil, nil, nil,
+				false, false, false, true, nil, nil, false, DescribeStacksErrorOptions{StaticOnly: true})
+			require.ErrorIs(t, err, errUtils.ErrInvalidImport)
+			require.ErrorContains(t, err, "cannot inspect provider import")
+			require.Empty(t, runtime.imports, "static inspection must never invoke the provider runtime")
+
+			// The same manifest still imports units during an ordinary load.
+			result, err := ProcessYAMLConfigFile(config, root, file, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
+			require.NoError(t, err)
+			require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
+			require.Contains(t, result.DeepMergedConfig["components"].(map[string]any)["terraform"], "app")
+
+			// Even a previously used runtime must not serve a later static load.
+			_, handled, err := importConfigurationComponents(config, "terragrunt://live", &schema.StackImport{}, &StackLoadOptions{StaticOnly: true})
+			require.True(t, handled)
+			require.ErrorIs(t, err, errUtils.ErrInvalidImport)
+			require.Len(t, runtime.imports, 1)
+		})
+	}
 }
