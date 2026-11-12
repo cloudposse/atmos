@@ -425,6 +425,14 @@ func (c *conformance) lock(t *testing.T) {
 	assert.NotEmpty(t, first.Token())
 	assert.True(t, first.Scope().Satisfies(artifact.LockScopeHost))
 
+	caps := repo.Capabilities()
+	if !caps.HasLockScope(artifact.LockScopeRepository) {
+		stronger := request
+		stronger.Required = artifact.LockScopeRepository
+		_, err := repo.Lock(ctx, stronger)
+		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability, "an insufficient guarantee is an error, never a silent downgrade")
+	}
+
 	blocked, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 	second := request
@@ -435,16 +443,14 @@ func (c *conformance) lock(t *testing.T) {
 	assert.True(t, errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errUtils.ErrArtifactConflict), "waiting is bounded by the context or rejected as a conflict: %v", err)
 
 	require.NoError(t, first.Release(ctx))
+	if errors.Is(err, errUtils.ErrArtifactPublicationAmbiguous) {
+		// The deadline cut a claim create short and the backend reported that it may still commit.
+		// Such a claim is left for deliberate operator recovery, so leak-freedom is not promised.
+		return
+	}
 	again, err := repo.Lock(ctx, second)
 	require.NoError(t, err, "a canceled acquisition leaked no ownership")
 	require.NoError(t, again.Release(ctx))
-
-	caps := repo.Capabilities()
-	if !caps.HasLockScope(artifact.LockScopeRepository) {
-		request.Required = artifact.LockScopeRepository
-		_, err := repo.Lock(ctx, request)
-		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability, "an insufficient guarantee is an error, never a silent downgrade")
-	}
 }
 
 func (c *conformance) capabilityErrors(t *testing.T) {
