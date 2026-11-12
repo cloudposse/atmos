@@ -42,6 +42,11 @@ func (s *Store) Get(ctx context.Context, key string, opts blob.GetOptions) (*blo
 		return nil, wrapIO(blob.OpGet, key, err)
 	}
 	defer root.Close()
+	release, err := s.guard(ctx, blob.OpGet, key, false)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	target := filepath.FromSlash(key)
 	file, err := rootOpenFile(root, target)
 	if err != nil {
@@ -93,6 +98,11 @@ func (s *Store) Stat(ctx context.Context, key string, opts blob.StatOptions) (*b
 		return nil, wrapIO(blob.OpStat, key, err)
 	}
 	defer root.Close()
+	release, err := s.guard(ctx, blob.OpStat, key, false)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	target := filepath.FromSlash(key)
 	file, err := rootOpenFile(root, target)
 	if err != nil {
@@ -111,7 +121,7 @@ func (s *Store) describe(root *os.Root, op, key string, file *os.File, withTags 
 	if !stat.Mode().IsRegular() {
 		return nil, blob.NewError(blob.KindNotFound, op, key, fmt.Errorf("%w: key is a prefix, not an object", errUtils.ErrBlobNotFound))
 	}
-	etag, err := etagOpen(file, stat)
+	etag, err := etagOpen(file)
 	if err != nil {
 		return nil, wrapIO(op, key, err)
 	}
