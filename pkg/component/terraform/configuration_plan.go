@@ -103,6 +103,7 @@ func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfigura
 	if err != nil {
 		return nil, err
 	}
+	info.ConfigurationPlanImplicit = info.ConfigurationPlanImplicit || info.PlanFile == ""
 	info.UseTerraformPlan = true
 	info.PlanFile = absolute
 	return plan.Prepared, nil
@@ -539,7 +540,7 @@ func finishConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Con
 	}
 	canonical := ConstructTerraformComponentPlanfilePath(config, info)
 	// A plan file the user named is theirs even when it is the canonical path, so it is kept.
-	if info.PlanFile == "" || filepath.Clean(configurationPlanPath(config, info)) != filepath.Clean(canonical) {
+	if info.PlanFile == "" || info.ConfigurationPlanImplicit || filepath.Clean(configurationPlanPath(config, info)) != filepath.Clean(canonical) {
 		removeTerraformFile(canonical, "Failed to remove consumed plan file")
 	}
 	removeTerraformFile(canonical+configurationPlanSuffix, "Failed to remove consumed plan record")
