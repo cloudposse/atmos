@@ -4,10 +4,12 @@ package oci
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
 
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -153,4 +155,29 @@ func TestReaderClosedBeforeReadingFetchesNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, content.Close())
 	assert.Zero(t, reg.recorder.count("GET", payloadDigest(t, result).Encoded()))
+}
+
+func TestFinishVerificationRejectsUnchecked(t *testing.T) {
+	base := &artifact.VerificationResult{Status: artifact.VerificationFailed}
+	result, err := finishVerification(base, &artifact.VerificationResult{Status: artifact.VerificationUnchecked}, nil)
+	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
+	assert.Equal(t, artifact.VerificationUnchecked, result.Status)
+}
+
+func TestLazyReaderRejectsUnavailableDigestAlgorithm(t *testing.T) {
+	reader := newLazyReader(context.Background(), nil, ocispec.Descriptor{Digest: "sha999:abcd"})
+	_, err := reader.Read(make([]byte, 1))
+	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
+}
+
+func TestTrackedRootsAreBounded(t *testing.T) {
+	repo := newLayoutRepo(t)
+	for i := 0; i < manifestCacheEntries+1; i++ {
+		desc := ocispec.Descriptor{Digest: digest.FromString(fmt.Sprint(i))}
+		repo.track("example", &root{desc: desc, class: classPlugin})
+	}
+	assert.Len(t, repo.pinned, manifestCacheEntries)
+	assert.LessOrEqual(t, len(repo.roots), manifestCacheEntries)
+	_, found := repo.descriptorFor("example", digest.FromString("0"))
+	assert.False(t, found)
 }

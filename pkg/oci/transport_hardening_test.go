@@ -110,8 +110,8 @@ func TestLayoutTagKeepsMetadataAndDigestRoots(t *testing.T) {
 }
 
 func TestLayoutStateMatchesThePersistedIndexAfterAFailedWrite(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory write permissions are not enforced on Windows")
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("directory write permissions are not enforced for this process")
 	}
 	dir := t.TempDir()
 	layout, err := OpenLayout(t.Context(), dir)

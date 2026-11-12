@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"sort"
 	"strings"
 
@@ -34,28 +34,56 @@ func (s *Store) List(ctx context.Context, opts blob.ListOptions) (*blob.ListPage
 	if err := validatePrefix(opts.Prefix); err != nil {
 		return nil, err
 	}
-	entries, err := s.walk(ctx, opts.Prefix)
-	if err != nil {
-		return nil, blob.NewError(blob.KindOther, blob.OpList, opts.Prefix, err)
+	var entries []entry
+	var snapshotID string
+	if id, last, ok := parseSnapshotCursor(opts.Cursor); ok {
+		opts.Cursor = last
+		snapshotID = id
+		entries = s.lookupSnapshot(id, opts)
 	}
-	return paginate(entries, opts), nil
+	if entries == nil {
+		var err error
+		entries, err = s.walk(ctx, opts.Prefix)
+		if err != nil {
+			return nil, blob.NewError(blob.KindOther, blob.OpList, opts.Prefix, err)
+		}
+		snapshotID = ""
+	}
+	page := paginate(entries, opts)
+	if page.NextCursor != "" {
+		if snapshotID == "" {
+			snapshotID = s.rememberSnapshot(entries, opts)
+		}
+		if snapshotID != "" {
+			page.NextCursor = snapshotCursor(snapshotID, page.NextCursor)
+		}
+	}
+	return page, nil
 }
 
 // walk returns every object whose key starts with prefix, sorted by key.
 func (s *Store) walk(ctx context.Context, prefix string) ([]entry, error) {
-	start := s.root
+	root, err := s.openRoot(false)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	start := "."
 	if idx := strings.LastIndexByte(prefix, '/'); idx >= 0 {
-		start = s.path(prefix[:idx])
+		start = prefix[:idx]
 	}
 	var entries []entry
-	err := filepath.WalkDir(start, func(path string, d fs.DirEntry, walkErr error) error {
+	err = fs.WalkDir(root.FS(), start, func(name string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return ignoreMissing(walkErr)
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		found, ok, err := s.objectAt(path, d, prefix)
+		found, ok, err := s.objectAt(name, d, prefix)
 		if err != nil || !ok {
 			return err
 		}
@@ -79,15 +107,11 @@ func ignoreMissing(err error) error {
 
 // objectAt returns the object stored at a walked path, or false for directories, bookkeeping
 // files, keys outside the prefix, and files that vanished.
-func (s *Store) objectAt(path string, d fs.DirEntry, prefix string) (entry, bool, error) {
-	if d.IsDir() || reserved(path, s.root, d.Name()) {
+func (s *Store) objectAt(name string, d fs.DirEntry, prefix string) (entry, bool, error) {
+	if d.IsDir() || reserved(name, d.Name()) {
 		return entry{}, false, nil
 	}
-	rel, err := filepath.Rel(s.root, path)
-	if err != nil {
-		return entry{}, false, err
-	}
-	key := filepath.ToSlash(rel)
+	key := name
 	if !strings.HasPrefix(key, prefix) {
 		return entry{}, false, nil
 	}
@@ -99,10 +123,10 @@ func (s *Store) objectAt(path string, d fs.DirEntry, prefix string) (entry, bool
 }
 
 // reserved reports whether a file is one of the store's own bookkeeping files.
-func reserved(path, root, name string) bool {
-	return strings.HasPrefix(name, tempPrefix) ||
-		strings.HasSuffix(name, attrsSuffix) ||
-		(name == lockName && filepath.Dir(path) == root)
+func reserved(name, base string) bool {
+	return strings.HasPrefix(base, tempPrefix) ||
+		strings.HasSuffix(base, attrsSuffix) ||
+		(base == lockName && path.Dir(name) == ".")
 }
 
 // paginate applies the delimiter roll-up, cursor, and limit to sorted entries.
@@ -158,7 +182,7 @@ func validatePrefix(prefix string) error {
 			return blob.NewError(blob.KindInvalid, blob.OpList, prefix, fmt.Errorf("%w: prefix contains a relative segment", errUtils.ErrBlobInvalid))
 		}
 	}
-	if strings.ContainsRune(prefix, '\\') || strings.HasPrefix(prefix, "/") {
+	if strings.ContainsRune(prefix, '\\') || strings.ContainsRune(prefix, 0) || strings.HasPrefix(prefix, "/") {
 		return blob.NewError(blob.KindInvalid, blob.OpList, prefix, fmt.Errorf("%w: prefix must be a relative slash path", errUtils.ErrBlobInvalid))
 	}
 	return nil

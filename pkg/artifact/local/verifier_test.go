@@ -66,7 +66,7 @@ func TestVerify_TranslatesVerifierOutcomes(t *testing.T) {
 		wantStatus artifact.VerificationStatus
 	}{
 		{"verified", &artifact.VerificationResult{Status: artifact.VerificationVerified}, nil, nil, artifact.VerificationVerified},
-		{"unchecked passes through without a verdict", &artifact.VerificationResult{Status: artifact.VerificationUnchecked}, nil, nil, artifact.VerificationUnchecked},
+		{"unchecked is not verified", &artifact.VerificationResult{Status: artifact.VerificationUnchecked}, nil, errUtils.ErrArtifactVerificationFailed, artifact.VerificationUnchecked},
 		{"failed status without an error still fails", &artifact.VerificationResult{Status: artifact.VerificationFailed}, nil, errUtils.ErrArtifactVerificationFailed, artifact.VerificationFailed},
 		{"verifier error is wrapped as a verification failure", nil, errors.New("crypto exploded"), errUtils.ErrArtifactVerificationFailed, artifact.VerificationFailed},
 		{"verification sentinel is kept", &artifact.VerificationResult{Status: artifact.VerificationFailed}, fmt.Errorf("%w: policy", errUtils.ErrArtifactVerificationFailed), errUtils.ErrArtifactVerificationFailed, artifact.VerificationFailed},
@@ -112,10 +112,10 @@ func TestVerify_ReportsDiagnosticsAlongsideTheVerifier(t *testing.T) {
 	assert.True(t, codes["malformed-evidence"], "a file whose name is not an evidence digest is reported, not trusted")
 }
 
-func TestVerify_BoundsTheNumberOfEvidenceFilesRead(t *testing.T) {
+func TestVerify_ReadsAllValidEvidence(t *testing.T) {
 	stub := &stubVerifier{result: &artifact.VerificationResult{Status: artifact.VerificationVerified}}
 	repo, subject := signedWith(t, stub)
-	for index := range maxEvidenceFiles + 5 {
+	for index := range maxMalformedEvidence + 5 {
 		evidence, err := layout.NewEvidence(subject, &artifact.EvidencePayload{Format: artifact.EvidenceSigstoreBundle, MediaType: "x", Data: []byte(fmt.Sprintf("bundle-%d", index))})
 		require.NoError(t, err)
 		raw, err := evidence.Marshal()
@@ -125,12 +125,8 @@ func TestVerify_BoundsTheNumberOfEvidenceFilesRead(t *testing.T) {
 	}
 	result, err := repo.Verify(context.Background(), subject, trustedPolicy)
 	require.NoError(t, err)
-	assert.Equal(t, maxEvidenceFiles, stub.seen, "the verifier never sees more than the bound")
-	truncated := false
-	for _, diagnostic := range result.Diagnostics {
-		truncated = truncated || diagnostic.Code == "evidence-truncated"
-	}
-	assert.True(t, truncated, "the cap is reported, not silent")
+	assert.Equal(t, maxMalformedEvidence+6, stub.seen, "all valid evidence reaches the verifier")
+	assert.Equal(t, artifact.VerificationVerified, result.Status)
 }
 
 func TestSign_RejectsOversizeEvidence(t *testing.T) {
@@ -141,4 +137,29 @@ func TestSign_RejectsOversizeEvidence(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactTooLarge)
 	_, err = repo.Sign(context.Background(), subject, &fixedSigner{data: nil}, artifact.SignOptions{})
 	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed, "empty evidence is invalid")
+}
+
+func TestVerifyRejectsUnreadableEvidenceDirectory(t *testing.T) {
+	stub := &stubVerifier{result: &artifact.VerificationResult{Status: artifact.VerificationVerified}}
+	repo, subject := signedWith(t, stub)
+	dir := filepath.Join(repo.root, filepath.FromSlash(layout.SignatureDir(subject.Kind, subject.Digest)))
+	require.NoError(t, os.RemoveAll(dir))
+	require.NoError(t, os.WriteFile(dir, []byte("not a directory"), 0o644))
+	result, err := repo.Verify(context.Background(), subject, trustedPolicy)
+	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
+	require.Contains(t, result.Diagnostics[0].Code, "evidence-read-failed")
+	assert.Zero(t, stub.seen)
+}
+
+func TestVerifyFailsClosedOnTooManyMalformedEvidenceFiles(t *testing.T) {
+	stub := &stubVerifier{result: &artifact.VerificationResult{Status: artifact.VerificationVerified}}
+	repo, subject := signedWith(t, stub)
+	dir := filepath.Join(repo.root, filepath.FromSlash(layout.SignatureDir(subject.Kind, subject.Digest)))
+	for i := range maxMalformedEvidence + 1 {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("bad-%03d.json", i)), []byte("bad"), 0o644))
+	}
+	_, err := repo.Verify(context.Background(), subject, trustedPolicy)
+	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
+	require.ErrorIs(t, err, errTooManyMalformedEvidence)
+	assert.Zero(t, stub.seen)
 }

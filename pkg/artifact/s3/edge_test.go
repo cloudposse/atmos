@@ -3,6 +3,7 @@ package s3
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/artifacttest"
+	"github.com/cloudposse/atmos/pkg/artifact/blob"
 	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
 	"github.com/cloudposse/atmos/pkg/artifact/layout"
 )
@@ -206,12 +208,23 @@ func TestDelete_PartialFailureLeavesGarbageNotADanglingReference(t *testing.T) {
 	_, err := repo.Delete(context.Background(), pinned, artifact.DeleteOptions{})
 	require.ErrorIs(t, err, errUtils.ErrArtifactDeleteFailed)
 	_, err = repo.Resolve(context.Background(), defaultRef())
-	require.ErrorIs(t, err, errUtils.ErrArtifactNotFound, "the reference was removed first")
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable, "pending deletion makes the reference unavailable while retaining ownership")
 
+	state, err := repo.loadReference(context.Background(), layout.ReferenceKey(testName, testVersion))
+	require.NoError(t, err)
+	oldClaim, err := repo.claimOf(context.Background(), state.ref)
+	require.NoError(t, err)
+	require.NotNil(t, oldClaim)
+	assert.Contains(t, oldClaim.Paths, "team/app/1.0.0", "older writers still observe the old location as claimed")
+	_, err = layout.Admit(&layout.AdmitInput{Current: state.ref, IncomingIntent: digest.FromString("old writer")})
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable, "older writers cannot steal the pending deletion")
 	spec.fake.ClearFaults()
+	repo.keyPattern = "new/{{ .Name }}/{{ .Version }}"
 	again := publish(t, repo, &prepareSpec{files: map[string]string{"a.txt": "a2", "b.txt": "b2"}, opID: "op-again"}, artifact.PublishOptions{})
 	assert.Equal(t, artifact.OutcomeCreated, again.Outcome, "leftover payload objects are still owned by the reference's representation")
 	assertIntact(t, repo, defaultRef())
+	_, exists := spec.fake.Object("team/app/1.0.0/b.txt")
+	assert.False(t, exists, "recovery deletes leftovers at the old location")
 }
 
 // A lost response to the reference delete is settled by reading the reference.
@@ -226,14 +239,26 @@ func TestDelete_LostResponseIsReconciled(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 }
 
-// A create that never reached the endpoint is retried transparently.
-func TestLock_CreateThatNeverArrivedIsRetried(t *testing.T) {
+// An absent claim does not prove an ambiguous create cannot arrive later.
+func TestLock_MissingAfterAmbiguousCreateRemainsAmbiguous(t *testing.T) {
 	spec := noneSpec().fresh(t)
 	repo := newRepo(t, spec)
 	spec.fake.Inject(s3test.Fault{Op: s3test.OpPutObject, KeyPrefix: layout.LockPath(lockResource), Action: s3test.DropBeforeCommit})
 	handle, err := repo.Lock(context.Background(), artifact.LockRequest{Resource: lockResource, Owner: "owner-a"})
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+	assert.Nil(t, handle)
+	puts := spec.fake.RequestsFor(s3test.OpPutObject)
+	require.Len(t, puts, 2, "the second create installs a distinct fence, not a retry")
+	key := layout.LockPath(lockResource)
+	claim, _, err := repo.readClaim(context.Background(), key)
 	require.NoError(t, err)
-	require.NoError(t, handle.Release(context.Background()))
+	require.NotNil(t, claim)
+	assert.Contains(t, claim.Owner, "pending reconciliation")
+	assert.ErrorContains(t, repo.heldError(context.Background(), key, lockResource, nil), "Do not delete it until the original remote request is known to have finished")
+	delayed, err := json.Marshal(&claimDoc{SchemaVersion: layout.SchemaVersion, Resource: lockResource, Owner: "owner-a", Token: "late-request"})
+	require.NoError(t, err)
+	_, err = repo.putConditional(context.Background(), key, delayed, contentTypeJSON, blob.IfAbsent())
+	require.True(t, blob.IsPreconditionFailed(err), "the retained fence rejects a late original create")
 }
 
 // More evidence than the read bound is reported, not silently dropped.
@@ -290,4 +315,24 @@ func TestOptions_OwnerAndPartSize(t *testing.T) {
 	publish(t, repo, &prepareSpec{files: bigFiles()}, artifact.PublishOptions{})
 	assert.GreaterOrEqual(t, fake.CompletedUploads(), 1, "the configured part size forced multipart uploads")
 	assert.NotEmpty(t, defaultOwner())
+}
+
+func TestReplacementRetainsRecoveryMetadataUntilCleanupSucceeds(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	first := publish(t, repo, &prepareSpec{files: map[string]string{"old.txt": "old"}}, artifact.PublishOptions{})
+	spec.fake.Inject(s3test.Fault{Op: s3test.OpDeleteObject, KeyPrefix: "team/app/1.0.0/old.txt", Status: 403, Code: "AccessDenied", Times: -1})
+	prep := &prepareSpec{files: map[string]string{"new.txt": "new"}, opID: "replacement"}
+	second := publish(t, repo, prep, artifact.PublishOptions{Force: true, ExpectedPrior: &first.Pinned})
+	_, ok := spec.fake.Object(layout.RecordPath(first.Pinned.RecordDigest))
+	require.True(t, ok, "the old Record is needed to retry cleanup")
+	_, ok = spec.fake.Object(layout.OperationPath("replacement"))
+	require.True(t, ok, "the journal identifies the old location")
+	spec.fake.ClearFaults()
+	_, err := repo.Publish(context.Background(), prepare(t, repo, prep), artifact.PublishOptions{ExpectedPrior: &second.Pinned})
+	require.NoError(t, err)
+	_, ok = spec.fake.Object(layout.RecordPath(first.Pinned.RecordDigest))
+	assert.False(t, ok)
+	_, ok = spec.fake.Object(layout.OperationPath("replacement"))
+	assert.False(t, ok)
 }

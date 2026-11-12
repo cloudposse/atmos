@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact/blob"
@@ -27,10 +28,13 @@ const (
 
 // Store is a filesystem [blob.Store].
 type Store struct {
-	root     string
-	dirPerm  os.FileMode
-	filePerm os.FileMode
-	lockAll  bool
+	root           string
+	dirPerm        os.FileMode
+	filePerm       os.FileMode
+	lockAll        bool
+	allowBackslash bool
+	snapshotMu     sync.Mutex
+	snapshots      map[string]listSnapshot
 }
 
 // New returns a Store rooted at root. The directory is created on first write.
@@ -79,7 +83,11 @@ func (s *Store) Capabilities() blob.Capabilities {
 
 // validate rejects keys that are unsafe on a filesystem or collide with the store's own files.
 func (s *Store) validate(op, key string) error {
-	if err := blob.ValidateKey(key); err != nil {
+	validationKey := key
+	if s.allowBackslash && os.PathSeparator != '\\' {
+		validationKey = strings.ReplaceAll(key, "\\", "_")
+	}
+	if err := blob.ValidateKey(validationKey); err != nil {
 		return err
 	}
 	last := key[strings.LastIndexByte(key, '/')+1:]
@@ -87,11 +95,6 @@ func (s *Store) validate(op, key string) error {
 		return blob.NewError(blob.KindInvalid, op, key, fmt.Errorf("%w: key uses a reserved name", errUtils.ErrBlobInvalid))
 	}
 	return nil
-}
-
-// path maps a validated key to its file path.
-func (s *Store) path(key string) string {
-	return filepath.Join(s.root, filepath.FromSlash(key))
 }
 
 // checkContext fails fast when ctx is already done.

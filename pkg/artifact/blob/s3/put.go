@@ -36,6 +36,9 @@ func (p *putPlan) request(mutating bool) request {
 func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.PutOptions) (*blob.ObjectInfo, error) {
 	defer perf.Track(nil, "blob.s3.Put")()
 
+	if body == nil {
+		return nil, blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: nil body", errUtils.ErrBlobInvalid))
+	}
 	plan, err := s.planPut(ctx, key, opts)
 	if err != nil {
 		return nil, err
@@ -54,6 +57,9 @@ func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.P
 func (s *Store) planPut(ctx context.Context, key string, opts blob.PutOptions) (*putPlan, error) {
 	if err := s.validateKey(key); err != nil {
 		return nil, err
+	}
+	if opts.Size < blob.UnknownSize {
+		return nil, blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: invalid size %d", errUtils.ErrBlobInvalid, opts.Size))
 	}
 	tags := blob.MergeTags(s.cfg.tags, opts.Tags)
 	if err := blob.ValidateTags(tags); err != nil {
@@ -87,7 +93,10 @@ func effectivePartSize(size, partSize int64) int64 {
 	if size <= 0 {
 		return partSize
 	}
-	needed := (size + MaxParts - 1) / MaxParts
+	needed := size / MaxParts
+	if size%MaxParts != 0 {
+		needed++
+	}
 	return max(partSize, needed)
 }
 

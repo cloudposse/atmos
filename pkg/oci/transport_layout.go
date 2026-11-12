@@ -135,6 +135,8 @@ func (l *Layout) Exists(ctx context.Context, target ocispec.Descriptor) (bool, e
 // recorded as an unnamed root, because that is the only way its relationship to the
 // subject survives reopening the layout.
 func (l *Layout) Push(ctx context.Context, expected ocispec.Descriptor, content io.Reader) error {
+	defer perf.Track(nil, "oci.Layout.Push")()
+
 	err := l.store.Push(ctx, expected, content)
 	if err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
 		return layoutError(err)
@@ -168,6 +170,10 @@ func (l *Layout) recordAttachment(ctx context.Context, desc ocispec.Descriptor) 
 func (l *Layout) recordRoot(desc ocispec.Descriptor) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.recordRootLocked(desc)
+}
+
+func (l *Layout) recordRootLocked(desc ocispec.Descriptor) error {
 	for i := range l.index {
 		if l.index[i].Digest == desc.Digest {
 			return nil
@@ -197,16 +203,16 @@ func (l *Layout) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]o
 func (l *Layout) Tag(ctx context.Context, desc ocispec.Descriptor, reference string) error {
 	defer perf.Track(nil, "oci.Layout.Tag")()
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if err := l.store.Tag(ctx, desc, reference); err != nil {
 		return layoutError(err)
 	}
 	if reference == desc.Digest.String() {
 		// A digest reference is never named, but the root must still be listed or reopening the
 		// layout loses its media type and children.
-		return l.recordRoot(desc)
+		return l.recordRootLocked(desc)
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	// Copy the descriptor and its annotations so root metadata (artifact type, platform, other
 	// annotations) survives reopening without mutating the caller's descriptor.
 	named := desc
@@ -238,11 +244,11 @@ func withReference(entries []ocispec.Descriptor, named ocispec.Descriptor) []oci
 func (l *Layout) Untag(ctx context.Context, reference string) error {
 	defer perf.Track(nil, "oci.Layout.Untag")()
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if err := l.store.Untag(ctx, reference); err != nil {
 		return layoutError(err)
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	kept := l.index[:0:0]
 	for i := range l.index {
 		if l.index[i].Annotations[ocispec.AnnotationRefName] != reference {

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -196,3 +198,29 @@ func TestHTTPClientInjectionReachesTheSDK(t *testing.T) {
 type httpClientFunc func(*http.Request) (*http.Response, error)
 
 func (f httpClientFunc) Do(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestNamedIdentityReloadsRotatedCredentials(t *testing.T) {
+	headers := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers <- r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	creds := filepath.Join(t.TempDir(), "credentials")
+	write := func(key string) {
+		require.NoError(t, os.WriteFile(creds, []byte("[default]\naws_access_key_id = "+key+"\naws_secret_access_key = secret\n"), 0o600))
+	}
+	write("first-key")
+	resolver := &fakeResolver{result: &store.AWSAuthConfig{CredentialsFile: creds, Profile: "default", Region: "us-east-1"}}
+	s, err := New("artifacts", WithIdentity("deploy", resolver), WithEndpoint(server.URL))
+	require.NoError(t, err)
+	_, err = s.Stat(context.Background(), "file", blob.StatOptions{})
+	require.NoError(t, err)
+	assert.Contains(t, <-headers, "Credential=first-key/")
+	write("second-key")
+	_, err = s.Stat(context.Background(), "file", blob.StatOptions{})
+	require.NoError(t, err)
+	assert.Contains(t, <-headers, "Credential=second-key/")
+	assert.Equal(t, int32(2), resolver.calls.Load())
+}

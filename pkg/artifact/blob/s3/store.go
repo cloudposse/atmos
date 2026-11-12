@@ -77,8 +77,8 @@ func (s *Store) Capabilities() blob.Capabilities {
 	}
 }
 
-// client returns the S3 client, building it on first use. A failed build is not cached, so a
-// transient identity failure can be retried by the next operation.
+// client builds named-identity clients per operation so refreshed identity files and endpoint
+// configuration are observed. Injected clients and the default credential chain stay cached.
 func (s *Store) client(ctx context.Context) (API, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -89,8 +89,10 @@ func (s *Store) client(ctx context.Context) (API, error) {
 	if err != nil {
 		return nil, blob.NewError(blob.KindIdentity, "client", "", err)
 	}
-	s.api = client
-	return s.api, nil
+	if s.cfg.client.Identity == "" {
+		s.api = client
+	}
+	return client, nil
 }
 
 // validateKey applies the configured key rules.

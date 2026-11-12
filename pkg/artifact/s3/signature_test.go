@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -147,6 +148,9 @@ func TestSignature_SubjectBinding(t *testing.T) {
 	_, err := repo.Sign(context.Background(), wrongSize, newSigner(), artifact.SignOptions{})
 	require.ErrorIs(t, err, errUtils.ErrArtifactRefInvalid)
 
+	_, err = repo.Verify(context.Background(), wrongSize, newSigner().TrustedPolicy())
+	require.ErrorIs(t, err, errUtils.ErrArtifactRefInvalid)
+
 	badKind := subject
 	badKind.Kind = artifact.SubjectOCIRoot
 	_, err = repo.Sign(context.Background(), badKind, newSigner(), artifact.SignOptions{})
@@ -191,6 +195,15 @@ func TestSignature_ExportAndImportEvidenceAcrossRepositories(t *testing.T) {
 	require.Len(t, imported, 1)
 	assert.Equal(t, blobs[0].Evidence.Descriptor.Digest, imported[0].Descriptor.Digest, "re-import is idempotent")
 
+	wrongSize := blobs[0]
+	wrongSize.Evidence.Subject.Size++
+	_, err = source.WriteEvidence(context.Background(), &sourcePinned, []artifact.EvidenceBlob{wrongSize}, nil)
+	require.ErrorIs(t, err, errUtils.ErrArtifactRefInvalid)
+	wrongSize = blobs[0]
+	wrongSize.Evidence.Descriptor.Size++
+	_, err = source.WriteEvidence(context.Background(), &sourcePinned, []artifact.EvidenceBlob{wrongSize}, nil)
+	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
+
 	corrupted := blobs[0]
 	corrupted.Data = append([]byte(nil), corrupted.Data...)
 	corrupted.Data[0] ^= 0xff
@@ -221,4 +234,28 @@ func TestSignature_EvidenceFollowsTheRecordLifecycle(t *testing.T) {
 	_, err = repo.Delete(context.Background(), second.Pinned, artifact.DeleteOptions{Scope: artifact.DeleteObject})
 	require.NoError(t, err)
 	assert.Empty(t, managedKeys(spec.fake, "", currentDir), "delete removes the evidence the artifact exclusively owns")
+}
+
+func TestEvidenceExportFailsWhenAttemptsAreTruncated(t *testing.T) {
+	spec := signedSpec(t, noneSpec())
+	repo := newRepo(t, spec)
+	pinned := publish(t, repo, &prepareSpec{}, artifact.PublishOptions{}).Pinned
+	dir := layout.SignatureDir(artifact.SubjectRecord, pinned.RecordDigest)
+	for i := 0; i < maxEvidenceFiles+1; i++ {
+		spec.fake.Seed(fmt.Sprintf("%s/%064x.json", dir, i), []byte("bad"), nil)
+	}
+	loaded, diags, err := repo.loadEvidence(context.Background(), pinned.RecordDigest)
+	require.NoError(t, err)
+	assert.Empty(t, loaded)
+	require.Len(t, diags, maxEvidenceFiles+1)
+	assert.Equal(t, "evidence-truncated", diags[len(diags)-1].Code)
+	_, err = repo.ReadEvidence(context.Background(), &pinned)
+	require.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+}
+
+func TestFinishVerificationRejectsUnchecked(t *testing.T) {
+	base := &artifact.VerificationResult{Status: artifact.VerificationFailed}
+	result, err := finishVerification(base, &artifact.VerificationResult{Status: artifact.VerificationUnchecked}, nil)
+	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
+	assert.Equal(t, artifact.VerificationUnchecked, result.Status)
 }

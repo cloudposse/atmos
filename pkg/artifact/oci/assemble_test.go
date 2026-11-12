@@ -122,6 +122,14 @@ func TestAssemble_Rejections(t *testing.T) {
 			p.Blobs = append(p.Blobs, p.Blobs[0])
 			return p
 		}},
+		{"duplicate document", func(p *artifact.PreparedArtifact) *artifact.PreparedArtifact {
+			p.Blobs = append(p.Blobs, p.Blobs[1])
+			return p
+		}},
+		{"unknown blob role", func(p *artifact.PreparedArtifact) *artifact.PreparedArtifact {
+			p.Blobs[0].Role = "unknown"
+			return p
+		}},
 		{"document the Record does not describe", func(p *artifact.PreparedArtifact) *artifact.PreparedArtifact {
 			p.Blobs[1].DocumentRole = artifact.DocumentChangelog
 			p.Record.Documents = p.Record.Documents[:1]

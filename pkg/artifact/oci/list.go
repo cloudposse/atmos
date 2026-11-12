@@ -38,11 +38,11 @@ func (r *Repository) List(ctx context.Context, query artifact.ListQuery) (*artif
 		if cursor.skipsName(name) {
 			continue
 		}
-		items, err := r.entriesOf(ctx, name, query.Labels)
+		items, err := r.entriesOf(ctx, name, query.Labels, cursor)
 		if err != nil {
 			return nil, err
 		}
-		entries = append(entries, cursor.remaining(name, items)...)
+		entries = append(entries, items...)
 		if len(entries) > size {
 			last := entries[size-1]
 			return &artifact.ListPage{Entries: entries[:size], NextCursor: last.Name + cursorSeparator + last.Version}, nil
@@ -66,18 +66,8 @@ func parseCursor(raw string) listCursor {
 // skipsName reports whether every entry of name precedes the cursor.
 func (c listCursor) skipsName(name string) bool { return c.set && name < c.name }
 
-// remaining returns the entries of name that follow the cursor.
-func (c listCursor) remaining(name string, items []artifact.ListEntry) []artifact.ListEntry {
-	if !c.set || name != c.name {
-		return items
-	}
-	var rest []artifact.ListEntry
-	for index := range items {
-		if items[index].Version > c.version {
-			rest = append(rest, items[index])
-		}
-	}
-	return rest
+func (c listCursor) skipsVersion(name, version string) bool {
+	return c.set && name == c.name && version <= c.version
 }
 
 // namesFor returns the names to list: the requested one, or the enumerated collection.
@@ -93,7 +83,7 @@ func (r *Repository) namesFor(ctx context.Context, name string) ([]string, error
 
 // entriesOf lists the Atmos package versions of one name, sorted by version, that match labels.
 // Each tag costs a manifest read and a Record read, bounded by the configured concurrency.
-func (r *Repository) entriesOf(ctx context.Context, name string, labels []artifact.Label) ([]artifact.ListEntry, error) {
+func (r *Repository) entriesOf(ctx context.Context, name string, labels []artifact.Label, cursor listCursor) ([]artifact.ListEntry, error) {
 	versions, err := r.be.versions(ctx, name)
 	if err != nil {
 		return nil, err
@@ -103,7 +93,7 @@ func (r *Repository) entriesOf(ctx context.Context, name string, labels []artifa
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(r.settings.concurrency)
 	for index, version := range versions {
-		if artifact.ValidateVersion(version) != nil {
+		if cursor.skipsVersion(name, version) || artifact.ValidateVersion(version) != nil {
 			continue
 		}
 		group.Go(func() error {

@@ -27,11 +27,17 @@ func (a identityAdapter) ResolveAWSAuthContext(ctx context.Context, identity str
 	}
 	switch typed := value.(type) {
 	case *store.AWSAuthConfig:
-		if typed != nil {
+		if typed != nil && hasAWSIdentitySource(typed) {
 			return typed, nil
 		}
 	case store.AWSAuthConfig:
-		return &typed, nil
+		if hasAWSIdentitySource(&typed) {
+			return &typed, nil
+		}
 	}
 	return nil, fmt.Errorf("%w: identity %q did not resolve to AWS credentials (got %T)", errUtils.ErrBlobIdentityUnresolved, identity, value)
+}
+
+func hasAWSIdentitySource(config *store.AWSAuthConfig) bool {
+	return config.CredentialsFile != "" || config.ConfigFile != "" || config.Profile != ""
 }

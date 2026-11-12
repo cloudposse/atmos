@@ -256,21 +256,38 @@ func TestShowDocument_TamperedDocumentFailsItsDescriptor(t *testing.T) {
 	pinned := artifact.PinnedReference{Ref: exampleRef, ResolvedDigest: recordDigest, RecordDigest: recordDigest}
 	want := []byte("genuine readme")
 	descriptor := artifact.Document{Role: artifact.DocumentReadme, SourcePath: "README.md", MediaType: artifact.DocumentMediaType, Size: int64(len(want)), Digest: digest.FromBytes(want)}
-	_ = record
+	record.Documents = []artifact.Document{descriptor}
+	require.NoError(t, record.Seal())
+	recordDigest, err := record.RecordDigest()
+	require.NoError(t, err)
+	pinned.ResolvedDigest, pinned.RecordDigest = recordDigest, recordDigest
 
 	for name, content := range map[string][]byte{"altered bytes": []byte("tampered readme"), "oversize": bytes.Repeat([]byte("x"), int(artifact.MaxDocumentSize)+1)} {
 		t.Run(name, func(t *testing.T) {
 			m := newMockSetup(t, &caps)
 			m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(pinned, nil)
+			m.repo.EXPECT().Inspect(gomock.Any(), pinned).Return(&artifact.Inspection{Record: &record}, nil)
 			m.repo.EXPECT().OpenDocument(gomock.Any(), pinned, artifact.DocumentReadme).Return(&artifact.DocumentStream{Document: descriptor, Reader: io.NopCloser(bytes.NewReader(content))}, nil)
 			_, err := m.svc.ShowDocument(context.Background(), artifact.ShowDocumentRequest{Repository: "dst", Ref: exampleRef, Role: artifact.DocumentReadme})
 			require.Error(t, err)
 			assert.True(t, errors.Is(err, errUtils.ErrArtifactIntegrityFailed) || errors.Is(err, errUtils.ErrArtifactTooLarge), "%v", err)
 		})
 	}
+	t.Run("forged descriptor", func(t *testing.T) {
+		m := newMockSetup(t, &caps)
+		forged := []byte("forged readme")
+		other := descriptor
+		other.Size, other.Digest = int64(len(forged)), digest.FromBytes(forged)
+		m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(pinned, nil)
+		m.repo.EXPECT().Inspect(gomock.Any(), pinned).Return(&artifact.Inspection{Record: &record}, nil)
+		m.repo.EXPECT().OpenDocument(gomock.Any(), pinned, artifact.DocumentReadme).Return(&artifact.DocumentStream{Document: other, Reader: io.NopCloser(bytes.NewReader(forged))}, nil)
+		_, err := m.svc.ShowDocument(context.Background(), artifact.ShowDocumentRequest{Repository: "dst", Ref: exampleRef, Role: artifact.DocumentReadme})
+		require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
+	})
 	t.Run("open fails", func(t *testing.T) {
 		m := newMockSetup(t, &caps)
 		m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(pinned, nil)
+		m.repo.EXPECT().Inspect(gomock.Any(), pinned).Return(&artifact.Inspection{Record: &record}, nil)
 		m.repo.EXPECT().OpenDocument(gomock.Any(), pinned, artifact.DocumentReadme).Return(nil, errTransport)
 		_, err := m.svc.ShowDocument(context.Background(), artifact.ShowDocumentRequest{Repository: "dst", Ref: exampleRef, Role: artifact.DocumentReadme})
 		require.ErrorIs(t, err, errTransport)
@@ -377,7 +394,7 @@ func TestCopy_EvidenceCarryFailuresAreReported(t *testing.T) {
 	e.static.Repositories["src"] = failingEvidenceReader{Repository: e.repos["src"]}
 
 	result, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
-	require.NoError(t, err)
+	require.Error(t, err)
 	var warned bool
 	for _, diagnostic := range result.Diagnostics {
 		warned = warned || diagnostic.Code == "evidence-read-failed"

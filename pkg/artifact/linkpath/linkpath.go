@@ -13,7 +13,10 @@ import (
 )
 
 // maxLinkHops bounds the symlinks followed while resolving one path, so a loop terminates.
-const maxLinkHops = 255
+const (
+	maxLinkHops     = 255
+	parentComponent = ".."
+)
 
 // Resolve returns the physical absolute path that target refers to. It follows every symlink it
 // meets, like filepath.EvalSymlinks. Unlike EvalSymlinks, it also resolves a path whose tail does
@@ -34,10 +37,10 @@ func Resolve(target string) (string, bool) {
 	for len(w.pending) > 0 {
 		done, ok := w.step()
 		if done {
-			return w.resolved, ok
+			return filepath.Join(append([]string{w.resolved}, w.missing...)...), ok
 		}
 	}
-	return w.resolved, true
+	return filepath.Join(append([]string{w.resolved}, w.missing...)...), true
 }
 
 // walker resolves a path one component at a time.
@@ -51,6 +54,9 @@ type walker struct {
 	// pending holds the components still to resolve.
 	pending []string
 
+	// missing holds the lexical tail below the first missing component.
+	missing []string
+
 	// hops counts the symlinks followed.
 	hops int
 }
@@ -59,16 +65,19 @@ type walker struct {
 func (w *walker) step() (done, ok bool) {
 	component := w.pending[0]
 	w.pending = w.pending[1:]
-	if component == "." || component == ".." {
+	if len(w.missing) > 0 {
+		w.stepMissing(component)
+		return false, true
+	}
+	if component == "." || component == parentComponent {
 		w.resolved = stepDot(w.resolved, component)
 		return false, true
 	}
 	next := filepath.Join(w.resolved, component)
 	info, err := os.Lstat(next)
 	if errors.Is(err, fs.ErrNotExist) {
-		// Nothing below a missing component can be a symlink, so the rest is lexical.
-		w.resolved = filepath.Join(append([]string{next}, w.pending...)...)
-		return true, true
+		w.missing = append(w.missing, component)
+		return false, true
 	}
 	if err != nil {
 		return true, false
@@ -81,6 +90,17 @@ func (w *walker) step() (done, ok bool) {
 		return false, true
 	}
 	return w.follow(next)
+}
+
+// stepMissing resolves the missing tail lexically until it returns to an existing directory.
+func (w *walker) stepMissing(component string) {
+	switch component {
+	case ".":
+	case parentComponent:
+		w.missing = w.missing[:len(w.missing)-1]
+	default:
+		w.missing = append(w.missing, component)
+	}
 }
 
 // follow splices the target of the symlink at link in front of the pending components.
@@ -97,9 +117,9 @@ func (w *walker) follow(link string) (done, ok bool) {
 	return false, true
 }
 
-// stepDot applies a "." or ".." component to a fully resolved directory.
+// stepDot applies a current or parent directory component to a fully resolved directory.
 func stepDot(resolved, component string) string {
-	if component == ".." {
+	if component == parentComponent {
 		return filepath.Dir(resolved)
 	}
 	return resolved
@@ -121,7 +141,7 @@ func Within(root, target string) bool {
 	defer perf.Track(nil, "linkpath.Within")()
 
 	relative, err := filepath.Rel(root, target)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+	return err == nil && relative != parentComponent && !strings.HasPrefix(relative, parentComponent+string(filepath.Separator))
 }
 
 // splitComponents splits a path into its non-empty components.

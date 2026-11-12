@@ -436,7 +436,9 @@ func TestAdmit(t *testing.T) {
 		{"stale expected prior", AdmitInput{Current: &completed, IncomingRecord: digestC, ExpectedPrior: &artifact.PinnedReference{ResolvedDigest: digestC}, Force: true}, "", "", errUtils.ErrArtifactConflict},
 		{"exists but writer expected none", AdmitInput{Current: &completed, IncomingRecord: digestC, Force: true}, "", "", errUtils.ErrArtifactConflict},
 		{"same-intent pending first publication resumes", AdmitInput{Current: &pendingFirst, IncomingIntent: digestA}, AdmitResumeCreate, artifact.OutcomeCreated, nil},
-		{"same-intent pending replacement resumes", AdmitInput{Current: &pendingReplace, IncomingIntent: digestA}, AdmitResumeReplace, artifact.OutcomeReplaced, nil},
+		{"same-intent pending replacement resumes", AdmitInput{Current: &pendingReplace, IncomingIntent: digestA, ExpectedPrior: expectCurrent}, AdmitResumeReplace, artifact.OutcomeReplaced, nil},
+		{"stale pending replacement", AdmitInput{Current: &pendingReplace, IncomingIntent: digestA}, "", "", errUtils.ErrArtifactConflict},
+		{"unexpected prior for pending creation", AdmitInput{Current: &pendingFirst, IncomingIntent: digestA, ExpectedPrior: expectCurrent}, "", "", errUtils.ErrArtifactConflict},
 		{"different-intent pending names the operation", AdmitInput{Current: &pendingFirst, IncomingIntent: digestC}, "", "", errUtils.ErrArtifactPublicationUnavailable},
 		{"force never steals a different pending intent", AdmitInput{Current: &pendingReplace, IncomingIntent: digestC, Force: true}, "", "", errUtils.ErrArtifactPublicationUnavailable},
 	}
@@ -456,4 +458,20 @@ func TestAdmit(t *testing.T) {
 
 	_, err := Admit(&AdmitInput{Current: &pendingFirst, IncomingIntent: digestC})
 	require.ErrorContains(t, err, "op-1", "the recovery diagnostic includes the owning operation ID")
+}
+
+func TestPortableWindowsNames(t *testing.T) {
+	for _, name := range []string{"CON", "aux.txt", "com1", "lPt9.tar", "trailing.", "trailing "} {
+		_, err := CleanLocation("team/" + name)
+		require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath, name)
+	}
+	for _, id := range []string{"CON", "aux.txt", "COM1", "lpt9.tar"} {
+		assert.NotEqual(t, id, OperationFileName(id))
+	}
+	assert.Equal(t, "COM10", OperationFileName("COM10"))
+}
+
+func TestOperationRejectsUnsafePriorLocation(t *testing.T) {
+	op := &Operation{SchemaVersion: SchemaVersion, RepositoryKind: artifact.RepositoryKindLocalDir, OperationID: "op", Name: "team/app", Version: "1", CapturedAt: artifact.NewTimestamp(time.Now()), Location: "safe", Payload: []ocispec.Descriptor{}, Documents: []ocispec.Descriptor{}, Prior: &Prior{RecordDigest: digestA, Location: artifact.ReservedNamespace + "/unsafe"}}
+	require.Error(t, op.Validate())
 }

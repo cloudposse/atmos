@@ -401,3 +401,60 @@ func TestPublishWithDelegatedLockAlsoTakesLocalReferenceLock(t *testing.T) {
 	_, err = repo.Publish(ctx, prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: delegatedTestLock{}})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
+
+func TestPublishRejectsLockForAnotherReference(t *testing.T) {
+	repo := newRepo(t, dirSpec())
+	held, err := repo.Lock(context.Background(), lockRequest("other:1.0.0"))
+	require.NoError(t, err)
+	defer held.Release(context.Background())
+	_, err = repo.Publish(context.Background(), prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: held})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+}
+
+func TestWriteEvidenceHonorsReferenceLock(t *testing.T) {
+	repo := newRepo(t, dirSpec())
+	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
+	pinned := resolve(t, repo, defaultRef())
+	held, err := repo.Lock(context.Background(), lockRequest(testName+":"+testVersion))
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err = repo.WriteEvidence(ctx, &pinned, nil, nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	_, err = repo.WriteEvidence(context.Background(), &pinned, nil, held)
+	require.NoError(t, err)
+	require.NoError(t, held.Release(context.Background()))
+}
+
+func TestDelegatedMutationsAlsoTakeLocalReferenceLock(t *testing.T) {
+	repo := newRepo(t, signedSpec(dirSpec()))
+	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
+	pinned := resolve(t, repo, defaultRef())
+	subject := recordSubject(t, repo)
+	holder, err := repo.Lock(context.Background(), lockRequest(testName+":"+testVersion))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Release(context.Background()) })
+	for _, operation := range []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{"sign", func(ctx context.Context) error {
+			_, err := repo.Sign(ctx, subject, newSigner(), artifact.SignOptions{Lock: delegatedTestLock{}})
+			return err
+		}},
+		{"delete", func(ctx context.Context) error {
+			_, err := repo.Delete(ctx, pinned, artifact.DeleteOptions{Lock: delegatedTestLock{}})
+			return err
+		}},
+		{"write evidence", func(ctx context.Context) error {
+			_, err := repo.WriteEvidence(ctx, &pinned, nil, delegatedTestLock{})
+			return err
+		}},
+	} {
+		t.Run(operation.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			require.ErrorIs(t, operation.run(ctx), context.DeadlineExceeded)
+		})
+	}
+}

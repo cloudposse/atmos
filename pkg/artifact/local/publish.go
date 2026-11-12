@@ -55,7 +55,11 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 			err = releaseErr
 		}
 	}()
-	if _, localLock := options.Lock.(*fileLock); !localLock {
+	localLock, isLocalLock := options.Lock.(*fileLock)
+	if isLocalLock && localLock.Resource() != prepared.Record.Name+":"+prepared.Record.Version {
+		return nil, fmt.Errorf("%w: supplied lock does not cover reference %s:%s", errUtils.ErrArtifactConflict, prepared.Record.Name, prepared.Record.Version)
+	}
+	if !isLocalLock {
 		lock, lockErr := r.acquire(ctx, prepared.Record.Name+":"+prepared.Record.Version, r.settings.owner, job.opID)
 		if lockErr != nil {
 			return nil, lockErr
@@ -244,6 +248,16 @@ func (r *Repository) begin(ctx context.Context, t *tree, job *publishJob, plan *
 // reserve checks for location collisions and unmanaged content, then records the journal and the
 // pending reference.
 func (r *Repository) reserve(t *tree, job *publishJob, plan *publishPlan) (*layout.Reference, error) {
+	if err := r.rejectUnmanagedPrior(t, job, plan); err != nil {
+		return nil, err
+	}
+	existing, err := t.loadOperation(job.opID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil && layout.ReferenceKey(existing.Name, existing.Version) != job.key {
+		return nil, fmt.Errorf("%w: operation %s belongs to %s:%s", errUtils.ErrArtifactConflict, job.opID, existing.Name, existing.Version)
+	}
 	if err := r.checkCollision(t, job, plan); err != nil {
 		return nil, err
 	}
@@ -338,13 +352,28 @@ func (r *Repository) representation(job *publishJob) *layout.Representation {
 // Everything here is best-effort: the reference is already complete, and a leftover is garbage,
 // not an inconsistency.
 func (r *Repository) retire(t *tree, job *publishJob, plan *publishPlan) {
-	_ = t.removeAll(job.staging)
-	if plan.abandoned != "" && layout.FoldPath(plan.abandoned) != layout.FoldPath(job.location) {
+	removeStaging := true
+	if r.kind == artifact.RepositoryKindLocalDir && plan.prior != nil {
+		if record, _, err := t.loadRecord(plan.prior.RecordDigest); err != nil || checkOwnedDirectory(t, job.retiredDir()+"/payload", record) != nil {
+			removeStaging = false
+		}
+	}
+	if removeStaging {
+		_ = t.removeAll(job.staging)
+	}
+	if plan.abandoned != "" && layout.FoldPath(plan.abandoned) != layout.FoldPath(job.location) && r.kind != artifact.RepositoryKindLocalDir {
 		r.removePayload(t, plan.abandoned)
 	}
 	if plan.prior != nil {
 		if plan.prior.Location != "" && layout.FoldPath(plan.prior.Location) != layout.FoldPath(job.location) {
-			r.removePayload(t, plan.prior.Location)
+			if r.kind == artifact.RepositoryKindLocalDir {
+				if record, _, err := t.loadRecord(plan.prior.RecordDigest); err == nil {
+					_, _ = r.store.remove(t, &view{record: record, rep: &layout.Representation{Location: plan.prior.Location}})
+					t.removeEmptyParents(plan.prior.Location)
+				}
+			} else {
+				r.removePayload(t, plan.prior.Location)
+			}
 		}
 		if plan.prior.RecordDigest != "" && plan.prior.RecordDigest != job.recordDigest {
 			_ = t.removeAll(layout.RecordPath(plan.prior.RecordDigest))

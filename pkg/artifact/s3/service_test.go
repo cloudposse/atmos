@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/artifacttest"
 	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
 	"github.com/cloudposse/atmos/pkg/artifact/fixtures"
 	"github.com/cloudposse/atmos/pkg/artifact/local"
@@ -155,4 +156,27 @@ func TestService_ReconcilesALostResponseAfterCommit(t *testing.T) {
 	pulled, err := svc.Pull(context.Background(), artifact.PullRequest{Repository: "bucket-files", Ref: defaultRef(), Destination: filepath.Join(t.TempDir(), "out")})
 	require.NoError(t, err)
 	assert.Equal(t, artifact.OutcomeRead, pulled.Outcome)
+}
+
+// The shared service must hold both the subject lock and the canonical S3 reference lock.
+func TestService_SignAndDeleteS3ByDigest(t *testing.T) {
+	isolateAWS(t)
+	fake := s3test.NewServer(t)
+	registry := artifact.NewRepositoryRegistry()
+	require.NoError(t, RegisterWith(registry, WithVerifier(&artifacttest.FakeVerifier{})))
+	cfg := &schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
+		"bucket": {Kind: artifact.RepositoryKindS3, Packaging: "none", Options: map[string]any{"bucket": fake.Bucket(), "endpoint": fake.Endpoint(), "region": "us-east-1"}},
+	}}
+	svc, err := service.New(service.FromConfig(cfg, registry), nil, service.WithSigner(newSigner()), service.WithStagingRoot(t.TempDir()))
+	require.NoError(t, err)
+	source := t.TempDir()
+	fixtures.WriteFilePackage(t, source)
+	published, err := svc.Publish(context.Background(), artifact.PublishRequest{Repository: "bucket", Source: source, Name: testName, Version: testVersion})
+	require.NoError(t, err)
+	ref := artifact.Ref{Name: testName, Digest: published.RecordDigest}
+	_, err = svc.Sign(context.Background(), artifact.SignRequest{Repository: "bucket", Ref: ref})
+	require.NoError(t, err)
+	deleted, err := svc.Delete(context.Background(), artifact.DeleteRequest{Repository: "bucket", Ref: ref})
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeDeleted, deleted.Outcome)
 }

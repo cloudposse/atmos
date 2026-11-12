@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact/blob"
@@ -36,9 +35,9 @@ func classifyCopy(key string, err error) error {
 
 // classifyCreate explains why a temporary file could not be created beside target. An existing
 // object occupying a parent path is a key conflict, which the filesystem cannot represent.
-func (s *Store) classifyCreate(key, target string, err error) error {
-	for dir := filepath.Dir(target); strings.HasPrefix(dir, s.root) && dir != s.root; dir = filepath.Dir(dir) {
-		if info, statErr := os.Stat(dir); statErr == nil && !info.IsDir() {
+func (s *Store) classifyCreate(root *os.Root, key, target string, err error) error {
+	for dir := filepath.Dir(target); dir != "."; dir = filepath.Dir(dir) {
+		if info, statErr := root.Stat(dir); statErr == nil && !info.IsDir() {
 			return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: a parent path is an existing object", errUtils.ErrBlobInvalid))
 		}
 	}

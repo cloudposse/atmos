@@ -42,13 +42,23 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	if err := checkSigningCapability(request.Repository, &info, s.signer, subject); err != nil {
 		return err
 	}
-	locks, err := s.acquireLocks(ctx, op, opSign, []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: request.Ref.String()}})
+	subjectResource := subjectLockResource(request.Ref.Name)
+	resource := subjectResource
+	targets := []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: subjectResource}}
+	if inspection.Record != nil {
+		resource = inspection.Record.Name + ":" + inspection.Record.Version
+		targets = append(targets, lockTarget{alias: request.Repository, repo: repo, info: &info, resource: resource})
+	}
+	locks, err := s.acquireLocks(ctx, op, opSign, targets)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = locks.release(ctx, op) }()
 
-	evidence, err := repo.Sign(ctx, subject, s.signer, artifact.SignOptions{OperationID: op.id, Lock: locks.handleFor(request.Repository)})
+	if err := verifyLockedSubject(ctx, repo, request.Ref, &pinned); err != nil {
+		return err
+	}
+	evidence, err := repo.Sign(ctx, subject, s.signer, artifact.SignOptions{OperationID: op.id, Lock: locks.handleForResource(request.Repository, resource)})
 	if err != nil {
 		return fmt.Errorf("sign %s in repository %q: %w", request.Ref, request.Repository, err)
 	}
@@ -59,6 +69,17 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	op.result.Outcome = artifact.OutcomeCreated
 	op.result.LockScope = locks.scope()
 	op.info("signed-not-verified", "the subject is signed; signing alone does not verify it against trust policy, use verify")
+	return nil
+}
+
+func verifyLockedSubject(ctx context.Context, repo artifact.Repository, ref artifact.Ref, pinned *artifact.PinnedReference) error {
+	current, err := repo.Resolve(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("resolve %s after locking: %w", ref, err)
+	}
+	if current.ResolvedDigest != pinned.ResolvedDigest || current.RecordDigest != pinned.RecordDigest {
+		return fmt.Errorf("%w: subject %s changed while acquiring its lock", errUtils.ErrArtifactConflict, ref)
+	}
 	return nil
 }
 

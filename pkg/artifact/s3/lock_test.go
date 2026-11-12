@@ -330,3 +330,52 @@ func TestLockNamespaceIncludesEndpoint(t *testing.T) {
 	assert.NotEqual(t, first.LockNamespace(), second.LockNamespace())
 	assert.Equal(t, first.LockNamespace(), (&first).LockNamespace())
 }
+
+func TestSettleClaimDoesNotRetryBehindForeignOwner(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	ctx := context.Background()
+	other, err := repo.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "other"})
+	require.NoError(t, err)
+	defer other.Release(ctx)
+	before := len(spec.fake.RequestsFor(s3test.OpPutObject))
+	handle, err := repo.settleClaim(ctx, layout.LockPath(lockResource), &claimDoc{Resource: lockResource, Owner: "original", Token: "original-token"})
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+	assert.Nil(t, handle)
+	assert.Len(t, spec.fake.RequestsFor(s3test.OpPutObject), before, "a foreign claim does not prove the original request has finished")
+}
+
+func TestFenceAdoptsOriginalClaimThatWonTheRace(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	ctx := context.Background()
+	key := layout.LockPath(lockResource)
+	doc := &claimDoc{SchemaVersion: layout.SchemaVersion, Resource: lockResource, Owner: "original", Token: "original-token"}
+	raw, err := json.Marshal(doc)
+	require.NoError(t, err)
+	_, err = repo.putConditional(ctx, key, raw, contentTypeJSON, blob.IfAbsent())
+	require.NoError(t, err)
+	handle, err := repo.fenceUnknownClaim(ctx, ctx, key, doc)
+	require.NoError(t, err)
+	require.NotNil(t, handle)
+	assert.Equal(t, doc.Token, handle.Token())
+	require.NoError(t, handle.Release(ctx))
+}
+
+func TestPublishWithDelegatedClaimAlsoTakesTargetReferenceClaim(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec.withOpts(WithLockWait(time.Second)))
+	coordinator := newRepo(t, spec)
+	ctx := context.Background()
+	reference := testName + ":" + testVersion
+	holder, err := repo.Lock(ctx, artifact.LockRequest{Resource: reference, Owner: "direct"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Release(ctx) })
+	delegate, err := coordinator.Lock(ctx, artifact.LockRequest{Resource: "delegated/" + reference, Owner: "delegated"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = delegate.Release(ctx) })
+	wait, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	_, err = repo.Publish(wait, prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: delegate})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}

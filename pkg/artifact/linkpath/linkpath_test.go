@@ -29,6 +29,7 @@ func TestResolve(t *testing.T) {
 	require.True(t, fixtures.Symlink(t, root, "tree/to-real", "real"))
 	require.True(t, fixtures.Symlink(t, root, "tree/dangling", "real/missing/deeper"))
 	require.True(t, fixtures.Symlink(t, root, "tree/escapes", "up/../outside/missing"))
+	require.True(t, fixtures.Symlink(t, root, "tree/missing-return", "absent/../up/../outside"))
 	require.True(t, fixtures.Symlink(t, root, "tree/loop-a", "loop-b"))
 	require.True(t, fixtures.Symlink(t, root, "tree/loop-b", "loop-a"))
 
@@ -43,6 +44,7 @@ func TestResolve(t *testing.T) {
 		{"dangling tail stays lexical under the link target", filepath.Join(root, "tree", "dangling"), filepath.Join(root, "tree", "real", "missing", "deeper"), true},
 		{"dangling tail walking out through a link", filepath.Join(root, "tree", "escapes"), filepath.Join(filepath.Dir(root), "outside", "missing"), true},
 		{"missing path is lexical", filepath.Join(root, "tree", "absent", "..", "other"), filepath.Join(root, "tree", "other"), true},
+		{"missing tail returns to physical resolution", filepath.Join(root, "tree", "missing-return"), filepath.Join(filepath.Dir(root), "outside"), true},
 		{"loop", filepath.Join(root, "tree", "loop-a"), "", false},
 		{"through a regular file", filepath.Join(root, "tree", "real", "file.txt", "child"), "", false},
 	}
