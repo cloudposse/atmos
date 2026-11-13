@@ -30,7 +30,7 @@ def seed():
             "message": "Seed Atmos infrastructure and catalog",
             "path": [".gitignore", "atmos.yaml", "catalog", "components", "stacks", ".gitea", "ci"],
         })
-        atmos.git("push", "deployments")
+    atmos.git("push", "deployments")
     ui.success("Git repository ready: http://localhost:3001/atmos/deployments")
 
 def publish_request(name):

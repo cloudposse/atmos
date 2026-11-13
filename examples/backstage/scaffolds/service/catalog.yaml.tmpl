@@ -1,7 +1,7 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: {{ .Config.service_name }}
+  name: "{{ .Config.service_name }}"
   description: Service with an S3 bucket provisioned by Atmos in the local AWS emulator.
   annotations:
     backstage.io/techdocs-entity: component:default/payments

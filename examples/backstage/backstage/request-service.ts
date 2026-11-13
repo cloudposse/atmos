@@ -44,6 +44,10 @@ export function createServiceRequestAction() {
     },
     async handler(ctx) {
       const name = ctx.input.name;
+      // Reserved by catalog/entities.yaml as component:default/payments.
+      if (name === 'payments') {
+        throw new Error('Service payments already exists in the seed catalog. Choose a new name.');
+      }
       const branch = `request-${name}`;
       const stackPath = `stacks/deploy/services/${name}.yaml`;
       if (await exists(`/contents/${stackPath}?ref=main`)) {

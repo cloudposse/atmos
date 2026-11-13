@@ -82,6 +82,14 @@ commands:
               atmos.emulator("down", "backstage-aws", flags = {"stack": "local"})
               atmos.emulator("down", "backstage-git", flags = {"stack": "local"})
               atmos.git("clean", "deployments", flags = {"force": True})
+              # Rootful Linux runners create state the host user cannot delete.
+              # Stop the runner first, then clean only this demo's mounted CI data.
+              cleanup = exec.run(["rm", "-rf", ".atmos/ci"], check = False, output = "capture")
+              if cleanup.exit_code != 0:
+                  exec.run(["docker", "run", "--rm", "--user", "0:0",
+                            "--mount", "type=bind,src=" + fs.resolve(".atmos/ci") + ",dst=/cleanup",
+                            "--entrypoint", "find", "atmos-backstage-runner:local",
+                            "/cleanup", "-mindepth", "1", "-delete"])
               exec.run(["rm", "-rf", ".atmos/ci"])
       - name: logs
         description: Show Backstage logs
