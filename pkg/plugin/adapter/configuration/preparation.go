@@ -96,11 +96,8 @@ func rejectSavedPlan(info *schema.ConfigAndStacksInfo) error {
 // granted, after checking module ownership and engine selection. Only an explicit --command
 // flag may switch the engine discovered from the global configuration.
 func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
-	if err := checkSourceOverride(info, selected.instance); err != nil {
+	if err := checkProviderSelection(info, selected.instance); err != nil {
 		return nil, err
-	}
-	if engine := expectedEngine(info, selected.instance); engine != selected.instance.Engine && info.ComponentCommand == "" {
-		return nil, engineMismatch(info, selected.instance.Engine, engine)
 	}
 	if err := s.checkPreparationDependencies(ctx, selected.instance, selected.request.Invocation.Environment, info.SubCommand); err != nil {
 		return nil, err
@@ -114,27 +111,51 @@ func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAnd
 	// sensitive(run_cmd(...)) at debug level, so the inputs are registered for masking first.
 	// Reject malformed or unknown inputs before rendering any response content: until
 	// they decode successfully, their sensitive values cannot be registered safely.
-	if _, err := adapter.DecodeInputs(result.GetInputs()); err != nil {
+	if err := s.renderPreparationLogs(info, selected, result); err != nil {
 		return nil, err
 	}
-	adapter.RenderLogs(logScope(selected.request, info, &s.warnings), result.GetLogs())
 	if nanos := result.GetRegistryResolutionNanos(); nanos > 0 && nanos <= uint64(math.MaxInt64) {
 		perf.ObserveExternal("atmosbridge.ResolveRegistrySource", time.Duration(nanos))
 	}
-	// An error diagnostic fails the preparation; warnings are printed below.
-	for _, diagnostic := range result.Diagnostics {
-		if err = adapter.DiagnosticError(diagnostic); err != nil {
-			return nil, err
-		}
-	}
-	// The provider prepares for the binary it is given, so any other engine is a protocol violation.
-	if result.Engine != expectedEngine(info, selected.instance) {
-		return nil, errUtils.ErrPluginProtocol
+	if err := validatePreparationResponse(info, selected.instance, result); err != nil {
+		return nil, err
 	}
 	if result.State != nil {
 		s.prepared.Store(addressKey(selected.instance.Address), proto.Clone(result.State))
 	}
 	return result, nil
+}
+
+func validatePreparationResponse(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent, result *pluginv1.PrepareComponentResponse) error {
+	// An error diagnostic fails the preparation; warnings are printed by the caller.
+	for _, diagnostic := range result.Diagnostics {
+		if err := adapter.DiagnosticError(diagnostic); err != nil {
+			return err
+		}
+	}
+	// The provider prepares for the binary it is given, so any other engine is a protocol violation.
+	if result.Engine != expectedEngine(info, instance) {
+		return errUtils.ErrPluginProtocol
+	}
+	return nil
+}
+
+func checkProviderSelection(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent) error {
+	if err := checkSourceOverride(info, instance); err != nil {
+		return err
+	}
+	if engine := expectedEngine(info, instance); engine != instance.Engine && info.ComponentCommand == "" {
+		return engineMismatch(info, instance.Engine, engine)
+	}
+	return nil
+}
+
+func (s *Session) renderPreparationLogs(info *schema.ConfigAndStacksInfo, selected *selectedComponent, result *pluginv1.PrepareComponentResponse) error {
+	if _, err := adapter.DecodeInputs(result.GetInputs()); err != nil {
+		return err
+	}
+	adapter.RenderLogs(logScope(selected.request, info, &s.warnings), result.GetLogs())
+	return nil
 }
 
 // logScope names the component and stack a plugin's log events belong to.

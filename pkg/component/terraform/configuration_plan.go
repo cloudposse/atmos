@@ -501,15 +501,6 @@ func verifyConfigurationPlanState(ctx context.Context, config *schema.AtmosConfi
 	return nil
 }
 
-// excludedWorkdirFile reports a file the working directory digest ignores: the plan and its
-// binding, Terraform's cache outside downloaded modules, and runtime files outside modules.
-func excludedWorkdirFile(root, path, planPath, name string) bool {
-	if path == planPath || path == planPath+configurationPlanSuffix || insideTerraformCacheOutsideModules(root, path) {
-		return true
-	}
-	return !insideTerraformModules(root, path) && ignoredWorkdirFile(path, planPath, name)
-}
-
 // configurationWorkdirDigest binds retained module/configuration bytes, excluding mutable execution data.
 func configurationWorkdirDigest(root, planPath string) (string, error) {
 	return workdirDigest(root, planPath, nil)
