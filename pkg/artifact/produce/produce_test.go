@@ -535,6 +535,22 @@ func TestFilesProducer_SingleFileDocumentEscapingThroughSymlink(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
 }
 
+func TestFilesProducer_SingleFileDocumentThroughSymlinkInsideTheSourceDirectory(t *testing.T) {
+	dir := t.TempDir()
+	fixtures.WriteFile(t, dir, "tool.bin", "x", 0o644)
+	fixtures.MkdirAll(t, dir, "docs")
+	fixtures.WriteFile(t, dir, "docs/NOTES.md", "inside notes", 0o644)
+	if err := os.Symlink("docs", filepath.Join(dir, "alias")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	req := request(filepath.Join(dir, "tool.bin"), artifact.PackagingNone)
+	req.Readme = "alias/NOTES.md"
+	prepared, _ := prepare(t, req)
+	require.Len(t, prepared.Record.Documents, 1)
+	assert.Equal(t, "alias/NOTES.md", prepared.Record.Documents[0].SourcePath)
+	assert.Equal(t, int64(len("inside notes")), prepared.Record.Documents[0].Size)
+}
+
 func TestFilesProducer_InvalidPackagesFailBeforeAnythingIsKept(t *testing.T) {
 	tests := []struct {
 		name  string

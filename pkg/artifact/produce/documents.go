@@ -212,34 +212,26 @@ func readSiblingDocument(source string, role artifact.DocumentRole, rel string) 
 	if relative, err := filepath.Rel(parent, full); err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("%w: %s file %q resolves outside the source directory", errUtils.ErrArtifactUnsafePath, role, rel)
 	}
-	info, err := os.Lstat(full)
+	// Open the document through a handle on the checked parent directory so a parent that is
+	// replaced after the containment check above cannot redirect the read outside it.
+	root, err := os.OpenRoot(parent)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s file %q: %w", errUtils.ErrArtifactPackagingInvalid, role, rel, err)
+	}
+	defer root.Close()
+	file, err := root.Open(filepath.FromSlash(rel))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s file %q: %w", errUtils.ErrArtifactPackagingInvalid, role, rel, err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%w: %s file %q is not a regular file", errUtils.ErrArtifactPackagingInvalid, role, rel)
 	}
 	if info.Size() > artifact.MaxDocumentSize {
 		return nil, fmt.Errorf("%w: %s is %d bytes; the limit is %d", errUtils.ErrArtifactTooLarge, rel, info.Size(), artifact.MaxDocumentSize)
 	}
-	file, err := openChecked(full, info)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s file %q: %w", errUtils.ErrArtifactPackagingInvalid, role, rel, err)
-	}
-	defer file.Close()
 	return readBounded(file, rel)
-}
-
-// openChecked opens full and confirms the opened file is the regular file that was inspected, so a
-// path replaced by a symlink between the check and the open is never read.
-func openChecked(full string, inspected os.FileInfo) (*os.File, error) {
-	file, err := os.Open(full)
-	if err != nil {
-		return nil, err
-	}
-	opened, err := file.Stat()
-	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(inspected, opened) {
-		_ = file.Close()
-		return nil, fmt.Errorf("%w: the file changed while it was being read", errUtils.ErrArtifactSourceChanged)
-	}
-	return file, nil
 }
 
 func readBounded(reader io.Reader, name string) ([]byte, error) {
