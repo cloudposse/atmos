@@ -27,6 +27,9 @@ var (
 	ErrMalformedRegistryVersion = errors.New("malformed Terraform registry version")
 	// ErrRegistryVersionConstraint identifies a constraint in an exact-version query.
 	ErrRegistryVersionConstraint = errors.New("Terraform registry version constraint requires the terraform block")
+	// ErrRegistryLookup identifies a failure of the registry protocol: service discovery, version
+	// lookup, the X-Terraform-Get header, or the download URL it names. The upstream error is kept.
+	ErrRegistryLookup = errors.New("Terraform registry lookup failed")
 )
 
 // RegistryRequest describes one `tfr://` module source to resolve.
@@ -92,7 +95,7 @@ func ResolveRegistrySourceWithAuth(ctx context.Context, logger log.Logger, reque
 	}
 	base, err := getter.GetModuleRegistryURLBasePath(ctx, logger, client, auth, domain)
 	if err != nil {
-		return RegistryResolution{}, err
+		return RegistryResolution{}, fmt.Errorf("%w: service discovery for %s: %w", ErrRegistryLookup, domain, err)
 	}
 	modulePath, moduleSubdir := getter.SourceDirSubdir(source.Path)
 	version, err := registryVersion(ctx, logger, client, auth, request, source, domain, base, modulePath)
@@ -101,15 +104,15 @@ func ResolveRegistrySourceWithAuth(ctx context.Context, logger log.Logger, reque
 	}
 	moduleURL, err := getter.BuildRequestURL(domain, base, modulePath, version)
 	if err != nil {
-		return RegistryResolution{}, err
+		return RegistryResolution{}, fmt.Errorf("%w: module URL for %s: %w", ErrRegistryLookup, modulePath, err)
 	}
 	header, err := getter.GetTerraformGetHeader(ctx, logger, client, auth, moduleURL)
 	if err != nil {
-		return RegistryResolution{}, err
+		return RegistryResolution{}, fmt.Errorf("%w: download header for %s: %w", ErrRegistryLookup, modulePath, err)
 	}
 	download, err := getter.GetDownloadURLFromHeader(moduleURL, header)
 	if err != nil {
-		return RegistryResolution{}, err
+		return RegistryResolution{}, fmt.Errorf("%w: download URL for %s: %w", ErrRegistryLookup, modulePath, err)
 	}
 	archive, subdir := getter.SourceDirSubdir(download)
 	resolution := RegistryResolution{Source: withSubdir(archive, path.Join(subdir, moduleSubdir))}
@@ -165,10 +168,17 @@ func registryVersion(ctx context.Context, logger log.Logger, client *http.Client
 		}
 		return versions[0], nil
 	}
+	var version string
+	var err error
 	if request.Constraint != "" {
-		return getter.GetMatchingModuleVersion(ctx, logger, client, auth, domain, base, modulePath, request.Constraint)
+		version, err = getter.GetMatchingModuleVersion(ctx, logger, client, auth, domain, base, modulePath, request.Constraint)
+	} else {
+		version, err = getter.GetLatestModuleVersion(ctx, logger, client, auth, domain, base, modulePath)
 	}
-	return getter.GetLatestModuleVersion(ctx, logger, client, auth, domain, base, modulePath)
+	if err != nil {
+		return "", fmt.Errorf("%w: version of %s: %w", ErrRegistryLookup, modulePath, err)
+	}
+	return version, nil
 }
 
 // withSubdir appends `//subdir` to the path of a getter URL, ahead of its query, which is where go-getter reads it.

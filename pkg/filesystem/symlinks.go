@@ -2,6 +2,8 @@ package filesystem
 
 import (
 	"path/filepath"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // EvalSymlinksBestEffort resolves symlinks in path even when the full path
@@ -10,6 +12,8 @@ import (
 // missing paths, and changed or deleted files routinely do not exist.
 // A path with no resolvable ancestor is returned unchanged.
 func EvalSymlinksBestEffort(path string) string {
+	defer perf.Track(nil, "filesystem.EvalSymlinksBestEffort")()
+
 	remainder := ""
 	current := path
 	for {

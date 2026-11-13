@@ -156,6 +156,32 @@ func TestRemoteStateEncryptionRejectsTerraform(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestRemoteStateEncryptionChecksTheUnitExecutable checks that a unit's terraform_binary, not the host's
+// default executable, decides whether the encryption block is supported.
+func TestRemoteStateEncryptionChecksTheUnitExecutable(t *testing.T) {
+	for _, test := range []struct {
+		name, unit, host string
+		rejected         bool
+	}{
+		{name: "unit OpenTofu over host Terraform", unit: "/opt/bin/tofu", host: "/opt/bin/terraform"},
+		{name: "unit Terraform over host OpenTofu", unit: "/opt/bin/terraform", host: "/opt/bin/tofu", rejected: true},
+		{name: "host executable without a unit binary", host: "/opt/bin/tofu"},
+		{name: "host Terraform without a unit binary", host: "/opt/bin/terraform", rejected: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := &model.Resolution{Path: "unit/terragrunt.hcl", TerraformBinary: test.unit}
+			err := checkEncryption(true, true, result, &model.Request{Tofu: test.host})
+			if !test.rejected {
+				require.NoError(t, err)
+				return
+			}
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, "remote_state.encryption", problem.Key)
+		})
+	}
+}
+
 func TestRemoteStateEncryptionWithoutGenerateWarns(t *testing.T) {
 	request := nativeUnit(t, encryptedBackend(""))
 	request.Tofu = "/opt/bin/terraform"

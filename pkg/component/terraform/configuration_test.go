@@ -244,6 +244,7 @@ func TestApplyIAMRoleExportsTheSessionToTheComponent(t *testing.T) {
 	require.Equal(t, awsidentity.InlineRole{Role: "arn:aws:iam::1:role/x", SessionName: "s", Duration: 30 * time.Minute}, recorded.role)
 	require.Equal(t, []string{"AWS_PROFILE=atmos", "PATH=/bin", "TF_IN_AUTOMATION=true"}, recorded.environ, "the role is assumed on top of the invocation's own credentials")
 	require.Equal(t, []string{"TF_IN_AUTOMATION=true", "AWS_ACCESS_KEY_ID=ASIASESSION", "AWS_PROFILE=", "AWS_SESSION_TOKEN=session-token"}, info.ComponentEnvList)
+	require.Equal(t, map[string]string{"AWS_ACCESS_KEY_ID": "ASIASESSION", "AWS_SESSION_TOKEN": "session-token", "AWS_PROFILE": ""}, info.IAMSession, "source downloads use the same session")
 }
 
 func TestApplyIAMRoleIsSkippedForAnExplicitIdentity(t *testing.T) {
@@ -260,6 +261,7 @@ func TestApplyIAMRoleIsSkippedForAnExplicitIdentity(t *testing.T) {
 			info.Stack, info.ComponentFromArg = "live/dev", "app"
 			require.NoError(t, applyIAMRole(t.Context(), info, iam))
 			require.Empty(t, info.ComponentEnvList, "the selected identity decides who the component runs as")
+			require.Nil(t, info.IAMSession, "source downloads keep the selected identity")
 		})
 	}
 	require.Zero(t, recorded.calls)

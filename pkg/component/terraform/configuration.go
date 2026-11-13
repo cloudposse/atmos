@@ -258,7 +258,8 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 var assumeInlineRole = awsidentity.AssumeInlineRole
 
 // applyIAMRole assumes the role a component asks for, on top of the credentials of the invocation, and
-// exports the session to every command the component runs. An Atmos identity that the user selected
+// exports the session to every command the component runs, and to in-process source downloads, as Terragrunt
+// fetches a unit's source with the assumed role. An Atmos identity that the user selected
 // explicitly decides who the component runs as, so it replaces the role instead of being layered under it.
 // The session lives only in the environment of this invocation: it is neither written to a file nor to a
 // saved plan, and it is registered with the output masker.
@@ -286,6 +287,7 @@ func applyIAMRole(ctx context.Context, info *schema.ConfigAndStacksInfo, iam *sc
 	for _, key := range slices.Sorted(maps.Keys(session)) {
 		info.ComponentEnvList = append(info.ComponentEnvList, key+"="+session[key])
 	}
+	info.IAMSession = session
 	return nil
 }
 

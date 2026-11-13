@@ -2136,6 +2136,9 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvList          []string
 	// SourceAuthorization is an invocation-only header for a resolved registry archive.
 	SourceAuthorization *SourceAuthorization `json:"-" yaml:"-" mapstructure:"-"`
+	// IAMSession is the invocation-only AWS session of a role the component configuration assumed.
+	// In-process source downloads use it so they run as the same principal as the component's commands.
+	IAMSession map[string]string `json:"-" yaml:"-" mapstructure:"-"`
 	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
 	// whose value contains a resolved secret (detected via the masker). These variables
 	// are excluded from the on-disk Terraform varfile and injected at runtime as

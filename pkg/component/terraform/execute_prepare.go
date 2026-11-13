@@ -51,6 +51,7 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 	defer cancel()
 	ctx = e.withInitFromModule(ctx, atmosConfig, info)
 	ctx = downloader.WithSourceAuthorization(ctx, info.SourceAuthorization)
+	ctx = downloader.WithAWSSession(ctx, info.IAMSession)
 	componentPath, componentPathExists, err := provisionAndResolveTerraformComponentPath(
 		ctx, writers, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)

@@ -552,7 +552,7 @@ func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
 	require.Equal(t, []string{
 		"tflint", "--config", tflintConfigSearchPrefix + root, "--chdir", ".",
 		"--var=count=2", "--var=name=web",
-		"--var=zone=a", "--var=region=eu", "--var-file=required.tfvars",
+		"--var=region=eu", "--var-file=required.tfvars",
 		"--minimum-failure-severity=error",
 	}, lintHook.Execute)
 	require.Equal(t, "lint", initHook.Name)
@@ -670,8 +670,11 @@ func TestTflintVariablesFromExtraArguments(t *testing.T) {
 		{Commands: []string{"apply"}, Arguments: []string{"-var=ignored=1"}},
 		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false", "-var", "c=3", "-var-file", "d.tfvars"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
 	}}
-	require.Equal(t, []string{"--var=b=2", "--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", tflintOptionalVarFilePrefix + existing, tflintOptionalVarFilePrefix + "absent.tfvars"}, tflintExtraVariables("plan", execution))
+	require.Equal(t, []string{"--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", tflintOptionalVarFilePrefix + existing, tflintOptionalVarFilePrefix + "absent.tfvars"}, tflintExtraVariables("plan", execution))
 	require.Equal(t, []string{"--var=ignored=1"}, tflintExtraVariables("apply", execution))
+	require.Empty(t, tflintExtraVariables("plan", &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Environment: map[string]string{"TF_VAR_b": "2"}},
+	}}), "TFLint reads TF_VAR_ from the hook environment, below terraform.tfvars")
 }
 
 func TestTflintHookScopesExtraArgumentsToEachCommand(t *testing.T) {
