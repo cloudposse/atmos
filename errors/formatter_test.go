@@ -250,6 +250,12 @@ func TestShouldUseColorInCI(t *testing.T) {
 func TestFormatInCIUsesColorUnlessDisabled(t *testing.T) {
 	t.Setenv("CI", "true")
 	t.Setenv("NO_COLOR", "")
+	// TERM=dumb intentionally disables automatic CI styling.
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("CLICOLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("FORCE_COLOR", "")
+	t.Setenv("ATMOS_FORCE_COLOR", "")
 
 	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
