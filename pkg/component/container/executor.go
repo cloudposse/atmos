@@ -349,7 +349,10 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if r.spec.Run == nil || strings.TrimSpace(r.spec.Run.Command) == "" {
 		return fmt.Errorf("%w: component %q has no run.command for run", errUtils.ErrComponentConfigInvalid, r.component)
 	}
-	ports := r.spec.Ports()
+	ports, err := r.spec.Ports()
+	if err != nil {
+		return err
+	}
 	if r.dryRun {
 		ui.Infof("[dry-run] run %s: %s", image, r.spec.Run.Command)
 		return nil
@@ -398,7 +401,10 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	ports := r.spec.Ports()
+	ports, err := r.spec.Ports()
+	if err != nil {
+		return err
+	}
 	command, err := r.spec.CommandArgs()
 	if err != nil {
 		return err
