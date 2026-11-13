@@ -273,6 +273,32 @@ func (r *reviewedRebuild) verify(workdir string) error {
 	return nil
 }
 
+// downloadedModulesDir is where `init` and `get` install child modules.
+var downloadedModulesDir = filepath.Join(".terraform", "modules")
+
+// hasDownloadedModules reports whether a workdir holds downloaded child modules.
+func hasDownloadedModules(workdir string) bool {
+	info, err := os.Stat(filepath.Join(workdir, downloadedModulesDir))
+	return err == nil && info.IsDir()
+}
+
+// installReviewedModules downloads the child modules of a reviewed plan into the rebuilt workdir before it
+// is verified, as `init` did before the plan was made. The modules stay covered by RebuildDigest, so a
+// source that now resolves to different code fails verification instead of being applied; nothing is
+// restored from the plan artifacts.
+func (e *Executor) installReviewedModules(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rebuild *reviewedRebuild, workdir string) error {
+	if rebuild == nil || !rebuild.plan.Modules || info.DryRun {
+		return nil
+	}
+	if err := e.services.ExecuteShellCommand(*atmosConfig, info.Command, []string{"get"}, workdir, info.ComponentEnvList, false, info.RedirectStdErr); err != nil {
+		return errUtils.Build(fmt.Errorf("%w: downloading the reviewed child modules: %w", errUtils.ErrPlanVerificationFailed, err)).
+			WithExplanation("The reviewed plan uses downloaded child modules, which must be downloaded again and match before the plan is applied.").
+			WithHint("Check that the module sources are reachable from this runner, or apply on the runner that created the plan.").
+			Err()
+	}
+	return nil
+}
+
 // rebuildReviewedWorkdir re-provisions the working directory of a reviewed plan on a runner that only
 // holds the restored artifacts. The caller verifies the result once execution has written its own
 // files (generated backend configuration), before anything runs.

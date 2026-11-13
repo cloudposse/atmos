@@ -72,6 +72,9 @@ func (e *Executor) prepareComponentExecution(
 	}
 	// Execution has now written its own files, so the directory is complete and must equal the reviewed one.
 	if execCtx.rebuild != nil {
+		if err = e.installReviewedModules(atmosConfig, info, execCtx.rebuild, execCtx.workingDir); err != nil {
+			return nil, err
+		}
 		if err = execCtx.rebuild.verify(execCtx.workingDir); err != nil {
 			return nil, err
 		}

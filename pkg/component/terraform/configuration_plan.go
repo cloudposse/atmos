@@ -46,7 +46,10 @@ type configurationPlan struct {
 	// Older records omit it and remain bound to their original absolute directory.
 	WorkingIdentity                          string
 	BackendDigest, RebuildDigest, LockDigest string
-	Prepared                                 *schema.PreparedComponentConfiguration
+	// Modules records that the reviewed workdir held downloaded child modules, which RebuildDigest covers.
+	// A rebuild downloads them again before verification. Older records omit it.
+	Modules  bool `json:",omitempty"`
+	Prepared *schema.PreparedComponentConfiguration
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -348,7 +351,7 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: rebuildDigest, LockDigest: lock, Prepared: &stored}, nil
+	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: rebuildDigest, LockDigest: lock, Modules: hasDownloadedModules(execCtx.workingDir), Prepared: &stored}, nil
 }
 
 // relativeWorkdirIdentity is set only when an explicit relative override actually resolves
