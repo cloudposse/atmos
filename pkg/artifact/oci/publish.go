@@ -100,12 +100,7 @@ func decidePublish(ref artifact.Ref, state *tagState, incoming *incomingRoot, op
 		return "", fmt.Errorf("%w: %s is %s but the caller expected %s", errUtils.ErrArtifactConflict, ref, state.desc.Digest, options.ExpectedPrior.ResolvedDigest)
 	}
 	if state.desc.Digest == incoming.digest {
-		// Unchanged still honors the compare-and-swap guard, matching the layout contract: a caller
-		// that expected the tag to be absent gets a conflict, not a silent success.
-		if options.ExpectedPrior == nil {
-			return "", fmt.Errorf("%w: %s already exists (%s) but the caller expected it not to", errUtils.ErrArtifactConflict, ref, state.desc.Digest)
-		}
-		return artifact.OutcomeUnchanged, nil
+		return decideUnchanged(ref, state, options)
 	}
 	if state.loaded.class == classPlugin {
 		return "", fmt.Errorf("%w: %s is a legacy plugin release and stays immutable even with force", errUtils.ErrArtifactConflict, ref)
@@ -120,6 +115,16 @@ func decidePublish(ref artifact.Ref, state *tagState, incoming *incomingRoot, op
 		return "", fmt.Errorf("%w: %s already exists with different content; use force to replace it", errUtils.ErrArtifactConflict, ref)
 	}
 	return artifact.OutcomeReplaced, nil
+}
+
+// decideUnchanged reports an unchanged tag. It still honors the compare-and-swap guard, matching
+// the layout contract: a caller that expected the tag to be absent gets a conflict, not a silent
+// success.
+func decideUnchanged(ref artifact.Ref, state *tagState, options artifact.PublishOptions) (artifact.Outcome, error) {
+	if options.ExpectedPrior == nil {
+		return "", fmt.Errorf("%w: %s already exists (%s) but the caller expected it not to", errUtils.ErrArtifactConflict, ref, state.desc.Digest)
+	}
+	return artifact.OutcomeUnchanged, nil
 }
 
 // uploadJob is one package upload and the tag state it started from.
