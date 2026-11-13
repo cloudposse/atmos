@@ -54,60 +54,93 @@ func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentReque
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	effects := request.GetEffects()
-	if !effects.GetCommands() || !effects.GetWrites() || !effects.GetStateReads() || !effects.GetNetwork() || !effects.GetSecrets() {
+	if !preparationEffects(request.GetEffects()) {
 		return nil, rpcError(ErrUnsupported)
 	}
-	if req.GenerationRoot != "" {
-		// All provider processes generating the same stack must retain the lock
-		// until the subsequent unit parse has finished.
-		root, err := filepath.EvalSymlinks(req.BasePath)
-		if err != nil {
-			return nil, rpcError(err)
-		}
-		rel, err := filepath.Rel(req.BasePath, req.GenerationRoot)
-		if err != nil {
-			return nil, rpcError(err)
-		}
-		generationPath := filepath.Join(root, rel)
-		if resolved, resolveErr := filepath.EvalSymlinks(generationPath); resolveErr == nil {
-			generationPath = resolved
-		}
-		key := sha256.Sum256([]byte(generationPath))
-		lock := flock.New(filepath.Join(os.TempDir(), fmt.Sprintf("atmos-terragrunt-%x.lock", key)))
-		locked, err := lock.TryLockContext(ctx, 50*time.Millisecond)
-		if err != nil {
-			return nil, rpcError(err)
-		}
-		if !locked {
-			return nil, rpcError(ctx.Err())
-		}
-		defer lock.Unlock()
-		generation := req
-		generation.Path, generation.Phase, generation.Command = req.GenerationRoot, "discover", "generate"
-		if _, err := p.evaluate(ctx, generation); err != nil {
-			return nil, rpcError(err)
-		}
+	// All provider processes generating the same stack must retain the lock
+	// until the subsequent unit parse has finished.
+	unlock, err := p.generateLocked(ctx, req)
+	if err != nil {
+		return nil, rpcError(err)
 	}
+	defer unlock()
 	result, err := p.evaluate(ctx, req)
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	response, err := preparedResponse(req, result)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return response, nil
+}
+
+func preparationEffects(effects *pluginv1.ComponentEffects) bool {
+	return effects.GetCommands() && effects.GetWrites() && effects.GetStateReads() && effects.GetNetwork() && effects.GetSecrets()
+}
+
+// generateLocked generates the owning stack under a cross-process lock and
+// returns the function that releases it. Units outside a stack need no lock.
+func (p *Provider) generateLocked(ctx context.Context, req model.Request) (func(), error) {
+	if req.GenerationRoot == "" {
+		return func() {}, nil
+	}
+	lock, err := generationLock(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	generation := req
+	generation.Path, generation.Phase, generation.Command = req.GenerationRoot, "discover", "generate"
+	if _, err := p.evaluate(ctx, generation); err != nil {
+		_ = lock.Unlock()
+		return nil, err
+	}
+	return func() { _ = lock.Unlock() }, nil
+}
+
+// generationLock keys the lock by the physical generation root, so processes
+// that spell the project root differently still serialize.
+func generationLock(ctx context.Context, req model.Request) (*flock.Flock, error) {
+	root, err := filepath.EvalSymlinks(req.BasePath)
+	if err != nil {
+		return nil, err
+	}
+	rel, err := filepath.Rel(req.BasePath, req.GenerationRoot)
+	if err != nil {
+		return nil, err
+	}
+	generationPath := filepath.Join(root, rel)
+	if resolved, resolveErr := filepath.EvalSymlinks(generationPath); resolveErr == nil {
+		generationPath = resolved
+	}
+	key := sha256.Sum256([]byte(generationPath))
+	lock := flock.New(filepath.Join(os.TempDir(), fmt.Sprintf("atmos-terragrunt-%x.lock", key)))
+	locked, err := lock.TryLockContext(ctx, 50*time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	if !locked {
+		return nil, ctx.Err()
+	}
+	return lock, nil
+}
+
+func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.PrepareComponentResponse, error) {
 	values := result.Inputs
 	if values == nil {
 		values = map[string]any{}
 	}
 	inputs, err := encode(values)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, err
 	}
 	state, err := stateIdentity(req, result)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, err
 	}
 	watched, err := sources(req.BasePath, result)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, err
 	}
 	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution)}
 	for _, name := range slices.Sorted(maps.Keys(result.Generated)) {

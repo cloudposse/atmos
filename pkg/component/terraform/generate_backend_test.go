@@ -174,12 +174,14 @@ func TestWriteBackendConfigFile(t *testing.T) {
 		info         *schema.ConfigAndStacksInfo
 		config       map[string]any
 		wantPath     string
+		wantAbsent   string
 		wantContains string
 	}{
 		{
-			name:   "dry-run skips writing",
-			info:   &schema.ConfigAndStacksInfo{FinalComponent: "vpc", DryRun: true},
-			config: map[string]any{"terraform": map[string]any{"backend": map[string]any{"s3": map[string]any{"bucket": "test-bucket"}}}},
+			name:       "dry-run skips writing",
+			info:       &schema.ConfigAndStacksInfo{FinalComponent: "vpc", DryRun: true, ComponentSection: map[string]any{provWorkdir.WorkdirPathKey: filepath.Join(tempDir, "dry-run")}},
+			wantAbsent: filepath.Join(tempDir, "dry-run", "backend.tf.json"),
+			config:     map[string]any{"terraform": map[string]any{"backend": map[string]any{"s3": map[string]any{"bucket": "test-bucket"}}}},
 		},
 		{
 			name:         "writes to component dir",
@@ -205,6 +207,9 @@ func TestWriteBackendConfigFile(t *testing.T) {
 			err := writeBackendConfigFile(atmosConfig, tt.info, tt.config)
 			assert.NoError(t, err)
 
+			if tt.wantAbsent != "" {
+				assert.NoFileExists(t, tt.wantAbsent)
+			}
 			if tt.wantPath != "" {
 				assert.FileExists(t, tt.wantPath)
 				if tt.wantContains != "" {

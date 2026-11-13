@@ -75,6 +75,12 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 		require.Equal(t, "override", request.Invocation.Environment["FROM_COMPONENT"])
 		return &pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "stage", WorkingDirectory: config.BasePathAbsolute}, Files: []*pluginv1.ComponentGeneratedFile{{Path: "context.tf", Content: []byte("{{ literal }}"), IfExists: "overwrite"}}}, nil
 	})
+	networkState := &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default", WorkingDirectory: config.BasePathAbsolute}
+	provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		require.Equal(t, "network", request.Address.Component)
+		require.Equal(t, "live/network/terragrunt.hcl", request.Source)
+		return &pluginv1.ResolveComponentStateResponse{State: networkState}, nil
+	}).Times(2)
 	prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", Command: "tofu", SubCommand: "apply", TerraformWorkspace: "stage", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvList: []string{"FROM_COMPONENT=original", "FROM_COMPONENT=override"}, ComponentEnvSection: map[string]any{"FROM_COMPONENT": "override"}})
 	require.NoError(t, err)
 	require.Equal(t, int64(9007199254740993), prepared.Inputs["large"])
@@ -307,6 +313,7 @@ func TestPreparationRevalidatesDependencyPaths(t *testing.T) {
 				return current, nil
 			})
 			if change == "unchanged" || change == "reordered" {
+				provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).Return(&pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local"}}, nil).Times(2)
 				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil)
 			}
 			result, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{
@@ -405,4 +412,70 @@ func TestRevisionDropsImportOnlyScopeButKeepsImportProviders(t *testing.T) {
 	require.True(t, handled)
 	require.Equal(t, []string{"terragrunt://previous"}, revision.requests[0].Imports)
 	require.Equal(t, []string{"terragrunt://live"}, head.requests[0].Imports)
+}
+
+// Output reads must use the state the dependency was prepared with, not the
+// state its remote_state selects under the dependent's environment.
+func TestPreparationRejectsDependencyStateDrift(t *testing.T) {
+	stateAt := func(path string) *pluginv1.ComponentStateIdentity {
+		backend, err := adapter.EncodeObject(map[string]any{"path": path})
+		require.NoError(t, err)
+		return &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default", WorkingDirectory: "/work"}
+	}
+	for _, test := range []struct {
+		name                 string
+		prepareNetworkFirst  bool
+		dependent, reference *pluginv1.ComponentStateIdentity
+		resolveErr           error
+		want                 error
+	}{
+		{name: "same state", dependent: stateAt("network.tfstate"), reference: stateAt("network.tfstate")},
+		{name: "state differs from discovery environment", dependent: stateAt("other.tfstate"), reference: stateAt("network.tfstate"), want: errUtils.ErrPluginInvalidConfig},
+		{name: "state differs from prepared dependency", prepareNetworkFirst: true, dependent: stateAt("other.tfstate"), want: errUtils.ErrPluginInvalidConfig},
+		{name: "matches prepared dependency", prepareNetworkFirst: true, dependent: stateAt("network.tfstate")},
+		{name: "resolve failure", resolveErr: errUtils.ErrPluginProtocol, want: errUtils.ErrPluginProtocol},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform")
+			network, app := unit(t, "network"), unit(t, "app")
+			app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+			inventory := &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(inventory, nil).AnyTimes()
+			session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			info := func(component string) *schema.ConfigAndStacksInfo {
+				return &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: component, Command: "tofu", SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"IDENTITY=" + component}}
+			}
+			if test.prepareNetworkFirst {
+				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", State: stateAt("network.tfstate")}, nil)
+				_, err := session.Prepare(t.Context(), info("network"))
+				require.NoError(t, err)
+			}
+			provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+				require.Equal(t, "network", request.Address.Component)
+				if test.resolveErr != nil {
+					return nil, test.resolveErr
+				}
+				if request.Invocation.Environment["IDENTITY"] == "app" {
+					return &pluginv1.ResolveComponentStateResponse{State: test.dependent}, nil
+				}
+				require.False(t, test.prepareNetworkFirst, "a prepared dependency must not be re-resolved")
+				return &pluginv1.ResolveComponentStateResponse{State: test.reference}, nil
+			}).MinTimes(1)
+			if test.want == nil {
+				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", State: stateAt("app.tfstate")}, nil)
+			}
+			result, err := session.Prepare(t.Context(), info("app"))
+			if test.want != nil {
+				require.ErrorIs(t, err, test.want)
+				require.Nil(t, result)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, result)
+		})
+	}
 }

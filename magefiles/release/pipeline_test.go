@@ -22,6 +22,10 @@ type pipelineStep struct {
 	ContinueOnError bool              `yaml:"continue-on-error"`
 }
 type pipelineJob struct {
+	Concurrency struct {
+		Group  string `yaml:"group"`
+		Cancel bool   `yaml:"cancel-in-progress"`
+	} `yaml:"concurrency"`
 	Name        string            `yaml:"name"`
 	Timeout     int               `yaml:"timeout-minutes"`
 	Needs       any               `yaml:"needs"`

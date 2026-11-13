@@ -178,6 +178,12 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 		// SourcePath anchors imports and tracebacks for files; stdin has no source path.
 		Name: name, SourcePath: sourcePath, ProjectRoot: standaloneProjectRoot(),
 		Source: string(source), File: file,
+		ChildEnvironment: func(env []string, stream bool) []string {
+			if !stream {
+				return terminal.ChildColorEnv(env, nil)
+			}
+			return terminal.ChildColorEnv(env, streams.RawUI())
+		},
 		ProcessEnv: processEnv,
 		Stdout:     streams.Data(), Stderr: streams.UI(),
 		ResolveComponent: runnerstep.ScriptComponentResolver(vars),

@@ -42,6 +42,9 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if result.Engine != expectedEngine(info, selected.instance) {
 		return nil, errUtils.ErrPluginProtocol
 	}
+	if result.State != nil {
+		s.prepared.Store(addressKey(selected.instance.Address), proto.Clone(result.State))
+	}
 	return preparedConfiguration(result)
 }
 
@@ -120,9 +123,59 @@ func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pl
 				return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
 			}
 		}
-		return nil
+		return s.checkDependencyStates(ctx, original, selected.Dependencies, env, command)
 	}
 	return errUtils.ErrPluginInvalidConfig
+}
+
+// checkDependencyStates keeps output reads on the dependency's own state. The
+// provider evaluates a dependency's remote_state under the dependent's
+// environment, so an identity or component override can select different state.
+// The reference is the identity the dependency was prepared with in this
+// invocation, or else its identity under the discovery environment.
+func (s *Session) checkDependencyStates(ctx context.Context, discovery *pluginv1.DiscoverComponentsRequest, dependencies []*pluginv1.ComponentDependency, env map[string]string, command string) error {
+	for _, dependency := range dependencies {
+		if dependency.Kind != pluginv1.ComponentDependency_OUTPUT {
+			continue
+		}
+		key := addressKey(dependency.Target)
+		target := s.instances[key]
+		current, err := s.dependencyState(ctx, discovery, target, env, command)
+		if err != nil {
+			return err
+		}
+		expected, err := s.referenceState(ctx, discovery, target, key, command)
+		if err != nil {
+			return err
+		}
+		if !proto.Equal(expected, current) {
+			return fmt.Errorf("%w: dependency %s/%s state differs under the dependent's environment", errUtils.ErrPluginInvalidConfig, key[0], key[2])
+		}
+	}
+	return nil
+}
+
+func (s *Session) referenceState(ctx context.Context, discovery *pluginv1.DiscoverComponentsRequest, target *pluginv1.DiscoveredComponent, key [3]string, command string) (*pluginv1.ComponentStateIdentity, error) {
+	if prepared, ok := s.prepared.Load(key); ok {
+		return prepared.(*pluginv1.ComponentStateIdentity), nil
+	}
+	return s.dependencyState(ctx, discovery, target, discovery.GetInvocation().GetEnvironment(), command)
+}
+
+func (s *Session) dependencyState(ctx context.Context, discovery *pluginv1.DiscoverComponentsRequest, target *pluginv1.DiscoveredComponent, env map[string]string, command string) (*pluginv1.ComponentStateIdentity, error) {
+	result, err := s.registry[target.Provider].ResolveState(ctx, &pluginv1.ComponentRequest{
+		Provider: target.Provider, Address: target.Address, Source: target.Source, RootDirectory: s.root,
+		Configuration: target.Configuration, ProviderConfiguration: discovery.ProviderConfiguration,
+		Invocation: &pluginv1.Invocation{Environment: env},
+		Operation:  &pluginv1.ComponentOperation{Command: command, Mode: "native"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.State == nil {
+		return nil, errUtils.ErrPluginProtocol
+	}
+	return result.State, nil
 }
 
 func sameDependencyUnit(before, after *pluginv1.DiscoveredComponent) bool {

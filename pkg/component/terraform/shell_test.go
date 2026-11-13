@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -269,6 +270,20 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 				"Component: rds",
 				"Stack: prod",
 				"Terraform workspace: ",
+			},
+		},
+		{
+			name: "Unverified cold source path",
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"},
+			cfg: &shellConfig{
+				componentPath:  "/.workdir/terraform/dev-vpc",
+				workingDir:     "/.workdir/terraform/dev-vpc",
+				varFile:        "dev-vpc.terraform.tfvars.json",
+				unverifiedPath: true,
+			},
+			expectedOutput: []string{
+				"Component path: /.workdir/terraform/dev-vpc" + unverifiedPathNote,
+				"Working directory: /.workdir/terraform/dev-vpc" + unverifiedPathNote,
 			},
 		},
 	}
@@ -570,7 +585,14 @@ func TestExecuteShellLifecycle_WorkdirComponent_SkipsWorkspaceClean(t *testing.T
 	info.ComponentSection = map[string]any{provWorkdir.WorkdirPathKey: tmpDir}
 	cfg := &shellConfig{componentPath: tmpDir, workingDir: tmpDir, varFile: "dev-vpc.tfvars.json"}
 
+	t.Setenv("TF_DATA_DIR", "")
+	marker := filepath.Join(tmpDir, ".terraform", "environment")
+	require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
+	require.NoError(t, os.WriteFile(marker, []byte("myworkspace"), 0o600))
 	require.NoError(t, testExecutor(t).executeShellLifecycle(atmosConfig, &info, cfg))
+	data, err := os.ReadFile(marker)
+	require.NoError(t, err)
+	assert.Equal(t, "myworkspace", string(data))
 	assert.Equal(t, []string{"init", "workspace", "shell"}, *calls,
 		"workdir components still run init, workspace, and shell in order")
 }
@@ -771,4 +793,28 @@ func TestPrepareShellExecution_AuthErrorStopsSetup(t *testing.T) {
 	err := testExecutor(t).prepareShellExecution(atmosConfig, info, cfg, false)
 	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
 	assert.Empty(t, info.ComponentEnvList, "env must not be assembled after an auth failure")
+}
+
+// TestExecuteTerraformShell_DisabledAuthDoesNotMutateCallerConfig verifies that --identity=false configures
+// the disabled-auth manager on an invocation-local copy, so a caller that reuses its configuration (the
+// interactive UI) does not carry disabled auth into a later authenticated shell.
+func TestExecuteTerraformShell_DisabledAuthDoesNotMutateCallerConfig(t *testing.T) {
+	stop := errors.New("stop after auth setup")
+	var seen *schema.AtmosConfiguration
+	executor := NewExecutor(Services{
+		CreateAndAuthenticateAuthManager: func(atmosConfig *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+			seen = atmosConfig
+			return nil, stop
+		},
+	})
+	shared := &schema.AtmosConfiguration{}
+
+	err := executor.ExecuteTerraformShell(&ShellOptions{Component: "vpc", Stack: "dev", Identity: "false"}, shared)
+	require.ErrorIs(t, err, stop)
+
+	require.NotNil(t, seen)
+	assert.NotSame(t, shared, seen, "disabled auth must be configured on a copy")
+	assert.NotNil(t, seen.AuthManager, "the invocation must see the disabled-auth manager")
+	assert.Nil(t, shared.AuthManager, "the caller's configuration must keep no auth manager")
+	assert.Nil(t, shared.DeferredEvaluation, "the caller's configuration must keep no deferred evaluation context")
 }

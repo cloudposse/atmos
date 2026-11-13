@@ -185,6 +185,7 @@ type Mount struct {
 
 // PortBinding represents a port mapping.
 type PortBinding struct {
+	Bind          string // optional host interface for publishing (IPv4 or IPv6)
 	ContainerPort int
 	HostPort      int
 	Protocol      string // tcp, udp

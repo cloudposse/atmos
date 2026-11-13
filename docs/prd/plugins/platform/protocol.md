@@ -256,7 +256,7 @@ The runtime writes events to caller-provided stdout/stderr writers; callers supp
 
 ### Component configuration services
 
-The component configuration protocol is now defined in `proto/atmos/plugin/v1/plugin.proto` and generated for the CLI and SDK. The host has static descriptors, explicit package loading, and service adapters. CLI stack and execution wiring remain pending. These independently negotiated version-1 services replace the earlier proposed monolithic `Component` service:
+The component configuration protocol, generated CLI and SDK bindings, and component-specific host descriptors, package loading, and adapters are planned. CLI stack and execution integration are also unavailable. These proposed independently negotiated version-1 services replace the earlier proposed monolithic `Component` service:
 
 | Capability | RPC | Result |
 |---|---|---|

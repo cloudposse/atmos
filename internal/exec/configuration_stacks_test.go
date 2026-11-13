@@ -13,7 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-//go:generate go run go.uber.org/mock/mockgen -destination=mock_configuration_test.go -package=exec github.com/cloudposse/atmos/pkg/schema ComponentConfigurationRuntime
+//go:generate go run go.uber.org/mock/mockgen -destination=mock_configuration_test.go -package=exec github.com/cloudposse/atmos/pkg/schema ComponentConfigurationRuntime,ComponentConfigurationRevisionRuntime
 
 func TestConfigurationStacksUseStackCompiler(t *testing.T) {
 	root := t.TempDir()

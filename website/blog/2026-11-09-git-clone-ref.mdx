@@ -1,0 +1,59 @@
+---
+slug: git-clone-ref
+title: "Check Out an Exact Commit, Tag, or Ref with atmos git clone --ref"
+authors: [osterman]
+tags: [feature]
+date: 2026-11-09T12:00:00.000Z
+---
+
+A CI job is supposed to build the commit that triggered it. But a branch name is a moving target: by the
+time the job starts, someone may have pushed again, and a restored checkout cache may already be ahead of
+the event. Checking out "the branch" quietly gives you a different revision than the one you were asked to
+test. Now [`atmos git clone --ref`](/cli/commands/git/clone#flags) pins the checkout to an exact commit
+SHA, tag, or ref.
+
+<!--truncate-->
+
+## The Problem
+
+The `--branch` flag maps to `git clone --branch`, which only accepts branch and tag names, not commit
+SHAs. Reconciling an existing checkout also fast-forwards to the branch tip. That is the right behavior for
+keeping a working copy current, and the wrong behavior when a pipeline must operate on one immutable
+revision, such as the event SHA for a plan, an apply, or a `describe affected` diff.
+
+## The Fix
+
+The new `--ref` flag (or the `ATMOS_GIT_REF` environment variable) accepts a branch, tag, full ref such as
+`refs/tags/v1`, or a commit SHA. Atmos fetches exactly that ref and checks it out detached:
+
+- **Fresh clones** fetch the requested ref instead of checking out the default branch.
+- **Existing checkouts** move to the requested revision exactly, even when the cached copy is ahead of it.
+  Nothing is merged or fast-forwarded past it. Uncommitted changes are still refused.
+- **Named repositories and URI queries:** `--ref` overrides any configured branch.
+- **Submodules** are updated to match when submodules are enabled.
+
+`--ref` and `--branch` are mutually exclusive. The
+[fork-PR safety gate](/cli/commands/git/clone#fork-pr-safety-gate) also applies: in an elevated
+`pull_request_target` or `workflow_run` event for a fork pull request, an explicit `--ref` is refused unless
+you opt in with `--allow-unsafe-fork`.
+
+## How to Use It
+
+Pin a CI job to its event revision and keep full history for diffs:
+
+```shell
+atmos git clone --ci --ref "$GITHUB_SHA" --depth 0
+```
+
+Check out a release tag of a managed repository:
+
+```shell
+atmos git clone flux-deploy --ref v1.2.0
+```
+
+See the [`atmos git clone` reference](/cli/commands/git/clone#flags) for every flag.
+
+## Get Involved
+
+Try `--ref` in your pipelines and tell us how it works for you in the
+[Cloud Posse Slack](https://cloudposse.com/slack) or on [GitHub](https://github.com/cloudposse/atmos/issues).

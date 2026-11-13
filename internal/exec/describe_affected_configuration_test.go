@@ -16,13 +16,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// revisionConfigurationRuntime composes the generated runtime and revision mocks,
+// because a revision-capable provider implements both schema interfaces.
 type revisionConfigurationRuntime struct {
 	*MockComponentConfigurationRuntime
-	revision func(string) (schema.ComponentConfigurationRuntime, error)
-}
-
-func (r *revisionConfigurationRuntime) ForRevision(root string) (schema.ComponentConfigurationRuntime, error) {
-	return r.revision(root)
+	*MockComponentConfigurationRevisionRuntime
 }
 
 func affectedConfigurationDefinitions(names ...string) map[string]map[string]any {
@@ -61,11 +59,12 @@ func TestAffectedConfigurationRevisions(t *testing.T) {
 			previous := NewMockComponentConfigurationRuntime(ctrl)
 			previous.EXPECT().Discover(gomock.Any()).Return(affectedConfigurationDefinitions(tc.before...), tc.discoverErr).AnyTimes()
 			forked := false
-			runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: current, revision: func(root string) (schema.ComponentConfigurationRuntime, error) {
-				require.Equal(t, baseRoot, root)
+			revisions := NewMockComponentConfigurationRevisionRuntime(ctrl)
+			revisions.EXPECT().ForRevision(baseRoot).DoAndReturn(func(string) (schema.ComponentConfigurationRuntime, error) {
 				forked = true
 				return previous, tc.forkErr
-			}}
+			}).Times(1)
+			runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: current, MockComponentConfigurationRevisionRuntime: revisions}
 			config.ComponentConfigurations = runtime
 			affected, _, _, err := executeDescribeAffected(config, headRoot, baseRoot, head, base, false, false, "", false, false, nil, AffectedFilter{}, nil, true, DescribeStacksErrorOptions{})
 			require.True(t, forked, "BASE must discover independently")
@@ -93,12 +92,15 @@ func TestAffectedConfigurationRevisions(t *testing.T) {
 
 func TestAffectedConfigurationForkErrors(t *testing.T) {
 	require.NoError(t, rebaseConfigurationDiscovery(&schema.AtmosConfiguration{}))
-	original := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	ctrl := gomock.NewController(t)
+	original := NewMockComponentConfigurationRuntime(ctrl)
 	config := &schema.AtmosConfiguration{ComponentConfigurations: original}
 	require.ErrorIs(t, rebaseConfigurationDiscovery(config), errUtils.ErrPluginUnsupportedExtension)
 	require.Same(t, original, config.ComponentConfigurations)
 	for _, failure := range []error{context.Canceled, errUtils.ErrPluginInvalidConfig} {
-		runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: original, revision: func(string) (schema.ComponentConfigurationRuntime, error) { return nil, failure }}
+		revisions := NewMockComponentConfigurationRevisionRuntime(ctrl)
+		revisions.EXPECT().ForRevision(gomock.Any()).Return(nil, failure).Times(1)
+		runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: original, MockComponentConfigurationRevisionRuntime: revisions}
 		config.ComponentConfigurations = runtime
 		require.ErrorIs(t, rebaseConfigurationDiscovery(config), failure)
 		require.Same(t, runtime, config.ComponentConfigurations)
@@ -130,7 +132,7 @@ func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
 		resolvedIndex, matched := configurationMatchInputs(index, deps, provider)
 		changed, kind, path, err := isComponentDependentFolderOrFileChangedIndexed(resolvedIndex, matched)
 		require.NoError(t, err)
-		return changed, kind, configuredDependencyPath(deps, matched, path)
+		return changed, kind, configuration.ConfiguredDependencyPath(deps, matched, path)
 	}
 
 	deps := watches()

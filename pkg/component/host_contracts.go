@@ -24,6 +24,9 @@ type ExecuteDescribeComponentParams struct {
 	AuthManager          auth.AuthManager
 	AuthDisabled         bool
 	ErrorOptions         DescribeStacksErrorOptions
+	// CommandPath names the CLI command that needs the component, such as
+	// ["secret", "shell"], for component admission. Empty means `describe component`.
+	CommandPath []string
 }
 
 type (

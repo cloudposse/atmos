@@ -27,6 +27,7 @@ type Provider interface {
 	ComponentType() string
 	Discover(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error)
 	Prepare(context.Context, *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error)
+	ResolveState(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error)
 }
 
 // Loader resolves the requested configuration providers through package policy and locks.
@@ -48,6 +49,9 @@ type Session struct {
 	importProviders map[string]*pluginv1.DiscoverComponentsRequest
 	imports         map[string]bool
 	started         bool
+	// prepared records the state identity each instance was prepared with, so a
+	// dependent's output reads can be checked against it within this invocation.
+	prepared sync.Map
 }
 
 // New snapshots the explicitly enabled scope without starting plugins or scanning directories.

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	ctr "github.com/cloudposse/atmos/pkg/container"
@@ -66,7 +67,7 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 
 	section := map[string]any{
 		"image": "localhost:5001/api:abc",
-		"run":   map[string]any{"command": "./api", "ports": []any{map[string]any{"host": 8080, "container": 8080}}},
+		"run":   map[string]any{"command": "./api", "ports": []any{map[string]any{"host": "127.0.0.1:8080", "container": 8080}}},
 	}
 	withStubs(t, section, []string{"PORT=8080"}, rt)
 
@@ -77,6 +78,7 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 				assert.Equal(t, "atmos-dev-container-api", c.Name)
 				assert.Equal(t, []string{"./api"}, c.Command)
 				require.Len(t, c.Ports, 1)
+				assert.Equal(t, "127.0.0.1", c.Ports[0].Bind)
 				assert.Equal(t, 8080, c.Ports[0].HostPort)
 				assert.Equal(t, 8080, c.Ports[0].ContainerPort)
 				assert.Equal(t, "8080", c.Env["PORT"])
@@ -662,4 +664,107 @@ func TestMounts_EmptyComponentPathLeavesSourcesUnanchored(t *testing.T) {
 
 	require.Len(t, mounts, 1)
 	assert.Equal(t, "app/public", mounts[0].Source)
+}
+
+func TestExecute_RejectsInvalidHostBeforeRuntime(t *testing.T) {
+	for _, operation := range []struct {
+		name string
+		run  func(context.Context, *schema.ConfigAndStacksInfo) error
+	}{{"up", ExecuteUp}, {"run", ExecuteRun}} {
+		t.Run(operation.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			rt := NewMockRuntime(ctrl)
+			withStubs(t, map[string]any{
+				"image": "api:dev",
+				"run":   map[string]any{"command": "echo ok", "ports": []any{map[string]any{"host": "localhost:8080", "container": 8080}}},
+			}, nil, rt)
+			err := operation.run(context.Background(), infoFor("api"))
+			require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+			require.ErrorContains(t, err, "ports[0].host")
+		})
+	}
+}
+
+// Runtime arguments must survive both component execution paths. In particular,
+// dropping --publish silently makes a loopback-only service unreachable, and
+// adding a shared network alongside --network=host creates conflicting flags.
+func TestExecute_ForwardsRunArgs(t *testing.T) {
+	for _, operation := range []string{"up", "run"} {
+		for _, explicitNetwork := range []bool{false, true} {
+			name := operation + "/publish"
+			if explicitNetwork {
+				name = operation + "/explicit-network"
+			}
+			t.Run(name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				rt := &networkEnsurerMockRuntime{MockRuntime: NewMockRuntime(ctrl)}
+				args := []string{"--publish=127.0.0.1:3000:3000", "--init"}
+				if explicitNetwork {
+					args = []string{"--network=host", "--init"}
+				}
+				section := map[string]any{
+					"image": "backstage:local",
+					"run": map[string]any{
+						"command":  "node server.js",
+						"run_args": args,
+					},
+				}
+				withStubs(t, section, nil, rt)
+				if operation == "up" {
+					rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "portal")).Return([]ctr.Info{}, nil)
+				}
+				rt.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, c *ctr.CreateConfig) (string, error) {
+					assert.Equal(t, args, c.RunArgs)
+					if explicitNetwork {
+						assert.Empty(t, c.Networks)
+					} else {
+						require.Len(t, c.Networks, 1)
+						assert.Equal(t, "atmos-dev", c.Networks[0].Name)
+					}
+					return "cid", nil
+				})
+				rt.EXPECT().Start(gomock.Any(), "cid").Return(nil)
+				if operation == "up" {
+					require.NoError(t, ExecuteUp(context.Background(), infoFor("portal")))
+				} else {
+					rt.EXPECT().Exec(gomock.Any(), "cid", gomock.Any(), gomock.Any()).Return(nil)
+					rt.EXPECT().Remove(gomock.Any(), "cid", true).Return(nil)
+					require.NoError(t, ExecuteRun(context.Background(), infoFor("portal")))
+				}
+				if explicitNetwork {
+					assert.Empty(t, rt.ensured)
+				} else {
+					assert.Equal(t, []string{"atmos-dev"}, rt.ensured)
+				}
+			})
+		}
+	}
+}
+
+func TestExecuteExec_DetectsTerminal(t *testing.T) {
+	for _, interactive := range []bool{false, true} {
+		name := "pipe"
+		if interactive {
+			name = "terminal"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			rt := NewMockRuntime(ctrl)
+			withStubs(t, map[string]any{"image": "alpine"}, nil, rt)
+			original := stdinIsTerminal
+			stdinIsTerminal = func() bool { return interactive }
+			t.Cleanup(func() { stdinIsTerminal = original })
+
+			rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).Return(runningInfo(), nil)
+			rt.EXPECT().Exec(gomock.Any(), "cid", []string{"/bin/sh"}, gomock.Any()).
+				DoAndReturn(func(_ context.Context, _ string, _ []string, opts *ctr.ExecOptions) error {
+					assert.Equal(t, interactive, opts.Tty)
+					assert.True(t, opts.AttachStdin, "piped input must remain available")
+					assert.True(t, opts.AttachStdout)
+					assert.True(t, opts.AttachStderr)
+					return nil
+				})
+			require.NoError(t, ExecuteExec(context.Background(), infoFor("api"), nil))
+		})
+	}
 }

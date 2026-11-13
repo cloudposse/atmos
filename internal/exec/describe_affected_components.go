@@ -1189,7 +1189,7 @@ func checkDependencyChangesIndexed(
 			return err
 		}
 		if isFolderOrFileChanged {
-			changedFileOrFolder = configuredDependencyPath(deps, matched, changedFileOrFolder)
+			changedFileOrFolder = configuration.ConfiguredDependencyPath(deps, matched, changedFileOrFolder)
 			return addDependencyAffectedItem(
 				affected, atmosConfig, componentName, stackName, componentType,
 				componentSection, changedType, changedFileOrFolder,

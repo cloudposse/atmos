@@ -37,6 +37,9 @@ const (
 // signal path could equally delete it; required checks defend against that,
 // not this reporter.
 func (r *qualityWorkflowRun) reporterRun() bool {
+	if r.Event == "push" && (r.Path == qualityReconcileWorkflow || r.Path == releaseMilestonesWorkflow) {
+		return true
+	}
 	switch r.Path {
 	case releaseMilestonesWorkflow, qualityReportWorkflow, qualityReconcileWorkflow:
 		switch r.Event {

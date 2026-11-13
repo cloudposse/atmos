@@ -203,9 +203,6 @@ func TestSessionResolvesStateWithoutPreparation(t *testing.T) {
 	}
 	_, err = session.ResolveState(t.Context(), info)
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
-	session.registry["terragrunt"] = mock
-	_, err = session.ResolveState(t.Context(), info)
-	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	info.ComponentFromArg = "absent"
 	_, err = session.ResolveState(t.Context(), info)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)

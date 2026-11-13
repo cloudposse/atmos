@@ -84,3 +84,18 @@ func (mr *MockProviderMockRecorder) Prepare(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Prepare", reflect.TypeOf((*MockProvider)(nil).Prepare), arg0, arg1)
 }
+
+// ResolveState mocks base method.
+func (m *MockProvider) ResolveState(arg0 context.Context, arg1 *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveState", arg0, arg1)
+	ret0, _ := ret[0].(*pluginv1.ResolveComponentStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveState indicates an expected call of ResolveState.
+func (mr *MockProviderMockRecorder) ResolveState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveState", reflect.TypeOf((*MockProvider)(nil).ResolveState), arg0, arg1)
+}
