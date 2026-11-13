@@ -112,3 +112,36 @@ func ImportConflict(component, first, second, where string) error {
 		WithHint("Import the units from different stack files, or import a narrower directory or a single `terragrunt.hcl`").
 		Err()
 }
+
+// BackendLayer is one component-level backend: its type and its settings.
+type BackendLayer struct {
+	Type     string
+	Settings map[string]any
+}
+
+// CheckBackendOverrides rejects a component-level backend for a component a configuration provider
+// owns: the unit's own backend is its state identity. A component without a provider is unaffected.
+func CheckBackendOverrides(component, stack string, settings map[string]any, layers ...BackendLayer) error {
+	defer perf.Track(nil, "configuration.CheckBackendOverrides")()
+
+	// Only a provider owns the backend; a bare `configuration` key, such as an empty map, does not.
+	if !OwnsComponent(map[string]any{"settings": settings}) {
+		return nil
+	}
+	for _, layer := range layers {
+		setting := ""
+		if layer.Type != "" && layer.Type != "local" {
+			setting = "backend_type"
+		}
+		if local, ok := layer.Settings["local"].(map[string]any); ok && len(local) > 0 {
+			setting = "backend.local"
+		}
+		if setting != "" {
+			return errUtils.Build(fmt.Errorf("%w: the state backend of component %q in stack %q is owned by the configuration provider, so `%s` cannot be set", errUtils.ErrConfigurationOverrideUnsupported, component, stack, setting)).
+				WithContext("component", component).
+				WithContext("stack", stack).
+				WithHint("Define the backend in the unit's remote_state block; component backend overrides cannot change the unit's state identity.").Err()
+		}
+	}
+	return nil
+}
