@@ -386,8 +386,8 @@ func (r *Repository) lockEvidenceReference(ctx context.Context, t *tree, recordD
 		return nil, err
 	}
 	resource := record.Name + ":" + record.Version
-	if lock != nil {
-		if lock.Resource() != resource {
+	if localLock, ok := lock.(*fileLock); ok {
+		if !r.coversReference(localLock, resource) {
 			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, resource)
 		}
 		return nil, nil

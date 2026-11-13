@@ -80,6 +80,20 @@ func (r *Repository) LockNamespace() string {
 	return filepath.ToSlash(root)
 }
 
+// coversReference reports whether lock protects reference (name:version) in this repository. A
+// direct lock names the reference itself. A lock taken through locking.repository delegation names
+// it scoped by this repository's collection namespace, or by its alias when it reports none, as
+// built by the service when it resolves the delegate. A lock for any other reference never matches.
+func (r *Repository) coversReference(lock *fileLock, reference string) bool {
+	resource := lock.Resource()
+	// The namespace is the symlink-resolved root once it exists and the literal root before, so a
+	// handle taken before the first publish names the literal form.
+	return resource == reference ||
+		resource == r.LockNamespace()+"/"+reference ||
+		resource == filepath.ToSlash(r.root)+"/"+reference ||
+		resource == r.alias+"/"+reference
+}
+
 // acquire takes the OS lock for resource.
 func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*fileLock, error) {
 	lockPath := filepath.Join(r.root, native(layout.LockPath(resource)))
