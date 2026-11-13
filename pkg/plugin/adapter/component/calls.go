@@ -86,6 +86,9 @@ func (p *Provider) Prepare(ctx context.Context, input *pluginv1.ComponentRequest
 		if err != nil {
 			return err
 		}
+		if request.GetOperation().GetMode() == "iam-probe" {
+			return checkIAMProbe(result)
+		}
 		return checkPreparation(result)
 	})
 	if err != nil {

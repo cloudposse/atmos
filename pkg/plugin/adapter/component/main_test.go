@@ -134,6 +134,9 @@ func (f *componentFixture) Prepare(ctx context.Context, request *pluginv1.Compon
 		<-ctx.Done()
 		return nil, status.FromContextError(ctx.Err()).Err()
 	}
+	if request.GetOperation().GetMode() == "iam-probe" {
+		return &pluginv1.PrepareComponentResponse{Iam: &pluginv1.ComponentIam{Role: "arn:aws:iam::1:role/test"}}, nil
+	}
 	var returned []*pluginv1.LogEntry
 	switch request.GetOperation().GetCommand() {
 	case "live-logs":

@@ -3,6 +3,8 @@ package component
 import (
 	"path/filepath"
 
+	"google.golang.org/protobuf/proto"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 )
@@ -93,6 +95,21 @@ func checkGeneratedFiles(files []*pluginv1.ComponentGeneratedFile) error {
 		default:
 			return errUtils.ErrPluginProtocol
 		}
+	}
+	return nil
+}
+
+// checkIAMProbe accepts only role settings and diagnostics; probing does not prepare a module.
+func checkIAMProbe(result *pluginv1.PrepareComponentResponse) error {
+	if result == nil {
+		return errUtils.ErrPluginProtocol
+	}
+	if err := firstDiagnosticError(result.Diagnostics); err != nil {
+		return err
+	}
+	allowed := &pluginv1.PrepareComponentResponse{Iam: result.Iam, Diagnostics: result.Diagnostics}
+	if !proto.Equal(result, allowed) {
+		return errUtils.ErrPluginProtocol
 	}
 	return nil
 }

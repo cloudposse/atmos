@@ -446,3 +446,22 @@ func TestNonSchemaSettingsErrorStillNamesTheSection(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	assert.Contains(t, strings.Join(errUtils.AllDetails(err), "\n"), "components.terraform.terragrunt")
 }
+
+func TestProviderIAMProbeAcceptsRoleOnlyResponse(t *testing.T) {
+	p := fixtureProvider(t)
+	result, err := p.Prepare(t.Context(), &pluginv1.ComponentRequest{
+		RootDirectory: t.TempDir(), Address: fixtureAddress(),
+		Operation: &pluginv1.ComponentOperation{Command: "plan", Mode: "iam-probe"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "arn:aws:iam::1:role/test", result.GetIam().GetRole())
+	require.ErrorIs(t, checkPreparation(result), errUtils.ErrPluginProtocol)
+}
+
+func TestIAMProbeRejectsModulePreparation(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, checkIAMProbe(&pluginv1.PrepareComponentResponse{}))
+	require.ErrorIs(t, checkIAMProbe(nil), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkIAMProbe(&pluginv1.PrepareComponentResponse{ModuleSource: "./module"}), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkIAMProbe(&pluginv1.PrepareComponentResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}), errUtils.ErrPluginInvalidConfig)
+}
