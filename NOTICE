@@ -759,11 +759,15 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.opentelemetry.io/otel
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.46.0/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.47.0/LICENSE
+
+  - go.opentelemetry.io/otel/log
+    License: Apache-2.0
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/log/v1.47.0/log/LICENSE
 
   - go.opentelemetry.io/otel/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.46.0/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.47.0/metric/LICENSE
 
   - go.opentelemetry.io/otel/sdk
     License: Apache-2.0
@@ -775,7 +779,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.opentelemetry.io/otel/trace
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.46.0/trace/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.47.0/trace/LICENSE
 
   - go.opentelemetry.io/proto/otlp
     License: Apache-2.0
