@@ -68,6 +68,9 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 	if !effects.GetCommands() || !effects.GetWrites() || !effects.GetStateReads() || !effects.GetNetwork() || !effects.GetSecrets() {
 		return nil, rpcError(ErrUnsupported)
 	}
+	if req.Phase == "iam" {
+		return p.probeIAM(ctx, &req)
+	}
 	if req.GenerationRoot != "" {
 		generation := req
 		generation.Path, generation.Phase, generation.Command = req.GenerationRoot, "discover", "generate"
@@ -95,11 +98,14 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution)}
+	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution), RegistryResolutionNanos: result.RegistryResolutionNanos}
 	if err := parityResponse(response, req, result); err != nil {
 		return nil, rpcError(err)
 	}
 	if response.Iam, err = iamResponse(result.IAM); err != nil {
+		return nil, rpcError(err)
+	}
+	if err = encodeRegistryAuth(response, result.RegistryAuth); err != nil {
 		return nil, rpcError(err)
 	}
 	response.Diagnostics = unitWarnings(req.BasePath, result.Warnings)
@@ -111,6 +117,31 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name]})
 	}
 	return response, nil
+}
+
+func encodeRegistryAuth(response *pluginv1.PrepareComponentResponse, auth *model.RegistryAuth) error {
+	if auth == nil {
+		return nil
+	}
+	value, err := component.Encode(cty.StringVal(auth.Authorization).Mark(component.Sensitive))
+	if err != nil {
+		return err
+	}
+	response.ModuleSourceAuthorization = value
+	response.ModuleSourceAuthOrigin = auth.Origin
+	return nil
+}
+
+func (p *Provider) probeIAM(ctx context.Context, req *model.Request) (*pluginv1.PrepareComponentResponse, error) {
+	result, err := p.evaluate(ctx, *req)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	iam, err := iamResponse(result.IAM)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &pluginv1.PrepareComponentResponse{Iam: iam, Diagnostics: unitWarnings(req.BasePath, result.Warnings)}, nil
 }
 
 func stateIdentity(req model.Request, result *model.Resolution) (*pluginv1.ComponentStateIdentity, error) {

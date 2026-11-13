@@ -56,6 +56,33 @@ func TestPreparationAndStateUseSeparatePhases(t *testing.T) {
 	require.Equal(t, result.State.WorkingDirectory, state.State.WorkingDirectory)
 }
 
+func TestIAMProbeReturnsOnlyRoleSettings(t *testing.T) {
+	request := componentRequest(t)
+	request.Operation.Mode = "iam-probe"
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		require.Equal(t, "iam", req.Phase)
+		return &model.Resolution{IAM: &model.IAM{Role: "arn:aws:iam::1:role/x"}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "arn:aws:iam::1:role/x", result.Iam.Role)
+	require.Empty(t, result.ModuleSource)
+	require.Nil(t, result.State)
+}
+
+func TestPreparationCarriesSensitiveRegistryAuthorization(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Source: "https://registry.example/archive.tar.gz", WorkingDir: request.RootDirectory, RegistryAuth: &model.RegistryAuth{Origin: "https://registry.example", Authorization: "Bearer secret"}, Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	response, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "https://registry.example", response.ModuleSourceAuthOrigin)
+	require.Len(t, response.ModuleSourceAuthorization.SensitivePaths, 1)
+	require.Empty(t, response.ModuleSourceAuthorization.SensitivePaths[0].Steps)
+	require.NotContains(t, response.ModuleSource, "secret")
+}
+
 func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 	for _, test := range []struct {
 		name   string

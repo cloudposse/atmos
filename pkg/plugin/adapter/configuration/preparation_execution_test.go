@@ -134,6 +134,24 @@ func TestPreparedConfigurationCarriesIAM(t *testing.T) {
 	require.Nil(t, got.IAM, "an IAM message without a role asks for nothing")
 }
 
+func TestPreparedRegistryAuthorizationRequiresSameOriginAndSensitivity(t *testing.T) {
+	response := executionResponse(t, nil)
+	response.ModuleSource = "https://registry.example/module.tar.gz//subdir"
+	response.ModuleSourceAuthOrigin = "https://registry.example"
+	response.ModuleSourceAuthorization = sensitiveString(t, "Bearer registry-secret")
+	prepared, err := preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Equal(t, &schema.SourceAuthorization{Origin: "https://registry.example", Header: "Bearer registry-secret"}, prepared.SourceAuthorization)
+
+	response.ModuleSourceAuthOrigin = "https://other.example"
+	_, err = preparedConfiguration(roundTrip(t, response))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	response.ModuleSourceAuthOrigin = "https://registry.example"
+	response.ModuleSourceAuthorization.SensitivePaths = nil
+	_, err = preparedConfiguration(roundTrip(t, response))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
 func TestPreparedIAMDistinguishesTokenFilesFromLiteralTokens(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "token")
 	require.NoError(t, os.WriteFile(file, []byte("file-token\n"), 0o600))

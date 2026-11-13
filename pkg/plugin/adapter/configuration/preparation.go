@@ -3,10 +3,13 @@ package configuration
 import (
 	"context"
 	"fmt"
+	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -50,6 +53,32 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	return prepared, nil
 }
 
+// ProbeIAM reads only the Terragrunt flags before full evaluation. It must not
+// run infrastructure commands or return a module configuration.
+func (s *Session) ProbeIAM(ctx context.Context, info *schema.ConfigAndStacksInfo) (*schema.ComponentIAM, error) {
+	defer perf.Track(nil, "configuration.Session.ProbeIAM")()
+
+	selected, err := s.componentRequest(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+	if selected.instance.Provider != "terragrunt" {
+		return nil, nil
+	}
+	selected.request.Operation.Mode = "iam-probe"
+	selected.request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
+	result, err := selected.provider.Prepare(ctx, selected.request)
+	if err != nil {
+		return nil, err
+	}
+	for _, diagnostic := range result.Diagnostics {
+		if err := adapter.DiagnosticError(diagnostic); err != nil {
+			return nil, err
+		}
+	}
+	return preparedIAM(result.Iam)
+}
+
 // rejectSavedPlan refuses a saved plan, which a plugin-provided configuration cannot bind to yet.
 func rejectSavedPlan(info *schema.ConfigAndStacksInfo) error {
 	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
@@ -72,6 +101,9 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 	result, err := selected.provider.Prepare(ctx, selected.request)
 	if err != nil {
 		return nil, err
+	}
+	if nanos := result.GetRegistryResolutionNanos(); nanos > 0 && nanos <= uint64(math.MaxInt64) {
+		perf.ObserveExternal("atmosbridge.ResolveRegistrySource", time.Duration(nanos))
 	}
 	// An error diagnostic fails the preparation; warnings are printed by the caller.
 	for _, diagnostic := range result.Diagnostics {
@@ -222,6 +254,9 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 		resolveLocalBackend(backend, result.State.WorkingDirectory)
 	}
 	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
+	if prepared.SourceAuthorization, err = preparedSourceAuthorization(result); err != nil {
+		return nil, err
+	}
 	execution, err := preparedExecution(result.Execution)
 	if err != nil {
 		return nil, err
@@ -241,6 +276,42 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	}
 
 	return prepared, nil
+}
+
+func preparedSourceAuthorization(result *pluginv1.PrepareComponentResponse) (*schema.SourceAuthorization, error) {
+	encoded := result.GetModuleSourceAuthorization()
+	origin := result.GetModuleSourceAuthOrigin()
+	if encoded == nil && origin == "" {
+		return nil, nil
+	}
+	if !validSensitiveAuthorization(encoded, origin) {
+		return nil, errUtils.ErrPluginProtocol
+	}
+	authorization, err := adapter.DecodeString(encoded)
+	if err != nil || authorization == "" {
+		return nil, errUtils.ErrPluginProtocol
+	}
+	if !sameSourceOrigin(result.GetModuleSource(), origin) {
+		return nil, errUtils.ErrPluginProtocol
+	}
+	return &schema.SourceAuthorization{Origin: origin, Header: authorization}, nil
+}
+
+func validSensitiveAuthorization(encoded *pluginv1.ComponentValue, origin string) bool {
+	return encoded != nil && origin != "" && len(encoded.GetSensitivePaths()) == 1 && len(encoded.GetSensitivePaths()[0].GetSteps()) == 0
+}
+
+func sameSourceOrigin(source, origin string) bool {
+	archive, archiveErr := url.Parse(source)
+	registry, registryErr := url.Parse(origin)
+	if archiveErr != nil || registryErr != nil || !validRegistryOrigin(registry) {
+		return false
+	}
+	return archive.Scheme == registry.Scheme && strings.EqualFold(archive.Host, registry.Host)
+}
+
+func validRegistryOrigin(registry *url.URL) bool {
+	return registry.Host != "" && registry.User == nil && registry.Path == "" && registry.RawQuery == "" && registry.Fragment == "" && (registry.Scheme == "https" || registry.Scheme == "http")
 }
 
 func resolveLocalBackend(backend map[string]any, root string) {

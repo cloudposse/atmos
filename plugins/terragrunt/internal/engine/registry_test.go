@@ -237,6 +237,45 @@ func TestIAMRoleIsEvaluatedBeforeInputs(t *testing.T) {
 	require.Equal(t, "arn:aws:iam::123456789012:role/x", result.IAM.Role)
 }
 
+func TestIAMProbeResolvesRoleWithoutEvaluatingInputs(t *testing.T) {
+	request := iamUnit(t, `locals { account = "123456789012" }
+iam_role = "arn:aws:iam::${local.account}:role/x"
+inputs = { account = get_aws_account_id() }`)
+	request.Phase = "iam"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "arn:aws:iam::123456789012:role/x", result.IAM.Role)
+	require.Nil(t, result.Inputs)
+}
+
+func TestIAMProbeSkipsRoleForExcludedOperation(t *testing.T) {
+	request := iamUnit(t, `iam_role = "arn:aws:iam::123456789012:role/x"
+exclude {
+  if = true
+  actions = ["plan"]
+}`)
+	request.Phase = "iam"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Nil(t, result.IAM)
+}
+
+func TestAWSFunctionUsesStagedSessionCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Contains(t, r.Header.Get("Authorization"), "Credential=ASIASESSION/")
+		w.Header().Set("Content-Type", "text/xml")
+		fmt.Fprint(w, `<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><GetCallerIdentityResult><Account>222222222222</Account><Arn>arn:aws:sts::222222222222:assumed-role/x/session</Arn><UserId>session</UserId></GetCallerIdentityResult></GetCallerIdentityResponse>`)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("AWS_ENDPOINT_URL_STS", server.URL)
+	request := iamUnit(t, `iam_role = "arn:aws:iam::222222222222:role/x"
+inputs = { account = get_aws_account_id() }`)
+	request.Environment = map[string]string{"AWS_ACCESS_KEY_ID": "ASIASESSION", "AWS_SECRET_ACCESS_KEY": "session-secret", "AWS_SESSION_TOKEN": "session-token", "AWS_REGION": "us-east-1"}
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "222222222222", result.Inputs["account"])
+}
+
 func TestIAMEnvironmentOverridesTheUnit(t *testing.T) {
 	request := iamUnit(t, `iam_role = "arn:aws:iam::1:role/from-unit"
 iam_assume_role_duration = 900`)

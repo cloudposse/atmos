@@ -36,19 +36,27 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	if cfg.Terraform != nil && cfg.Terraform.Version != nil {
 		constraint = *cfg.Terraform.Version
 	}
+	var auth *model.RegistryAuth
+	started := time.Now()
 	resolved, err := retryRegistryResolution(ctx, result.Errors, func() (string, error) {
-		return atmosbridge.ResolveRegistrySource(ctx, logger, atmosbridge.RegistryRequest{
+		resolution, err := atmosbridge.ResolveRegistrySourceWithAuth(ctx, logger, atmosbridge.RegistryRequest{
 			Client: registryClient, Source: result.Source, Constraint: constraint, Environment: request.Environment, OpenTofu: IsOpenTofu(request.Tofu),
 		})
+		if err == nil && resolution.Authorization != "" {
+			auth = &model.RegistryAuth{Origin: resolution.AuthOrigin, Authorization: resolution.Authorization}
+		}
+		return resolution.Source, err
 	})
 	if err != nil {
 		return registryProblem(result.Source, err)
 	}
+	result.RegistryResolutionNanos = uint64(time.Since(started))
 	resolved = normalizeGetterURL(resolved)
 	if err := validateRemoteSource(resolved); err != nil {
 		return err
 	}
 	result.Source = resolved
+	result.RegistryAuth = auth
 	return nil
 }
 

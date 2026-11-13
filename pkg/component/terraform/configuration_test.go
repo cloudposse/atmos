@@ -186,6 +186,55 @@ func fakeAssume(t *testing.T, err error) *struct {
 	return recorded
 }
 
+type stagedIAMRuntime struct {
+	iam     *schema.ComponentIAM
+	prepare func(*schema.ConfigAndStacksInfo) *schema.PreparedComponentConfiguration
+	probes  int
+}
+
+func (r *stagedIAMRuntime) Discover(context.Context) (map[string]map[string]any, error) {
+	return nil, nil
+}
+
+func (r *stagedIAMRuntime) ProbeIAM(_ context.Context, _ *schema.ConfigAndStacksInfo) (*schema.ComponentIAM, error) {
+	r.probes++
+	return r.iam, nil
+}
+
+func (r *stagedIAMRuntime) Prepare(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+	return r.prepare(info), nil
+}
+
+func TestPrepareConfigurationStagesIAMForEvaluation(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	iam := &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"}
+	runtime := &stagedIAMRuntime{iam: iam, prepare: func(info *schema.ConfigAndStacksInfo) *schema.PreparedComponentConfiguration {
+		require.Contains(t, info.ComponentEnvList, "AWS_ACCESS_KEY_ID=ASIASESSION")
+		return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: iam}
+	}}
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"AWS_ACCESS_KEY_ID=BASE", "AWS_SECRET_ACCESS_KEY=base-secret"}}
+	_, err = prepareConfiguration(t.Context(), config, info)
+	require.NoError(t, err)
+	require.Equal(t, 1, runtime.probes)
+	require.Equal(t, 1, recorded.calls, "the staged session is reused for execution")
+	require.Contains(t, recorded.environ, "AWS_ACCESS_KEY_ID=BASE")
+}
+
+func TestPrepareConfigurationRejectsChangedIAMAfterStaging(t *testing.T) {
+	fakeAssume(t, nil)
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	runtime := &stagedIAMRuntime{iam: &schema.ComponentIAM{Role: "role-a"}, prepare: func(*schema.ConfigAndStacksInfo) *schema.PreparedComponentConfiguration {
+		return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: &schema.ComponentIAM{Role: "role-b"}}
+	}}
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+	_, err = prepareConfiguration(t.Context(), &schema.AtmosConfiguration{ComponentConfigurations: runtime}, info)
+	require.ErrorContains(t, err, "changed between role and unit evaluation")
+}
+
 func TestApplyIAMRoleExportsTheSessionToTheComponent(t *testing.T) {
 	recorded := fakeAssume(t, nil)
 	info := &schema.ConfigAndStacksInfo{Stack: "live/dev", ComponentFromArg: "app", SanitizedEnv: []string{"AWS_PROFILE=atmos", "PATH=/bin"}, ComponentEnvList: []string{"TF_IN_AUTOMATION=true"}}

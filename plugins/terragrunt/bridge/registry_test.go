@@ -150,6 +150,25 @@ func TestResolveRegistrySourceCredentials(t *testing.T) {
 	})
 }
 
+func TestRegistryArchiveAuthorizationIsScopedToTheRegistryOrigin(t *testing.T) {
+	registry := newFakeRegistry(t, "1.0.0")
+	registry.download = "/archives/%s.tar.gz"
+	logger := log.New(log.WithOutput(io.Discard))
+	request := RegistryRequest{Client: registry.server.Client(), Source: registry.source("/acme/vpc/aws", "?version=1.0.0"), Environment: map[string]string{"TG_TF_REGISTRY_TOKEN": "secret-token"}, OpenTofu: true}
+	resolution, err := ResolveRegistrySourceWithAuth(t.Context(), logger, request)
+	require.NoError(t, err)
+	assert.Equal(t, registry.server.URL+"/archives/1.0.0.tar.gz", resolution.Source)
+	assert.Equal(t, registry.server.URL, resolution.AuthOrigin)
+	assert.Equal(t, "Bearer secret-token", resolution.Authorization)
+	assert.NotContains(t, resolution.Source, "secret-token")
+
+	registry.download = "https://unrelated.example/archive-%s.tar.gz"
+	resolution, err = ResolveRegistrySourceWithAuth(t.Context(), logger, request)
+	require.NoError(t, err)
+	assert.Empty(t, resolution.Authorization)
+	assert.Empty(t, resolution.AuthOrigin)
+}
+
 func TestResolveRegistrySourceErrors(t *testing.T) {
 	registry := newFakeRegistry(t, "1.0.0")
 	tests := []struct{ name, source, constraint, wantErr string }{

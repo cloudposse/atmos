@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -47,11 +48,33 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if info.DryRun {
 		return nil, nil
 	}
-	// Plugins do not inherit PATH. Resolve the selected host executable before
-	// Terragrunt evaluates version constraints or dependency outputs.
+	if err := resolveSelectedExecutable(info); err != nil {
+		return nil, err
+	}
+	prepared, stagedIAM, err := restoreOrPrepareConfiguration(ctx, config, info)
+	if err != nil || prepared == nil {
+		return prepared, err
+	}
+	if err = finalizePreparedConfiguration(ctx, config, info, prepared, stagedIAM); err != nil {
+		return nil, err
+	}
+	applyPreparedConfiguration(config, info, prepared)
+	return prepared, nil
+}
+
+func finalizePreparedConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, stagedIAM *schema.ComponentIAM) error {
+	if err := applyStackOverrides(config, info, prepared); err != nil {
+		return err
+	}
+	return finishIAM(ctx, info, prepared, stagedIAM)
+}
+
+// Plugins do not inherit PATH. Resolve the selected host executable before
+// Terragrunt evaluates version constraints or dependency outputs.
+func resolveSelectedExecutable(info *schema.ConfigAndStacksInfo) error {
 	binary, err := exec.LookPath(info.Command)
 	if err != nil {
-		return nil, errUtils.Build(fmt.Errorf("%w: Terraform executable of component %q in stack %q: %w", errUtils.ErrPluginInvalidConfig, info.ComponentFromArg, info.Stack, err)).
+		return errUtils.Build(fmt.Errorf("%w: Terraform executable of component %q in stack %q: %w", errUtils.ErrPluginInvalidConfig, info.ComponentFromArg, info.Stack, err)).
 			WithContext("component", info.ComponentFromArg).
 			WithContext("stack", info.Stack).
 			WithContext("executable", info.Command).
@@ -60,32 +83,16 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	}
 	binary, err = filepath.Abs(binary)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
 	}
 	info.Command = binary
-	var prepared *schema.PreparedComponentConfiguration
-	if usesConfigurationPlan(info) {
-		if err = useRetainedWorkdir(config, info); err != nil {
-			return nil, err
-		}
-		prepared, err = restoreConfigurationPlan(ctx, config, info)
-	} else {
-		prepared, err = config.ComponentConfigurations.Prepare(ctx, info)
-	}
-	if err != nil || prepared == nil {
-		return prepared, err
-	}
-	if err = applyStackOverrides(config, info, prepared); err != nil {
-		return nil, err
-	}
-	// An operation the provider excludes never runs, so it must not need the unit's role.
-	if !excludedFromOperation(info, prepared) {
-		if err = applyIAMRole(ctx, info, prepared.IAM); err != nil {
-			return nil, err
-		}
-	}
+	return nil
+}
+
+func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
 	info.ComponentExecution = prepared.Execution
+	info.SourceAuthorization = prepared.SourceAuthorization
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
 	info.ComponentSection["vars"] = prepared.Inputs
@@ -102,7 +109,54 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	info.ComponentSection["backend"] = prepared.Backend
 	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
 	warnOnCacheLocalState(info, prepared)
-	return prepared, nil
+}
+
+func restoreOrPrepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *schema.ComponentIAM, error) {
+	if usesConfigurationPlan(info) {
+		if err := useRetainedWorkdir(config, info); err != nil {
+			return nil, nil, err
+		}
+		prepared, err := restoreConfigurationPlan(ctx, config, info)
+		return prepared, nil, err
+	}
+	staged, err := probeAndApplyIAM(ctx, config.ComponentConfigurations, info)
+	if err != nil {
+		return nil, nil, err
+	}
+	prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+	return prepared, staged, err
+}
+
+func probeAndApplyIAM(ctx context.Context, runtime schema.ComponentConfigurationRuntime, info *schema.ConfigAndStacksInfo) (*schema.ComponentIAM, error) {
+	if requestedIdentity(info) != "" {
+		return nil, nil
+	}
+	probe, ok := runtime.(schema.ComponentConfigurationIAMProbe)
+	if !ok {
+		return nil, nil
+	}
+	iam, err := probe.ProbeIAM(ctx, info)
+	if err != nil || iam == nil {
+		return iam, err
+	}
+	if err := applyIAMRole(ctx, info, iam); err != nil {
+		return nil, err
+	}
+	return iam, nil
+}
+
+func finishIAM(ctx context.Context, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, staged *schema.ComponentIAM) error {
+	if staged != nil {
+		if !reflect.DeepEqual(staged, prepared.IAM) {
+			return fmt.Errorf("%w: Terragrunt IAM settings changed between role and unit evaluation", errUtils.ErrPluginInvalidConfig)
+		}
+		return nil
+	}
+	// An operation the provider excludes never runs, so it must not need the unit's role.
+	if excludedFromOperation(info, prepared) {
+		return nil
+	}
+	return applyIAMRole(ctx, info, prepared.IAM)
 }
 
 // terragruntCacheDirectory is where Terragrunt keeps its working copies of a unit.

@@ -2134,6 +2134,8 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection       AtmosSectionMapType
 	ComponentAuthSection      AtmosSectionMapType
 	ComponentEnvList          []string
+	// SourceAuthorization is an invocation-only header for a resolved registry archive.
+	SourceAuthorization *SourceAuthorization `json:"-" yaml:"-" mapstructure:"-"`
 	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
 	// whose value contains a resolved secret (detected via the masker). These variables
 	// are excluded from the on-disk Terraform varfile and injected at runtime as

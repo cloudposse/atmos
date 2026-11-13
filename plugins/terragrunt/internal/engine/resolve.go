@@ -93,6 +93,23 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	// Explicit feature overrides apply to every unit, as Terragrunt's --feature flag does.
 	pctx.FeatureFlags = request.Features
 	pctx.MaxFoldersToCheck = options.DefaultMaxFoldersToCheck
+	if request.Phase == "iam" {
+		// Resolve the role before the full parse evaluates AWS functions. The host
+		// assumes it and supplies the resulting session on the second call.
+		flags, err := config.PartialParseConfigFile(ctx, logger, environment,
+			pctx.WithDecodeList(config.TerragruntFlags, config.ExcludeBlock), path, nil)
+		if err != nil {
+			return nil, err
+		}
+		if PreventsRun(excludeFromConfig(flags.Exclude), OperationCommand(request.Command, request.Arguments)) {
+			return &model.Resolution{Path: path}, nil
+		}
+		iam, warnings, err := iamSettings(flags, &request, path)
+		if err != nil {
+			return nil, err
+		}
+		return &model.Resolution{Path: path, IAM: iam, Warnings: warnings}, nil
+	}
 	if filepath.Base(path) == "terragrunt.stack.hcl" {
 		if request.Command == "generate" {
 			if err := atmosbridge.Generate(ctx, logger, environment, path, request.Tofu); err != nil {

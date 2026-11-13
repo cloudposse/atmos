@@ -36,6 +36,12 @@ type ComponentConfigurationRuntime interface {
 	Prepare(context.Context, *ConfigAndStacksInfo) (*PreparedComponentConfiguration, error)
 }
 
+// ComponentConfigurationIAMProbe is implemented by providers whose configuration
+// needs role credentials while it is being evaluated.
+type ComponentConfigurationIAMProbe interface {
+	ProbeIAM(context.Context, *ConfigAndStacksInfo) (*ComponentIAM, error)
+}
+
 // ComponentConfigurationFailureRuntime reports components that a provider discovered but could not
 // evaluate. Bulk commands use it to reject every selected broken component before they run any
 // infrastructure command. A nil error means the component is healthy or unknown to the provider.
@@ -76,6 +82,14 @@ type PreparedComponentConfiguration struct {
 	FeatureFlags map[string]string
 	// IAM is a role the host assumes for the component's commands; it is nil when the provider asks for none.
 	IAM *ComponentIAM
+	// SourceAuthorization is invocation-only registry auth for a same-origin archive.
+	SourceAuthorization *SourceAuthorization `json:"-"`
+}
+
+// SourceAuthorization is never serialized with a source URL or saved plan.
+type SourceAuthorization struct {
+	Origin string
+	Header string
 }
 
 // ComponentIAM is an AWS role a configuration provider asks the host to assume. The host assumes it

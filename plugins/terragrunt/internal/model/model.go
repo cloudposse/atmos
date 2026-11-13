@@ -35,11 +35,15 @@ type Resolution struct {
 	StackConfigs       map[string]string `json:"stack_configs,omitempty"`
 	Inputs             map[string]any    `json:"inputs"`
 	Source             string            `json:"source"`
-	BackendGenerated   bool              `json:"backend_generated,omitempty"`
-	BackendType        string            `json:"backend_type"`
-	Backend            map[string]any    `json:"backend"`
-	Generated          map[string]string `json:"generated"`
-	GeneratedPolicies  map[string]string `json:"generated_policies,omitempty"`
+	// RegistryAuth is an invocation-only bearer header for a same-origin archive.
+	// It must never enter saved configuration or source provenance.
+	RegistryAuth            *RegistryAuth     `json:"-"`
+	RegistryResolutionNanos uint64            `json:"registry_resolution_nanos,omitempty"`
+	BackendGenerated        bool              `json:"backend_generated,omitempty"`
+	BackendType             string            `json:"backend_type"`
+	Backend                 map[string]any    `json:"backend"`
+	Generated               map[string]string `json:"generated"`
+	GeneratedPolicies       map[string]string `json:"generated_policies,omitempty"`
 	// UnitFileCopies identifies literal files copied from beside the unit.
 	UnitFileCopies map[string]bool `json:"unit_file_copies,omitempty"`
 	// SensitiveGenerated names generated files whose contents can hold
@@ -61,6 +65,11 @@ type Resolution struct {
 	FeatureFlags map[string]string `json:"feature_flags,omitempty"`
 	// IAM is the role the host assumes for the unit's commands; nil when the unit names none.
 	IAM *IAM `json:"iam,omitempty"`
+}
+
+type RegistryAuth struct {
+	Origin        string
+	Authorization string
 }
 
 // IAM is the evaluated iam_role setting and its companions. The plugin never assumes the role: the host
