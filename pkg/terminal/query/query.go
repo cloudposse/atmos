@@ -76,7 +76,9 @@ func (r *Responder) Scan(chunk []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	data := make([]byte, 0, len(r.tail)+len(chunk))
+	// Size to the chunk alone: a sum of two lengths is not a bounded allocation size, and append
+	// grows the buffer for the short carried-over tail.
+	data := make([]byte, 0, len(chunk))
 	data = append(data, r.tail...)
 	data = append(data, chunk...)
 
