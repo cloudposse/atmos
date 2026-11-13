@@ -1,10 +1,13 @@
 package format
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -172,13 +175,36 @@ func (f *DelimitedFormatter) generatePropertyKeyRows(keys []string, valueKeys []
 }
 
 // buildOutput builds the final delimited output string.
+// When the delimiter is a single character that encoding/csv accepts, fields are written with
+// encoding/csv so values that contain the delimiter, quotes or newlines are quoted.
+// Any other delimiter (multi-character or reserved by encoding/csv) falls back to joining the fields as is.
 func (f *DelimitedFormatter) buildOutput(header []string, rows [][]string, delimiter string) string {
+	if comma, ok := csvDelimiter(delimiter); ok {
+		var output bytes.Buffer
+		writer := csv.NewWriter(&output)
+		writer.Comma = comma
+		writer.UseCRLF = utils.GetLineEnding() == "\r\n"
+		records := append([][]string{header}, rows...)
+		if err := writer.WriteAll(records); err == nil {
+			return output.String()
+		}
+	}
+
 	var output strings.Builder
 	output.WriteString(strings.Join(header, delimiter) + utils.GetLineEnding())
 	for _, row := range rows {
 		output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
 	}
 	return output.String()
+}
+
+// csvDelimiter returns the delimiter as a rune when encoding/csv can use it.
+func csvDelimiter(delimiter string) (rune, bool) {
+	r, size := utf8.DecodeRuneInString(delimiter)
+	if size == 0 || size != len(delimiter) || r == utf8.RuneError || r == '"' || r == '\r' || r == '\n' {
+		return 0, false
+	}
+	return r, true
 }
 
 // FormatValue converts a value to its string representation.
