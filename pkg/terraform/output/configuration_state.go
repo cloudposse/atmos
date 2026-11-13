@@ -173,10 +173,7 @@ func configurationInitializedOutputConfig(config *ComponentConfig, state *schema
 			WithHint("Run the command without --skip-init so Atmos can initialize a temporary state reader").
 			Err()
 	}
-	dataDir := ".terraform"
-	if configured, ok := config.Env["TF_DATA_DIR"].(string); ok && configured != "" {
-		dataDir = configured
-	}
+	dataDir := configurationDataDir(config)
 	if !filepath.IsAbs(dataDir) {
 		dataDir = filepath.Join(state.WorkingDirectory, dataDir)
 	}
@@ -194,6 +191,17 @@ func configurationInitializedOutputConfig(config *ComponentConfig, state *schema
 	config.Providers, config.Vars = nil, nil
 	config.PassVars = false
 	return nil
+}
+
+// configurationDataDir resolves TF_DATA_DIR from the environment the output subprocess receives,
+// with SetupEnvironment's precedence: the authoritative base environment (or the inherited one
+// when there is none), then the component env section. Terraform's default applies otherwise.
+func configurationDataDir(config *ComponentConfig) string {
+	environment, err := (&defaultEnvironmentSetup{}).SetupEnvironment(&ComponentConfig{Env: config.Env, BaseEnvironment: config.BaseEnvironment}, nil)
+	if err == nil && environment["TF_DATA_DIR"] != "" {
+		return environment["TF_DATA_DIR"]
+	}
+	return ".terraform"
 }
 
 // remoteStateOverrides returns the remote-state settings that differ from the placeholder backend.

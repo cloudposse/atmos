@@ -152,9 +152,14 @@ func TestConfigurationPlanPathsAndFileErrors(t *testing.T) {
 	require.Equal(t, path, configurationPlanPath(config, info))
 	info.PlanFile = path
 	require.Equal(t, path, configurationPlanPath(config, info))
-	require.Error(t, writePlanBinding(filepath.Join(t.TempDir(), "absent", "binding"), nil))
-	_, err := fileDigest(t.TempDir())
-	require.Error(t, err)
+	err := writePlanBinding(filepath.Join(t.TempDir(), "absent", "binding"), nil)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	_, err = fileDigest(t.TempDir())
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	_, err = fileDigest(filepath.Join(t.TempDir(), "absent"))
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, err, os.ErrNotExist)
 	_, err = configurationWorkdirDigest(filepath.Join(t.TempDir(), "absent"), path)
 	require.Error(t, err)
 	require.True(t, usesConfigurationPlan(info))
@@ -259,6 +264,41 @@ func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 	require.FileExists(t, plan+configurationPlanSuffix)
 }
 
+// TestDetailedExitCodePlanRecordsReviewedPlan binds a plan that reports changes with status 2,
+// and leaves an ordinary failure unbound.
+func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		args   []string
+		code   int
+		record bool
+	}{
+		{name: "explicit detailed exit code with changes", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 2, record: true},
+		{name: "failure with detailed exit code", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 1},
+		{name: "status 2 without detailed exit code", args: []string{"plan", "-out", "changes.plan"}, code: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, _ := planFixture(t)
+			shell := &fakeShell{run: func(call *shellCall) error {
+				if err := os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("changes"), 0o600); err != nil {
+					return err
+				}
+				return errUtils.ExitCodeError{Code: test.code}
+			}}
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.execute
+			err := executor.runMainCommandPhase(config, info, execCtx, test.args, execCtx.componentPath, false)
+			require.Equal(t, test.code, resolveExitCode(err), "the plan status is returned unchanged")
+			binding := filepath.Join(execCtx.componentPath, "changes.plan") + configurationPlanSuffix
+			if test.record {
+				require.FileExists(t, binding)
+				return
+			}
+			require.NoFileExists(t, binding)
+		})
+	}
+}
+
 type planShowRunner struct{}
 
 //nolint:gocritic // The process.Runner interface fixes the value parameter.
@@ -291,6 +331,8 @@ func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
 		inherited map[string]string
 		component []string
 		provider  map[string]string
+		global    map[string]string
+		sanitized []string
 		commands  []string
 		reject    bool
 	}{
@@ -302,6 +344,11 @@ func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
 		{name: "other flags", inherited: map[string]string{"TF_CLI_ARGS_plan": "-lock=false -outfile-like=x"}, component: []string{"TF_CLI_ARGS=-no-color"}},
 		{name: "apply only variable", component: []string{"TF_CLI_ARGS_apply=-out=x"}},
 		{name: "provider environment for apply", provider: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, commands: []string{"apply"}},
+		{name: "global environment", global: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, reject: true},
+		{name: "sanitized environment omits inherited flag", inherited: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, sanitized: []string{"PATH=/bin"}},
+		{name: "sanitized environment carries flag", sanitized: []string{"TF_CLI_ARGS=-out=env.plan"}, reject: true},
+		{name: "component overrides inherited flag", inherited: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, component: []string{"TF_CLI_ARGS_plan=-lock=false"}},
+		{name: "component overrides global flag", global: map[string]string{"TF_CLI_ARGS": "-out=env.plan"}, component: []string{"TF_CLI_ARGS="}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("TF_CLI_ARGS", "")
@@ -310,6 +357,8 @@ func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
 				t.Setenv(name, value)
 			}
 			config, info, execCtx, _, path := planFixture(t)
+			config.Env = test.global
+			info.SanitizedEnv = test.sanitized
 			info.ComponentEnvList = test.component
 			if test.provider != nil {
 				info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: test.commands, Environment: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
@@ -333,14 +382,14 @@ func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
 // TestEnvironmentPlanOutputIgnoresUnownedPlans keeps ordinary components unaffected.
 func TestEnvironmentPlanOutputIgnoresUnownedPlans(t *testing.T) {
 	t.Setenv("TF_CLI_ARGS_plan", "-out=env.plan")
-	_, info, execCtx, _, _ := planFixture(t)
-	require.ErrorIs(t, validateEnvironmentPlanOutput(info, execCtx), errUtils.ErrPlanVerificationFailed)
+	config, info, execCtx, _, _ := planFixture(t)
+	require.ErrorIs(t, validateEnvironmentPlanOutput(config, info, execCtx), errUtils.ErrPlanVerificationFailed)
 	info.DryRun = true
-	require.NoError(t, validateEnvironmentPlanOutput(info, execCtx))
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
 	info.DryRun = false
 	info.SubCommand = "apply"
-	require.NoError(t, validateEnvironmentPlanOutput(info, execCtx))
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
 	info.SubCommand = "plan"
 	execCtx.preparedConfiguration = nil
-	require.NoError(t, validateEnvironmentPlanOutput(info, execCtx))
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
 }

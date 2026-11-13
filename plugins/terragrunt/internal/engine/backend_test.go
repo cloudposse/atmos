@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -114,6 +115,7 @@ generate "duplicate" {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := Resolve(t.Context(), nativeUnit(t, test.hcl))
 			require.ErrorContains(t, err, test.want)
+			require.Equal(t, test.name == "disable_init" || test.name == "encryption", errors.Is(err, ErrUnsupportedRemoteState))
 			require.Nil(t, result)
 		})
 	}

@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,6 +24,9 @@ import (
 func Resolve(ctx context.Context, request model.Request) (*model.Resolution, error) {
 	return resolve(ctx, request, nil)
 }
+
+// ErrPreventDestroy rejects a destroy operation on a unit that sets prevent_destroy.
+var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
 
 func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
@@ -177,7 +181,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 			return nil, err
 		}
 		if guard.PreventDestroy != nil && *guard.PreventDestroy {
-			return nil, fmt.Errorf("unit is protected by prevent_destroy")
+			return nil, ErrPreventDestroy
 		}
 	}
 	var cfg *config.TerragruntConfig
@@ -203,6 +207,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	// Hooks and extra arguments are returned as data for the host to run; evaluation never
 	// executes them. Backend identity is read from a partial parse that does not decode them.
 	var execution *model.Execution
+	var applyFiles []string
 	if request.Phase != "backend" {
 		if execution, err = executionFromConfig(cfg.Terraform); err != nil {
 			return nil, err
@@ -210,17 +215,17 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 		reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 			return config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
 		}
-		if execution, err = applyTimeExecution(request, path, execution, environment.FS, pctx.FilesRead.Paths(), reparse); err != nil {
+		if execution, applyFiles, err = applyTimeExecution(request, path, execution, environment.FS, pctx.FilesRead.Paths(), reparse); err != nil {
 			return nil, err
 		}
 	}
 	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
-		return nil, fmt.Errorf("unit is protected by prevent_destroy")
+		return nil, ErrPreventDestroy
 	}
 	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
 		return nil, fmt.Errorf("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
 	}
-	result := &model.Resolution{Execution: execution, Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
+	result := &model.Resolution{Execution: execution, Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(append(pctx.FilesRead.Paths(), applyFiles...), path)}
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(path), result.Source)
 		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {

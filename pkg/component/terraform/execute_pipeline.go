@@ -271,7 +271,7 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	// this, incidental init/workspace-select output (e.g. a stray "No changes."
 	// lookalike) can poison the exec-metadata parser's extraction even though the
 	// real plan/apply's own output is correct (research.md Decision 32).
-	if err := validateEnvironmentPlanOutput(info, execCtx); err != nil {
+	if err := validateEnvironmentPlanOutput(atmosConfig, info, execCtx); err != nil {
 		return err
 	}
 	allArgsAndFlags, restore, err := expandPolicyPlanArguments(info, execCtx, allArgsAndFlags, componentPath)
@@ -303,7 +303,9 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		mainErr = e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
 			mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, append(slices.Clone(opts), captureArgs)...)
 	}
-	if mainErr != nil {
+	// An explicit -detailed-exitcode plan reports changes with status 2 after writing the
+	// plan, so the reviewed plan is recorded before that status is returned.
+	if mainErr != nil && !isExplicitDetailedPlanChanges(info, allArgsAndFlags, mainErr) {
 		return mainErr
 	}
 	// Policy plans run against a private artifact that is removed after the guard
@@ -312,7 +314,15 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	if execCtx.planPolicy != nil && info.SubCommand == "plan" && !info.DryRun {
 		effectiveArgs = allArgsAndFlags
 	}
-	return recordConfigurationPlan(component.ContextFromOptions(opts...), atmosConfig, info, execCtx, effectiveArgs)
+	if err := recordConfigurationPlan(component.ContextFromOptions(opts...), atmosConfig, info, execCtx, effectiveArgs); err != nil {
+		return err
+	}
+	return mainErr
+}
+
+// isExplicitDetailedPlanChanges reports plan's "changes present" status from -detailed-exitcode.
+func isExplicitDetailedPlanChanges(info *schema.ConfigAndStacksInfo, args []string, err error) bool {
+	return info.SubCommand == subcommandPlan && slices.Contains(args, detailedExitCodeFlag) && resolveExitCode(err) == detailedExitCodeChangesDetected
 }
 
 // recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command

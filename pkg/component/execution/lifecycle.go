@@ -52,16 +52,18 @@ type failure struct {
 func Run(ctx context.Context, config *schema.ComponentExecution, command string, runner Runner, action func() (Output, error)) error {
 	defer perf.Track(nil, "execution.Run")()
 
+	// An already-canceled context never starts the action.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if config == nil || (len(config.BeforeHooks)+len(config.AfterHooks)+len(config.ErrorHooks) == 0) {
 		_, err := action()
 		return err
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 
 	failures := runHooks(ctx, runner, KindBefore, hooksFor(config.BeforeHooks, command), nil)
-	if len(failures) == 0 {
+	// Cancellation during the last before hook must also keep the action from starting.
+	if len(failures) == 0 && ctx.Err() == nil {
 		if output, err := action(); err != nil {
 			failures = append(failures, failure{err: err, output: output})
 		}

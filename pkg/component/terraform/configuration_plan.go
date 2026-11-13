@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -225,29 +226,41 @@ func validatePlanOutputFlags(command string, args []string) error {
 // validateEnvironmentPlanOutput rejects plan output flags in TF_CLI_ARGS or
 // TF_CLI_ARGS_plan for a configuration-owned plan. Terraform reads these
 // variables itself, so a flag there could choose a plan file that Atmos does not
-// see and therefore does not bind. The check covers the inherited process
+// see and therefore does not bind. The check inspects the effective value of each
+// variable in the subprocess environment: the sanitized process environment (or
+// the inherited one when auth did not sanitize it), the global atmos.yaml
 // environment, the component environment, and provider extra-argument
-// environment, which together form the subprocess environment. Hooks run as
-// child processes and cannot change it.
-func validateEnvironmentPlanOutput(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) error {
+// environment, with later layers overriding earlier ones. Hooks run as child
+// processes and cannot change it.
+func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) error {
 	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != subcommandPlan {
 		return nil
 	}
-	for _, entry := range planEnvironment(info) {
-		name, value, _ := strings.Cut(entry, "=")
-		if name != tfCliArgsEnvVar && name != tfCliArgsEnvVar+"_"+subcommandPlan {
-			continue
+	effective := make(map[string]string)
+	for _, entry := range planEnvironment(atmosConfig, info) {
+		if name, value, ok := strings.Cut(entry, "="); ok {
+			effective[name] = value
 		}
-		if containsOutputFlag(parseArgs(value)) {
+	}
+	for _, name := range []string{tfCliArgsEnvVar, tfCliArgsEnvVar + "_" + subcommandPlan} {
+		if containsOutputFlag(parseArgs(effective[name])) {
 			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
 		}
 	}
 	return nil
 }
 
-// planEnvironment lists every environment entry a plan subprocess may receive.
-func planEnvironment(info *schema.ConfigAndStacksInfo) []string {
-	entries := append(os.Environ(), info.ComponentEnvList...)
+// planEnvironment lists the environment layers a plan subprocess receives, in precedence order.
+func planEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) []string {
+	base := info.SanitizedEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	entries := slices.Clone(base)
+	if atmosConfig != nil {
+		entries = envpkg.MergeGlobalEnv(entries, atmosConfig.Env)
+	}
+	entries = append(entries, info.ComponentEnvList...)
 	if info.ComponentExecution == nil {
 		return entries
 	}
@@ -294,12 +307,12 @@ func plannedOutputPath(directory string, args []string) string {
 func fileDigest(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", planIOError(err)
 	}
 	defer file.Close()
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
-		return "", err
+		return "", planIOError(err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
@@ -307,17 +320,25 @@ func fileDigest(path string) (string, error) {
 func writePlanBinding(path string, data []byte) error {
 	file, err := os.CreateTemp(filepath.Dir(path), ".atmos-plan-*")
 	if err != nil {
-		return err
+		return planIOError(err)
 	}
 	defer os.Remove(file.Name())
 	if _, err := file.Write(data); err != nil {
 		file.Close()
-		return err
+		return planIOError(err)
 	}
 	if err := file.Close(); err != nil {
-		return err
+		return planIOError(err)
 	}
-	return os.Rename(file.Name(), path)
+	if err := os.Rename(file.Name(), path); err != nil {
+		return planIOError(err)
+	}
+	return nil
+}
+
+// planIOError wraps a saved-plan filesystem failure while keeping the underlying cause.
+func planIOError(err error) error {
+	return fmt.Errorf("%w: %w", errUtils.ErrPlanVerificationFailed, err)
 }
 
 // verifyConfigurationPlanState rejects a changed backend without reading dependency outputs.
@@ -377,8 +398,16 @@ func configurationWorkdirDigest(root, planPath string) (string, error) {
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
 // The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
 // that even a read-only lookup of the retained directory creates), never executed content.
+// Name-based exclusions apply only outside downloaded modules: a module's own subdirectories
+// are content Terraform may execute during apply, whatever they are called.
 func skipWorkdirDirectory(root, path, name string) bool {
-	return path != root && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || insideTerraformCacheOutsideModules(root, path))
+	if path == root {
+		return false
+	}
+	if insideTerraformCacheOutsideModules(root, path) {
+		return true
+	}
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache

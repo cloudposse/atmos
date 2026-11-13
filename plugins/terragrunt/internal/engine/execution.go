@@ -68,17 +68,20 @@ var commandFunctions = [][]byte{[]byte("get_terraform_command"), []byte("get_ter
 // Configuration that cannot observe the command evaluates identically, so it is not parsed twice.
 func applyTimeExecution(request model.Request, path string, planned *model.Execution, filesystem afero.Fs, read []string,
 	parse func(*config.ParsingContext) (*config.TerragruntConfig, error),
-) (*model.Execution, error) {
+) (*model.Execution, []string, error) {
 	if request.Command != "plan" || !observesCommand(filesystem, append(slices.Clone(read), path)) {
-		return planned, nil
+		return planned, nil, nil
 	}
-	cfg, err := parse(parsingContext(path, request.Tofu, "apply", nil))
+	apply := parsingContext(path, request.Tofu, "apply", nil)
+	cfg, err := parse(apply)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	// Configuration read only when evaluating for apply also shapes the reviewed plan.
+	files := apply.FilesRead.Paths()
 	applied, err := executionFromConfig(cfg.Terraform)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if applied == nil {
 		applied = &model.Execution{}
@@ -87,10 +90,10 @@ func applyTimeExecution(request model.Request, path string, planned *model.Execu
 		planned = &model.Execution{}
 	}
 	if reflect.DeepEqual(*applied, *planned) {
-		return nilIfEmpty(planned), nil
+		return nilIfEmpty(planned), files, nil
 	}
 	planned.Apply = applied
-	return planned, nil
+	return planned, files, nil
 }
 
 // observesCommand reports whether any configuration file the unit read can call a function

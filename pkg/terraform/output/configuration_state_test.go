@@ -275,6 +275,39 @@ func TestPluginOutputSkipInitRejectsAnUninitializedUnit(t *testing.T) {
 	}
 }
 
+// TestConfigurationInitializedOutputConfigUsesEffectiveDataDir verifies that the initialized
+// directory is located through the effective TF_DATA_DIR, with SetupEnvironment's precedence.
+func TestConfigurationInitializedOutputConfigUsesEffectiveDataDir(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		inherited string
+		base      []string
+		env       map[string]any
+		dataDir   string
+		ok        bool
+	}{
+		{name: "base environment", base: []string{"TF_DATA_DIR=base-data"}, dataDir: "base-data", ok: true},
+		{name: "inherited environment without base", inherited: "inherited-data", dataDir: "inherited-data", ok: true},
+		{name: "base environment omits inherited value", inherited: "inherited-data", base: []string{"PATH=/bin"}, dataDir: "inherited-data"},
+		{name: "component env overrides base", base: []string{"TF_DATA_DIR=base-data"}, env: map[string]any{"TF_DATA_DIR": "component-data"}, dataDir: "component-data", ok: true},
+		{name: "default data directory", base: []string{}, dataDir: ".terraform", ok: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("TF_DATA_DIR", test.inherited)
+			unit := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(unit, test.dataDir), 0o700))
+			config := &ComponentConfig{BaseEnvironment: test.base, Env: test.env}
+			err := configurationInitializedOutputConfig(config, &schema.ComponentConfigurationState{Workspace: "prod", WorkingDirectory: unit}, "network", "live")
+			if !test.ok {
+				require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, unit, config.ComponentPath)
+		})
+	}
+}
+
 // TestPluginOutputDoesNotResolveTheExecutionWorkdir verifies that a plugin-owned state read
 // succeeds even when the component's execution workdir cannot be resolved.
 func TestPluginOutputDoesNotResolveTheExecutionWorkdir(t *testing.T) {

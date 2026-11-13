@@ -235,6 +235,30 @@ func TestRunDoesNotStartWhenAlreadyCanceled(t *testing.T) {
 	require.Empty(t, r.calls)
 }
 
+func TestRunDoesNotStartActionWhenLastBeforeHookIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	r := &recorder{onCall: func(name string) {
+		if name == "before_hook:last" {
+			cancel()
+		}
+	}}
+	config := &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{hook("first", "plan"), hook("last", "plan")}}
+	err := Run(ctx, config, "plan", r, r.action)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, []string{"before_hook:first", "before_hook:last"}, r.calls)
+}
+
+func TestRunWithoutHooksDoesNotStartWhenAlreadyCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for _, config := range []*schema.ComponentExecution{nil, {}} {
+		r := &recorder{}
+		err := Run(ctx, config, "plan", r, r.action)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Empty(t, r.calls)
+	}
+}
+
 func TestRunErrorMessageNamesTheHook(t *testing.T) {
 	r := &recorder{failures: map[string]error{"lint": errors.New("exit status 3")}}
 	err := runLifecycle(t, &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{hook("lint", "plan")}}, "plan", r)

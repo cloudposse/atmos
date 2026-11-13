@@ -156,7 +156,7 @@ func TestConfigurationWorkdirDigestSkipsOnlyNestedMutableDirectories(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, baseline, same, "mutable data does not alter the retained-bytes digest")
 
-	for _, retained := range []string{"modules/child/main.tf", "terragrunt.hcl", ".terraform.lock.hcl", "settings.atmos.json"} {
+	for _, retained := range []string{"modules/child/main.tf", "terragrunt.hcl", ".terraform.lock.hcl", "settings.atmos.json", ".terraform/modules/vpc/.atmos/hook.sh", ".terraform/modules/vpc/.terragrunt-cache/main.tf", ".terraform/modules/vpc/.git/hooks/post-checkout"} {
 		write(retained)
 		changed, err := configurationWorkdirDigest(root, plan)
 		require.NoError(t, err)

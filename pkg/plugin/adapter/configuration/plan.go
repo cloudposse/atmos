@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -67,7 +68,7 @@ func (s *Session) PlanIdentity(ctx context.Context, info *schema.ConfigAndStacks
 func sourceDigests(ctx context.Context, root string, sources []schema.ComponentConfigurationSource) (map[string]string, error) {
 	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return nil, err
+		return nil, sourceReadError(err)
 	}
 	result := map[string]string{}
 	for _, source := range sources {
@@ -93,7 +94,7 @@ func digestSourceDirectory(ctx context.Context, root, sourcePath string, result 
 	top := filepath.Join(root, filepath.FromSlash(sourcePath))
 	err := filepath.WalkDir(top, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			return sourceReadError(err)
 		}
 		if entry.IsDir() {
 			if path != top && excludedPlanSource(entry.Name()) {
@@ -109,11 +110,16 @@ func digestSourceDirectory(ctx context.Context, root, sourcePath string, result 
 		}
 		return digestSource(ctx, root, path, result)
 	})
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		result[sourcePath] = "absent"
 		return nil
 	}
 	return err
+}
+
+// sourceReadError wraps a filesystem failure met while fingerprinting watched sources.
+func sourceReadError(err error) error {
+	return fmt.Errorf("%w: fingerprint watched source: %w", errUtils.ErrReadFile, err)
 }
 
 // rejectDirectorySymlink fails clearly on a symlink to a directory inside a watched directory.
@@ -159,7 +165,7 @@ func digestSource(ctx context.Context, root, path string, result map[string]stri
 		return nil
 	}
 	if err != nil {
-		return err
+		return sourceReadError(err)
 	}
 	relative, err := filepath.Rel(root, real)
 	if err != nil || !filepath.IsLocal(relative) {
@@ -167,7 +173,7 @@ func digestSource(ctx context.Context, root, path string, result map[string]stri
 	}
 	data, err := os.ReadFile(real)
 	if err != nil {
-		return err
+		return sourceReadError(err)
 	}
 	sum := sha256.Sum256(data)
 	relative, err = filepath.Rel(root, path)

@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
@@ -9,12 +9,15 @@ import (
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
+// ErrUnsupportedRemoteState identifies remote_state settings that the native adapter cannot reproduce.
+var ErrUnsupportedRemoteState = errors.New("native adaptation of remote_state disable_init or encryption is not implemented")
+
 func resolveBackend(cfg *config.TerragruntConfig, result *model.Resolution) error {
 	if cfg.RemoteState == nil {
 		return nil
 	}
 	if cfg.RemoteState.DisableInit || len(cfg.RemoteState.Encryption) > 0 {
-		return fmt.Errorf("native adaptation of remote_state disable_init or encryption is not implemented")
+		return ErrUnsupportedRemoteState
 	}
 	result.BackendType = cfg.RemoteState.BackendName
 	result.Backend = atmosbridge.BackendConfig(cfg.RemoteState.Config)

@@ -236,6 +236,27 @@ func TestPlanPreparationRecordsApplyTimeExecution(t *testing.T) {
 	require.Equal(t, planned.Execution.Apply.AfterHooks, applied.Execution.AfterHooks)
 }
 
+// Configuration that only the apply-time evaluation reads also shapes the reviewed plan, so the
+// plan's watched sources include it.
+func TestPlanPreparationWatchesApplyTimeReads(t *testing.T) {
+	request := nativeUnit(t, `locals {
+  hooks = read_terragrunt_config(get_terraform_command() == "apply" ? "apply-hooks.hcl" : "plan-hooks.hcl")
+}`)
+	root := filepath.Dir(request.Path)
+	for _, name := range []string{"apply-hooks.hcl", "plan-hooks.hcl"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte("locals {}\n"), 0o600))
+	}
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	var names []string
+	for _, file := range result.Files {
+		names = append(names, filepath.Base(file))
+	}
+	require.Contains(t, names, "plan-hooks.hcl")
+	require.Contains(t, names, "apply-hooks.hcl", "apply-time reads must be watched by the saved plan")
+	require.Contains(t, names, "terragrunt.hcl")
+}
+
 func TestPlanPreparationRecordsThatApplyRunsNothing(t *testing.T) {
 	result, err := Resolve(t.Context(), executionUnit(t, `
   before_hook "plan_only" {

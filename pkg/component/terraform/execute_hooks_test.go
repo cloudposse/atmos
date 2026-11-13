@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -442,26 +443,15 @@ func TestUnknownHookFailureIsNotMistakenForSuccess(t *testing.T) {
 	require.Equal(t, []string{"hook-b"}, shell.names())
 }
 
-// fakeConfigurationRuntime is a provider session that returns a fixed preparation.
-type fakeConfigurationRuntime struct {
-	prepared *schema.PreparedComponentConfiguration
-}
-
-func (fakeConfigurationRuntime) Discover(context.Context) (map[string]map[string]any, error) {
-	return nil, nil
-}
-
-func (f fakeConfigurationRuntime) Prepare(context.Context, *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
-	return f.prepared, nil
-}
-
 func TestPrepareConfigurationHandsExecutionToThePipeline(t *testing.T) {
 	executable, err := os.Executable()
 	require.NoError(t, err)
 	execution := &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{execHook("b", "plan")}}
-	config := &schema.AtmosConfiguration{ComponentConfigurations: fakeConfigurationRuntime{prepared: &schema.PreparedComponentConfiguration{
+	runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	runtime.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
 		Source: "./module", BackendType: "local", Backend: map[string]any{}, Workspace: "default", Execution: execution,
-	}}}
+	}, nil)
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 	info := &schema.ConfigAndStacksInfo{
 		SubCommand: "plan", Command: executable, ComponentSection: map[string]any{},
 		ComponentSettingsSection: map[string]any{"configuration": true},

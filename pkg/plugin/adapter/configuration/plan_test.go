@@ -277,13 +277,14 @@ func TestSourceDigests(t *testing.T) {
 	})
 	t.Run("missing project root fails", func(t *testing.T) {
 		_, err := sourceDigests(t.Context(), filepath.Join(t.TempDir(), "gone"), nil)
+		require.ErrorIs(t, err, errUtils.ErrReadFile)
 		require.ErrorIs(t, err, os.ErrNotExist)
 	})
 	t.Run("directory watched as a file fails", func(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(root, "modules"), 0o700))
 		_, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "modules"}})
-		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrReadFile)
 	})
 	t.Run("canceled context stops digesting", func(t *testing.T) {
 		root := t.TempDir()

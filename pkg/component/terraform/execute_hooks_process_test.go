@@ -388,8 +388,10 @@ func TestCaptureFileReportsFailures(t *testing.T) {
 	t.Setenv("TEMP", os.Getenv("TMPDIR"))
 	file = capture.create()
 	_, _ = file.Write([]byte("kept"))
+	// Close the capture before removing it: Windows cannot remove a file that is still open.
+	output := file.finish()
 	require.NoError(t, os.Remove(file.path))
-	_, err = file.finish().Open()
+	_, err = output.Open()
 	require.ErrorIs(t, err, errUtils.ErrComponentOutputCapture, "a removed capture reports a read failure")
 	capture.cleanup()
 }
