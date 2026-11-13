@@ -217,7 +217,9 @@ func validateHook(kind string, hook *model.Hook) error {
 // a Terragrunt evaluation context. Dynamic values (including dependency outputs and
 // run_cmd) are validated by executionFromConfig during preparation.
 func checkExecutionSyntax(filesystem afero.Fs, cfg *config.TerragruntConfig, path string) error {
-	paths := []string{path}
+	// Included files come first and the unit last, so a later same-named declaration replaces an
+	// earlier one, as Terragrunt merges hooks and extra_arguments by name.
+	var paths []string
 	for _, name := range slices.Sorted(maps.Keys(cfg.ProcessedIncludes)) {
 		include := cfg.ProcessedIncludes[name]
 		strategy, err := include.GetMergeStrategy()
@@ -233,10 +235,35 @@ func checkExecutionSyntax(filesystem afero.Fs, cfg *config.TerragruntConfig, pat
 		}
 		paths = append(paths, included)
 	}
+	paths = append(paths, path)
+	effective, err := effectiveExecutionBlocks(filesystem, paths)
+	if err != nil {
+		return err
+	}
+	// A declaration that a later file replaces never runs, so only the effective ones are checked.
+	for _, declaration := range effective {
+		if err := checkExecutionBlock(declaration.block); err != nil {
+			return hookProblem(err, declaration.path)
+		}
+	}
+	return nil
+}
+
+// executionDeclaration is one execution block and the file that declares it.
+type executionDeclaration struct {
+	block *hcl.Block
+	path  string
+}
+
+// effectiveExecutionBlocks parses every file and keeps, for each block type and name, the last
+// declaration in file order. Unparseable files are still reported.
+func effectiveExecutionBlocks(filesystem afero.Fs, paths []string) ([]executionDeclaration, error) {
+	var order []string
+	effective := map[string]executionDeclaration{}
 	for _, path := range paths {
 		data, err := afero.ReadFile(filesystem, path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		parser := hclparse.NewParser()
 		var file *hcl.File
@@ -247,26 +274,32 @@ func checkExecutionSyntax(filesystem afero.Fs, cfg *config.TerragruntConfig, pat
 			file, diagnostics = parser.ParseHCL(data, path)
 		}
 		if diagnostics.HasErrors() {
-			return diagnostics
+			return nil, diagnostics
 		}
 		content, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}}})
 		if diagnostics.HasErrors() {
-			return diagnostics
+			return nil, diagnostics
 		}
 		for _, terraform := range content.Blocks {
 			schema, _ := gohcl.ImpliedBodySchema(&config.TerraformConfig{})
 			declarations, diagnostics := terraform.Body.Content(schema)
 			if diagnostics.HasErrors() {
-				return diagnostics
+				return nil, diagnostics
 			}
 			for _, block := range declarations.Blocks {
-				if err := checkExecutionBlock(block); err != nil {
-					return hookProblem(err, path)
+				key := block.Type + "\x00" + strings.Join(block.Labels, "\x00")
+				if _, seen := effective[key]; !seen {
+					order = append(order, key)
 				}
+				effective[key] = executionDeclaration{block: block, path: path}
 			}
 		}
 	}
-	return nil
+	result := make([]executionDeclaration, 0, len(order))
+	for _, key := range order {
+		result = append(result, effective[key])
+	}
+	return result, nil
 }
 
 func checkExecutionBlock(block *hcl.Block) error {

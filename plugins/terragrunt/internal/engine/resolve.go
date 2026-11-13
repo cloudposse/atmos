@@ -238,8 +238,8 @@ func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *conf
 	result := &model.Resolution{Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(path), result.Source)
-		if info, err := environment.FS.Stat(result.Source); err != nil || !info.IsDir() {
-			return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
+		if problem := localSourceProblem(environment.FS, path, *cfg.Terraform.Source, result.Source); problem != nil {
+			return nil, problem
 		}
 		result.Folders = []string{result.Source}
 	} else if err := validateRemoteSource(result.Source); err != nil {

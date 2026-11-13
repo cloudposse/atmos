@@ -427,3 +427,39 @@ func hookNames(hooks []model.Hook) []string {
 	}
 	return names
 }
+
+// A parent hook that a unit replaces by name never runs, so its unsupported built-in executable
+// does not block the unit. The same parent hook is still rejected when nothing replaces it.
+func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
+	for _, test := range []struct {
+		name, child, want string
+	}{
+		{"overridden by name", `before_hook "lint" {
+ commands = ["plan"]
+ execute = ["./wrapper.sh"]
+}`, ""},
+		{"inherited unchanged", "", "Unsupported built-in"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, test.child)
+			parent := filepath.Join(request.BasePath, "parent.hcl")
+			require.NoError(t, os.WriteFile(parent, []byte(`terraform {
+ before_hook "lint" {
+  commands = ["plan"]
+  execute = ["tflint"]
+ }
+}
+`), 0o644))
+			body, err := os.ReadFile(request.Path)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(request.Path, append([]byte("include \"parent\" { path = \"./parent.hcl\" }\n"), body...), 0o644))
+			request.Phase = "discover"
+			_, err = Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, test.want)
+		})
+	}
+}
