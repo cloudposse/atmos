@@ -98,3 +98,35 @@ func TestSkipKeepsOwnershipOfAnIdenticalModuleFile(t *testing.T) {
 	require.NoError(t, WriteFiles(root, nil))
 	require.NoFileExists(t, filepath.Join(root, generated.Path))
 }
+
+func TestEnsureModeWrapsPermissionFailures(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+	err = ensureMode(root, "missing.tf")
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrNotExist, "the filesystem cause is preserved")
+	require.ErrorContains(t, err, "missing.tf")
+	// A file that exists is tightened without error.
+	require.NoError(t, root.WriteFile("present.tf", nil, 0o644))
+	require.NoError(t, ensureMode(root, "present.tf"))
+}
+
+func TestWatchPaths(t *testing.T) {
+	root := t.TempDir()
+	for _, provider := range []bool{true, false} {
+		settings := map[string]any{}
+		if provider {
+			settings["configuration"] = map[string]any{"provider": "terragrunt"}
+		}
+		absolute := filepath.Join(root, "module")
+		deps := []schema.ComponentDependency{{Path: "root.hcl"}, {Path: absolute}}
+		require.Equal(t, provider, WatchPaths(&schema.AtmosConfiguration{BasePathAbsolute: root}, settings, deps))
+		require.Equal(t, absolute, deps[1].Path)
+		if provider {
+			require.Equal(t, filepath.Join(root, "root.hcl"), deps[0].Path)
+		} else {
+			require.Equal(t, "root.hcl", deps[0].Path)
+		}
+	}
+}

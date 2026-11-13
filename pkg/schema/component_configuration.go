@@ -84,6 +84,8 @@ type PreparedComponentConfiguration struct {
 	IAM *ComponentIAM
 	// SourceAuthorization is invocation-only registry auth for a same-origin archive.
 	SourceAuthorization *SourceAuthorization `json:"-"`
+	// SensitiveInputKeys projects provider sensitivity paths onto whole input variables.
+	SensitiveInputKeys map[string]bool
 }
 
 // SourceAuthorization is never serialized with a source URL or saved plan.
@@ -121,6 +123,19 @@ type ComponentConfigurationFile struct {
 	Sensitive bool
 	// UnitFileCopy identifies a literal adjacent unit-file copy, not explicit generation.
 	UnitFileCopy bool
+}
+
+// ConfigurationOwned reports whether a configuration provider owns a component's settings.
+// Discovery records ownership as a map; an explicit false or null leaves an ordinary component.
+func ConfigurationOwned(settings map[string]any) bool {
+	switch value := settings["configuration"].(type) {
+	case nil:
+		return false
+	case bool:
+		return value
+	default:
+		return true
+	}
 }
 
 // HasComponentDiscovery reports an explicit opt-in without consulting plugins or the filesystem.

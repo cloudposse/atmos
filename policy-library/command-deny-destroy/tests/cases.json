@@ -5,7 +5,7 @@
       "kind": "command",
       "input": {
         "command": "terraform destroy",
-        "path": [
+        "command_path": [
           "terraform",
           "destroy"
         ],
@@ -20,7 +20,7 @@
       "kind": "command",
       "input": {
         "command": "terraform apply",
-        "path": [
+        "command_path": [
           "terraform",
           "apply"
         ],
@@ -35,7 +35,7 @@
       "kind": "command",
       "input": {
         "command": "terraform plan",
-        "path": [
+        "command_path": [
           "terraform",
           "plan"
         ],
@@ -50,7 +50,7 @@
       "kind": "command",
       "input": {
         "command": "terraform deploy",
-        "path": [
+        "command_path": [
           "terraform",
           "deploy"
         ],
@@ -65,7 +65,7 @@
       "kind": "command",
       "input": {
         "command": "terraform apply",
-        "path": [
+        "command_path": [
           "terraform",
           "apply"
         ],
@@ -80,7 +80,7 @@
       "kind": "command",
       "input": {
         "command": "terraform plan",
-        "path": [
+        "command_path": [
           "terraform",
           "plan"
         ],

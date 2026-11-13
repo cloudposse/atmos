@@ -30,7 +30,7 @@ func TestCloneFreshAppendsExtraArgsBeforeSeparator(t *testing.T) {
 	// Extra args are git clone flags, so they must precede the "--" that
 	// separates flags from the URI/workdir positionals.
 	assert.Equal(t, []string{
-		"clone", "--no-tags", "--origin", "upstream", "--",
+		"clone", "--origin", "origin", "--no-tags", "--origin", "upstream", "--",
 		"https://github.com/acme/deploy.git", workdir,
 	}, runner.calls[0].args)
 }
@@ -61,4 +61,23 @@ func TestPushAppendsExtraArgs(t *testing.T) {
 
 	require.Len(t, runner.calls, 1)
 	assert.Equal(t, []string{"push", "origin", "main", "--follow-tags"}, runner.calls[0].args)
+}
+
+func TestCloneRefRejectsRemotePassthrough(t *testing.T) {
+	for _, args := range [][]string{{"--origin", "upstream"}, {"--origin=upstream"}, {"--ori=upstream"}, {"-o", "upstream"}, {"-oupstream"}, {"-qoupstream"}} {
+		t.Run(args[0], func(t *testing.T) {
+			runner := newFakeRunner()
+			workdir := filepath.Join(t.TempDir(), "parent", "checkout")
+			err := New(WithRunner(runner)).Clone(context.Background(), &atmosgit.CloneOptions{URI: "repo", Ref: "v1", ExtraArgs: args, RepoContext: atmosgit.RepoContext{Workdir: workdir}})
+			require.ErrorContains(t, err, "remote passthrough")
+			require.Empty(t, runner.calls)
+			require.NoDirExists(t, filepath.Dir(workdir))
+		})
+	}
+}
+
+func TestCloneRemoteShortOption(t *testing.T) {
+	require.False(t, cloneRemoteShortOption("-btopic"))
+	require.False(t, cloneRemoteShortOption("--no-tags"))
+	require.True(t, cloneRemoteShortOption("-vqoother"))
 }

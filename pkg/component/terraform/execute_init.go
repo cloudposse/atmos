@@ -89,10 +89,11 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 // newAutoInitInputs builds this invocation's fingerprint inputs -- the thin internal/exec-local
-// wrapper around autoinit.InputsFromInfo shared by buildInitSubcommandArgs, recordAutoInit, and
-// executeTerraformInitForced.
+// wrapper around autoinit.InputsFromInfo shared by buildInitSubcommandArgs, recordAutoInit,
+// executeTerraformInitCommand, and executeTerraformInitForced. It adds the init settings that
+// provider extra arguments contribute, which the init phase applies.
 func newAutoInitInputs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string) *autoinit.Inputs {
-	return autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile)
+	return withProviderInitSettings(autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile), info, componentPath)
 }
 
 // decideAutoInit resolves atmos.yaml's init policy plus force into an autoinit.Request and
@@ -177,13 +178,13 @@ func (e *Executor) executeTerraformInitForced(atmosConfig *schema.AtmosConfigura
 // situation as a backend migration, producing the "Do you want to migrate all workspaces?"
 // prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; owned && usesConfigurationPlan(info) {
+	if schema.ConfigurationOwned(info.ComponentSettingsSection) && usesConfigurationPlan(info) {
 		// Saved plans retain their reviewed modules and generated files.
 		return componentPath, nil
 	}
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !isWorkdir && !info.DryRun {
-		cleanTerraformWorkspace(*atmosConfig, componentPath)
+		cleanTerraformWorkspace(*atmosConfig, componentPath, info.ComponentEnvList)
 	}
 
 	if ctx == nil {
@@ -286,7 +287,7 @@ func (e *Executor) runTerraformInitSubprocess(atmosConfig *schema.AtmosConfigura
 // prerequisiteOutputOptions keeps initialization diagnostics out of a data command's stdout.
 // Explicit init and ordinary plan/apply retain their existing terminal and capture behavior.
 func prerequisiteOutputOptions(info *schema.ConfigAndStacksInfo, opts []component.ExecutionOption) []component.ExecutionOption {
-	if info.SubCommand != "output" && info.SubCommand != "show" && (info.SubCommand != "state" || info.SubCommand2 != "pull") {
+	if !isDataSubcommand(info) {
 		return opts
 	}
 	var options component.ExecutionOptions
@@ -312,6 +313,18 @@ func prerequisiteOutputOptions(info *schema.ConfigAndStacksInfo, opts []componen
 		component.WithStdoutOverride(streams.Stderr), component.WithStdoutCapture(capture), component.WithStderrCapture(capture))
 }
 
+// isDataSubcommand reports whether the main command writes data to stdout. The CLI parser stores
+// `state pull` and `state list` as single compound subcommands; the split forms are accepted as well.
+func isDataSubcommand(info *schema.ConfigAndStacksInfo) bool {
+	switch info.SubCommand {
+	case "output", "show", "state pull", "state list":
+		return true
+	case "state":
+		return info.SubCommand2 == "pull" || info.SubCommand2 == "list"
+	}
+	return false
+}
+
 // executeTerraformInitCommand is the "smart init" decision point: it fingerprints this
 // invocation's init inputs, compares them against the marker recorded by the last successful
 // init (autoinit.Decide), and either skips the subprocess entirely or runs it with exactly the
@@ -324,7 +337,7 @@ func prerequisiteOutputOptions(info *schema.ConfigAndStacksInfo, opts []componen
 func (e *Executor) executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...component.ExecutionOption) error {
 	defer perf.Track(atmosConfig, "exec.executeTerraformInitCommand")()
 
-	in := autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile)
+	in := newAutoInitInputs(atmosConfig, info, componentPath, varFile)
 	decision := autoinit.Decide(autoinit.RequestFromInfo(atmosConfig, info, in, false))
 
 	if !decision.RunInit {
@@ -617,25 +630,23 @@ func (e *Executor) createWorkspaceFallback(atmosConfig *schema.AtmosConfiguratio
 // helping Terraform identify the active workspace context for managing your infrastructure.
 // We delete the file to prevent the Terraform prompt asking to select the default or the
 // previously used workspace. This happens when different backends are used for the same component.
-//
-//nolint:nestif // Preserve workspace cleanup and Windows retry behavior during extraction.
 func CleanTerraformWorkspace(componentPath string) {
 	defer perf.Track(nil, "terraform.CleanTerraformWorkspace")()
 
-	// Get `TF_DATA_DIR` ENV variable, default to `.terraform` if not set
-	//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos configuration variable.
-	tfDataDir := os.Getenv("TF_DATA_DIR")
-	if tfDataDir == "" {
-		tfDataDir = ".terraform"
-	}
+	CleanTerraformWorkspaceWithEnv(componentPath, nil)
+}
 
-	// Convert relative path to absolute
-	if !filepath.IsAbs(tfDataDir) {
-		tfDataDir = filepath.Join(componentPath, tfDataDir)
-	}
+// CleanTerraformWorkspaceWithEnv is CleanTerraformWorkspace for a subprocess environment:
+// a TF_DATA_DIR in envList (typically info.ComponentEnvList) wins over this process's own
+// environment, so the cleanup targets the data directory Terraform will actually use.
+//
+//nolint:nestif // Preserve workspace cleanup and Windows retry behavior during extraction.
+func CleanTerraformWorkspaceWithEnv(componentPath string, envList []string) {
+	defer perf.Track(nil, "terraform.CleanTerraformWorkspaceWithEnv")()
 
-	// Ensure the path is cleaned properly
-	tfDataDir = filepath.Clean(tfDataDir)
+	// Resolve TF_DATA_DIR from envList, then this process's environment, defaulting to
+	// `.terraform`; a relative value is joined to componentPath and cleaned.
+	tfDataDir := autoinit.DataDir(componentPath, envListLookup(envList))
 
 	// Construct the full file path
 	filePath := filepath.Join(tfDataDir, "environment")
@@ -658,5 +669,20 @@ func CleanTerraformWorkspace(componentPath string) {
 		log.Debug("Terraform environment file not found. No action needed.", "file", filePath)
 	} else {
 		log.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
+	}
+}
+
+// envListLookup looks keys up in a subprocess environment list. The last entry for a key wins,
+// as it does for the launched process, and an explicit empty value is reported as present.
+func envListLookup(envList []string) func(string) (string, bool) {
+	return func(key string) (string, bool) {
+		prefix := key + "="
+		value, found := "", false
+		for _, entry := range envList {
+			if strings.HasPrefix(entry, prefix) {
+				value, found = entry[len(prefix):], true
+			}
+		}
+		return value, found
 	}
 }

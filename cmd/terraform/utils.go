@@ -38,8 +38,6 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/policy"
-	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1234,18 +1232,8 @@ func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.Co
 // admission rules are configured. Other resolution failures are left to the
 // executor, which reports them authoritatively.
 func admitNodeComponent(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	enabled, err := admission.HasRules(policy.ComponentCommand)
-	if err != nil {
-		return err
-	}
-	if !enabled || info.ComponentFromArg == "" {
-		return nil
-	}
 	authManager, _ := info.AuthManager.(authtypes.AuthManager)
-	if _, err := e.ProcessStacks(atmosConfig, *info, true, false, false, nil, authManager); h.IsPolicyAdmissionError(err) {
-		return err
-	}
-	return nil
+	return e.AdmitComponent(atmosConfig, info, authManager)
 }
 
 // nodeKey identifies a graph node across its Before and After hook calls.

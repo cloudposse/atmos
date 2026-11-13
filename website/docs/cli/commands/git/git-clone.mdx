@@ -65,6 +65,9 @@ atmos git clone flux-deploy --depth=1 --single-branch --workdir=./deploy
 # working directory — replaces actions/checkout
 atmos git clone
 
+# Pin a CI job to its immutable event revision, retaining history for diffs
+atmos git clone --ci --ref "$REVISION" --depth 0
+
 # Pass native arguments to the underlying git clone invocation
 atmos git clone flux-deploy -- --no-tags
 ```
@@ -158,6 +161,16 @@ Affected detection requires merge-base history. If [`atmos describe affected`](/
     <dd>
         Branch to clone. Precedence: flag &gt; `?ref=` query parameter &gt; repository config &gt; remote default branch.
         Environment variable: `ATMOS_GIT_BRANCH`
+    </dd>
+
+    <dt>`--ref` <em>(optional)</em></dt>
+    <dd>
+        Branch, tag, full ref, or commit SHA to fetch and check out detached.
+        Mutually exclusive with `--branch` (including `ATMOS_GIT_BRANCH`).
+        Overrides the branch in a named repository configuration or URI query.
+        Reconciliation checks out the requested ref exactly, even when a cached
+        checkout is ahead; dirty worktrees are still refused.
+        Environment variable: `ATMOS_GIT_REF`.
     </dd>
 
     <dt>`--remote` <em>(optional)</em></dt>

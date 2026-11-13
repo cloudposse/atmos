@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"slices"
@@ -18,6 +19,28 @@ func preparedExecution(source *pluginv1.ComponentExecutionConfiguration) (*schem
 	if source == nil {
 		return nil, nil
 	}
+	result, err := executionMetadata(source)
+	if err != nil {
+		return nil, err
+	}
+	// The apply-time evaluation is kept even when empty: it means apply adds nothing,
+	// which differs from an absent evaluation, where the plan-time metadata applies.
+	if apply := source.GetApply(); apply != nil {
+		if apply.GetApply() != nil {
+			return nil, fmt.Errorf("%w: apply-time execution metadata cannot nest another", errUtils.ErrPluginProtocol)
+		}
+		if result.Apply, err = executionMetadata(apply); err != nil {
+			return nil, err
+		}
+	}
+	if result.IsEmpty() && result.Apply == nil {
+		return nil, nil
+	}
+	return result, nil
+}
+
+// executionMetadata converts one evaluation of hooks and extra arguments and validates it.
+func executionMetadata(source *pluginv1.ComponentExecutionConfiguration) (*schema.ComponentExecution, error) {
 	result := &schema.ComponentExecution{}
 	for _, item := range source.GetExtraArguments() {
 		if item == nil {
@@ -43,9 +66,6 @@ func preparedExecution(source *pluginv1.ComponentExecutionConfiguration) (*schem
 	}
 	if err := execution.Validate(result); err != nil {
 		return nil, err
-	}
-	if result.IsEmpty() {
-		return nil, nil
 	}
 	return result, nil
 }

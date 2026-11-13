@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/go-version"
 
@@ -70,6 +71,28 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 		return err
 	}
 	return check("terraform_version_constraint", terraform, result.Version)
+}
+
+// checkUnitPolicies rejects Terragrunt semantics that the native adapter cannot
+// represent faithfully. Backend reads skip the version probe, which may execute
+// the selected binary.
+func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.TerragruntConfig, path string) error {
+	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
+		return missingSourceProblem(path)
+	}
+	if request.Phase != "backend" {
+		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
+			return err
+		}
+	}
+	if err := rejectUnsupported(cfg, path); err != nil {
+		return err
+	}
+	// Hooks and extra arguments are adapted as execution data by unitExecution.
+	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+		return ErrPreventDestroy
+	}
+	return nil
 }
 
 // validateRemoteSource preserves the getter URI for Atmos's source provisioner. A `tfr://` registry

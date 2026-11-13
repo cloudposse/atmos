@@ -116,9 +116,13 @@ func (*componentFixture) Discover(_ context.Context, request *pluginv1.DiscoverC
 	return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{{Address: fixtureAddress(), Provider: request.Provider, Engine: "terraform", Source: "live/app/terragrunt.hcl"}}}, nil
 }
 
-func (*componentFixture) Prepare(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+func (*componentFixture) Prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
 	if err := recordCall(request.RootDirectory, "preparation", request); err != nil {
 		return nil, err
+	}
+	if request.GetOperation().GetCommand() == "wait-prepare" {
+		<-ctx.Done()
+		return nil, status.FromContextError(ctx.Err()).Err()
 	}
 	return &pluginv1.PrepareComponentResponse{Engine: "terraform", WorkingDirectory: request.RootDirectory, ModuleSource: "./module", Inputs: request.Configuration, State: fixtureState(request.RootDirectory), Files: []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", Content: []byte("$${literal}\n%{ literal }\n"), IfExists: "error"}}}, nil
 }

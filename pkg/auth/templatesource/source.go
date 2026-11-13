@@ -27,7 +27,7 @@ const (
 
 var (
 	commentAction  = regexp.MustCompile(`(?m)^[ \t]*\{\{-?[ \t\r\n]*/\*[^*]*\*+(?:[^/*][^*]*\*+)*/[ \t\r\n]*-?\}\}[ \t\r]*$`)
-	controlLine    = regexp.MustCompile(`^\{\{-?\s*(if|else|end|range|with|define|block|template)\b(?:[^"'\x60{}]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60)*\}\}$`)
+	controlLine    = regexp.MustCompile(`^\{\{-?\s*(if|else|end|range|with|define|block|template|break|continue)\b(?:[^"'\x60{}]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60)*\}\}$`)
 	controlOpening = regexp.MustCompile(`\{\{-?\s*(if|range|with|define|block)\b(?:[^"'\x60]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60)*?\}\}`)
 	mappingKey     = regexp.MustCompile(`(?m)(^|[,{]|\}\})\s*(?:\?\s+)?("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[[:alnum:]_]+)\s*:`)
 )
@@ -317,7 +317,7 @@ func templateYAML(input string, marker rune) string {
 	lines := strings.Split(input, newline)
 	for index, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if controlLine.MatchString(trimmed) {
+		if nonOutputLine(trimmed) {
 			indent := len(line) - len(strings.TrimLeft(line, indentWhitespace))
 			lines[index] = line[:indent] + "#" + line[indent:]
 			continue
@@ -335,6 +335,31 @@ func templateYAML(input string, marker rune) string {
 		})
 	}
 	return strings.Join(lines, newline)
+}
+
+// nonOutputLine reports whether a line holds only actions that render nothing:
+// controls and variable declarations or assignments, in any combination.
+func nonOutputLine(line string) bool {
+	if controlLine.MatchString(line) {
+		return true
+	}
+	if !strings.HasPrefix(line, templateOpening) {
+		return false
+	}
+	rest := line
+	for rest != "" {
+		action := wholeValueAction.FindString(rest)
+		if action == "" || !nonOutputAction(action) {
+			return false
+		}
+		rest = strings.TrimLeft(rest[len(action):], indentWhitespace)
+	}
+	return true
+}
+
+// nonOutputAction reports whether one action renders nothing.
+func nonOutputAction(action string) bool {
+	return controlLine.MatchString(action) || assignmentAction.MatchString(action)
 }
 
 // commentTemplateAction preserves line positions and template markers in scalar data.

@@ -1492,6 +1492,35 @@ func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testi
 	assert.Equal(t, "# v1", string(contents))
 }
 
+// TestAutoProvisionSource_InvocationGuard_RechecksTargetOwner verifies the marker is reused only while
+// the workdir still holds this selector's provisioning. When another selector has since re-vendored the
+// target, the marker no longer applies and the source is provisioned again.
+func TestAutoProvisionSource_InvocationGuard_RechecksTargetOwner(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# v1"), 0o644))
+	component := map[string]any{"component": "example", "atmos_stack": "dev", "source": map[string]any{"uri": sourceDir, "ttl": "0s"}, "provision": map[string]any{"workdir": map[string]any{"enabled": true}}}
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	require.NoError(t, AutoProvisionSource(t.Context(), config, "terraform", component, nil, provisioner.OutputWriters{}))
+	target, err := ResolveTarget(config, "terraform", "example", component)
+	require.NoError(t, err)
+
+	// Another selector re-vendors the same target.
+	metadata, err := workdir.ReadMetadata(target.Dir)
+	require.NoError(t, err)
+	metadata.Stack = "prod"
+	require.NoError(t, workdir.WriteMetadata(target.Dir, metadata))
+	require.False(t, markerTargetMatches(target, "dev", &schema.VendorComponentSource{Uri: sourceDir}))
+
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# v2"), 0o644))
+	require.NoError(t, AutoProvisionSource(t.Context(), config, "terraform", component, nil, provisioner.OutputWriters{}))
+	contents, err := os.ReadFile(filepath.Join(target.Dir, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# v2", string(contents))
+	metadata, err = workdir.ReadMetadata(target.Dir)
+	require.NoError(t, err)
+	assert.Equal(t, "dev", metadata.Stack)
+}
+
 // TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning verifies that the
 // invocationDoneKey is written into componentConfig when provisioning is skipped
 // (cache still valid). This ensures the before.terraform.init hook will be a no-op.

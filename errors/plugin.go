@@ -97,6 +97,8 @@ var (
 	ErrComponentRunIgnored = errors.New("component run ended by an ignored error")
 	// ErrComponentExcluded ends a component run successfully because the provider excluded the operation.
 	ErrComponentExcluded = errors.New("component excluded from this operation")
+	// ErrComponentOutputCapture identifies command output that could not be recorded for error hook matching.
+	ErrComponentOutputCapture = errors.New("failed to capture command output for error hooks")
 
 	ErrInvalidCredentialCodec    = errors.New("invalid credential codec")
 	ErrDuplicateCredentialCodec  = errors.New("duplicate credential codec")

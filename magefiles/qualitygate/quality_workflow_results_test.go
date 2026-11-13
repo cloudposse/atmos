@@ -50,6 +50,13 @@ func TestQualityWorkflowResultsIgnoreSupersededMatrixPlaceholders(t *testing.T) 
 	}
 }
 
+func TestQualityDefaultBranchReportersAreNotCIEvidence(t *testing.T) {
+	for _, path := range []string{qualityReconcileWorkflow, releaseMilestonesWorkflow, qualityReportWorkflow, ".github/workflows/test.yml"} {
+		run := qualityWorkflowRun{Run: githubapi.Run{Path: path, Event: "push"}}
+		require.Equal(t, path == qualityReconcileWorkflow || path == releaseMilestonesWorkflow, run.reporterRun(), path)
+	}
+}
+
 func workflowResultFixture(id, suite int64, conclusion string) map[string]any {
 	return map[string]any{
 		"id": id, "check_suite_id": suite, "head_sha": githubtest.SHA,

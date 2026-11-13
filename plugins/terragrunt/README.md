@@ -104,3 +104,16 @@ go -C plugins/terragrunt/bridge test ./...
 ```
 
 See [the Terragrunt PRD](../../docs/prd/terragrunt-support.md) and [the shared component contract](../../docs/prd/plugins/extensions/component-engines.md) for the release requirements.
+
+## Discovery diagnostics
+
+Discovery failures use `google.rpc.ErrorInfo` with domain
+`atmos.terragrunt.discovery.v1`, a fixed reason (`MISSING_TERRAFORM_SOURCE`,
+`NONLOCAL_SOURCE`, or `EVALUATION_FAILED`), and a single `file` metadata entry.
+The file is a filesystem-derived path relative to the discovery root, including
+virtual generated configuration files. Paths are diagnostic identities and are
+not read by the host. This contract permits configuration filenames, never HCL
+source, evaluated values, or evaluator error text. The host validates paths and
+categories and renders its own messages; unknown details retain the generic
+error. Cancellation, deadlines, and unsupported operations retain their existing
+status mappings. The contract assumes the enabled native plugin is trusted code.

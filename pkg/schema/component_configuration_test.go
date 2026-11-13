@@ -62,3 +62,22 @@ func TestComponentExecutionIsEmptyCountsErrorHandling(t *testing.T) {
 		t.Fatal("a hook is execution metadata")
 	}
 }
+
+func TestConfigurationOwned(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		settings map[string]any
+		want     bool
+	}{
+		{name: "absent", settings: map[string]any{}},
+		{name: "nil settings"},
+		{name: "explicit false", settings: map[string]any{"configuration": false}},
+		{name: "explicit null", settings: map[string]any{"configuration": nil}},
+		{name: "explicit true", settings: map[string]any{"configuration": true}, want: true},
+		{name: "discovered", settings: map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, ConfigurationOwned(test.settings))
+		})
+	}
+}

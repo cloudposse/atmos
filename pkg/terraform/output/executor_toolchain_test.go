@@ -198,15 +198,15 @@ func TestPluginOwnedOutputReadUsesIdentityEnvironmentAndToolchain(t *testing.T) 
 		return runner, nil
 	}))
 	stateRoot := t.TempDir()
-	setup.config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+	setup.config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate")}, Workspace: "prod", WorkingDirectory: stateRoot}, nil
-	}}
+	})
 	sections := validSections()
 	sections["settings"] = map[string]any{"configuration": true}
 	sections[cfg.CommandSectionName] = "tofu"
 	sections["dependencies"] = map[string]any{"tools": map[string]any{"tofu": "1.0.0", "fixture-tool": "1.0.0"}}
 
-	outputs, err := executor.execute(t.Context(), setup.config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true, manager)
+	outputs, err := executor.execute(t.Context(), setup.config, "network", "live", sections, nil, &OutputOptions{}, true, manager)
 	require.NoError(t, err)
 	require.Equal(t, "value", outputs["id"])
 

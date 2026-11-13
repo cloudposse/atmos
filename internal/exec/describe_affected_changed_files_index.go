@@ -31,6 +31,8 @@ type changedFilesIndex struct {
 	// literal folder dependency is answered by one lookup instead of a scan of all files.
 	directories     map[string]struct{}
 	directoriesOnce sync.Once
+	resolvedOnce    sync.Once
+	resolved        *changedFilesIndex
 
 	// watchMu protects filtered views for this change set.
 	watchMu      sync.Mutex

@@ -114,6 +114,11 @@ func applyParity(prepared *schema.PreparedComponentConfiguration, result *plugin
 			prepared.Execution = &schema.ComponentExecution{}
 		}
 		prepared.Execution.Errors = policies
+		// The unit's errors block is evaluated once, so a saved plan applied with the
+		// apply-time metadata keeps the same retry and ignore policies.
+		if prepared.Execution.Apply != nil {
+			prepared.Execution.Apply.Errors = policies
+		}
 	}
 	prepared.TerraformBinary = result.GetTerraformBinary()
 	prepared.Exclusion = preparedExclusion(result.GetExclude())

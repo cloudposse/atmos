@@ -254,6 +254,12 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
+	discoveredErrors, err := validateDiscoveredManifests(atmosConfig, atmosManifestJsonSchemaFilePath)
+	if err != nil {
+		return err
+	}
+	validationErrorMessages = append(validationErrorMessages, discoveredErrors...)
+
 	if len(validationErrorMessages) > 0 {
 		return errors.New(strings.Join(dedupeStrings(validationErrorMessages), "\n\n"))
 	}

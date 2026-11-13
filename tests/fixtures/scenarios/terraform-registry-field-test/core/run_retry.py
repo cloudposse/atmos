@@ -10,7 +10,7 @@ import time
 
 import yaml
 
-from run import Case
+from run import Case, exit_status
 from run_extra import simple
 
 
@@ -61,6 +61,9 @@ def retry(c):
 
 if __name__ == "__main__":
     root, baseline, candidate = sys.argv[1:]
+    cases = []
     for engine in ("terraform", "tofu"):
         for revision, binary in (("baseline", baseline), ("candidate", candidate)):
-            retry(Case(Path(root) / f"{engine}-{revision}", revision, engine, binary))
+            cases.append(Case(Path(root) / f"{engine}-{revision}", revision, engine, binary))
+            retry(cases[-1])
+    sys.exit(exit_status(cases))

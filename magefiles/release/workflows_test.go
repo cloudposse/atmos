@@ -105,7 +105,7 @@ type releaseStepLibrary struct {
 	run func(*api.StepCall) (*api.StepResult, error)
 }
 
-func (s *releaseStepLibrary) Names() []string       { return []string{"shell", "confirm"} }
+func (s *releaseStepLibrary) Names() []string       { return []string{"confirm"} }
 func (s *releaseStepLibrary) Fork() api.StepLibrary { return s }
 func (s *releaseStepLibrary) Validate(call *api.StepCall) error {
 	return step.NewAutomationLibrary(nil, nil).Validate(call)
@@ -167,7 +167,8 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		for _, answer := range []string{"true", "false", "", "plan failed"} {
 			t.Run(fmt.Sprintf("resume=%t/answer=%s", resume, answer), func(t *testing.T) {
-				plan := `{"version":"v1.234.0","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","milestone":{"number":42},"branch":"main","previous_tag":"v1.233.0","resume":{"run_id":77}}`
+				// The release notes quote literal template syntax, which must reach release:cut verbatim.
+				plan := `{"version":"v1.234.0","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","milestone":{"number":42,"notes":"Use {{ .Values.name }} and {{ atmos.Component \"vpc\" .stack }}."},"branch":"main","previous_tag":"v1.233.0","resume":{"run_id":77}}`
 				calls := 0
 				library := &releaseStepLibrary{run: func(call *api.StepCall) (*api.StepResult, error) {
 					calls++
@@ -184,13 +185,6 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 							require.Contains(t, prompt, "Do you want to cut 1.234.0?")
 						}
 						return &api.StepResult{Value: answer}, nil
-					case 3:
-						require.Equal(t, "true", answer, "declining must never execute the release command")
-						require.Equal(t, "shell", call.Type)
-						require.Equal(t, true, call.Configuration["interactive"])
-						require.Equal(t, "go tool mage release:cut cloudposse/atmos", call.Configuration["command"])
-						require.Equal(t, map[string]any{"RELEASE_RESUME": fmt.Sprint(resume), "RELEASE_CONFIRMED": "true", "RELEASE_APPROVED_PLAN": plan}, call.Configuration["env"])
-						return &api.StepResult{}, nil
 					default:
 						t.Fatal("unexpected step")
 						return nil, nil
@@ -198,15 +192,24 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 				}}
 				runner := releasePlanRunner(func(spec process.TaskSpec) process.Result {
 					calls++
-					require.Equal(t, 1, calls, "planning must precede confirmation")
 					require.Equal(t, "go", spec.Command)
-					require.Equal(t, []string{"tool", "mage", "release:planJSON", "cloudposse/atmos"}, spec.Args)
 					require.Contains(t, spec.Env, "RELEASE_RESUME="+fmt.Sprint(resume))
-					if answer == "plan failed" {
-						return process.Result{ExitCode: 1}
+					switch calls {
+					case 1:
+						require.Equal(t, []string{"tool", "mage", "release:planJSON", "cloudposse/atmos"}, spec.Args, "planning must precede confirmation")
+						if answer == "plan failed" {
+							return process.Result{ExitCode: 1}
+						}
+						_, err := io.WriteString(spec.Streams.Stdout, plan)
+						require.NoError(t, err)
+					case 3:
+						require.Equal(t, "true", answer, "declining must never execute the release command")
+						require.Equal(t, []string{"tool", "mage", "release:cut", "cloudposse/atmos"}, spec.Args)
+						require.Contains(t, spec.Env, "RELEASE_CONFIRMED=true")
+						require.Contains(t, spec.Env, "RELEASE_APPROVED_PLAN="+plan, "the approved plan must reach release:cut verbatim")
+					default:
+						t.Fatal("unexpected process")
 					}
-					_, err := io.WriteString(spec.Streams.Stdout, plan)
-					require.NoError(t, err)
 					return process.Result{}
 				})
 				_, err := starlarkengine.New(starlarkengine.WithProcessRunner(runner)).Execute(t.Context(), script.Spec{Source: source, Flags: map[string]any{"resume": resume}, Steps: library})

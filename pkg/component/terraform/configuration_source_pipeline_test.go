@@ -19,6 +19,8 @@ import (
 // sourcePipelineProvider replaces only the RPC boundary; source validation is
 // performed by the real Session.Prepare reached through component preparation.
 type sourcePipelineProvider struct {
+	// The embedded interface leaves calls this test does not expect, such as ResolveState, unimplemented.
+	configurationadapter.Provider
 	unit     *pluginv1.DiscoveredComponent
 	result   *pluginv1.PrepareComponentResponse
 	prepares int

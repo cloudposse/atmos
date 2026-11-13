@@ -6,6 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
@@ -88,4 +91,43 @@ func TestDiagnosticLocationIsMaskedBeforeItIsAttached(t *testing.T) {
 	require.True(t, found)
 	assert.NotContains(t, location.File, "tok,en-7d3a")
 	assert.Equal(t, 3, location.Line)
+}
+
+// An InvalidArgument failure that carries a structured detail stays on the structured path: the plugin's
+// safe detail reaches the user and an unsafe detail does not. A bare InvalidArgument status still
+// discloses nothing from its RPC message.
+func TestInvalidArgumentStructuredDetailKeepsSafeContract(t *testing.T) {
+	for _, safe := range []bool{true, false} {
+		detail := &pluginv1.ErrorDetail{Code: "evaluation_failed", Summary: "Evaluation failed", Location: &pluginv1.SourceLocation{File: "live/app/terragrunt.hcl", Line: 2}, UserSafe: safe}
+		if safe {
+			detail.Detail = "locals.region is not defined."
+		} else {
+			detail.Detail = "token ghp_INVALIDARG leaked"
+		}
+		wire, err := status.New(codes.InvalidArgument, "secret RPC payload").WithDetails(detail)
+		require.NoError(t, err)
+		// Round-trip the status protobuf as the RPC transport does.
+		data, err := proto.Marshal(wire.Proto())
+		require.NoError(t, err)
+		decoded := wire.Proto()
+		require.NoError(t, proto.Unmarshal(data, decoded))
+
+		result := invocationError(status.FromProto(decoded).Err())
+		require.ErrorIs(t, result, errUtils.ErrPluginInvalidConfig)
+		var failure *Failure
+		require.ErrorAs(t, result, &failure, "structured detail must not degrade to a bare sentinel")
+		rendered := result.Error() + strings.Join(errUtils.AllDetails(result), "\n")
+		assert.Equal(t, "Evaluation failed", result.Error())
+		assert.NotContains(t, rendered, "secret RPC payload")
+		assert.Contains(t, rendered, "live/app/terragrunt.hcl:2")
+		if safe {
+			assert.Contains(t, rendered, "locals.region is not defined.")
+		} else {
+			assert.NotContains(t, rendered, "ghp_INVALIDARG")
+		}
+	}
+
+	bare := invocationError(status.Error(codes.InvalidArgument, "secret RPC payload"))
+	require.ErrorIs(t, bare, errUtils.ErrPluginAPI)
+	assert.NotContains(t, bare.Error(), "secret")
 }

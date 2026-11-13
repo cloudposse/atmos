@@ -3,12 +3,16 @@ package provider
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
@@ -120,6 +124,13 @@ func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 	cancel()
 	_, err := p.Validate(ctx, componentRequest(t))
 	require.Equal(t, codes.Canceled, status.Code(err))
+	// Prepare and Resolve keep the validation status instead of re-mapping it to InvalidArgument.
+	_, err = p.Prepare(ctx, componentRequest(t))
+	require.Equal(t, codes.Canceled, status.Code(err))
+	unsupported := componentRequest(t)
+	unsupported.Operation.Mode = "cli"
+	_, err = p.Resolve(t.Context(), unsupported)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
 }
 
 func TestEvaluatorErrorsDoNotExposePayloads(t *testing.T) {
@@ -173,6 +184,34 @@ func TestPrepareReturnsExecutionInDeclarationOrder(t *testing.T) {
 	require.True(t, got.AfterHooks[0].RunOnError)
 	require.Len(t, got.ErrorHooks, 1)
 	require.Equal(t, []string{"x", "y"}, got.ErrorHooks[0].OnErrors)
+}
+
+// The apply-time evaluation crosses the boundary distinctly, including an empty one, which
+// means apply runs nothing rather than the plan-time metadata.
+func TestPrepareReturnsApplyTimeExecution(t *testing.T) {
+	request := componentRequest(t)
+	execution := &model.Execution{
+		BeforeHooks: []model.Hook{{Name: "plan_only", Commands: []string{"plan"}, Execute: []string{"tool", "plan"}}},
+		Apply:       &model.Execution{AfterHooks: []model.Hook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}}},
+	}
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Execution: execution, Source: request.RootDirectory, WorkingDir: request.RootDirectory, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	got := result.GetExecution()
+	require.Equal(t, "plan_only", got.GetBeforeHooks()[0].GetName())
+	require.Empty(t, got.GetAfterHooks())
+	require.Len(t, got.GetApply().GetAfterHooks(), 1)
+	require.Equal(t, "notify", got.GetApply().GetAfterHooks()[0].GetName())
+	require.Equal(t, []string{"tool", "notify"}, got.GetApply().GetAfterHooks()[0].GetExecute())
+	require.Nil(t, got.GetApply().GetApply())
+
+	execution.Apply = &model.Execution{}
+	result, err = p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, result.GetExecution().GetApply(), "an empty apply-time evaluation must be preserved")
+	require.Empty(t, result.GetExecution().GetApply().GetBeforeHooks())
 }
 
 func TestPrepareOmitsExecutionWithoutHooks(t *testing.T) {
@@ -382,6 +421,68 @@ func TestPreparationTransmitsUnitFileCopyProvenance(t *testing.T) {
 			require.NoError(t, proto.Unmarshal(wire, decoded))
 			require.Equal(t, copied, decoded.Files[0].UnitFileCopy)
 			require.Equal(t, "overwrite", result.Files[0].IfExists)
+		})
+	}
+}
+
+func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
+	request := componentRequest(t)
+	parsing := make(chan struct{})
+	release := make(chan struct{})
+	secondGeneration := make(chan struct{}, 1)
+	var calls atomic.Int32
+	p := New(func(ctx context.Context, req model.Request) (*model.Resolution, error) {
+		if req.Phase == "discover" {
+			if calls.Add(1) == 2 {
+				secondGeneration <- struct{}{}
+			}
+		} else if calls.Load() == 1 {
+			close(parsing)
+			<-release
+		}
+		return &model.Resolution{Source: request.RootDirectory, WorkingDir: request.RootDirectory}, nil
+	})
+	first := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); first <- err }()
+	<-parsing
+	second := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); second <- err }()
+	select {
+	case <-secondGeneration:
+		t.Fatal("second generation started before the first parse finished")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	select {
+	case <-secondGeneration:
+	default:
+		t.Fatal("second generation did not run")
+	}
+}
+
+// A unit that fails discovery is reported as a diagnostic for that unit; neither evaluated
+// values nor the absolute project path reach the response.
+func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
+	for _, test := range []struct{ name, content string }{
+		{"inline", "locals { password = \"secret-evaluated-value\" }"},
+		{"parse", "locals { password = \"secret-evaluated-value\""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := componentRequest(t)
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "terragrunt.hcl"), []byte(test.content), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "main.tf"), []byte("terraform {}"), 0o600))
+			response, err := New(nil).Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
+				RootDirectory: request.RootDirectory, Provider: request.Provider,
+				ProviderConfiguration: request.ProviderConfiguration, Operation: request.Operation, IncludePaths: []string{"**"},
+			})
+			require.NoError(t, err)
+			require.Empty(t, response.GetComponents())
+			require.NotEmpty(t, response.GetDiagnostics(), "the failed unit is reported")
+			serialized := prototext.Format(response)
+			require.NotContains(t, serialized, "secret-evaluated-value")
+			require.NotContains(t, serialized, request.RootDirectory)
 		})
 	}
 }

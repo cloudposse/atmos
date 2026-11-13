@@ -1,6 +1,7 @@
 """Paired real-CLI field harness. Requires Python 3, PyYAML, Git and both engines.
 
 All runtime changes are confined to a new output directory; the fixture is copied.
+The output directory must be outside this fixture. The runner exits nonzero when any check fails.
 Usage: python3 run.py RUN_DIRECTORY BASELINE_BINARY CANDIDATE_BINARY
 """
 import concurrent.futures
@@ -17,17 +18,45 @@ import time
 import yaml
 
 
+SOURCE = Path(__file__).parent.resolve()
+
+
+def reject_nested_output(root):
+    """Return the resolved case root, or fail when it lies inside the fixture source.
+
+    copytree() would otherwise copy the growing case into itself.
+    """
+    resolved = Path(root).resolve()
+    if resolved == SOURCE or SOURCE in resolved.parents:
+        raise ValueError(f"output directory {resolved} must be outside the fixture source {SOURCE}")
+    return resolved
+
+
+def exit_status(cases):
+    """Report failed checks across all cases and return the process exit status."""
+    failed = [(case.root.name, check) for case in cases for check in case.checks if not check["passed"]]
+    for name, check in failed:
+        print(f"FAIL {name}: {check['name']}", file=sys.stderr, flush=True)
+    total = sum(len(case.checks) for case in cases)
+    print(f"{total - len(failed)}/{total} checks passed across {len(cases)} cases", file=sys.stderr, flush=True)
+    return 1 if failed else 0
+
+
 class Case:
     def __init__(self, root, revision, engine, binary):
-        self.root = Path(root).resolve()
+        self.root = reject_nested_output(root)
         self.revision, self.engine, self.binary = revision, engine, str(Path(binary).resolve())
         self.project = self.root / "project"
         self.root.mkdir(parents=True, exist_ok=False)
-        shutil.copytree(Path(__file__).parent, self.project, ignore=shutil.ignore_patterns("run.py", "__pycache__"))
+        shutil.copytree(SOURCE, self.project, ignore=shutil.ignore_patterns("run.py", "test_run.py", "__pycache__", ".terraform", "*.tfstate*", "terraform.tfstate.d"))
         self.logs = self.root / "commands"
         self.logs.mkdir()
         self.records, self.checks = [], []
-        self.env = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG") if k in os.environ}
+        self.env = {k: os.environ[k] for k in ("PATH", "TMPDIR", "LANG") if k in os.environ}
+        # Each case gets a disposable HOME so caller dotfiles and credentials never leak in.
+        home = self.root / "home"
+        home.mkdir()
+        self.env["HOME"] = str(home)
         self.env.update({"ATMOS_TELEMETRY_ENABLED": "false", "ATMOS_PRO_ERRORS_ENABLED": "false",
                          "ATMOS_CI": "false", "CI": "false", "CHECKPOINT_DISABLE": "1",
                          "TF_INPUT": "0", "AWS_EC2_METADATA_DISABLED": "true", "NO_COLOR": "1",
@@ -127,6 +156,9 @@ def lifecycle(case):
     c.command("config", ["describe", "config", "-f", "json"], [0])
     c.command("explicit-init", ["terraform", "init", "producer", "-s", "dev"], [0])
     initial, _, _ = c.command("initial-plan", ["terraform", "plan", "producer", "-s", "dev", "-detailed-exitcode"], [2])
+    c.check("initial plan records before and after hooks", all(
+        any(event.startswith(name + " ") for event in initial["hooks"])
+        for name in ("before-plan", "after-plan")), initial["hooks"])
     if initial["exit_code"] != 2:
         raise RuntimeError("Initial fixture plan failed; inspect evidence before continuing")
     c.command("apply-saved", ["terraform", "apply", "producer", "-s", "dev", "--from-plan"], [0])
@@ -154,8 +186,18 @@ def lifecycle(case):
                  "tags-dependencies": ["--tags=data", "--include-dependencies"],
                  "all-tags": ["--all", "--tags=other"], "stack-only": [],
                  "all-parallel": ["--all", "--max-concurrency=2", "--log-order=grouped"]}
+    expected_selectors = {
+        "tags": {"independent"}, "labels": {"producer", "consumer", "state-consumer"},
+        "query": {"consumer", "state-consumer"}, "components": {"consumer", "producer"},
+        "tags-labels": {"independent"}, "tags-dependencies": {"consumer", "state-consumer", "producer"},
+        "all-tags": {"independent"}, "stack-only": {"producer", "consumer", "state-consumer", "independent"},
+        "all-parallel": {"producer", "consumer", "state-consumer", "independent"}}
     for label, flags in selectors.items():
-        c.command("select-" + label, ["terraform", "plan", "-s", "dev", *flags], [0])
+        result, _, _ = c.command("select-" + label, ["terraform", "plan", "-s", "dev", *flags], [0])
+        plans = [entry["argv"] for entry in result["trace"] if entry["argv"] and entry["argv"][0] == "plan"]
+        selected = {component for component in expected_selectors["stack-only"]
+                    if any(any("dev-" + component + ".terraform.tfvars.json" in arg for arg in argv) for argv in plans)}
+        c.check("select-" + label + " components", selected == expected_selectors[label] and len(plans) == len(selected), plans)
     c.command("saved-v2", ["terraform", "plan", "producer", "-s", "dev"], [0])
     dev.write_text(dev.read_text().replace("dev-producer-v2", "dev-producer-v3"))
     c.command("apply-old-saved", ["terraform", "apply", "producer", "-s", "dev", "--from-plan"], [0])
@@ -182,6 +224,9 @@ def lifecycle(case):
 
 if __name__ == "__main__":
     root, baseline, candidate = sys.argv[1:]
+    cases = []
     for engine in ("terraform", "tofu"):
         for revision, binary in (("baseline", baseline), ("candidate", candidate)):
-            lifecycle(Case(Path(root) / f"{engine}-{revision}", revision, engine, binary))
+            cases.append(Case(Path(root) / f"{engine}-{revision}", revision, engine, binary))
+            lifecycle(cases[-1])
+    sys.exit(exit_status(cases))

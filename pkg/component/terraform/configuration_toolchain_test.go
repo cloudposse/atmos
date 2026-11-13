@@ -156,6 +156,16 @@ func (p *recordingConfigurationProvider) Prepare(_ context.Context, request *plu
 	return &pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "./module", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default"}}, nil
 }
 
+// ResolveState reports the same local state Prepare returns; the single discovered unit has
+// no output dependencies, so preparation never needs it.
+func (p *recordingConfigurationProvider) ResolveState(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+	backend, err := adapter.EncodeObject(map[string]any{"path": "terraform.tfstate"})
+	if err != nil {
+		return nil, err
+	}
+	return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default"}}, nil
+}
+
 // toolchainScenario is one component execution: an identity and the tool versions it pins.
 type toolchainScenario struct {
 	identity, tofuVersion, toolVersion, stackValue string

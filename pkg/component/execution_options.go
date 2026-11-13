@@ -161,7 +161,8 @@ func MetadataOutputCaptureFromOptions(opts ...ExecutionOption) (io.Writer, io.Wr
 }
 
 // WithStdoutCapture returns an ExecutionOption that tees stdout to the provided writer.
-// The captured output includes secret masking (post-MaskWriter).
+// The captured output is the raw, unmasked subprocess output; only the terminal copy is
+// masked. Callers that persist or display captured output must mask it themselves.
 func WithStdoutCapture(w io.Writer) ExecutionOption {
 	defer perf.Track(nil, "component.WithStdoutCapture")()
 
@@ -171,7 +172,8 @@ func WithStdoutCapture(w io.Writer) ExecutionOption {
 }
 
 // WithStderrCapture returns an ExecutionOption that tees stderr to the provided writer.
-// The captured output includes secret masking (post-MaskWriter).
+// The captured output is the raw, unmasked subprocess output; only the terminal copy is
+// masked. Callers that persist or display captured output must mask it themselves.
 func WithStderrCapture(w io.Writer) ExecutionOption {
 	defer perf.Track(nil, "component.WithStderrCapture")()
 

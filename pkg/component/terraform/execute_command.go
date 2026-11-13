@@ -389,7 +389,7 @@ func ExecuteShellCommandWithRetry(
 // os/exec.Cmd copies each stream in its own goroutine whenever Stdout and Stderr aren't the
 // exact same Writer value — so without synchronization, concurrent Write calls into buf would
 // race (bytes.Buffer is not safe for concurrent use).
-func composeRetryCaptureWriters(baseOpts []component.ExecutionOption, buf *bytes.Buffer) (stdout, stderr io.Writer) {
+func composeRetryCaptureWriters(baseOpts []component.ExecutionOption, buf io.Writer) (stdout, stderr io.Writer) {
 	var probe component.ExecutionOptions
 	for _, opt := range baseOpts {
 		opt(&probe)

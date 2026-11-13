@@ -510,6 +510,17 @@ type Terminal struct {
 	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
 	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
 	Help               HelpSettings       `yaml:"help,omitempty" json:"help,omitempty" mapstructure:"help"`
+	// Links selects how a URL the user opens by hand (such as an AWS sign-in
+	// link too long for a dialog box) is delivered: `auto` (default) uses a
+	// clickable OSC 8 hyperlink when the terminal is known to support one and
+	// the raw URL otherwise, `osc8` always uses the hyperlink, `clipboard`
+	// copies the URL to the clipboard, and `raw` always prints the full URL.
+	// Overridden by ATMOS_TERMINAL_LINKS and --links. In `auto` mode,
+	// FORCE_HYPERLINK=1 or FORCE_HYPERLINK=0 overrides terminal detection.
+	// When stderr is not a terminal (piped, redirected, or in CI), every mode,
+	// including `osc8` and `clipboard`, prints the raw URL. On a terminal, a
+	// `clipboard` copy can still fail; Atmos then prints the raw URL as well.
+	Links string `yaml:"links,omitempty" json:"links,omitempty" mapstructure:"links" jsonschema:"enum=,enum=auto,enum=osc8,enum=clipboard,enum=raw"`
 }
 
 // HelpSettings controls how `--help` output is rendered.
@@ -2147,6 +2158,8 @@ type ConfigAndStacksInfo struct {
 	// before auth credentials are registered) to keep the varfile-write and env-assembly
 	// steps consistent.
 	TerraformSecretVarKeys map[string]bool
+	// ConfigurationSensitiveInputKeys retains provider-declared sensitivity independently of masking.
+	ConfigurationSensitiveInputKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
 	// When set, subprocess execution uses this instead of re-reading os.Environ(),
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).

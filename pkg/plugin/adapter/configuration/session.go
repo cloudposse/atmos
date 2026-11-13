@@ -28,6 +28,7 @@ type Provider interface {
 	ComponentType() string
 	Discover(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error)
 	Prepare(context.Context, *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error)
+	ResolveState(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error)
 }
 
 // Loader resolves the requested configuration providers through package policy and locks.
@@ -64,6 +65,9 @@ type Session struct {
 	settingsErrs map[string]error
 	// options holds the provider-owned keys of each enabled section, by section name.
 	options map[string]map[string]any
+	// prepared records the state identity each instance was prepared with, so a
+	// dependent's output reads can be checked against it within this invocation.
+	prepared sync.Map
 }
 
 // New snapshots the explicitly enabled scope without starting plugins or scanning directories.
@@ -190,11 +194,9 @@ func (s *Session) ensure(ctx context.Context) error {
 		s.importMu.Unlock()
 		go func() {
 			defer close(s.done)
-			call, cancel := context.WithCancel(s.ctx)
-			stop := context.AfterFunc(ctx, cancel)
-			defer stop()
-			defer cancel()
-			s.err = s.discover(call)
+			// Shared discovery is owned by the session: one caller giving up must not
+			// cancel it or cache that cancellation for the other waiters.
+			s.err = s.discover(s.ctx)
 		}()
 	})
 	select {

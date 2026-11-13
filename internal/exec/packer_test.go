@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1039,10 +1040,11 @@ func TestExecutePacker_DryRunAcceptsColdSourceComponent(t *testing.T) {
 		ProcessTemplates: true, ProcessFunctions: true, DryRun: true,
 	}
 	require.NoError(t, ExecutePacker(&info, &PackerFlags{}))
+	_, err := os.Stat(filepath.Join("components", "packer", "cold"))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
-// Without --dry-run the same component is provisioned (and the download fails here), proving the
-// existence check is only relaxed for dry runs and not for components without a source.
+// A dry run still rejects a missing component that has no source.
 func TestExecutePacker_DryRunStillRejectsMissingLocalComponent(t *testing.T) {
 	writeColdSourceProject(t, "packer", "local")
 	root, err := os.Getwd()
@@ -1058,4 +1060,38 @@ components:
 		ProcessTemplates: true, ProcessFunctions: true, DryRun: true,
 	}
 	assert.ErrorIs(t, ExecutePacker(&info, &PackerFlags{}), errUtils.ErrInvalidComponent)
+}
+
+func TestExecutePacker_ProvisionsColdSourceComponent(t *testing.T) {
+	writeColdSourceProject(t, "packer", "cold")
+	root, err := os.Getwd()
+	require.NoError(t, err)
+	source := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(source, "template.pkr.hcl"), []byte("packer {}\n"), 0o600))
+	sourceURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(source)}).String()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars: {stage: dev}
+components:
+  packer:
+    cold:
+      source:
+        uri: '`+sourceURL+`'
+      vars: {name: cold}
+`), 0o600))
+
+	original := executePackerShellCommand
+	t.Cleanup(func() { executePackerShellCommand = original })
+	var capturedDir string
+	executePackerShellCommand = func(_ schema.AtmosConfiguration, _ string, _ []string, dir string, _ []string, _ bool, _ string, _ ...ShellCommandOption) error {
+		capturedDir = dir
+		return nil
+	}
+	info := schema.ConfigAndStacksInfo{
+		Stack: "dev", ComponentType: "packer", ComponentFromArg: "cold", SubCommand: "validate",
+		ProcessTemplates: true, ProcessFunctions: true,
+	}
+	require.NoError(t, ExecutePacker(&info, &PackerFlags{}))
+	require.Equal(t, filepath.Join(root, "components", "packer", "cold"), capturedDir)
+	content, err := os.ReadFile(filepath.Join(capturedDir, "template.pkr.hcl"))
+	require.NoError(t, err)
+	require.Equal(t, "packer {}\n", string(content))
 }

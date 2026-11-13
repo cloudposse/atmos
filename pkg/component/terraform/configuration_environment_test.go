@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentpkg "github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -185,4 +186,20 @@ func TestConfigurationPreparationUsesSelectedInstalledToolVersion(t *testing.T) 
 		_, err = prepareConfiguration(t.Context(), config, info)
 		require.NoError(t, err)
 	}
+}
+
+// Discovery supplies a placeholder backend, so state lookup must fail instead of reading it.
+func TestGetTerraformStateRejectsConfigurationOwnedBackend(t *testing.T) {
+	executor := testExecutor(t)
+	executor.services.ExecuteDescribeComponent = func(*componentpkg.ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			"settings":     map[string]any{"configuration": map[string]any{"provider": "terragrunt"}},
+			"backend_type": "local",
+			"backend":      map[string]any{"local": map[string]any{}},
+		}, nil
+	}
+	value, err := executor.GetTerraformState(&schema.AtmosConfiguration{}, "!terraform.state", "dev", "native", "id", true, nil, nil)
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	require.ErrorContains(t, err, "does not support state lookup")
+	require.Nil(t, value)
 }

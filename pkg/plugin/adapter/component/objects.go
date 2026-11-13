@@ -3,6 +3,7 @@ package component
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
@@ -67,7 +68,7 @@ func DecodeObject(input *pluginv1.ComponentValue) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	object, ok := result.(map[string]any)
+	object, ok := nativeNumbers(result).(map[string]any)
 	if !ok {
 		return nil, errUtils.ErrPluginProtocol
 	}
@@ -117,6 +118,65 @@ func DecodeString(input *pluginv1.ComponentValue) (string, error) {
 		return "", err
 	}
 	return value.AsString(), nil
+}
+
+// DecodeObjectWithSensitiveKeys retains validated sensitivity paths as top-level
+// input keys. Terraform partitions whole variables, so a sensitive descendant
+// makes its containing input sensitive even when it has no non-empty leaves.
+func DecodeObjectWithSensitiveKeys(input *pluginv1.ComponentValue) (map[string]any, map[string]bool, error) {
+	defer perf.Track(nil, "componentadapter.DecodeObjectWithSensitiveKeys")()
+
+	object, err := DecodeObject(input)
+	if err != nil {
+		return nil, nil, err
+	}
+	keys := make(map[string]bool)
+	for _, path := range input.GetSensitivePaths() {
+		if len(path.Steps) == 0 {
+			for key := range object {
+				keys[key] = true
+			}
+			continue
+		}
+		switch selector := path.Steps[0].GetSelector().(type) {
+		case *pluginv1.ComponentValueStep_Attribute:
+			keys[selector.Attribute] = true
+		case *pluginv1.ComponentValueStep_Index:
+			// DecodeObject already validated this path against an object or map.
+			index, err := sensitiveIndex(selector.Index)
+			if err != nil || index.Type() != cty.String {
+				return nil, nil, errUtils.ErrPluginProtocol
+			}
+			keys[index.AsString()] = true
+		}
+	}
+	return object, keys, nil
+}
+
+// Float64Bits is the bit size strconv uses for float64 formatting.
+const float64Bits = 64
+
+// nativeNumbers converts JSON numbers to int64 or float64 when that is exact, so YAML
+// output keeps them numeric. A number neither type can hold exactly stays a json.Number.
+func nativeNumbers(value any) any {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, child := range value {
+			value[key] = nativeNumbers(child)
+		}
+	case []any:
+		for i, child := range value {
+			value[i] = nativeNumbers(child)
+		}
+	case json.Number:
+		if integer, err := value.Int64(); err == nil {
+			return integer
+		}
+		if float, err := value.Float64(); err == nil && strconv.FormatFloat(float, 'g', -1, float64Bits) == value.String() {
+			return float
+		}
+	}
+	return value
 }
 
 func decodePlain(input *pluginv1.ComponentValue) (cty.Value, error) {
@@ -177,7 +237,8 @@ func objectJSON(value cty.Value) (any, error) {
 func registerSensitive(value any) {
 	switch value := value.(type) {
 	case map[string]any:
-		for _, child := range value {
+		for key, child := range value {
+			atmosio.RegisterSecretValue(key)
 			registerSensitive(child)
 		}
 	case []any:

@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,7 +22,8 @@ func preparationSession(t *testing.T) (*Session, *MockProvider, *schema.ConfigAn
 	t.Helper()
 	provider := NewMockProvider(gomock.NewController(t))
 	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
-	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil).MaxTimes(1)
+	// The session discovers lazily, and Prepare rediscovers to revalidate dependencies.
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil).AnyTimes()
 	session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
 		return map[string]Provider{"terragrunt": provider}, nil
 	})
@@ -113,6 +115,28 @@ func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
 	require.ErrorContains(t, err, `command "terraform" selects the terraform engine`)
 	require.ErrorContains(t, err, "discovered for opentofu")
+}
+
+func TestPrepareRejectsDependenciesChangedSinceDiscovery(t *testing.T) {
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	network, app := unit(t, "network"), unit(t, "app")
+	moved := unit(t, "app")
+	moved.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+	gomock.InOrder(
+		provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil),
+		provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, moved}}, nil),
+	)
+	session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "apply", ComponentSettingsSection: map[string]any{"configuration": true}}
+
+	prepared, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "preparation changed discovered dependency paths")
+	require.Nil(t, prepared, "Prepare must not run when dependencies changed")
 }
 
 func TestPrepareFailsClosed(t *testing.T) {
@@ -299,4 +323,60 @@ func TestPrepareRejectsAnExecutableChangeSinceDiscovery(t *testing.T) {
 	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", TerraformBinary: "tofu", State: &pluginv1.ComponentStateIdentity{}}, nil)
 	_, err := session.Prepare(t.Context(), info)
 	require.ErrorIs(t, err, errUtils.ErrComponentBinaryChanged)
+}
+
+type stateProviderFixture struct {
+	Provider
+	resolve func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error)
+}
+
+func (p *stateProviderFixture) ResolveState(ctx context.Context, req *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+	return p.resolve(ctx, req)
+}
+
+func TestSessionResolvesStateWithoutPreparation(t *testing.T) {
+	config := enabledConfig(t)
+	mock := NewMockProvider(gomock.NewController(t))
+	mock.EXPECT().ComponentType().Return("terraform")
+	mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "network")}}, nil)
+	backend, err := adapter.EncodeObject(map[string]any{"path": "state.tfstate"})
+	require.NoError(t, err)
+	provider := &stateProviderFixture{Provider: mock, resolve: func(_ context.Context, req *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		require.Nil(t, req.Effects)
+		require.Equal(t, "output", req.Operation.Command)
+		require.Equal(t, "selected", req.Invocation.Environment["IDENTITY"])
+		require.Equal(t, "stage", req.Invocation.Environment["TF_WORKSPACE"])
+		return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "stage", WorkingDirectory: config.BasePathAbsolute}}, nil
+	}}
+	session, err := New(t.Context(), config, "describe", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", SubCommand: "output", TerraformWorkspace: "stage", ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"IDENTITY=selected"}}
+	state, err := session.ResolveState(t.Context(), info)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(config.BasePathAbsolute, "state.tfstate"), state.Backend["path"])
+	require.Equal(t, "stage", state.Workspace)
+	provider.resolve = func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		return nil, context.Canceled
+	}
+	_, err = session.ResolveState(t.Context(), info)
+	require.ErrorIs(t, err, context.Canceled)
+	provider.resolve = func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		return &pluginv1.ResolveComponentStateResponse{}, nil
+	}
+	_, err = session.ResolveState(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	provider.resolve = func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{Backend: &pluginv1.ComponentValue{}}}, nil
+	}
+	_, err = session.ResolveState(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	info.ComponentFromArg = "absent"
+	_, err = session.ResolveState(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	info.ComponentSettingsSection = nil
+	state, err = session.ResolveState(t.Context(), info)
+	require.NoError(t, err)
+	require.Nil(t, state)
 }

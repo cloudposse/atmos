@@ -56,35 +56,51 @@ func localSourceStamp(spec *schema.VendorComponentSource) string {
 	hash := fnv.New128a()
 	links := &stampLinks{root: root, spec: spec, seen: make(map[string]bool)}
 	skip := vendor.CreateSkipFunc(root, spec.IncludedPaths, spec.ExcludedPaths)
-	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if excluded, err := skip(info, path, ""); err != nil || excluded {
-			if err == nil && entry.IsDir() {
-				return filepath.SkipDir
-			}
-			return err
-		}
-		if entry.IsDir() {
-			if _, skip := localStampSkippedDirs[entry.Name()]; skip && path != root {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if err := stampEntry(hash, root, path, entry); err != nil {
-			return err
-		}
-		return links.stampTarget(hash, path, entry)
-	})
-	if walkErr != nil {
+	if err := filepath.WalkDir(root, links.walk(hash, skip)); err != nil {
 		return ""
 	}
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// stampSkipFunc reports whether the source copy excludes a path.
+type stampSkipFunc func(os.FileInfo, string, string) (bool, error)
+
+// walk digests every file the source copy keeps and the targets of the links it copies.
+func (links *stampLinks) walk(hash io.Writer, skip stampSkipFunc) fs.WalkDirFunc {
+	return func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if done, err := links.skipEntry(path, entry, skip); done {
+			return err
+		}
+		if err := stampEntry(hash, links.root, path, entry); err != nil {
+			return err
+		}
+		return links.stampTarget(hash, path, entry)
+	}
+}
+
+// skipEntry reports whether entry is not stamped itself: excluded entries and directories. Excluded
+// directories and runtime directories below the root are not descended either.
+func (links *stampLinks) skipEntry(path string, entry fs.DirEntry, skip stampSkipFunc) (bool, error) {
+	info, err := entry.Info()
+	if err != nil {
+		return true, err
+	}
+	if excluded, err := skip(info, path, ""); err != nil || excluded {
+		if err == nil && entry.IsDir() {
+			return true, filepath.SkipDir
+		}
+		return true, err
+	}
+	if !entry.IsDir() {
+		return false, nil
+	}
+	if _, skipped := localStampSkippedDirs[entry.Name()]; skipped && path != links.root {
+		return true, filepath.SkipDir
+	}
+	return true, nil
 }
 
 // stampLinks covers directories exposed by copied links, even when their real
@@ -97,20 +113,8 @@ type stampLinks struct {
 }
 
 func (links *stampLinks) stampTarget(hash io.Writer, path string, entry fs.DirEntry) error {
-	if entry.Type()&os.ModeSymlink == 0 {
-		return nil
-	}
-	info, err := entry.Info()
-	if err != nil {
+	if follow, err := links.copiesLink(path, entry); !follow || err != nil {
 		return err
-	}
-	skip := vendor.CreateSkipFunc(links.root, links.spec.IncludedPaths, links.spec.ExcludedPaths)
-	if excluded, err := skip(info, path, ""); err != nil || excluded {
-		return err
-	}
-	opts := vendor.CopyOptions{IncludedPaths: links.spec.IncludedPaths, ExcludedPaths: links.spec.ExcludedPaths}
-	if !vendor.CanCopySymlink(links.root, path, opts) {
-		return nil
 	}
 	target, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -128,6 +132,23 @@ func (links *stampLinks) stampTarget(hash io.Writer, path string, entry fs.DirEn
 	}
 	links.seen[target] = true
 	return links.stampDirectory(hash, target)
+}
+
+// copiesLink reports whether entry is a link that the source copy keeps and follows.
+func (links *stampLinks) copiesLink(path string, entry fs.DirEntry) (bool, error) {
+	if entry.Type()&os.ModeSymlink == 0 {
+		return false, nil
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return false, err
+	}
+	skip := vendor.CreateSkipFunc(links.root, links.spec.IncludedPaths, links.spec.ExcludedPaths)
+	if excluded, err := skip(info, path, ""); err != nil || excluded {
+		return false, err
+	}
+	opts := vendor.CopyOptions{IncludedPaths: links.spec.IncludedPaths, ExcludedPaths: links.spec.ExcludedPaths}
+	return vendor.CanCopySymlink(links.root, path, opts), nil
 }
 
 func (links *stampLinks) stampDirectory(hash io.Writer, target string) error {

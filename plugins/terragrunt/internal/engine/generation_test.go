@@ -100,6 +100,7 @@ func TestPreventDestroyUsesCommandAndBooleanArguments(t *testing.T) {
 			request.Command, request.Arguments = test.command, test.args
 			_, err := Resolve(t.Context(), request)
 			if test.blocked {
+				require.ErrorIs(t, err, ErrPreventDestroy)
 				require.ErrorContains(t, err, "protected by prevent_destroy")
 			} else {
 				require.NoError(t, err)
@@ -113,7 +114,7 @@ func TestPreventDestroyRejectsBeforeInputEffects(t *testing.T) {
 inputs = { value = run_cmd("must-not-execute") }`)
 	request.Command = "destroy"
 	_, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "protected by prevent_destroy")
+	require.ErrorIs(t, err, ErrPreventDestroy)
 	require.NotContains(t, err.Error(), "must-not-execute")
 }
 

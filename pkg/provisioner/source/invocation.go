@@ -1,6 +1,7 @@
 package source
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"sync"
@@ -15,7 +16,8 @@ type invocationProvisioning struct {
 	entries sync.Map
 }
 type invocationEntry struct {
-	mu   sync.Mutex
+	// The slot is a one-element semaphore rather than a mutex so a waiter can stop on cancellation.
+	slot chan struct{}
 	done bool
 	key  string
 }
@@ -41,25 +43,35 @@ func provisioningKey(target *Target, componentType string, config map[string]any
 
 // beginProvision serializes duplicate callers within an explicitly established invocation.
 // A failed attempt is never cached. Independent library calls still use publication locking.
-func beginProvision(key, target string) (bool, func(bool)) {
+func beginProvision(ctx context.Context, key, target string) (bool, func(bool), error) {
 	invocation := currentInvocation.Load()
 	if invocation == nil {
-		return false, func(bool) {}
+		return false, func(bool) {}, nil
 	}
-	value, _ := invocation.entries.LoadOrStore(target, &invocationEntry{})
+	value, _ := invocation.entries.LoadOrStore(target, &invocationEntry{slot: make(chan struct{}, 1)})
 	entry := value.(*invocationEntry)
-	entry.mu.Lock()
+	select {
+	case entry.slot <- struct{}{}:
+	case <-ctx.Done():
+		return false, nil, ctx.Err()
+	}
+	release := func() { <-entry.slot }
+	// The slot and cancellation can become ready together; a cancelled caller never reports reuse.
+	if err := ctx.Err(); err != nil {
+		release()
+		return false, nil, err
+	}
 	if entry.done && entry.key == key && isNonEmptyDir(target) {
-		entry.mu.Unlock()
-		return true, func(bool) {}
+		release()
+		return true, func(bool) {}, nil
 	}
 	return false, func(success bool) {
 		entry.done = success
 		if success {
 			entry.key = key
 		}
-		entry.mu.Unlock()
-	}
+		release()
+	}, nil
 }
 
 // provisionedMarker is valid only in the invocation that created it.

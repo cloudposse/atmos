@@ -189,6 +189,8 @@ const (
 var (
 	wholeValueAction = regexp.MustCompile("^" + goActionPattern)
 	templateAction   = regexp.MustCompile(goActionPattern)
+	// A variable declaration or assignment emits no output when rendered.
+	assignmentAction = regexp.MustCompile(`^\{\{-?\s*\$[\pL\pN_]*\s*:?=(?:[^"'\x60{}]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60)*\}\}$`)
 )
 
 func generatedMappingValue(source *sourceIndex, node *yaml.Node) bool {
@@ -213,13 +215,17 @@ func templatedAuthKeyError() error {
 // rejectMalformedAuthSource inspects an inert action projection only on decode
 // failure. Dynamic application keys and non-output actions can precede ordinary
 // YAML keys; parsed ownership takes precedence over raw credential-key evidence.
+// Without raw credential keys, variable assignments are dropped like controls
+// because they emit no output; the parsed walk still rejects templated auth keys.
+// With raw credential keys they stay as scalars: a successful fallback decode
+// protects no spans, so it must not accept files that own real credentials.
 func rejectMalformedAuthSource(input string) bool {
 	rawAuth := hasRawAuthPathKeys(input)
 	if !rawAuth && !templatedMappingKeySyntax.MatchString(input) {
 		return false
 	}
 	projected := templateAction.ReplaceAllStringFunc(input, func(action string) string {
-		if controlLine.MatchString(action) {
+		if controlLine.MatchString(action) || (!rawAuth && assignmentAction.MatchString(action)) {
 			return ""
 		}
 		return projectedAction
