@@ -12,12 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// stepTimeoutFactoryKey permits package tests to synchronize a real timeout with helper startup.
-type (
-	stepTimeoutFactoryKey struct{}
-	stepTimeoutFactory    func(context.Context, time.Duration) (context.Context, context.CancelFunc)
-)
-
 // StepDeadline enforces a step's `timeout:` on the work it runs. The zero value, and a nil
 // pointer, mean the step has no timeout.
 type StepDeadline struct {
@@ -66,11 +60,7 @@ func StartStepDeadline(ctx context.Context, step *schema.WorkflowStep, vars *Var
 		return nil, builder.Err()
 	}
 	deadline.timeout = timeout
-	if factory, ok := ctx.Value(stepTimeoutFactoryKey{}).(stepTimeoutFactory); ok {
-		deadline.ctx, deadline.cancel = factory(ctx, timeout)
-	} else {
-		deadline.ctx, deadline.cancel = context.WithTimeout(ctx, timeout)
-	}
+	deadline.ctx, deadline.cancel = context.WithTimeout(ctx, timeout)
 	return deadline, nil
 }
 
