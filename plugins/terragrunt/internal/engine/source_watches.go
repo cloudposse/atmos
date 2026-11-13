@@ -240,8 +240,38 @@ func (t *watchTracker) scanTerraform(scan fileScan, block *hclsyntax.Block) {
 					t.watchList(scan, attribute.Expr)
 				}
 			}
+			if attribute := child.Body.Attributes["arguments"]; attribute != nil {
+				t.watchVarFileArguments(scan, attribute.Expr)
+			}
 		case "before_hook", "after_hook", "error_hook":
 			t.watchHook(scan, child.Body)
+		}
+	}
+}
+
+// watchVarFileArguments finds explicit Terraform var files in extra_arguments.
+// An unresolved word could itself be a var-file flag or its path, so it must
+// conservatively watch the project even when other arguments are known.
+func (t *watchTracker) watchVarFileArguments(scan fileScan, expression hclsyntax.Expression) {
+	words, resolved := hookWords(scan, expression)
+	if !resolved {
+		t.fallback()
+	}
+	for index := 0; index < len(words); index++ {
+		word := words[index]
+		if word == "-var-file" {
+			if index+1 == len(words) || words[index+1] == "" {
+				t.fallback()
+				continue
+			}
+			index++
+			t.add(t.files, localPath(t.unit, words[index]))
+		} else if path, found := strings.CutPrefix(word, "-var-file="); found {
+			if path == "" {
+				t.fallback()
+				continue
+			}
+			t.add(t.files, localPath(t.unit, path))
 		}
 	}
 }
