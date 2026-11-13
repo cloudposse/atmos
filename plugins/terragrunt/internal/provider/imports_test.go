@@ -67,6 +67,22 @@ func TestRemoteModuleSourceIsNotAFileWatch(t *testing.T) {
 	require.Equal(t, "live/app/terragrunt.hcl", instance.Sources[0].Path)
 }
 
+func TestDiscoveredLocalModuleSubdirKeepsDelimiter(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	unitPath := filepath.Join(root, "live", "app", "terragrunt.hcl")
+	repository := filepath.Join(root, "repository")
+	unit := model.DiscoveredUnit{Config: model.Resolution{Path: unitPath, Source: repository + "//modules/app", Folders: []string{repository}, Files: []string{unitPath}}}
+	addresses := map[string]*pluginv1.ComponentAddress{unitPath: {Stack: "live", Component: "app", ComponentType: "terraform"}}
+	instance, err := discoveredUnit(model.Request{BasePath: root}, unit, addresses)
+	require.NoError(t, err)
+	var configuration map[string]any
+	require.NoError(t, decode(instance.Configuration, &configuration))
+	require.Equal(t, "./repository//modules/app", configuration["source"])
+	metadata := configuration["metadata"].(map[string]any)
+	require.Equal(t, "modules/app", metadata["source_subdir"])
+}
+
 func TestDerivedAddressNamesAnUnscopedUnit(t *testing.T) {
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)

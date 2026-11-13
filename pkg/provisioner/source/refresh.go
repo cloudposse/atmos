@@ -439,6 +439,8 @@ func moduleRoots(target string, config map[string]any) []string {
 	if metadata, ok := config["metadata"].(map[string]any); ok {
 		subpath, _ := metadata["component"].(string)
 		candidates = append(candidates, subpath)
+		moduleSubdir, _ := metadata["source_subdir"].(string)
+		candidates = append(candidates, moduleSubdir)
 	}
 	for _, candidate := range candidates {
 		if candidate != "" && filepath.IsLocal(candidate) {

@@ -286,12 +286,11 @@ func unitResolution(ctx context.Context, logger log.Logger, environment *atmosbr
 	// A remote source keeps the identity it was written with, exactly as Terragrunt names its working
 	// copy; resolving a registry source below only changes where the module is fetched from.
 	identity := result.Source
-	if plainLocalSource(result.Source) {
-		result.Source = localPath(filepath.Dir(path), result.Source)
-		if problem := localSourceProblem(environment.FS, path, *cfg.Terraform.Source, result.Source); problem != nil {
-			return nil, problem
-		}
-		identity, result.Folders = result.Source, []string{result.Source}
+	if resolved, root, local, problem := resolveLocalModuleSource(environment.FS, path, result.Source); problem != nil {
+		return nil, problem
+	} else if local {
+		result.Source = resolved
+		identity, result.Folders = result.Source, []string{root}
 	} else if !PreventsRun(result.Exclude, OperationCommand(request.Command, request.Arguments)) {
 		// An operation the exclude block prevents never runs, so its registry source is not resolved.
 		if err := prepareRemoteSource(ctx, logger, &request, cfg, result); err != nil {

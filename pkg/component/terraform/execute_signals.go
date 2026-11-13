@@ -42,14 +42,14 @@ func signalModuleDirectory(atmosConfig *schema.AtmosConfiguration, info *schema.
 		if !target.IsWorkdir {
 			return target.Dir, nil
 		}
-		return component.ResolveWorkdirSubpath(info.BaseComponentPath, target.Dir)
+		return component.ResolveConfiguredSubpath(info, target.Dir)
 	}
 	if workdir.IsWorkdirEnabled(section) {
 		root, err := workdir.BuildPath(atmosConfig.BasePath, cfg.TerraformComponentType, info.FinalComponent, info.Stack, section)
 		if err != nil {
 			return "", err
 		}
-		return component.ResolveWorkdirSubpath(info.BaseComponentPath, root)
+		return component.ResolveConfiguredSubpath(info, root)
 	}
 	return ConstructTerraformComponentWorkingDir(atmosConfig, info), nil
 }
