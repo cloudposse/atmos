@@ -1115,6 +1115,7 @@ func TestResolveFormatterWidth(t *testing.T) {
 			config: FormatterConfig{},
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
+					//nolint:staticcheck // Verify the supported deprecated docs width fallback.
 					Docs: schema.Docs{MaxWidth: 140},
 				},
 			},

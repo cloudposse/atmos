@@ -120,15 +120,6 @@ func formatStructuredPlainError(err error, title string, suggestion string) stri
 	return out.String()
 }
 
-// printErrorDetails prints the explanation section from error details.
-func printErrorDetails(err error) {
-	var out strings.Builder
-	appendErrorDetails(&out, err)
-	if out.Len() > 0 {
-		_, _ = os.Stderr.WriteString(out.String())
-	}
-}
-
 func appendErrorDetails(out *strings.Builder, err error) {
 	details := AllDetails(err)
 	if len(details) == 0 {
@@ -137,15 +128,6 @@ func appendErrorDetails(out *strings.Builder, err error) {
 	fmt.Fprintln(out)
 	for _, d := range details {
 		fmt.Fprintf(out, "%s\n", d)
-	}
-}
-
-// printErrorHints prints the hints section, filtering out internal prefixes.
-func printErrorHints(err error) {
-	var out strings.Builder
-	appendErrorHints(&out, err)
-	if out.Len() > 0 {
-		_, _ = os.Stderr.WriteString(out.String())
 	}
 }
 
@@ -163,15 +145,6 @@ func appendErrorHints(out *strings.Builder, err error) {
 	fmt.Fprintln(out)
 	for _, h := range userHints {
 		fmt.Fprintf(out, "💡 %s\n", h)
-	}
-}
-
-// printErrorContext prints the context section from safe details.
-func printErrorContext(err error) {
-	var out strings.Builder
-	appendErrorContext(&out, err)
-	if out.Len() > 0 {
-		_, _ = os.Stderr.WriteString(out.String())
 	}
 }
 
@@ -238,36 +211,7 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 // printFormattedError prints an error using the new formatter.
 // If title or suggestion are provided, they are incorporated into the formatted output.
 func printFormattedError(err error, title string, suggestion string) {
-	// If legacy title or suggestion are provided, incorporate them into the error.
-	if title != "" || suggestion != "" {
-		// Wrap error with legacy parameters using error builder.
-		builder := Build(err)
-		if suggestion != "" {
-			// Trim leading/trailing whitespace for analysis.
-			trimmed := strings.TrimSpace(suggestion)
-
-			// Check if suggestion contains markdown sections (backward compatibility).
-			// Old code passed suggestions like "\n## Explanation\n..." which should be
-			// added as explanations, not hints.
-			if strings.Contains(suggestion, "\n##") || strings.HasPrefix(trimmed, "##") {
-				// Strip the legacy "## Explanation" header if present.
-				cleaned := strings.TrimLeft(suggestion, "\n")
-				cleaned = strings.TrimPrefix(cleaned, "## Explanation\n")
-				cleaned = strings.TrimPrefix(cleaned, "## Explanation")
-				cleaned = strings.TrimSpace(cleaned)
-				builder = builder.WithExplanation(cleaned)
-			} else {
-				// Only add as hint if it's not empty after trimming.
-				// This prevents rendering empty hint lines for suggestions that are
-				// just whitespace or newlines.
-				if trimmed != "" {
-					builder = builder.WithHint(trimmed)
-				}
-			}
-		}
-		// Note: title is handled by the formatter's title parameter, not as a hint.
-		err = builder.Err()
-	}
+	err = withLegacySuggestion(err, title, suggestion)
 
 	// Check for --verbose flag (CLI flag > env var > config).
 	verbose := atmosConfig.Errors.Format.Verbose
@@ -405,4 +349,38 @@ func WrapComponentDescribeError(component, stack string, err error, context stri
 	}
 	// For other errors, preserve the full chain.
 	return fmt.Errorf("%s(%s, %s) failed: %w", context, component, stack, err)
+}
+
+// withLegacySuggestion preserves explanations and hints from legacy callers.
+func withLegacySuggestion(err error, title, suggestion string) error {
+	// If legacy title or suggestion are provided, incorporate them into the error.
+	if title == "" && suggestion == "" {
+		return err
+	}
+	// Wrap error with legacy parameters using error builder.
+	builder := Build(err)
+	if suggestion != "" {
+		// Trim leading/trailing whitespace for analysis.
+		trimmed := strings.TrimSpace(suggestion)
+
+		// Check if suggestion contains markdown sections (backward compatibility).
+		// Old code passed suggestions like "\n## Explanation\n..." which should be
+		// added as explanations, not hints.
+		if strings.Contains(suggestion, "\n##") || strings.HasPrefix(trimmed, "##") {
+			// Strip the legacy "## Explanation" header if present.
+			cleaned := strings.TrimLeft(suggestion, "\n")
+			cleaned = strings.TrimPrefix(cleaned, "## Explanation\n")
+			cleaned = strings.TrimPrefix(cleaned, "## Explanation")
+			cleaned = strings.TrimSpace(cleaned)
+			builder = builder.WithExplanation(cleaned)
+		} else if trimmed != "" {
+			// Only add as hint if it's not empty after trimming.
+			// This prevents rendering empty hint lines for suggestions that are
+			// just whitespace or newlines.
+			builder = builder.WithHint(trimmed)
+		}
+	}
+	// Note: title is handled by the formatter's title parameter, not as a hint.
+	err = builder.Err()
+	return err
 }
