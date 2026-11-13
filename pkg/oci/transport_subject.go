@@ -37,6 +37,12 @@ func readSubject(ctx context.Context, store Fetcher, desc *ocispec.Descriptor) (
 	if err := expectByte(scanner, '{'); err != nil {
 		return nil, integrityError(err)
 	}
+	return scanForSubject(scanner)
+}
+
+// scanForSubject reads the members of a manifest object, after its opening brace, until it finds
+// the subject descriptor or the object ends.
+func scanForSubject(scanner *bufio.Reader) (*ocispec.Descriptor, error) {
 	for {
 		next, err := nextNonSpace(scanner)
 		if err != nil {

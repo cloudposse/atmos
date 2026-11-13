@@ -200,20 +200,12 @@ func readStagedDocument(snap *snapshot.Snapshot, entry *artifact.Entry) ([]byte,
 // readSiblingDocument reads an explicit document next to a single-file source, rejecting anything
 // that is not a regular file contained in the source's parent directory.
 func readSiblingDocument(source string, role artifact.DocumentRole, rel string) ([]byte, error) {
-	resolvedSource, err := filepath.EvalSymlinks(source)
+	parent, err := checkedSiblingParent(source, role, rel)
 	if err != nil {
-		return nil, fmt.Errorf("%w: source %q: %w", errUtils.ErrArtifactPackagingInvalid, source, err)
-	}
-	parent := filepath.Dir(resolvedSource)
-	full, err := filepath.EvalSymlinks(filepath.Join(parent, filepath.FromSlash(rel)))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s file %q: %w", errUtils.ErrArtifactPackagingInvalid, role, rel, err)
-	}
-	if relative, err := filepath.Rel(parent, full); err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return nil, fmt.Errorf("%w: %s file %q resolves outside the source directory", errUtils.ErrArtifactUnsafePath, role, rel)
+		return nil, err
 	}
 	// Open the document through a handle on the checked parent directory so a parent that is
-	// replaced after the containment check above cannot redirect the read outside it.
+	// replaced after the containment check cannot redirect the read outside it.
 	root, err := os.OpenRoot(parent)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s file %q: %w", errUtils.ErrArtifactPackagingInvalid, role, rel, err)
@@ -232,6 +224,24 @@ func readSiblingDocument(source string, role artifact.DocumentRole, rel string) 
 		return nil, fmt.Errorf("%w: %s is %d bytes; the limit is %d", errUtils.ErrArtifactTooLarge, rel, info.Size(), artifact.MaxDocumentSize)
 	}
 	return readBounded(file, rel)
+}
+
+// checkedSiblingParent resolves the source's parent directory and verifies that the document
+// rel resolves inside it.
+func checkedSiblingParent(source string, role artifact.DocumentRole, rel string) (string, error) {
+	resolvedSource, err := filepath.EvalSymlinks(source)
+	if err != nil {
+		return "", fmt.Errorf("%w: source %q: %w", errUtils.ErrArtifactPackagingInvalid, source, err)
+	}
+	parent := filepath.Dir(resolvedSource)
+	full, err := filepath.EvalSymlinks(filepath.Join(parent, filepath.FromSlash(rel)))
+	if err != nil {
+		return "", fmt.Errorf("%w: %s file %q: %w", errUtils.ErrArtifactPackagingInvalid, role, rel, err)
+	}
+	if relative, err := filepath.Rel(parent, full); err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%w: %s file %q resolves outside the source directory", errUtils.ErrArtifactUnsafePath, role, rel)
+	}
+	return parent, nil
 }
 
 func readBounded(reader io.Reader, name string) ([]byte, error) {
