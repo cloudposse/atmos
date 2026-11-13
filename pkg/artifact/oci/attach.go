@@ -51,7 +51,7 @@ func (r *Repository) attachments(ctx context.Context, st store, name string, roo
 	set := &attachmentSet{}
 	inspected := 0
 	for index := range predecessors {
-		if !isManifestMediaType(predecessors[index].MediaType) {
+		if !isManifestMediaType(predecessors[index].MediaType) || !mayBeBundle(&predecessors[index]) {
 			continue
 		}
 		if inspected >= maxAttachments*4 {
@@ -105,6 +105,20 @@ func (r *Repository) readAttachment(ctx context.Context, st store, name string, 
 		return nil, fmt.Sprintf("signature referrer %s has a %d byte bundle; the limit is %d", desc.Digest, layer.Size, artifact.MaxEvidenceSize), nil
 	}
 	return newAttachment(&manifest, desc, layer, rootDesc.Digest), "", nil
+}
+
+// mayBeBundle reports whether a referrer descriptor can be a Sigstore bundle. A descriptor that
+// names another concrete artifact type is skipped before it costs part of the inspection budget,
+// so unrelated referrers cannot crowd out real signature evidence. The descriptor type is only a
+// hint: registries derive it from the config media type, so an untyped referrer or one with the
+// empty config placeholder is still inspected.
+func mayBeBundle(desc *ocispec.Descriptor) bool {
+	switch desc.ArtifactType {
+	case "", ocispec.MediaTypeEmptyJSON:
+		return true
+	default:
+		return strings.HasPrefix(desc.ArtifactType, bundleMediaTypePrefix)
+	}
 }
 
 // isBundleReferrer reports whether a manifest is a Sigstore bundle attached to the subject digest.
