@@ -262,6 +262,9 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	// this, incidental init/workspace-select output (e.g. a stray "No changes."
 	// lookalike) can poison the exec-metadata parser's extraction even though the
 	// real plan/apply's own output is correct (research.md Decision 32).
+	if err := validateEnvironmentPlanOutput(info, execCtx); err != nil {
+		return err
+	}
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
 	var effectiveArgs []string
 	captureCtx := context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs)

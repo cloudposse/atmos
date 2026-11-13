@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -18,6 +19,9 @@ import (
 )
 
 const configurationPlanSuffix = ".atmos.json"
+
+// subcommandPlan names the Terraform plan command.
+const subcommandPlan = "plan"
 
 // planBindingSuffix names the binding of a default saved plan, which Atmos writes as "*.planfile".
 const planBindingSuffix = ".planfile" + configurationPlanSuffix
@@ -216,6 +220,54 @@ func validatePlanOutputFlags(command string, args []string) error {
 		}
 	}
 	return nil
+}
+
+// validateEnvironmentPlanOutput rejects plan output flags in TF_CLI_ARGS or
+// TF_CLI_ARGS_plan for a configuration-owned plan. Terraform reads these
+// variables itself, so a flag there could choose a plan file that Atmos does not
+// see and therefore does not bind. The check covers the inherited process
+// environment, the component environment, and provider extra-argument
+// environment, which together form the subprocess environment. Hooks run as
+// child processes and cannot change it.
+func validateEnvironmentPlanOutput(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) error {
+	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != subcommandPlan {
+		return nil
+	}
+	for _, entry := range planEnvironment(info) {
+		name, value, _ := strings.Cut(entry, "=")
+		if name != tfCliArgsEnvVar && name != tfCliArgsEnvVar+"_"+subcommandPlan {
+			continue
+		}
+		if containsOutputFlag(parseArgs(value)) {
+			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
+		}
+	}
+	return nil
+}
+
+// planEnvironment lists every environment entry a plan subprocess may receive.
+func planEnvironment(info *schema.ConfigAndStacksInfo) []string {
+	entries := append(os.Environ(), info.ComponentEnvList...)
+	if info.ComponentExecution == nil {
+		return entries
+	}
+	for i := range info.ComponentExecution.ExtraArguments {
+		item := &info.ComponentExecution.ExtraArguments[i]
+		if !slices.Contains(item.Commands, subcommandPlan) {
+			continue
+		}
+		for name, value := range item.Environment {
+			entries = append(entries, name+"="+value)
+		}
+	}
+	return entries
+}
+
+// containsOutputFlag reports any plan output flag, with or without a value.
+func containsOutputFlag(args []string) bool {
+	return slices.ContainsFunc(args, func(arg string) bool {
+		return arg == "-out" || arg == "--out" || strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=")
+	})
 }
 
 func plannedOutputPath(directory string, args []string) string {

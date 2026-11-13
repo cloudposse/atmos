@@ -282,3 +282,65 @@ func TestPolicyPlanBindsPublishedOutput(t *testing.T) {
 	require.NoError(t, executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false))
 	require.FileExists(t, path+configurationPlanSuffix)
 }
+
+// TestPlanOutputFlagsInEnvironmentAreRejected covers output flags that Terraform
+// reads from TF_CLI_ARGS or TF_CLI_ARGS_plan, which Atmos cannot bind.
+func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		inherited map[string]string
+		component []string
+		provider  map[string]string
+		commands  []string
+		reject    bool
+	}{
+		{name: "inherited TF_CLI_ARGS_plan", inherited: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, reject: true},
+		{name: "inherited TF_CLI_ARGS", inherited: map[string]string{"TF_CLI_ARGS": "-lock=false --out env.plan"}, reject: true},
+		{name: "component environment", component: []string{"TF_CLI_ARGS_plan=-out env.plan"}, reject: true},
+		{name: "provider environment", provider: map[string]string{"TF_CLI_ARGS_plan": "--out=env.plan"}, commands: []string{"plan"}, reject: true},
+		{name: "bare flag", component: []string{"TF_CLI_ARGS=-out"}, reject: true},
+		{name: "other flags", inherited: map[string]string{"TF_CLI_ARGS_plan": "-lock=false -outfile-like=x"}, component: []string{"TF_CLI_ARGS=-no-color"}},
+		{name: "apply only variable", component: []string{"TF_CLI_ARGS_apply=-out=x"}},
+		{name: "provider environment for apply", provider: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, commands: []string{"apply"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("TF_CLI_ARGS", "")
+			t.Setenv("TF_CLI_ARGS_plan", "")
+			for name, value := range test.inherited {
+				t.Setenv(name, value)
+			}
+			config, info, execCtx, _, path := planFixture(t)
+			info.ComponentEnvList = test.component
+			if test.provider != nil {
+				info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: test.commands, Environment: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
+			}
+			shell := &fakeShell{}
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.execute
+			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}, execCtx.componentPath, false)
+			if test.reject {
+				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+				require.Empty(t, shell.calls, "neither hook nor Terraform should run")
+				return
+			}
+			require.NoError(t, err)
+			require.NotEmpty(t, shell.calls)
+			require.FileExists(t, path+configurationPlanSuffix)
+		})
+	}
+}
+
+// TestEnvironmentPlanOutputIgnoresUnownedPlans keeps ordinary components unaffected.
+func TestEnvironmentPlanOutputIgnoresUnownedPlans(t *testing.T) {
+	t.Setenv("TF_CLI_ARGS_plan", "-out=env.plan")
+	_, info, execCtx, _, _ := planFixture(t)
+	require.ErrorIs(t, validateEnvironmentPlanOutput(info, execCtx), errUtils.ErrPlanVerificationFailed)
+	info.DryRun = true
+	require.NoError(t, validateEnvironmentPlanOutput(info, execCtx))
+	info.DryRun = false
+	info.SubCommand = "apply"
+	require.NoError(t, validateEnvironmentPlanOutput(info, execCtx))
+	info.SubCommand = "plan"
+	execCtx.preparedConfiguration = nil
+	require.NoError(t, validateEnvironmentPlanOutput(info, execCtx))
+}
