@@ -98,3 +98,16 @@ func TestSkipKeepsOwnershipOfAnIdenticalModuleFile(t *testing.T) {
 	require.NoError(t, WriteFiles(root, nil))
 	require.NoFileExists(t, filepath.Join(root, generated.Path))
 }
+
+func TestEnsureModeWrapsPermissionFailures(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+	err = ensureMode(root, "missing.tf")
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrNotExist, "the filesystem cause is preserved")
+	require.ErrorContains(t, err, "missing.tf")
+	// A file that exists is tightened without error.
+	require.NoError(t, root.WriteFile("present.tf", nil, 0o644))
+	require.NoError(t, ensureMode(root, "present.tf"))
+}
