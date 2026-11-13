@@ -31,6 +31,14 @@ var (
 	resetSignals  = signal.Stop
 )
 
+// The omitted-logs notice is qualified because the host cannot know how many log events the
+// plugin still had queued once the call was cancelled; the plugin's own count travels in the
+// response that cancellation discards.
+const omittedLogsNotice = "Log events the plugin had not yet delivered may not have been shown."
+
+// Warnings are routed through a variable so tests can observe what reaches the user.
+var warn = ui.Warning
+
 // interrupt is a context that ends on SIGINT or SIGTERM, like signal.NotifyContext, and also
 // remembers which signal arrived so Atmos can exit with the matching shell status.
 type interrupt struct {
@@ -119,12 +127,19 @@ func (h *Handle) finishInvocation(callCtx context.Context, err error) error {
 	}
 	if h.interrupt != nil && h.interrupt.fired() {
 		h.Close()
-		ui.Warning("Interrupted; the plugin process was stopped.")
+		warn("Interrupted; the plugin process was stopped.")
+		warn(omittedLogsNotice)
 		return errors.Join(context.Canceled, errUtils.ExitCodeError{Code: h.interrupt.exitCode(), Silent: true})
 	}
 	if deadlineExceeded(callCtx, err) {
 		h.Close()
+		warn(omittedLogsNotice)
 		return timeoutError(callCtx)
+	}
+	// A caller that cancels the call (for example, after a sibling operation failed) gets the
+	// error unchanged, but the user still learns that the plugin's queued logs may be missing.
+	if errors.Is(callCtx.Err(), context.Canceled) {
+		warn(omittedLogsNotice)
 	}
 	return err
 }
