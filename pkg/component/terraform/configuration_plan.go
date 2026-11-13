@@ -281,7 +281,7 @@ func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurati
 	}
 	root, err := os.OpenRoot(workdir)
 	if err != nil {
-		return err
+		return planIOError(err)
 	}
 	defer root.Close()
 	for i := range files {

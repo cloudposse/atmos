@@ -258,11 +258,12 @@ func isDetailedExitCodeChanges(command string, args, env []string, err error, op
 // detailedExitCodeEnabled reports whether -detailed-exitcode is in effect for the command.
 // Terraform inserts TF_CLI_ARGS_<command>, then TF_CLI_ARGS, before the command-line arguments,
 // and the last setting of a flag wins, so an explicit command-line setting takes precedence.
+// Terraform reads the variables as shell words, so quoted values are unquoted the same way.
 func detailedExitCodeEnabled(command string, args, env []string, opts ...component.ExecutionOption) bool {
 	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(command)
 	words := slices.Concat(
-		strings.Fields(environmentValue(env, "TF_CLI_ARGS_"+suffix, opts...)),
-		strings.Fields(environmentValue(env, "TF_CLI_ARGS", opts...)),
+		parseArgs(environmentValue(env, "TF_CLI_ARGS_"+suffix, opts...)),
+		parseArgs(environmentValue(env, "TF_CLI_ARGS", opts...)),
 		args,
 	)
 	enabled := false

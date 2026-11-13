@@ -3,10 +3,8 @@ package exec
 import (
 	"errors"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -25,9 +23,8 @@ import (
 var RemoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 
 const (
-	shaString      = "SHA"
-	refString      = "ref"
-	signalExitBase = 128
+	shaString = "SHA"
+	refString = "ref"
 )
 
 // ExecuteDescribeAffectedWithTargetRefClone clones the remote reference,
@@ -348,75 +345,13 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
 }
 
-// exitProcess ends the process after signal cleanup; tests replace it.
-var exitProcess = os.Exit
+// affectedSignalCleanups removes describe-affected worktrees when the process is interrupted.
+var affectedSignalCleanups = g.NewWorktreeSignalCleanups(os.Exit)
 
-// affectedSignalCleanups serializes registration, normal release and signal cleanup.
-// A single watcher owns all active worktrees, so none can exit ahead of another.
-var affectedSignalCleanups = struct {
-	sync.Mutex
-	watcher *affectedSignalWatcher
-}{}
-
-type affectedSignalWatcher struct {
-	signals  chan os.Signal
-	done     chan struct{}
-	cleanups map[*signalWorktreeCleanup]struct{}
-}
-
-type signalWorktreeCleanup struct {
-	run func()
-}
-
-// removeOnSignal runs all active cleanups on SIGINT or SIGTERM before exiting with
-// the conventional 128+signal status. Call the returned function after normal cleanup.
+// removeOnSignal registers a worktree cleanup for SIGINT and SIGTERM. Call the returned function
+// after normal cleanup.
 func removeOnSignal(cleanup func()) func() {
-	affectedSignalCleanups.Lock()
-	defer affectedSignalCleanups.Unlock()
-	watcher := affectedSignalCleanups.watcher
-	if watcher == nil {
-		watcher = &affectedSignalWatcher{
-			signals:  make(chan os.Signal, 1),
-			done:     make(chan struct{}),
-			cleanups: make(map[*signalWorktreeCleanup]struct{}),
-		}
-		affectedSignalCleanups.watcher = watcher
-		signal.Notify(watcher.signals, syscall.SIGINT, syscall.SIGTERM)
-		go watcher.run()
-	}
-	key := &signalWorktreeCleanup{run: cleanup}
-	watcher.cleanups[key] = struct{}{}
-	return sync.OnceFunc(func() {
-		affectedSignalCleanups.Lock()
-		defer affectedSignalCleanups.Unlock()
-		delete(watcher.cleanups, key)
-		if len(watcher.cleanups) == 0 {
-			signal.Stop(watcher.signals)
-			close(watcher.done)
-			affectedSignalCleanups.watcher = nil
-		}
-	})
-}
-
-func (watcher *affectedSignalWatcher) run() {
-	select {
-	case received := <-watcher.signals:
-		affectedSignalCleanups.Lock()
-		defer affectedSignalCleanups.Unlock()
-		// Normal release may have retired this watcher while the signal arrived.
-		if affectedSignalCleanups.watcher != watcher {
-			return
-		}
-		for cleanup := range watcher.cleanups {
-			cleanup.run()
-		}
-		code := 1
-		if number, ok := received.(syscall.Signal); ok {
-			code = signalExitBase + int(number)
-		}
-		exitProcess(code)
-	case <-watcher.done:
-	}
+	return affectedSignalCleanups.Register(cleanup)
 }
 
 // cleanupWorktree removes a git worktree and its parent temp directory.

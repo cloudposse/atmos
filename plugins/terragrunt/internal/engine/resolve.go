@@ -288,8 +288,8 @@ func unitResolution(ctx context.Context, logger log.Logger, environment *atmosbr
 	identity := result.Source
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(path), result.Source)
-		if info, err := environment.FS.Stat(result.Source); err != nil || !info.IsDir() {
-			return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
+		if problem := localSourceProblem(environment.FS, path, *cfg.Terraform.Source, result.Source); problem != nil {
+			return nil, problem
 		}
 		identity, result.Folders = result.Source, []string{result.Source}
 	} else if !PreventsRun(result.Exclude, OperationCommand(request.Command, request.Arguments)) {

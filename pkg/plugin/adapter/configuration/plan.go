@@ -223,11 +223,15 @@ func checkSourcesInRoot(ctx context.Context, root string, sources []schema.Compo
 
 // checkSourcePath rejects a watched path whose own location leaves the project root through a
 // symlinked parent directory, such as `shared/inputs.hcl` when `shared` links outside. A missing
-// path is left for the first read to report.
+// path is left for the first read to report; any other resolution failure, such as a permission
+// error, is reported now, as fingerprinting would report it later.
 func checkSourcePath(root, top string) error {
 	real, err := filepath.EvalSymlinks(top)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return nil //nolint:nilerr // A missing or dangling path is not a boundary violation.
+		return sourceReadError(err)
 	}
 	if relative, err := filepath.Rel(root, real); err != nil || !filepath.IsLocal(relative) {
 		return sourceOutsideRoot(root, top, real)
@@ -259,14 +263,17 @@ func checkSourceTree(ctx context.Context, root, top string) error {
 }
 
 // checkSourceLink rejects a symlink entry that resolves outside the project root. A broken
-// link is left for the first read to report.
+// link is left for the first read to report; other resolution failures are reported now.
 func checkSourceLink(root, path string, entry fs.DirEntry) error {
 	if entry.Type()&fs.ModeSymlink == 0 || excludedPlanSource(entry.Name()) {
 		return nil
 	}
 	real, err := filepath.EvalSymlinks(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return nil //nolint:nilerr // A dangling link is not a boundary violation.
+		return sourceReadError(err)
 	}
 	if relative, err := filepath.Rel(root, real); err != nil || !filepath.IsLocal(relative) {
 		return sourceOutsideRoot(root, path, real)

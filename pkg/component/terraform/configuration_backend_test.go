@@ -169,3 +169,18 @@ func TestPreparedConfigurationSkipSymlink(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, content, actual)
 }
+
+// Failures to inspect retained files or the reviewed working directory are classified with a
+// static Atmos error and keep the filesystem cause.
+func TestRetainedFileFailuresUseStaticErrors(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "absent")
+	retained := schema.ComponentConfigurationFile{Path: "backend.tf", IfExists: "skip", Content: []byte("terraform {}")}
+	err := validateRetainedFile(missing, retained)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.ErrorContains(t, err, "backend.tf")
+
+	err = restoreSensitiveContent(missing, []schema.ComponentConfigurationFile{{Path: "secret.auto.tfvars", Sensitive: true}})
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}

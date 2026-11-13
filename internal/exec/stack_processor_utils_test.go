@@ -22,14 +22,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-//go:generate go run go.uber.org/mock/mockgen -source=stack_processor_utils_test.go -destination=mock_import_runtime_test.go -package=exec ImportTestRuntime
-
-// ImportTestRuntime combines the host and import contracts for generated test mocks.
-type ImportTestRuntime interface {
-	schema.ComponentConfigurationRuntime
-	schema.ComponentConfigurationImportRuntime
-}
-
 func TestMissingBaseComponentQuotedIdentifiers(t *testing.T) {
 	config := &schema.AtmosConfiguration{TrackProvenance: true}
 	baseConfig := &schema.BaseComponentConfig{}

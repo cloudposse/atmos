@@ -3,9 +3,11 @@ package configuration
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -355,4 +357,36 @@ func TestWatchedFileUnderASymlinkedParentThatLeavesTheProjectIsRejected(t *testi
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.ErrorContains(t, err, "shared/inputs.hcl")
 	require.ErrorContains(t, err, "leaves the project root")
+}
+
+// A watched link whose target cannot be resolved for a reason other than absence is reported
+// during preparation, as fingerprinting would report it, while a dangling link is still allowed.
+func TestSourceLinkResolutionFailuresAreReported(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not block path resolution on Windows")
+	}
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	locked := filepath.Join(root, "locked")
+	require.NoError(t, os.MkdirAll(filepath.Join(locked, "inner"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(locked, "inner", "inputs.hcl"), nil, 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "watched"), 0o755))
+	if err := os.Symlink(filepath.Join(locked, "inner", "inputs.hcl"), filepath.Join(root, "watched", "inputs.hcl")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	require.NoError(t, os.Symlink(filepath.Join(root, "absent.hcl"), filepath.Join(root, "watched", "dangling.hcl")))
+	require.NoError(t, os.Symlink(filepath.Join(locked, "inner", "inputs.hcl"), filepath.Join(root, "direct.hcl")))
+	require.NoError(t, os.Chmod(locked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if _, err := filepath.EvalSymlinks(filepath.Join(root, "direct.hcl")); err == nil {
+		t.Skip("the process bypasses directory permissions")
+	}
+
+	for _, source := range []string{"watched", "direct.hcl"} {
+		err := checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: source}})
+		require.ErrorIs(t, err, errUtils.ErrReadFile, source)
+		require.ErrorIs(t, err, fs.ErrPermission, source)
+	}
+	require.NoError(t, os.Chmod(locked, 0o755))
+	require.NoError(t, checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "watched"}}), "a dangling link is left for the first read")
 }

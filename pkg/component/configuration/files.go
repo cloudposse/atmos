@@ -110,11 +110,11 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded s
 
 // unchangedFileOutcome retains ownership only when an identical file belongs to this host.
 func unchangedFileOutcome(root *os.Root, file schema.ComponentConfigurationFile, recorded, digest string) (string, error) {
-	if file.IfExists == "skip" && recorded != digest {
-		// A file the module already ships stays the module's, so removing the block keeps it.
+	if (file.IfExists == "skip" || file.IfExists == "error") && recorded != digest {
+		// A file the module already ships, or any file this host did not write, stays unowned, so
+		// removing the block keeps it. Its bytes already match, so if_exists = "error" has nothing to reject.
 		return "", nil
 	}
-	// Already what would be written, so even if_exists = "error" has nothing to protect.
 	return digest, ensureMode(root, file.Path)
 }
 

@@ -121,20 +121,24 @@ func TestConfigurationWatchIndexBuildsAreIsolated(t *testing.T) {
 	})
 	defer func() { close(release); <-blocked }()
 	<-entered
-	done := make(chan error, 1)
+	type lookup struct {
+		sameView bool
+		err      error
+	}
+	done := make(chan lookup, 1)
 	go func() {
 		hit, err := configurationWatchIndex(config, settings("**/*.md"), index)
-		if err == nil && hit != cached {
-			err = fmt.Errorf("cached view changed")
+		if err != nil {
+			done <- lookup{err: err}
+			return
 		}
-		if err == nil {
-			_, err = configurationWatchIndex(config, settings("**/*.hcl"), index)
-		}
-		done <- err
+		_, err = configurationWatchIndex(config, settings("**/*.hcl"), index)
+		done <- lookup{sameView: hit == cached, err: err}
 	}()
 	select {
-	case err := <-done:
-		require.NoError(t, err)
+	case result := <-done:
+		require.NoError(t, result.err)
+		require.True(t, result.sameView, "the cached view must be returned unchanged")
 	case <-time.After(5 * time.Second):
 		t.Fatal("an unrelated cache build blocked other keys")
 	}
