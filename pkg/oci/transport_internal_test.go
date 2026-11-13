@@ -3,6 +3,7 @@ package oci
 import (
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -220,3 +221,61 @@ var (
 	errorResponse403 = errcode.ErrorResponse{Method: http.MethodPut, StatusCode: http.StatusForbidden}
 	errorResponse503 = errcode.ErrorResponse{Method: http.MethodPut, StatusCode: http.StatusServiceUnavailable}
 )
+
+func TestReadSubjectClassifiesScanFailuresAsIntegrity(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		manifest string
+	}{
+		{"truncated manifest", `{"schemaVersion":2,"layers":[`},
+		{"malformed subject", `{"schemaVersion":2,"subject":{"size":"x"}}`},
+		{"not an object", `[1,2]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := NewMockStore(ctrl)
+			desc := Descriptor(ocispec.MediaTypeImageManifest, []byte(tc.manifest))
+			store.EXPECT().Fetch(gomock.Any(), desc).Return(io.NopCloser(strings.NewReader(tc.manifest)), nil)
+
+			subject, err := readSubject(t.Context(), store, &desc)
+
+			require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+			assert.Nil(t, subject)
+		})
+	}
+}
+
+func TestReadSubjectSkipsLongStringsAndFindsSubject(t *testing.T) {
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	longString := strings.Repeat(`x\"y`, 1<<18)
+	for _, tc := range []struct {
+		name     string
+		manifest string
+		want     bool
+	}{
+		{"long string value then subject", `{"annotations":{"k":"` + longString + `"},"subject":` + subject + `}`, true},
+		{"long key is skipped", `{"` + strings.Repeat("k", 4096) + `":1,"subject":` + subject + `}`, true},
+		{"escaped subject key", `{"subject":` + subject + `}`, true},
+		{"scalars and nesting before subject", `{"a":1.5e3,"b":true,"c":null,"d":[{"e":"]}"}],"subject":` + subject + `}`, true},
+		{"long string without subject", `{"annotations":{"k":"` + longString + `"},"n":7}`, false},
+		{"empty object", `{}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := NewMockStore(ctrl)
+			desc := Descriptor(ocispec.MediaTypeImageManifest, []byte(tc.manifest))
+			store.EXPECT().Fetch(gomock.Any(), desc).Return(io.NopCloser(strings.NewReader(tc.manifest)), nil)
+
+			got, err := readSubject(t.Context(), store, &desc)
+
+			require.NoError(t, err)
+			if !tc.want {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, int64(1), got.Size)
+			assert.Equal(t, ocispec.MediaTypeImageManifest, got.MediaType)
+		})
+	}
+}
