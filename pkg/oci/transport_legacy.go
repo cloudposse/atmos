@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/stream"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -32,6 +34,11 @@ type legacyGraph struct {
 	// indexes holds the descriptors of indexes whose children were already added, so a subgraph
 	// shared by several parents is traversed once.
 	indexes map[digest.Digest]ocispec.Descriptor
+
+	// spooled maps a streaming layer's digest to the replayable file that holds its bytes, and
+	// spoolDir is the private directory that owns those files until close.
+	spooled  map[digest.Digest]string
+	spoolDir string
 }
 
 var _ ReadOnlyStore = (*legacyGraph)(nil)
@@ -40,7 +47,71 @@ func newLegacyGraph() *legacyGraph {
 	return &legacyGraph{
 		blobs:   make(map[digest.Digest]func() (io.ReadCloser, error)),
 		indexes: make(map[digest.Digest]ocispec.Descriptor),
+		spooled: make(map[digest.Digest]string),
 	}
+}
+
+// close removes the spooled streaming layers. It is safe to call more than once.
+func (g *legacyGraph) close() {
+	if g == nil || g.spoolDir == "" {
+		return
+	}
+	_ = os.RemoveAll(g.spoolDir)
+	g.spoolDir = ""
+	g.spooled = map[digest.Digest]string{}
+}
+
+// spoolStreamingLayers consumes every layer that is a stream not yet read (stream.NewLayer) into a
+// replayable file. A stream's digest, size, and the image's manifest exist only after it was read
+// once, and it can be read only once, so the bytes must be kept for the upload.
+func (g *legacyGraph) spoolStreamingLayers(ctx context.Context, image v1.Image) error {
+	layers, err := image.Layers()
+	if err != nil {
+		return errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	for _, layer := range layers {
+		if _, err := layer.Digest(); !errors.Is(err, stream.ErrNotComputed) {
+			continue
+		}
+		if err := g.spoolLayer(ctx, layer); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (g *legacyGraph) spoolLayer(ctx context.Context, layer v1.Layer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if g.spoolDir == "" {
+		dir, err := os.MkdirTemp("", "atmos-oci-spool-")
+		if err != nil {
+			return errors.Join(errUtils.ErrOCIIntegrity, err)
+		}
+		g.spoolDir = dir
+	}
+	reader, err := layer.Compressed()
+	if err != nil {
+		return errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	file, err := os.CreateTemp(g.spoolDir, "layer-*")
+	if err != nil {
+		_ = reader.Close()
+		return errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	_, copyErr := io.Copy(file, reader)
+	// Closing the stream is what computes its digest and size.
+	closeErr := errors.Join(reader.Close(), file.Close())
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		return errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	hash, err := layer.Digest()
+	if err != nil {
+		return errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	g.spooled[digest.Digest(hash.String())] = file.Name()
+	return nil
 }
 
 func legacyImageGraph(ctx context.Context, image v1.Image) (*legacyGraph, error) {
@@ -48,8 +119,9 @@ func legacyImageGraph(ctx context.Context, image v1.Image) (*legacyGraph, error)
 		return nil, err
 	}
 	graph := newLegacyGraph()
-	root, err := graph.addImage(image)
+	root, err := graph.addImage(ctx, image)
 	if err != nil {
+		graph.close()
 		return nil, err
 	}
 	graph.root = root
@@ -60,6 +132,7 @@ func legacyIndexGraph(ctx context.Context, index v1.ImageIndex) (*legacyGraph, e
 	graph := newLegacyGraph()
 	root, err := graph.addIndex(ctx, index)
 	if err != nil {
+		graph.close()
 		return nil, err
 	}
 	graph.root = root
@@ -72,7 +145,10 @@ func (g *legacyGraph) addBytes(mediaType string, raw []byte) ocispec.Descriptor 
 	return desc
 }
 
-func (g *legacyGraph) addImage(image v1.Image) (ocispec.Descriptor, error) {
+func (g *legacyGraph) addImage(ctx context.Context, image v1.Image) (ocispec.Descriptor, error) {
+	if err := g.spoolStreamingLayers(ctx, image); err != nil {
+		return ocispec.Descriptor{}, err
+	}
 	raw, err := image.RawManifest()
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
@@ -94,6 +170,10 @@ func (g *legacyGraph) addImage(image v1.Image) (ocispec.Descriptor, error) {
 	}
 	for i := range manifest.Layers {
 		hash := manifest.Layers[i].Digest
+		if path, found := g.spooled[digest.Digest(hash.String())]; found {
+			g.blobs[digest.Digest(hash.String())] = func() (io.ReadCloser, error) { return os.Open(path) }
+			continue
+		}
 		g.blobs[digest.Digest(hash.String())] = func() (io.ReadCloser, error) {
 			layer, err := image.LayerByDigest(hash)
 			if err != nil {
@@ -158,7 +238,7 @@ func (g *legacyGraph) addChild(ctx context.Context, index v1.ImageIndex, child *
 		if err != nil {
 			return errors.Join(errUtils.ErrOCIIntegrity, err)
 		}
-		_, err = g.addImage(nested)
+		_, err = g.addImage(ctx, nested)
 		return err
 	default:
 		return fmt.Errorf("%w: unsupported child media type %q", errUtils.ErrOCIIntegrity, child.MediaType)

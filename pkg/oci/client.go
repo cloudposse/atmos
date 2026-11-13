@@ -148,6 +148,7 @@ func (c *Client) WriteImage(ctx context.Context, ref name.Reference, img v1.Imag
 	if err != nil {
 		return err
 	}
+	defer graph.close()
 	_, err = Copy(ctx, Source{Store: graph, Reference: legacyRoot}, Destination{Store: store, Reference: ref.Identifier()}, WithoutSubjectTraversal())
 	return err
 }
@@ -164,6 +165,7 @@ func (c *Client) WriteIndex(ctx context.Context, ref name.Reference, index v1.Im
 	if err != nil {
 		return err
 	}
+	defer graph.close()
 	_, err = Copy(ctx, Source{Store: graph, Reference: legacyRoot}, Destination{Store: store, Reference: ref.Identifier()}, WithoutSubjectTraversal())
 	return err
 }
