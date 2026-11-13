@@ -51,7 +51,7 @@ func (r *Repository) attachments(ctx context.Context, st store, name string, roo
 	set := &attachmentSet{}
 	inspected := 0
 	for index := range predecessors {
-		if !isManifestMediaType(predecessors[index].MediaType) || !mayBeBundle(&predecessors[index]) {
+		if !isCandidateReferrer(&predecessors[index]) {
 			continue
 		}
 		if inspected >= maxAttachments*4 {
@@ -105,6 +105,11 @@ func (r *Repository) readAttachment(ctx context.Context, st store, name string, 
 		return nil, fmt.Sprintf("signature referrer %s has a %d byte bundle; the limit is %d", desc.Digest, layer.Size, artifact.MaxEvidenceSize), nil
 	}
 	return newAttachment(&manifest, desc, layer, rootDesc.Digest), "", nil
+}
+
+// isCandidateReferrer reports whether a referrer is a manifest that may hold a Sigstore bundle.
+func isCandidateReferrer(desc *ocispec.Descriptor) bool {
+	return isManifestMediaType(desc.MediaType) && mayBeBundle(desc)
 }
 
 // mayBeBundle reports whether a referrer descriptor can be a Sigstore bundle. A descriptor that
