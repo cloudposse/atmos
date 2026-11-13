@@ -23,7 +23,7 @@ Backstage form → Atmos scaffold + Git target → Gitea PR → review and merge
                                     Atmos plan/apply → local S3 bucket
 ```
 
-Atmos runs Backstage as a native container component, Gitea as its **Git emulator**,
+[Atmos](https://atmos.tools/) runs Backstage as a native container component, Gitea as its **Git emulator**,
 and Floci as its **AWS emulator**. A Software Template opens a PR in Gitea.
 Gitea Actions validates and plans the request; after review and merge, its runner
 uses an Atmos Starlark module to provision the bucket and register the service. No cloud account or GitHub token is needed.
@@ -111,7 +111,9 @@ The Git and AWS emulators and the Actions runner remain running.
 
 The commands below are an alternative for a new service when the Gitea runner
 is stopped **before merging**. CI and the manual runner use separate local state;
-do not apply the same service through both.
+do not apply the same service through both. Disable the **Atmos infrastructure**
+workflow in Gitea before merging. If it has already been triggered, cancel its
+queued deploy job before restarting the runner.
 
 From this example directory, run:
 
