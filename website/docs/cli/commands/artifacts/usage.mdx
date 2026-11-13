@@ -156,7 +156,7 @@ Repositories authenticate through Atmos Auth identities named in `artifacts.repo
 
 ## CI Summaries and Outputs
 
-With [`ci.enabled: true`](/cli/configuration/ci), every `atmos artifacts` command that runs an operation appends one Markdown report to the CI job summary and writes the operation's results as CI output variables. The report covers published, unchanged, replaced, downloaded, copied, deleted, signed, verified, inspected, listed, and failed outcomes.
+With [`ci.enabled: true`](/cli/configuration/ci), every `atmos artifacts` command that runs a repository operation appends one Markdown report to the CI job summary and writes the operation's results as CI output variables. The report covers published, unchanged, replaced, downloaded, copied, deleted, signed, verified, inspected, listed, and failed outcomes.
 
 Each operation gets a row in an overview table and a section with:
 
@@ -174,9 +174,11 @@ The CI output variables use the [named outputs](/steps/type/artifact#result) of 
 
 The summary and the outputs follow the existing CI switches: `ci.enabled`, `ci.summary.enabled`, `ci.output.enabled`, and an explicit CI mode such as `--ci`. With reporting disabled, Atmos makes no extra request to a repository. The report is built from the result the operation already returned. Pull request comments and commit checks are separate, opt-in CI features and are not written by artifact operations. Customize the report with [`ci.templates.artifacts`](/cli/configuration/ci/templates#artifacts).
 
+The [`atmos artifacts catalog`](/cli/commands/artifacts/catalog) subcommands are the exception. They maintain a repository's discovery catalog, do not open a report session, and write neither a CI summary nor CI output variables.
+
 ## Workflows, Custom Commands, and Hooks
 
-Every command also runs as an [`artifact` step](/steps/type/artifact) in a workflow, a custom command, an embedded script, or a `kind: step` lifecycle hook. The step calls the same implementation in process, so it needs no `atmos artifacts` subprocess, and it returns the result that `--format=json` prints under `metadata.artifact`, together with the named outputs `ref`, `location`, `resolved_digest`, `record_digest`, `content_digest`, `representation_digest`, `size`, and `outcome`. A workflow, a custom command, an embedded script, or a hook writes one [CI report](#ci-summaries-and-outputs) for all of its artifact operations after it ends, with retries collapsed to the final attempt.
+Every command except the [`atmos artifacts catalog`](/cli/commands/artifacts/catalog) subcommands also runs as an [`artifact` step](/steps/type/artifact) in a workflow, a custom command, an embedded script, or a `kind: step` lifecycle hook. The step calls the same implementation in process, so it needs no `atmos artifacts` subprocess, and it returns the result that `--format=json` prints under `metadata.artifact`, together with the named outputs `ref`, `location`, `resolved_digest`, `record_digest`, `content_digest`, `representation_digest`, `size`, and `outcome`. A workflow, a custom command, an embedded script, or a hook writes one [CI report](#ci-summaries-and-outputs) for all of its artifact operations after it ends, with retries collapsed to the final attempt.
 
 ```yaml
 hooks:
