@@ -213,17 +213,8 @@ func (e *Executor) runPreExecutionSteps(
 		return err
 	}
 
-	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
-		if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
-			// The error is returned and rendered once by the command boundary, so it is only logged
-			// at debug level here to avoid printing the same failure twice.
-			log.Debug("Error executing 'atmos auth terraform pre-hook'",
-				logFieldComponent, info.ComponentFromArg, "error", err)
-			// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
-			// Authentication setup failures must not silently produce unauthenticated terraform commands.
-			return err
-		}
-		disableTerraformPluginCacheForExecution(atmosConfig, info)
+	if err := prepareExecutionAuthentication(atmosConfig, info); err != nil {
+		return err
 	}
 
 	// Generate backend and provider-override files. When AutoGenerateFiles=true,
@@ -268,9 +259,7 @@ func (e *Executor) executeCommandPipeline(
 	opts ...component.ExecutionOption,
 ) error {
 	componentPath := execCtx.componentPath
-	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
-		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
-	}
+	warnConfigurationPreview(info)
 
 	if shouldRunTerraformInit(atmosConfig, info) {
 		// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
@@ -572,4 +561,27 @@ func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile st
 		return
 	}
 	info.AdditionalArgsAndFlags = append([]string{varFileFlag, testVarFile}, info.AdditionalArgsAndFlags...)
+}
+
+func prepareExecutionAuthentication(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
+		if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
+			// The error is returned and rendered once by the command boundary, so it is only logged
+			// at debug level here to avoid printing the same failure twice.
+			log.Debug("Error executing 'atmos auth terraform pre-hook'",
+				logFieldComponent, info.ComponentFromArg, "error", err)
+			// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
+			// Authentication setup failures must not silently produce unauthenticated terraform commands.
+			return err
+		}
+		disableTerraformPluginCacheForExecution(atmosConfig, info)
+	}
+
+	return nil
+}
+
+func warnConfigurationPreview(info *schema.ConfigAndStacksInfo) {
+	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
+		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
+	}
 }

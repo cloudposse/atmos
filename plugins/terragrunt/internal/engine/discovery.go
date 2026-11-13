@@ -457,14 +457,12 @@ func resolveUnitInventory(ctx context.Context, logger log.Logger, environment *a
 	}
 	if cfg.Terraform != nil && cfg.Terraform.Source != nil {
 		result.Source = *cfg.Terraform.Source
-		if plainLocalSource(result.Source) {
-			result.Source = localPath(filepath.Dir(path), result.Source)
-			// A missing local module fails discovery, so a bulk run stops before any unit runs. The
-			// active filesystem also sees modules that a generated stack unit names in the overlay.
-			if problem := localSourceProblem(environment.FS, path, *cfg.Terraform.Source, result.Source); problem != nil {
-				return nil, problem
-			}
-			result.Folders = []string{result.Source}
+		if resolved, root, local, problem := resolveLocalModuleSource(environment.FS, path, result.Source); problem != nil {
+			return nil, problem
+		} else if local {
+			// A missing local module fails discovery before any unit runs.
+			result.Source = resolved
+			result.Folders = []string{root}
 		}
 	}
 	if result.OutputDependencies, err = outputDependencies(environment, cfg, path); err != nil {

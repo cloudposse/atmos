@@ -24,7 +24,13 @@ var localStampSkippedDirs = map[string]struct{}{".git": {}, ".terraform": {}, ".
 // way as vendoring resolves it. It reports false for remote sources and for missing directories.
 func localSourceRoot(spec *schema.VendorComponentSource) (string, bool) {
 	uri := vendor.NormalizeURI(resolveSourceURI(spec))
-	if vendor.IsLocalPath(uri) && !filepath.IsAbs(uri) {
+	if root, subdir, ok := vendor.LocalRootSubdir(uri); ok && !filepath.IsAbs(root) {
+		absolute, err := resolveLocalSourcePath(root, "")
+		if err != nil {
+			return "", false
+		}
+		uri = absolute + "//" + subdir
+	} else if vendor.IsLocalPath(uri) && !filepath.IsAbs(uri) {
 		absolute, err := resolveLocalSourcePath(uri, "")
 		if err != nil {
 			return "", false
@@ -244,6 +250,14 @@ func localSourceChanged(metadata *workdir.WorkdirMetadata, spec *schema.VendorCo
 // be read. It reports false for remote sources.
 func localSourceMissing(spec *schema.VendorComponentSource) bool {
 	uri := vendor.NormalizeURI(resolveSourceURI(spec))
+	if _, _, ok := vendor.LocalRootSubdir(uri); ok {
+		resolved, err := resolveLocalSubdirURI(uri, "")
+		if err != nil {
+			return true
+		}
+		_, present, err := localDirectorySource(resolved)
+		return err != nil || !present
+	}
 	switch {
 	case vendor.IsFileURI(uri):
 		path, err := fileURIPath(uri)
@@ -289,7 +303,15 @@ func sameLocalSource(left, right string) bool {
 	if !isLocalSource(left) || !isLocalSource(right) {
 		return false
 	}
-	absoluteLeft, errLeft := filepath.Abs(left)
-	absoluteRight, errRight := filepath.Abs(right)
+	leftRoot, leftSubdir, leftHasSubdir := vendor.LocalRootSubdir(left)
+	rightRoot, rightSubdir, rightHasSubdir := vendor.LocalRootSubdir(right)
+	if leftHasSubdir != rightHasSubdir || leftSubdir != rightSubdir {
+		return false
+	}
+	if !leftHasSubdir {
+		leftRoot, rightRoot = left, right
+	}
+	absoluteLeft, errLeft := filepath.Abs(leftRoot)
+	absoluteRight, errRight := filepath.Abs(rightRoot)
 	return errLeft == nil && errRight == nil && absoluteLeft == absoluteRight
 }

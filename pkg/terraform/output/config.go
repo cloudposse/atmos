@@ -260,7 +260,7 @@ func extractOptionalFields(sections map[string]any, config *ComponentConfig) {
 func ExtractComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string) (*ComponentConfig, error) {
 	defer perf.Track(atmosConfig, "output.ExtractComponentConfig")()
 
-	config := newComponentConfig(atmosConfig)
+	config := newComponentConfig(atmosConfig, sections)
 	if err := extractRequiredFields(atmosConfig, sections, component, stack, config); err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func ExtractComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map
 // in a scratch or the unit's own initialized directory, never in the component's execution
 // workdir, so the workdir path is not resolved and its configuration cannot fail the read.
 func extractConfigurationStateConfig(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string) (*ComponentConfig, error) {
-	config := newComponentConfig(atmosConfig)
+	config := newComponentConfig(atmosConfig, sections)
 	if err := extractCommandFields(sections, component, stack, config); err != nil {
 		return nil, err
 	}
@@ -283,9 +283,9 @@ func extractConfigurationStateConfig(atmosConfig *schema.AtmosConfiguration, sec
 }
 
 // newComponentConfig applies the project-wide output defaults.
-func newComponentConfig(atmosConfig *schema.AtmosConfiguration) *ComponentConfig {
+func newComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map[string]any) *ComponentConfig {
 	return &ComponentConfig{
-		AutoGenerateBackend:            atmosConfig.Components.Terraform.AutoGenerateBackendFile,
+		AutoGenerateBackend:            schema.GenerateBackendFileForSection(atmosConfig, sections),
 		InitMode:                       atmosConfig.Components.Terraform.EffectiveInitMode(),
 		InitReconfigure:                atmosConfig.Components.Terraform.EffectiveInitReconfigure(),
 		InitUpgrade:                    atmosConfig.Components.Terraform.EffectiveInitUpgrade(),

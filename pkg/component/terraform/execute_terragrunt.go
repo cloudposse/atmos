@@ -150,8 +150,8 @@ func resolveTerragruntPath(binary string, base, overrides []string) (string, err
 	if base == nil {
 		base = os.Environ()
 	}
-	path, _ := lastEnvListValue(base, "PATH")
-	if value, ok := lastEnvListValue(overrides, "PATH"); ok {
+	path, _ := lastEnvListValue(base)
+	if value, ok := lastEnvListValue(overrides); ok {
 		path = value
 	}
 	if strings.ContainsAny(binary, `/\`) {

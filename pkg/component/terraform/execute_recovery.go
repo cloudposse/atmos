@@ -179,7 +179,7 @@ func recoveringFetch(info *schema.ConfigAndStacksInfo, target *source.Target, po
 		moduleDir := target.Dir
 		if target.IsWorkdir {
 			var err error
-			moduleDir, err = component.ResolveWorkdirSubpath(info.BaseComponentPath, target.Dir)
+			moduleDir, err = component.ResolveConfiguredSubpath(info, target.Dir)
 			if err != nil {
 				return err
 			}
