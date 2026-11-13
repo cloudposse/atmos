@@ -525,7 +525,7 @@ func TestPolicyPlanUsesProviderOutputArguments(t *testing.T) {
 			config, info, execCtx, _, _ := planFixture(t)
 			var engine policy.Engine
 			require.NoError(t, engine.Register(policy.CELEngine, &policy.CEL{}))
-			execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: planShowRunner{}, Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
+			execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: newPlanShowRunner(t), Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
 			var original *schema.ComponentExecution
 			if test.provider != nil {
 				original = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: test.provider, Environment: map[string]string{"PROVIDER_ENV": "set"}}}}

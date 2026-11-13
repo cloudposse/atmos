@@ -15,21 +15,60 @@ import (
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
-type planRuntimeFixture struct {
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_plan_runtime_test.go -package=$GOPACKAGE -mock_names=reviewedPlanRuntime=MockReviewedPlanRuntime,planIdentityRuntime=MockPlanIdentityRuntime,planShowRunner=MockPlanShowRunner
+
+// reviewedPlanRuntime is a configuration runtime that prepares, binds saved plans, and resolves state.
+type reviewedPlanRuntime interface {
 	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationPlanRuntime
+	schema.ComponentConfigurationStateRuntime
+}
+
+// planIdentityRuntime can bind plans but cannot resolve backend state.
+type planIdentityRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationPlanRuntime
+}
+
+// planShowRunner runs the plan show command for plan policy evaluation.
+type planShowRunner interface {
+	process.Runner
+}
+
+// The generated mocks implement the contracts that the code under test asserts.
+var (
+	_ reviewedPlanRuntime = (*MockReviewedPlanRuntime)(nil)
+	_ planIdentityRuntime = (*MockPlanIdentityRuntime)(nil)
+	_ planShowRunner      = (*MockPlanShowRunner)(nil)
+)
+
+// planRuntimeFixture holds the responses that the generated plan runtime mock returns.
+// Tests change its fields to simulate a different provider identity, backend, or failure.
+type planRuntimeFixture struct {
 	identity string
 	state    *schema.ComponentConfigurationState
 	err      error
 }
 
-func (p *planRuntimeFixture) PlanIdentity(context.Context, *schema.ConfigAndStacksInfo, []schema.ComponentConfigurationSource) (string, error) {
-	return p.identity, p.err
-}
-
-func (p *planRuntimeFixture) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-	return p.state, p.err
+// mock returns a generated plan runtime that answers PlanIdentity and ResolveState from the
+// fixture at call time. Discover and Prepare have no expectations, so gomock rejects them.
+func (p *planRuntimeFixture) mock(t *testing.T) *MockReviewedPlanRuntime {
+	t.Helper()
+	runtime := NewMockReviewedPlanRuntime(gomock.NewController(t))
+	runtime.EXPECT().PlanIdentity(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *schema.ConfigAndStacksInfo, []schema.ComponentConfigurationSource) (string, error) {
+			return p.identity, p.err
+		},
+	).AnyTimes()
+	runtime.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+			return p.state, p.err
+		},
+	).AnyTimes()
+	return runtime
 }
 
 func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, *componentExecContext, *planRuntimeFixture, string) {
@@ -47,7 +86,7 @@ func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndSta
 	require.NoError(t, os.WriteFile(path, []byte("reviewed plan"), 0o600))
 	prepared := &schema.PreparedComponentConfiguration{Engine: "terraform", Source: root, Inputs: map[string]any{"value": "reviewed"}, BackendType: "local", Backend: map[string]any{"path": filepath.Join(root, "state")}, Workspace: "default"}
 	runtime := &planRuntimeFixture{identity: "provider-source-options", state: &schema.ComponentConfigurationState{BackendType: prepared.BackendType, Backend: prepared.Backend, Workspace: prepared.Workspace}}
-	config.ComponentConfigurations = runtime
+	config.ComponentConfigurations = runtime.mock(t)
 	execCtx := &componentExecContext{componentPath: working, workingDir: working, preparedConfiguration: prepared}
 	return config, info, execCtx, runtime, path
 }
@@ -136,7 +175,7 @@ func TestConfigurationPlanRecordingGuards(t *testing.T) {
 	info.SubCommand = "plan"
 	config.ComponentConfigurations = nil
 	require.ErrorIs(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out", path}), errUtils.ErrPluginUnsupportedExtension)
-	config.ComponentConfigurations = runtime
+	config.ComponentConfigurations = runtime.mock(t)
 	runtime.err = context.Canceled
 	require.ErrorIs(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out", path}), context.Canceled)
 	runtime.err = nil
@@ -299,19 +338,24 @@ func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 	}
 }
 
-type planShowRunner struct{}
-
-//nolint:gocritic // The process.Runner interface fixes the value parameter.
-func (planShowRunner) Run(_ context.Context, spec process.TaskSpec) process.Result {
-	_, _ = io.WriteString(spec.Streams.Stdout, `{"format_version":"1.2","planned_values":{}}`)
-	return process.Result{Started: true}
+// newPlanShowRunner returns a generated runner whose plan show prints an empty JSON plan.
+func newPlanShowRunner(t *testing.T) process.Runner {
+	t.Helper()
+	runner := NewMockPlanShowRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, spec process.TaskSpec) process.Result {
+			_, _ = io.WriteString(spec.Streams.Stdout, `{"format_version":"1.2","planned_values":{}}`)
+			return process.Result{Started: true}
+		},
+	).AnyTimes()
+	return runner
 }
 
 func TestPolicyPlanBindsPublishedOutput(t *testing.T) {
 	config, info, execCtx, _, _ := planFixture(t)
 	var engine policy.Engine
 	require.NoError(t, engine.Register(policy.CELEngine, &policy.CEL{}))
-	execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: planShowRunner{}, Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
+	execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: newPlanShowRunner(t), Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
 	shell := &fakeShell{run: func(call *shellCall) error {
 		path := plannedOutputPath(execCtx.componentPath, call.args)
 		return os.WriteFile(path, []byte("reviewed"), 0o600)

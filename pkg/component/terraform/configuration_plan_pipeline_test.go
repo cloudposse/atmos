@@ -1,7 +1,6 @@
 package terraform
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,25 +14,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// reviewedPlanRuntime is a configuration provider that can prepare, bind plans, and resolve state.
-type reviewedPlanRuntime struct {
-	*MockComponentConfigurationRuntime
-	state *schema.ComponentConfigurationState
-}
-
-func (reviewedPlanRuntime) PlanIdentity(context.Context, *schema.ConfigAndStacksInfo, []schema.ComponentConfigurationSource) (string, error) {
-	return "provider-source-options", nil
-}
-
-func (r reviewedPlanRuntime) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-	return r.state, nil
-}
-
 // reviewedPlanProject is an isolated workdir-enabled component whose module can change after review.
 type reviewedPlanProject struct {
 	root, module, workdir, state string
 	config                       *schema.AtmosConfiguration
-	provider                     *MockComponentConfigurationRuntime
+	provider                     *MockReviewedPlanRuntime
 }
 
 func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
@@ -44,9 +29,12 @@ func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
 	require.NoError(t, os.WriteFile(filepath.Join(project.module, "main.tf"), []byte("# reviewed module"), 0o644))
 	project.config = &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
 	project.config.Components.Terraform.BasePath = "components"
-	project.provider = NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	// The provider is a generated runtime that can prepare, bind plans, and resolve state.
+	project.provider = NewMockReviewedPlanRuntime(gomock.NewController(t))
 	state := &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": project.state}, Workspace: "default"}
-	project.config.ComponentConfigurations = reviewedPlanRuntime{MockComponentConfigurationRuntime: project.provider, state: state}
+	project.provider.EXPECT().PlanIdentity(gomock.Any(), gomock.Any(), gomock.Any()).Return("provider-source-options", nil).AnyTimes()
+	project.provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).Return(state, nil).AnyTimes()
+	project.config.ComponentConfigurations = project.provider
 	return project
 }
 
