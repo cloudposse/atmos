@@ -223,6 +223,10 @@ jobs:
       - name: Verify Windows plan-binding ACL
         if: matrix.target == 'windows' && ! github.event.pull_request.draft
         shell: bash
+        # Match the CLI and acceptance harness; the hosted CGO runtime can
+        # crash during startup before this test reaches its ACL assertions.
+        env:
+          CGO_ENABLED: '0'
         run: go test ./pkg/component/terraform -run '^TestPlanBindingPrivateACLUnderPermissiveParent$' -count=1 -v
 
       # Mage keeps the cross-platform acceptance orchestration in typed,
