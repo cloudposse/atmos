@@ -87,6 +87,9 @@ func TestDecodeValueHandlesAnyKnownValue(t *testing.T) {
 }
 
 func TestDecodeStringReadsStringsAndRejectsEverythingElse(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
 	text, err := DecodeString(nil)
 	require.NoError(t, err)
 	require.Empty(t, text)
@@ -96,6 +99,7 @@ func TestDecodeStringReadsStringsAndRejectsEverythingElse(t *testing.T) {
 	text, err = DecodeString(secret)
 	require.NoError(t, err)
 	require.Equal(t, "token-value", text)
+	require.NotContains(t, atmosio.GetContext().Masker().Mask("token-value"), "token-value")
 
 	_, err = DecodeString(objectWireValue(t, cty.NumberIntVal(1)))
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)

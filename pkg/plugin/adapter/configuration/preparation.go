@@ -64,10 +64,14 @@ func rejectSavedPlan(info *schema.ConfigAndStacksInfo) error {
 }
 
 // runProviderPrepare asks the owning provider to reevaluate the selected unit with every effect
-// granted, after checking that the stack neither replaces the unit's module nor switches its engine.
+// granted, after checking module ownership and engine selection. Only an explicit --command
+// flag may switch the engine discovered from the global configuration.
 func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
 	if err := checkSourceOverride(info, selected.instance); err != nil {
 		return nil, err
+	}
+	if engine := expectedEngine(info, selected.instance); engine != selected.instance.Engine && info.ComponentCommand == "" {
+		return nil, engineMismatch(info, selected.instance.Engine, engine)
 	}
 	selected.request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
 	result, err := selected.provider.Prepare(ctx, selected.request)
@@ -88,8 +92,9 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 			return nil, err
 		}
 	}
-	if result.Engine != selected.instance.Engine {
-		return nil, engineMismatch(info, selected.instance.Engine, result.Engine)
+	// The provider prepares for the binary it is given, so any other engine is a protocol violation.
+	if result.Engine != expectedEngine(info, selected.instance) {
+		return nil, errUtils.ErrPluginProtocol
 	}
 	return result, nil
 }
@@ -141,6 +146,20 @@ func engineMismatch(info *schema.ConfigAndStacksInfo, discovered, selected strin
 		WithContext("command", info.Command).
 		WithHint("Set `command` to another " + discovered + " executable, or change `components.terraform.command` in `atmos.yaml` to switch every unit to " + selected).
 		Err()
+}
+
+// expectedEngine is the engine of the command this invocation runs. Discovery records the engine of
+// the globally configured command, but --command may explicitly select another one,
+// and the provider prepares for the binary it is given. Any other engine is a protocol violation.
+func expectedEngine(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent) string {
+	if info.Command == "" {
+		return instance.Engine
+	}
+	// Match execution's executable-name detection (pkg/component/terraform/detection.go).
+	if strings.Contains(strings.ToLower(filepath.Base(info.Command)), "tofu") {
+		return "opentofu"
+	}
+	return "terraform"
 }
 
 // selectedComponent bundles the request, owning provider, and discovered instance for one component.
@@ -234,7 +253,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 		return nil, err
 	}
 	for _, file := range result.Files {
-		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive})
+		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive, UnitFileCopy: file.UnitFileCopy})
 	}
 	for _, source := range result.Sources {
 		prepared.Sources = append(prepared.Sources, schema.ComponentConfigurationSource{Path: source.Path, Directory: source.Kind == pluginv1.ComponentSource_DIRECTORY})

@@ -78,6 +78,49 @@ func TestWriteFilesRegistersSensitiveContentItKeeps(t *testing.T) {
 	require.Equal(t, "key=<MASKED>", atmosio.MaskString("key="+secret))
 }
 
+func TestSensitiveGeneratedFileRestrictsBeforeTruncating(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "secret.tf")
+	previous := []byte("preserve until restricted")
+	require.NoError(t, os.WriteFile(path, previous, 0o644))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	output, err := openGeneratedFile(root, schema.ComponentConfigurationFile{
+		Path: "secret.tf", IfExists: "overwrite", Sensitive: true,
+	}, true)
+	require.NoError(t, err)
+	defer output.Close()
+	info, err := output.Stat()
+	require.NoError(t, err)
+	require.EqualValues(t, len(previous), info.Size())
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(secretMode), info.Mode().Perm())
+	}
+}
+
+func TestSensitiveGeneratedFileExistingPolicies(t *testing.T) {
+	for _, policy := range []string{"skip", "error"} {
+		t.Run(policy, func(t *testing.T) {
+			directory := t.TempDir()
+			path := filepath.Join(directory, "secret.tf")
+			previous := []byte("preserve existing content")
+			require.NoError(t, os.WriteFile(path, previous, 0o644))
+			err := WriteFiles(directory, []schema.ComponentConfigurationFile{{
+				Path: "secret.tf", IfExists: policy, Sensitive: true, Content: []byte("replacement"),
+			}})
+			if policy == "skip" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			}
+			content, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, previous, content)
+		})
+	}
+}
+
 // A module file that already matches a skip block stays the module's: removing the block later
 // must not delete it as a stale generated file.
 func TestSkipKeepsOwnershipOfAnIdenticalModuleFile(t *testing.T) {

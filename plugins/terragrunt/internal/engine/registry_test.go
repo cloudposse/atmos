@@ -52,6 +52,45 @@ func registryUnit(t *testing.T, terraformBody string) model.Request {
 	return model.Request{Path: path, BasePath: root, Command: "plan", Tofu: "/bin/tofu", Environment: map[string]string{"HOME": root}}
 }
 
+func TestRegistryDiscoveryRetriesTransientFailure(t *testing.T) {
+	var discoveryCalls atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/terraform.json", func(w http.ResponseWriter, _ *http.Request) {
+		if discoveryCalls.Add(1) == 1 {
+			http.Error(w, "temporary", http.StatusServiceUnavailable)
+			return
+		}
+		fmt.Fprint(w, `{"modules.v1":"/v1/modules/"}`)
+	})
+	mux.HandleFunc("/v1/modules/acme/vpc/aws/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Terraform-Get", "https://example.test/module.zip")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+	previous := registryClient
+	registryClient = server.Client()
+	defer func() { registryClient = previous }()
+	address, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	request := registryUnit(t, `source = "tfr://`+address.Host+`/acme/vpc/aws?version=1.0.0"`)
+	file := `terraform {
+  source = "tfr://` + address.Host + `/acme/vpc/aws?version=1.0.0"
+}
+errors {
+  retry "registry" {
+    retryable_errors = ["status code 503"]
+    max_attempts = 2
+    sleep_interval_sec = 0
+  }
+}`
+	require.NoError(t, os.WriteFile(request.Path, []byte(file), 0o644))
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "https://example.test/module.zip", result.Source)
+	require.EqualValues(t, 2, discoveryCalls.Load())
+}
+
 func TestRegistrySourceResolvesAtPreparation(t *testing.T) {
 	host, requests := registryServer(t)
 	request := registryUnit(t, `source = "tfr://`+host+`/acme/vpc/aws//modules/nat?version=1.4.0"`)
@@ -93,6 +132,27 @@ func TestRegistrySourceStaysUnresolvedWithoutNetwork(t *testing.T) {
 	}
 }
 
+func TestRegistrySourceIsNotResolvedForAnExcludedOperation(t *testing.T) {
+	host, requests := registryServer(t)
+	source := "tfr://" + host + "/acme/vpc/aws?version=1.0.0"
+	request := registryUnit(t, `source = "`+source+`"
+}
+exclude {
+  if      = true
+  actions = ["plan"]
+  no_run  = true`)
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), requests.Load(), "a prevented plan must not contact the registry")
+	assert.Equal(t, source, result.Source)
+
+	request.Command = "apply"
+	result, err = Resolve(t.Context(), request)
+	require.NoError(t, err)
+	assert.Positive(t, requests.Load(), "an operation the block does not prevent resolves the source")
+	assert.NotEqual(t, source, result.Source)
+}
+
 func TestRegistrySourceFailureIsAnActionableProblem(t *testing.T) {
 	host, _ := registryServer(t)
 	_, err := Resolve(t.Context(), registryUnit(t, `source = "tfr://`+host+`/acme/missing/aws?version=1.0.0"`))
@@ -105,11 +165,12 @@ func TestRegistrySourceFailureIsAnActionableProblem(t *testing.T) {
 
 func TestNormalizeGetterURL(t *testing.T) {
 	for source, want := range map[string]string{
-		"github.com/acme/repo?ref=v1":          "git::https://github.com/acme/repo.git?ref=v1",
-		"github.com/acme/repo.git//sub?ref=v1": "git::https://github.com/acme/repo.git//sub?ref=v1",
-		"bitbucket.org/acme/repo":              "git::https://bitbucket.org/acme/repo.git",
-		"git::https://example.test/repo.git":   "git::https://example.test/repo.git",
-		"https://example.test/module.tar.gz":   "https://example.test/module.tar.gz",
+		"github.com/acme/repo?ref=v1":             "git::https://github.com/acme/repo.git?ref=v1",
+		"github.com/acme/repo.git//sub?ref=v1":    "git::https://github.com/acme/repo.git//sub?ref=v1",
+		"bitbucket.org/acme/repo":                 "git::https://bitbucket.org/acme/repo.git",
+		"github.com/acme/repo/modules/vpc?ref=v1": "git::https://github.com/acme/repo.git//modules/vpc?ref=v1",
+		"git::https://example.test/repo.git":      "git::https://example.test/repo.git",
+		"https://example.test/module.tar.gz":      "https://example.test/module.tar.gz",
 	} {
 		assert.Equal(t, want, normalizeGetterURL(source))
 	}
@@ -149,6 +210,23 @@ inputs = { account = "kept" }`)
 	require.NoError(t, err)
 	require.Equal(t, &model.IAM{Role: "arn:aws:iam::123456789012:role/deploy", SessionName: "session-ci", DurationSeconds: 7200, WebIdentityToken: "token-value"}, result.IAM)
 	require.Equal(t, "kept", result.Inputs["account"], "iam settings do not disturb the rest of the unit")
+}
+
+func TestIAMWebIdentityTokenFileIsAnchoredAtTheUnit(t *testing.T) {
+	request := iamUnit(t, `iam_role = "arn:aws:iam::123456789012:role/deploy"
+iam_web_identity_token = "token.jwt"`)
+	unitDir := filepath.Dir(request.Path)
+	require.NoError(t, os.WriteFile(filepath.Join(unitDir, "token.jwt"), []byte("jwt"), 0o600))
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	resolvedUnitDir, err := filepath.EvalSymlinks(unitDir)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(resolvedUnitDir, "token.jwt"), result.IAM.WebIdentityToken, "a relative token file resolves against the unit directory")
+
+	require.Equal(t, "literal-token", unitTokenFile("literal-token", unitDir), "a token that names no file is kept")
+	absolute := filepath.Join(unitDir, "token.jwt")
+	require.Equal(t, absolute, unitTokenFile(absolute, t.TempDir()))
+	require.Empty(t, unitTokenFile("", unitDir))
 }
 
 func TestIAMRoleIsEvaluatedBeforeInputs(t *testing.T) {

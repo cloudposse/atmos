@@ -103,6 +103,10 @@ func (e *Executor) executeMainTerraformCommand( //nolint:revive // argument-limi
 	}
 
 	err := e.runMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, opts...)
+	// Invalid output selection is a preflight failure, not a Terraform exit code.
+	if errors.Is(err, errUtils.ErrPlanVerificationFailed) {
+		return err
+	}
 	return e.finishMainTerraformCommand(atmosConfig, info, err, uploadStatusFlag)
 }
 

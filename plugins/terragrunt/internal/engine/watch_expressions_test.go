@@ -207,6 +207,10 @@ func TestWatchesCoverWholeCopiedSourceRoot(t *testing.T) {
 		{source: "../../../modules/sub//app", want: []string{filepath.Join(project.root, "modules", "sub")}},
 		{source: filepath.Join(project.root, "modules", "sub") + "//app", want: []string{filepath.Join(project.root, "modules", "sub")}},
 		{source: "git::https://example.invalid/repo.git//sub?ref=v1"},
+		// An in-project Git repository is watched whole; one outside the project cannot change in it.
+		{source: "git::file://" + filepath.ToSlash(filepath.Join(project.root, "modules", "repo")) + "//app?ref=main", want: []string{filepath.Join(project.root, "modules", "repo")}},
+		{source: "git::file://" + filepath.ToSlash(filepath.Join(project.root, "modules", "repo")) + "?ref=main", want: []string{filepath.Join(project.root, "modules", "repo")}},
+		{source: "git::file://" + filepath.ToSlash(filepath.Dir(project.root)) + "//app?ref=main"},
 		{source: "https://example.invalid/archive.zip//sub"},
 		{source: "../../../modules/plain"},
 	} {
@@ -309,6 +313,48 @@ terraform {
   before_hook "unresolved" {
     commands = ["plan"]
     execute  = ["bash", "${get_env("HOOK_DIR")}/run.sh"]
+  }
+}
+`)
+	require.Equal(t, []string{project.root}, result.Folders)
+}
+
+// A file read with read_terragrunt_config resolves get_terragrunt_dir() against its own directory.
+func TestWatchesResolveReadConfigurationFromItsOwnDirectory(t *testing.T) {
+	project := newWatchProject(t)
+	shared := filepath.Join(project.root, "live", "shared")
+	project.write(filepath.Join(shared, "extra.hcl"), `locals { body = file("${get_terragrunt_dir()}/data.json") }`)
+	result := project.track(`
+inputs = { v = read_terragrunt_config("${get_terragrunt_dir()}/../../shared/extra.hcl").locals.body }
+`)
+	require.Contains(t, result.Files, filepath.Join(shared, "data.json"))
+	require.NotContains(t, result.Files, filepath.Join(project.unit, "data.json"))
+	require.Empty(t, result.Folders)
+}
+
+// Hook scripts resolve against the hook's working directory, and an unresolved directory widens the watch.
+func TestWatchesResolveHookScriptsFromWorkingDirectory(t *testing.T) {
+	project := newWatchProject(t)
+	project.write(filepath.Join(project.root, "scripts", "run.sh"), "echo")
+	result := project.track(`
+terraform {
+  before_hook "relative" {
+    commands    = ["plan"]
+    execute     = ["../scripts/run.sh", "check.sh"]
+    working_dir = "${get_repo_root()}/tools"
+  }
+}
+`)
+	// The working directory is watched whole, covering slashless arguments such as check.sh.
+	require.Contains(t, result.Files, filepath.Join(project.root, "scripts", "run.sh"))
+	require.Equal(t, []string{filepath.Join(project.root, "tools")}, result.Folders)
+
+	result = project.track(`
+terraform {
+  before_hook "dynamic" {
+    commands    = ["plan"]
+    execute     = ["bash", "check.sh"]
+    working_dir = get_env("HOOK_DIR")
   }
 }
 `)

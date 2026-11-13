@@ -220,6 +220,8 @@ service Commands {
 // implement an executor or replace the built-in Terraform component provider.
 // Negotiate each service through Info using component.discovery,
 // component.validation, component.preparation, and component.state respectively.
+// component.preparation is version 2: it adds terraform_arguments,
+// backend_generated, and execution. A version-1 host must reject the plugin.
 
 // ComponentValue uses cty's JSON type encoding and MessagePack value encoding.
 // Unlike protobuf.Struct, it preserves exact numbers, nulls, unknowns, and
@@ -350,6 +352,9 @@ message ComponentGeneratedFile {
   // default. Content is evaluated bytes, not another template language.
   string if_exists = 3;
   bool sensitive = 4;
+  // True only for a literal file copied from beside the configuration unit,
+  // never for an explicit generate block. Absent means normal policy handling.
+  bool unit_file_copy = 5;
 }
 // Evaluated command metadata; the host executes it with the invocation's
 // environment, toolchain, cancellation, and I/O. Lists retain declaration order.

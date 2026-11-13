@@ -27,6 +27,9 @@ const configurationPlanSuffix = ".atmos.json"
 // configurationPlanVersion is bumped whenever the stored binding changes shape.
 const configurationPlanVersion = 3
 
+// planBindingSuffix names the binding of a default saved plan, which Atmos writes as "*.planfile".
+const planBindingSuffix = ".planfile" + configurationPlanSuffix
+
 // configurationPlan is the private record stored beside a saved plan. It binds the plan to the
 // exact preparation it was made from. Evaluated inputs and backend settings are not stored:
 // the plan file already embodies the inputs, and the backend is re-resolved at apply time and
@@ -127,6 +130,7 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	if err != nil {
 		return nil, nil, err
 	}
+	info.ConfigurationPlanImplicit = info.ConfigurationPlanImplicit || info.PlanFile == ""
 	info.UseTerraformPlan = true
 	info.PlanFile = absolute
 	return plan.Prepared, rebuild, nil
@@ -381,14 +385,37 @@ func backendIdentityDigest(backend map[string]any) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
+// validatePlanOutputFlags rejects ambiguous plan destinations before hooks or Terraform run.
+func validatePlanOutputFlags(command string, args []string) error {
+	if command != "plan" {
+		return nil
+	}
+	count := 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-out" || arg == "--out" {
+			count++
+			i++
+		} else if strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=") {
+			count++
+		}
+		if count > 1 {
+			return fmt.Errorf("%w: multiple plan output flags", errUtils.ErrPlanVerificationFailed)
+		}
+	}
+	return nil
+}
+
 func plannedOutputPath(directory string, args []string) string {
 	for i, arg := range args {
 		path := ""
-		if arg == "-out" && i+1 < len(args) {
+		switch {
+		case (arg == "-out" || arg == "--out") && i+1 < len(args):
 			path = args[i+1]
-		}
-		if strings.HasPrefix(arg, "-out=") {
+		case strings.HasPrefix(arg, "-out="):
 			path = strings.TrimPrefix(arg, "-out=")
+		case strings.HasPrefix(arg, "--out="):
+			path = strings.TrimPrefix(arg, "--out=")
 		}
 		if path != "" {
 			if filepath.IsAbs(path) {
@@ -476,7 +503,7 @@ func workdirDigest(root, planPath string, ignore func(relative string) bool) (st
 			}
 			return nil
 		}
-		if ignoredWorkdirFile(path, planPath, entry.Name()) || ignoredRelative(root, path, ignore) {
+		if skipWorkdirFile(root, path, planPath, entry.Name(), ignore) {
 			return nil
 		}
 		return recordWorkdirFile(root, path, entry, files)
@@ -490,6 +517,13 @@ func workdirDigest(root, planPath string, ignore func(relative string) bool) (st
 	}
 	digest := sha256.Sum256(data)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+func skipWorkdirFile(root, path, planPath, name string, ignore func(string) bool) bool {
+	if path == planPath || path == planPath+configurationPlanSuffix || insideTerraformCacheOutsideModules(root, path) {
+		return true
+	}
+	return (!insideTerraformModules(root, path) && ignoredWorkdirFile(path, planPath, name)) || ignoredRelative(root, path, ignore)
 }
 
 // ignoredRelative applies a caller's filter to the slash-separated path relative to root.
@@ -530,7 +564,37 @@ func resolvedPath(path string) (string, error) {
 // The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
 // that even a read-only lookup of the retained directory creates), never executed content.
 func skipWorkdirDirectory(root, path, name string) bool {
-	return path != root && (name == ".terraform" || name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
+	return path != root && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || insideTerraformCacheOutsideModules(root, path))
+}
+
+// Terraform's downloaded modules can contain scripts executed during apply. Other cache
+// content, including providers and state, remains mutable and is excluded.
+func insideTerraformCacheOutsideModules(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(relative, string(filepath.Separator))
+	for i, part := range parts {
+		if part == ".terraform" && i+1 < len(parts) && parts[i+1] != "modules" {
+			return true
+		}
+	}
+	return false
+}
+
+func insideTerraformModules(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(relative, string(filepath.Separator))
+	for i, part := range parts {
+		if part == ".terraform" && i+1 < len(parts) && parts[i+1] == "modules" {
+			return true
+		}
+	}
+	return false
 }
 
 // ignoredWorkdirFile reports whether a file is a plan, its binding, or mutable state. Plan files are
@@ -538,7 +602,7 @@ func skipWorkdirDirectory(root, path, name string) bool {
 // still lying in the directory, the stored plan `deploy` downloads for comparison, and the fresh
 // plan it generates.
 func ignoredWorkdirFile(path, planPath, name string) bool {
-	return path == planPath || strings.HasSuffix(name, configurationPlanSuffix) || strings.HasSuffix(name, ".planfile") ||
+	return path == planPath || strings.HasSuffix(name, planBindingSuffix) || strings.HasSuffix(name, ".planfile") ||
 		name == ciplanfile.StoredPlanPrefix+ciplanfile.PlanFilename || name == freshPlanName ||
 		strings.HasPrefix(name, ".atmos-plan-") || strings.HasPrefix(name, "terraform.tfstate")
 }
@@ -571,12 +635,17 @@ func finishConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Con
 	if !ownsConfigurationPlan(info) || info.DryRun {
 		return
 	}
+	// A CI exit-code mapping can report a failed apply as success. The subprocess's own status
+	// decides, so a plan whose apply failed (for example on a state lock) can be applied again.
+	if info.ExecMetadataRawExitCode != 0 {
+		return
+	}
 	if _, changes := stateChangingSubcommands[info.SubCommand]; !changes {
 		return
 	}
 	canonical := ConstructTerraformComponentPlanfilePath(config, info)
 	// A plan file the user named is theirs even when it is the canonical path, so it is kept.
-	if info.PlanFile == "" || filepath.Clean(configurationPlanPath(config, info)) != filepath.Clean(canonical) {
+	if info.PlanFile == "" || info.ConfigurationPlanImplicit || filepath.Clean(configurationPlanPath(config, info)) != filepath.Clean(canonical) {
 		removeTerraformFile(canonical, "Failed to remove consumed plan file")
 	}
 	removeTerraformFile(canonical+configurationPlanSuffix, "Failed to remove consumed plan record")

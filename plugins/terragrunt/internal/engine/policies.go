@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -131,10 +132,24 @@ func iamSettings(cfg *config.TerragruntConfig, request *model.Request, path stri
 		iam.DurationSeconds = seconds
 	}
 	if iam.Role != "" {
+		iam.WebIdentityToken = unitTokenFile(iam.WebIdentityToken, filepath.Dir(path))
 		return iam, nil, nil
 	}
 	if iam.WebIdentityToken == "" {
 		return nil, nil, nil
 	}
 	return nil, []model.Warning{{Code: warningIAMTokenWithoutRole, Path: mustRel(request.BasePath, path), Message: "`iam_web_identity_token` has no effect without `iam_role`, so no role is assumed. Terragrunt behaves the same way."}}, nil
+}
+
+// unitTokenFile anchors a relative web identity token file at the unit directory, so the host finds it
+// whatever directory Atmos runs from. Absolute paths and token values that name no file are unchanged.
+func unitTokenFile(token, unitDir string) string {
+	if token == "" || filepath.IsAbs(token) {
+		return token
+	}
+	candidate := filepath.Join(unitDir, token)
+	if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+		return candidate
+	}
+	return token
 }

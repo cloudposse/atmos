@@ -598,6 +598,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 
 	// Terraform-specific: process backends and add Terraform-specific fields.
 	if opts.ComponentType == cfg.TerraformComponentType {
+		// Validate component-owned options while backend types are still nested and
+		// component inheritance is distinguishable from stack-global defaults.
+		if err := checkConfigurationBackendOverrides(opts, result, finalSettings); err != nil {
+			return nil, nil, err
+		}
 		// Process backend configuration.
 		finalComponentBackendType, finalComponentBackend, err := processTerraformBackend(
 			&terraformBackendConfig{

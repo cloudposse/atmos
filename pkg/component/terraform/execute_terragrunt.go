@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/terragruntexec"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -87,32 +88,8 @@ func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schem
 			return err
 		}
 	}
-	binary := terragruntTool
-	if tenv != nil {
-		if pinned, ok := tenv.ResolvePinned(binary); ok {
-			binary = pinned
-		}
-	}
-	var lookupErr error
-	if !filepath.IsAbs(binary) {
-		var resolved string
-		resolved, lookupErr = resolveTerragruntPath(binary, info.SanitizedEnv, info.ComponentEnvList)
-		if lookupErr == nil {
-			binary = resolved
-		}
-	}
-	configuration, _ := info.ComponentSettingsSection["configuration"].(map[string]any)
-	unit, _ := configuration["source"].(string)
-	provider, _ := configuration["provider"].(string)
-	section := providerSection(atmosConfig, provider)
-	features, _ := atmosConfig.Components.Terraform.ConfigurationProviders[section].Options["features"].(map[string]any)
-	request := &terragruntexec.Request{
-		Component: info.ComponentFromArg, Stack: info.Stack, Binary: binary, Engine: info.Command,
-		Unit: unit, Root: atmosConfig.BasePathAbsolute, SubCommand: info.SubCommand, SubCommand2: info.SubCommand2,
-		Arguments: info.AdditionalArgsAndFlags, Options: info.ComponentProviderOptions[section], Features: features,
-		Environment: info.ComponentEnvList, DryRun: info.DryRun,
-		SkipInit: info.SkipInit || (info.SubCommand == "plan" && atmosConfig.Components.Terraform.EffectiveInitMode() == schema.TerraformInitModeNever),
-	}
+	binary, lookupErr := terragruntExecutable(tenv, info)
+	request := terragruntRequest(atmosConfig, info, binary)
 	err = terragruntexec.Run(ctx, &terragruntHost{executor: e, atmosConfig: atmosConfig, info: info, opts: opts, lookupErr: lookupErr}, request)
 	info.ExecMetadataRawExitCode = resolveExitCode(err)
 	if !info.DryRun {
@@ -120,6 +97,38 @@ func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schem
 		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
 	}
 	return e.finishMainTerraformCommand(atmosConfig, info, err, false)
+}
+
+func terragruntExecutable(tenv *dependencies.ToolchainEnvironment, info *schema.ConfigAndStacksInfo) (string, error) {
+	binary := terragruntTool
+	if tenv != nil {
+		if pinned, ok := tenv.ResolvePinned(binary); ok {
+			binary = pinned
+		}
+	}
+	if filepath.IsAbs(binary) {
+		return binary, nil
+	}
+	resolved, err := resolveTerragruntPath(binary, info.SanitizedEnv, info.ComponentEnvList)
+	if err != nil {
+		return binary, err
+	}
+	return resolved, nil
+}
+
+func terragruntRequest(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, binary string) *terragruntexec.Request {
+	configuration, _ := info.ComponentSettingsSection["configuration"].(map[string]any)
+	unit, _ := configuration["source"].(string)
+	provider, _ := configuration["provider"].(string)
+	section := providerSection(atmosConfig, provider)
+	features, _ := atmosConfig.Components.Terraform.ConfigurationProviders[section].Options["features"].(map[string]any)
+	return &terragruntexec.Request{
+		Component: info.ComponentFromArg, Stack: info.Stack, Binary: binary, Engine: info.Command,
+		Unit: unit, Root: atmosConfig.BasePathAbsolute, SubCommand: info.SubCommand, SubCommand2: info.SubCommand2,
+		Arguments: info.AdditionalArgsAndFlags, Options: info.ComponentProviderOptions[section], Features: features,
+		Environment: info.ComponentEnvList, DryRun: info.DryRun,
+		SkipInit: info.SkipInit || (info.SubCommand == "plan" && atmosConfig.Components.Terraform.EffectiveInitMode() == schema.TerraformInitModeNever),
+	}
 }
 
 // providerSection returns the key under `components.terraform` that enabled the provider.

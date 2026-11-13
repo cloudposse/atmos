@@ -77,13 +77,12 @@ func preparedExclusion(source *pluginv1.ComponentExclude) *schema.ComponentExclu
 // discovery, because discovery handed it to the host as the component's `command`. A difference
 // means the unit's configuration changed between the two evaluations.
 func checkTerraformBinary(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent, binary string) error {
-	if binary == "" {
-		return nil
-	}
 	discovered, err := adapter.DecodeObject(instance.Configuration)
 	if err != nil {
 		return err
 	}
+	// A terraform_binary removed after discovery is a change too: the host would otherwise keep
+	// running the executable discovery selected.
 	command, _ := discovered["command"].(string)
 	if command == binary {
 		return nil

@@ -13,6 +13,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
@@ -592,4 +593,28 @@ func TestManifestDeclaresExactlyTheOptionsThePluginAccepts(t *testing.T) {
 		accepted = append(accepted, name)
 	}
 	require.ElementsMatch(t, accepted, names)
+}
+
+func TestPreparationTransmitsUnitFileCopyProvenance(t *testing.T) {
+	for _, copied := range []bool{false, true} {
+		t.Run(map[bool]string{false: "explicit generation", true: "adjacent copy"}[copied], func(t *testing.T) {
+			request := componentRequest(t)
+			p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+				return &model.Resolution{
+					Generated:         map[string]string{".terraform.lock.hcl": "# pinned\n"},
+					GeneratedPolicies: map[string]string{".terraform.lock.hcl": "overwrite"},
+					UnitFileCopies:    map[string]bool{".terraform.lock.hcl": copied},
+				}, nil
+			})
+			result, err := p.Prepare(t.Context(), request)
+			require.NoError(t, err)
+			require.Len(t, result.Files, 1)
+			wire, err := proto.Marshal(result)
+			require.NoError(t, err)
+			decoded := &pluginv1.PrepareComponentResponse{}
+			require.NoError(t, proto.Unmarshal(wire, decoded))
+			require.Equal(t, copied, decoded.Files[0].UnitFileCopy)
+			require.Equal(t, "overwrite", result.Files[0].IfExists)
+		})
+	}
 }

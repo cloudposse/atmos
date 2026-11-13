@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 
@@ -121,7 +120,7 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 		if policy == "" {
 			policy = "overwrite"
 		}
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy})
+		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name]})
 	}
 	return response, nil
 }
@@ -327,31 +326,9 @@ func discoveryParity(config map[string]any, resolved *model.Resolution) {
 	}
 }
 
-// operationCommand is the command name Terragrunt matches exclude actions against: destroy for
-// `apply -destroy`, apply for deploy, otherwise the command itself.
+// operationCommand is the command name Terragrunt matches exclude actions against.
 func operationCommand(command string, arguments []string) string {
-	if command == "deploy" {
-		command = "apply"
-	}
-	if command == "destroy" {
-		return command
-	}
-	if command == "apply" {
-		for _, argument := range slices.Backward(arguments) {
-			name, value, hasValue := strings.Cut(argument, "=")
-			if name != "-destroy" && name != "--destroy" {
-				continue
-			}
-			if !hasValue {
-				return "destroy"
-			}
-			if parsed, err := strconv.ParseBool(value); err == nil && parsed {
-				return "destroy"
-			}
-			return command
-		}
-	}
-	return command
+	return engine.OperationCommand(command, arguments)
 }
 
 // parityResponse adds the evaluated terraform_binary, errors, exclude, and feature flags to a

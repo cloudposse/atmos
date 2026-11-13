@@ -18,7 +18,7 @@ Official monorepo packages under `../plugins` are an exception to external SDK v
 
 ## Component configuration contracts (in development)
 
-`plugin.Services` accepts optional `Discovery`, `Validation`, `Preparation`, and `State` handlers. Negotiate these separately as `component.discovery`, `component.validation`, `component.preparation`, and `component.state`, each at version 1. A configuration provider does not need to supply an executor. The host runtime has matching clients and an explicit package loader with private configuration-provider registries. CLI stack and execution integration are not available yet.
+`plugin.Services` accepts optional `Discovery`, `Validation`, `Preparation`, and `State` handlers. Negotiate these separately as `component.discovery`, `component.validation`, `component.preparation`, and `component.state`. Preparation uses version 2, which carries execution metadata, Terraform arguments, and backend ownership. The other services use version 1. A configuration provider does not need to supply an executor. The host runtime has matching clients and an explicit package loader with private configuration-provider registries. CLI stack and execution integration are not available yet.
 
 Use `component.Encode` and `component.Decode` for infrastructure values. They retain exact cty numbers, types, nulls, unknowns, and nested sensitivity. Translate evaluator-specific sensitivity to `component.Sensitive` before encoding. Other marks are rejected. The payload and its sensitivity paths can contain secrets; never log them. Invalid wire values produce a payload-free `component.ErrInvalidValue`.
 

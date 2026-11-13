@@ -183,7 +183,7 @@ func AutoProvisionSource(
 	vendor := func(ctx context.Context) error {
 		return vendorToTarget(ctx, atmosConfig, sourceSpec, &vendorTarget{path: targetDir, component: component, writers: writers, options: options, preserveRuntime: componentType == cfg.TerraformComponentType})
 	}
-	if err := provisionWithWrapper(ctx, vendor); err != nil {
+	if err := provisionWithWrapper(ctx, target, vendor); err != nil {
 		return err
 	}
 
@@ -671,7 +671,7 @@ func prepareAutoVendorTarget(path string, preserveRuntime bool) (bool, error) {
 // ProvisionWrapper runs a source provisioning action. A wrapper may run work before and after the
 // action and decide what its error means; it is called only when the source is actually provisioned
 // (fetched or refreshed), never when the existing copy is up to date.
-type ProvisionWrapper func(ctx context.Context, provision func(context.Context) error) error
+type ProvisionWrapper func(ctx context.Context, target *Target, provision func(context.Context) error) error
 
 type provisionWrapperKey struct{}
 
@@ -683,9 +683,9 @@ func WithProvisionWrapper(ctx context.Context, wrapper ProvisionWrapper) context
 }
 
 // provisionWithWrapper runs provision directly, or through the wrapper the context carries.
-func provisionWithWrapper(ctx context.Context, provision func(context.Context) error) error {
+func provisionWithWrapper(ctx context.Context, target *Target, provision func(context.Context) error) error {
 	if wrapper, ok := ctx.Value(provisionWrapperKey{}).(ProvisionWrapper); ok && wrapper != nil {
-		return wrapper(ctx, provision)
+		return wrapper(ctx, target, provision)
 	}
 	return provision(ctx)
 }

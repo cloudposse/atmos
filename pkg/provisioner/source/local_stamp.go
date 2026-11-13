@@ -16,8 +16,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
-// localStampSkippedDirs are directories a local module copy never carries into a workdir.
-// Editing them must not refresh the workdir.
+// localStampSkippedDirs are runtime directories omitted from the ordinary stamp walk.
+// A copied directory link can expose their contents outside these runtime paths.
 var localStampSkippedDirs = map[string]struct{}{".git": {}, ".terraform": {}, ".terragrunt-cache": {}}
 
 // localSourceRoot returns the directory a local directory source copies from, resolved the same
@@ -38,9 +38,9 @@ func localSourceRoot(spec *schema.VendorComponentSource) (string, bool) {
 	return dir, true
 }
 
-// localSourceStamp digests a stat manifest (relative path, size, modification time, mode) of the
-// local directory source. It reads no file contents, so refreshing decisions stay cheap for
-// modules with many or large files. It returns an empty string for any other kind of source.
+// localSourceStamp digests file metadata and contents of the local directory source.
+// Contents are streamed so equal-size edits with unchanged timestamps are detected without
+// buffering entire files. It returns an empty string for other sources or unreadable files.
 //
 // The stamp is a change-detection token compared across processes, not a credential hash, so it uses
 // a non-cryptographic 128-bit FNV-1a digest. It stays stable for an unchanged source.
@@ -54,8 +54,20 @@ func localSourceStamp(spec *schema.VendorComponentSource) string {
 		root = resolved
 	}
 	hash := fnv.New128a()
+	links := &stampLinks{root: root, spec: spec, seen: make(map[string]bool)}
+	skip := vendor.CreateSkipFunc(root, spec.IncludedPaths, spec.ExcludedPaths)
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if excluded, err := skip(info, path, ""); err != nil || excluded {
+			if err == nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
 			return err
 		}
 		if entry.IsDir() {
@@ -64,12 +76,84 @@ func localSourceStamp(spec *schema.VendorComponentSource) string {
 			}
 			return nil
 		}
-		return stampEntry(hash, root, path, entry)
+		if err := stampEntry(hash, root, path, entry); err != nil {
+			return err
+		}
+		return links.stampTarget(hash, path, entry)
 	})
 	if walkErr != nil {
 		return ""
 	}
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// stampLinks covers directories exposed by copied links, even when their real
+// paths are runtime directories skipped by the ordinary walk. Real target paths
+// make the traversal finite for directory cycles and repeated aliases.
+type stampLinks struct {
+	root string
+	spec *schema.VendorComponentSource
+	seen map[string]bool
+}
+
+func (links *stampLinks) stampTarget(hash io.Writer, path string, entry fs.DirEntry) error {
+	if entry.Type()&os.ModeSymlink == 0 {
+		return nil
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return err
+	}
+	skip := vendor.CreateSkipFunc(links.root, links.spec.IncludedPaths, links.spec.ExcludedPaths)
+	if excluded, err := skip(info, path, ""); err != nil || excluded {
+		return err
+	}
+	opts := vendor.CopyOptions{IncludedPaths: links.spec.IncludedPaths, ExcludedPaths: links.spec.ExcludedPaths}
+	if !vendor.CanCopySymlink(links.root, path, opts) {
+		return nil
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	targetInfo, err := os.Stat(target)
+	if err != nil {
+		return err
+	}
+	if targetInfo.Mode().IsRegular() {
+		return stampFileContents(hash, target)
+	}
+	if !targetInfo.IsDir() || links.seen[target] {
+		return nil
+	}
+	links.seen[target] = true
+	return links.stampDirectory(hash, target)
+}
+
+func (links *stampLinks) stampDirectory(hash io.Writer, target string) error {
+	skip := vendor.CreateSkipFunc(links.root, links.spec.IncludedPaths, links.spec.ExcludedPaths)
+	return filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if excluded, err := skip(info, path, ""); err != nil || excluded {
+			if err == nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if err := stampEntry(hash, links.root, path, entry); err != nil {
+			return err
+		}
+		return links.stampTarget(hash, path, entry)
+	})
 }
 
 // stampEntry adds one non-directory entry to the manifest digest.
@@ -83,6 +167,9 @@ func stampEntry(hash io.Writer, root, path string, entry fs.DirEntry) error {
 		return err
 	}
 	fmt.Fprintf(hash, "%s\x00%d\x00%d\x00%d\n", filepath.ToSlash(relative), info.Size(), info.ModTime().UnixNano(), info.Mode())
+	if info.Mode().IsRegular() {
+		return stampFileContents(hash, path)
+	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		// A link edited through its target changes the module without touching the link.
 		if target, statErr := os.Stat(path); statErr == nil {
@@ -90,6 +177,21 @@ func stampEntry(hash io.Writer, root, path string, entry fs.DirEntry) error {
 		}
 	}
 	return nil
+}
+
+// stampFileContents adds a fixed-size content digest, keeping entry boundaries unambiguous.
+func stampFileContents(hash io.Writer, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	content := fnv.New128a()
+	if _, err := io.Copy(content, file); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(hash, "content:%x\n", content.Sum(nil))
+	return err
 }
 
 // localSourceChanged reports whether a local directory source was edited, or removed, since the
@@ -102,15 +204,44 @@ func localSourceChanged(metadata *workdir.WorkdirMetadata, spec *schema.VendorCo
 	}
 	stamp := localSourceStamp(spec)
 	if metadata.SourceStamp == "" {
-		if stamp == "" {
-			return false, ""
+		if stamp != "" {
+			return true, "Local source has no recorded stamp, refreshing the working directory"
 		}
-		return true, "Local source has no recorded stamp, refreshing the working directory"
+		if localSourceMissing(spec) {
+			// Reusing the copy would hide that the source is gone; refreshing reports it by name.
+			return true, "Local source is missing or unreadable, refreshing the working directory"
+		}
+		return false, ""
 	}
 	if stamp == metadata.SourceStamp {
 		return false, ""
 	}
 	return true, "Local source changed, refreshing the working directory"
+}
+
+// localSourceMissing reports whether a local source names a path that does not exist or cannot
+// be read. It reports false for remote sources.
+func localSourceMissing(spec *schema.VendorComponentSource) bool {
+	uri := vendor.NormalizeURI(resolveSourceURI(spec))
+	switch {
+	case vendor.IsFileURI(uri):
+		path, err := fileURIPath(uri)
+		if err != nil || path == "" {
+			return true
+		}
+		uri = path
+	case !vendor.IsLocalPath(uri):
+		return false
+	}
+	if !filepath.IsAbs(uri) {
+		absolute, err := resolveLocalSourcePath(uri, "")
+		if err != nil {
+			return true
+		}
+		uri = absolute
+	}
+	_, err := os.Stat(uri)
+	return err != nil
 }
 
 // recordSourceStamp stores the stamp taken before the local source was copied. A failure only

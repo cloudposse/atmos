@@ -1,8 +1,10 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"maps"
@@ -13,12 +15,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclparse"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsidentity "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/backend"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -57,8 +65,11 @@ func prepareConfigurationForExecution(ctx context.Context, config *schema.AtmosC
 	if err = applyStackOverrides(config, info, prepared); err != nil {
 		return nil, nil, err
 	}
-	if err = applyIAMRole(ctx, info, prepared.IAM); err != nil {
-		return nil, nil, err
+	// An operation the provider excludes never runs, so it must not need the unit's role.
+	if !excludedFromOperation(info, prepared) {
+		if err = applyIAMRole(ctx, info, prepared.IAM); err != nil {
+			return nil, nil, err
+		}
 	}
 	applyPreparedConfiguration(config, info, prepared)
 	return prepared, rebuild, nil
@@ -282,17 +293,11 @@ func applyIAMRole(ctx context.Context, info *schema.ConfigAndStacksInfo, iam *sc
 		ui.Infof("Component `%s` in stack `%s` runs as Atmos identity `%s`; its Terragrunt `iam_role` `%s` is not assumed.", info.ComponentFromArg, info.Stack, info.Identity, iam.Role)
 		return nil
 	}
-	role := awsidentity.InlineRole{Role: iam.Role, SessionName: iam.SessionName, Duration: time.Duration(iam.DurationSeconds) * time.Second, WebIdentityToken: iam.WebIdentityToken}
-	if iam.WebIdentityTokenFile != "" {
-		token, err := os.ReadFile(iam.WebIdentityTokenFile)
-		if err != nil {
-			return iamRoleError(info, iam, fmt.Errorf("%w: web identity token file: %w", errUtils.ErrAuthenticationFailed, err))
-		}
-		role.WebIdentityToken = strings.TrimSpace(string(token))
+	token, err := webIdentityToken(iam)
+	if err != nil {
+		return iamRoleError(info, iam, err)
 	}
-	if iam.WebIdentityTokenLiteral && role.WebIdentityToken == "" {
-		return iamRoleError(info, iam, fmt.Errorf("%w: the web identity token is not stored with a saved plan", errUtils.ErrAuthenticationFailed))
-	}
+	role := awsidentity.InlineRole{Role: iam.Role, SessionName: iam.SessionName, Duration: time.Duration(iam.DurationSeconds) * time.Second, WebIdentityToken: token}
 	base := info.SanitizedEnv
 	if base == nil {
 		base = os.Environ()
@@ -303,6 +308,59 @@ func applyIAMRole(ctx context.Context, info *schema.ConfigAndStacksInfo, iam *sc
 	}
 	for _, key := range slices.Sorted(maps.Keys(session)) {
 		info.ComponentEnvList = append(info.ComponentEnvList, key+"="+session[key])
+	}
+	return nil
+}
+
+// webIdentityToken returns the token to assume the role with: read from its file when one is set,
+// otherwise the literal value. A literal token is not stored with a saved plan, so applying such a
+// plan fails here instead of assuming the role with the base credentials.
+func webIdentityToken(iam *schema.ComponentIAM) (string, error) {
+	token := iam.WebIdentityToken
+	if iam.WebIdentityTokenFile != "" {
+		content, err := os.ReadFile(iam.WebIdentityTokenFile)
+		if err != nil {
+			return "", fmt.Errorf("%w: web identity token file: %w", errUtils.ErrAuthenticationFailed, err)
+		}
+		token = strings.TrimSpace(string(content))
+		if token == "" {
+			return "", fmt.Errorf("%w: web identity token file %s is empty", errUtils.ErrAuthenticationFailed, iam.WebIdentityTokenFile)
+		}
+	}
+	if iam.WebIdentityTokenLiteral && token == "" {
+		return "", fmt.Errorf("%w: the web identity token is not stored with a saved plan", errUtils.ErrAuthenticationFailed)
+	}
+	return token, nil
+}
+
+// writePreparedConfiguration verifies retained files before relinquishing the host backend
+// and applying provider file policies.
+func writePreparedConfiguration(directory string, prepared *schema.PreparedComponentConfiguration) error {
+	if err := validateRetainedConfiguration(directory, prepared.Files); err != nil {
+		return err
+	}
+	if prepared.BackendGenerated {
+		if err := backend.RemoveHostBackend(directory); err != nil {
+			return err
+		}
+	}
+	return configuration.WriteFiles(directory, prepared.Files)
+}
+
+// validateRetainedConfiguration runs before any backend cleanup or file writes.
+// A skipped Terraform file may disagree with the provider's resolved state identity.
+// Accept different bytes only when both versions are provably free of backend/cloud
+// declarations; otherwise fail closed without replacing the user's retained file.
+func validateRetainedConfiguration(directory string, files []schema.ComponentConfigurationFile) error {
+	defer perf.Track(nil, "terraform.validateRetainedConfiguration")()
+
+	for _, file := range files {
+		if file.IfExists != "skip" || !terraformConfigurationPath(file.Path) {
+			continue
+		}
+		if err := validateRetainedFile(directory, file); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -331,4 +389,72 @@ func iamRoleError(info *schema.ConfigAndStacksInfo, iam *schema.ComponentIAM, ca
 		WithContext("component", info.ComponentFromArg).
 		WithContext("stack", info.Stack).
 		Err()
+}
+
+func validateRetainedFile(directory string, file schema.ComponentConfigurationFile) error {
+	if !filepath.IsLocal(file.Path) {
+		return errUtils.ErrPluginProtocol
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	stat, err := root.Lstat(file.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !stat.Mode().IsRegular() {
+		return retainedBackendError(file.Path)
+	}
+	retained, err := root.ReadFile(file.Path)
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(retained, file.Content) {
+		return nil
+	}
+	if configurationHasBackend(file.Path, retained) || configurationHasBackend(file.Path, file.Content) {
+		return retainedBackendError(file.Path)
+	}
+	return nil
+}
+
+func retainedBackendError(path string) error {
+	return fmt.Errorf("%w: cannot verify backend identity for retained generated file %s (if_exists = \"skip\"); use matching generated content or an explicit overwrite policy", errUtils.ErrPluginInvalidConfig, path)
+}
+
+func terraformConfigurationPath(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json")
+}
+
+// configurationHasBackend also returns true for unparseable configuration: absence
+// of a backend cannot then be established. Diagnostics never expose retained secrets.
+func configurationHasBackend(path string, content []byte) bool {
+	parser := hclparse.NewParser()
+	var file *hcl.File
+	var diagnostics hcl.Diagnostics
+	if strings.HasSuffix(strings.ToLower(path), ".json") {
+		file, diagnostics = parser.ParseJSON(content, path)
+	} else {
+		file, diagnostics = parser.ParseHCL(content, path)
+	}
+	if diagnostics.HasErrors() {
+		return true
+	}
+	body, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}}})
+	if diagnostics.HasErrors() {
+		return true
+	}
+	for _, block := range body.Blocks {
+		nested, _, diags := block.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "backend", LabelNames: []string{"type"}}, {Type: "cloud"}}})
+		if diags.HasErrors() || len(nested.Blocks) != 0 {
+			return true
+		}
+	}
+	return false
 }

@@ -32,7 +32,8 @@ func DescribePackage(directory string, definition *manifest.Config, bindings []e
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		result.Services = append(result.Services, &pluginv1.ServiceVersionRange{Service: name, Min: 1, Max: 1})
+		version := manifest.HostContractVersion(name)
+		result.Services = append(result.Services, &pluginv1.ServiceVersionRange{Service: name, Min: version, Max: version})
 	}
 	return result, nil
 }

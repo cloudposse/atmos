@@ -14,6 +14,7 @@ import (
 
 func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.TerragruntConfig, result *model.Resolution) error {
 	result.GeneratedPolicies = make(map[string]string)
+	result.UnitFileCopies = make(map[string]bool)
 	for _, generated := range cfg.GenerateConfigs {
 		if generated.Disable && (generated.IfDisabledStr == "" || generated.IfDisabledStr == "skip") {
 			continue
@@ -41,11 +42,13 @@ func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.Terragru
 				return err
 			}
 			result.Generated[path] = string(content)
+			// Any generate block can interpolate credentials, regardless of its target.
+			markSensitive(result, path)
 		}
 		result.GeneratedPolicies[path] = policy
 		if !generated.Disable && declaresBackend(path, result.Generated[path]) {
-			// A generate block that writes a backend replaces Atmos's own backend file.
-			result.BackendGenerated = true
+			// Arbitrary Terraform text has no verified state-reader identity.
+			return unresolvedGeneratedBackend(result.Path)
 		}
 	}
 	if err := unitLockFile(result); err != nil {
@@ -79,5 +82,14 @@ func generatedBackend(ctx context.Context, logger log.Logger, cfg *config.Terrag
 	result.Generated[path] = string(content)
 	result.GeneratedPolicies[path] = generated.IfExists
 	result.BackendGenerated = true
+	markSensitive(result, path)
 	return nil
+}
+
+// markSensitive records a generated file whose bytes can hold credentials.
+func markSensitive(result *model.Resolution, path string) {
+	if result.SensitiveGenerated == nil {
+		result.SensitiveGenerated = map[string]bool{}
+	}
+	result.SensitiveGenerated[path] = true
 }

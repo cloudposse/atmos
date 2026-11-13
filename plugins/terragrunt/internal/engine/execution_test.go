@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
@@ -280,6 +282,16 @@ func TestErrorsBlockRejectsInvalidPolicies(t *testing.T) {
     max_attempts = 1
     sleep_interval_sec = -1
   }`, `errors.retry "x"`, "sleep_interval_sec"},
+		"attempts out of range": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 4294967296
+    sleep_interval_sec = 1
+  }`, `errors.retry "x"`, "too large"},
+		"sleep out of range": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 1
+    sleep_interval_sec = 4294967296
+  }`, `errors.retry "x"`, "too large"},
 		"bad retry pattern": {`retry "x" {
     retryable_errors = ["("]
     max_attempts = 1
@@ -387,6 +399,7 @@ func TestFeatureDefaultsAreRenderedAsStrings(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"enabled": "false", "size": "3", "tier": "basic"}, result.FeatureFlags)
 	require.Equal(t, false, result.Inputs["enabled"])
+	require.Equal(t, json.Number("3"), result.Inputs["size"])
 	require.Equal(t, "basic", result.Inputs["tier"])
 }
 
@@ -397,6 +410,7 @@ func TestFeatureOverridesReplaceDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"enabled": "true", "size": "8", "tier": "premium"}, result.FeatureFlags)
 	require.Equal(t, true, result.Inputs["enabled"], "a boolean feature is typed from its override")
+	require.Equal(t, "8", result.Inputs["size"], "Terragrunt keeps a numeric feature override as its CLI string")
 	require.Equal(t, "premium", result.Inputs["tier"])
 }
 
@@ -534,9 +548,9 @@ func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Execution.BeforeHooks, 2)
 	initHook, lintHook := result.Execution.BeforeHooks[0], result.Execution.BeforeHooks[1]
-	require.Equal(t, []string{"tflint", "--init", "--config", config, "--chdir", "."}, initHook.Execute)
+	require.Equal(t, []string{"tflint", "--init", "--config", tflintConfigSearchPrefix + root, "--chdir", "."}, initHook.Execute)
 	require.Equal(t, []string{
-		"tflint", "--config", config, "--chdir", ".",
+		"tflint", "--config", tflintConfigSearchPrefix + root, "--chdir", ".",
 		"--var=count=2", "--var=name=web",
 		"--var=zone=a", "--var=region=eu", "--var-file=required.tfvars",
 		"--minimum-failure-severity=error",
@@ -545,20 +559,14 @@ func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
 	require.Equal(t, []string{"plan"}, lintHook.Commands)
 }
 
-func TestTflintHookWithoutConfigurationNamesTheHook(t *testing.T) {
+func TestTflintHookDefersConfigurationLookup(t *testing.T) {
 	root := t.TempDir()
 	unit := filepath.Join(root, "a", "b")
 	require.NoError(t, os.MkdirAll(unit, 0o755))
-	// No .tflint.hcl exists in any parent below the temporary root, so the search must end with a problem.
-	_, err := tflintConfig(nil, unit)
-	if err == nil {
-		t.Skip("a .tflint.hcl exists above the temporary directory")
-	}
-	_, err = expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"), nil)
-	problem := asProblem(t, err)
-	require.Equal(t, model.CodeUnsupportedHook, problem.Code)
-	require.Contains(t, problem.Summary, `"lint"`)
-	require.NotEmpty(t, problem.Hints)
+	hooks, err := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"), nil)
+	require.NoError(t, err)
+	require.Len(t, hooks, 2)
+	require.Contains(t, hooks[0].Execute, tflintConfigSearchPrefix+unit)
 }
 
 func TestTflintConfigFlagForms(t *testing.T) {
@@ -587,6 +595,13 @@ func TestVariableValueRendering(t *testing.T) {
 	text, err = variableValue(map[string]any{"a": []any{1, "${x}"}})
 	require.NoError(t, err)
 	require.Equal(t, `{"a":[1,"$${x}"]}`, text)
+	text, err = variableValue(map[string]any{"literal": "%{ if true } ${x}"})
+	require.NoError(t, err)
+	expr, diags := hclsyntax.ParseExpression([]byte(text), "input", hcl.Pos{Line: 1, Column: 1})
+	require.False(t, diags.HasErrors(), diags.Error())
+	value, diags := expr.Value(nil)
+	require.False(t, diags.HasErrors(), diags.Error())
+	require.Equal(t, "%{ if true } ${x}", value.GetAttr("literal").AsString())
 	_, err = variableValue(make(chan int))
 	require.Error(t, err)
 }
@@ -607,12 +622,16 @@ func TestSignalValuesConvertToPlainJSON(t *testing.T) {
 	signals := mustSignals(t, map[string]cty.Value{
 		"text":    cty.StringVal("x"),
 		"number":  cty.NumberIntVal(3),
+		"large":   cty.NumberIntVal(9007199254740993),
 		"list":    cty.TupleVal([]cty.Value{cty.True, cty.StringVal("y")}),
 		"nothing": cty.NullVal(cty.String),
 		"unknown": cty.UnknownVal(cty.String),
 	})
 	assert.Equal(t, "x", signals["text"])
-	assert.EqualValues(t, 3, signals["number"])
+	assert.Equal(t, json.Number("3"), signals["number"])
+	data, err := json.Marshal(signals)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"large":9007199254740993`)
 	assert.Equal(t, []any{true, "y"}, signals["list"])
 	assert.Nil(t, signals["nothing"])
 	assert.Nil(t, signals["unknown"])
@@ -634,11 +653,7 @@ func TestFinalizeExecutionHandlesAbsentAndFailingHooks(t *testing.T) {
 		"error":  {ErrorHooks: []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := tflintConfig(nil, filepath.Dir(unit)); err == nil {
-				t.Skip("a .tflint.hcl exists above the temporary directory")
-			}
-			err := finalizeExecution(execution, unit, nil)
-			require.Equal(t, model.CodeUnsupportedHook, asProblem(t, err).Code)
+			require.NoError(t, finalizeExecution(execution, unit, nil))
 		})
 	}
 	// Inputs that cannot be rendered fail the whole unit with the error, not a silent gap.
@@ -651,12 +666,30 @@ func TestFinalizeExecutionHandlesAbsentAndFailingHooks(t *testing.T) {
 func TestTflintVariablesFromExtraArguments(t *testing.T) {
 	existing := filepath.Join(t.TempDir(), "optional.tfvars")
 	require.NoError(t, os.WriteFile(existing, nil, 0o644))
-	hook := &model.Hook{Commands: []string{"plan"}}
 	execution := &model.Execution{ExtraArguments: []model.ExtraArguments{
 		{Commands: []string{"apply"}, Arguments: []string{"-var=ignored=1"}},
-		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
+		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false", "-var", "c=3", "-var-file", "d.tfvars"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
 	}}
-	require.Equal(t, []string{"--var=b=2", "--var-file=a.tfvars", "--var-file=" + existing}, tflintExtraVariables(hook, execution))
+	require.Equal(t, []string{"--var=b=2", "--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", tflintOptionalVarFilePrefix + existing, tflintOptionalVarFilePrefix + "absent.tfvars"}, tflintExtraVariables("plan", execution))
+	require.Equal(t, []string{"--var=ignored=1"}, tflintExtraVariables("apply", execution))
+}
+
+func TestTflintHookScopesExtraArgumentsToEachCommand(t *testing.T) {
+	unit := filepath.Join(t.TempDir(), "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(unit), ".tflint.hcl"), nil, 0o644))
+	execution := &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Arguments: []string{"-var=only=plan"}},
+		{Commands: []string{"apply"}, Arguments: []string{"-var=only=apply"}},
+	}}
+	hooks, err := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan", "apply"}, Execute: []string{"tflint"}}, execution, unit, nil)
+	require.NoError(t, err)
+	require.Len(t, hooks, 4)
+	require.Equal(t, []string{"plan"}, hooks[1].Commands)
+	require.Contains(t, hooks[1].Execute, "--var=only=plan")
+	require.NotContains(t, hooks[1].Execute, "--var=only=apply")
+	require.Equal(t, []string{"apply"}, hooks[3].Commands)
+	require.Contains(t, hooks[3].Execute, "--var=only=apply")
+	require.NotContains(t, hooks[3].Execute, "--var=only=plan")
 }
 
 func TestExcludeFromConfigWithoutBlock(t *testing.T) {
@@ -698,4 +731,117 @@ func TestCheckFeatureOverridesLeavesParseErrorsToTheEvaluator(t *testing.T) {
 	}
 	require.NoError(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "false"}, declared))
 	require.Error(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "maybe"}, declared))
+}
+
+func TestDiscoveryDefersExecutionValues(t *testing.T) {
+	request := executionUnit(t, `
+ before_hook "dynamic" {
+   commands = ["plan"]
+   execute = ["echo", dependency.base.outputs.value, run_cmd("/bin/sh", "-c", "echo hook >> effects; printf hook")]
+ }
+ extra_arguments "dynamic" {
+   commands = ["plan"]
+   arguments = [dependency.base.outputs.value, run_cmd("/bin/sh", "-c", "echo args >> effects; printf args")]
+ }
+ `)
+	body, err := os.ReadFile(request.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(request.BasePath, "base"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "base", "terragrunt.hcl"), []byte("inputs = {}"), 0o644))
+	body = append(body, []byte(`
+ dependency "base" {
+   config_path = "./base"
+   skip_outputs = true
+   mock_outputs = { value = "from-dependency" }
+ }
+ `)...)
+	require.NoError(t, os.WriteFile(request.Path, body, 0o644))
+	request.Phase = "discover"
+	discovered, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Nil(t, discovered.Execution)
+	require.NoFileExists(t, filepath.Join(request.BasePath, "effects"))
+	request.Phase = ""
+	prepared, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"echo", "from-dependency", "hook"}, prepared.Execution.BeforeHooks[0].Execute)
+	require.Equal(t, []string{"from-dependency", "args"}, prepared.Execution.ExtraArguments[0].Arguments)
+	effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+	require.NoError(t, err)
+	require.Contains(t, string(effects), "hook")
+	require.Contains(t, string(effects), "args")
+}
+
+func TestDiscoveryValidatesExecutionSyntaxWithoutEffects(t *testing.T) {
+	for _, test := range []struct {
+		name, body, want string
+	}{
+		{"missing execute", `before_hook "hook" {
+ commands = ["plan"]
+}`, "execute"},
+		{"unknown argument setting", `extra_arguments "args" {
+ commands = ["plan"]
+ unexpected = run_cmd("must-not-execute")
+}`, "unexpected"},
+		{"invalid regex", `error_hook "hook" {
+ commands = ["plan"]
+ execute = [run_cmd("must-not-execute")]
+ on_errors = ["["]
+}`, "Invalid `on_errors`"},
+		{"disabled", `before_hook "hook" {
+ if = false
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, ""},
+		{"dynamic condition", `before_hook "hook" {
+ if = run_cmd("must-not-execute") == "enabled"
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, test.body)
+			request.Phase = "discover"
+			_, err := Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, test.want)
+			}
+		})
+	}
+}
+
+func TestDiscoveryDefersInheritedExecutionValues(t *testing.T) {
+	request := executionUnit(t, `before_hook "parent" {
+ commands = ["plan"]
+ execute = ["echo", run_cmd("/bin/sh", "-c", "echo evaluated >> effects; printf inherited")]
+}`)
+	parent := filepath.Join(request.BasePath, "parent.hcl")
+	require.NoError(t, os.Rename(request.Path, parent))
+	require.NoError(t, os.WriteFile(request.Path, []byte("include \"parent\" { path = \"./parent.hcl\" }"), 0o644))
+	request.Phase = "discover"
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(request.BasePath, "effects"))
+	request.Phase = ""
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"echo", "inherited"}, result.Execution.BeforeHooks[0].Execute)
+	require.FileExists(t, filepath.Join(request.BasePath, "effects"))
+}
+
+func TestPreparationValidatesDynamicHookSettings(t *testing.T) {
+	request := executionUnit(t, `error_hook "dynamic" {
+ commands = ["plan"]
+ execute = ["echo"]
+ on_errors = [get_env("HOOK_PATTERN")]
+}`)
+	request.Environment["HOOK_PATTERN"] = "["
+	request.Phase = "discover"
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	request.Phase = ""
+	_, err = Resolve(t.Context(), request)
+	require.ErrorContains(t, err, "Invalid `on_errors`")
 }

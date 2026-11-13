@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -129,6 +130,17 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 	require.Equal(t, "# reviewed module", string(retained))
 	require.Equal(t, planPath, apply.PlanFile)
 	require.True(t, apply.UseTerraformPlan)
+
+	// Run the prepared invocation through the command pipeline and inspect the
+	// actual subprocess arguments, rather than only the restored metadata.
+	argsFile := filepath.Join(project.root, "apply-args")
+	apply.SkipInit = true
+	apply.ComponentBackendType = "http" // Avoid a separate workspace subprocess.
+	apply.ComponentEnvList = append(apply.ComponentEnvList, "_ATMOS_TEST_ARGS_FILE="+argsFile)
+	require.NoError(t, testExecutor(t).executeCommandPipeline(project.config, apply, execution))
+	args, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	require.Contains(t, strings.Split(string(args), "\n"), planPath)
 }
 
 func TestApplyOfReviewedPlanRejectsChangedWorkdir(t *testing.T) {

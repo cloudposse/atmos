@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,7 +41,7 @@ func TestPreflightRejectsEveryBrokenComponentBeforeAnyRuns(t *testing.T) {
 	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 	graph := graphOf(t, [2]string{"live", "a"}, [2]string{"live", "b"}, [2]string{"live", "c"})
 
-	err := preflightTerraformGraph(t.Context(), config, graph)
+	err := preflightTerraformGraph(t.Context(), config, graph, nil)
 	require.ErrorIs(t, err, errUtils.ErrPluginComponentsFailed)
 	assert.ErrorContains(t, err, "first")
 	assert.ErrorContains(t, err, "second")
@@ -49,6 +50,48 @@ func TestPreflightRejectsEveryBrokenComponentBeforeAnyRuns(t *testing.T) {
 
 func TestPreflightIgnoresHealthyGraphsAndProvidersWithoutFailures(t *testing.T) {
 	graph := graphOf(t, [2]string{"live", "a"})
-	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{}, graph))
-	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{ComponentConfigurations: &failureRuntime{}}, graph))
+	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{}, graph, nil))
+	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{ComponentConfigurations: &failureRuntime{}}, graph, nil))
+}
+
+func TestPreflightSkipsExcludedButStillRejectsIncludedFailures(t *testing.T) {
+	runtime := &failureRuntime{failures: map[string]error{"live/a": errors.New("excluded"), "live/b": errors.New("included")}}
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+	graph := graphOf(t, [2]string{"live", "a"}, [2]string{"live", "b"})
+	err := preflightTerraformGraph(t.Context(), config, graph, map[string]string{terraformNodeID("a", "live"): "excluded"})
+	require.ErrorContains(t, err, "included")
+	require.NotContains(t, runtime.asked, "live/a")
+	require.Contains(t, runtime.asked, "live/b")
+}
+
+func TestExecuteTerraformPreflightRejectsFailuresBeforeDispatch(t *testing.T) {
+	runtime := &failureRuntime{failures: map[string]error{
+		"dev/b-broken": errors.New("first component failed validation"),
+		"dev/c-broken": errors.New("second component failed validation"),
+	}}
+	// The healthy component sorts first and has no dependencies, so it would
+	// be eligible for dispatch if validation happened only as each node ran.
+	stacks := terraformStacksFixture(map[string]any{
+		"a-healthy": map[string]any{},
+		"b-broken":  map[string]any{},
+		"c-broken":  map[string]any{},
+	})
+	var executorCalls atomic.Int32
+
+	err := ExecuteTerraform(t.Context(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{ComponentConfigurations: runtime},
+		Info:        &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"},
+		Stacks:      stacks,
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+			executorCalls.Add(1)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	assert.Zero(t, executorCalls.Load(), "validation must finish before any component is dispatched")
+	require.ErrorIs(t, err, errUtils.ErrPluginComponentsFailed)
+	assert.ErrorContains(t, err, "first component failed validation")
+	assert.ErrorContains(t, err, "second component failed validation")
+	assert.ElementsMatch(t, []string{"dev/a-healthy", "dev/b-broken", "dev/c-broken"}, runtime.asked,
+		"every selected component must be validated")
 }
