@@ -13,7 +13,6 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
-	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
@@ -79,10 +78,8 @@ func (e *Executor) prepareComponentExecution(
 		}
 	}
 
-	if prepared != nil && !info.DryRun {
-		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
-			return nil, fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
-		}
+	if err := writeConfigurationFiles(info, componentPath, prepared); err != nil {
+		return nil, err
 	}
 
 	if err = checkComponentRestrictions(info); err != nil {
