@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
@@ -119,12 +120,20 @@ func lockFileDigest(dir string) (string, error) {
 	return digest, err
 }
 
-// transportFiles lists the restored artifacts that may sit in the workdir: the plan, its record, and the lock file.
+// transportFiles lists the restored artifacts that may sit in the workdir, as slash-separated paths relative
+// to it: the lock file, and the plan with its record when the plan is inside the workdir, also in a
+// subdirectory such as `plans/reviewed.planfile`.
 func (r *reviewedRebuild) transportFiles() map[string]bool {
 	files := map[string]bool{terraformLockFile: true}
-	if sameDirectory(filepath.Dir(r.planPath), r.workdir) {
-		files[filepath.Base(r.planPath)] = true
-		files[filepath.Base(r.planPath)+configurationPlanSuffix] = true
+	workdir, errWorkdir := resolvedPath(r.workdir)
+	planDir, errPlan := resolvedPath(filepath.Dir(r.planPath))
+	if errWorkdir != nil || errPlan != nil {
+		return files
+	}
+	if relative, err := filepath.Rel(workdir, planDir); err == nil && filepath.IsLocal(relative) {
+		plan := filepath.ToSlash(filepath.Join(relative, filepath.Base(r.planPath)))
+		files[plan] = true
+		files[plan+configurationPlanSuffix] = true
 	}
 	return files
 }
@@ -136,21 +145,52 @@ func sameDirectory(first, second string) bool {
 }
 
 // holdsOnlyTransport reports whether the workdir is absent, empty, or contains just the restored artifacts.
+// A subdirectory is accepted only on the way to an artifact, and then holds nothing else either.
 func (r *reviewedRebuild) holdsOnlyTransport() (bool, error) {
-	entries, err := os.ReadDir(r.workdir)
-	if errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(r.workdir); errors.Is(err, fs.ErrNotExist) {
 		return true, nil
 	}
+	allowed := r.transportFiles()
+	only := true
+	err := filepath.WalkDir(r.workdir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == r.workdir {
+			return nil
+		}
+		relative, err := filepath.Rel(r.workdir, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if entry.IsDir() {
+			if !leadsToTransport(relative, allowed) {
+				only = false
+				return filepath.SkipAll
+			}
+			return nil
+		}
+		if !allowed[relative] {
+			only = false
+			return filepath.SkipAll
+		}
+		return nil
+	})
 	if err != nil {
 		return false, err
 	}
-	allowed := r.transportFiles()
-	for _, entry := range entries {
-		if entry.IsDir() || !allowed[entry.Name()] {
-			return false, nil
+	return only, nil
+}
+
+// leadsToTransport reports whether a directory is a parent of one of the restored artifacts.
+func leadsToTransport(directory string, allowed map[string]bool) bool {
+	for name := range allowed {
+		if strings.HasPrefix(name, directory+"/") {
+			return true
 		}
 	}
-	return true, nil
+	return false
 }
 
 // stage moves the restored artifacts aside so the workdir can be provisioned into an empty place, and

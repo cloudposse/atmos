@@ -89,8 +89,9 @@ func (p *reviewedPlanProject) review(t *testing.T) string {
 	return planPath
 }
 
-// reviewInDefaultWorkdir is review for a unit: the workdir is wherever provisioning places it.
-func (p *reviewedPlanProject) reviewInDefaultWorkdir(t *testing.T) string {
+// reviewInDefaultWorkdir is review for a unit: the workdir is wherever provisioning places it. The plan
+// is written at the optional path elements below the workdir, or directly in it.
+func (p *reviewedPlanProject) reviewInDefaultWorkdir(t *testing.T, below ...string) string {
 	t.Helper()
 	p.explicitWorkdir = false
 	info := p.info(t, "plan")
@@ -98,7 +99,8 @@ func (p *reviewedPlanProject) reviewInDefaultWorkdir(t *testing.T) string {
 	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, p.config, info, false)
 	require.NoError(t, err)
 	p.workdir = execution.workingDir
-	planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
+	planPath := filepath.Join(append(append([]string{execution.workingDir}, below...), "reviewed.planfile")...)
+	require.NoError(t, os.MkdirAll(filepath.Dir(planPath), 0o755))
 	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
 	require.NoError(t, recordConfigurationPlan(t.Context(), p.config, info, execution, []string{"-out=" + planPath}))
 	return planPath
@@ -223,6 +225,7 @@ func (p *reviewedPlanProject) freshRunner(t *testing.T, planPath string, restore
 	require.NoError(t, os.RemoveAll(p.workdir))
 	require.NoError(t, os.MkdirAll(p.workdir, 0o755))
 	for name, data := range artifacts {
+		require.NoError(t, os.MkdirAll(filepath.Dir(name), 0o755))
 		require.NoError(t, os.WriteFile(name, data, 0o600))
 	}
 }
@@ -259,6 +262,23 @@ func TestApplyOfRestoredPlanRebuildsWorkdirOnAFreshRunner(t *testing.T) {
 	require.FileExists(t, planPath+configurationPlanSuffix)
 	require.Empty(t, execution.preparedConfiguration.Inputs, "the plan file carries the inputs")
 	require.True(t, apply.UseTerraformPlan)
+	require.Equal(t, planPath, apply.PlanFile)
+}
+
+// A plan written to a subdirectory of the workdir is restored there; its directory holds only the plan and
+// its record, so a fresh runner rebuilds the workdir around it.
+func TestApplyOfRestoredPlanInAWorkdirSubdirectoryRebuildsOnAFreshRunner(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewInDefaultWorkdir(t, "plans")
+	project.freshRunner(t, planPath)
+
+	apply, execution, err := project.freshApply(t, planPath, project.prepared())
+	require.NoError(t, err)
+
+	require.Equal(t, project.workdir, execution.componentPath)
+	plan, err := os.ReadFile(planPath)
+	require.NoError(t, err)
+	require.Equal(t, "reviewed plan", string(plan), "the restored plan is kept in its subdirectory")
 	require.Equal(t, planPath, apply.PlanFile)
 }
 
@@ -428,6 +448,34 @@ func TestReviewedRebuildAcceptsOnlyTheRestoredArtifacts(t *testing.T) {
 	only, err = external.holdsOnlyTransport()
 	require.NoError(t, err)
 	require.False(t, only)
+}
+
+// A plan in a subdirectory of the workdir is part of the restored set, and so are the directories on the way
+// to it, but only while they hold nothing else.
+func TestReviewedRebuildAcceptsARestoredPlanInASubdirectory(t *testing.T) {
+	workdir := filepath.Join(t.TempDir(), "work")
+	plans := filepath.Join(workdir, "plans")
+	planPath := filepath.Join(plans, "reviewed.planfile")
+	rebuild := &reviewedRebuild{plan: &configurationPlan{}, planPath: planPath, workdir: workdir}
+	require.NoError(t, os.MkdirAll(plans, 0o755))
+	for _, path := range []string{planPath, planPath + configurationPlanSuffix, filepath.Join(workdir, terraformLockFile)} {
+		require.NoError(t, os.WriteFile(path, []byte("artifact"), 0o600))
+	}
+
+	only, err := rebuild.holdsOnlyTransport()
+	require.NoError(t, err)
+	require.True(t, only)
+
+	require.NoError(t, os.WriteFile(filepath.Join(plans, "other.planfile"), nil, 0o600))
+	only, err = rebuild.holdsOnlyTransport()
+	require.NoError(t, err)
+	require.False(t, only, "the plan's directory holds another file")
+	require.NoError(t, os.Remove(filepath.Join(plans, "other.planfile")))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, "modules"), 0o755))
+	only, err = rebuild.holdsOnlyTransport()
+	require.NoError(t, err)
+	require.False(t, only, "a directory that leads to no artifact is not part of the restored set")
 }
 
 func TestReviewedRebuildStagesAndReturnsTheArtifacts(t *testing.T) {
