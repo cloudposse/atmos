@@ -105,6 +105,8 @@ func buildGateTool(t *testing.T) string {
 	output := filepath.Join(t.TempDir(), name)
 	build := exec.Command("go", "build", "-o", output, "./fixtures/toolprobe")
 	build.Dir = filepath.Join(repoRoot, "plugins", "terragrunt")
+	// This helper belongs to the plugin module, whose Go version can exceed the root module's.
+	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOTOOLCHAIN=auto", "GOWORK=off")
 	if combined, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("cannot build the gate helper: %v\n%s", err, combined)
 	}
