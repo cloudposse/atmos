@@ -268,6 +268,12 @@ integration:
     script: |
       pro = module.load("scripts/pro.star")
       pro.restored_plan_is_applied_on_another_runner()
+  - name: pro-relocated-checkout-saved-plan
+    type: script
+    interpreter: starlark
+    script: |
+      pro = module.load("scripts/pro.star")
+      pro.relocated_checkout_restores_relative_workdir_plan()
   - name: pro-deploy-verifies-stored-plan
     type: script
     interpreter: starlark

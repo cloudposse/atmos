@@ -62,7 +62,7 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	level := request.LogLevel
 	// Terragrunt's own log events go to the host as structured entries, never to a stream.
 	if sink := logSinkFrom(ctx); sink != nil {
-		loggerOptions, level = append(loggerOptions, log.WithHooks(sink.hook())), sink.TerragruntLevel()
+		loggerOptions, level = append(loggerOptions, log.WithHooks(sink.Hook())), sink.TerragruntLevel()
 	}
 	logger := log.New(loggerOptions...)
 	if level != "" {
@@ -93,6 +93,15 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		command = "plan"
 	}
 	pctx := config.NewParsingContext().WithFileReadTracking()
+	// Terragrunt logs some values as it evaluates them, such as the output of run_cmd. The sensitive ones
+	// are redacted once they are known; when the evaluation stops before that, or a sensitive value is
+	// declared where it cannot be read back, the events of the call are withheld instead.
+	redacted := false
+	defer func() {
+		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, append(pctx.FilesRead.Paths(), path), path, redacted) {
+			sink.Withhold()
+		}
+	}()
 	pctx.WorkingDir, pctx.RootWorkingDir = filepath.Dir(path), filepath.Dir(path)
 	pctx.TerragruntConfigPath, pctx.OriginalTerragruntConfigPath = path, path
 	pctx.TFPath, pctx.TerraformCommand = request.Tofu, command
@@ -285,6 +294,11 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	result := &model.Resolution{Execution: execution, Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
 	if request.Phase != "backend" {
 		result.SensitiveInputs = SensitiveInputs(environment.FS, result.Files, cfg.Inputs)
+		// Redact before anything else can fail: the events of a failed call reach the host with the failure,
+		// before the host has seen which inputs are sensitive.
+		redactInputs(logSinkFrom(ctx), cfg.Inputs, result.SensitiveInputs)
+		redactInputs(logSinkFrom(ctx), cfg.Locals, sensitiveLocals(environment.FS, path, cfg.Locals))
+		redacted = true
 		if err := applyUnitSettings(ctx, cfg, request, path, result); err != nil {
 			return nil, err
 		}

@@ -25,6 +25,8 @@ const (
 	maxLogBytes = 1 << 20
 	// Field that Terragrunt uses for the directory of the unit an event is about.
 	unitField = "prefix"
+	// Replacement for a sensitive value in event text, the same one the host masker uses.
+	maskReplacement = "<MASKED>"
 )
 
 type logSinkKey struct{}
@@ -33,12 +35,24 @@ type logSinkKey struct{}
 // for concurrent use because Terragrunt may evaluate units in parallel.
 type LogSink struct {
 	root    string
-	entries []model.LogEntry
+	entries []logRecord
+	secrets map[string]struct{}
 	level   log.Level
 	dropped int
 	size    int
 	mu      sync.Mutex
 	off     bool
+	// Withheld is set when the call may have logged a sensitive value the sink cannot redact.
+	withheld bool
+}
+
+// logRecord is a collected event together with which of its texts were cut to the length bound, so that a
+// sensitive value cut in half can still be redacted.
+type logRecord struct {
+	entry      model.LogEntry
+	cutMessage bool
+	cutUnit    bool
+	cutFields  map[string]bool
 }
 
 // NewLogSink returns a sink for the events of a call at the host's log level. Terragrunt's logger reports
@@ -82,21 +96,106 @@ func logSinkFrom(ctx context.Context) *LogSink {
 	return sink
 }
 
-// Entries returns the collected events in order. When events were dropped, the last entry says how many.
+// RedactValue registers the text of a sensitive value, so that no event the sink returns contains it. A map
+// or list registers each of its scalars, as the host masker does. Registration may happen after the event
+// was collected: a unit's inputs are known to be sensitive only once it has been evaluated, and its
+// earlier events still must not carry them.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) RedactValue(value any) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.register(value)
+}
+
+// redactInputs registers the values of the inputs at the given paths with the sink. An empty path means
+// every input.
+func redactInputs(sink *LogSink, inputs map[string]any, paths [][]string) {
+	if sink == nil {
+		return
+	}
+	for _, path := range paths {
+		var value any = inputs
+		for _, key := range path {
+			object, ok := value.(map[string]any)
+			if !ok {
+				value = nil
+				break
+			}
+			value = object[key]
+		}
+		sink.RedactValue(value)
+	}
+}
+
+func (s *LogSink) register(value any) {
+	switch value := value.(type) {
+	case nil:
+	case map[string]any:
+		for _, child := range value {
+			s.register(child)
+		}
+	case []any:
+		for _, child := range value {
+			s.register(child)
+		}
+	default:
+		text := fmt.Sprint(value)
+		if text == "" {
+			return
+		}
+		if s.secrets == nil {
+			s.secrets = map[string]struct{}{}
+		}
+		s.secrets[text] = struct{}{}
+	}
+}
+
+// collecting reports whether the sink keeps any event, so callers can skip work for a sink that is off.
+func (s *LogSink) collecting() bool { return s != nil && !s.off }
+
+// Withhold makes the sink return no collected event, only a notice that events were withheld. It is used
+// when the call may have logged a sensitive value whose text the sink never learned, such as the output of
+// a sensitive run_cmd in a unit that failed to evaluate.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) Withhold() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.withheld = true
+}
+
+// Entries returns the collected events in order, with every registered sensitive value redacted. When
+// events were dropped, the last entry says how many.
 //
 //nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func (s *LogSink) Entries() []model.LogEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entries := slices.Clone(s.entries)
+	if s.withheld {
+		if count := len(s.entries) + s.dropped; count > 0 {
+			return []model.LogEntry{{Level: log.WarnLevel.String(), Message: fmt.Sprintf("%d Terragrunt log events were withheld because the unit declares sensitive values that could not be redacted", count)}}
+		}
+		return nil
+	}
+	secrets := s.sortedSecrets()
+	entries := make([]model.LogEntry, 0, len(s.entries)+1)
+	for i := range s.entries {
+		entries = append(entries, s.entries[i].redacted(secrets))
+	}
 	if s.dropped > 0 {
 		entries = append(entries, model.LogEntry{Level: log.WarnLevel.String(), Message: fmt.Sprintf("%d further Terragrunt log events were omitted", s.dropped)})
 	}
 	return entries
 }
 
-// Adapts the sink to the Terragrunt logger.
-func (s *LogSink) hook() logrus.Hook { return sinkHook{sink: s} }
+// Hook adapts the sink to a Terragrunt logger.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) Hook() logrus.Hook { return sinkHook{sink: s} }
 
 type sinkHook struct{ sink *LogSink }
 
@@ -131,22 +230,91 @@ func (s *LogSink) add(level log.Level, entry *logrus.Entry) {
 		s.dropped++
 		return
 	}
+	record := logRecord{cutFields: map[string]bool{}}
 	fields := make(map[string]string, len(entry.Data))
 	unit := ""
 	for _, key := range slices.Sorted(maps.Keys(entry.Data)) {
-		value := truncate(fmt.Sprint(entry.Data[key]))
+		raw := fmt.Sprint(entry.Data[key])
+		value := truncate(raw)
 		if key == unitField {
-			unit = s.relative(value)
+			unit, record.cutUnit = s.relative(value), len(value) != len(raw)
 			continue
 		}
 		fields[key] = value
+		if len(value) != len(raw) {
+			record.cutFields[key] = true
+		}
 	}
 	message := truncate(entry.Message)
+	record.cutMessage = len(message) != len(entry.Message)
+	// The size bound is checked on the collected text. Redaction replaces a value with a short marker, so
+	// the returned text stays close to this size.
 	s.size += len(message) + len(unit)
 	for key, value := range fields {
 		s.size += len(key) + len(value)
 	}
-	s.entries = append(s.entries, model.LogEntry{Time: entry.Time, Level: level.String(), Message: message, Fields: fields, Unit: unit})
+	record.entry = model.LogEntry{Time: entry.Time, Level: level.String(), Message: message, Fields: fields, Unit: unit}
+	s.entries = append(s.entries, record)
+}
+
+// sortedSecrets returns the registered values longest first, so a value that contains another is redacted
+// whole.
+func (s *LogSink) sortedSecrets() []string {
+	secrets := slices.Collect(maps.Keys(s.secrets))
+	slices.SortFunc(secrets, func(a, b string) int {
+		if len(a) != len(b) {
+			return len(b) - len(a)
+		}
+		return strings.Compare(a, b)
+	})
+	return secrets
+}
+
+// redacted returns a copy of the event with every registered value replaced.
+func (r *logRecord) redacted(secrets []string) model.LogEntry {
+	entry := r.entry
+	entry.Message = redact(entry.Message, secrets, r.cutMessage)
+	entry.Unit = redact(entry.Unit, secrets, r.cutUnit)
+	if entry.Fields != nil {
+		fields := make(map[string]string, len(entry.Fields))
+		for key, value := range entry.Fields {
+			fields[key] = redact(value, secrets, r.cutFields[key])
+		}
+		entry.Fields = fields
+	}
+	return entry
+}
+
+// redact replaces each occurrence of a registered value in text. When the text was cut to the length bound,
+// a value the cut split leaves its beginning just before the ellipsis, so that beginning is replaced too.
+func redact(text string, secrets []string, cut bool) string {
+	if len(secrets) == 0 || text == "" {
+		return text
+	}
+	for _, secret := range secrets {
+		text = strings.ReplaceAll(text, secret, maskReplacement)
+	}
+	if !cut {
+		return text
+	}
+	body, ok := strings.CutSuffix(text, ellipsis)
+	if !ok {
+		return text
+	}
+	// The longest beginning of any value wins, so no part of a longer one stays visible.
+	longest := 0
+	for _, secret := range secrets {
+		for end := min(len(secret)-1, len(body)); end > longest; end-- {
+			if strings.HasSuffix(body, secret[:end]) {
+				longest = end
+				break
+			}
+		}
+	}
+	if longest == 0 {
+		return text
+	}
+	return body[:len(body)-longest] + maskReplacement + ellipsis
 }
 
 // relative makes a unit directory project relative, leaving a path outside the project unchanged.
@@ -168,5 +336,8 @@ func truncate(text string) string {
 	for end > 0 && !utf8.RuneStart(text[end]) {
 		end--
 	}
-	return text[:end] + "..."
+	return text[:end] + ellipsis
 }
+
+// ellipsis marks text cut to the length bound.
+const ellipsis = "..."

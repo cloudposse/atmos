@@ -265,6 +265,25 @@ inputs = {
 	require.Empty(t, SensitiveInputs(fsys, nil, inputs))
 }
 
+func TestSensitiveInputsFollowExposedIncludeLocal(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	require.NoError(t, fsys.MkdirAll("/live/app", 0o755))
+	require.NoError(t, afero.WriteFile(fsys, "/root.hcl", []byte(`locals {
+  token = sensitive("secret")
+  plain = "visible"
+}`), 0o644))
+	require.NoError(t, afero.WriteFile(fsys, "/live/app/terragrunt.hcl", []byte(`include "root" {
+  path = find_in_parent_folders("root.hcl")
+  expose = true
+}
+inputs = {
+  token = include.root.locals.token
+  plain = include.root.locals.plain
+}`), 0o644))
+	paths := SensitiveInputs(fsys, []string{"/live/app/terragrunt.hcl", "/root.hcl"}, map[string]any{"token": "secret", "plain": "visible"})
+	require.Equal(t, [][]string{{"token"}}, paths)
+}
+
 func TestSensitiveInputsFollowNestedLocalReferences(t *testing.T) {
 	fsys := afero.NewMemMapFs()
 	require.NoError(t, afero.WriteFile(fsys, "/unit.hcl", []byte(`locals {

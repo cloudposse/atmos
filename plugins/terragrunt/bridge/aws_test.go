@@ -1,12 +1,15 @@
 package atmosbridge
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,6 +20,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/gruntwork-io/terragrunt/internal/awshelper"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
 	"github.com/gruntwork-io/terragrunt/pkg/log"
@@ -229,6 +233,40 @@ func TestAWSTransportRoutesByService(t *testing.T) {
 	assert.Equal(t, []string{"dynamodb.us-east-1.amazonaws.com/"}, hits["global"])
 	assert.Len(t, hits["other"], 1, "hosts outside AWS are never rewritten")
 	assert.Contains(t, hits["other"][0], "/untouched")
+}
+
+type captureTransport func(*http.Request) (*http.Response, error)
+
+func (f captureTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestAWSTransportSignsEndpointPathPrefix(t *testing.T) {
+	credentials := aws.Credentials{AccessKeyID: "AKIATEST", SecretAccessKey: "secret"}
+	req, err := http.NewRequest(http.MethodPost, "https://sts.us-east-1.amazonaws.com/action?version=1", strings.NewReader("Action=GetCallerIdentity"))
+	require.NoError(t, err)
+	digest := sha256.Sum256([]byte("Action=GetCallerIdentity"))
+	hash := hex.EncodeToString(digest[:])
+	stamp := time.Date(2026, time.November, 12, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, v4.NewSigner().SignHTTP(t.Context(), credentials, req, hash, "sts", "us-east-1", stamp))
+	oldSignature := req.Header.Get("Authorization")
+	var sent *http.Request
+	transport := &awsTransport{
+		credentials: credentials,
+		endpoints:   map[string]*url.URL{"sts": {Scheme: "https", Host: "proxy.example", Path: "/aws/sts"}},
+		next: captureTransport(func(r *http.Request) (*http.Response, error) {
+			sent = r
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+		}),
+	}
+	_, err = transport.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, "/aws/sts/action", sent.URL.Path)
+	require.Equal(t, "version=1", sent.URL.RawQuery)
+	require.Equal(t, "sts.us-east-1.amazonaws.com", sent.Host)
+	require.NotEqual(t, oldSignature, sent.Header.Get("Authorization"))
+	actualSignature := sent.Header.Get("Authorization")
+	sent.Header.Del("Authorization")
+	require.NoError(t, v4.NewSigner().SignHTTP(t.Context(), credentials, sent, hash, "sts", "us-east-1", stamp))
+	require.Equal(t, actualSignature, sent.Header.Get("Authorization"), "the signature covers the final path")
 }
 
 func TestAWSTransportFailureOnlyAffectsAWSHosts(t *testing.T) {

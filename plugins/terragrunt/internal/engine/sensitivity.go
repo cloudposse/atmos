@@ -31,6 +31,7 @@ const (
 //nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func SensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any) [][]string {
 	var found [][]string
+	bodies := make(map[string]*hclsyntax.Body)
 	for _, file := range files {
 		if filepath.Ext(file) != ".hcl" {
 			continue
@@ -47,18 +48,21 @@ func SensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any) [][]s
 		if !ok {
 			continue
 		}
-		found = append(found, scanFile(body)...)
+		bodies[filepath.Clean(file)] = body
+	}
+	for file, body := range bodies {
+		found = append(found, scanFile(body, file, bodies)...)
 	}
 	return existingPaths(uniquePaths(found), inputs)
 }
 
 // scanFile finds the sensitive paths declared by one file's inputs attribute.
-func scanFile(body *hclsyntax.Body) [][]string {
+func scanFile(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body) [][]string {
 	attribute := body.Attributes[inputsName]
 	if attribute == nil {
 		return nil
 	}
-	scanner := &sensitivityScanner{locals: localExpressions(body)}
+	scanner := &sensitivityScanner{locals: localExpressions(body), includes: exposedIncludes(body, file, bodies)}
 	scanner.walk(attribute.Expr, nil, 0)
 	return scanner.paths
 }
@@ -78,8 +82,9 @@ func localExpressions(body *hclsyntax.Body) map[string]hclsyntax.Expression {
 }
 
 type sensitivityScanner struct {
-	locals map[string]hclsyntax.Expression
-	paths  [][]string
+	locals   map[string]hclsyntax.Expression
+	includes map[string]map[string]hclsyntax.Expression
+	paths    [][]string
 }
 
 // walk records the paths below prefix that expression marks sensitive.
@@ -97,7 +102,7 @@ func (s *sensitivityScanner) walk(expression hclsyntax.Expression, prefix []stri
 		s.walk(node.TrueResult, prefix, depth)
 		s.walk(node.FalseResult, prefix, depth)
 	case *hclsyntax.ScopeTraversalExpr:
-		s.walkLocal(node, prefix, depth)
+		s.walkReference(node, prefix, depth)
 	default:
 		// A path is a list of object keys, so a sensitive value inside a list, a for expression, an
 		// index, or a template cannot be addressed on its own. Mark the whole value instead of dropping it.
@@ -124,7 +129,7 @@ func (s *sensitivityScanner) containsSensitive(expression hclsyntax.Expression, 
 		case *hclsyntax.FunctionCallExpr:
 			found = typed.Name == "sensitive"
 		case *hclsyntax.ScopeTraversalExpr:
-			found = s.localContainsSensitive(typed, depth)
+			found = s.referenceContainsSensitive(typed, depth)
 		}
 		return nil
 	})
@@ -132,16 +137,15 @@ func (s *sensitivityScanner) containsSensitive(expression hclsyntax.Expression, 
 }
 
 // localContainsSensitive reports whether the local a traversal starts from contains sensitive(...).
-func (s *sensitivityScanner) localContainsSensitive(traversal *hclsyntax.ScopeTraversalExpr, depth int) bool {
-	if traversal.Traversal.RootName() != localName || len(traversal.Traversal) < 2 {
+func (s *sensitivityScanner) referenceContainsSensitive(traversal *hclsyntax.ScopeTraversalExpr, depth int) bool {
+	current, locals, _, found := s.reference(traversal.Traversal)
+	if !found {
 		return false
 	}
-	first, ok := traversal.Traversal[1].(hcl.TraverseAttr)
-	if !ok {
-		return false
-	}
-	current, found := s.locals[first.Name]
-	return found && s.containsSensitive(current, depth+1)
+	previous := s.locals
+	s.locals = locals
+	defer func() { s.locals = previous }()
+	return s.containsSensitive(current, depth+1)
 }
 
 // walkObject records the sensitive paths below each key of an object literal.
@@ -186,23 +190,19 @@ func (s *sensitivityScanner) walkCall(call *hclsyntax.FunctionCallExpr, prefix [
 }
 
 // walkLocal follows local.name and local.name.key.key to the expression that defines it.
-func (s *sensitivityScanner) walkLocal(traversal *hclsyntax.ScopeTraversalExpr, prefix []string, depth int) {
-	if traversal.Traversal.RootName() != localName || len(traversal.Traversal) < 2 {
+func (s *sensitivityScanner) walkReference(traversal *hclsyntax.ScopeTraversalExpr, prefix []string, depth int) {
+	current, locals, rest, found := s.reference(traversal.Traversal)
+	if !found {
 		return
 	}
 	if depth >= maxLocalDepth {
 		s.paths = append(s.paths, slices.Clone(prefix))
 		return
 	}
-	first, ok := traversal.Traversal[1].(hcl.TraverseAttr)
-	if !ok {
-		return
-	}
-	current, found := s.locals[first.Name]
-	if !found {
-		return
-	}
-	for _, step := range traversal.Traversal[2:] {
+	previous := s.locals
+	s.locals = locals
+	defer func() { s.locals = previous }()
+	for _, step := range rest {
 		key, ok := traversalKey(step)
 		if !ok {
 			// An index the scan cannot follow: keep the value sensitive if any of it may be.
@@ -227,6 +227,83 @@ func (s *sensitivityScanner) walkLocal(traversal *hclsyntax.ScopeTraversalExpr, 
 		current = child
 	}
 	s.walk(current, prefix, depth+1)
+}
+
+// reference selects a local in this file or in an exposed include.
+func (s *sensitivityScanner) reference(traversal hcl.Traversal) (hclsyntax.Expression, map[string]hclsyntax.Expression, hcl.Traversal, bool) {
+	if len(traversal) < 2 {
+		return nil, nil, nil, false
+	}
+	if traversal.RootName() == localName {
+		name, ok := traversal[1].(hcl.TraverseAttr)
+		if !ok {
+			return nil, nil, nil, false
+		}
+		value, found := s.locals[name.Name]
+		return value, s.locals, traversal[2:], found
+	}
+	if traversal.RootName() == "include" && len(traversal) >= 4 {
+		alias, aliasOK := traversal[1].(hcl.TraverseAttr)
+		section, sectionOK := traversal[2].(hcl.TraverseAttr)
+		name, nameOK := traversal[3].(hcl.TraverseAttr)
+		if aliasOK && sectionOK && nameOK && section.Name == "locals" {
+			locals := s.includes[alias.Name]
+			value, found := locals[name.Name]
+			return value, locals, traversal[4:], found
+		}
+	}
+	return nil, nil, nil, false
+}
+
+// exposedIncludes associates an include alias with the parsed file's locals.
+func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body) map[string]map[string]hclsyntax.Expression {
+	result := make(map[string]map[string]hclsyntax.Expression)
+	for _, block := range body.Blocks {
+		if block.Type != "include" || len(block.Labels) == 0 {
+			continue
+		}
+		expose, ok := block.Body.Attributes["expose"]
+		if !ok {
+			continue
+		}
+		value, diagnostics := expose.Expr.Value(nil)
+		if diagnostics.HasErrors() || !value.IsKnown() || value.IsNull() || !value.Type().Equals(cty.Bool) || !value.True() {
+			continue
+		}
+		path, ok := includePath(block.Body.Attributes["path"])
+		if !ok {
+			continue
+		}
+		for dir := filepath.Dir(file); ; dir = filepath.Dir(dir) {
+			candidate := filepath.Clean(path)
+			if !filepath.IsAbs(path) {
+				candidate = filepath.Join(dir, path)
+			}
+			if included := bodies[candidate]; included != nil {
+				result[block.Labels[0]] = localExpressions(included)
+				break
+			}
+			if parent := filepath.Dir(dir); parent == dir || filepath.IsAbs(path) {
+				break
+			}
+		}
+	}
+	return result
+}
+
+func includePath(attribute *hclsyntax.Attribute) (string, bool) {
+	if attribute == nil {
+		return "", false
+	}
+	expression := attribute.Expr
+	if call, ok := expression.(*hclsyntax.FunctionCallExpr); ok && call.Name == "find_in_parent_folders" && len(call.Args) > 0 {
+		expression = call.Args[0]
+	}
+	value, diagnostics := expression.Value(nil)
+	if diagnostics.HasErrors() || !value.IsKnown() || value.IsNull() || !value.Type().Equals(cty.String) {
+		return "", false
+	}
+	return value.AsString(), true
 }
 
 // traversalKey returns the object key of local.name.key and local.name["key"].

@@ -49,6 +49,42 @@ def new_runner(root):
     fixtures.check(len(lifecycle.planfiles(root)) == 0, "The new runner still has a plan file")
 
 
+def relocated_checkout_restores_relative_workdir_plan():
+    # Keep the backend and plan store outside either checkout, as a real CI service would.
+    shared = fixtures.workspace("atmos-terragrunt-shared-")
+    root = lifecycle.project(fixtures.workspace("atmos-terragrunt-plan-runner-"), "project", fs.resolve("."), hardening.engine(), stacks=True)
+    config = json.decode(fs.read_file(root + "/atmos.yaml"))
+    store = shared + "/store"
+    state = shared + "/state/terraform.tfstate"
+    config["components"]["terraform"]["planfiles"] = {"default": "local", "stores": {"local": {"type": "local/dir", "options": {"path": store}}}}
+    fixtures.write(root, "atmos.yaml", json.encode(config))
+    lifecycle.write_unit(root, "planned", lifecycle.PLAN_UNIT.replace("@GREETING@", "relocated"))
+    unit = "live/dev/planned/terragrunt.hcl"
+    original = fs.read_file(root + "/" + unit)
+    fixtures.write(root, unit, original.replace('config  = { path = "${get_terragrunt_dir()}/state/terraform.tfstate" }', 'config  = { path = "' + lifecycle.hcl_path(state) + '", workspace_dir = "' + lifecycle.hcl_path(shared + "/state/workspaces") + '" }'))
+    fixtures.write(root, "stacks/portable.yaml", "import:\n  - terragrunt://live/dev/planned\ncomponents:\n  terraform:\n    planned:\n      metadata:\n        working_directory: .workdir/portable\n")
+
+    atmos_in(root, ["terraform", "plan", "planned", "-s", "portable"])
+    atmos_in(root, ["terraform", "planfile", "upload", "planned", "-s", "portable", "--sha", REVIEWED_SHA])
+    fixtures.check(not fs.exists(state), "Planning created backend state")
+
+    apply_root = fixtures.workspace("atmos-terragrunt-apply-runner-") + "/project"
+    fixtures.copy_tree(root, apply_root)
+    if fs.exists(apply_root + "/.workdir"):
+        fs.remove(apply_root + "/.workdir", recursive=True)
+    fixtures.check(root != apply_root, "The apply runner reused the planning checkout")
+    atmos_in(apply_root, ["terraform", "planfile", "download", "planned", "-s", "portable"])
+    files = fs.glob(apply_root + "/.workdir/portable/*.planfile")
+    fixtures.check(len(files) == 1 and fs.exists(files[0] + ".atmos.json"), "The relocated runner did not restore the plan and record: " + str(files))
+    applied = atmos_in(apply_root, ["terraform", "apply", "planned", "-s", "portable", "--from-plan", "--", "-no-color"])
+    fixtures.check("Plan:" not in applied.stdout, "The relocated apply planned again:\n" + applied.stdout)
+    fixtures.check("Apply complete! Resources: 1 added" in applied.stdout, "The relocated checkout did not apply the reviewed plan:\n" + applied.stdout)
+    fixtures.check(fs.exists(state), "The apply runner did not use the shared backend")
+    fixtures.check(not fs.exists(files[0] + ".atmos.json"), "The consumed plan record was retained")
+    again = atmos_in(apply_root, ["terraform", "apply", "planned", "-s", "portable", "--from-plan", "--", "-no-color"], failing=True)
+    fixtures.check("no saved plan found" in again.stdout + again.stderr, "The consumed plan could be applied twice:\n" + again.stdout + again.stderr)
+
+
 def restore_artifacts(root):
     # The apply runner restores the artifact where this unit's workdir will be.
     restored = atmos_in(root, ["terraform", "planfile", "download", "planned", "-s", STACK])

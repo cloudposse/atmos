@@ -1,11 +1,13 @@
 package atmosbridge
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"net/url"
@@ -17,6 +19,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
@@ -78,7 +81,9 @@ func AWS(ctx context.Context, v *venv.Venv) *venv.Venv {
 	if env == nil {
 		env = map[string]string{}
 	}
-	transport := &awsTransport{next: v.HTTP.Transport, endpoints: awsEndpoints(env)}
+	transport := &awsTransport{next: v.HTTP.Transport, endpoints: awsEndpoints(env), credentials: aws.Credentials{
+		AccessKeyID: env[envAccessKeyID], SecretAccessKey: env[envSecretKey], SessionToken: env[envSessionToken],
+	}}
 	if !hasStaticAWSKeys(env) && selectsAWSCredentials(env) {
 		credentials, err := cachedCredentials(awsCacheKey(env), func() (aws.Credentials, error) { return resolveAWSCredentials(ctx, env, transport) })
 		transport.apply(env, &credentials, err)
@@ -145,6 +150,7 @@ func (t *awsTransport) apply(env map[string]string, credentials *aws.Credentials
 		return
 	}
 	env[envAccessKeyID], env[envSecretKey], env[envSessionToken] = credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken
+	t.credentials = *credentials
 }
 
 // cachedCredentials loads credentials once per key, until they expire.
@@ -256,12 +262,13 @@ func cmpFirst(values ...string) string {
 
 // awsTransport sends AWS-bound requests to the endpoints the invocation overrides, and answers them with
 // the resolution failure when the invocation's credentials could not be resolved. Requests to other
-// hosts pass through untouched. The request keeps its original Host header and path, so the SigV4
-// signature the SDK computed for the AWS endpoint stays valid at an endpoint that checks it.
+// hosts pass through untouched. The request keeps its original Host header; a configured path prefix
+// is added to the service path and the request is signed again for that final path.
 type awsTransport struct {
-	next      http.RoundTripper
-	endpoints map[string]*url.URL
-	failure   error
+	next        http.RoundTripper
+	endpoints   map[string]*url.URL
+	failure     error
+	credentials aws.Credentials
 }
 
 // active reports whether the transport has anything to do.
@@ -301,7 +308,50 @@ func (t *awsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	clone := req.Clone(req.Context())
 	clone.Host = req.URL.Host
 	clone.URL.Scheme, clone.URL.Host = target.Scheme, target.Host
+	if target.Path != "" && target.Path != "/" {
+		clone.URL.Path = strings.TrimRight(target.Path, "/") + "/" + strings.TrimLeft(req.URL.Path, "/")
+		clone.URL.RawPath = ""
+		if err := t.signPrefixedRequest(clone); err != nil {
+			return nil, err
+		}
+	}
 	return next.RoundTrip(clone)
+}
+
+// signPrefixedRequest updates a SigV4 signature after the path changes. The upstream SDK
+// signs before RoundTrip, so retaining its signature would authenticate the old path.
+func (t *awsTransport) signPrefixedRequest(req *http.Request) error {
+	authorization := req.Header.Get("Authorization")
+	if authorization == "" {
+		return nil
+	}
+	parts := strings.SplitN(strings.TrimPrefix(authorization, "AWS4-HMAC-SHA256 Credential="), ",", 2)
+	if len(parts) != 2 || parts[0] == authorization {
+		return fmt.Errorf("%w: cannot re-sign AWS request with endpoint path prefix", ErrAWSCredentials)
+	}
+	scope := strings.Split(parts[0], "/")
+	if len(scope) != 5 || scope[4] != "aws4_request" || scope[0] != t.credentials.AccessKeyID || t.credentials.SecretAccessKey == "" {
+		return fmt.Errorf("%w: AWS signing scope or credentials changed", ErrAWSCredentials)
+	}
+	stamp, err := time.Parse("20060102T150405Z", req.Header.Get("X-Amz-Date"))
+	if err != nil {
+		return fmt.Errorf("%w: AWS signing time is missing: %w", ErrAWSCredentials, err)
+	}
+	payloadHash := req.Header.Get("X-Amz-Content-Sha256")
+	if payloadHash == "" {
+		var body []byte
+		if req.Body != nil {
+			body, err = io.ReadAll(req.Body)
+			if err != nil {
+				return err
+			}
+			req.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		digest := sha256.Sum256(body)
+		payloadHash = hex.EncodeToString(digest[:])
+	}
+	req.Header.Del("Authorization")
+	return v4.NewSigner().SignHTTP(req.Context(), t.credentials, req, payloadHash, scope[3], scope[2], stamp)
 }
 
 func isAWSHost(host string) bool {
