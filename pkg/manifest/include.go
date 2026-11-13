@@ -84,7 +84,7 @@ func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, fil
 	})
 	if includeRoot != "" {
 		var err error
-		policy, err = utils.ConfineScaffoldIncludes(policy, includeRoot)
+		policy, err = confineScaffoldIncludes(policy, includeRoot, utils.LocalIncludeFile)
 		if err != nil {
 			return nil, errUtils.Build(errUtils.ErrManifestIncludeRoot).
 				WithCause(err).
