@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -71,6 +72,28 @@ func (w *stampedWriter) text() string {
 	return all.String()
 }
 
+const (
+	// The time one CLI run may take, so that a hung CLI or plugin fails its subtest instead of the whole suite.
+	cliRunTimeout = 5 * time.Minute
+	// How long a killed CLI's output pipes may stay open before the run stops waiting.
+	cliRunWaitDelay = 10 * time.Second
+)
+
+// cliRun is one CLI process with its captured output. Done closes after the process has exited and been
+// reaped; err holds its result from then on.
+type cliRun struct {
+	stdout *stampedWriter
+	stderr *stampedWriter
+	done   chan struct{}
+	err    error
+}
+
+// wait blocks until the process exits and returns its result.
+func (r *cliRun) wait() error {
+	<-r.done
+	return r.err
+}
+
 // buildGateTool compiles the acceptance helper that blocks until a file exists. It is the same Go helper
 // that stands in for tools elsewhere in the plugin's acceptance tests, so no shell is involved.
 func buildGateTool(t *testing.T) string {
@@ -110,20 +133,40 @@ func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T)
 	gate := filepath.Join(t.TempDir(), "released")
 	project.write("live/dev/slow/terragrunt.hcl", fmt.Sprintf(slowUnit, filepath.ToSlash(gateTool), filepath.ToSlash(gate)))
 
-	run := func(args ...string) (*stampedWriter, *stampedWriter, chan error) {
-		cmd := atmosRunner.Command(args...)
+	run := func(t *testing.T, args ...string) *cliRun {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), cliRunTimeout)
+		cmd := atmosRunner.CommandContext(ctx, args...)
 		cmd.Dir = project.root
 		cmd.Env = append(cmd.Env, "NO_COLOR=1", "ATMOS_TELEMETRY_ENABLED=false", "TF_IN_AUTOMATION=true")
-		stdout, stderr := &stampedWriter{}, &stampedWriter{}
-		cmd.Stdout, cmd.Stderr = stdout, stderr
-		require.NoError(t, cmd.Start())
-		done := make(chan error, 1)
-		go func() { done <- cmd.Wait() }()
-		return stdout, stderr, done
+		// A plugin or tool the CLI started can keep the output pipes open after the CLI is killed; stop waiting
+		// for them once the CLI itself has exited.
+		cmd.WaitDelay = cliRunWaitDelay
+		started := &cliRun{stdout: &stampedWriter{}, stderr: &stampedWriter{}, done: make(chan struct{})}
+		cmd.Stdout, cmd.Stderr = started.stdout, started.stderr
+		if err := cmd.Start(); err != nil {
+			cancel()
+			t.Fatalf("cannot start the CLI: %v", err)
+		}
+		go func() {
+			started.err = cmd.Wait()
+			if ctx.Err() != nil {
+				started.err = fmt.Errorf("the CLI did not finish within %s: %w", cliRunTimeout, started.err)
+			}
+			cancel()
+			close(started.done)
+		}()
+		// Kill and reap the CLI on every exit path, including a failed assertion that ends the subtest early.
+		t.Cleanup(func() {
+			cancel()
+			<-started.done
+		})
+		return started
 	}
 
 	t.Run("an earlier log line is on screen before the command it precedes finishes", func(t *testing.T) {
-		stdout, stderr, done := run("terraform", "plan", "slow", "-s", "dev", "--logs-level=Debug")
+		cli := run(t, "terraform", "plan", "slow", "-s", "dev", "--logs-level=Debug")
+		stdout, stderr := cli.stdout, cli.stderr
 		defer func() { _ = os.WriteFile(gate, nil, 0o600) }()
 
 		require.Eventually(t, func() bool {
@@ -134,8 +177,8 @@ func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T)
 		// runs the held command right after logging this line.
 		early, _ := stderr.find("Evaluating unit", "component=slow", "stack=dev")
 		select {
-		case err := <-done:
-			t.Fatalf("the command finished before it was released (%v), so the line was not delivered live:\n%s", err, stderr.text())
+		case <-cli.done:
+			t.Fatalf("the command finished before it was released (%v), so the line was not delivered live:\n%s", cli.err, stderr.text())
 		default:
 		}
 		assert.Contains(t, early.Text, "unit=live/dev/slow")
@@ -143,7 +186,7 @@ func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T)
 
 		released := time.Now()
 		require.NoError(t, os.WriteFile(gate, nil, 0o600))
-		err := <-done
+		err := cli.wait()
 		finished := time.Now()
 		require.NoError(t, err, "stderr:\n%s", stderr.text())
 		assert.True(t, early.At.Before(released), "line at %s, release at %s", early.At, released)
@@ -153,8 +196,9 @@ func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T)
 
 	t.Run("the default level shows no engine events", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(gate, nil, 0o600))
-		stdout, stderr, done := run("terraform", "plan", "slow", "-s", "dev")
-		require.NoError(t, <-done, "stderr:\n%s", stderr.text())
+		cli := run(t, "terraform", "plan", "slow", "-s", "dev")
+		stdout, stderr := cli.stdout, cli.stderr
+		require.NoError(t, cli.wait(), "stderr:\n%s", stderr.text())
 		assert.NotContains(t, stderr.text(), "Evaluating unit")
 		assert.NotContains(t, stdout.text(), "Evaluating unit")
 	})
