@@ -98,7 +98,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 		backendBlockBody.SetAttributeValue(name, ctyVal)
 	}
 
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0o644)
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
