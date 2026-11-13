@@ -40,6 +40,11 @@ type Resolution struct {
 	Backend            map[string]any    `json:"backend"`
 	Generated          map[string]string `json:"generated"`
 	GeneratedPolicies  map[string]string `json:"generated_policies,omitempty"`
+	// UnitFileCopies identifies literal files copied from beside the unit.
+	UnitFileCopies map[string]bool `json:"unit_file_copies,omitempty"`
+	// SensitiveGenerated names generated files whose contents can hold
+	// credentials. The host masks their bytes and keeps them out of saved-plan records.
+	SensitiveGenerated map[string]bool   `json:"sensitive_generated,omitempty"`
 	Units              map[string]string `json:"units,omitempty"`
 	Stacks             map[string]string `json:"stacks,omitempty"`
 	// Failures are units that could not be evaluated. A failing unit never hides healthy ones.

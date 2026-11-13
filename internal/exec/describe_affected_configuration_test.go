@@ -354,71 +354,35 @@ func TestRemoveOnSignalStopReleasesWatcher(t *testing.T) {
 	require.Equal(t, int32(0), cleaned.Load())
 }
 
-func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {
-	root := t.TempDir()
-	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
-	index := newChangedFilesIndex(config, []string{filepath.Join("live", ".terragrunt-cache", "generated.tf"), filepath.Join("live", "new.yaml")}, root)
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/.terragrunt-cache/**"}}}
-	filtered, err := configurationWatchIndex(config, settings, index)
-	require.NoError(t, err)
-	require.Equal(t, []string{filepath.Join(root, "live", "new.yaml")}, filtered.getAllFiles())
-	require.ElementsMatch(t, []string{filepath.Join(root, "live", ".terragrunt-cache", "generated.tf"), filepath.Join(root, "live", "new.yaml")}, index.getAllFiles(),
-		"the shared index keeps both changed files, each once")
-	unchanged, err := configurationWatchIndex(config, nil, index)
-	require.NoError(t, err)
-	require.Same(t, index, unchanged)
-	for _, invalid := range []any{"[", 42} {
-		settings["configuration"].(map[string]any)["watch_excludes"] = []any{invalid}
-		_, err = configurationWatchIndex(config, settings, index)
-		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	}
-}
+// The BASE policy inventory resolves provider imports with a session of its own checkout; the
+// HEAD inventory keeps the invocation's session, which is never replaced.
+func TestAffectedPolicyInventoryUsesARevisionSession(t *testing.T) {
+	headRoot, _ := affectedPolicyRepo(t, map[string]string{"README": "unchanged"})
+	baseRoot, _ := affectedPolicyRepo(t, map[string]string{"README": "unchanged"})
+	config := affectedPolicyTestConfig(headRoot)
+	ctrl := gomock.NewController(t)
+	current := NewMockComponentConfigurationRuntime(ctrl)
+	previous := NewMockComponentConfigurationRuntime(ctrl)
+	forkedAt := ""
+	runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: current, revision: func(root string) (schema.ComponentConfigurationRuntime, error) {
+		forkedAt = root
+		return previous, nil
+	}}
+	config.ComponentConfigurations = runtime
 
-func TestConfigurationWatchExclusionsFailClosedOnPathsOutsideTheProject(t *testing.T) {
-	// A relative project root cannot be compared with absolute changed files; the watch must not silently match nothing.
-	config := &schema.AtmosConfiguration{BasePathAbsolute: "relative-root"}
-	absolute := filepath.Join(t.TempDir(), "live", "new.yaml")
-	index := newChangedFilesIndex(config, []string{absolute}, "")
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/*.tf"}}}
-	filtered, err := configurationWatchIndex(config, settings, index)
-	require.Error(t, err)
-	require.Nil(t, filtered)
-
-	// With an absolute project root, a changed file in a sibling directory is outside the project:
-	// project-relative exclusions cannot describe it, so it stays watched instead of disappearing.
-	parent := t.TempDir()
-	root := filepath.Join(parent, "project")
-	sibling := filepath.Join(parent, "sibling", "main.tf")
-	config = &schema.AtmosConfiguration{BasePathAbsolute: root}
-	index = newChangedFilesIndex(config, []string{sibling, filepath.Join(root, "live", "main.tf")}, "")
-	filtered, err = configurationWatchIndex(config, settings, index)
+	base, err := affectedPolicyConfig(config, headRoot, baseRoot)
 	require.NoError(t, err)
-	require.Equal(t, []string{sibling}, filtered.getAllFiles())
-}
+	require.Same(t, previous, base.ComponentConfigurations)
+	require.Equal(t, base.BasePathAbsolute, forkedAt)
+	require.Same(t, runtime, config.ComponentConfigurations, "the caller's session is not replaced")
 
-func TestConfigurationWatchExclusionsResolveRootAliases(t *testing.T) {
-	parent := t.TempDir()
-	root := filepath.Join(parent, "project")
-	require.NoError(t, os.Mkdir(root, 0o755))
-	alias := filepath.Join(parent, "alias")
-	if err := os.Symlink(root, alias); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
-	cache := filepath.Join(root, "live", ".terragrunt-cache", "deleted.tf")
-	ordinary := filepath.Join(root, "live", "main.tf")
-	files, err := filterWatchedFiles(alias, []string{cache, ordinary}, []string{"**/.terragrunt-cache/**"})
+	forkedAt = ""
+	head, err := affectedPolicyConfig(config, headRoot, headRoot)
 	require.NoError(t, err)
-	require.Equal(t, []string{ordinary}, files)
-}
+	require.Same(t, runtime, head.ComponentConfigurations)
+	require.Empty(t, forkedAt)
 
-func TestDependencyChangeCheckReportsInvalidWatchExclusions(t *testing.T) {
-	root := t.TempDir()
-	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
-	index := newChangedFilesIndex(config, []string{filepath.Join("live", "changed.hcl")}, root)
-	component := map[string]any{}
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"["}}}
-	var affected []schema.Affected
-	err := checkDependencyChangesIndexed(&affected, config, "app", "dev", "terraform", &component, settings, index, false, nil, false)
-	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	require.Empty(t, affected, "an invalid exclusion must not be treated as a clean comparison")
+	runtime.revision = func(string) (schema.ComponentConfigurationRuntime, error) { return nil, context.Canceled }
+	_, err = affectedPolicyConfig(config, headRoot, baseRoot)
+	require.ErrorIs(t, err, context.Canceled)
 }

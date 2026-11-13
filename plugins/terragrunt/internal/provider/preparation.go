@@ -108,7 +108,7 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 		if policy == "" {
 			policy = "overwrite"
 		}
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy})
+		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name]})
 	}
 	return response, nil
 }

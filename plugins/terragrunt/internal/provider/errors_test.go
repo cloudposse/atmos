@@ -3,13 +3,16 @@ package provider
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 	"github.com/cloudposse/atmos/sdk/component"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
@@ -99,4 +102,43 @@ func TestDiscoveryReportsAFailedUnitAndKeepsTheHealthyOnes(t *testing.T) {
 	require.Equal(t, "ok", response.Components[0].Address.Component)
 	require.Len(t, response.Diagnostics, 1)
 	require.Equal(t, "broken", response.Diagnostics[0].Detail.Unit)
+}
+
+// Exercise the evaluator and both provider output paths with an environment-derived target.
+func TestDependencyDiagnosticsKeepEvaluatedTargetsHidden(t *testing.T) {
+	for _, block := range []string{
+		"dependency \"upstream\" { config_path = get_env(\"DEPENDENCY_TARGET\") }",
+		"dependencies { paths = [get_env(\"DEPENDENCY_TARGET\")] }",
+	} {
+		t.Run(block, func(t *testing.T) {
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			file := filepath.Join(root, "terragrunt.hcl")
+			require.NoError(t, os.WriteFile(file, []byte(block), 0o600))
+			const secret = "secret-dependency-target"
+			_, err = engine.Resolve(t.Context(), model.Request{
+				Path: file, BasePath: root, Phase: "discover", Command: "plan", Tofu: "must-not-execute",
+				Environment: map[string]string{"DEPENDENCY_TARGET": "./" + secret},
+			})
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, model.CodeDependency, problem.Code)
+			require.ErrorIs(t, err, os.ErrNotExist)
+			require.Contains(t, problem.Err.Error(), secret, "the cause remains available locally")
+			rpc := scoped(rpcError(err), "discover", root, &pluginv1.ComponentAddress{Stack: "live", Component: "unit"})
+			require.NotContains(t, rpc.Error(), secret)
+			wire, marshalErr := protojson.Marshal(status.Convert(rpc).Proto())
+			require.NoError(t, marshalErr)
+			require.NotContains(t, string(wire), secret)
+			diagnostic := unitDiagnostic(root, model.UnitFailure{Stack: "live", Name: "unit", Err: err})
+			wire, marshalErr = protojson.Marshal(diagnostic)
+			require.NoError(t, marshalErr)
+			require.NotContains(t, string(wire), secret)
+			require.True(t, diagnostic.Detail.UserSafe)
+			require.Equal(t, "terragrunt.hcl", diagnostic.Detail.Location.File)
+			require.Equal(t, "dependency", diagnostic.Detail.ConfigKey)
+			require.Equal(t, "unit", diagnostic.Detail.Unit)
+			require.NotEmpty(t, diagnostic.Detail.Hints)
+		})
+	}
 }

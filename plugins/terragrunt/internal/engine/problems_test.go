@@ -45,13 +45,20 @@ func TestEvaluationErrorKeepsEvaluatedTextHidden(t *testing.T) {
 	require.Positive(t, problem.Line)
 }
 
-func TestMissingDependencyTargetIsNamed(t *testing.T) {
-	request := nativeUnit(t, "dependency \"gone\" {\n config_path = \"./gone\"\n}\n")
+func TestMissingDependencyTargetStaysHidden(t *testing.T) {
+	request := nativeUnit(t, "dependency \"gone\" {\n config_path = get_env(\"DEPENDENCY_TARGET\")\n}\n")
 	request.Phase = "discover"
+	request.Environment["DEPENDENCY_TARGET"] = "./secret-dependency-target"
 	_, err := Resolve(t.Context(), request)
 	problem := asProblem(t, err)
 	require.Equal(t, model.CodeDependency, problem.Code)
-	require.Contains(t, problem.Detail, "gone")
+	require.True(t, problem.Safe)
+	require.NotContains(t, problem.Error(), "secret-dependency-target")
+	expectedFile, err := filepath.EvalSymlinks(request.Path)
+	require.NoError(t, err)
+	require.Equal(t, expectedFile, problem.File)
+	require.NotEmpty(t, problem.Hints)
+	require.ErrorIs(t, problem, os.ErrNotExist)
 	require.Equal(t, "dependency", problem.Key)
 }
 

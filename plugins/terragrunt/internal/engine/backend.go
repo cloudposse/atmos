@@ -25,6 +25,9 @@ func resolveBackend(cfg *config.TerragruntConfig, result *model.Resolution, requ
 	if result.BackendType != "local" {
 		return nil
 	}
+	if result.Backend == nil {
+		result.Backend = make(map[string]any)
+	}
 	// Local state remains relative to Terragrunt's source cache identity,
 	// independently of the execution directory chosen by Atmos.
 	for key, fallback := range map[string]string{"path": "terraform.tfstate", "workspace_dir": "terraform.tfstate.d"} {

@@ -43,9 +43,9 @@ func checkStackOverrides(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// backendOverride reports a backend the stack defines for the component itself. A backend that is
-// only inherited from a global section never reaches here, because the provider's placeholder is
-// part of the component and takes precedence over inherited values.
+// backendOverride defensively checks unnormalized callers. Stack compilation validates
+// component-level backend options before flattening them; flattened local options can
+// come from allowed global defaults and must not be rejected here.
 func backendOverride(info *schema.ConfigAndStacksInfo) (string, bool) {
 	if kind, _ := info.ComponentSection["backend_type"].(string); kind != "" && kind != localBackendType {
 		return "backend_type: " + kind, true

@@ -142,13 +142,14 @@ func mustRel(root, path string) string {
 	return path
 }
 
-// dependencyProblem describes a dependency whose target is missing or is not a unit.
-func dependencyProblem(file, target string, err error) *model.Problem {
+// dependencyProblem keeps evaluated target paths out of safe details; the cause remains available
+// for classification and local debugging.
+func dependencyProblem(file, _ string, err error) *model.Problem {
 	summary := "A dependency points at a unit that cannot be read"
 	hint := "Create the target unit, or fix `config_path` in the `dependency` or `dependencies` block."
 	if errors.Is(err, os.ErrNotExist) {
 		summary = "A dependency points at a path that does not exist"
 		hint = "The target may have been deleted or renamed. Fix `config_path` in the `dependency` or `dependencies` block, or remove the dependency."
 	}
-	return &model.Problem{Code: model.CodeDependency, Summary: summary, Detail: fmt.Sprintf("The dependency target %q was not found.", target), Hints: []string{hint}, File: file, Key: "dependency", Safe: true, Err: err}
+	return &model.Problem{Code: model.CodeDependency, Summary: summary, Detail: "The dependency target could not be read.", Hints: []string{hint}, File: file, Key: "dependency", Safe: true, Err: err}
 }

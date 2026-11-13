@@ -103,7 +103,11 @@ func publishSource(ctx context.Context, stage, target string, config map[string]
 	if err := rejectActiveStateLock(target); err != nil {
 		return err
 	}
-	changes, incoming, err := sourceChanges(stage, target, next, previous, runtimePaths(target, config))
+	protected := runtimePaths(target, config)
+	if err := rejectLegacyResources(target, next, protected); err != nil {
+		return err
+	}
+	changes, incoming, err := sourceChanges(stage, target, next, previous, protected)
 	if err != nil {
 		return err
 	}
@@ -120,6 +124,42 @@ func publishSource(ctx context.Context, stage, target string, config map[string]
 	}
 	publication := sourcePublication{stage: stage, target: target, backup: backup, rename: rename}
 	return publication.publish(ctx, changes, incoming)
+}
+
+// Without a receipt, neither metadata nor a source stamp proves ownership of a
+// removed file. Refuse to bless stale configuration; let the caller reconcile it.
+func rejectLegacyResources(target string, next sourceFiles, protected map[string]bool) error {
+	if _, err := os.Lstat(filepath.Join(target, sourceFilesManifest)); !os.IsNotExist(err) {
+		return err
+	}
+	incoming := make(map[string]bool, len(next.Files))
+	for _, name := range next.Files {
+		incoming[name] = true
+	}
+	err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(target, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if protectedRuntimePath(path, relative, protected) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.Name() != "resources.tf" || incoming[relative] {
+			return nil
+		}
+		return fmt.Errorf("%w: legacy workdir %s has no source ownership receipt and contains %s absent from the incoming source; inspect this file and move it outside the workdir or remove it if obsolete, then retry", errUtils.ErrSourceCopyFailed, target, relative)
+	})
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 func readSourceInventory(target string) (sourceFiles, error) {

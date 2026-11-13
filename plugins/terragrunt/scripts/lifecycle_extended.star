@@ -237,6 +237,19 @@ def verify_missing_required_var_file(root):
     fs.write_file(path, content)
 
 
+def verify_fresh_unit_missing_required_var_file(root, binary):
+    # A never-initialized unit whose required variable file is absent fails before implicit init:
+    # no init or plan hook runs, and OpenTofu never initializes the working directory.
+    write_unit(root, "fresh", hooked_unit(binary, "fresh"))
+    result = terraform(root, "plan", "fresh", failing=True)
+    output = result.stderr + result.stdout
+    fixtures.check("required.tfvars" in output, "Missing var file was not named:\n" + output)
+    expect_count(result.stderr, "Executing before hook", 0, "fresh unit stderr")
+    fixtures.check("Initializing" not in output, "Implicit init ran before the var file check:\n" + output)
+    data_dirs = fs.glob(root + "/.workdir/terraform/" + STACK + "-fresh*/.terraform")
+    fixtures.check(not data_dirs, "Implicit init initialized the fresh unit: " + str(data_dirs))
+
+
 def verify_failing_before_hook(root, binary):
     write_unit(root, "gated", GATED_UNIT.replace("@TOOL@", tool_of(binary)))
     fixtures.write(root, "live/dev/gated/unformatted.tf", 'variable   "x"   {}\n')
@@ -269,8 +282,9 @@ def hooks():
     root = project(fixtures.workspace("atmos-terragrunt-hooks-"), "project", package, binary)
     verify_hook_and_argument_ordering(root, binary)
     verify_missing_required_var_file(root)
+    verify_fresh_unit_missing_required_var_file(root, binary)
     verify_failing_before_hook(root, binary)
-    ui.success("Hooks and extra_arguments: ordering, scoping, exit codes, error hooks, var files, env")
+    ui.success("Hooks and extra_arguments: ordering, scoping, exit codes, error hooks, var files before init, env")
 
 
 PLAN_UNIT = """

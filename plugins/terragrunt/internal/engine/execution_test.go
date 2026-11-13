@@ -740,3 +740,116 @@ func TestCheckFeatureOverridesLeavesParseErrorsToTheEvaluator(t *testing.T) {
 	require.NoError(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "false"}, declared))
 	require.Error(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "maybe"}, declared))
 }
+
+func TestDiscoveryDefersExecutionValues(t *testing.T) {
+	request := executionUnit(t, `
+ before_hook "dynamic" {
+   commands = ["plan"]
+   execute = ["echo", dependency.base.outputs.value, run_cmd("/bin/sh", "-c", "echo hook >> effects; printf hook")]
+ }
+ extra_arguments "dynamic" {
+   commands = ["plan"]
+   arguments = [dependency.base.outputs.value, run_cmd("/bin/sh", "-c", "echo args >> effects; printf args")]
+ }
+ `)
+	body, err := os.ReadFile(request.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(request.BasePath, "base"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "base", "terragrunt.hcl"), []byte("inputs = {}"), 0o644))
+	body = append(body, []byte(`
+ dependency "base" {
+   config_path = "./base"
+   skip_outputs = true
+   mock_outputs = { value = "from-dependency" }
+ }
+ `)...)
+	require.NoError(t, os.WriteFile(request.Path, body, 0o644))
+	request.Phase = "discover"
+	discovered, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Nil(t, discovered.Execution)
+	require.NoFileExists(t, filepath.Join(request.BasePath, "effects"))
+	request.Phase = ""
+	prepared, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"echo", "from-dependency", "hook"}, prepared.Execution.BeforeHooks[0].Execute)
+	require.Equal(t, []string{"from-dependency", "args"}, prepared.Execution.ExtraArguments[0].Arguments)
+	effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+	require.NoError(t, err)
+	require.Contains(t, string(effects), "hook")
+	require.Contains(t, string(effects), "args")
+}
+
+func TestDiscoveryValidatesExecutionSyntaxWithoutEffects(t *testing.T) {
+	for _, test := range []struct {
+		name, body, want string
+	}{
+		{"missing execute", `before_hook "hook" {
+ commands = ["plan"]
+}`, "execute"},
+		{"unknown argument setting", `extra_arguments "args" {
+ commands = ["plan"]
+ unexpected = run_cmd("must-not-execute")
+}`, "unexpected"},
+		{"invalid regex", `error_hook "hook" {
+ commands = ["plan"]
+ execute = [run_cmd("must-not-execute")]
+ on_errors = ["["]
+}`, "Invalid `on_errors`"},
+		{"disabled", `before_hook "hook" {
+ if = false
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, ""},
+		{"dynamic condition", `before_hook "hook" {
+ if = run_cmd("must-not-execute") == "enabled"
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, test.body)
+			request.Phase = "discover"
+			_, err := Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, test.want)
+			}
+		})
+	}
+}
+
+func TestDiscoveryDefersInheritedExecutionValues(t *testing.T) {
+	request := executionUnit(t, `before_hook "parent" {
+ commands = ["plan"]
+ execute = ["echo", run_cmd("/bin/sh", "-c", "echo evaluated >> effects; printf inherited")]
+}`)
+	parent := filepath.Join(request.BasePath, "parent.hcl")
+	require.NoError(t, os.Rename(request.Path, parent))
+	require.NoError(t, os.WriteFile(request.Path, []byte("include \"parent\" { path = \"./parent.hcl\" }"), 0o644))
+	request.Phase = "discover"
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(request.BasePath, "effects"))
+	request.Phase = ""
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"echo", "inherited"}, result.Execution.BeforeHooks[0].Execute)
+	require.FileExists(t, filepath.Join(request.BasePath, "effects"))
+}
+
+func TestPreparationValidatesDynamicHookSettings(t *testing.T) {
+	request := executionUnit(t, `error_hook "dynamic" {
+ commands = ["plan"]
+ execute = ["echo"]
+ on_errors = [get_env("HOOK_PATTERN")]
+}`)
+	request.Environment["HOOK_PATTERN"] = "["
+	request.Phase = "discover"
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	request.Phase = ""
+	_, err = Resolve(t.Context(), request)
+	require.ErrorContains(t, err, "Invalid `on_errors`")
+}

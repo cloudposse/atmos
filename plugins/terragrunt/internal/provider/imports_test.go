@@ -29,7 +29,7 @@ func TestImportsSelectExplicitFilesAndDirectories(t *testing.T) {
 	})
 	_, err = p.Discover(t.Context(), request)
 	require.NoError(t, err)
-	for uri, want := range map[string]string{"terragrunt://.": "**", "terragrunt://./": "**", "terragrunt://live/": "live/**", "terragrunt://./live": "live/**"} {
+	for uri, want := range map[string]string{"terragrunt://.": "**", "terragrunt://./": "**", "terragrunt://live/": "live/**", "terragrunt://./live": "live/**", "terragrunt://./live/terragrunt.stack.hcl": "live/terragrunt.stack.hcl", "terragrunt://live//terragrunt.stack.hcl": "live/terragrunt.stack.hcl"} {
 		request.Imports = []string{uri}
 		got, err := importPaths(request)
 		require.NoError(t, err, uri)

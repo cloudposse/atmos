@@ -136,8 +136,9 @@ remote_state {
     forbid(ignored, [PASSPHRASE], "encryption without generate")
     fixtures.check("encrypted_data" not in fs.read_file(lifecycle.state_path(root, "plain")), "State was encrypted without generate")
 
-    # A module that already ships the backend file keeps it under if_exists = "skip", so the generated
-    # encryption block is never written. Atmos warns before running, and only then.
+    # A module that already ships the backend file would keep it under if_exists = "skip", so the
+    # generated encryption block would never be written and the state would stay plain. Atmos refuses
+    # the run before writing anything or running the engine, and leaves the module's file alone.
     fixtures.write(root, "modules/kept/main.tf", lifecycle.UNIT_MODULE)
     fixtures.write(root, "modules/kept/backend.tf", "terraform {\n  backend \"local\" {}\n}\n")
     write_hcl(root, "kept", """
@@ -145,10 +146,9 @@ terraform {
   source = "../../../modules/kept"
 }
 """ + ENCRYPTED_BACKEND.replace("overwrite_terragrunt", "skip").replace("@PASSPHRASE@", PASSPHRASE))
-    kept = terraform(root, work, "plan", "kept")
-    expect(kept, ["configures state encryption in the generated file", "The state will not be encrypted"], "skipped encrypted backend")
-    forbid(kept, [PASSPHRASE], "skipped encrypted backend")
-    forbid(planned, ["will not be encrypted"], "generated encrypted backend")
+    kept = terraform(root, work, "plan", "kept", failing=True)
+    expect(kept, ["cannot verify backend identity for retained generated file backend.tf"], "skipped encrypted backend")
+    forbid(kept, [PASSPHRASE, "Plan:"], "skipped encrypted backend")
     ui.success("State encryption: pbkdf2 encrypts the OpenTofu state, plans decrypt it, and the passphrase stays out of output")
 
 

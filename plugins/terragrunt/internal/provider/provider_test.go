@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -332,4 +333,28 @@ func TestDiscoveryPublishesCommandAndExclude(t *testing.T) {
 	require.Equal(t, "opentofu", unitEngine(model.Request{Tofu: "terraform"}, &model.Resolution{TerraformBinary: "/opt/bin/tofu"}))
 	require.Equal(t, "terraform", unitEngine(model.Request{Tofu: "terraform"}, &model.Resolution{}))
 	require.Equal(t, "opentofu", unitEngine(model.Request{Tofu: "tofu"}, nil))
+}
+
+func TestPreparationTransmitsUnitFileCopyProvenance(t *testing.T) {
+	for _, copied := range []bool{false, true} {
+		t.Run(map[bool]string{false: "explicit generation", true: "adjacent copy"}[copied], func(t *testing.T) {
+			request := componentRequest(t)
+			p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+				return &model.Resolution{
+					Generated:         map[string]string{".terraform.lock.hcl": "# pinned\n"},
+					GeneratedPolicies: map[string]string{".terraform.lock.hcl": "overwrite"},
+					UnitFileCopies:    map[string]bool{".terraform.lock.hcl": copied},
+				}, nil
+			})
+			result, err := p.Prepare(t.Context(), request)
+			require.NoError(t, err)
+			require.Len(t, result.Files, 1)
+			wire, err := proto.Marshal(result)
+			require.NoError(t, err)
+			decoded := &pluginv1.PrepareComponentResponse{}
+			require.NoError(t, proto.Unmarshal(wire, decoded))
+			require.Equal(t, copied, decoded.Files[0].UnitFileCopy)
+			require.Equal(t, "overwrite", result.Files[0].IfExists)
+		})
+	}
 }

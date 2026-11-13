@@ -89,6 +89,8 @@ func TestDiscoveryRejectsUnrepresentableInventory(t *testing.T) {
 				require.Equal(t, "default", target.Stack)
 				require.Equal(t, "other", target.Component)
 				require.Equal(t, "terraform", target.ComponentType)
+				require.Equal(t, "terraform", component.Address.ComponentType)
+				require.Equal(t, pluginv1.ComponentDependency_ORDER, component.Dependencies[0].Kind)
 				return
 			}
 			require.Empty(t, result.Components)

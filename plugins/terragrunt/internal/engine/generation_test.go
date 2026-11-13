@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,8 +37,11 @@ generate "json" {
 	require.Equal(t, "overwrite_terragrunt", result.GeneratedPolicies[filepath.Join("nested", "provider.tf")])
 	require.Equal(t, "remove_terragrunt", result.GeneratedPolicies["obsolete.tf"])
 	require.Empty(t, result.Generated["obsolete.tf"])
+	require.False(t, result.SensitiveGenerated["obsolete.tf"], "removal policies have no bytes to restore")
 	require.Equal(t, `{"a":true}`, result.Generated["data.json"])
 	require.Equal(t, "skip", result.GeneratedPolicies["data.json"])
+	require.True(t, result.SensitiveGenerated["data.json"])
+	require.True(t, result.SensitiveGenerated[filepath.Join("nested", "provider.tf")])
 	require.NoDirExists(t, filepath.Join(filepath.Dir(request.Path), "nested"))
 }
 
@@ -122,7 +126,7 @@ func TestPreventDestroyGuardFailsClosedWhenConfigCannotBeParsed(t *testing.T) {
 	require.NotContains(t, err.Error(), "protected by prevent_destroy", "the failure is a parse error, not a protection verdict")
 }
 
-func TestPlainGenerateBlockThatWritesABackendReplacesTheHostBackend(t *testing.T) {
+func TestPlainGenerateBlockRejectsUnverifiedBackendIdentity(t *testing.T) {
 	for name, test := range map[string]struct {
 		path, contents string
 		want           bool
@@ -140,8 +144,14 @@ func TestPlainGenerateBlockThatWritesABackendReplacesTheHostBackend(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			request := nativeUnit(t, "generate \"x\" {\n path = \""+test.path+"\"\n if_exists = \"overwrite\"\n disable_signature = true\n contents = <<-EOT\n"+test.contents+"\nEOT\n}\n")
 			result, err := Resolve(t.Context(), request)
+			if test.want {
+				require.ErrorContains(t, err, "Cannot verify the backend identity")
+				require.Nil(t, result)
+				return
+			}
 			require.NoError(t, err)
-			require.Equal(t, test.want, result.BackendGenerated)
+			require.False(t, result.BackendGenerated)
+			require.True(t, result.SensitiveGenerated[test.path], "all enabled generate blocks may contain credentials")
 		})
 	}
 }
@@ -160,6 +170,7 @@ func TestLockFileBesideTheUnitIsHandedToTheHost(t *testing.T) {
 		result, err := Resolve(t.Context(), request)
 		require.NoError(t, err)
 		require.NotContains(t, result.Generated, ".terraform.lock.hcl")
+		require.Empty(t, result.UnitFileCopies)
 	})
 	t.Run("present", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(lock, []byte("# pinned\n"), 0o600))
@@ -167,13 +178,42 @@ func TestLockFileBesideTheUnitIsHandedToTheHost(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "# pinned\n", result.Generated[".terraform.lock.hcl"])
 		require.Equal(t, "overwrite", result.GeneratedPolicies[".terraform.lock.hcl"])
+		require.True(t, result.UnitFileCopies[".terraform.lock.hcl"])
 	})
-	t.Run("an explicit generate block for it wins", func(t *testing.T) {
-		explicit := nativeUnit(t, "generate \"lock\" {\n path = \".terraform.lock.hcl\"\n if_exists = \"skip\"\n disable_signature = true\n contents = \"# generated\\n\"\n}\n")
-		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(explicit.Path), ".terraform.lock.hcl"), []byte("# pinned\n"), 0o600))
-		result, err := Resolve(t.Context(), explicit)
-		require.NoError(t, err)
-		require.Equal(t, "# generated\n", result.Generated[".terraform.lock.hcl"])
-		require.Equal(t, "skip", result.GeneratedPolicies[".terraform.lock.hcl"])
-	})
+	for _, policy := range []string{"skip", "overwrite", "error", "overwrite_terragrunt"} {
+		t.Run("explicit generate wins with "+policy, func(t *testing.T) {
+			explicit := nativeUnit(t, "generate \"lock\" {\n path = \".terraform.lock.hcl\"\n if_exists = \""+policy+"\"\n disable_signature = true\n contents = \"# generated\\n\"\n}\n")
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(explicit.Path), ".terraform.lock.hcl"), []byte("# pinned\n"), 0o600))
+			result, err := Resolve(t.Context(), explicit)
+			require.NoError(t, err)
+			require.Equal(t, "# generated\n", result.Generated[".terraform.lock.hcl"])
+			require.Equal(t, policy, result.GeneratedPolicies[".terraform.lock.hcl"])
+			require.False(t, result.UnitFileCopies[".terraform.lock.hcl"])
+		})
+	}
+}
+
+func TestProviderGenerateCredentialsAreSensitiveAcrossPolicies(t *testing.T) {
+	for _, policy := range []string{"overwrite", "overwrite_terragrunt", "skip", "error"} {
+		t.Run(policy, func(t *testing.T) {
+			request := nativeUnit(t, fmt.Sprintf(`locals {
+ credential = "provider-test-secret"
+}
+generate "provider" {
+ path = "provider.tf"
+ if_exists = %q
+ contents = <<-EOT
+provider "aws" {
+ secret_key = "${local.credential}"
+}
+EOT
+}`, policy))
+			result, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Contains(t, result.Generated["provider.tf"], "provider-test-secret")
+			require.True(t, result.SensitiveGenerated["provider.tf"])
+			require.False(t, result.BackendGenerated)
+			require.Equal(t, policy, result.GeneratedPolicies["provider.tf"])
+		})
+	}
 }

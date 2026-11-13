@@ -2231,6 +2231,8 @@ type ConfigAndStacksInfo struct {
 	UseTerraformPlan        bool
 	PlanFile                string
 	StoredPlanFile          string
+	// ConfigurationPlanImplicit retains implicit selection after restoration fills PlanFile.
+	ConfigurationPlanImplicit bool `yaml:"-" json:"-" mapstructure:"-"`
 	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
 	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
 	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the

@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,10 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 func writeStampFile(t *testing.T, path, content string) {
@@ -121,8 +125,13 @@ func TestNeedsProvisioningLocalSourceStamp(t *testing.T) {
 	})
 	t.Run("a removed source is refreshed so the failure names it", func(t *testing.T) {
 		// Keep the same spec, so URI-change detection cannot be what reports it.
-		require.NoError(t, os.RemoveAll(sourceDir))
+		stamp := localSourceStamp(spec)
+		require.NotEmpty(t, stamp)
+		recordSourceStamp(target, stamp, ui.New(nil))
 		needs, reason := needsProvisioning(target, spec, true)
+		require.False(t, needs, reason)
+		require.NoError(t, os.RemoveAll(sourceDir))
+		needs, reason = needsProvisioning(target, spec, true)
 		assert.True(t, needs)
 		assert.Contains(t, reason, "Local source changed")
 	})
@@ -243,4 +252,244 @@ func TestProvisionWithoutWrapperRunsDirectly(t *testing.T) {
 	ran := false
 	require.NoError(t, provisionWithWrapper(t.Context(), func(context.Context) error { ran = true; return nil }))
 	assert.True(t, ran)
+}
+
+// An unstamped workdir of a local source that is gone is refreshed, so provisioning names the
+// missing source instead of reusing stale configuration. A remote source is unaffected.
+func TestLocalSourceChangedReportsAMissingUnstampedSource(t *testing.T) {
+	missing := &schema.VendorComponentSource{Uri: filepath.Join(t.TempDir(), "absent")}
+	changed, reason := localSourceChanged(&workdir.WorkdirMetadata{}, missing)
+	assert.True(t, changed)
+	assert.Contains(t, reason, "missing")
+
+	remote := &schema.VendorComponentSource{Uri: "git::https://example.com/org/repo.git//module?ref=v1"}
+	changed, reason = localSourceChanged(&workdir.WorkdirMetadata{}, remote)
+	assert.False(t, changed, reason)
+
+	present := t.TempDir()
+	writeStampFile(t, filepath.Join(present, "main.tf"), "# one")
+	changed, _ = localSourceChanged(&workdir.WorkdirMetadata{SourceStamp: localSourceStamp(&schema.VendorComponentSource{Uri: present})}, &schema.VendorComponentSource{Uri: present})
+	assert.False(t, changed)
+}
+
+func TestLocalSourceStampCopiedDirectoryLinks(t *testing.T) {
+	for _, dir := range []string{".terraform", ".terragrunt-cache"} {
+		t.Run(dir, func(t *testing.T) {
+			root := t.TempDir()
+			file := filepath.Join(root, dir, "nested", "main.tf")
+			writeStampFile(t, file, "# before")
+			require.NoError(t, os.Symlink(dir, filepath.Join(root, "linked")))
+			spec := &schema.VendorComponentSource{Uri: root}
+			before := localSourceStamp(spec)
+			require.NotEmpty(t, before)
+			assert.Equal(t, before, localSourceStamp(spec))
+			first := t.TempDir()
+			require.NoError(t, vendor.CopyToTarget(root, first, vendor.CopyOptions{}))
+			data, err := os.ReadFile(filepath.Join(first, "linked", "nested", "main.tf"))
+			require.NoError(t, err)
+			assert.Equal(t, "# before", string(data))
+			parentInfo, err := os.Stat(filepath.Dir(file))
+			require.NoError(t, err)
+			writeStampFile(t, file, "# after, longer")
+			// No directory metadata change can explain the changed stamp.
+			require.NoError(t, os.Chtimes(filepath.Dir(file), parentInfo.ModTime(), parentInfo.ModTime()))
+			assert.NotEqual(t, before, localSourceStamp(spec))
+			changed, _ := localSourceChanged(&workdir.WorkdirMetadata{SourceStamp: before}, spec)
+			assert.True(t, changed)
+			second := t.TempDir()
+			require.NoError(t, vendor.CopyToTarget(root, second, vendor.CopyOptions{}))
+			data, err = os.ReadFile(filepath.Join(second, "linked", "nested", "main.tf"))
+			require.NoError(t, err)
+			assert.Equal(t, "# after, longer", string(data))
+		})
+	}
+}
+
+func TestLocalSourceStampDirectoryLinkExclusions(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		target   string
+		excludes []string
+		includes []string
+		external bool
+	}{
+		{name: "git target", target: ".git"},
+		{name: "external target", external: true},
+		{name: "excluded link", target: ".terraform", excludes: []string{"linked"}},
+		{name: "excluded target", target: ".terraform", excludes: []string{".terraform"}},
+		{name: "excluded descendant", target: ".terraform", excludes: []string{"**/main.tf"}},
+		{name: "include filter", target: ".terraform", includes: []string{"**/*.txt"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			target := filepath.Join(root, tc.target)
+			if tc.external {
+				target = t.TempDir()
+			}
+			file := filepath.Join(target, "nested", "main.tf")
+			writeStampFile(t, file, "# before")
+			require.NoError(t, os.Symlink(target, filepath.Join(root, "linked")))
+			spec := &schema.VendorComponentSource{Uri: root, ExcludedPaths: tc.excludes, IncludedPaths: tc.includes}
+			before := localSourceStamp(spec)
+			require.NotEmpty(t, before)
+			writeStampFile(t, file, "# after, longer")
+			assert.Equal(t, before, localSourceStamp(spec))
+			copyDir := t.TempDir()
+			require.NoError(t, vendor.CopyToTarget(root, copyDir, vendor.CopyOptions{IncludedPaths: tc.includes, ExcludedPaths: tc.excludes}))
+			assert.NoFileExists(t, filepath.Join(copyDir, "linked", "nested", "main.tf"))
+		})
+	}
+}
+
+func TestLocalSourceStampDirectoryLinkCycles(t *testing.T) {
+	root := t.TempDir()
+	cache := filepath.Join(root, ".terraform")
+	file := filepath.Join(cache, "main.tf")
+	writeStampFile(t, file, "# before")
+	require.NoError(t, os.Symlink(cache, filepath.Join(root, "linked")))
+	require.NoError(t, os.Symlink(cache, filepath.Join(root, "alias")))
+	require.NoError(t, os.Symlink(root, filepath.Join(cache, "back")))
+	require.NoError(t, os.Symlink("missing", filepath.Join(cache, "dangling")))
+	spec := &schema.VendorComponentSource{Uri: root}
+	before := localSourceStamp(spec)
+	require.NotEmpty(t, before)
+	assert.Equal(t, before, localSourceStamp(spec))
+	writeStampFile(t, file, "# after, longer")
+	assert.NotEqual(t, before, localSourceStamp(spec))
+}
+
+func replaceStampContents(t *testing.T, path string) {
+	t.Helper()
+	before, err := os.Stat(path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte("# two"), before.Mode()))
+	require.NoError(t, os.Chtimes(path, before.ModTime(), before.ModTime()))
+	after, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, before.Size(), after.Size())
+	require.Equal(t, before.Mode(), after.Mode())
+	require.Equal(t, before.ModTime(), after.ModTime())
+}
+
+func TestLocalSourceStampEqualMetadataContents(t *testing.T) {
+	for _, kind := range []string{"regular", "file link", "directory link"} {
+		t.Run(kind, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "main.tf")
+			if kind != "regular" {
+				path = filepath.Join(root, ".terraform", "main.tf")
+			}
+			writeStampFile(t, path, "# one")
+			switch kind {
+			case "file link":
+				require.NoError(t, os.Symlink(path, filepath.Join(root, "main.tf")))
+			case "directory link":
+				require.NoError(t, os.Symlink(filepath.Dir(path), filepath.Join(root, "module")))
+			}
+			spec := &schema.VendorComponentSource{Uri: root}
+			before := localSourceStamp(spec)
+			require.NotEmpty(t, before)
+			require.Equal(t, before, localSourceStamp(spec))
+			replaceStampContents(t, path)
+			after := localSourceStamp(spec)
+			require.NotEmpty(t, after)
+			assert.NotEqual(t, before, after)
+			assert.Equal(t, after, localSourceStamp(spec))
+			changed, reason := localSourceChanged(&workdir.WorkdirMetadata{SourceStamp: before}, spec)
+			assert.True(t, changed)
+			assert.Contains(t, reason, "Local source changed")
+		})
+	}
+}
+
+func TestLocalSourceStampExcludedContents(t *testing.T) {
+	for _, kind := range []string{"excluded file", "include filter", "runtime directory", "external link"} {
+		t.Run(kind, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "main.tf")
+			spec := &schema.VendorComponentSource{Uri: root}
+			switch kind {
+			case "excluded file":
+				spec.ExcludedPaths = []string{"main.tf"}
+			case "include filter":
+				spec.IncludedPaths = []string{"**/*.txt"}
+			case "runtime directory":
+				path = filepath.Join(root, ".terraform", "main.tf")
+			case "external link":
+				path = filepath.Join(t.TempDir(), "main.tf")
+				require.NoError(t, os.Symlink(path, filepath.Join(root, "main.tf")))
+			}
+			writeStampFile(t, path, "# one")
+			before := localSourceStamp(spec)
+			require.NotEmpty(t, before)
+			replaceStampContents(t, path)
+			assert.Equal(t, before, localSourceStamp(spec))
+		})
+	}
+}
+
+func TestStampFileContentsReadErrors(t *testing.T) {
+	// A directory opens successfully but cannot be read as file contents.
+	assert.Error(t, stampFileContents(io.Discard, t.TempDir()))
+	assert.Error(t, stampFileContents(io.Discard, filepath.Join(t.TempDir(), "missing")))
+}
+
+func TestSourceRefreshLegacyRemovedResources(t *testing.T) {
+	for _, name := range []string{"resources.tf", "exports/resources.tf"} {
+		t.Run(name, func(t *testing.T) {
+			src, target := t.TempDir(), t.TempDir()
+			refreshWrite(t, src, "main.tf", "# updated")
+			refreshWrite(t, target, "main.tf", "# original")
+			refreshWrite(t, target, name, "resource \"null_resource\" \"old\" {}")
+			runtime := map[string]string{
+				"terraform.tfstate": "state", ".terraform/modules/example/resources.tf": "cached module",
+				".terraform.lock.hcl": "provider lock", "reviewed-plan": "plan", "notes.txt": "user file",
+			}
+			for path, content := range runtime {
+				refreshWrite(t, target, path, content)
+			}
+			spec := &schema.VendorComponentSource{Uri: src}
+			require.NoError(t, writeWorkdirMetadata(target, "app", "dev", spec))
+			metadata, err := workdir.ReadMetadata(target)
+			require.NoError(t, err)
+			metadata.SourceStamp = ""
+			require.NoError(t, workdir.WriteMetadata(target, metadata))
+			needs, _ := needsProvisioning(target, spec, true)
+			require.True(t, needs)
+			before, err := downloader.TreeSHA256(target)
+			require.NoError(t, err)
+			err = VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(nil))
+			require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
+			assert.ErrorContains(t, err, name)
+			assert.ErrorContains(t, err, "inspect this file")
+			after, err := downloader.TreeSHA256(target)
+			require.NoError(t, err)
+			assert.Equal(t, before, after, "failure must preserve all source, runtime files and metadata")
+			assert.NoFileExists(t, filepath.Join(target, sourceFilesManifest))
+			// Once the caller confirms and removes the obsolete file, migration succeeds.
+			require.NoError(t, os.Remove(filepath.Join(target, name)))
+			require.NoError(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(nil)))
+			assert.FileExists(t, filepath.Join(target, sourceFilesManifest))
+			for path, content := range runtime {
+				actual, err := os.ReadFile(filepath.Join(target, path))
+				require.NoError(t, err)
+				assert.Equal(t, content, string(actual))
+			}
+		})
+	}
+}
+
+func TestSourceRefreshLegacyIncomingResourcesBecomeOwned(t *testing.T) {
+	src, target := t.TempDir(), t.TempDir()
+	refreshWrite(t, src, "resources.tf", "# current")
+	refreshWrite(t, target, "resources.tf", "# previous")
+	spec := &schema.VendorComponentSource{Uri: src}
+	require.NoError(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(nil)))
+	actual, err := os.ReadFile(filepath.Join(target, "resources.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# current", string(actual))
+	require.NoError(t, os.Remove(filepath.Join(src, "resources.tf")))
+	refreshWrite(t, src, "main.tf", "# remaining")
+	require.NoError(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(nil)))
+	assert.NoFileExists(t, filepath.Join(target, "resources.tf"))
 }

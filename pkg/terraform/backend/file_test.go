@@ -70,3 +70,41 @@ func TestGenerateFileConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestHostBackendOwnership(t *testing.T) {
+	for _, mode := range []string{"unchanged", "modified", "unrecorded", "symlink", "missing", "corrupt receipt"} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.AutoGenerateBackendFile = true
+			info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+			require.NoError(t, GenerateFile(config, info, dir))
+			path := filepath.Join(dir, hostBackendName)
+			switch mode {
+			case "modified":
+				require.NoError(t, os.WriteFile(path, []byte("user changes"), 0o600))
+			case "unrecorded":
+				require.NoError(t, os.Remove(filepath.Join(dir, hostBackendReceipt)))
+			case "symlink":
+				require.NoError(t, os.Rename(path, filepath.Join(dir, "user.tf.json")))
+				require.NoError(t, os.Symlink("user.tf.json", path))
+			case "missing":
+				require.NoError(t, os.Remove(path))
+			case "corrupt receipt":
+				require.NoError(t, os.WriteFile(filepath.Join(dir, hostBackendReceipt), []byte("invalid"), 0o600))
+			}
+			err := RemoveHostBackend(dir)
+			if mode == "modified" || mode == "symlink" || mode == "corrupt receipt" {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+				assert.FileExists(t, path)
+			} else {
+				require.NoError(t, err)
+				if mode == "unrecorded" {
+					assert.FileExists(t, path)
+				} else {
+					assert.NoFileExists(t, path)
+				}
+			}
+		})
+	}
+}

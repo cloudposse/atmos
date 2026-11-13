@@ -148,7 +148,9 @@ func TestGeneratedFilesArePrivateToTheOwner(t *testing.T) {
 func TestUnitLockFileIsCopiedOnlyWhenItChanges(t *testing.T) {
 	root := t.TempDir()
 	lock := func(content string) []schema.ComponentConfigurationFile {
-		return []schema.ComponentConfigurationFile{generated(lockFileName, content, "overwrite")}
+		file := generated(lockFileName, content, "overwrite")
+		file.UnitFileCopy = true
+		return []schema.ComponentConfigurationFile{file}
 	}
 	require.NoError(t, WriteFiles(root, lock("# pinned v1\n")))
 	require.Equal(t, "# pinned v1\n", read(t, root, lockFileName))
@@ -231,4 +233,39 @@ func TestBatchFailureKeepsTheRecordsOfFilesItAlreadyWrote(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(root, "guarded.tf")))
 	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{first, second}))
 	require.Equal(t, "token = \"b\"\n", read(t, root, "secret.auto.tfvars"))
+}
+
+// An explicit generate block must keep enforcing its policy after init changes the lock.
+func TestExplicitLockFilePoliciesAfterTerraformUpdates(t *testing.T) {
+	for _, policy := range []string{"overwrite", "skip", "error"} {
+		t.Run(policy, func(t *testing.T) {
+			root := t.TempDir()
+			files := []schema.ComponentConfigurationFile{generated(lockFileName, "# generated pins\n", policy)}
+			require.NoError(t, WriteFiles(root, files))
+			require.NoError(t, os.WriteFile(filepath.Join(root, lockFileName), []byte("# upgraded by init\n"), 0o600))
+			err := WriteFiles(root, files)
+			if policy == "error" {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			} else {
+				require.NoError(t, err)
+			}
+			want := "# upgraded by init\n"
+			if policy == "overwrite" {
+				want = "# generated pins\n"
+			}
+			require.Equal(t, want, read(t, root, lockFileName))
+		})
+	}
+}
+
+func TestExplicitLockGenerationReplacesAdjacentCopy(t *testing.T) {
+	root := t.TempDir()
+	file := generated(lockFileName, "# pinned\n", "overwrite")
+	file.UnitFileCopy = true
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
+	require.NoError(t, os.WriteFile(filepath.Join(root, lockFileName), []byte("# upgraded by init\n"), 0o600))
+	// The explicit block has identical bytes to the old copy; provenance alone changes.
+	file.UnitFileCopy = false
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
+	require.Equal(t, "# pinned\n", read(t, root, lockFileName))
 }

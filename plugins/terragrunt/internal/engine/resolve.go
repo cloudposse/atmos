@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
@@ -143,13 +143,16 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	}
 	if discover {
 		cfg, err := config.PartialParseConfigFile(ctx, logger, environment,
-			pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource, config.TerraformBlock, config.TerragruntFlags, config.TerragruntVersionConstraints, config.FeatureFlagsBlock, config.ExcludeBlock, config.ErrorsBlock), path, nil)
+			pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource, config.TerragruntFlags, config.TerragruntVersionConstraints, config.FeatureFlagsBlock, config.ExcludeBlock, config.ErrorsBlock), path, nil)
 		if err != nil {
 			return nil, err
 		}
 		// Reject unsupported settings now, so every selected unit is validated before any
 		// infrastructure command runs.
 		if err := rejectUnsupported(cfg, path); err != nil {
+			return nil, err
+		}
+		if err := checkExecutionSyntax(environment.FS, cfg, path); err != nil {
 			return nil, err
 		}
 		result := &model.Resolution{Path: path, Files: append(pctx.FilesRead.Paths(), path)}
@@ -163,8 +166,9 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 			result.Source = *cfg.Terraform.Source
 			if plainLocalSource(result.Source) {
 				result.Source = localPath(filepath.Dir(path), result.Source)
-				// A missing local module fails discovery, so a bulk run stops before any unit runs.
-				if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
+				// A missing local module fails discovery, so a bulk run stops before any unit runs. The
+				// active filesystem also sees modules that a generated stack unit names in the overlay.
+				if info, err := environment.FS.Stat(result.Source); err != nil || !info.IsDir() {
 					return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
 				}
 				result.Folders = []string{result.Source}
@@ -189,7 +193,13 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 				if _, err := environment.FS.Stat(physical); err != nil {
 					return nil, dependencyProblem(path, dependency, err)
 				}
-				result.OutputDependencies = append(result.OutputDependencies, physical)
+				if !slices.Contains(result.OutputDependencies, physical) {
+					result.OutputDependencies = append(result.OutputDependencies, physical)
+				}
+				// Output reads also require a scheduling edge before preparation.
+				if !slices.Contains(result.Dependencies, physical) {
+					result.Dependencies = append(result.Dependencies, physical)
+				}
 			}
 		}
 		if cfg.Dependencies != nil {
@@ -208,7 +218,9 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 				if err != nil {
 					return nil, dependencyProblem(path, dependency, err)
 				}
-				result.Dependencies = append(result.Dependencies, physical)
+				if !slices.Contains(result.Dependencies, physical) {
+					result.Dependencies = append(result.Dependencies, physical)
+				}
 			}
 		}
 		return result, nil
@@ -226,6 +238,9 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	var cfg *config.TerragruntConfig
 	if request.Phase == "backend" {
 		cfg, err = config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
+		if err == nil {
+			err = checkBackendGeneration(environment.FS, append(pctx.FilesRead.Paths(), path))
+		}
 	} else {
 		cfg, err = config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
 	}
@@ -273,7 +288,7 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	identity := result.Source
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(path), result.Source)
-		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
+		if info, err := environment.FS.Stat(result.Source); err != nil || !info.IsDir() {
 			return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
 		}
 		identity, result.Folders = result.Source, []string{result.Source}
