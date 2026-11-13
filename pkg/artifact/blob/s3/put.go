@@ -65,8 +65,8 @@ func (s *Store) planPut(ctx context.Context, key string, opts blob.PutOptions) (
 	if err := blob.ValidateTags(tags); err != nil {
 		return nil, err
 	}
-	if opts.Condition.Kind == blob.ConditionIfMatch && opts.Condition.ETag == "" {
-		return nil, blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: if-match requires an ETag", errUtils.ErrBlobInvalid))
+	if err := validateCondition(key, opts.Condition); err != nil {
+		return nil, err
 	}
 	if err := s.Capabilities().CheckPut(storeName, key, opts.Condition); err != nil {
 		return nil, err
@@ -86,6 +86,22 @@ func (s *Store) planPut(ctx context.Context, key string, opts blob.PutOptions) (
 		tags:      encodeTags(tags),
 		partSize:  effectivePartSize(opts.Size, s.cfg.partSize),
 	}, nil
+}
+
+// validateCondition rejects conditions the store cannot translate into request headers. Unknown
+// kinds must fail before any write: sending them unconditionally would silently drop the guard.
+func validateCondition(key string, cond blob.Condition) error {
+	switch cond.Kind {
+	case blob.ConditionNone, blob.ConditionIfAbsent:
+		return nil
+	case blob.ConditionIfMatch:
+		if cond.ETag == "" {
+			return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: if-match requires an ETag", errUtils.ErrBlobInvalid))
+		}
+		return nil
+	default:
+		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: unknown condition kind %d", errUtils.ErrBlobInvalid, cond.Kind))
+	}
 }
 
 // effectivePartSize grows the part size so a known-size body fits within the S3 part limit.

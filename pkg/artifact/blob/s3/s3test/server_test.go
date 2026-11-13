@@ -366,6 +366,7 @@ func TestDiscardBodiesKeepsSizesAndETags(t *testing.T) {
 func TestEmulatorFromEnvSkipsWhenUnset(t *testing.T) {
 	t.Setenv(EmulatorEndpointEnv, "")
 	t.Setenv(EmulatorBucketEnv, "")
+	t.Setenv(EmulatorRegionEnv, "")
 	result := t.Run("inner", func(t *testing.T) {
 		EmulatorFromEnv(t)
 		t.Error("EmulatorFromEnv must skip when the environment is unset")
