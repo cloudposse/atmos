@@ -1,0 +1,4 @@
+name: fixture
+count: 42
+enabled: true
+items: [a, b]

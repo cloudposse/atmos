@@ -39,6 +39,9 @@ func TestFindLocalFileResolutionOrder(t *testing.T) {
 	writeIncludeFixture(t, filepath.Join(baseDir, "stacks", "deploy", "demo", "host.yaml"), "kind: host\n")
 	// A file that exists only in the working directory.
 	writeIncludeFixture(t, filepath.Join(workDir, "cwd-only.yaml"), "kind: cwd-only\n")
+	// A file under the working directory that coincidentally shares its path with a
+	// go-getter remote shorthand reference.
+	writeIncludeFixture(t, filepath.Join(workDir, "github.com", "hashicorp", "terraform"), "kind: coincidence\n")
 
 	t.Chdir(workDir)
 
@@ -85,6 +88,11 @@ func TestFindLocalFileResolutionOrder(t *testing.T) {
 		{
 			name:    "missing file resolves to empty",
 			include: filepath.Join("docs", "missing.yaml"),
+			want:    "",
+		},
+		{
+			name:    "go-getter remote shorthand is never satisfied by a coincidentally matching working-directory file",
+			include: "github.com/hashicorp/terraform",
 			want:    "",
 		},
 	}

@@ -3,7 +3,9 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -392,11 +394,13 @@ func TestEKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
 				ARN:                      clusterARN,
 				Region:                   "us-east-2",
 			}
-			clusterConfig := kube.BuildClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), tt.alias)
+			clusterInfo, buildErr := awsCloud.BuildKubeClusterInfo(info, "dev-admin")
+			require.NoError(t, buildErr)
+			clusterConfig := kube.BuildClusterConfig(clusterInfo, tt.alias)
 
 			mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 			require.NoError(t, err)
-			_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), tt.alias, "merge")
+			_, err = mgr.WriteClusterConfig(clusterInfo, tt.alias, "merge")
 			require.NoError(t, err)
 
 			// Verify entries exist.
@@ -727,7 +731,9 @@ func TestEKSIntegration_Cleanup_NoAliasWithARNInKubeconfig(t *testing.T) {
 	}
 	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 	require.NoError(t, err)
-	_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "dev-admin"), "", "merge")
+	clusterInfo, buildErr := awsCloud.BuildKubeClusterInfo(info, "dev-admin")
+	require.NoError(t, buildErr)
+	_, err = mgr.WriteClusterConfig(clusterInfo, "", "merge")
 	require.NoError(t, err)
 
 	// Verify entry exists.
@@ -780,7 +786,9 @@ func TestEKSIntegration_FindClusterARN_MultipleCluster(t *testing.T) {
 			ARN:                      cluster.arn,
 			Region:                   "us-east-2",
 		}
-		_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "admin"), cluster.alias, "merge")
+		clusterInfo, buildErr := awsCloud.BuildKubeClusterInfo(info, "admin")
+		require.NoError(t, buildErr)
+		_, err = mgr.WriteClusterConfig(clusterInfo, cluster.alias, "merge")
 		require.NoError(t, err)
 	}
 
@@ -814,7 +822,9 @@ func TestEKSIntegration_FindClusterARN_NoMatch(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/other-cluster",
 		Region:                   "us-east-2",
 	}
-	_, err = mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, "admin"), "other", "merge")
+	clusterInfo, buildErr := awsCloud.BuildKubeClusterInfo(info, "admin")
+	require.NoError(t, buildErr)
+	_, err = mgr.WriteClusterConfig(clusterInfo, "other", "merge")
 	require.NoError(t, err)
 
 	integration := &EKSIntegration{
@@ -830,4 +840,36 @@ func TestEKSIntegration_FindClusterARN_NoMatch(t *testing.T) {
 	_, err = integration.findClusterARN(mgr)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no cluster ARN found matching missing-cluster")
+}
+
+func TestEKSIntegration_Execute_WorkingDirectoryUnavailable(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Only Linux reliably fails Getwd after removing the current directory")
+	}
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	require.NoError(t, os.Remove(projectDir))
+
+	origFactory, origDescribe := eksClientFactory, eksDescribeCluster
+	t.Cleanup(func() {
+		eksClientFactory, eksDescribeCluster = origFactory, origDescribe
+	})
+	eksClientFactory = func(context.Context, types.ICredentials, string) (awsCloud.EKSClient, error) {
+		return nil, nil
+	}
+	eksDescribeCluster = func(context.Context, awsCloud.EKSClient, string, string) (*awsCloud.EKSClusterInfo, error) {
+		return &awsCloud.EKSClusterInfo{Name: "dev-cluster", Region: "us-east-2"}, nil
+	}
+	integration := &EKSIntegration{
+		identity: "dev-admin",
+		cluster: &schema.Cluster{
+			Name: "dev-cluster", Region: "us-east-2",
+			Kubeconfig: &schema.KubeconfigSettings{Path: kubeconfigPath},
+		},
+	}
+	err := integration.Execute(t.Context(), nil)
+	require.ErrorIs(t, err, errUtils.ErrEKSIntegrationFailed)
+	require.ErrorIs(t, err, errUtils.ErrWorkingDirAccessFailed)
+	assert.NoFileExists(t, kubeconfigPath)
 }

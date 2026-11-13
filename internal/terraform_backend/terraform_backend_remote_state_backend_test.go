@@ -95,7 +95,8 @@ func TestResolveRemoteStateBackendSections(t *testing.T) {
 		assert.Equal(t, "s3", GetComponentBackendType(got))
 
 		// The assume-role ARN resolved from the effective backend is the read-only role.
-		assert.Equal(t,
+		assert.Equal(
+			t,
 			"arn:aws:iam::123456789012:role/example-tfstate-ro",
 			GetS3BackendAssumeRoleArn(&remoteBackend),
 		)

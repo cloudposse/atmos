@@ -358,6 +358,7 @@ func parsePodmanPorts(raw interface{}) []PortBinding {
 		// Expand consecutive host/container ports within the range.
 		for i := 0; i < span; i++ {
 			expanded := PortBinding{
+				Bind:          binding.Bind,
 				ContainerPort: binding.ContainerPort + i,
 				HostPort:      binding.HostPort + i,
 				Protocol:      binding.Protocol,
@@ -395,7 +396,8 @@ func parsePodmanPort(entry interface{}) (PortBinding, int, bool) {
 	if span <= 0 {
 		span = 1
 	}
-	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, span, true
+	bind, _ := m["host_ip"].(string)
+	return PortBinding{Bind: bind, ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, span, true
 }
 
 // JsonFieldInt coerces a JSON-decoded numeric field to an int. The json.Unmarshal

@@ -75,3 +75,10 @@ func TestGitCloneFlagsBindEnvVars(t *testing.T) {
 	assert.True(t, v.GetBool(viperKey(cloneViperPrefix, flagSubmodules)))
 	assert.True(t, v.GetBool(viperKey(cloneViperPrefix, flagCI)))
 }
+
+func TestGitCloneRefEnvironment(t *testing.T) {
+	v := viper.New()
+	require.NoError(t, newCloneParser().BindToViper(v))
+	t.Setenv("ATMOS_GIT_REF", "refs/tags/v1")
+	assert.Equal(t, "refs/tags/v1", v.GetString(viperKey(cloneViperPrefix, flagRef)))
+}

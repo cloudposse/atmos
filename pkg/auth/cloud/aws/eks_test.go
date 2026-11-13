@@ -2,6 +2,9 @@ package aws
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -12,8 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"k8s.io/client-go/tools/clientcmd"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 )
 
@@ -133,8 +138,9 @@ func TestBuildKubeClusterInfo_WithIdentity(t *testing.T) {
 		Region:                   "us-east-2",
 	}
 
-	clusterInfo := BuildKubeClusterInfo(info, "dev-admin")
+	clusterInfo, err := BuildKubeClusterInfo(info, "dev-admin")
 
+	require.NoError(t, err)
 	assert.Equal(t, "dev-cluster", clusterInfo.Name)
 	assert.Equal(t, "https://XXXX.gr7.us-east-2.eks.amazonaws.com", clusterInfo.Endpoint)
 	assert.Equal(t, "LS0tLS1CRUdJTi...", clusterInfo.CertificateAuthorityData)
@@ -142,7 +148,7 @@ func TestBuildKubeClusterInfo_WithIdentity(t *testing.T) {
 	assert.Equal(t, "us-east-2", clusterInfo.Region)
 	assert.Equal(t, "eks", clusterInfo.UserPrefix)
 	assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "dev-cluster", "--region", "us-east-2", "--identity=dev-admin"}, clusterInfo.ExecArgs)
-	require.Len(t, clusterInfo.ExecEnv, 1)
+	require.Len(t, clusterInfo.ExecEnv, 2)
 	assert.Equal(t, "ATMOS_IDENTITY", clusterInfo.ExecEnv[0].Name)
 	assert.Equal(t, "dev-admin", clusterInfo.ExecEnv[0].Value)
 }
@@ -155,8 +161,96 @@ func TestBuildKubeClusterInfo_WithoutIdentity(t *testing.T) {
 		Region:   "us-east-2",
 	}
 
-	clusterInfo := BuildKubeClusterInfo(info, "")
+	clusterInfo, err := BuildKubeClusterInfo(info, "")
 
+	require.NoError(t, err)
 	assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "dev-cluster", "--region", "us-east-2"}, clusterInfo.ExecArgs)
-	assert.Empty(t, clusterInfo.ExecEnv)
+	require.Len(t, clusterInfo.ExecEnv, 1)
+	workingDir, err := os.Getwd()
+	require.NoError(t, err)
+	assert.Equal(t, "ATMOS_CHDIR", clusterInfo.ExecEnv[0].Name)
+	assert.Equal(t, workingDir, clusterInfo.ExecEnv[0].Value)
+}
+
+// Regression for #3674: SDK region resolution must survive in the written exec plugin.
+func TestDescribeCluster_ResolvedRegion(t *testing.T) {
+	for _, tt := range []struct {
+		name, arn, region, want string
+		wantErr                 bool
+	}{
+		{name: "default region", arn: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", want: "eu-central-1"},
+		{name: "GovCloud", arn: "arn:aws-us-gov:eks:us-gov-west-1:123456789012:cluster/bar", want: "us-gov-west-1"},
+		{name: "explicit region", arn: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", region: "eu-central-1", want: "eu-central-1"},
+		{name: "explicit region without ARN", region: "eu-central-1", want: "eu-central-1"},
+		{name: "missing ARN", wantErr: true},
+		{name: "malformed ARN", arn: "invalid", wantErr: true},
+		{name: "missing region", arn: "arn:aws:eks::123456789012:cluster/bar", wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewMockEKSClient(gomock.NewController(t))
+			client.EXPECT().DescribeCluster(gomock.Any(), gomock.Any()).Return(&eks.DescribeClusterOutput{
+				Cluster: &ekstypes.Cluster{Arn: aws.String(tt.arn)},
+			}, nil)
+			info, err := DescribeCluster(context.Background(), client, "bar", tt.region)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrEKSDescribeCluster)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, info.Region)
+			clusterInfo, err := BuildKubeClusterInfo(info, "foo")
+			require.NoError(t, err)
+			config := kube.BuildClusterConfig(clusterInfo, "")
+			user := config.AuthInfos["atmos-eks-bar-"+tt.want]
+			require.NotNil(t, user)
+			assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "bar", "--region", tt.want, "--identity=foo"}, user.Exec.Args)
+		})
+	}
+}
+
+// Regression for #3673: persist the effective directory, not a relative ATMOS_CHDIR.
+func TestBuildKubeClusterInfo_WorkingDirectory(t *testing.T) {
+	projectDir := filepath.Join(t.TempDir(), "project with spaces")
+	require.NoError(t, os.Mkdir(projectDir, 0o700))
+	t.Chdir(projectDir)
+	t.Setenv("ATMOS_CHDIR", "relative-original-value")
+	workingDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	info, err := BuildKubeClusterInfo(&EKSClusterInfo{
+		Name: "bar", Region: "eu-central-1", ARN: "arn:aws:eks:eu-central-1:123456789012:cluster/bar",
+	}, "foo")
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "config")
+	mgr, err := kube.NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+	_, err = mgr.WriteClusterConfig(info, "", "merge")
+	require.NoError(t, err)
+
+	// Reading from an unrelated directory must retain the original auth context.
+	t.Chdir(t.TempDir())
+	config, err := clientcmd.LoadFromFile(path)
+	require.NoError(t, err)
+	user := config.AuthInfos["atmos-eks-bar-eu-central-1"]
+	require.NotNil(t, user)
+	env := map[string]string{}
+	for _, entry := range user.Exec.Env {
+		env[entry.Name] = entry.Value
+	}
+	assert.Equal(t, workingDir, env["ATMOS_CHDIR"])
+	assert.True(t, filepath.IsAbs(env["ATMOS_CHDIR"]))
+	assert.Equal(t, "foo", env["ATMOS_IDENTITY"])
+}
+
+func TestBuildKubeClusterInfo_WorkingDirectoryUnavailable(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Only Linux reliably fails Getwd after removing the current directory")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	require.NoError(t, os.Remove(dir))
+
+	info, err := BuildKubeClusterInfo(&EKSClusterInfo{Name: "bar", Region: "eu-central-1"}, "foo")
+	require.ErrorIs(t, err, errUtils.ErrWorkingDirAccessFailed)
+	assert.Nil(t, info)
 }

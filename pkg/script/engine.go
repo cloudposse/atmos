@@ -31,6 +31,9 @@ type Spec struct {
 	// OwnsTerminal permits nested interactive renderers through host output wrappers.
 	// Hosts must leave it false for captured, suppressed, or shared output.
 	OwnsTerminal bool
+	// ChildEnvironment forwards rendering preferences for subprocess output; stream is false for captures.
+	// Hosts with wrapped output use the actual destination, without granting TTY input.
+	ChildEnvironment func(env []string, stream bool) []string
 	// Parallel marks execution inside a control runner that cannot grant exclusive terminal access.
 	Parallel              bool
 	Component             *ComponentRef

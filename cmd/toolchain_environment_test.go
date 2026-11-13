@@ -81,6 +81,7 @@ func TestRootCommandContinuesWithoutUsableManifest(t *testing.T) {
 	for _, kind := range []string{"unreadable", "conflicting"} {
 		t.Run(kind, func(t *testing.T) {
 			_ = NewTestKit(t)
+			keepInheritedToolchainPath(t)
 			root := t.TempDir()
 			config := &schema.AtmosConfiguration{BasePathAbsolute: root}
 			installPath := useNeverInstallToolchain(t, config)
@@ -124,6 +125,7 @@ func TestInstalledProjectToolsLeavesPathWithoutDefaults(t *testing.T) {
 	for _, unreadable := range []bool{false, true} {
 		t.Run(map[bool]string{false: "absent", true: "unreadable"}[unreadable], func(t *testing.T) {
 			_ = NewTestKit(t)
+			keepInheritedToolchainPath(t)
 			root := t.TempDir()
 			config := &schema.AtmosConfiguration{BasePathAbsolute: root}
 			useNeverInstallToolchain(t, config)

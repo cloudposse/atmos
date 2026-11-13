@@ -42,7 +42,7 @@ func TestCreateCommandThroughScaffold(t *testing.T) {
 	assert.Contains(t, string(content), `"network":`)
 	require.Error(t, cmd.RunE(cmd, nil))
 	assert.True(t, stackDeleteCmd.Hidden)
-	assert.NotEmpty(t, stackDeleteCmd.Deprecated)
+	assert.Equal(t, "atmos stack config delete", stackDeleteCmd.Annotations[legacyReplacementAnnotation])
 }
 
 func TestCreatePreviewShowsContentsAndHooks(t *testing.T) {

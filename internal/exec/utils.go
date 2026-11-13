@@ -27,6 +27,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
 	"github.com/cloudposse/atmos/pkg/terraform/inspect"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -1130,6 +1131,12 @@ func processStacks(
 	configAndStacksInfo.ComponentSection["deps"] = componentDeps
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
+	// Admission runs before workspace and Spacelift/Atlantis name templates: a template
+	// can read an identity-backed store, and a failure there must not mask a denial.
+	if err := enforceComponentAdmission(atmosConfig, &configAndStacksInfo); err != nil {
+		return configAndStacksInfo, err
+	}
+
 	// Terraform workspace.
 	workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 	if err != nil {
@@ -1145,10 +1152,6 @@ func processStacks(
 	// is a snapshot of ComponentSection taken before templates run. Computing them
 	// here (instead of after templates) doesn't lose any information.
 	if err := computeSpaceliftAndAtlantisNames(atmosConfig, &configAndStacksInfo); err != nil {
-		return configAndStacksInfo, err
-	}
-
-	if err := enforceComponentAdmission(atmosConfig, &configAndStacksInfo); err != nil {
 		return configAndStacksInfo, err
 	}
 
@@ -1188,7 +1191,7 @@ func processStacks(
 		}
 		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
 			templateInput,
-			effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+			delimiters.ForComponent(atmosConfig, &settingsSectionStruct),
 		)
 		if err != nil {
 			return configAndStacksInfo, err

@@ -110,6 +110,13 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	log.Debug("Resolving auth config for component command",
 		"stack", info.Stack, "component", info.ComponentFromArg, "subcommand", info.SubCommand)
 
+	// Policy admission must not depend on valid credentials: a command that policy
+	// denies (for example, an agent running destroy on production) fails here,
+	// before any identity is resolved or logged in to.
+	if err := AdmitComponent(atmosConfig, info, nil); err != nil {
+		return nil, err
+	}
+
 	// Get merged auth config (global + component-specific if stack/component are set).
 	// getMergedAuthConfig logs on debug when falling back to global config after an error.
 	mergedAuthConfig, err := defaultMergedAuthConfigGetter(atmosConfig, info)

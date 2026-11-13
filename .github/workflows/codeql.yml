@@ -59,7 +59,7 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
           # If you wish to specify custom queries, you can do so here or in a config file.
@@ -72,7 +72,7 @@ jobs:
       # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
       # If this step fails, then you should remove it and run the build manually (see below)
       - name: Autobuild
-        uses: github/codeql-action/autobuild@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
 
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
@@ -85,7 +85,7 @@ jobs:
       #     ./location_of_script_within_repo/buildscript.sh
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:${{matrix.language}}"
           # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
@@ -175,11 +175,11 @@ jobs:
       # GO-2026-6597 (containerd/v2 < 2.3.6) landed — which exceeds the public
       # runner's 16GB RAM and gets the runner OOM-killed (seen as `Killed`,
       # exit 143 "shutdown signal", or "The operation was canceled"). Swap
-      # absorbs the overflow; with 20G added the pass finishes in ~12 min.
+      # absorbs the overflow; request 30 GiB for the full scan.
       - name: Add swap space
         uses: ./.github/actions/swap-space
         with:
-          size-gb: '20'
+          size-gb: '30'
 
       - name: Run govulncheck
         shell: bash
@@ -210,7 +210,7 @@ jobs:
         # Setup failures produce no report; preserve the original failure without
         # adding a misleading missing-file upload error.
         if: ${{ always() && hashFiles('govulncheck.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
@@ -285,7 +285,7 @@ jobs:
 
       - name: Upload SARIF to code-scanning
         if: ${{ !cancelled() && steps.semgrep-sarif.outcome == 'success' }}
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: semgrep-upload.sarif
           category: semgrep
@@ -432,7 +432,7 @@ jobs:
         # option here either: it would leave the native "CodeQL" code-scanning
         # required check without this SARIF's contribution.
         if: always()
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: golangci-lint.sarif
           ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
