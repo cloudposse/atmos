@@ -90,7 +90,7 @@ func stageSourceRefresh(ctx context.Context, config *schema.AtmosConfiguration, 
 	}
 	stage, err := os.MkdirTemp(filepath.Dir(target), ".atmos-source-stage-")
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: create source stage: %w", errUtils.ErrSourceCopyFailed, err)
 	}
 	defer os.RemoveAll(stage)
 	stagedOpts := opts
@@ -157,11 +157,11 @@ func publishSource(ctx context.Context, stage, target string, config map[string]
 		return err
 	}
 	if err := os.MkdirAll(target, TargetDirPermissions); err != nil {
-		return err
+		return fmt.Errorf("%w: create source target: %w", errUtils.ErrSourceCopyFailed, err)
 	}
 	backup, err := os.MkdirTemp(filepath.Dir(target), ".atmos-source-rollback-")
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: create source rollback directory: %w", errUtils.ErrSourceCopyFailed, err)
 	}
 	publication := sourcePublication{stage: stage, target: target, backup: backup, rename: rename}
 	return publication.publish(ctx, changes, incoming)
@@ -174,10 +174,10 @@ func readSourceInventory(target string) (sourceFiles, error) {
 		return previous, nil
 	}
 	if err != nil {
-		return previous, err
+		return previous, fmt.Errorf("%w: read source ownership: %w", errUtils.ErrSourceCopyFailed, err)
 	}
 	if err := json.Unmarshal(data, &previous); err != nil {
-		return previous, fmt.Errorf("read source ownership: %w", err)
+		return previous, fmt.Errorf("%w: read source ownership: %w", errUtils.ErrSourceCopyFailed, err)
 	}
 	for _, name := range previous.Files {
 		if !safeSourceRelative(name) {
@@ -392,7 +392,10 @@ func protectLocalBackendPaths(protected map[string]bool, root string, config map
 func runtimeOwned(path, relative string, protected map[string]bool) (bool, error) {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
-		return false, nil
+		// An absent destination under a protected runtime root (local state, .terraform, a configured
+		// backend path) is still runtime-owned: installing a source file there would plant initial state.
+		// An absent provider lock file is not under such a root, so it still reaches installation.
+		return underProtectedRoot(path, protected), nil
 	} else if err != nil {
 		return false, err
 	}
@@ -410,12 +413,20 @@ func runtimeOwned(path, relative string, protected map[string]bool) (bool, error
 }
 
 func protectedRuntimePath(path, relative string, protected map[string]bool) bool {
+	if underProtectedRoot(path, protected) {
+		return true
+	}
+	return strings.HasSuffix(filepath.Base(path), ".terraform.lock.hcl") || relative == ".atmos/metadata.json" || relative == ".atmos/source.json"
+}
+
+// underProtectedRoot reports whether path is a protected runtime root or lies beneath one.
+func underProtectedRoot(path string, protected map[string]bool) bool {
 	for root := range protected {
 		if path == root || strings.HasPrefix(path, root+string(filepath.Separator)) {
 			return true
 		}
 	}
-	return strings.HasSuffix(filepath.Base(path), ".terraform.lock.hcl") || relative == ".atmos/metadata.json" || relative == ".atmos/source.json"
+	return false
 }
 
 // checkSourceDestination rejects a destination that traverses a symlink and, for an incoming file,
@@ -475,7 +486,7 @@ func sourceChange(stage, target, name string, flags sourceChangeFlags, protected
 	path := filepath.Join(target, filepath.FromSlash(name))
 	runtime, err := runtimeOwned(path, name, protected)
 	if err != nil {
-		return false, fmt.Errorf("inspect runtime artifact %s: %w", name, err)
+		return false, fmt.Errorf("%w: inspect runtime artifact %s: %w", errUtils.ErrSourceCopyFailed, name, err)
 	}
 	if runtime {
 		if install && !strings.HasSuffix(filepath.Base(name), ".terraform.lock.hcl") {

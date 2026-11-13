@@ -104,3 +104,84 @@ func TestSourceRefreshRejectsFileDirectoryTypeChange(t *testing.T) {
 		})
 	}
 }
+
+// TestSourceRefreshRejectsRuntimePathsOnFreshCheckout verifies that a source cannot plant initial
+// local state or Terraform runtime files when the destination does not exist yet, while ordinary
+// source files and an absent provider lock file still install.
+func TestSourceRefreshRejectsRuntimePathsOnFreshCheckout(t *testing.T) {
+	cases := []struct {
+		name    string
+		file    string
+		config  map[string]any
+		wantErr bool
+	}{
+		{name: "default-state", file: "terraform.tfstate", wantErr: true},
+		{name: "state-backup", file: "terraform.tfstate.backup", wantErr: true},
+		{name: "workspace-state", file: "terraform.tfstate.d/dev/terraform.tfstate", wantErr: true},
+		{name: "terraform-dir", file: ".terraform/terraform.tfstate", wantErr: true},
+		{
+			name:    "configured-backend-path",
+			file:    "state/custom.tfstate",
+			config:  map[string]any{"backend": map[string]any{"local": map[string]any{"path": "state/custom.tfstate"}}},
+			wantErr: true,
+		},
+		{name: "provider-lock", file: ".terraform.lock.hcl"},
+		{name: "ordinary-file", file: "data/custom.tfstate"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src, target := t.TempDir(), filepath.Join(t.TempDir(), "target")
+			refreshWrite(t, src, "main.tf", "# source")
+			refreshWrite(t, src, tc.file, `{"version":4,"lineage":"shipped-by-source","serial":1}`)
+			spec := &schema.VendorComponentSource{Uri: src}
+			err := VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(tc.config))
+			_, statErr := os.Lstat(filepath.Join(target, filepath.FromSlash(tc.file)))
+			if tc.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
+				require.ErrorContains(t, err, "collides with runtime artifact "+tc.file)
+				require.True(t, os.IsNotExist(statErr), "the source file must not be published at a runtime path")
+				return
+			}
+			require.NoError(t, err)
+			require.NoError(t, statErr, "a non-runtime source file must still be installed")
+		})
+	}
+}
+
+// TestRuntimeOwnedAbsentDestination verifies the missing-destination branch directly: absent paths under a
+// protected root are runtime-owned, and absent paths elsewhere, including the provider lock file, are not.
+func TestRuntimeOwnedAbsentDestination(t *testing.T) {
+	target := t.TempDir()
+	protected := runtimePaths(target, nil)
+	for relative, want := range map[string]bool{
+		"terraform.tfstate":            true,
+		".terraform/modules/x/main.tf": true,
+		".terraform.lock.hcl":          false,
+		"modules/terraform.tfstate":    false,
+		"terraform.tfstate.d.notes":    false,
+	} {
+		owned, err := runtimeOwned(filepath.Join(target, filepath.FromSlash(relative)), relative, protected)
+		require.NoError(t, err)
+		assert.Equal(t, want, owned, relative)
+	}
+}
+
+// TestReadSourceInventoryWrapsFailures verifies that unreadable and unparseable ownership manifests
+// carry ErrSourceCopyFailed and keep their cause.
+func TestReadSourceInventoryWrapsFailures(t *testing.T) {
+	t.Run("unparseable", func(t *testing.T) {
+		target := t.TempDir()
+		refreshWrite(t, target, sourceFilesManifest, "not json")
+		_, err := readSourceInventory(target)
+		require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
+		require.ErrorContains(t, err, "read source ownership")
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		target := t.TempDir()
+		// A directory at the manifest path makes the read fail with an error other than not-exist.
+		require.NoError(t, os.MkdirAll(filepath.Join(target, filepath.FromSlash(sourceFilesManifest)), 0o755))
+		_, err := readSourceInventory(target)
+		require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
+		require.ErrorContains(t, err, "read source ownership")
+	})
+}
