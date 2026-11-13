@@ -201,12 +201,16 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 	stacks := map[string]any{"dev": map[string]any{}}
 	var described bool
 	var scheduled bool
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var initializerContext context.Context
 
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
 	// The query path loads configuration through InitCliConfigWithContext. InitCliConfig is only a
 	// wrapper around it, so patching the wrapper would not intercept this call.
-	patches.ApplyFunc(cfg.InitCliConfigWithContext, func(_ context.Context, info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	patches.ApplyFunc(cfg.InitCliConfigWithContext, func(got context.Context, info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		initializerContext = got
 		require.Equal(t, "dev", info.Stack)
 		require.True(t, processStacks)
 		return schema.AtmosConfiguration{}, nil
@@ -266,9 +270,12 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		ProcessFunctions: true,
 		Skip:             []string{"skip-me"},
 	}
-	require.NoError(t, testExecutor(t).ExecuteTerraformQuery(info))
+	require.NoError(t, testExecutor(t).ExecuteTerraformQueryWithContext(ctx, info))
 	require.True(t, described)
 	require.True(t, scheduled)
+	require.NotNil(t, initializerContext)
+	cancel()
+	require.ErrorIs(t, initializerContext.Err(), context.Canceled)
 }
 
 func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {

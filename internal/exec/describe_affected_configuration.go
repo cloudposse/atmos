@@ -3,9 +3,7 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"slices"
-	"sync/atomic"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
@@ -62,22 +60,6 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 	return filtered, nil
 }
 
-// configurationWatchPaths resolves provider-owned watches against the project
-// root without putting checkout-specific absolute paths into stack comparisons.
-// Existing YAML dependency path semantics remain unchanged. It reports whether
-// the dependencies belong to a provider-discovered component.
-func configurationWatchPaths(config *schema.AtmosConfiguration, settings map[string]any, deps []schema.ComponentDependency) bool {
-	if _, provider := settings["configuration"]; !provider {
-		return false
-	}
-	for i := range deps {
-		if !filepath.IsAbs(deps[i].Path) {
-			deps[i].Path = filepath.Join(config.BasePathAbsolute, deps[i].Path)
-		}
-	}
-	return true
-}
-
 // configurationMatchInputs returns the change set and dependencies to match.
 // Provider watches are rooted at BasePathAbsolute, and base-path resolution
 // can spell that root differently from the repository root the changed files
@@ -106,27 +88,15 @@ func configuredDependencyPath(deps, matched []schema.ComponentDependency, path s
 	return path
 }
 
-// resolvedChangedFilesView pairs a change-set index with its resolved copy.
-type resolvedChangedFilesView struct {
-	source, resolved *changedFilesIndex
-}
-
-// lastResolvedChangedFiles holds the view for the most recent index, so a run
-// resolves its change set once rather than once per provider component. The
-// index is immutable after construction, so pointer identity is a safe key.
-var lastResolvedChangedFiles atomic.Pointer[resolvedChangedFilesView]
-
 // resolvedChangedFiles returns the change set with symlinks and short names resolved.
 func resolvedChangedFiles(index *changedFilesIndex) *changedFilesIndex {
-	if view := lastResolvedChangedFiles.Load(); view != nil && view.source == index {
-		return view.resolved
-	}
-	files := index.getAllFiles()
-	resolved := make([]string, len(files))
-	for i, file := range files {
-		resolved[i] = evalSymlinksBestEffort(file)
-	}
-	view := &resolvedChangedFilesView{source: index, resolved: &changedFilesIndex{allFiles: resolved}}
-	lastResolvedChangedFiles.Store(view)
-	return view.resolved
+	index.resolvedOnce.Do(func() {
+		files := index.getAllFiles()
+		resolved := make([]string, len(files))
+		for i, file := range files {
+			resolved[i] = evalSymlinksBestEffort(file)
+		}
+		index.resolved = &changedFilesIndex{allFiles: resolved}
+	})
+	return index.resolved
 }

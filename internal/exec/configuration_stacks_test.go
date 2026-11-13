@@ -43,7 +43,8 @@ func TestConfigurationStacksDoNotReuseAnotherInvocationsCache(t *testing.T) {
 		provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
 		config.ComponentConfigurations = provider
 		definitions := map[string]map[string]any{"live": {"name": "live", "components": map[string]any{"terraform": map[string]any{"app": map[string]any{"source": "./module", "vars": map[string]any{"revision": revision}}}}}}
-		provider.EXPECT().Discover(gomock.Any()).Return(definitions, nil).Times(2)
+		// FindStacksMap, then ValidateStacks for its stack map and its schema check.
+		provider.EXPECT().Discover(gomock.Any()).Return(definitions, nil).Times(3)
 		stacks, _, _, err := FindStacksMap(config, false)
 		require.NoError(t, err)
 		app := stacks["live"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)
@@ -116,4 +117,58 @@ func TestValidateStacksMissingStacksDirStillRunsDiscovery(t *testing.T) {
 	// Without discovery, a missing stacks directory remains a validation no-op.
 	plain := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: missing}
 	require.NoError(t, ValidateStacks(plain))
+}
+
+func TestValidateStacksChecksDiscoveredDefinitionsAgainstManifestSchema(t *testing.T) {
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true, Discovery: schema.ComponentDiscoveryConfig{Enabled: true}}}
+	// The shape the Terragrunt provider and discovery adapter produce for a unit.
+	unit := map[string]any{
+		"source": "./modules/app", "vars": map[string]any{},
+		"provision":    map[string]any{"workdir": map[string]any{"enabled": true}},
+		"backend_type": "local", "backend": map[string]any{"local": map[string]any{}},
+		"metadata": map[string]any{"terraform_workspace": "default", "type": "real"},
+		"settings": map[string]any{
+			"terragrunt":    map[string]any{"generation_root": ""},
+			"configuration": map[string]any{"provider": "terragrunt", "engine": "terraform", "source": "live/app/terragrunt.hcl"},
+		},
+		"dependencies": map[string]any{"files": []any{"live/app/terragrunt.hcl"}, "folders": []any{"modules/app"}, "components": []any{map[string]any{"name": "vpc", "stack": "live", "kind": "terraform"}}},
+	}
+	vpc := map[string]any{"source": "./modules/vpc", "vars": map[string]any{}}
+	valid := map[string]map[string]any{"live": {"name": "live", "components": map[string]any{"terraform": map[string]any{"app": unit, "vpc": vpc}}}}
+	invalid := map[string]map[string]any{"live": {"name": "live", "components": map[string]any{"terraform": map[string]any{"app": map[string]any{"source": "./module", "metadata": map[string]any{"type": "bogus"}}}}}}
+	for _, test := range []struct {
+		name        string
+		definitions map[string]map[string]any
+		wantErr     bool
+	}{{name: "valid", definitions: valid}, {name: "invalid metadata type", definitions: invalid, wantErr: true}} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+			provider.EXPECT().Discover(gomock.Any()).DoAndReturn(func(context.Context) (map[string]map[string]any, error) {
+				return test.definitions, nil
+			}).AnyTimes()
+			config.ComponentConfigurations = provider
+			err := ValidateStacks(config)
+			if !test.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "discovered stack 'live'")
+		})
+	}
+}
+
+func TestStaticDescribeStacksIncludesDiscoveredStacks(t *testing.T) {
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: filepath.Join(root, "stacks"), TerraformDirAbsolutePath: filepath.Join(root, "components")}
+	provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	config.ComponentConfigurations = provider
+	definitions := map[string]map[string]any{"live": {"name": "live", "components": map[string]any{"terraform": map[string]any{"app": map[string]any{"source": "./module"}}}}}
+	provider.EXPECT().Discover(gomock.Any()).Return(definitions, nil)
+	stacks, raw, _, err := findDescribeStacksMap(config, "live", false, true)
+	require.NoError(t, err)
+	require.Contains(t, stacks["live"].(map[string]any)["components"].(map[string]any)["terraform"], "app")
+	require.Equal(t, "live", raw["live"]["name"])
 }

@@ -120,11 +120,9 @@ func (s *Session) ensure(ctx context.Context) error {
 		s.importMu.Unlock()
 		go func() {
 			defer close(s.done)
-			call, cancel := context.WithCancel(s.ctx)
-			stop := context.AfterFunc(ctx, cancel)
-			defer stop()
-			defer cancel()
-			s.err = s.discover(call)
+			// Shared discovery is owned by the session: one caller giving up must not
+			// cancel it or cache that cancellation for the other waiters.
+			s.err = s.discover(s.ctx)
 		}()
 	})
 	select {

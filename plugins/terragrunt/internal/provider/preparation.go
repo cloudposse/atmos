@@ -2,16 +2,22 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
+	"time"
+
+	"github.com/gofrs/flock"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
 func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.ComponentRequest) (model.Request, error) {
-	if _, err := p.Validate(ctx, request); err != nil {
+	if err := validate(ctx, request); err != nil {
 		return model.Request{}, err
 	}
 	req, err := operation(request.RootDirectory, request.Provider, request.Operation, request.Invocation)
@@ -53,6 +59,30 @@ func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentReque
 		return nil, rpcError(ErrUnsupported)
 	}
 	if req.GenerationRoot != "" {
+		// All provider processes generating the same stack must retain the lock
+		// until the subsequent unit parse has finished.
+		root, err := filepath.EvalSymlinks(req.BasePath)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		rel, err := filepath.Rel(req.BasePath, req.GenerationRoot)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		generationPath := filepath.Join(root, rel)
+		if resolved, resolveErr := filepath.EvalSymlinks(generationPath); resolveErr == nil {
+			generationPath = resolved
+		}
+		key := sha256.Sum256([]byte(generationPath))
+		lock := flock.New(filepath.Join(os.TempDir(), fmt.Sprintf("atmos-terragrunt-%x.lock", key)))
+		locked, err := lock.TryLockContext(ctx, 50*time.Millisecond)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		if !locked {
+			return nil, rpcError(ctx.Err())
+		}
+		defer lock.Unlock()
 		generation := req
 		generation.Path, generation.Phase, generation.Command = req.GenerationRoot, "discover", "generate"
 		if _, err := p.evaluate(ctx, generation); err != nil {

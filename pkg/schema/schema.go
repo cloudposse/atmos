@@ -2142,6 +2142,8 @@ type ConfigAndStacksInfo struct {
 	// before auth credentials are registered) to keep the varfile-write and env-assembly
 	// steps consistent.
 	TerraformSecretVarKeys map[string]bool
+	// ConfigurationSensitiveInputKeys retains provider-declared sensitivity independently of masking.
+	ConfigurationSensitiveInputKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
 	// When set, subprocess execution uses this instead of re-reading os.Environ(),
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).

@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -147,10 +148,15 @@ func NewDescribeAffectedExec(
 func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
 	defer perf.Track(nil, "exec.ParseDescribeAffectedCliArgs")()
 
+	// Native discovery runs during configuration initialization, so it must see the command's cancellation.
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var atmosConfig schema.AtmosConfiguration
 	if info, err := ProcessCommandLineArgs("", cmd, args, nil); err != nil {
 		return DescribeAffectedCmdArgs{}, err
-	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
+	} else if atmosConfig, err = cfg.InitCliConfigWithContext(ctx, info, true); err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
 	if err := ValidateStacks(&atmosConfig); err != nil {

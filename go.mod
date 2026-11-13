@@ -139,6 +139,7 @@ require (
 	golang.org/x/text v0.43.0
 	google.golang.org/api v0.290.0
 	google.golang.org/genai v1.58.0
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260720171339-e059f2f05d78
 	google.golang.org/grpc v1.83.2
 	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v2 v2.4.0
@@ -435,7 +436,6 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20260720171339-e059f2f05d78 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260727163830-6c54dddc4772 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260720171339-e059f2f05d78 // indirect
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"maps"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -14,12 +15,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return nil, nil
 	}
 	if config.ComponentConfigurations == nil {
@@ -56,6 +59,7 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	}
 	info.ComponentVarsSection = prepared.Inputs
 	info.ComponentExecution = prepared.Execution
+	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
 	info.ComponentSection["vars"] = prepared.Inputs
@@ -94,10 +98,15 @@ func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 func configurationArtifactName(info *schema.ConfigAndStacksInfo, suffix string) (string, bool) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return "", false
 	}
-	return "atmos-" + configurationIdentity(info.Stack, info.ComponentFromArg) + suffix, true
+	component := info.ComponentFromArg
+	if component == "" {
+		// Callers that resolve a component without CLI arguments still name distinct files.
+		component = info.Component
+	}
+	return "atmos-" + configurationIdentity(info.Stack, component) + suffix, true
 }
 
 // configurationIdentity names a stack and component pair for artifact files. The name must be the same in
@@ -114,7 +123,7 @@ func configurationIdentity(stack, component string) string {
 // prepareConfigurationEnvironment applies the same authentication, RC, cache,
 // and toolchain environment as Terraform before the evaluator can spawn children.
 func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool) (*dependencies.ToolchainEnvironment, error) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned || info.DryRun {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
 		return nil, nil
 	}
 	if err := checkComponentRestrictions(info); err != nil {
@@ -143,4 +152,59 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 		return nil, err
 	}
 	return tenv, nil
+}
+
+// checkConfigurationWorkspace rejects a TF_WORKSPACE that would make Terraform use a different
+// workspace than the one the configuration provider prepared, before any initialization runs.
+// The component environment overrides the base environment, as it does for the Terraform process.
+func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
+	base := info.SanitizedEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	workspace := ""
+	for _, entries := range [][]string{base, info.ComponentEnvList} {
+		for _, entry := range entries {
+			if key, value, ok := strings.Cut(entry, "="); ok && key == "TF_WORKSPACE" {
+				workspace = value
+			}
+		}
+	}
+	if workspace != "" && workspace != info.TerraformWorkspace {
+		return fmt.Errorf("%w: TF_WORKSPACE %q differs from the prepared workspace %q", errUtils.ErrPluginInvalidConfig, workspace, info.TerraformWorkspace)
+	}
+	return nil
+}
+
+// Workdir runtime paths generated artifacts must never write. They mirror the paths the
+// workdir sync preserves: Terraform data and workspace-state directories, Atmos metadata,
+// provider lock files at any depth, and the default local-backend state files at the root.
+var (
+	runtimeArtifactDirs  = map[string]bool{".terraform": true, "terraform.tfstate.d": true, workdir.AtmosDir: true}
+	runtimeArtifactFiles = map[string]bool{"terraform.tfstate": true, "terraform.tfstate.backup": true, ".terraform.tfstate.lock.info": true}
+)
+
+// rejectRuntimeArtifacts checks the whole artifact set before any file is written, so a
+// generated file can never replace Terraform state, provider locks, or workdir metadata,
+// even with an overwrite policy.
+func rejectRuntimeArtifacts(files []schema.ComponentConfigurationFile) error {
+	for _, file := range files {
+		if isRuntimeArtifact(file.Path) {
+			return fmt.Errorf("%w: generated file %s overlaps Terraform state or workdir runtime files", errUtils.ErrPluginInvalidConfig, file.Path)
+		}
+	}
+	return nil
+}
+
+func isRuntimeArtifact(path string) bool {
+	path = filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
+	if runtimeArtifactFiles[path] || strings.HasSuffix(path, provisioner.CanonicalLockFilename) {
+		return true
+	}
+	for _, segment := range strings.Split(path, "/") {
+		if runtimeArtifactDirs[segment] {
+			return true
+		}
+	}
+	return false
 }

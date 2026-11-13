@@ -19,7 +19,7 @@ type StateProvider interface {
 func (s *Session) ResolveState(ctx context.Context, info *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 	defer perf.Track(nil, "configuration.Session.ResolveState")()
 
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return nil, nil
 	}
 	selected, err := s.componentRequest(ctx, info)

@@ -36,12 +36,14 @@ func ResolveConfigurationState(ctx context.Context, config *schema.AtmosConfigur
 
 	sections, component, stack := request.Sections, request.Component, request.Stack
 	settings, _ := sections["settings"].(map[string]any)
-	if _, owned := settings["configuration"]; !owned {
+	if !schema.ConfigurationOwned(settings) {
 		return nil, nil
 	}
+	// Discovery does not provide the native unit's state identity. Reading the
+	// placeholder backend could return a different component's local state.
 	runtime, ok := config.ComponentConfigurations.(schema.ComponentConfigurationStateRuntime)
 	if !ok {
-		return nil, errUtils.ErrPluginUnsupportedExtension
+		return nil, fmt.Errorf("%w: the configuration runtime does not support state lookup for component `%s` in stack `%s`", errUtils.ErrPluginUnsupportedExtension, component, stack)
 	}
 	env, _ := sections["env"].(map[string]any)
 	environment, err := (&defaultEnvironmentSetup{}).SetupEnvironment(&ComponentConfig{Env: env, BaseEnvironment: configurationEnvironment(request.AuthManagers)}, request.AuthContext)

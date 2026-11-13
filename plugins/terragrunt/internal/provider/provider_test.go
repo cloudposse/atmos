@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -92,6 +96,13 @@ func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 	cancel()
 	_, err := p.Validate(ctx, componentRequest(t))
 	require.Equal(t, codes.Canceled, status.Code(err))
+	// Prepare and Resolve keep the validation status instead of re-mapping it to InvalidArgument.
+	_, err = p.Prepare(ctx, componentRequest(t))
+	require.Equal(t, codes.Canceled, status.Code(err))
+	unsupported := componentRequest(t)
+	unsupported.Operation.Mode = "cli"
+	_, err = p.Resolve(t.Context(), unsupported)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
 }
 
 func TestEvaluatorErrorsDoNotExposePayloads(t *testing.T) {
@@ -166,4 +177,67 @@ func TestUnsupportedExecutionIsReportedSpecifically(t *testing.T) {
 	require.Equal(t, codes.Unimplemented, status.Code(err))
 	require.Contains(t, err.Error(), "init-from-module")
 	require.Contains(t, err.Error(), "setup")
+}
+
+func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
+	request := componentRequest(t)
+	parsing := make(chan struct{})
+	release := make(chan struct{})
+	secondGeneration := make(chan struct{}, 1)
+	var calls atomic.Int32
+	p := New(func(ctx context.Context, req model.Request) (*model.Resolution, error) {
+		if req.Phase == "discover" {
+			if calls.Add(1) == 2 {
+				secondGeneration <- struct{}{}
+			}
+		} else if calls.Load() == 1 {
+			close(parsing)
+			<-release
+		}
+		return &model.Resolution{Source: request.RootDirectory, WorkingDir: request.RootDirectory}, nil
+	})
+	first := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); first <- err }()
+	<-parsing
+	second := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); second <- err }()
+	select {
+	case <-secondGeneration:
+		t.Fatal("second generation started before the first parse finished")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	select {
+	case <-secondGeneration:
+	default:
+		t.Fatal("second generation did not run")
+	}
+}
+
+func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
+	for _, test := range []struct{ name, content, reason string }{
+		{"inline", "locals { password = \"secret-evaluated-value\" }", "MISSING_TERRAFORM_SOURCE"},
+		{"parse", "locals { password = \"secret-evaluated-value\"", "EVALUATION_FAILED"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := componentRequest(t)
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "terragrunt.hcl"), []byte(test.content), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "main.tf"), []byte("terraform {}"), 0o600))
+			_, err := New(nil).Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
+				RootDirectory: request.RootDirectory, Provider: request.Provider,
+				ProviderConfiguration: request.ProviderConfiguration, Operation: request.Operation, IncludePaths: []string{"**"},
+			})
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			details := status.Convert(err).Details()
+			require.Len(t, details, 1)
+			info := details[0].(*errdetails.ErrorInfo)
+			require.Equal(t, "atmos.terragrunt.discovery.v1", info.Domain)
+			require.Equal(t, test.reason, info.Reason)
+			require.Equal(t, map[string]string{"file": "terragrunt.hcl"}, info.Metadata)
+			require.NotContains(t, status.Convert(err).Proto().String(), "secret-evaluated-value")
+			require.NotContains(t, status.Convert(err).Proto().String(), request.RootDirectory)
+		})
+	}
 }

@@ -23,11 +23,15 @@ class Case:
         self.revision, self.engine, self.binary = revision, engine, str(Path(binary).resolve())
         self.project = self.root / "project"
         self.root.mkdir(parents=True, exist_ok=False)
-        shutil.copytree(Path(__file__).parent, self.project, ignore=shutil.ignore_patterns("run.py", "__pycache__"))
+        shutil.copytree(Path(__file__).parent, self.project, ignore=shutil.ignore_patterns("run.py", "__pycache__", ".terraform", "*.tfstate*", "terraform.tfstate.d"))
         self.logs = self.root / "commands"
         self.logs.mkdir()
         self.records, self.checks = [], []
-        self.env = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG") if k in os.environ}
+        self.env = {k: os.environ[k] for k in ("PATH", "TMPDIR", "LANG") if k in os.environ}
+        # Each case gets a disposable HOME so caller dotfiles and credentials never leak in.
+        home = self.root / "home"
+        home.mkdir()
+        self.env["HOME"] = str(home)
         self.env.update({"ATMOS_TELEMETRY_ENABLED": "false", "ATMOS_PRO_ERRORS_ENABLED": "false",
                          "ATMOS_CI": "false", "CI": "false", "CHECKPOINT_DISABLE": "1",
                          "TF_INPUT": "0", "AWS_EC2_METADATA_DISABLED": "true", "NO_COLOR": "1",

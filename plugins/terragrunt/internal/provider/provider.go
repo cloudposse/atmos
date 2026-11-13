@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	ctyjson "github.com/zclconf/go-cty/cty/json"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -168,19 +169,36 @@ func rpcError(err error) error {
 	if errors.Is(err, engine.ErrUnsupportedExecution) {
 		return status.Error(codes.Unimplemented, err.Error())
 	}
-	return status.Error(codes.InvalidArgument, "Terragrunt evaluation failed")
+	result := status.New(codes.InvalidArgument, "Terragrunt evaluation failed")
+	var diagnostic *engine.DiscoveryError
+	if errors.As(err, &diagnostic) {
+		// Never serialize the wrapped evaluator error or any evaluated HCL values.
+		detailed, detailErr := result.WithDetails(&errdetails.ErrorInfo{
+			Domain: "atmos.terragrunt.discovery.v1", Reason: diagnostic.Category,
+			Metadata: map[string]string{"file": diagnostic.File},
+		})
+		if detailErr == nil {
+			return detailed.Err()
+		}
+	}
+	return result.Err()
 }
 
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
 func (p *Provider) Validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, rpcError(err)
-	}
-	if _, err := operation(request.GetRootDirectory(), request.GetProvider(), request.GetOperation(), request.GetInvocation()); err != nil {
-		return nil, rpcError(err)
-	}
-	if err := settings(request.GetProviderConfiguration()); err != nil {
+	if err := validate(ctx, request); err != nil {
 		return nil, rpcError(err)
 	}
 	return &pluginv1.ValidateResponse{}, nil
+}
+
+// validate returns the unconverted cause so callers map it to a status code exactly once.
+func validate(ctx context.Context, request *pluginv1.ComponentRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := operation(request.GetRootDirectory(), request.GetProvider(), request.GetOperation(), request.GetInvocation()); err != nil {
+		return err
+	}
+	return settings(request.GetProviderConfiguration())
 }

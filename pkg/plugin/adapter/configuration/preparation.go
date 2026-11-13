@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
@@ -19,7 +21,7 @@ import (
 func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
 	defer perf.Track(nil, "configurationadapter.Prepare")()
 
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return nil, nil
 	}
 	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
@@ -27,6 +29,9 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	}
 	selected, err := s.componentRequest(ctx, info)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.checkPreparationDependencies(ctx, selected.instance, selected.request.Invocation.Environment, info.SubCommand); err != nil {
 		return nil, err
 	}
 	selected.request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
@@ -86,8 +91,66 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 	return &selectedComponent{request: request, provider: provider, instance: instance}, nil
 }
 
+// Reevaluate the inventory without preparation effects before any dependency
+// outputs are read. Identity and component environment overrides must not change
+// the units that the scheduler ordered using the original discovery result.
+func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pluginv1.DiscoveredComponent, env map[string]string, command string) error {
+	for _, original := range s.requests {
+		if original.Provider != instance.Provider {
+			continue
+		}
+		request := proto.Clone(original).(*pluginv1.DiscoverComponentsRequest)
+		request.Invocation = &pluginv1.Invocation{Environment: env}
+		request.Operation = &pluginv1.ComponentOperation{Command: command, Mode: "native"}
+		response, err := s.registry[instance.Provider].Discover(ctx, request)
+		if err != nil {
+			return err
+		}
+		current := make(map[[3]string]*pluginv1.DiscoveredComponent)
+		if err := addDiscovered(make(map[string]map[string]any), current, response); err != nil {
+			return err
+		}
+		selected := current[addressKey(instance.Address)]
+		if !sameDependencyUnit(instance, selected) || !sameDependencies(instance.Dependencies, selected.Dependencies) {
+			return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
+		}
+		for _, dependency := range selected.Dependencies {
+			key := addressKey(dependency.Target)
+			if !sameDependencyUnit(s.instances[key], current[key]) {
+				return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
+			}
+		}
+		return nil
+	}
+	return errUtils.ErrPluginInvalidConfig
+}
+
+func sameDependencyUnit(before, after *pluginv1.DiscoveredComponent) bool {
+	return before != nil && after != nil && before.Source == after.Source && before.Provider == after.Provider && before.Engine == after.Engine
+}
+
+func sameDependencies(before, after []*pluginv1.ComponentDependency) bool {
+	type edge struct {
+		target [3]string
+		kind   pluginv1.ComponentDependency_Kind
+	}
+	counts := make(map[edge]int)
+	for _, dependency := range before {
+		counts[edge{addressKey(dependency.Target), dependency.Kind}]++
+	}
+	for _, dependency := range after {
+		counts[edge{addressKey(dependency.Target), dependency.Kind}]--
+	}
+	for _, count := range counts {
+		if count != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.PreparedComponentConfiguration, error) {
-	inputs, err := adapter.DecodeObject(result.Inputs)
+	inputs, sensitiveKeys, err := adapter.DecodeObjectWithSensitiveKeys(result.Inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +161,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	if result.State.BackendType == "local" {
 		resolveLocalBackend(backend, result.State.WorkingDirectory)
 	}
-	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
+	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, SensitiveInputKeys: sensitiveKeys, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
 	execution, err := preparedExecution(result.Execution)
 	if err != nil {
 		return nil, err

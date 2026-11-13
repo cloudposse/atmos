@@ -72,6 +72,9 @@ func (e *Executor) prepareComponentExecution(
 	}
 
 	if prepared != nil && !info.DryRun {
+		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
+			return nil, err
+		}
 		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
 			return nil, err
 		}
@@ -140,7 +143,7 @@ func (e *Executor) runPreExecutionSteps(
 		return err
 	}
 
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned || info.DryRun {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
 		if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
 			// The error is returned and rendered once by the command boundary, so it is only logged
 			// at debug level here to avoid printing the same failure twice.
@@ -163,7 +166,10 @@ func (e *Executor) runPreExecutionSteps(
 
 	warnOnConflictingEnvVars()
 
-	if _, owned := info.ComponentSettingsSection["configuration"]; owned && !info.DryRun {
+	if schema.ConfigurationOwned(info.ComponentSettingsSection) && !info.DryRun {
+		if err := checkConfigurationWorkspace(info); err != nil {
+			return err
+		}
 		// Inputs have now been evaluated; append their secret variables after masking.
 		return appendTerraformSecretEnv(info)
 	}

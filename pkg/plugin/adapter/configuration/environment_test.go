@@ -31,6 +31,9 @@ func TestPreparationEnvironmentPrecedenceAndSanitization(t *testing.T) {
 			info := &schema.ConfigAndStacksInfo{SanitizedEnv: test.sanitized, ComponentEnvList: test.overrides, ComponentEnvSection: map[string]any{"AWS_WEB_IDENTITY_TOKEN_FILE": "stale-section"}}
 			got := preparationEnvironment(info)
 			require.Equal(t, test.want, got["ATMOS_ENV_AMBIENT_PROBE"])
+			if test.name == "explicit empty override" {
+				require.Contains(t, got, "ATMOS_ENV_AMBIENT_PROBE", "an explicit empty override must stay set")
+			}
 			_, present := got["AWS_WEB_IDENTITY_TOKEN_FILE"]
 			require.Equal(t, test.present, present)
 			if test.name == "last path wins" {

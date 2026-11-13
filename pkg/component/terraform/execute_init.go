@@ -177,7 +177,7 @@ func (e *Executor) executeTerraformInitForced(atmosConfig *schema.AtmosConfigura
 // situation as a backend migration, producing the "Do you want to migrate all workspaces?"
 // prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; owned && usesConfigurationPlan(info) {
+	if schema.ConfigurationOwned(info.ComponentSettingsSection) && usesConfigurationPlan(info) {
 		// Saved plans retain their reviewed modules and generated files.
 		return componentPath, nil
 	}
