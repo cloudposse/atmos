@@ -7,11 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-
 	errUtils "github.com/cloudposse/atmos/errors"
-	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -35,8 +31,9 @@ type InlineRole struct {
 }
 
 // AssumeInlineRole assumes the role on top of the AWS credentials found in environ, a list of KEY=VALUE
-// entries in which the last entry of a key wins. Static keys are used as given; otherwise the profile and
-// credential files that environ names, then the SDK default chain, supply them. It returns the
+// entries in which the last entry of a key wins. The starting credentials come from environ alone, in the
+// order of the SDK default chain: static keys, a web identity token file, the profile and files that environ
+// names, container credentials, then instance metadata. The process environment is neither read nor changed. It returns the
 // environment variables that make the new session the credentials of a child process, and registers the
 // secrets with the output masker.
 func AssumeInlineRole(ctx context.Context, role InlineRole, environ []string) (map[string]string, error) {
@@ -94,36 +91,6 @@ func inlineRoleConfig(role InlineRole, env map[string]string) *schema.Identity {
 		identity.Spec = map[string]any{"endpoint_url": endpoint}
 	}
 	return identity
-}
-
-// baseCredentials resolves the credentials that sign the AssumeRole request.
-func baseCredentials(ctx context.Context, env map[string]string) (*types.AWSCredentials, error) {
-	region := cmp.Or(env["AWS_REGION"], env["AWS_DEFAULT_REGION"])
-	if key, secret := env["AWS_ACCESS_KEY_ID"], env["AWS_SECRET_ACCESS_KEY"]; key != "" && secret != "" {
-		return &types.AWSCredentials{AccessKeyID: key, SecretAccessKey: secret, SessionToken: env["AWS_SESSION_TOKEN"], Region: region}, nil
-	}
-	options := []func(*config.LoadOptions) error{}
-	if profile := env["AWS_PROFILE"]; profile != "" {
-		options = append(options, config.WithSharedConfigProfile(profile))
-	}
-	if file := env["AWS_SHARED_CREDENTIALS_FILE"]; file != "" {
-		options = append(options, config.WithSharedCredentialsFiles([]string{file}))
-	}
-	if file := env["AWS_CONFIG_FILE"]; file != "" {
-		options = append(options, config.WithSharedConfigFiles([]string{file}))
-	}
-	if region != "" {
-		options = append(options, config.WithRegion(region))
-	}
-	cfg, err := awsCloud.LoadAtmosManagedAWSConfig(ctx, options...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: no AWS credentials to assume a role with: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-	retrieved, err := aws.NewCredentialsCache(cfg.Credentials).Retrieve(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%w: no AWS credentials to assume a role with: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-	return &types.AWSCredentials{AccessKeyID: retrieved.AccessKeyID, SecretAccessKey: retrieved.SecretAccessKey, SessionToken: retrieved.SessionToken, Region: cmp.Or(region, cfg.Region)}, nil
 }
 
 func environMap(environ []string) map[string]string {
