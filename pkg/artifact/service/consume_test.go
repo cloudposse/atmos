@@ -339,19 +339,17 @@ type listGate struct {
 	release  chan struct{}
 }
 
-type gatedListRepository struct {
-	artifact.Repository
-	gate *listGate
-}
-
-func (r *gatedListRepository) List(ctx context.Context, query artifact.ListQuery) (*artifact.ListPage, error) {
-	current := r.gate.inflight.Add(1)
-	defer r.gate.inflight.Add(-1)
-	for old := r.gate.peak.Load(); current > old && !r.gate.peak.CompareAndSwap(old, current); old = r.gate.peak.Load() {
-	}
-	r.gate.entered <- struct{}{}
-	<-r.gate.release
-	return r.Repository.List(ctx, query)
+// gatedList returns a generated repository that blocks every List on the gate before delegating.
+func gatedList(t *testing.T, base *artifacttest.Repository, gate *listGate) artifact.Repository {
+	return delegatingRepository(t, base, repoHooks{list: func(ctx context.Context, query artifact.ListQuery) (*artifact.ListPage, error) {
+		current := gate.inflight.Add(1)
+		defer gate.inflight.Add(-1)
+		for old := gate.peak.Load(); current > old && !gate.peak.CompareAndSwap(old, current); old = gate.peak.Load() {
+		}
+		gate.entered <- struct{}{}
+		<-gate.release
+		return base.List(ctx, query)
+	}})
 }
 
 func TestList_ConcurrencyIsInjectable(t *testing.T) {
@@ -364,7 +362,7 @@ func TestList_ConcurrencyIsInjectable(t *testing.T) {
 	}
 	gate := &listGate{entered: make(chan struct{}, 3), release: make(chan struct{})}
 	for _, alias := range []string{"a", "b", "c"} {
-		e.static.Repositories[alias] = &gatedListRepository{Repository: e.repos[alias], gate: gate}
+		e.static.Repositories[alias] = gatedList(t, e.repos[alias], gate)
 	}
 	done := make(chan error, 1)
 	go func() {
@@ -389,19 +387,6 @@ func TestList_ConcurrencyIsInjectable(t *testing.T) {
 	assert.Equal(t, int32(1), gate.peak.Load())
 }
 
-// readHookRepository runs a hook right before every Read, as if another process touched the
-// destination while the artifact was downloading.
-type readHookRepository struct {
-	*artifacttest.Repository
-	onRead func()
-}
-
-//nolint:gocritic // The pinned reference is passed by value because artifact.Repository fixes the signature.
-func (r *readHookRepository) Read(ctx context.Context, pinned artifact.PinnedReference) (*artifact.Content, error) {
-	r.onRead()
-	return r.Repository.Read(ctx, pinned)
-}
-
 func TestPull_RechecksTheDestinationBeforeReplacingIt(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -418,9 +403,11 @@ func TestPull_RechecksTheDestinationBeforeReplacingIt(t *testing.T) {
 			e.publish("dst", e.source("ORIGINAL"))
 			dest := out(t)
 			require.NoError(t, os.MkdirAll(dest, 0o755))
-			e.static.Repositories["dst"] = &readHookRepository{Repository: e.repos["dst"], onRead: func() {
+			// Another process touches the destination right before the artifact is read.
+			e.static.Repositories["dst"] = delegatingRepository(t, e.repos["dst"], repoHooks{read: func(ctx context.Context, pinned artifact.PinnedReference) (*artifact.Content, error) {
 				fixtures.WriteFile(t, dest, "late.txt", "written during the download", 0o644)
-			}}
+				return e.repos["dst"].Read(ctx, pinned)
+			}})
 
 			_, err := e.svc.Pull(context.Background(), artifact.PullRequest{Repository: "dst", Ref: exampleRef, Destination: dest, Force: tt.force})
 			if runtime.GOOS == "windows" && tt.force {
