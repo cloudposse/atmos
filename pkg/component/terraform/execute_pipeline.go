@@ -265,6 +265,11 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	if err := validateEnvironmentPlanOutput(info, execCtx); err != nil {
 		return err
 	}
+	allArgsAndFlags, restore, err := expandPolicyPlanArguments(info, execCtx, allArgsAndFlags, componentPath)
+	if err != nil {
+		return err
+	}
+	defer restore()
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
 	var effectiveArgs []string
 	captureCtx := context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs)

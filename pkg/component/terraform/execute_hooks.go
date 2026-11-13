@@ -249,6 +249,58 @@ func (r *hookRunner) workingDirectory(hook *schema.ComponentHook) string {
 	}
 }
 
+// expandPolicyPlanArguments gives a plan policy the effective plan invocation. The policy
+// selects its artifact from -out before Terraform runs, but provider extra arguments are
+// otherwise added later, in runExecutionPhase. This adds them now and rejects conflicting
+// output flags. It then removes the added arguments from the component execution until
+// restore, so runExecutionPhase applies only the environment and hooks, and the arguments
+// are not added twice. Double-dash output flags are written as -out, which the policy
+// guard recognizes. Terraform accepts both forms. The returned arguments are also the
+// published plan path that plan binding records.
+func expandPolicyPlanArguments(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, args []string, componentPath string) ([]string, func(), error) {
+	noop := func() {}
+	if execCtx.planPolicy == nil || info.DryRun || info.SubCommand != subcommandPlan || len(args) == 0 {
+		return args, noop, nil
+	}
+	config := info.ComponentExecution
+	if config.IsEmpty() {
+		return singleDashOutputFlags(args), noop, nil
+	}
+	position := extraArgumentsPosition(info, args)
+	command := execution.CommandName(info.SubCommand, args[position:])
+	applied, err := execution.ApplyExtraArguments(config.ExtraArguments, &execution.ArgumentsRequest{
+		Command: command, Args: args, InsertAt: position, WorkingDirectory: componentPath,
+	})
+	if err != nil {
+		return nil, noop, err
+	}
+	if err := validatePlanOutputFlags(command, applied.Args); err != nil {
+		return nil, noop, err
+	}
+	stripped := *config
+	stripped.ExtraArguments = slices.Clone(config.ExtraArguments)
+	for i := range stripped.ExtraArguments {
+		if slices.Contains(stripped.ExtraArguments[i].Commands, command) {
+			stripped.ExtraArguments[i].Arguments = nil
+			stripped.ExtraArguments[i].RequiredVarFiles = nil
+			stripped.ExtraArguments[i].OptionalVarFiles = nil
+		}
+	}
+	info.ComponentExecution = &stripped
+	return singleDashOutputFlags(applied.Args), func() { info.ComponentExecution = config }, nil
+}
+
+// singleDashOutputFlags rewrites double-dash output flags in single-dash form, keeping their values.
+func singleDashOutputFlags(args []string) []string {
+	result := slices.Clone(args)
+	for i, arg := range result {
+		if arg == "--out" || strings.HasPrefix(arg, "--out=") {
+			result[i] = arg[1:]
+		}
+	}
+	return result
+}
+
 // extraArgumentsPosition is the index after the Terraform command and its subcommands, so extra
 // arguments precede the caller's flags exactly as Terragrunt inserts them.
 func extraArgumentsPosition(info *schema.ConfigAndStacksInfo, args []string) int {

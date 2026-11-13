@@ -15,6 +15,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -513,4 +515,60 @@ func TestPreflightRequiredVarFiles(t *testing.T) {
 	require.NoError(t, preflightRequiredVarFiles(savedPlan, dir), "saved plans never take variable files")
 	workspace := hookInfo("workspace", missing)
 	require.NoError(t, preflightRequiredVarFiles(workspace, dir), "workspace management runs no main command")
+}
+
+// TestPolicyPlanUsesProviderOutputArguments verifies that a plan policy selects and binds
+// the output path Terraform receives, including one supplied only by provider extra arguments.
+func TestPolicyPlanUsesProviderOutputArguments(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		provider []string
+		args     []string
+		output   string
+		conflict bool
+	}{
+		{name: "provider only", provider: []string{"--out=provider.plan", "-lock=false"}, args: []string{"plan"}, output: "provider.plan"},
+		{name: "double dash argument", args: []string{"plan", "--out", "argument.plan"}, output: "argument.plan"},
+		{name: "provider and argument conflict", provider: []string{"-out=provider.plan"}, args: []string{"plan", "-out=argument.plan"}, conflict: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, _ := planFixture(t)
+			var engine policy.Engine
+			require.NoError(t, engine.Register(policy.CELEngine, &policy.CEL{}))
+			execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: planShowRunner{}, Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
+			var original *schema.ComponentExecution
+			if test.provider != nil {
+				original = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: test.provider, Environment: map[string]string{"PROVIDER_ENV": "set"}}}}
+				info.ComponentExecution = original
+			}
+			shell := &fakeShell{run: func(call *shellCall) error {
+				return os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed"), 0o600)
+			}}
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.execute
+			err := executor.runMainCommandPhase(config, info, execCtx, test.args, execCtx.componentPath, false)
+			require.Same(t, original, info.ComponentExecution, "the component execution must be restored")
+			if test.conflict {
+				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+				require.Empty(t, shell.calls, "Terraform must not run")
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, shell.calls, 1)
+			outputs := 0
+			for _, arg := range shell.calls[0].args {
+				if arg == "-out" || strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out") {
+					outputs++
+				}
+			}
+			require.Equal(t, 1, outputs, "provider arguments must be added once: %v", shell.calls[0].args)
+			if test.provider != nil {
+				require.Contains(t, shell.calls[0].args, "-lock=false")
+				require.Contains(t, shell.calls[0].env, "PROVIDER_ENV=set")
+			}
+			published := filepath.Join(execCtx.componentPath, test.output)
+			require.FileExists(t, published)
+			require.FileExists(t, published+configurationPlanSuffix)
+		})
+	}
 }
