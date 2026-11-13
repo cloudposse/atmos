@@ -392,7 +392,7 @@ func TestCaptureExecMetadataSync_RawExitCodeSurvivesGlobalRemap(t *testing.T) {
 	}
 
 	var gotExitCode int
-	parser := func(subCommand string, exitCode int, output string) any {
+	parser := func(subCommand, component string, exitCode int, output string) any {
 		gotExitCode = exitCode
 		return map[string]any{"exit_code": exitCode}
 	}

@@ -48,11 +48,7 @@ For complete Terraform/OpenTofu documentation, see:
 		if err != nil {
 			return err
 		}
-		var component string
-		if len(args) > 0 {
-			component = args[0]
-		}
-		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(component, v.GetString("stack"))
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(v.GetString("stack"))
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 		capturedDestroyOutput = ansi.Strip(stdoutBuf.String() + "\n" + stderrBuf.String())
 		return err
