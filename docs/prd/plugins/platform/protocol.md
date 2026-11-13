@@ -256,7 +256,7 @@ The runtime writes events to caller-provided stdout/stderr writers; callers supp
 
 ### Component configuration services
 
-The component configuration protocol is now defined in `proto/atmos/plugin/v1/plugin.proto` and generated for the CLI and SDK. The host has static descriptors, explicit package loading, and service adapters. CLI stack and execution wiring remain pending. These independently negotiated services replace the earlier proposed monolithic `Component` service. Discovery, validation, and state use version 1. Preparation uses version 2:
+The component configuration protocol is now defined in `proto/atmos/plugin/v1/plugin.proto` and generated for the CLI and SDK. The host has static descriptors, explicit package loading, and service adapters. Stack processing and Terraform execution call the plugin configuration runtime for components that declare a `configuration` settings section, and that call reaches the provider `Prepare` RPC. These independently negotiated services replace the earlier proposed monolithic `Component` service. Discovery, validation, and state use version 1. Preparation uses version 2:
 
 | Capability | RPC | Result |
 |---|---|---|
