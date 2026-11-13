@@ -116,9 +116,13 @@ func (s *Snapshot) Close() error {
 		return nil
 	}
 	err := os.RemoveAll(s.Root)
+	root := s.Root
 	s.Root = ""
 	s.staged = nil
-	return err
+	if err != nil {
+		return fmt.Errorf("%w: remove staging directory %q: %w", errUtils.ErrArtifactPackagingInvalid, root, err)
+	}
+	return nil
 }
 
 // StagedPath returns the staged copy of the regular file at the inventory path.
@@ -137,7 +141,11 @@ func (s *Snapshot) Open(entryPath string) (io.ReadCloser, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %q is not a staged file", errUtils.ErrArtifactNotFound, entryPath)
 	}
-	return os.Open(p)
+	file, err := os.Open(p)
+	if err != nil {
+		return nil, fmt.Errorf("%w: open staged file %q: %w", errUtils.ErrArtifactPackagingInvalid, entryPath, err)
+	}
+	return file, nil
 }
 
 // Lookup returns the inventory entry at path.

@@ -87,6 +87,9 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 		return nil, err
 	}
 	r.mu.Unlock()
+	if err := r.caps.CheckSignerFormats(r.opts.Alias, signer); err != nil {
+		return nil, err
+	}
 	payload, err := signer.Sign(ctx, subject)
 	if err != nil {
 		return nil, err

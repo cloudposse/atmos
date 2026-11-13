@@ -143,6 +143,10 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 	if signer == nil {
 		return nil, fmt.Errorf("%w: no signer supplied", errUtils.ErrArtifactConfigInvalid)
 	}
+	caps := r.Capabilities()
+	if err := caps.CheckSignerFormats(r.alias, signer); err != nil {
+		return nil, err
+	}
 	t, err := r.openTree(false)
 	if err != nil {
 		return nil, r.missingRoot(err, artifact.Ref{Name: "(subject)", Digest: subject.Digest})

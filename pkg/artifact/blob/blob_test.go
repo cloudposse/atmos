@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -137,17 +138,28 @@ func TestCapabilityChecksFailClearly(t *testing.T) {
 }
 
 func TestListAllFollowsCursorsAndMergesPrefixes(t *testing.T) {
-	store := &listOnlyStore{pages: []ListPage{
+	ctrl := gomock.NewController(t)
+	store := NewMockStore(ctrl)
+	pages := []ListPage{
 		{Objects: []ObjectInfo{{Key: "a"}, {Key: "b"}}, CommonPrefixes: []string{"p/"}, NextCursor: "c1"},
 		{Objects: []ObjectInfo{{Key: "c"}}, NextCursor: "c2"},
 		{Objects: []ObjectInfo{{Key: "d"}}, CommonPrefixes: []string{"q/"}},
-	}}
+	}
+	var calls []ListOptions
+	store.EXPECT().List(gomock.Any(), gomock.Any()).Times(len(pages)).
+		DoAndReturn(func(_ context.Context, opts ListOptions) (*ListPage, error) {
+			calls = append(calls, opts)
+			page := pages[len(calls)-1]
+			return &page, nil
+		})
+
 	objects, prefixes, err := ListAll(context.Background(), store, ListOptions{Prefix: "x/", Limit: 2})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "b", "c", "d"}, []string{objects[0].Key, objects[1].Key, objects[2].Key, objects[3].Key})
 	assert.Equal(t, []string{"p/", "q/"}, prefixes)
-	assert.Equal(t, []string{"", "c1", "c2"}, []string{store.calls[0].Cursor, store.calls[1].Cursor, store.calls[2].Cursor})
-	for _, call := range store.calls {
+	require.Len(t, calls, 3)
+	assert.Equal(t, []string{"", "c1", "c2"}, []string{calls[0].Cursor, calls[1].Cursor, calls[2].Cursor})
+	for _, call := range calls {
 		assert.Equal(t, "x/", call.Prefix)
 		assert.Equal(t, 2, call.Limit)
 	}
@@ -155,31 +167,32 @@ func TestListAllFollowsCursorsAndMergesPrefixes(t *testing.T) {
 
 func TestListAllStopsOnError(t *testing.T) {
 	boom := errors.New("boom")
-	store := &listOnlyStore{err: boom}
+	ctrl := gomock.NewController(t)
+	store := NewMockStore(ctrl)
+	store.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, boom)
 	_, _, err := ListAll(context.Background(), store, ListOptions{})
 	require.ErrorIs(t, err, boom)
-}
-
-// listOnlyStore implements only List; other methods come from the generated mock and would fail
-// the test if called.
-type listOnlyStore struct {
-	MockStore
-	pages []ListPage
-	calls []ListOptions
-	err   error
-}
-
-func (s *listOnlyStore) List(_ context.Context, opts ListOptions) (*ListPage, error) {
-	s.calls = append(s.calls, opts)
-	if s.err != nil {
-		return nil, s.err
-	}
-	page := s.pages[len(s.calls)-1]
-	return &page, nil
 }
 
 func TestValidateTagsRejectsInvalidUTF8(t *testing.T) {
 	for _, tags := range []map[string]string{{"\xff": "value"}, {"key": "\xff"}} {
 		require.ErrorIs(t, ValidateTags(tags), errUtils.ErrBlobInvalid)
+	}
+}
+
+func TestValidateTagsCountsUTF16CodeUnits(t *testing.T) {
+	const emoji = "\U0001F600" // One rune, two UTF-16 code units.
+	keyAtLimit := strings.Repeat(emoji, MaxTagKeyChars/2)
+	valueAtLimit := strings.Repeat(emoji, MaxTagValueChars/2)
+
+	require.NoError(t, ValidateTags(map[string]string{keyAtLimit: valueAtLimit}), "exactly at both limits")
+	for name, tags := range map[string]map[string]string{
+		"key one unit over":    {keyAtLimit + "a": "v"},
+		"key one rune over":    {keyAtLimit + emoji: "v"},
+		"value one unit over":  {"k": valueAtLimit + "a"},
+		"value one rune over":  {"k": valueAtLimit + emoji},
+		"rune count under cap": {strings.Repeat(emoji, MaxTagKeyChars/2+1): "v"},
+	} {
+		require.ErrorIs(t, ValidateTags(tags), errUtils.ErrBlobInvalid, name)
 	}
 }

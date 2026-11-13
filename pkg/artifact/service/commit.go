@@ -164,10 +164,8 @@ func (s *Service) decide(tgt *target, cur *current, in *incoming, force bool) (v
 		return verdictCreate, nil
 	}
 	existing := cur.inspection.Record
-	if existing != nil {
-		if intent, err := existing.IntentDigest(); err == nil && intent == in.intent {
-			return verdictUnchanged, nil
-		}
+	if sameIntent(existing, in) || sameGraphRoot(existing, cur, in) {
+		return verdictUnchanged, nil
 	}
 	if immutable, reason := s.immutableCandidate(tgt, cur, in); immutable {
 		return verdictCreate, fmt.Errorf("%w: %s stays immutable even with force", errUtils.ErrArtifactConflict, reason)
@@ -177,6 +175,21 @@ func (s *Service) decide(tgt *target, cur *current, in *incoming, force bool) (v
 			errUtils.ErrArtifactConflict, in.ref, tgt.alias, describeDifferences(existing, in.record))
 	}
 	return verdictReplace, nil
+}
+
+// sameIntent reports whether the stored Record carries the incoming intent.
+func sameIntent(existing *artifact.Record, in *incoming) bool {
+	if existing == nil {
+		return false
+	}
+	intent, err := existing.IntentDigest()
+	return err == nil && intent == in.intent
+}
+
+// sameGraphRoot reports whether a Record-free destination already points at the pinned source root
+// of a native graph copy. It uses the same root identity as reconcileGraph.
+func sameGraphRoot(existing *artifact.Record, cur *current, in *incoming) bool {
+	return existing == nil && in.rootDigest != "" && cur.pinned.ResolvedDigest == in.rootDigest
 }
 
 // immutableCandidate asks the admission policy about both the stored and the incoming artifact.

@@ -231,31 +231,10 @@ func TestCopy_WarnsWhenEvidenceCannotTravel(t *testing.T) {
 	assert.True(t, warned, "missing evidence transfer is reported, never silently dropped")
 }
 
-// nativeRepository adds a compatible native transfer to the in-memory repository.
-type nativeRepository struct {
-	*artifacttest.Repository
-	copies  int
-	options artifact.CopyFromOptions
-	compat  bool
-}
-
-func (n *nativeRepository) CanCopyFrom(artifact.Repository) bool { return n.compat }
-
-//nolint:gocritic // The pinned reference is passed by value because artifact.Copier fixes the signature.
-func (n *nativeRepository) CopyFrom(ctx context.Context, source artifact.Repository, pinned artifact.PinnedReference, options artifact.CopyFromOptions) (*artifact.PublishResult, error) {
-	n.copies++
-	n.options = options
-	inspection, err := source.Inspect(ctx, pinned)
-	if err != nil {
-		return nil, err
-	}
-	return &artifact.PublishResult{Outcome: artifact.OutcomeCreated, Pinned: pinned, Representation: inspection.Representation, Location: "native://copy"}, nil
-}
-
 func TestCopy_UsesNativeTransferWhenCompatible(t *testing.T) {
 	e := copyEnv(t, artifact.PackagingNone, artifact.PackagingNone)
 	published := e.publish("src", e.source("hello"))
-	native := &nativeRepository{Repository: e.repos["dst"], compat: true}
+	native := newNativeRepository(t, e.repos["dst"])
 	e.static.Repositories["dst"] = native
 	reads := e.repos["src"].Calls("Read")
 
@@ -273,6 +252,52 @@ func TestCopy_UsesNativeTransferWhenCompatible(t *testing.T) {
 	_, err = e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, native.copies, "an incompatible pair falls back to staging")
+}
+
+func TestCopy_RepeatedNativeGraphCopyWithoutRecordIsUnchanged(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(map[bool]string{false: "without force", true: "with force"}[force], func(t *testing.T) {
+			e := copyEnv(t, artifact.PackagingNone, artifact.PackagingNone)
+			e.publish("src", e.source("hello"))
+			source := delegatingRepository(t, e.repos["src"], repoHooks{inspect: func(ctx context.Context, pinned artifact.PinnedReference) (*artifact.Inspection, error) {
+				inspection, err := e.repos["src"].Inspect(ctx, pinned)
+				if err != nil {
+					return nil, err
+				}
+				return withoutRecord(inspection), nil
+			}})
+			pinned, err := e.repos["src"].Resolve(context.Background(), exampleRef)
+			require.NoError(t, err)
+			var native *nativeRepository
+			destination := delegatingRepository(t, e.repos["dst"], repoHooks{
+				resolve: func(context.Context, artifact.Ref) (artifact.PinnedReference, error) {
+					if native.copies == 0 {
+						return artifact.PinnedReference{}, errUtils.ErrArtifactNotFound
+					}
+					return pinned, nil
+				},
+				inspect: func(ctx context.Context, p artifact.PinnedReference) (*artifact.Inspection, error) {
+					inspection, err := e.repos["src"].Inspect(ctx, p)
+					if err != nil {
+						return nil, err
+					}
+					return withoutRecord(inspection), nil
+				},
+			})
+			native = newNativeRepository(t, destination)
+			e.static.Repositories["src"] = source
+			e.static.Repositories["dst"] = native
+
+			first, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
+			require.NoError(t, err)
+			assert.Equal(t, artifact.OutcomeCreated, first.Outcome)
+
+			again, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst", Force: force})
+			require.NoError(t, err)
+			assert.Equal(t, artifact.OutcomeUnchanged, again.Outcome, "the destination already points at the source root")
+			assert.Equal(t, 1, native.copies, "an unchanged destination is not copied again")
+		})
+	}
 }
 
 func diagnosticCodes(result *artifact.OperationResult) []string {

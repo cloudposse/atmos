@@ -160,14 +160,27 @@ func (c *capturer) recheckFile(record *sourceRecord, now os.FileInfo) error {
 	if !sameFileState(record.info, now) {
 		return fmt.Errorf("%w: %q changed size, mode, or modification time while it was being captured", errUtils.ErrArtifactSourceChanged, record.rel)
 	}
-	file, err := os.Open(record.abs)
+	file, err := openSame(record.abs, record.rel, record.info)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
 	if err != nil {
 		return changedError(record.rel, err)
 	}
-	defer file.Close()
+	if !sameFileState(record.info, opened) {
+		return changedError(record.rel, errSizeOrTimeChanged)
+	}
+	// Read at most one byte past the recorded size so a file that grew after the stat is rejected
+	// without being read in full.
 	hasher := sha256.New()
-	if _, err := copyContext(c.ctx, hasher, file); err != nil {
+	copied, err := copyContext(c.ctx, hasher, io.LimitReader(file, record.info.Size()+1))
+	if err != nil {
 		return fmt.Errorf("%w: recheck %q: %w", errUtils.ErrArtifactSourceChanged, record.rel, err)
+	}
+	if copied != record.info.Size() {
+		return changedError(record.rel, errSizeOrTimeChanged)
 	}
 	if digest.NewDigest(digest.SHA256, hasher) != record.digest {
 		return fmt.Errorf("%w: %q content changed while it was being captured", errUtils.ErrArtifactSourceChanged, record.rel)

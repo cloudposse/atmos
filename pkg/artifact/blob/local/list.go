@@ -31,7 +31,7 @@ func (s *Store) List(ctx context.Context, opts blob.ListOptions) (*blob.ListPage
 	if err := checkContext(ctx, blob.OpList, opts.Prefix); err != nil {
 		return nil, err
 	}
-	if err := validatePrefix(opts.Prefix); err != nil {
+	if err := s.validatePrefix(opts.Prefix); err != nil {
 		return nil, err
 	}
 	var entries []entry
@@ -175,14 +175,21 @@ func rollUp(key string, opts blob.ListOptions) (string, bool) {
 	return opts.Prefix + rest[:idx+len(opts.Delimiter)], true
 }
 
-// validatePrefix rejects listing prefixes that could leave the root.
-func validatePrefix(prefix string) error {
+// literalBackslashes reports whether backslashes are ordinary characters in keys: the store opted
+// in with WithLiteralBackslashes and the platform does not treat them as path separators.
+func (s *Store) literalBackslashes() bool {
+	return s.allowBackslash && os.PathSeparator != '\\'
+}
+
+// validatePrefix rejects listing prefixes that could leave the root. It applies the same
+// platform-aware backslash rule as key validation.
+func (s *Store) validatePrefix(prefix string) error {
 	for _, segment := range strings.Split(prefix, "/") {
 		if segment == ".." {
 			return blob.NewError(blob.KindInvalid, blob.OpList, prefix, fmt.Errorf("%w: prefix contains a relative segment", errUtils.ErrBlobInvalid))
 		}
 	}
-	if strings.ContainsRune(prefix, '\\') || strings.ContainsRune(prefix, 0) || strings.HasPrefix(prefix, "/") {
+	if (!s.literalBackslashes() && strings.ContainsRune(prefix, '\\')) || strings.ContainsRune(prefix, 0) || strings.HasPrefix(prefix, "/") {
 		return blob.NewError(blob.KindInvalid, blob.OpList, prefix, fmt.Errorf("%w: prefix must be a relative slash path", errUtils.ErrBlobInvalid))
 	}
 	return nil
