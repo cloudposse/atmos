@@ -246,16 +246,21 @@ func (l *Layout) Untag(ctx context.Context, reference string) error {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if err := l.store.Untag(ctx, reference); err != nil {
-		return layoutError(err)
-	}
 	kept := l.index[:0:0]
 	for i := range l.index {
 		if l.index[i].Annotations[ocispec.AnnotationRefName] != reference {
 			kept = append(kept, l.index[i])
 		}
 	}
-	return l.commitIndex(kept)
+	// Persist index.json before touching the store: a failed write leaves the handle and the file
+	// unchanged, so the same call can be retried.
+	if err := l.commitIndex(kept); err != nil {
+		return err
+	}
+	if err := l.store.Untag(ctx, reference); err != nil {
+		return layoutError(err)
+	}
+	return nil
 }
 
 // References returns the named roots in index.json in insertion order.
