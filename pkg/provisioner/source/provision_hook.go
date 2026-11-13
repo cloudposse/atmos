@@ -115,13 +115,16 @@ func AutoProvisionSource(
 
 	key := provisioningKey(target, componentType, componentConfig, sourceSpec, authContext)
 	marker := provisionedMarker{key: key, invocation: currentInvocation.Load()}
-	if done, ok := componentConfig[invocationDoneKey].(provisionedMarker); ok && marker.invocation == nil && done == marker && isNonEmptyDir(targetDir) {
+	if done, ok := componentConfig[invocationDoneKey].(provisionedMarker); ok && marker.invocation == nil && done == marker && isNonEmptyDir(targetDir) && markerTargetMatches(target, stack, sourceSpec) {
 		if isWorkdir {
 			setProvisionedWorkdir(componentConfig, targetDir)
 		}
 		return nil
 	}
-	reused, finish := beginProvision(key, targetDir)
+	reused, finish, err := beginProvision(ctx, key, targetDir)
+	if err != nil {
+		return err
+	}
 	if reused {
 		// beginProvision may have waited for an in-process peer; another process can claim an
 		// explicit target in that window, so confirm ownership before reusing the directory.
@@ -204,6 +207,30 @@ func AutoProvisionSource(
 		}
 	}
 	return nil
+}
+
+// markerTargetMatches reports whether a workdir target still holds what this selector provisioned.
+// Another selector may have re-vendored a shared target since the marker was recorded; its metadata
+// then names a different instance, stack, or source, and the marker must not be reused. The TTL is
+// deliberately ignored so a zero-TTL source is not downloaded twice within one command. Shared
+// component directories carry no per-selector workdir metadata and keep the marker as recorded.
+func markerTargetMatches(target *Target, stack string, sourceSpec *schema.VendorComponentSource) bool {
+	if !target.IsWorkdir {
+		return true
+	}
+	metadata, err := workdir.ReadMetadata(target.Dir)
+	if err != nil || metadata == nil {
+		return false
+	}
+	instance := target.Instance
+	if instance == "" {
+		instance = target.Component
+	}
+	if metadata.Component != instance || metadata.Stack != stack {
+		return false
+	}
+	changed, _ := checkMetadataChanges(metadata, sourceSpec)
+	return !changed
 }
 
 // applyGlobalTTLDefault sets the source TTL from the global config if not already set per-component.

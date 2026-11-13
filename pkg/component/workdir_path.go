@@ -222,7 +222,7 @@ func ProvisionAndResolveComponentPath(
 ) (string, bool, error) {
 	defer perf.Track(atmosConfig, "component.ProvisionAndResolveComponentPath")()
 	if info.DryRun {
-		return resolveDryRunComponentPath(atmosConfig, info, componentType, fallbackComponentPath)
+		return resolveDryRunComponentPath(atmosConfig, info, componentType, fallbackComponentPath, provSource.HasSource(info.ComponentSection))
 	}
 
 	// Provision an isolated workdir for LOCAL Terraform components (no JIT source) up front — before
@@ -308,11 +308,13 @@ func DryRunDefersMissingPath(info *schema.ConfigAndStacksInfo) bool {
 
 // resolveDryRunComponentPath validates placement without downloading source or copying a workdir.
 // The existence result describes the current filesystem, not a simulated successful provision.
-func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallback string) (string, bool, error) {
+// A sourced component's directory follows source target rules, which honor an explicit
+// working_directory for an enabled workdir.
+func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallback string, sourced bool) (string, bool, error) {
 	var err error
 	isWorkdir := provWorkdir.IsWorkdirEnabled(info.ComponentSection) &&
-		(componentType == cfg.TerraformComponentType || provSource.HasSource(info.ComponentSection))
-	if provSource.HasSource(info.ComponentSection) {
+		(componentType == cfg.TerraformComponentType || sourced)
+	if sourced {
 		fallback, err = dryRunSourceTarget(atmosConfig, info, componentType)
 	} else if componentType == cfg.TerraformComponentType && isWorkdir {
 		fallback, err = provWorkdir.BuildPath(atmosConfig.BasePath, componentType, info.FinalComponent, info.Stack, info.ComponentSection)
@@ -336,11 +338,14 @@ func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *sc
 
 // ResolveRetainedWorkdir records, without provisioning anything, the directory an earlier run
 // populated and returns it. Reviewed saved plans use it to find their retained workdir in a new
-// process, where only provisioning would otherwise set provWorkdir.WorkdirPathKey.
+// process, where only provisioning would otherwise set provWorkdir.WorkdirPathKey. The plan ran
+// with the provider's module source, so an enabled workdir follows source target rules, including
+// an explicit working_directory, even when the discovered section carries no source.
 func ResolveRetainedWorkdir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallbackComponentPath string) (string, error) {
 	defer perf.Track(atmosConfig, "component.ResolveRetainedWorkdir")()
 
-	path, _, err := resolveDryRunComponentPath(atmosConfig, info, componentType, fallbackComponentPath)
+	sourced := provSource.HasSource(info.ComponentSection) || provWorkdir.IsWorkdirEnabled(info.ComponentSection)
+	path, _, err := resolveDryRunComponentPath(atmosConfig, info, componentType, fallbackComponentPath, sourced)
 	return path, err
 }
 

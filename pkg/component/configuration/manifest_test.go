@@ -269,3 +269,56 @@ func TestExplicitLockGenerationReplacesAdjacentCopy(t *testing.T) {
 	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
 	require.Equal(t, "# pinned\n", read(t, root, lockFileName))
 }
+
+// A manifest that cannot be written is reported with the configuration sentinel and keeps its
+// filesystem cause; the generated file written before it stays in place.
+func TestManifestWriteFailureCarriesSentinel(t *testing.T) {
+	root := t.TempDir()
+	// A regular file where the bookkeeping directory belongs makes the manifest write fail.
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".atmos"), []byte("blocker\n"), 0o600))
+
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{generated("main.tf", "locals {}\n", "overwrite")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.Contains(t, err.Error(), manifestName)
+	var pathErr *os.PathError
+	require.ErrorAs(t, err, &pathErr, "the filesystem cause is preserved")
+	require.Equal(t, "locals {}\n", read(t, root, "main.tf"))
+}
+
+// requireEffectiveDirectoryPermissions skips a test when the process can still create files in a
+// read-only directory, as root with CAP_DAC_OVERRIDE can, or on Windows.
+func requireEffectiveDirectoryPermissions(t *testing.T, directory string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not prevent changes on Windows")
+	}
+	probe := filepath.Join(directory, ".permission-probe")
+	if err := os.WriteFile(probe, nil, 0o600); err == nil {
+		_ = os.Remove(probe)
+		t.Skip("the process bypasses directory permissions")
+	}
+}
+
+// A replacement that cannot be written leaves the previous file and its recorded digest in place,
+// so the retry still recognizes the file as this host's under an ownership-checking policy.
+func TestFailedReplacementKeepsTheRecordedFile(t *testing.T) {
+	root := t.TempDir()
+	original := generated("child/backend.tf", "terraform {}\n", "overwrite_terragrunt")
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{original}))
+	child := filepath.Join(root, "child")
+	require.NoError(t, os.Chmod(child, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(child, 0o755) })
+	requireEffectiveDirectoryPermissions(t, child)
+
+	replacement := generated("child/backend.tf", "terraform { backend \"s3\" {} }\n", "overwrite_terragrunt")
+	require.ErrorIs(t, WriteFiles(root, []schema.ComponentConfigurationFile{replacement}), errUtils.ErrPluginInvalidConfig)
+	require.Equal(t, "terraform {}\n", read(t, root, "child/backend.tf"), "the previous bytes stay intact")
+	entries, err := os.ReadDir(child)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "no temporary file is left behind")
+	require.Equal(t, "backend.tf", entries[0].Name())
+
+	require.NoError(t, os.Chmod(child, 0o755))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{replacement}))
+	require.Equal(t, "terraform { backend \"s3\" {} }\n", read(t, root, "child/backend.tf"))
+}

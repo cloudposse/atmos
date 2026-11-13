@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -23,7 +25,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// recorder implements Runner and records every hook and the action in call order.
+// recorder records every hook and the action in call order. Tests drive it through the
+// generated MockRunner returned by runner.
 type recorder struct {
 	calls []string
 	// failures maps a hook name (or "action") to the error it returns.
@@ -34,21 +37,29 @@ type recorder struct {
 	onCall func(name string)
 }
 
-func (r *recorder) RunHook(_ context.Context, kind HookKind, hook *schema.ComponentHook) (string, error) {
+// runner returns a generated Runner mock whose RunHook calls feed the recorder.
+func (r *recorder) runner(t *testing.T) Runner {
+	t.Helper()
+	mock := NewMockRunner(gomock.NewController(t))
+	mock.EXPECT().RunHook(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(r.runHook).AnyTimes()
+	return mock
+}
+
+func (r *recorder) runHook(_ context.Context, kind HookKind, hook *schema.ComponentHook) (Output, error) {
 	name := string(kind) + ":" + hook.Name
 	r.calls = append(r.calls, name)
 	if r.onCall != nil {
 		r.onCall(name)
 	}
-	return r.output[hook.Name], r.failures[hook.Name]
+	return TextOutput(r.output[hook.Name]), r.failures[hook.Name]
 }
 
-func (r *recorder) action() (string, error) {
+func (r *recorder) action() (Output, error) {
 	r.calls = append(r.calls, "action")
 	if r.onCall != nil {
 		r.onCall("action")
 	}
-	return r.output["action"], r.failures["action"]
+	return TextOutput(r.output["action"]), r.failures["action"]
 }
 
 func hook(name string, commands ...string) schema.ComponentHook {
@@ -57,7 +68,7 @@ func hook(name string, commands ...string) schema.ComponentHook {
 
 func runLifecycle(t *testing.T, config *schema.ComponentExecution, command string, r *recorder) error {
 	t.Helper()
-	return Run(t.Context(), config, command, r, r.action)
+	return Run(t.Context(), config, command, r.runner(t), r.action)
 }
 
 func TestRunOrdersBeforeActionAfter(t *testing.T) {
@@ -230,7 +241,7 @@ func TestRunStopsWhenCanceled(t *testing.T) {
 		AfterHooks:  []schema.ComponentHook{{Name: "a", Commands: []string{"plan"}, Execute: []string{"tool"}, RunOnError: true}},
 		ErrorHooks:  []schema.ComponentHook{{Name: "e", Commands: []string{"plan"}, OnErrors: []string{".*"}, Execute: []string{"tool"}}},
 	}
-	err := Run(ctx, config, "plan", r, r.action)
+	err := Run(ctx, config, "plan", r.runner(t), r.action)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, []string{"before_hook:b1"}, r.calls)
 }
@@ -239,9 +250,33 @@ func TestRunDoesNotStartWhenAlreadyCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	r := &recorder{}
-	err := Run(ctx, &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{hook("b", "plan")}}, "plan", r, r.action)
+	err := Run(ctx, &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{hook("b", "plan")}}, "plan", r.runner(t), r.action)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, r.calls)
+}
+
+func TestRunDoesNotStartActionWhenLastBeforeHookIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	r := &recorder{onCall: func(name string) {
+		if name == "before_hook:last" {
+			cancel()
+		}
+	}}
+	config := &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{hook("first", "plan"), hook("last", "plan")}}
+	err := Run(ctx, config, "plan", r.runner(t), r.action)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, []string{"before_hook:first", "before_hook:last"}, r.calls)
+}
+
+func TestRunWithoutHooksDoesNotStartWhenAlreadyCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for _, config := range []*schema.ComponentExecution{nil, {}} {
+		r := &recorder{}
+		err := Run(ctx, config, "plan", r.runner(t), r.action)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Empty(t, r.calls)
+	}
 }
 
 func TestRunErrorMessageNamesTheHook(t *testing.T) {
@@ -374,6 +409,79 @@ func TestRecovererMatchesStderrOrFallsBackToError(t *testing.T) {
 				require.NoError(t, err)
 			} else {
 				require.ErrorIs(t, err, errExit)
+			}
+		})
+	}
+}
+
+// streamOutput is captured output that records how it was read.
+type streamOutput struct {
+	text    string
+	openErr error
+	readErr error
+	closed  int
+}
+
+func (o *streamOutput) Open() (io.Reader, error) {
+	if o.openErr != nil {
+		return nil, o.openErr
+	}
+	var reader io.Reader = strings.NewReader(o.text)
+	if o.readErr != nil {
+		reader = io.MultiReader(reader, &failingReader{err: o.readErr})
+	}
+	return &closingReader{Reader: reader, output: o}, nil
+}
+
+type closingReader struct {
+	io.Reader
+	output *streamOutput
+}
+
+func (r *closingReader) Close() error {
+	r.output.closed++
+	return nil
+}
+
+type failingReader struct{ err error }
+
+func (r *failingReader) Read([]byte) (int, error) { return 0, r.err }
+
+// TestErrorHooksStreamCapturedOutput verifies error hook matching reads captured output as a
+// stream, closes every reader, keeps matching across failure boundaries, and reports capture
+// failures instead of silently skipping the hook.
+func TestErrorHooksStreamCapturedOutput(t *testing.T) {
+	failed := errors.New("exit status 1")
+	readFailure := errors.New("capture read failed")
+	large := strings.Repeat("x", 4<<20) + "\nError: AccessDenied\n"
+	for _, test := range []struct {
+		name    string
+		output  *streamOutput
+		pattern string
+		hookRan bool
+		wantErr error
+	}{
+		{name: "match at end of large output", output: &streamOutput{text: large}, pattern: "AccessDenied", hookRan: true},
+		{name: "match spans error and output", output: &streamOutput{text: "Error: Throttled"}, pattern: "(?s)exit status 1.*Throttled", hookRan: true},
+		{name: "anchored pattern on the whole text", output: &streamOutput{text: "tail"}, pattern: "^exit status 1\ntail\n$", hookRan: true},
+		{name: "no match", output: &streamOutput{text: large}, pattern: "Throttled"},
+		{name: "capture cannot be opened", output: &streamOutput{openErr: readFailure}, pattern: ".*", wantErr: readFailure},
+		{name: "capture read fails", output: &streamOutput{text: "partial", readErr: readFailure}, pattern: "never", wantErr: readFailure},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := &recorder{}
+			config := &schema.ComponentExecution{ErrorHooks: []schema.ComponentHook{{Name: "e", Commands: []string{"plan"}, OnErrors: []string{test.pattern}, Execute: []string{"tool"}}}}
+			err := Run(t.Context(), config, "plan", r.runner(t), func() (Output, error) {
+				r.calls = append(r.calls, "action")
+				return test.output, failed
+			})
+			require.ErrorIs(t, err, failed, "the action failure stays visible")
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+			}
+			require.Equal(t, test.hookRan, slices.Contains(r.calls, "error_hook:e"), r.calls)
+			if test.output.openErr == nil {
+				require.Equal(t, 1, test.output.closed, "every opened reader is closed")
 			}
 		})
 	}
@@ -565,4 +673,82 @@ func TestLifecycleHookSelection(t *testing.T) {
 	require.Equal(t, []string{CommandReadConfig}, selected[0].Commands, "the alias is rewritten to the canonical command")
 	require.Equal(t, []string{"plan", CommandReadConfigAlias}, hooks[0].Commands, "the input is not modified")
 	require.Empty(t, HooksFor(hooks, "other"))
+}
+
+func errorHook(name string) schema.ComponentHook {
+	return schema.ComponentHook{Name: name, Commands: []string{"plan"}, OnErrors: []string{".*"}, Execute: []string{"tool", name}}
+}
+
+func TestRunCancellationDuringActionIsReported(t *testing.T) {
+	failure := errors.New("exit status 1")
+	for _, test := range []struct {
+		name        string
+		actionErr   error
+		wantFailure bool
+	}{
+		{"successful action", nil, false},
+		{"failed action", failure, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			r := &recorder{}
+			config := &schema.ComponentExecution{
+				BeforeHooks: []schema.ComponentHook{hook("b", "plan")},
+				AfterHooks:  []schema.ComponentHook{{Name: "a", Commands: []string{"plan"}, Execute: []string{"tool"}, RunOnError: true}},
+				ErrorHooks:  []schema.ComponentHook{errorHook("e")},
+			}
+			err := Run(ctx, config, "plan", r.runner(t), func() (Output, error) {
+				r.calls = append(r.calls, "action")
+				cancel()
+				return nil, test.actionErr
+			})
+			require.ErrorIs(t, err, context.Canceled)
+			require.Equal(t, test.wantFailure, errors.Is(err, failure), "the action's own failure must stay visible")
+			require.Equal(t, []string{"before_hook:b", "action"}, r.calls, "no later hook may run after cancellation")
+		})
+	}
+}
+
+func TestRunCancellationDuringAfterHookSkipsErrorHooks(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	failure := errors.New("exit status 2")
+	r := &recorder{failures: map[string]error{"action": failure}, onCall: func(name string) {
+		if name == "after_hook:a" {
+			cancel()
+		}
+	}}
+	config := &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{{Name: "a", Commands: []string{"plan"}, Execute: []string{"tool"}, RunOnError: true}},
+		ErrorHooks: []schema.ComponentHook{errorHook("e")},
+	}
+	err := Run(ctx, config, "plan", r.runner(t), r.action)
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, failure)
+	require.Equal(t, []string{"action", "after_hook:a"}, r.calls)
+}
+
+func TestRunCancellationBetweenErrorHooksStopsRemainingHooks(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	failure := errors.New("exit status 3")
+	r := &recorder{failures: map[string]error{"action": failure}, onCall: func(name string) {
+		if name == "error_hook:e1" {
+			cancel()
+		}
+	}}
+	config := &schema.ComponentExecution{ErrorHooks: []schema.ComponentHook{errorHook("e1"), errorHook("e2")}}
+	err := Run(ctx, config, "plan", r.runner(t), r.action)
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, failure)
+	require.Equal(t, []string{"action", "error_hook:e1"}, r.calls, "the second error hook must not start once canceled")
+}
+
+func TestJoinFailuresKeepsLoneErrorIntact(t *testing.T) {
+	lone := errors.New("only")
+	require.Same(t, lone, joinFailures([]failure{{err: lone}}, nil))
+	require.Same(t, lone, joinFailures([]failure{{err: lone}}, lone), "an already-recorded cause is not duplicated")
+	require.NoError(t, joinFailures(nil, nil))
+	other := errors.New("other")
+	joined := joinFailures([]failure{{err: lone}}, other)
+	require.ErrorIs(t, joined, lone)
+	require.ErrorIs(t, joined, other)
 }

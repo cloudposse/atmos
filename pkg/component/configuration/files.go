@@ -1,10 +1,12 @@
 package configuration
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
@@ -147,26 +149,93 @@ func recordedIfOwned(recorded, existing string) string {
 
 // ensureMode tightens a file written by an earlier run, which may predate the private mode.
 func ensureMode(root *os.Root, file schema.ComponentConfigurationFile) error {
-	return restrictExistingGeneratedFile(root, file)
+	if err := restrictExistingGeneratedFile(root, file); err != nil {
+		return generatedFileError(file.Path, err)
+	}
+	return nil
 }
 
 // replaceFile writes the bytes. Generated files can embed backend credentials, so they are
 // private to the owner, like the backend file Atmos writes itself.
+//
+// An existing file is replaced through a temporary file renamed over it, so a failed write leaves
+// the previous bytes, and the digest recorded for them, valid for a retry.
 func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists bool) error {
 	if err := root.MkdirAll(filepath.Dir(file.Path), directoryMode); err != nil {
+		return generatedFileError(file.Path, err)
+	}
+	// Sensitive files on Windows need the secured handle to retain their ACL and
+	// reject concurrent readers while replacing existing bytes.
+	if runtime.GOOS == "windows" && file.Sensitive {
+		return replaceSensitiveWindowsFile(root, file, exists)
+	}
+	if !exists {
+		return createFile(root, file.Path, file.Content)
+	}
+	temporary := filepath.Join(filepath.Dir(file.Path), "."+filepath.Base(file.Path)+"."+rand.Text()+".tmp")
+	if err := createFile(root, temporary, file.Content); err != nil {
 		return err
 	}
-	// Policy has already approved replacing an existing file; creating one must not race another writer.
+	if err := root.Rename(temporary, file.Path); err != nil {
+		_ = root.Remove(temporary)
+		return generatedFileError(file.Path, err)
+	}
+	return nil
+}
+
+func replaceSensitiveWindowsFile(root *os.Root, file schema.ComponentConfigurationFile, exists bool) error {
 	output, err := openGeneratedFile(root, file, exists)
 	if err != nil {
-		return fmt.Errorf("%w: generated file %s: %w", errUtils.ErrPluginInvalidConfig, file.Path, err)
+		return generatedFileError(file.Path, err)
 	}
-	// Access is restricted through the open handle before existing bytes are removed.
 	if exists {
 		if err := output.Truncate(0); err != nil {
 			return errors.Join(err, output.Close())
 		}
 	}
 	_, writeErr := output.Write(file.Content)
-	return errors.Join(writeErr, output.Close())
+	if err := errors.Join(writeErr, output.Close()); err != nil {
+		return generatedFileError(file.Path, err)
+	}
+	return nil
+}
+
+func createFile(root *os.Root, path string, content []byte) error {
+	output, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, secretMode)
+	if err != nil {
+		return generatedFileError(path, err)
+	}
+	if err := output.Chmod(secretMode); err != nil {
+		_ = output.Close()
+		_ = root.Remove(path)
+		return generatedFileError(path, err)
+	}
+	_, writeErr := output.Write(content)
+	if err := errors.Join(writeErr, output.Close()); err != nil {
+		_ = root.Remove(path)
+		return generatedFileError(path, err)
+	}
+	return nil
+}
+
+// generatedFileError classifies a filesystem failure on a generated file as invalid configuration.
+func generatedFileError(path string, err error) error {
+	return fmt.Errorf("%w: generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err)
+}
+
+// WatchPaths resolves provider-owned watches against the project
+// root without putting checkout-specific absolute paths into stack comparisons.
+// Existing YAML dependency path semantics remain unchanged. It reports whether
+// the dependencies belong to a provider-discovered component.
+func WatchPaths(config *schema.AtmosConfiguration, settings map[string]any, deps []schema.ComponentDependency) bool {
+	defer perf.Track(nil, "configuration.WatchPaths")()
+	if !schema.ConfigurationOwned(settings) {
+		return false
+	}
+	for i := range deps {
+		if !filepath.IsAbs(deps[i].Path) {
+			deps[i].Path = filepath.Join(config.BasePathAbsolute, deps[i].Path)
+		}
+	}
+	return true
 }

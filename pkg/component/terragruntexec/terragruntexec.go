@@ -231,19 +231,7 @@ func absolute(path string) string {
 // optionFlags maps provider options to Terragrunt global flags, in a stable order. Features merge per
 // name: configuration, then the environment, then an explicit command-line option.
 func optionFlags(options map[string]schema.ComponentProviderOption, configured map[string]any, environment []string) (args, env []string) {
-	features := maps.Clone(configured)
-	if features == nil {
-		features = map[string]any{}
-	}
-	maps.Copy(features, environmentFeatures(environment))
-	if feature, set := options["feature"]; set {
-		if names, ok := feature.Value.(map[string]any); ok && (feature.FromCLI || !hasComponentFeatures(environment)) {
-			maps.Copy(features, names)
-		}
-	}
-	for _, name := range slices.Sorted(maps.Keys(features)) {
-		args = append(args, "--feature", name+"="+fmt.Sprint(features[name]))
-	}
+	args = append(args, featureOptionFlags(options, configured, environment)...)
 	// Terragrunt ranks a flag above its variable, so an option read from the process environment becomes a
 	// flag only when the component `env` does not set that variable: the component's own setting, such as
 	// the role its unit runs under, must not be replaced by the Atmos process environment.
@@ -262,6 +250,24 @@ func optionFlags(options map[string]schema.ComponentProviderOption, configured m
 		env = append(env, tokenVariable+"="+fmt.Sprint(token.Value))
 	}
 	return args, env
+}
+
+func featureOptionFlags(options map[string]schema.ComponentProviderOption, configured map[string]any, environment []string) []string {
+	features := maps.Clone(configured)
+	if features == nil {
+		features = map[string]any{}
+	}
+	maps.Copy(features, environmentFeatures(environment))
+	if feature, set := options["feature"]; set {
+		if names, ok := feature.Value.(map[string]any); ok && (feature.FromCLI || !hasComponentFeatures(environment)) {
+			maps.Copy(features, names)
+		}
+	}
+	var args []string
+	for _, name := range slices.Sorted(maps.Keys(features)) {
+		args = append(args, "--feature", name+"="+fmt.Sprint(features[name]))
+	}
+	return args
 }
 
 // componentSets reports whether the component environment sets the variable.

@@ -622,6 +622,22 @@ func TestResolveRetainedWorkdirRecordsPathWithoutProvisioning(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, entries, "locating a retained workdir must not create or download anything")
 
+	// A reviewed plan ran with the provider's module source. Without a discovered source, an
+	// enabled workdir still follows source target rules, including an explicit working_directory.
+	chosen := filepath.Join(base, "chosen")
+	unsourced := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: map[string]any{
+		"component": "vpc", "atmos_component": "vpc", "atmos_stack": "dev",
+		"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		"metadata":  map[string]any{"working_directory": chosen},
+	}}
+	path, err = ResolveRetainedWorkdir(config, unsourced, cfg.TerraformComponentType, fallback)
+	require.NoError(t, err)
+	assert.Equal(t, chosen, path)
+	assert.Equal(t, chosen, unsourced.ComponentSection[provWorkdir.WorkdirPathKey])
+	entries, err = os.ReadDir(base)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "locating a retained workdir must not create or download anything")
+
 	// Without a workdir the component keeps its own directory and nothing is recorded.
 	plain := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: map[string]any{}}
 	path, err = ResolveRetainedWorkdir(config, plain, cfg.TerraformComponentType, base)

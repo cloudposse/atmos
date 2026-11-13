@@ -5,10 +5,19 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/santhosh-tekuri/jsonschema/v5"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// Discovered definitions are literal provider inventory data, so static inspection
+// (for example scoped `atmos auth validate`) includes them as well.
+func init() {
+	mergeStaticStacks = mergeConfigurationStacks
+}
 
 // mergeConfigurationStacks feeds provider definitions through the ordinary stack compiler.
 // The invocation-owned provider retains the caller's cancellation scope.
@@ -44,7 +53,8 @@ func mergeConfigurationStacks(config *schema.AtmosConfiguration, stacks map[stri
 // their origin. Global backends remain allowed; the provider replaces them during preparation.
 func checkConfigurationBackendOverrides(opts *ComponentProcessorOptions, result *ComponentProcessorResult, settings map[string]any) error {
 	defer perf.Track(nil, "exec.checkConfigurationBackendOverrides")()
-	if _, owned := settings["configuration"]; !owned {
+	// Only a provider owns the backend; a bare `configuration` key, such as an empty map, does not.
+	if !configuration.OwnsComponent(map[string]any{"settings": settings}) {
 		return nil
 	}
 	for _, layer := range []struct {
@@ -69,4 +79,32 @@ func checkConfigurationBackendOverrides(opts *ComponentProcessorOptions, result 
 		}
 	}
 	return nil
+}
+
+// validateDiscoveredManifests adapts the configuration package's manifest validation
+// to the stack processor's compiled-schema cache.
+func validateDiscoveredManifests(config *schema.AtmosConfiguration, schemaPath string) ([]string, error) {
+	if config.ComponentConfigurations == nil {
+		return nil, nil
+	}
+	discovered, err := config.ComponentConfigurations.Discover(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return configuration.ValidateDiscoveredManifests(discovered, func() (*jsonschema.Schema, error) {
+		return compiledManifestSchema(schemaPath)
+	})
+}
+
+// compiledManifestSchema shares the stack processor's compiled-schema cache.
+func compiledManifestSchema(path string) (*jsonschema.Schema, error) {
+	if compiled, found := getCachedCompiledSchema(path); found {
+		return compiled, nil
+	}
+	compiled, err := configuration.CompileManifestSchema(path)
+	if err != nil {
+		return nil, err
+	}
+	cacheCompiledSchema(path, compiled)
+	return compiled, nil
 }

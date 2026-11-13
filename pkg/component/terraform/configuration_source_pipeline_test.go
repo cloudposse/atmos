@@ -19,6 +19,8 @@ import (
 // sourcePipelineProvider replaces only the RPC boundary; source validation is
 // performed by the real Session.Prepare reached through component preparation.
 type sourcePipelineProvider struct {
+	// The embedded interface leaves calls this test does not expect, such as ResolveState, unimplemented.
+	configurationadapter.Provider
 	unit     *pluginv1.DiscoveredComponent
 	result   *pluginv1.PrepareComponentResponse
 	prepares int
@@ -75,7 +77,7 @@ func TestConfigurationSourceSymlinkRejectedBeforeInitAndMain(t *testing.T) {
 			if err == nil {
 				err = executor.executeCommandPipeline(project.config, info, execution)
 			}
-			require.Equal(t, 1, provider.prepares, "must reach the real session's preparation boundary")
+			require.Equal(t, 2, provider.prepares, "must reach the IAM probe and full preparation boundaries")
 			if escaping {
 				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 				require.Nil(t, execution)

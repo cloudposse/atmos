@@ -178,6 +178,41 @@ terraform {
 	require.Equal(t, []string{project.root}, result.Folders)
 }
 
+func TestWatchesExtraArgumentVarFiles(t *testing.T) {
+	project := newWatchProject(t)
+	result := project.track(`
+locals { flags = ["-var-file=${get_terragrunt_dir()}/../../shared/computed.tfvars", "-lock=false"] }
+terraform {
+  extra_arguments "literal" {
+    commands = ["plan"]
+    arguments = ["-var-file=${get_terragrunt_dir()}/../../shared/arg.tfvars", "-var-file", "relative.tfvars", "-lock=false"]
+  }
+  extra_arguments "computed" {
+    commands = ["apply"]
+    arguments = local.flags
+  }
+}
+`)
+	for _, path := range []string{
+		filepath.Join(project.root, "live", "shared", "arg.tfvars"),
+		filepath.Join(project.root, "live", "shared", "computed.tfvars"),
+		filepath.Join(project.unit, "relative.tfvars"),
+	} {
+		require.Contains(t, result.Files, path)
+	}
+	require.Empty(t, result.Folders)
+
+	result = project.track(`
+terraform {
+  extra_arguments "dynamic" {
+    commands = ["plan"]
+    arguments = ["-var-file=${get_terragrunt_dir()}/${get_env("ENV")}.tfvars"]
+  }
+}
+`)
+	require.Equal(t, []string{project.root}, result.Folders)
+}
+
 func TestWatchesFollowReadConfigurationFiles(t *testing.T) {
 	project := newWatchProject(t)
 	project.write(filepath.Join(project.unit, "extra.hcl"), `

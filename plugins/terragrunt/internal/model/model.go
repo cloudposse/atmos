@@ -37,13 +37,16 @@ type Resolution struct {
 	StackConfigs       map[string]string `json:"stack_configs,omitempty"`
 	Inputs             map[string]any    `json:"inputs"`
 	// SensitiveInputs are the paths (object keys from the top) of the inputs the unit declares sensitive.
-	SensitiveInputs   [][]string        `json:"sensitive_inputs,omitempty"`
-	Source            string            `json:"source"`
-	BackendGenerated  bool              `json:"backend_generated,omitempty"`
-	BackendType       string            `json:"backend_type"`
-	Backend           map[string]any    `json:"backend"`
-	Generated         map[string]string `json:"generated"`
-	GeneratedPolicies map[string]string `json:"generated_policies,omitempty"`
+	SensitiveInputs [][]string `json:"sensitive_inputs,omitempty"`
+	Source          string     `json:"source"`
+	// RegistryAuth is an invocation-only bearer header for a same-origin archive.
+	RegistryAuth            *RegistryAuth     `json:"-"`
+	RegistryResolutionNanos uint64            `json:"registry_resolution_nanos,omitempty"`
+	BackendGenerated        bool              `json:"backend_generated,omitempty"`
+	BackendType             string            `json:"backend_type"`
+	Backend                 map[string]any    `json:"backend"`
+	Generated               map[string]string `json:"generated"`
+	GeneratedPolicies       map[string]string `json:"generated_policies,omitempty"`
 	// UnitFileCopies identifies literal files copied from beside the unit.
 	UnitFileCopies map[string]bool `json:"unit_file_copies,omitempty"`
 	// SensitiveGenerated names generated files whose contents can hold
@@ -65,6 +68,11 @@ type Resolution struct {
 	FeatureFlags map[string]string `json:"feature_flags,omitempty"`
 	// IAM is the role the host assumes for the unit's commands; nil when the unit names none.
 	IAM *IAM `json:"iam,omitempty"`
+}
+
+type RegistryAuth struct {
+	Origin        string
+	Authorization string
 }
 
 // IAM is the evaluated iam_role setting and its companions. The plugin never assumes the role: the host
@@ -156,6 +164,9 @@ type Execution struct {
 	BeforeHooks    []Hook           `json:"before_hooks,omitempty"`
 	AfterHooks     []Hook           `json:"after_hooks,omitempty"`
 	ErrorHooks     []Hook           `json:"error_hooks,omitempty"`
+	// Apply is the metadata evaluated for the apply command while preparing a plan whose
+	// configuration depends on the command. Nil means the plan-time metadata applies.
+	Apply *Execution `json:"apply,omitempty"`
 }
 
 // ExtraArguments adds arguments, variable files, and environment to the listed commands.

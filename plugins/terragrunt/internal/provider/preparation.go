@@ -2,14 +2,18 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
@@ -19,7 +23,7 @@ import (
 )
 
 func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.ComponentRequest) (model.Request, error) {
-	if _, err := p.Validate(ctx, request); err != nil {
+	if err := validate(ctx, request); err != nil {
 		return model.Request{}, err
 	}
 	req, err := operation(request.RootDirectory, request.Provider, request.Operation, request.Invocation)
@@ -76,42 +80,107 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	effects := request.GetEffects()
-	if !effects.GetCommands() || !effects.GetWrites() || !effects.GetStateReads() || !effects.GetNetwork() || !effects.GetSecrets() {
+	if !preparationEffects(request.GetEffects()) {
 		return nil, rpcError(ErrUnsupported)
 	}
-	if req.GenerationRoot != "" {
-		generation := req
-		generation.Path, generation.Phase, generation.Command = req.GenerationRoot, "discover", "generate"
-		if _, err := p.evaluate(ctx, generation); err != nil {
-			return nil, rpcError(err)
-		}
+	// The role is resolved before any evaluation that can call AWS functions, so the
+	// probe runs before stack generation.
+	if req.Phase == "iam" {
+		return p.probeIAM(ctx, &req)
 	}
+	// All provider processes generating the same stack must retain the lock
+	// until the subsequent unit parse has finished.
+	unlock, err := p.generateLocked(ctx, req)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	defer unlock()
 	result, err := p.evaluate(ctx, req)
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	response, err := preparedResponse(req, result)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return response, nil
+}
+
+func preparationEffects(effects *pluginv1.ComponentEffects) bool {
+	return effects.GetCommands() && effects.GetWrites() && effects.GetStateReads() && effects.GetNetwork() && effects.GetSecrets()
+}
+
+// generateLocked generates the owning stack under a cross-process lock and
+// returns the function that releases it. Units outside a stack need no lock.
+func (p *Provider) generateLocked(ctx context.Context, req model.Request) (func(), error) {
+	if req.GenerationRoot == "" {
+		return func() {}, nil
+	}
+	lock, err := generationLock(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	generation := req
+	generation.Path, generation.Phase, generation.Command = req.GenerationRoot, "discover", "generate"
+	if _, err := p.evaluate(ctx, generation); err != nil {
+		_ = lock.Unlock()
+		return nil, err
+	}
+	return func() { _ = lock.Unlock() }, nil
+}
+
+// generationLock keys the lock by the physical generation root, so processes
+// that spell the project root differently still serialize.
+func generationLock(ctx context.Context, req model.Request) (*flock.Flock, error) {
+	root, err := filepath.EvalSymlinks(req.BasePath)
+	if err != nil {
+		return nil, err
+	}
+	rel, err := filepath.Rel(req.BasePath, req.GenerationRoot)
+	if err != nil {
+		return nil, err
+	}
+	generationPath := filepath.Join(root, rel)
+	if resolved, resolveErr := filepath.EvalSymlinks(generationPath); resolveErr == nil {
+		generationPath = resolved
+	}
+	key := sha256.Sum256([]byte(generationPath))
+	lock := flock.New(filepath.Join(os.TempDir(), fmt.Sprintf("atmos-terragrunt-%x.lock", key)))
+	locked, err := lock.TryLockContext(ctx, 50*time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	if !locked {
+		return nil, ctx.Err()
+	}
+	return lock, nil
+}
+
+func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.PrepareComponentResponse, error) {
 	values := result.Inputs
 	if values == nil {
 		values = map[string]any{}
 	}
 	inputs, err := encodeSensitive(values, result.SensitiveInputs)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, err
 	}
 	state, err := stateIdentity(req, result)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, err
 	}
 	watched, err := sources(req.BasePath, result)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, err
 	}
-	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution)}
+	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution), RegistryResolutionNanos: result.RegistryResolutionNanos}
 	if err := parityResponse(response, req, result); err != nil {
 		return nil, rpcError(err)
 	}
 	if response.Iam, err = iamResponse(result.IAM); err != nil {
+		return nil, rpcError(err)
+	}
+	if err = encodeRegistryAuth(response, result.RegistryAuth); err != nil {
 		return nil, rpcError(err)
 	}
 	response.Diagnostics = unitWarnings(req.BasePath, result.Warnings)
@@ -123,6 +192,31 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name]})
 	}
 	return response, nil
+}
+
+func encodeRegistryAuth(response *pluginv1.PrepareComponentResponse, auth *model.RegistryAuth) error {
+	if auth == nil {
+		return nil
+	}
+	value, err := component.Encode(cty.StringVal(auth.Authorization).Mark(component.Sensitive))
+	if err != nil {
+		return err
+	}
+	response.ModuleSourceAuthorization = value
+	response.ModuleSourceAuthOrigin = auth.Origin
+	return nil
+}
+
+func (p *Provider) probeIAM(ctx context.Context, req *model.Request) (*pluginv1.PrepareComponentResponse, error) {
+	result, err := p.evaluate(ctx, *req)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	iam, err := iamResponse(result.IAM)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return &pluginv1.PrepareComponentResponse{Iam: iam, Diagnostics: unitWarnings(req.BasePath, result.Warnings)}, nil
 }
 
 func stateIdentity(req model.Request, result *model.Resolution) (*pluginv1.ComponentStateIdentity, error) {
@@ -187,6 +281,7 @@ func executionResponse(execution *model.Execution) *pluginv1.ComponentExecutionC
 		BeforeHooks: hooksResponse(execution.BeforeHooks),
 		AfterHooks:  hooksResponse(execution.AfterHooks),
 		ErrorHooks:  hooksResponse(execution.ErrorHooks),
+		Apply:       executionResponse(execution.Apply),
 	}
 	for i := range execution.ExtraArguments {
 		extra := &execution.ExtraArguments[i]

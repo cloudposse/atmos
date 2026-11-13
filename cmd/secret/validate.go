@@ -90,7 +90,7 @@ func validateScope(scope secretScope) (secrets.ValidationResult, error) {
 		if len(secrets.ExtractDeclarations(sharedSecretSection(entry.Section))) == 0 {
 			continue
 		}
-		svc, err := loadServiceFn(secretScope{Stack: entry.Stack, Component: entry.Component, ComponentType: entry.ComponentType, Identity: scope.Identity, SharedOnly: true})
+		svc, err := loadServiceFn(secretScope{Stack: entry.Stack, Component: entry.Component, ComponentType: entry.ComponentType, Identity: scope.Identity, SharedOnly: true, CommandPath: scope.CommandPath})
 		if err != nil {
 			return result, err
 		}

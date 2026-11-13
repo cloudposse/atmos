@@ -229,11 +229,11 @@ func (e *Executor) runLifecycle(ctx context.Context, atmosConfig *schema.AtmosCo
 	phase := &executionPhase{command: stage.command}
 	hookOpts := hookOptions([]component.ExecutionOption{component.WithProcessContext(ctx), component.WithEnvironment(info.SanitizedEnv)})
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: info, phase: phase, opts: hookOpts}
-	return execution.Run(ctx, stage.config, stage.command, runner, func() (string, error) {
+	return execution.Run(ctx, stage.config, stage.command, runner, func() (execution.Output, error) {
 		err := action(ctx)
 		if err == nil {
-			return "", nil
+			return nil, nil
 		}
-		return strings.TrimSpace(err.Error()), err
+		return execution.TextOutput(strings.TrimSpace(err.Error())), err
 	})
 }

@@ -85,6 +85,7 @@ func isInteractive() bool {
 
 // manager implements the AuthManager interface.
 type manager struct {
+	operationScope  *identityOperationScope
 	config          *schema.AuthConfig
 	providers       map[string]types.Provider
 	identities      map[string]types.Identity
@@ -310,6 +311,8 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	return result, err
 }
 
+// authenticateResolvedIdentity authenticates the chain and materializes the
+// target identity's context before returning its identity metadata.
 func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
@@ -343,7 +346,7 @@ func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName
 			IdentityName: identityName,
 			Credentials:  finalCreds,
 			Manager:      m,
-			Realm:        m.realm.Value,
+			Realm:        m.identityCredentialRealm(identityName),
 		}); err != nil {
 			// Keep structured details and hints from the identity error. Emulator
 			// identities use those hints to tell the user how to start the selected
@@ -362,9 +365,11 @@ func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName
 	// Clean up legacy (pre-realm) keyring and file entries to prevent realm mismatch warnings.
 	// This runs after successful authentication so legacy credentials remain as a fallback
 	// if authentication fails.
-	m.deleteLegacyCredentialFiles()
-	for _, step := range m.chain {
-		m.deleteLegacyKeyringEntry(step)
+	if m.operationScope == nil {
+		m.deleteLegacyCredentialFiles()
+		for _, step := range m.chain {
+			m.deleteLegacyKeyringEntry(step)
+		}
 	}
 
 	m.warnIfJustificationUnused()

@@ -1,8 +1,13 @@
 name: Release milestones
 
 on:
-  pull_request_target:
-    types: [opened, reopened, synchronize, edited, labeled, unlabeled, milestoned, demilestoned, closed, enqueued, dequeued]
+  # The unprivileged signal only wakes this default-branch reconciler. Its
+  # conclusion and artifacts are never authority for a release-policy verdict.
+  workflow_run:
+    workflows: [Quality Gate Signal]
+    types: [completed]
+  push:
+    branches: [main]
   issues:
     types: [closed, reopened, edited, milestoned, demilestoned]
   milestone:
@@ -47,7 +52,8 @@ jobs:
 
   enforce:
     needs: maintain
-    if: always()
+    # Review signals refresh quality only; release policy needs PR metadata events.
+    if: always() && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -71,7 +77,7 @@ jobs:
 
   previews:
     needs: maintain
-    if: always() && github.event_name != 'merge_group'
+    if: always() && github.event_name != 'merge_group' && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: release-notes

@@ -127,11 +127,15 @@ func TestAssumeInlineRoleFailures(t *testing.T) {
 	})
 	t.Run("no starting credentials", func(t *testing.T) {
 		empty := t.TempDir()
-		t.Setenv("AWS_ACCESS_KEY_ID", "")
-		t.Setenv("AWS_SECRET_ACCESS_KEY", "")
-		t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+		// The process keys are not a fallback for an invocation that names a missing profile.
+		t.Setenv("AWS_ACCESS_KEY_ID", "AKIAPROCESSKEY")
+		t.Setenv("AWS_SECRET_ACCESS_KEY", "process-secret")
 		_, err := AssumeInlineRole(context.Background(), InlineRole{Role: "arn:aws:iam::1:role/r"},
 			[]string{"AWS_SHARED_CREDENTIALS_FILE=" + filepath.Join(empty, "none"), "AWS_CONFIG_FILE=" + filepath.Join(empty, "none"), "AWS_PROFILE=missing"})
+		require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		// Nor for one whose every source is empty.
+		_, err = AssumeInlineRole(context.Background(), InlineRole{Role: "arn:aws:iam::1:role/r"},
+			[]string{"HOME=" + empty, "USERPROFILE=" + empty, "AWS_EC2_METADATA_DISABLED=true"})
 		require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	})
 }

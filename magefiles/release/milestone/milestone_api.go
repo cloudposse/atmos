@@ -167,7 +167,8 @@ func (c *Client) ensureMilestoneResult(title string) (bool, error) {
 		}
 		return false, fmt.Errorf("%w: milestone %s already exists and is closed", ErrMilestonePolicy, title)
 	}
-	err = c.Write(http.MethodPost, "milestones", map[string]string{"title": title, "state": "open"})
+	// Titles are the bare version; tags carry the "v" prefix.
+	err = c.Write(http.MethodPost, "milestones", map[string]string{"title": desired.String(), "state": "open"})
 	if err == nil {
 		return true, nil
 	}

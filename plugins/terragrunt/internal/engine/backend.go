@@ -57,7 +57,12 @@ func checkEncryption(encrypted, generated bool, result *model.Resolution, reques
 		})
 		return nil
 	}
-	if IsOpenTofu(request.Tofu) {
+	// The unit's terraform_binary, resolved before the backend, is the executable that runs it.
+	binary := result.TerraformBinary
+	if binary == "" {
+		binary = request.Tofu
+	}
+	if IsOpenTofu(binary) {
 		return nil
 	}
 	return &model.Problem{

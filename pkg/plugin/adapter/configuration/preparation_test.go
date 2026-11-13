@@ -26,7 +26,8 @@ func preparationSession(t *testing.T) (*Session, *MockProvider, *schema.ConfigAn
 	t.Helper()
 	provider := NewMockProvider(gomock.NewController(t))
 	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
-	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil).MaxTimes(1)
+	// The session discovers lazily, and Prepare rediscovers to revalidate dependencies.
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil).AnyTimes()
 	session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
 		return map[string]Provider{"terragrunt": provider}, nil
 	})
@@ -94,6 +95,28 @@ func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
 	require.ErrorContains(t, err, `command "terraform" selects the terraform engine`)
 	require.ErrorContains(t, err, "discovered for opentofu")
+}
+
+func TestPrepareRejectsDependenciesChangedSinceDiscovery(t *testing.T) {
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	network, app := unit(t, "network"), unit(t, "app")
+	moved := unit(t, "app")
+	moved.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+	gomock.InOrder(
+		provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil),
+		provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, moved}}, nil),
+	)
+	session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "apply", ComponentSettingsSection: map[string]any{"configuration": true}}
+
+	prepared, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "preparation changed discovered dependency paths")
+	require.Nil(t, prepared, "Prepare must not run when dependencies changed")
 }
 
 func TestPrepareFailsClosed(t *testing.T) {
@@ -328,7 +351,7 @@ func TestExplicitOptionsAndModeReachDiscoveryAndPreparation(t *testing.T) {
 			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
 				check(request.Operation)
 				return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil
-			})
+			}).MinTimes(1)
 			if wantMode != "executable" {
 				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
 					check(request.Operation)
@@ -367,10 +390,11 @@ func TestPlanIdentityIncludesTheEffectiveOptions(t *testing.T) {
 	identity := func(value string) string {
 		config := enabledConfig(t)
 		config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {"level": {Value: value}}}
-		mock := NewMockProvider(gomock.NewController(t))
+		mock := NewMockIdentifiedProvider(gomock.NewController(t))
 		mock.EXPECT().ComponentType().Return("terraform").AnyTimes()
 		mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil)
-		provider := &identifiedProvider{Provider: mock, identity: func(context.Context) (string, error) { return "v1", nil }}
+		mock.EXPECT().Identity(gomock.Any()).Return("v1", nil).AnyTimes()
+		provider := Provider(mock)
 		session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
 			return map[string]Provider{"terragrunt": provider}, nil
 		})
@@ -382,6 +406,15 @@ func TestPlanIdentityIncludesTheEffectiveOptions(t *testing.T) {
 	}
 	require.Equal(t, identity("debug"), identity("debug"))
 	require.NotEqual(t, identity("debug"), identity("info"), "applying a plan reviewed with other options must be refused")
+}
+
+type stateProviderFixture struct {
+	Provider
+	resolve func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error)
+}
+
+func (p *stateProviderFixture) ResolveState(ctx context.Context, req *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+	return p.resolve(ctx, req)
 }
 
 func TestPrepareRefusesAnExecutableModeUnit(t *testing.T) {

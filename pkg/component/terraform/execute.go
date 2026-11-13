@@ -253,8 +253,7 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 	// A Terraform command can create, change, or remove state, and a failed apply can
 	// still persist partial changes. Drop any preflight snapshot either way so a later
 	// graph node (including one in a keep-going run) reads the current outputs.
-	invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
-	tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
+	invalidateTerraformExecutionCaches(&info)
 
 	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
 		Cmd:    component.InvokingCommandFromOptions(opts...),
@@ -270,6 +269,16 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 // fails the command.
 func onlyRunIgnored(err error) bool {
 	return errors.Is(err, errUtils.ErrComponentRunIgnored) && !errors.Is(err, errUtils.ErrComponentHookFailed)
+}
+
+// invalidateTerraformExecutionCaches clears snapshots under both execution identities.
+func invalidateTerraformExecutionCaches(info *schema.ConfigAndStacksInfo) {
+	invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
+	tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
+	if info.StackFromArg != "" && info.StackFromArg != info.Stack {
+		invalidateTerraformStateCache(info.StackFromArg, info.ComponentFromArg)
+		tfoutput.InvalidateComponentOutputs(info.StackFromArg, info.ComponentFromArg)
+	}
 }
 
 // captureExecMetadataSync reports an execution record to Atmos Pro for the

@@ -100,15 +100,27 @@ func admittedCommandArgs(root *cobra.Command, original cobra.PositionalArgs) cob
 	}
 }
 
+// policyCommandPath returns the canonical command path policies see, without the
+// root command name. Native aliases use the canonical path.
+func policyCommandPath(root, cmd *cobra.Command) string {
+	if canonical := cmd.Annotations["policy-command"]; canonical != "" {
+		return canonical
+	}
+	return strings.TrimPrefix(cmd.CommandPath(), root.Name()+" ")
+}
+
+// PolicyCommandPath returns the canonical command path of cmd as policy path fields,
+// such as ["secret", "shell"], for inputs that carry a command path.
+func PolicyCommandPath(cmd *cobra.Command) []string {
+	return strings.Fields(policyCommandPath(cmd.Root(), cmd))
+}
+
 // checkCommandAdmission evaluates command policies. The args are only used to derive
 // the normalized destroy boolean; their values are never part of the policy input.
 func checkCommandAdmission(root, cmd *cobra.Command, args []string) error {
-	path := strings.TrimPrefix(cmd.CommandPath(), root.Name()+" ")
-	if canonical := cmd.Annotations["policy-command"]; canonical != "" {
-		path = canonical
-	}
+	path := policyCommandPath(root, cmd)
 	fields := strings.Fields(path)
-	data, err := json.Marshal(policy.CommandInput{Path: fields, Command: path, Destroy: policy.IsDestroyInvocation(fields, args)})
+	data, err := json.Marshal(policy.CommandInput{CommandPath: fields, Path: fields, Command: path, Destroy: policy.IsDestroyInvocation(fields, args)})
 	if err != nil {
 		return err
 	}

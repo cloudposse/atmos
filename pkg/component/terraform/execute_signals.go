@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/execution"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -26,7 +27,7 @@ func clearStaleSignals(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	}
 	path := filepath.Join(moduleDir, execution.SignalsFileName)
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("clear stale error signals from %s: %w", path, err)
+		return fmt.Errorf("%w: clear stale error signals from %s: %w", errUtils.ErrGeneratorRemoveFailed, path, err)
 	}
 	return nil
 }

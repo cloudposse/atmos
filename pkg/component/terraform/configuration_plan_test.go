@@ -18,21 +18,60 @@ import (
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
-type planRuntimeFixture struct {
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_plan_runtime_test.go -package=$GOPACKAGE -mock_names=reviewedPlanRuntime=MockReviewedPlanRuntime,planIdentityRuntime=MockPlanIdentityRuntime,planShowRunner=MockPlanShowRunner
+
+// reviewedPlanRuntime is a configuration runtime that prepares, binds saved plans, and resolves state.
+type reviewedPlanRuntime interface {
 	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationPlanRuntime
+	schema.ComponentConfigurationStateRuntime
+}
+
+// planIdentityRuntime can bind plans but cannot resolve backend state.
+type planIdentityRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationPlanRuntime
+}
+
+// planShowRunner runs the plan show command for plan policy evaluation.
+type planShowRunner interface {
+	process.Runner
+}
+
+// The generated mocks implement the contracts that the code under test asserts.
+var (
+	_ reviewedPlanRuntime = (*MockReviewedPlanRuntime)(nil)
+	_ planIdentityRuntime = (*MockPlanIdentityRuntime)(nil)
+	_ planShowRunner      = (*MockPlanShowRunner)(nil)
+)
+
+// planRuntimeFixture holds the responses that the generated plan runtime mock returns.
+// Tests change its fields to simulate a different provider identity, backend, or failure.
+type planRuntimeFixture struct {
 	identity string
 	state    *schema.ComponentConfigurationState
 	err      error
 }
 
-func (p *planRuntimeFixture) PlanIdentity(context.Context, *schema.ConfigAndStacksInfo, []schema.ComponentConfigurationSource) (string, error) {
-	return p.identity, p.err
-}
-
-func (p *planRuntimeFixture) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-	return p.state, p.err
+// mock returns a generated plan runtime that answers PlanIdentity and ResolveState from the
+// fixture at call time. Discover and Prepare have no expectations, so gomock rejects them.
+func (p *planRuntimeFixture) mock(t *testing.T) *MockReviewedPlanRuntime {
+	t.Helper()
+	runtime := NewMockReviewedPlanRuntime(gomock.NewController(t))
+	runtime.EXPECT().PlanIdentity(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *schema.ConfigAndStacksInfo, []schema.ComponentConfigurationSource) (string, error) {
+			return p.identity, p.err
+		},
+	).AnyTimes()
+	runtime.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+			return p.state, p.err
+		},
+	).AnyTimes()
+	return runtime
 }
 
 func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, *componentExecContext, *planRuntimeFixture, string) {
@@ -50,7 +89,7 @@ func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndSta
 	require.NoError(t, os.WriteFile(path, []byte("reviewed plan"), 0o600))
 	prepared := &schema.PreparedComponentConfiguration{Engine: "terraform", Source: root, Inputs: map[string]any{"value": "reviewed"}, BackendType: "local", Backend: map[string]any{"path": filepath.Join(root, "state")}, Workspace: "default"}
 	runtime := &planRuntimeFixture{identity: "provider-source-options", state: &schema.ComponentConfigurationState{BackendType: prepared.BackendType, Backend: prepared.Backend, Workspace: prepared.Workspace}}
-	config.ComponentConfigurations = runtime
+	config.ComponentConfigurations = runtime.mock(t)
 	execCtx := &componentExecContext{componentPath: working, workingDir: working, preparedConfiguration: prepared}
 	return config, info, execCtx, runtime, path
 }
@@ -140,7 +179,7 @@ func TestConfigurationPlanRecordingGuards(t *testing.T) {
 	info.SubCommand = "plan"
 	config.ComponentConfigurations = nil
 	require.ErrorIs(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out", path}), errUtils.ErrPluginUnsupportedExtension)
-	config.ComponentConfigurations = runtime
+	config.ComponentConfigurations = runtime.mock(t)
 	runtime.err = context.Canceled
 	require.ErrorIs(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out", path}), context.Canceled)
 	runtime.err = nil
@@ -156,9 +195,14 @@ func TestConfigurationPlanPathsAndFileErrors(t *testing.T) {
 	require.Equal(t, path, configurationPlanPath(config, info))
 	info.PlanFile = path
 	require.Equal(t, path, configurationPlanPath(config, info))
-	require.Error(t, writePlanBinding(filepath.Join(t.TempDir(), "absent", "binding"), nil))
-	_, err := fileDigest(t.TempDir())
-	require.Error(t, err)
+	err := writePlanBinding(filepath.Join(t.TempDir(), "absent", "binding"), nil)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	_, err = fileDigest(t.TempDir())
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	_, err = fileDigest(filepath.Join(t.TempDir(), "absent"))
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, err, os.ErrNotExist)
 	_, err = configurationWorkdirDigest(filepath.Join(t.TempDir(), "absent"), path)
 	require.Error(t, err)
 	require.True(t, usesConfigurationPlan(info))
@@ -192,10 +236,9 @@ func TestConfigurationWorkdirDigestIgnoresMutableFiles(t *testing.T) {
 // carry evaluated input values, hook command lines are the only execution data it keeps, and
 // backend settings (which can hold credentials) are reduced to a digest.
 func TestConfigurationPlanRecordHoldsNoInputsOrBackendValues(t *testing.T) {
-	config, info, execCtx, _, path := planFixture(t)
+	config, info, execCtx, runtime, path := planFixture(t)
 	execCtx.preparedConfiguration.Inputs = map[string]any{"password": "input-secret-value"}
 	execCtx.preparedConfiguration.Backend = map[string]any{"access_key": "backend-secret-value"}
-	runtime := config.ComponentConfigurations.(*planRuntimeFixture)
 	runtime.state.Backend = execCtx.preparedConfiguration.Backend
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 
@@ -593,19 +636,59 @@ func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 	require.FileExists(t, plan+configurationPlanSuffix)
 }
 
-type planShowRunner struct{}
+// TestDetailedExitCodePlanRecordsReviewedPlan binds a plan that reports changes with status 2,
+// and leaves an ordinary failure unbound.
+func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		args   []string
+		code   int
+		record bool
+	}{
+		{name: "explicit detailed exit code with changes", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 2, record: true},
+		{name: "failure with detailed exit code", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 1},
+		{name: "status 2 without detailed exit code", args: []string{"plan", "-out", "changes.plan"}, code: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, _ := planFixture(t)
+			shell := &fakeShell{run: func(call *shellCall) error {
+				if err := os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("changes"), 0o600); err != nil {
+					return err
+				}
+				return errUtils.ExitCodeError{Code: test.code}
+			}}
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.execute
+			err := executor.runMainCommandPhase(config, info, execCtx, test.args, execCtx.componentPath, false)
+			require.Equal(t, test.code, resolveExitCode(err), "the plan status is returned unchanged")
+			binding := filepath.Join(execCtx.componentPath, "changes.plan") + configurationPlanSuffix
+			if test.record {
+				require.FileExists(t, binding)
+				return
+			}
+			require.NoFileExists(t, binding)
+		})
+	}
+}
 
-//nolint:gocritic // The process.Runner interface fixes the value parameter.
-func (planShowRunner) Run(_ context.Context, spec process.TaskSpec) process.Result {
-	_, _ = io.WriteString(spec.Streams.Stdout, `{"format_version":"1.2","planned_values":{}}`)
-	return process.Result{Started: true}
+// newPlanShowRunner returns a generated runner whose plan show prints an empty JSON plan.
+func newPlanShowRunner(t *testing.T) process.Runner {
+	t.Helper()
+	runner := NewMockPlanShowRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, spec process.TaskSpec) process.Result {
+			_, _ = io.WriteString(spec.Streams.Stdout, `{"format_version":"1.2","planned_values":{}}`)
+			return process.Result{Started: true}
+		},
+	).AnyTimes()
+	return runner
 }
 
 func TestPolicyPlanBindsPublishedOutput(t *testing.T) {
 	config, info, execCtx, _, _ := planFixture(t)
 	var engine policy.Engine
 	require.NoError(t, engine.Register(policy.CELEngine, &policy.CEL{}))
-	execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: planShowRunner{}, Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
+	execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: newPlanShowRunner(t), Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
 	shell := &fakeShell{run: func(call *shellCall) error {
 		path := plannedOutputPath(execCtx.componentPath, call.args)
 		return os.WriteFile(path, []byte("reviewed"), 0o600)
@@ -751,7 +834,7 @@ func TestDetailedExitCodePolicyPlanBinding(t *testing.T) {
 			config, info, execCtx, _, path := planFixture(t)
 			var engine policy.Engine
 			require.NoError(t, engine.Register(policy.CELEngine, &policy.CEL{}))
-			execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: planShowRunner{}, Rules: []policy.Rule{{ID: "guard", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: fmt.Sprint(deny), Effects: policy.Effects{Deny: true}}}}
+			execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: newPlanShowRunner(t), Rules: []policy.Rule{{ID: "guard", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: fmt.Sprint(deny), Effects: policy.Effects{Deny: true}}}}
 			require.NoError(t, os.Remove(path))
 			shell := &fakeShell{run: func(call *shellCall) error {
 				require.NoError(t, os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed"), 0o600))
@@ -771,4 +854,19 @@ func TestDetailedExitCodePolicyPlanBinding(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEnvironmentPlanOutputIgnoresUnownedPlans keeps ordinary components unaffected.
+func TestEnvironmentPlanOutputIgnoresUnownedPlans(t *testing.T) {
+	t.Setenv("TF_CLI_ARGS_plan", "-out=env.plan")
+	config, info, execCtx, _, _ := planFixture(t)
+	require.ErrorIs(t, validateEnvironmentPlanOutput(config, info, execCtx), errUtils.ErrPlanVerificationFailed)
+	info.DryRun = true
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
+	info.DryRun = false
+	info.SubCommand = "apply"
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
+	info.SubCommand = "plan"
+	execCtx.preparedConfiguration = nil
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
 }

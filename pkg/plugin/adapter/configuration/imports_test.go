@@ -47,7 +47,12 @@ func TestImportedUnitsBecomeComponentsOfTheImportingStack(t *testing.T) {
 		require.Equal(t, []string{"terragrunt://live"}, req.Imports)
 		require.Nil(t, req.Effects)
 		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil
-	})
+	}).Times(2) // The import, then the dependency recheck that preparation runs under its own environment.
+	// The recheck confirms the output dependency still reads the state it was discovered with.
+	provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		require.Equal(t, network.Source, req.Source)
+		return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local"}}, nil
+	}).Times(2)
 	loads := 0
 	session, err := New(t.Context(), importOnlyConfig(t), "list", func(_ context.Context, names []string) (map[string]Provider, error) {
 		loads++

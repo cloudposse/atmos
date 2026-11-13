@@ -77,6 +77,44 @@ components:
 
 Inheritance (`metadata.inherits`), catalogs, mixins, and deep-merge work exactly like other component kinds — define an abstract base component with shared `run`/`build` defaults and inherit it.
 
+## Port Bindings
+
+Use `run.ports` to publish container ports. `host` accepts a port number or a
+quoted `IP:port` string. `container` is the container port, and `protocol`
+defaults to `tcp`.
+
+```yaml
+components:
+  container:
+    portal:
+      image: my-portal:local
+      run:
+        ports:
+          - host: "127.0.0.1:3000"
+            container: 3000
+```
+
+A numeric `host: 3000` preserves the container runtime's default interface
+binding. Use `host: "127.0.0.1:3000"` for IPv4 loopback or
+`host: "0.0.0.0:3000"` for all IPv4 interfaces. IPv6 requires brackets, for
+example `host: "[::1]:3000"` for loopback or `host: "[::]:3000"` for all IPv6
+interfaces. The address must be an IP literal, not a hostname or interface name.
+
+Loopback binding narrows where the runtime listens, but it is not a firewall.
+Docker Engine versions before 28.0.0 may expose localhost-published ports to
+hosts on the same network segment. See
+[Docker's port publishing documentation](https://docs.docker.com/engine/network/port-publishing/)
+for details.
+
+Omitting `host` or setting it to `0` requests an automatically assigned host
+port. To request one on a specific address, use `host: "127.0.0.1:0"` or
+`host: "[::1]:0"`. Host ports must be between 0 and 65535; quoted port numbers
+such as `host: "3000"` are also accepted. The same syntax works in container
+workflow steps, workflow sandboxes, background container services, and emulators.
+
+Changes to port bindings require removing and recreating the container with
+`atmos container down` followed by `atmos container up`.
+
 ## Component-Type Defaults
 
 Define defaults for all container components:
@@ -143,6 +181,19 @@ atmos container logs api -s dev       # stream logs
 atmos container exec api -s dev -- sh # run a command inside the container
 atmos container down api -s dev       # stop + rm
 ```
+
+`atmos container exec` allocates a TTY only when stdin is a terminal. It also
+works in scripts and pipelines, preserving piped stdin without requesting a TTY.
+
+## Additional Runtime Arguments
+
+`run.run_args` forwards additional arguments to Docker or Podman for both
+`atmos container up` and `atmos container run`, for example `run_args: [--init]`.
+An explicit `--network` or `--net` argument takes precedence over Atmos's automatic
+shared stack network.
+
+Changes to runtime arguments require removing and recreating
+the container with `atmos container down` followed by `atmos container up`.
 
 Each instance is named and labeled from its canonical address `<stack>/container/<component>` (e.g., `atmos-dev-container-api`), so lifecycle commands discover it by label — there are no local state files.
 

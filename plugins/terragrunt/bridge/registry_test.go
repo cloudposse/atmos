@@ -150,6 +150,25 @@ func TestResolveRegistrySourceCredentials(t *testing.T) {
 	})
 }
 
+func TestRegistryArchiveAuthorizationIsScopedToTheRegistryOrigin(t *testing.T) {
+	registry := newFakeRegistry(t, "1.0.0")
+	registry.download = "/archives/%s.tar.gz"
+	logger := log.New(log.WithOutput(io.Discard))
+	request := RegistryRequest{Client: registry.server.Client(), Source: registry.source("/acme/vpc/aws", "?version=1.0.0"), Environment: map[string]string{"TG_TF_REGISTRY_TOKEN": "secret-token"}, OpenTofu: true}
+	resolution, err := ResolveRegistrySourceWithAuth(t.Context(), logger, request)
+	require.NoError(t, err)
+	assert.Equal(t, registry.server.URL+"/archives/1.0.0.tar.gz", resolution.Source)
+	assert.Equal(t, registry.server.URL, resolution.AuthOrigin)
+	assert.Equal(t, "Bearer secret-token", resolution.Authorization)
+	assert.NotContains(t, resolution.Source, "secret-token")
+
+	registry.download = "https://unrelated.example/archive-%s.tar.gz"
+	resolution, err = ResolveRegistrySourceWithAuth(t.Context(), logger, request)
+	require.NoError(t, err)
+	assert.Empty(t, resolution.Authorization)
+	assert.Empty(t, resolution.AuthOrigin)
+}
+
 func TestResolveRegistrySourceErrors(t *testing.T) {
 	registry := newFakeRegistry(t, "1.0.0")
 	tests := []struct{ name, source, constraint, wantErr string }{
@@ -176,7 +195,25 @@ func TestResolveRegistrySourceErrors(t *testing.T) {
 	} {
 		_, err := resolveTestSource(t, registry, test.source, "", map[string]string{})
 		require.True(t, errors.Is(err, test.want), "expected %v in %v", test.want, err)
+		require.False(t, errors.Is(err, ErrRegistryLookup), "a source rejected before any lookup is not a lookup failure: %v", err)
 	}
+	// Upstream protocol failures keep their cause and gain the bridge sentinel.
+	for _, test := range []struct{ name, source, constraint, upstream string }{
+		{"version lookup", registry.source("/acme/vpc/aws", ""), ">= 9.0", "satisfies constraint"},
+		{"download header", registry.source("/acme/other/aws", "?version=1.0.0"), "", "Error downloading module"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := resolveTestSource(t, registry, test.source, test.constraint, map[string]string{})
+			require.ErrorIs(t, err, ErrRegistryLookup)
+			wrapped, ok := err.(interface{ Unwrap() []error })
+			require.True(t, ok, "the upstream error is wrapped beside the sentinel")
+			require.Len(t, wrapped.Unwrap(), 2)
+			require.ErrorContains(t, wrapped.Unwrap()[1], test.upstream)
+		})
+	}
+	unreachable := RegistryRequest{Client: registry.server.Client(), Source: "tfr://127.0.0.1:1/acme/vpc/aws?version=1.0.0", Environment: map[string]string{}}
+	_, err := ResolveRegistrySource(t.Context(), log.New(log.WithOutput(io.Discard)), unreachable)
+	require.ErrorIs(t, err, ErrRegistryLookup, "service discovery failure")
 }
 
 func TestWithSubdir(t *testing.T) {
