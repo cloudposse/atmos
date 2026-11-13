@@ -2,6 +2,8 @@
 
 **Status:** Implementation in progress. The protocol, SDK, native runtime clients, static component descriptors, explicit package loader, and configuration-service adapters exist. CLI discovery, stack adaptation, and native Terraform preparation are wired on this branch. End-to-end validation is limited to local Terragrunt fixtures; the full release gates remain.
 
+This L5 status supersedes the earlier, L4-scoped "planned" descriptions in the [platform interfaces](../platform/interfaces.md#component), [protocol](../platform/protocol.md#component-configuration-services), and [SDK README](../../../../sdk/README.md#component-configuration-contracts-in-development). On this branch, `plugin.Services` accepts the four optional component handlers, `component.Encode` and `component.Decode` are available, and component exports can be validated and packed. The host has matching clients, explicit package loading, and private provider registries. The CLI and native Terraform path use these services for discovery, stack adaptation, and preparation. External execution engines, general host process and filesystem grants, typed plugin flags, and the remaining integration and release gates below are still pending.
+
 **Decision:** Separate component type, configuration provider, and execution engine. Negotiate optional capabilities independently. A configuration provider must not need an executor.
 
 See the [Terragrunt requirements](../../terragrunt-support.md) for the first consumer and [all extension types](README.md) for the platform scope.
