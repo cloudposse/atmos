@@ -35,6 +35,7 @@ type Loader func(context.Context, []string) (map[string]Provider, error)
 
 // Session holds one command's discovery result; it is never a process-global cache.
 type Session struct {
+	warnings        adapter.WarningDeduper
 	ctx             context.Context
 	root, command   string
 	requests        []*pluginv1.DiscoverComponentsRequest

@@ -215,7 +215,13 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 			return err
 		}
 		// Test hooks already ran before authentication to bootstrap their fixtures.
-		return e.executeTerragruntUnit(component.ContextFromOptions(opts...), &atmosConfig, &info, terragruntUnitRun{shouldProcess: shouldProcess, runHooks: fixtureState == nil}, opts...)
+		err := e.executeTerragruntUnit(component.ContextFromOptions(opts...), &atmosConfig, &info, terragruntUnitRun{shouldProcess: shouldProcess, runHooks: fixtureState == nil}, opts...)
+		captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
+			Cmd:    component.InvokingCommandFromOptions(opts...),
+			Parser: component.MetadataParserFromOptions(opts...),
+			Err:    err,
+		})
+		return err
 	}
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.

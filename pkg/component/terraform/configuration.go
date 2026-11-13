@@ -25,6 +25,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/backend"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -130,6 +131,7 @@ func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration,
 // applyPreparedConfiguration records the prepared values on the invocation.
 func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
+	info.PreparedSensitiveInputKeys = prepared.SensitiveInputKeys
 	info.ComponentExecution = prepared.Execution
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
@@ -217,6 +219,20 @@ func warnOnCacheLocalState(info *schema.ConfigAndStacksInfo, prepared *schema.Pr
 // useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.
 // A new process has not provisioned anything, so the path is derived the way provisioning does.
 func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	// A downloaded plan and record can be the only files in an explicit workdir.
+	// Resolve a relative override without source ownership checks here; the
+	// reviewed-plan restore verifies the exact transport set before provisioning.
+	if override := workingDirectoryOverride(info); override != "" && !filepath.IsAbs(override) {
+		clean := filepath.Clean(override)
+		if clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			base, err := filepath.Abs(config.BasePath)
+			if err != nil {
+				return err
+			}
+			info.ComponentSection[provWorkdir.WorkdirPathKey] = filepath.Join(base, clean)
+			return nil
+		}
+	}
 	fallback, err := u.GetComponentPath(config, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)

@@ -73,6 +73,18 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 	require.Equal(t, "-var=a=1", sent.Operation.TerraformArguments[0], "the request owns a copy of the arguments")
 }
 
+func TestPreparedConfigurationPreservesSensitiveEmptyInputKeys(t *testing.T) {
+	inputs, err := adapter.EncodeObject(map[string]any{"password": "", "region": "us-east-1"})
+	require.NoError(t, err)
+	inputs.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "password"}}}}}
+	prepared, err := preparedConfiguration(&pluginv1.PrepareComponentResponse{
+		Inputs: inputs, State: &pluginv1.ComponentStateIdentity{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"password": true}, prepared.SensitiveInputKeys)
+	require.Equal(t, "", prepared.Inputs["password"])
+}
+
 func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {
 	session, _, info := preparationSession(t)
 	info.Command = "terraform"
@@ -405,11 +417,9 @@ func captureAtmosLogs(t *testing.T) *bytes.Buffer {
 	previous := log.GetLevel()
 	log.SetOutput(&output)
 	log.SetLevel(charm.DebugLevel)
-	adapter.ResetShownMessages()
 	t.Cleanup(func() {
 		log.SetOutput(os.Stderr)
 		log.SetLevel(previous)
-		adapter.ResetShownMessages()
 	})
 	return &output
 }

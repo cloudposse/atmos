@@ -229,15 +229,17 @@ func absolute(path string) string {
 }
 
 // optionFlags maps provider options to Terragrunt global flags, in a stable order. Features merge per
-// name: configuration, then the environment, then the command line.
+// name: configuration, then the environment, then an explicit command-line option.
 func optionFlags(options map[string]schema.ComponentProviderOption, configured map[string]any, environment []string) (args, env []string) {
 	features := maps.Clone(configured)
 	if features == nil {
 		features = map[string]any{}
 	}
 	maps.Copy(features, environmentFeatures(environment))
-	if names, ok := options["feature"].Value.(map[string]any); ok {
-		maps.Copy(features, names)
+	if feature, set := options["feature"]; set {
+		if names, ok := feature.Value.(map[string]any); ok && (feature.FromCLI || !hasComponentFeatures(environment)) {
+			maps.Copy(features, names)
+		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(features)) {
 		args = append(args, "--feature", name+"="+fmt.Sprint(features[name]))
@@ -261,31 +263,46 @@ func optionFlags(options map[string]schema.ComponentProviderOption, configured m
 // environmentFeatures reads the features the environment sets: the component `env` first, then the
 // process environment, from the first variable that is present.
 func environmentFeatures(environment []string) map[string]any {
+	// Component env wins over the process environment, even when it uses TG_FEATURE
+	// and the process uses ATMOS_TERRAGRUNT_FEATURE.
+	if value, present := componentFeatureValue(environment); present {
+		return parseFeatures(value)
+	}
 	for _, name := range featureEnvironment {
-		value, present := lookup(environment, name)
+		value, present := os.LookupEnv(name)
 		if !present {
 			continue
 		}
-		features := map[string]any{}
-		for _, entry := range strings.Split(value, ",") {
-			key, setting, found := strings.Cut(strings.TrimSpace(entry), "=")
-			if found && strings.TrimSpace(key) != "" {
-				features[strings.TrimSpace(key)] = setting
-			}
-		}
-		return features
+		return parseFeatures(value)
 	}
 	return nil
 }
 
-// lookup finds a variable in an environment list, where the last entry wins, and then in the process.
-func lookup(environment []string, name string) (string, bool) {
-	for index := len(environment) - 1; index >= 0; index-- {
-		if key, value, found := strings.Cut(environment[index], "="); found && key == name {
-			return value, true
+func parseFeatures(value string) map[string]any {
+	features := map[string]any{}
+	for _, entry := range strings.Split(value, ",") {
+		key, setting, found := strings.Cut(strings.TrimSpace(entry), "=")
+		if found && strings.TrimSpace(key) != "" {
+			features[strings.TrimSpace(key)] = setting
 		}
 	}
-	return os.LookupEnv(name)
+	return features
+}
+
+func hasComponentFeatures(environment []string) bool {
+	_, present := componentFeatureValue(environment)
+	return present
+}
+
+func componentFeatureValue(environment []string) (string, bool) {
+	for _, name := range featureEnvironment {
+		for index := len(environment) - 1; index >= 0; index-- {
+			if key, value, found := strings.Cut(environment[index], "="); found && key == name {
+				return value, true
+			}
+		}
+	}
+	return "", false
 }
 
 // CheckVersion verifies that the executable exists and is not older than MinimumVersion.

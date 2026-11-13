@@ -1,3 +1,5 @@
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_node_hooks_test.go -package=terraform github.com/cloudposse/atmos/pkg/schema ComponentNodeHooksWithPreparation
+
 package terraform
 
 import (
@@ -11,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/refcache"
@@ -21,37 +24,24 @@ var _ = schema.ConfigAndStacksInfo{NodeHooks: nil}
 
 var errRejectedByHook = errors.New("rejected by hook")
 
-// recordingPreparedHooks stands in for the cmd/terraform hooks of init, destroy, and test, which
-// wait for preparation before they run.
-type recordingPreparedHooks struct {
-	events *[]string
-	err    error
-	ran    int
-}
-
-func (h *recordingPreparedHooks) Before(context.Context, *schema.ConfigAndStacksInfo) error {
-	return nil
-}
-
-func (h *recordingPreparedHooks) After(context.Context, *schema.ConfigAndStacksInfo, string, error) error {
-	return nil
-}
-
-func (h *recordingPreparedHooks) NeedsPreAuth(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (bool, error) {
-	return false, nil
-}
-
-func (h *recordingPreparedHooks) BeforePrepared(_ context.Context, _ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, _ schema.ComponentNodeHookWriters) error {
-	h.ran++
-	*h.events = append(*h.events, "before-hook")
-	return h.err
+func preparedHookMock(t *testing.T) *MockComponentNodeHooksWithPreparation {
+	t.Helper()
+	hooks := NewMockComponentNodeHooksWithPreparation(gomock.NewController(t))
+	hooks.EXPECT().NeedsPreAuth(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+	return hooks
 }
 
 func TestExecuteTerragruntUnitRunsPreparedBeforeHooksAfterAuthentication(t *testing.T) {
 	harness, info, _ := unitHarness(t)
 	probePath := info.ComponentEnvSection[testEnvToolchainProbe].(string)
 	info.SubCommand = "destroy"
-	hooks := &recordingPreparedHooks{events: &harness.events}
+	hooks := preparedHookMock(t)
+	hooks.EXPECT().BeforePrepared(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, schema.ComponentNodeHookWriters) error {
+			harness.events = append(harness.events, "before-hook")
+			return nil
+		},
+	).Times(1)
 	info.NodeHooks = hooks
 	// Stand in for the context and manager a real identity attaches during authentication.
 	resolvedContext, resolvedManager := &schema.AuthContext{}, &struct{ name string }{name: "development"}
@@ -63,7 +53,6 @@ func TestExecuteTerragruntUnitRunsPreparedBeforeHooksAfterAuthentication(t *test
 
 	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun))
 
-	require.Equal(t, 1, hooks.ran)
 	require.Equal(t, []string{"authenticate", "toolchain", "before-hook"}, harness.events, "the hook runs with the unit's identity, before terragrunt")
 	require.Len(t, readToolchainProbes(t, probePath), 2, "the version probe and the unit command ran after the hook")
 	authContext, authManager := GetLastAuthContext()
@@ -75,7 +64,14 @@ func TestExecuteTerragruntUnitStopsWhenABeforeHookRejectsTheOperation(t *testing
 	harness, info, _ := unitHarness(t)
 	probePath := info.ComponentEnvSection[testEnvToolchainProbe].(string)
 	info.SubCommand = "destroy"
-	info.NodeHooks = &recordingPreparedHooks{events: &harness.events, err: errRejectedByHook}
+	hooks := preparedHookMock(t)
+	hooks.EXPECT().BeforePrepared(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, schema.ComponentNodeHookWriters) error {
+			harness.events = append(harness.events, "before-hook")
+			return errRejectedByHook
+		},
+	).Times(1)
+	info.NodeHooks = hooks
 	t.Cleanup(ClearLastAuthContext)
 
 	err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun)
@@ -86,12 +82,11 @@ func TestExecuteTerragruntUnitStopsWhenABeforeHookRejectsTheOperation(t *testing
 
 func TestExecuteTerragruntUnitSkipsHooksThatTestFixturesAlreadyRan(t *testing.T) {
 	harness, info, _ := unitHarness(t)
-	hooks := &recordingPreparedHooks{events: &harness.events, err: errRejectedByHook}
+	hooks := preparedHookMock(t)
 	info.NodeHooks = hooks
 	t.Cleanup(ClearLastAuthContext)
 
 	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, terragruntUnitRun{shouldProcess: true}))
-	require.Zero(t, hooks.ran)
 }
 
 func TestExecuteTerragruntUnitInvalidatesStateAfterFailure(t *testing.T) {

@@ -161,7 +161,7 @@ func TestBuildCommandMergesEnvironmentFeaturesPerName(t *testing.T) {
 	t.Setenv("TG_FEATURE", "tier=environment,region=from-env")
 	r := request()
 	r.Features = map[string]any{"tier": "config", "size": "config"}
-	r.Options = map[string]schema.ComponentProviderOption{"feature": {Value: map[string]any{"region": "from-cli"}}}
+	r.Options = map[string]schema.ComponentProviderOption{"feature": {Value: map[string]any{"region": "from-cli"}, FromCLI: true}}
 	want := []string{"--feature", "region=from-cli", "--feature", "size=config", "--feature", "tier=environment", "--"}
 	assert.Equal(t, want, BuildCommand(r).Args[3:3+len(want)], "configuration, then environment, then command line")
 
@@ -169,6 +169,18 @@ func TestBuildCommandMergesEnvironmentFeaturesPerName(t *testing.T) {
 	r.Environment = append(r.Environment, "TG_FEATURE=tier=component")
 	want = []string{"--feature", "region=from-cli", "--feature", "size=config", "--feature", "tier=component", "--"}
 	assert.Equal(t, want, BuildCommand(r).Args[3:3+len(want)])
+}
+
+func TestBuildCommandComponentFeatureWinsOverProcessOption(t *testing.T) {
+	t.Setenv("ATMOS_TERRAGRUNT_FEATURE", "tier=process")
+	r := request()
+	r.Features = map[string]any{"tier": "config"}
+	r.Options = map[string]schema.ComponentProviderOption{"feature": {Value: map[string]any{"tier": "process"}}}
+	r.Environment = append(r.Environment, "TG_FEATURE=tier=component")
+	assert.Contains(t, BuildCommand(r).Args, "tier=component")
+	assert.NotContains(t, BuildCommand(r).Args, "tier=process")
+	r.Options["feature"] = schema.ComponentProviderOption{Value: map[string]any{"tier": "cli"}, FromCLI: true}
+	assert.Contains(t, BuildCommand(r).Args, "tier=cli")
 }
 
 func TestBuildCommandOmitsAbsentOptions(t *testing.T) {

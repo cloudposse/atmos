@@ -807,6 +807,19 @@ func TestTerraformSensitiveDeclaredVars_NeverHitDisk(t *testing.T) {
 	assert.Contains(t, strings.Join(env, "\n"), "TF_VAR_sensitive_value=ordinary-resolved-value")
 }
 
+func TestPreparedSensitiveEmptyInputNeverHitsVarfile(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection:       map[string]any{"password": "", "region": "us-east-1"},
+		PreparedSensitiveInputKeys: map[string]bool{"password": true},
+	}
+	ComputeTerraformSecretVarKeys(info)
+	require.True(t, info.TerraformSecretVarKeys["password"])
+	assert.NotContains(t, diskSafeVars(info), "password")
+	env, err := SecretVarEnv(info)
+	require.NoError(t, err)
+	assert.Contains(t, env, "TF_VAR_password=")
+}
+
 func TestTerraformSensitiveDeclaredVars_MaskingDisabledPreservesJSONCompatibility(t *testing.T) {
 	atmosio.Reset()
 	t.Cleanup(atmosio.Reset)

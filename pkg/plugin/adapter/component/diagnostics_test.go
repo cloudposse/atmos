@@ -104,11 +104,9 @@ func captureLogs(t *testing.T, level charm.Level) *bytes.Buffer {
 	previousLevel := log.GetLevel()
 	log.SetOutput(&output)
 	log.SetLevel(level)
-	ResetShownMessages()
 	t.Cleanup(func() {
 		log.SetOutput(os.Stderr)
 		log.SetLevel(previousLevel)
-		ResetShownMessages()
 	})
 	return &output
 }
@@ -165,28 +163,41 @@ func TestRenderLogsMasksSecretsInMessagesAndFields(t *testing.T) {
 
 func TestRenderLogsShowsAWarningOncePerComponentAndStack(t *testing.T) {
 	output := captureLogs(t, charm.DebugLevel)
+	warnings := &WarningDeduper{}
 	warning := []*pluginv1.LogEntry{logEntry(pluginv1.LogLevel_LOG_LEVEL_WARN, "state is not encrypted", nil)}
 	debug := []*pluginv1.LogEntry{logEntry(pluginv1.LogLevel_LOG_LEVEL_DEBUG, "evaluating again", nil)}
 
 	for range 3 {
-		RenderLogs(LogScope{Component: "app", Stack: "dev"}, append(slices.Clone(warning), debug...))
+		RenderLogs(LogScope{Component: "app", Stack: "dev", Warnings: warnings}, append(slices.Clone(warning), debug...))
 	}
-	RenderLogs(LogScope{Component: "app", Stack: "prod"}, warning)
+	RenderLogs(LogScope{Component: "app", Stack: "prod", Warnings: warnings}, warning)
 
 	assert.Equal(t, 2, strings.Count(output.String(), "state is not encrypted"), "once per component and stack")
 	assert.Equal(t, 3, strings.Count(output.String(), "evaluating again"), "debug events are not deduplicated")
 }
 
+func TestWarningDeduplicationIsIsolatedPerQuery(t *testing.T) {
+	output := captureLogs(t, charm.WarnLevel)
+	warning := []*pluginv1.LogEntry{logEntry(pluginv1.LogLevel_LOG_LEVEL_WARN, "repeated warning", nil)}
+	first, second := &WarningDeduper{}, &WarningDeduper{}
+	for range 2 {
+		RenderLogs(LogScope{Component: "app", Stack: "dev", Warnings: first}, warning)
+	}
+	RenderLogs(LogScope{Component: "app", Stack: "dev", Warnings: second}, warning)
+	assert.Equal(t, 2, strings.Count(output.String(), "repeated warning"))
+}
+
 func TestRenderLogsKeepsWarningsThatDifferInTheirFields(t *testing.T) {
 	output := captureLogs(t, charm.DebugLevel)
-	scope := LogScope{Provider: "terragrunt", Component: "app", Stack: "dev"}
+	warnings := &WarningDeduper{}
+	scope := LogScope{Provider: "terragrunt", Component: "app", Stack: "dev", Warnings: warnings}
 	for range 2 {
 		RenderLogs(scope, []*pluginv1.LogEntry{
 			logEntry(pluginv1.LogLevel_LOG_LEVEL_WARN, "dependency has no outputs", map[string]string{"dependency": "network"}),
 			logEntry(pluginv1.LogLevel_LOG_LEVEL_WARN, "dependency has no outputs", map[string]string{"dependency": "database"}),
 		})
 	}
-	RenderLogs(LogScope{Provider: "other", Component: "app", Stack: "dev"}, []*pluginv1.LogEntry{
+	RenderLogs(LogScope{Provider: "other", Component: "app", Stack: "dev", Warnings: warnings}, []*pluginv1.LogEntry{
 		logEntry(pluginv1.LogLevel_LOG_LEVEL_WARN, "dependency has no outputs", map[string]string{"dependency": "network"}),
 	})
 
@@ -205,15 +216,14 @@ func TestWarnDiagnosticShowsTheSameWarningOncePerInvocation(t *testing.T) {
 	restore := atmosio.PushUIWriter(&output)
 	t.Cleanup(restore)
 	warning := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "remote_state_encryption_not_generated", Summary: "Encryption is not generated", Unit: "app", Stack: "dev", UserSafe: true, Severity: pluginv1.Severity_SEVERITY_WARNING}}
+	warnings := &WarningDeduper{}
 
-	assert.True(t, firstTime("diagnostic", "app", "dev", "remote_state_encryption_not_generated", "Encryption is not generated (Component `app` in stack `dev`)"), "unseen before the first call")
-	ResetShownMessages()
-	WarnDiagnostic(warning)
-	assert.False(t, firstTime("diagnostic", "app", "dev", "remote_state_encryption_not_generated", "Encryption is not generated (Component `app` in stack `dev`)"), "the first call recorded it")
-	WarnDiagnostic(warning)
+	WarnDiagnostic(warning, warnings)
+	assert.False(t, warnings.firstTime("diagnostic", "app", "dev", "remote_state_encryption_not_generated", "Encryption is not generated (Component `app` in stack `dev`)"), "the first call recorded it")
+	WarnDiagnostic(warning, warnings)
 	other := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "remote_state_encryption_not_generated", Summary: "Encryption is not generated", Unit: "app", Stack: "prod", Severity: pluginv1.Severity_SEVERITY_WARNING}}
-	WarnDiagnostic(other)
-	assert.False(t, firstTime("diagnostic", "app", "prod", "remote_state_encryption_not_generated", "Encryption is not generated (Component `app` in stack `prod`)"), "another stack is its own warning, recorded by its own call")
+	WarnDiagnostic(other, warnings)
+	assert.False(t, warnings.firstTime("diagnostic", "app", "prod", "remote_state_encryption_not_generated", "Encryption is not generated (Component `app` in stack `prod`)"), "another stack is its own warning, recorded by its own call")
 	assert.Equal(t, 2, strings.Count(output.String(), "Encryption is not generated"))
 	assert.Equal(t, 1, strings.Count(output.String(), "stack dev"), "%q", output.String())
 	assert.Equal(t, 1, strings.Count(output.String(), "stack prod"), "%q", output.String())

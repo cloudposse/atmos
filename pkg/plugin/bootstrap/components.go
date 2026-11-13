@@ -169,8 +169,11 @@ func declaredComponentBindings(ctx context.Context, atmos *schema.AtmosConfigura
 	var result []extension.Binding
 	for _, alias := range slices.Sorted(maps.Keys(atmos.Plugins.Packages)) {
 		declaration := atmos.Plugins.Packages[alias]
+		if !enabled(&declaration) || !packageExportsWanted(alias, state, file, wanted) {
+			continue
+		}
 		directory := packageDirectory(alias, state, file, cache)
-		if !enabled(&declaration) || directory == "" {
+		if directory == "" {
 			continue
 		}
 		bindings, err := discoveryBindings(registry, directory, wanted)
@@ -186,6 +189,22 @@ func declaredComponentBindings(ctx context.Context, atmos *schema.AtmosConfigura
 		result = append(result, bindings...)
 	}
 	return result, nil
+}
+
+func packageExportsWanted(alias string, state *config.Selections, file *pluginlock.File, wanted map[string][]string) bool {
+	if _, local := state.Packages[alias]; local {
+		return true // Local packages have no lock exports; inspect their manifest.
+	}
+	entry, locked := file.Spec.Packages[alias]
+	if !locked {
+		return false
+	}
+	for _, export := range entry.Exports {
+		if export.Capability == extension.ComponentDiscovery && wanted[export.Name] != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // discoveryBindings reads a package manifest and keeps the discovery exports of the wanted providers.
@@ -216,7 +235,7 @@ func packageDirectory(alias string, state *config.Selections, file *pluginlock.F
 	if !locked {
 		return ""
 	}
-	directory, err := cache.Installed(&entry, install.CurrentPlatform())
+	directory, err := cache.DiscoveryDirectory(&entry, install.CurrentPlatform())
 	if err != nil {
 		return ""
 	}

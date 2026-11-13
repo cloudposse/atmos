@@ -277,6 +277,11 @@ func ComputeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 	for k := range secret {
 		keys[k] = true
 	}
+	for k := range info.PreparedSensitiveInputKeys {
+		if _, supplied := info.ComponentVarsSection[k]; supplied {
+			keys[k] = true
+		}
+	}
 
 	// Terraform's `sensitive = true` is an explicit declaration that an input must
 	// not be persisted in a generated tfvars file. When masking is disabled, retain

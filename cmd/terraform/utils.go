@@ -2188,11 +2188,15 @@ func handlePromptError(err error, name string) error {
 // promptForComponent delegates to shared.PromptForComponent.
 // If stack is provided, filters components to only those in that stack.
 // Declared as a var so tests can stub the interactive prompt.
-var promptForComponent = shared.PromptForComponent
+var promptForComponent = func(cmd *cobra.Command, stack string) (string, error) {
+	return shared.PromptForComponent(cmd, stack)
+}
 
 // promptForStack delegates to shared.PromptForStack.
 // Declared as a var so tests can stub the interactive prompt.
-var promptForStack = shared.PromptForStack
+var promptForStack = func(cmd *cobra.Command, component string) (string, error) {
+	return shared.PromptForStack(cmd, component)
+}
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
 // This is needed because --heatmap must be detected before flag parsing occurs.

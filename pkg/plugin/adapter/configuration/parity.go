@@ -95,9 +95,9 @@ func checkTerraformBinary(info *schema.ConfigAndStacksInfo, instance *pluginv1.D
 }
 
 // warnDiagnostics prints the provider's warnings about a unit and never fails the command.
-func warnDiagnostics(diagnostics []*pluginv1.Diagnostic) {
+func warnDiagnostics(diagnostics []*pluginv1.Diagnostic, warnings *adapter.WarningDeduper) {
 	for _, diagnostic := range diagnostics {
-		adapter.WarnDiagnostic(diagnostic)
+		adapter.WarnDiagnostic(diagnostic, warnings)
 	}
 }
 

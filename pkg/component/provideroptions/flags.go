@@ -177,10 +177,10 @@ func decorate(sub *cobra.Command, provider string, option *Option) {
 	if primary == nil {
 		return
 	}
-	mark(primary, provider)
+	mark(primary, provider, option.Sensitive)
 	for _, alias := range option.Aliases {
 		shared := &pflag.Flag{Name: alias, Usage: "Alias of --" + primary.Name, Value: primary.Value, DefValue: primary.DefValue, NoOptDefVal: primary.NoOptDefVal, Hidden: true}
-		mark(shared, provider)
+		mark(shared, provider, option.Sensitive)
 		set.AddFlag(shared)
 	}
 	if option.Deprecated != "" {
@@ -196,11 +196,14 @@ func lookupFlag(cmd *cobra.Command, name string) *pflag.Flag {
 	return cmd.PersistentFlags().Lookup(name)
 }
 
-func mark(flag *pflag.Flag, provider string) {
+func mark(flag *pflag.Flag, provider string, sensitive bool) {
 	if flag.Annotations == nil {
 		flag.Annotations = make(map[string][]string)
 	}
 	flag.Annotations[sectionAnnotation] = []string{provider}
+	if sensitive {
+		flag.Annotations[flags.SensitiveMetadataAnnotation] = []string{"true"}
+	}
 }
 
 // Resolve reads the options the user set for the command, from the command line or the
@@ -230,7 +233,7 @@ func Resolve(cmd *cobra.Command, v *viper.Viper) (map[string]map[string]schema.C
 			if result[entry.provider.Section] == nil {
 				result[entry.provider.Section] = make(map[string]schema.ComponentProviderOption)
 			}
-			result[entry.provider.Section][option.Name] = schema.ComponentProviderOption{Value: value, Sensitive: option.Sensitive}
+			result[entry.provider.Section][option.Name] = schema.ComponentProviderOption{Value: value, Sensitive: option.Sensitive, FromCLI: entry.fromCLI(cmd, option)}
 			if option.Sensitive {
 				atmosio.RegisterSecretValue(value)
 			}
@@ -258,6 +261,17 @@ func (r *registration) explicit(cmd *cobra.Command, option *Option, primary stri
 		}
 	}
 	return r.parser.IsFlagExplicitlySet(cmd, primary)
+}
+
+func (r *registration) fromCLI(cmd *cobra.Command, option *Option) bool {
+	for _, name := range append([]string{option.FlagName(r.provider.Name)}, option.Aliases...) {
+		if flag := lookupFlag(cmd, name); flag != nil && flag.Changed {
+			if _, fromEnv := flags.FlagValueFromEnv(flag); !fromEnv {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // convert turns a flag or environment value into the declared type.

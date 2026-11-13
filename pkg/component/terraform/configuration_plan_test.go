@@ -329,6 +329,28 @@ func TestConfigurationPlanExplicitAbsolutePathVerifiesLikeCanonicalPath(t *testi
 	}
 }
 
+func TestRelativeWorkingDirectoryPlanCanMoveToAnotherCheckout(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	info.ComponentSection = map[string]any{"metadata": map[string]any{"working_directory": filepath.Join("components", "network")}}
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+
+	otherRoot := t.TempDir()
+	otherWorkdir := filepath.Join(otherRoot, "components", "network")
+	require.NoError(t, os.MkdirAll(otherWorkdir, 0o700))
+	otherPlan := filepath.Join(otherWorkdir, filepath.Base(path))
+	for _, suffix := range []string{"", configurationPlanSuffix} {
+		data, err := os.ReadFile(path + suffix)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(otherPlan+suffix, data, 0o600))
+	}
+	config.BasePath = otherRoot
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, otherPlan
+	_, rebuild, err := restoreOrRebuildConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.NotNil(t, rebuild)
+	require.Equal(t, otherWorkdir, rebuild.workdir)
+}
+
 func TestConfigurationPlanMissingPlanExplainsWhatHappened(t *testing.T) {
 	t.Run("never planned", func(t *testing.T) {
 		config, info, _, _, path := planFixture(t)
@@ -533,7 +555,8 @@ func TestDropCIPlanLocationKeepsEveryPlanTheUserNamed(t *testing.T) {
 		info     schema.ConfigAndStacksInfo
 		wantPlan string
 	}{
-		{"hook recorded the location while downloading a stored plan", schema.ConfigAndStacksInfo{PlanFile: "w/plan", StoredPlanFile: "w/stored"}, ""},
+		{"hook recorded the location while downloading a stored plan", schema.ConfigAndStacksInfo{SubCommand: "deploy", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, ""},
+		{"explicit apply plan alongside stored path", schema.ConfigAndStacksInfo{SubCommand: "apply", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, "w/plan"},
 		{"a plan the user named", schema.ConfigAndStacksInfo{PlanFile: "w/plan", UseTerraformPlan: true, StoredPlanFile: "w/stored"}, "w/plan"},
 		{"a plan named without any stored plan", schema.ConfigAndStacksInfo{PlanFile: "w/plan"}, "w/plan"},
 		{"nothing named", schema.ConfigAndStacksInfo{}, ""},

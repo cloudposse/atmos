@@ -241,6 +241,35 @@ func TestInspectRejectsImageAnnotationsAndMissingImage(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+func TestInspectAcceptsExactLegacyAnnotations(t *testing.T) {
+	directory, _ := validationFixture(t)
+	definition, err := manifest.Load(directory)
+	require.NoError(t, err)
+	files, err := packageFiles(directory)
+	require.NoError(t, err)
+	current := releaseAnnotations(definition, files["plugin.yaml"])
+	legacy := map[string]string{
+		annotationName:     current[annotationName],
+		annotationVersion:  current[annotationVersion],
+		annotationManifest: current[annotationManifest],
+	}
+	var additions []mutate.IndexAddendum
+	for platform := range definition.Spec.Platforms {
+		parsed, err := parsePlatform(platform)
+		require.NoError(t, err)
+		image, err := platformImage(&releaseBuild{directory: directory, definition: definition, files: files, annotations: legacy, options: newOptions(nil)}, parsed)
+		require.NoError(t, err)
+		additions = append(additions, mutate.IndexAddendum{Add: image, Descriptor: v1.Descriptor{Platform: parsed, Annotations: legacy}})
+	}
+	oldIndex := mutate.Annotations(mutate.AppendManifests(empty.Index, additions...), legacy).(v1.ImageIndex)
+	_, err = Inspect(oldIndex, "")
+	require.NoError(t, err)
+	legacy[annotationTitle] = "unexpected"
+	changed := mutate.Annotations(oldIndex, legacy).(v1.ImageIndex)
+	_, err = Inspect(changed, "")
+	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+}
+
 func configurePublishFailure(client *MockRegistry, phase string) {
 	if phase == "head" {
 		client.EXPECT().Head(gomock.Any(), gomock.Any()).Return(nil, os.ErrPermission)

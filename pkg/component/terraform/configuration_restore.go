@@ -188,10 +188,21 @@ func putBack(holding, workdir string, names []string) error {
 	}
 	for _, name := range names {
 		destination := filepath.Join(workdir, name)
+		staged := filepath.Join(holding, name)
+		if _, err := os.Lstat(staged); errors.Is(err, fs.ErrNotExist) {
+			// An earlier restore attempt may already have moved this artifact.
+			if _, destinationErr := os.Lstat(destination); destinationErr == nil {
+				continue
+			} else {
+				return errors.Join(err, destinationErr)
+			}
+		} else if err != nil {
+			return err
+		}
 		if err := os.Remove(destination); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
-		if err := os.Rename(filepath.Join(holding, name), destination); err != nil {
+		if err := os.Rename(staged, destination); err != nil {
 			return err
 		}
 	}

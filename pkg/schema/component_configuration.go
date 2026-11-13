@@ -36,6 +36,8 @@ type ComponentProviderOption struct {
 	Value any
 	// Sensitive values are masked and never logged.
 	Sensitive bool
+	// FromCLI distinguishes an explicit flag from an environment-derived value.
+	FromCLI bool
 }
 
 // ComponentConfigurationRuntime is an invocation-owned host service. It is not a wire contract.
@@ -65,15 +67,17 @@ type ComponentConfigurationValidationRuntime interface {
 
 // PreparedComponentConfiguration contains evaluated inputs and literal artifacts.
 type PreparedComponentConfiguration struct {
-	Sources          []ComponentConfigurationSource
-	Engine           string
-	Source           string
-	Inputs           map[string]any
-	BackendType      string
-	Backend          map[string]any
-	Workspace        string
-	Files            []ComponentConfigurationFile
-	BackendGenerated bool
+	Sources []ComponentConfigurationSource
+	Engine  string
+	Source  string
+	Inputs  map[string]any
+	// SensitiveInputKeys identifies prepared inputs whose values must stay out of generated varfiles.
+	SensitiveInputKeys map[string]bool
+	BackendType        string
+	Backend            map[string]any
+	Workspace          string
+	Files              []ComponentConfigurationFile
+	BackendGenerated   bool
 	// Execution is data the host runs; it is nil when the provider adds no hooks or arguments.
 	Execution *ComponentExecution
 	// TerraformBinary is the executable the unit selects, verified against the one it was discovered with.

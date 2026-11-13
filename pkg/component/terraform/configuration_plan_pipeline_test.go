@@ -460,6 +460,28 @@ func TestReviewedRebuildStagesAndReturnsTheArtifacts(t *testing.T) {
 	require.Empty(t, holding, "the holding directory is removed")
 }
 
+func TestReviewedRebuildRestoreRetriesAfterPartialMove(t *testing.T) {
+	workdir := filepath.Join(t.TempDir(), "work")
+	rebuild := &reviewedRebuild{plan: &configurationPlan{}, planPath: filepath.Join(workdir, "reviewed.planfile"), workdir: workdir}
+	require.NoError(t, os.MkdirAll(workdir, 0o755))
+	for _, name := range []string{"reviewed.planfile", terraformLockFile} {
+		require.NoError(t, os.WriteFile(filepath.Join(workdir, name), []byte(name), 0o600))
+	}
+	restore, err := rebuild.stage()
+	require.NoError(t, err)
+	holding, err := filepath.Glob(filepath.Join(filepath.Dir(workdir), ".atmos-restore-*"))
+	require.NoError(t, err)
+	require.Len(t, holding, 1)
+	require.NoError(t, os.MkdirAll(workdir, 0o755))
+	require.NoError(t, os.Rename(filepath.Join(holding[0], "reviewed.planfile"), filepath.Join(workdir, "reviewed.planfile")))
+	require.NoError(t, restore(), "already restored plan must be skipped while the lock is returned")
+	for _, name := range []string{"reviewed.planfile", terraformLockFile} {
+		content, err := os.ReadFile(filepath.Join(workdir, name))
+		require.NoError(t, err)
+		require.Equal(t, name, string(content))
+	}
+}
+
 func TestNewReviewedRebuildRequiresAnOldEnoughRecord(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", ComponentSettingsSection: map[string]any{"configuration": true}}
 	_, err := newReviewedRebuild(info, &configurationPlan{WorkingDirectory: t.TempDir()}, "plan")

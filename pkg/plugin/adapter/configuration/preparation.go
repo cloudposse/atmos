@@ -37,7 +37,7 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
-	result, err := runProviderPrepare(ctx, info, selected)
+	result, err := s.runProviderPrepare(ctx, info, selected)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err = checkTerraformBinary(info, selected.instance, prepared.TerraformBinary); err != nil {
 		return nil, err
 	}
-	warnDiagnostics(result.Diagnostics)
+	warnDiagnostics(result.Diagnostics, &s.warnings)
 	if err := checkSourcesInRoot(ctx, s.root, prepared.Sources); err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func rejectSavedPlan(info *schema.ConfigAndStacksInfo) error {
 // runProviderPrepare asks the owning provider to reevaluate the selected unit with every effect
 // granted, after checking module ownership and engine selection. Only an explicit --command
 // flag may switch the engine discovered from the global configuration.
-func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
+func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
 	if err := checkSourceOverride(info, selected.instance); err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 	if _, err := adapter.DecodeInputs(result.GetInputs()); err != nil {
 		return nil, err
 	}
-	adapter.RenderLogs(logScope(selected.request, info), result.GetLogs())
+	adapter.RenderLogs(logScope(selected.request, info, &s.warnings), result.GetLogs())
 	// An error diagnostic fails the preparation; warnings are printed below.
 	for _, diagnostic := range result.Diagnostics {
 		if err = adapter.DiagnosticError(diagnostic); err != nil {
@@ -100,8 +100,8 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 }
 
 // logScope names the component and stack a plugin's log events belong to.
-func logScope(request *pluginv1.ComponentRequest, info *schema.ConfigAndStacksInfo) adapter.LogScope {
-	return adapter.LogScope{Provider: request.GetProvider(), Component: info.ComponentFromArg, Stack: info.Stack}
+func logScope(request *pluginv1.ComponentRequest, info *schema.ConfigAndStacksInfo, warnings *adapter.WarningDeduper) adapter.LogScope {
+	return adapter.LogScope{Provider: request.GetProvider(), Component: info.ComponentFromArg, Stack: info.Stack, Warnings: warnings}
 }
 
 // checkSourceOverride rejects a stack that points the component at another module. The module
@@ -241,6 +241,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 		resolveLocalBackend(backend, result.State.WorkingDirectory)
 	}
 	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
+	prepared.SensitiveInputKeys = sensitiveInputKeys(result.Inputs, inputs)
 	execution, err := preparedExecution(result.Execution)
 	if err != nil {
 		return nil, err
@@ -260,6 +261,25 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	}
 
 	return prepared, nil
+}
+
+// sensitiveInputKeys preserves declared sensitivity independently of the decoded value.
+// A sensitive empty string cannot be found later by value-based secret detection.
+func sensitiveInputKeys(value *pluginv1.ComponentValue, inputs map[string]any) map[string]bool {
+	if value == nil || len(value.SensitivePaths) == 0 {
+		return nil
+	}
+	keys := make(map[string]bool)
+	for _, path := range value.SensitivePaths {
+		if path == nil || len(path.Steps) == 0 || path.Steps[0].GetAttribute() == "" {
+			for key := range inputs {
+				keys[key] = true
+			}
+			continue
+		}
+		keys[path.Steps[0].GetAttribute()] = true
+	}
+	return keys
 }
 
 func resolveLocalBackend(backend map[string]any, root string) {

@@ -34,7 +34,7 @@ func (s *Session) ResolveState(ctx context.Context, info *schema.ConfigAndStacks
 	if err != nil {
 		return nil, err
 	}
-	adapter.RenderLogs(logScope(selected.request, info), result.GetLogs())
+	adapter.RenderLogs(logScope(selected.request, info, &s.warnings), result.GetLogs())
 	if result == nil || result.State == nil {
 		return nil, errUtils.ErrPluginProtocol
 	}

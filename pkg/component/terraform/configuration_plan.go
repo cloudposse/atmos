@@ -42,8 +42,11 @@ const planBindingSuffix = ".planfile" + configurationPlanSuffix
 type configurationPlan struct {
 	Version                                                                               int
 	Stack, Component, Identity, EngineDigest, PlanDigest, WorkingDirectory, WorkingDigest string
-	BackendDigest, RebuildDigest, LockDigest                                              string
-	Prepared                                                                              *schema.PreparedComponentConfiguration
+	// WorkingIdentity binds a relative working_directory override to its checkout-relative location.
+	// Older records omit it and remain bound to their original absolute directory.
+	WorkingIdentity                          string
+	BackendDigest, RebuildDigest, LockDigest string
+	Prepared                                 *schema.PreparedComponentConfiguration
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -61,10 +64,10 @@ func usesConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
 }
 
 // dropCIPlanLocation forgets the plan path the CI download hook records while it fetches a stored
-// plan for `deploy`. Every way a user names a plan to apply also sets UseTerraformPlan, so a PlanFile
-// that comes with a StoredPlanFile and no UseTerraformPlan is only the place the hook looked.
+// plan for `deploy`. An apply may have an explicitly supplied PlanFile even when
+// UseTerraformPlan is false, so only deploy's hook path is discarded.
 func dropCIPlanLocation(info *schema.ConfigAndStacksInfo) {
-	if info.PlanFile != "" && !info.UseTerraformPlan && info.StoredPlanFile != "" {
+	if info.SubCommand == "deploy" && info.PlanFile != "" && !info.UseTerraformPlan && info.StoredPlanFile != "" {
 		info.PlanFile = ""
 	}
 }
@@ -117,6 +120,13 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	plan, err := loadConfigurationPlan(path, info)
 	if err != nil {
 		return nil, nil, err
+	}
+	if plan.WorkingIdentity != "" {
+		workdir := filepath.Clean(ConstructTerraformComponentWorkingDir(config, info))
+		if relativeWorkdirIdentity(config, info, workdir) != plan.WorkingIdentity {
+			return nil, nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+		}
+		plan.WorkingDirectory = workdir
 	}
 	if err := verifyReviewedArtifacts(ctx, config, info, plan, path); err != nil {
 		return nil, nil, err
@@ -286,7 +296,7 @@ func recordConfigurationPlan(ctx context.Context, config *schema.AtmosConfigurat
 	if err != nil {
 		return err
 	}
-	plan, err := newConfigurationPlan(info, execCtx, identity, path)
+	plan, err := newConfigurationPlan(config, info, execCtx, identity, path)
 	if err != nil {
 		return err
 	}
@@ -306,7 +316,7 @@ func recordedPlanPath(info *schema.ConfigAndStacksInfo, execCtx *componentExecCo
 }
 
 // newConfigurationPlan binds the identity to the digests of the plan, engine, and working directory.
-func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, identity, path string) (*configurationPlan, error) {
+func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, identity, path string) (*configurationPlan, error) {
 	planDigest, err := fileDigest(path)
 	if err != nil {
 		return nil, err
@@ -338,7 +348,48 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: rebuildDigest, LockDigest: lock, Prepared: &stored}, nil
+	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: rebuildDigest, LockDigest: lock, Prepared: &stored}, nil
+}
+
+// relativeWorkdirIdentity is set only when an explicit relative override actually resolves
+// beneath the checkout root. Absolute and legacy workdirs retain exact-path verification.
+func relativeWorkdirIdentity(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workdir string) string {
+	if config == nil || info == nil {
+		return ""
+	}
+	override := workingDirectoryOverride(info)
+	if override == "" || filepath.IsAbs(override) {
+		return ""
+	}
+	base, err := filepath.Abs(config.BasePath)
+	if err != nil {
+		return ""
+	}
+	actual, err := filepath.Abs(workdir)
+	if err != nil {
+		return ""
+	}
+	relative, err := filepath.Rel(base, actual)
+	if err != nil || !matchesRelativeWorkdir(relative, override) {
+		return ""
+	}
+	return "relative:" + filepath.ToSlash(relative)
+}
+
+func matchesRelativeWorkdir(relative, override string) bool {
+	return relative != "." && relative != ".." &&
+		!strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
+		relative == filepath.Clean(override)
+}
+
+func workingDirectoryOverride(info *schema.ConfigAndStacksInfo) string {
+	for _, section := range []string{"metadata", "settings"} {
+		values, _ := info.ComponentSection[section].(map[string]any)
+		if value, ok := values["working_directory"].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // withoutSensitiveContent copies files, dropping the bytes of every sensitive one.

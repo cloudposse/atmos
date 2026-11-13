@@ -25,12 +25,12 @@ type failedUnit struct {
 // recordDiagnostics interprets a discovery response's diagnostics. Warnings print and never fail.
 // An error naming a unit is held for the commands that target that unit; an error that names no
 // unit is a project-level failure and is returned.
-func recordDiagnostics(provider string, diagnostics []*pluginv1.Diagnostic, failures map[failedKey]*failedUnit) error {
+func recordDiagnostics(provider string, diagnostics []*pluginv1.Diagnostic, failures map[failedKey]*failedUnit, warnings *adapter.WarningDeduper) error {
 	var projectLevel error
 	for _, diagnostic := range diagnostics {
 		err := adapter.DiagnosticError(diagnostic)
 		if err == nil {
-			adapter.WarnDiagnostic(diagnostic)
+			adapter.WarnDiagnostic(diagnostic, warnings)
 			continue
 		}
 		detail := diagnostic.GetDetail()

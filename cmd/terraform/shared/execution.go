@@ -139,7 +139,7 @@ func HandleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 	}
 
 	if info.Stack != "" && info.ComponentFromArg == "" {
-		if err := ValidateStackExists(cmd, info.Stack); err != nil {
+		if err := ValidateStackExists(cmd, info.Stack, info); err != nil {
 			return err
 		}
 	}
@@ -162,7 +162,7 @@ func promptMissingComponent(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	if info.ComponentFromArg != "" {
 		return nil
 	}
-	component, err := PromptForComponent(cmd, info.Stack)
+	component, err := PromptForComponent(cmd, info.Stack, info)
 	if err = HandlePromptError(err, "component"); err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func promptMissingStack(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) er
 	if info.Stack != "" {
 		return nil
 	}
-	stack, err := PromptForStack(cmd, info.ComponentFromArg)
+	stack, err := PromptForStack(cmd, info.ComponentFromArg, info)
 	if err = HandlePromptError(err, "stack"); err != nil {
 		return err
 	}

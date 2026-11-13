@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -288,6 +289,22 @@ func TestResolveMarksSensitiveValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resolved["tool"]["token"].Sensitive)
 	assert.Equal(t, "s3cret-value", resolved["tool"]["token"].Value)
+	assert.True(t, resolved["tool"]["token"].FromCLI)
+}
+
+func TestResolvePreservesEnvironmentProvenance(t *testing.T) {
+	resolved, err := resolveWith(t, sample, nil, map[string]string{"ATMOS_TOOL_FEATURE": "tier=process"})
+	require.NoError(t, err)
+	assert.False(t, resolved["tool"]["feature"].FromCLI)
+}
+
+func TestSensitiveProviderFlagsCarryMetadataAnnotation(t *testing.T) {
+	root, plan, _ := newTree()
+	require.NoError(t, Register(root, []Provider{providerFor(t, "tool", sample)}))
+	for _, name := range []string{"tool-token"} {
+		require.Equal(t, []string{"true"}, plan.Flags().Lookup(name).Annotations[flags.SensitiveMetadataAnnotation])
+	}
+	assert.Empty(t, plan.Flags().Lookup("tool-level").Annotations[flags.SensitiveMetadataAnnotation])
 }
 
 func TestSensitiveIntegerFlagValidation(t *testing.T) {
