@@ -1770,7 +1770,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/editorconfig/editorconfig-core-go/v2
     License: MIT
-    URL: https://github.com/editorconfig/editorconfig-core-go/blob/v2.6.4/LICENSE
+    URL: https://github.com/editorconfig/editorconfig-core-go/blob/v2.6.5/LICENSE
 
   - github.com/elewis787/boa
     License: MIT
