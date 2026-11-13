@@ -6,12 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -167,7 +169,8 @@ func TestBuildGoogleAPIURL(t *testing.T) {
 	query := "test query"
 	maxResults := 10
 
-	url := buildGoogleAPIURL("", apiKey, cseID, query, maxResults)
+	url, err := buildGoogleAPIURL("", apiKey, cseID, query, maxResults)
+	require.NoError(t, err)
 
 	assert.True(t, strings.HasPrefix(url, "https://www.googleapis.com/customsearch/v1?"))
 	assert.Contains(t, url, "key=test-api-key")
@@ -177,13 +180,60 @@ func TestBuildGoogleAPIURL(t *testing.T) {
 }
 
 func TestBuildGoogleAPIURL_CustomBaseURL(t *testing.T) {
-	url := buildGoogleAPIURL("https://search.example.com/customsearch/v1/", "test-api-key", "test-cse-id", "test query", 10)
+	url, err := buildGoogleAPIURL("https://search.example.com/customsearch/v1/", "test-api-key", "test-cse-id", "test query", 10)
+	require.NoError(t, err)
 
 	assert.True(t, strings.HasPrefix(url, "https://search.example.com/customsearch/v1?"))
 	assert.Contains(t, url, "key=test-api-key")
 	assert.Contains(t, url, "cx=test-cse-id")
 	assert.Contains(t, url, "q=test+query")
 	assert.Contains(t, url, "num=10")
+}
+
+func TestBuildGoogleAPIURL_KeepsExistingQuery(t *testing.T) {
+	apiURL, err := buildGoogleAPIURL("https://search.example.com/customsearch/v1?tenant=acme", "test-api-key", "test-cse-id", "test query", 10)
+	require.NoError(t, err)
+
+	parsed, err := url.Parse(apiURL)
+	require.NoError(t, err)
+	assert.Equal(t, "/customsearch/v1", parsed.Path)
+	assert.Equal(t, "acme", parsed.Query().Get("tenant"))
+	assert.Equal(t, "test-api-key", parsed.Query().Get("key"))
+	assert.Equal(t, "test-cse-id", parsed.Query().Get("cx"))
+	assert.Equal(t, "test query", parsed.Query().Get("q"))
+	assert.Equal(t, "10", parsed.Query().Get("num"))
+}
+
+func TestBuildGoogleAPIURL_RejectsFragment(t *testing.T) {
+	_, err := buildGoogleAPIURL("https://search.example.com/customsearch/v1#top", "test-api-key", "test-cse-id", "test query", 10)
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+}
+
+func TestGoogleEngine_Search_RejectsInsecureBaseURL(t *testing.T) {
+	mockTransport := new(MockRoundTripper)
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", "http://search.example.com/customsearch/v1")
+	engine.client = &http.Client{Transport: mockTransport}
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	assert.ErrorIs(t, err, errUtils.ErrAIInsecureBaseURL)
+	mockTransport.AssertNotCalled(t, "RoundTrip", mock.Anything)
+}
+
+func TestGoogleEngine_Search_AllowsLoopbackHTTP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "test-api-key", r.URL.Query().Get("key"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items": [{"title": "Result 1", "link": "https://example.com/1", "snippet": "Description 1"}]}`))
+	}))
+	defer server.Close()
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+
+	response, err := engine.Search(context.Background(), "test query", 5)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, response.Count)
 }
 
 func TestConvertGoogleResults(t *testing.T) {
@@ -1197,7 +1247,8 @@ func TestBuildGoogleAPIURL_SpecialCharacters(t *testing.T) {
 	query := "test & special = chars"
 	maxResults := 10
 
-	url := buildGoogleAPIURL("", apiKey, cseID, query, maxResults)
+	url, err := buildGoogleAPIURL("", apiKey, cseID, query, maxResults)
+	require.NoError(t, err)
 
 	assert.Contains(t, url, "test+%26+special+%3D+chars")
 	assert.Contains(t, url, "key=test-api-key")

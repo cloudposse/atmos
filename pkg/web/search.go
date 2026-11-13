@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -206,8 +208,16 @@ func (e *GoogleEngine) Search(ctx context.Context, query string, maxResults int)
 
 	maxResults = normalizeMaxResults(maxResults, DefaultMaxResults, GoogleMaxResults)
 
+	// The API key travels in the query string, so refuse cleartext http to a non-loopback host.
+	if err := base.ValidateProviderBaseURL(e.baseURL, e.apiKey != ""); err != nil {
+		return nil, err
+	}
+
 	// Build API URL.
-	apiURL := buildGoogleAPIURL(e.baseURL, e.apiKey, e.cseID, query, maxResults)
+	apiURL, err := buildGoogleAPIURL(e.baseURL, e.apiKey, e.cseID, query, maxResults)
+	if err != nil {
+		return nil, err
+	}
 
 	// Execute API request and parse response.
 	items, err := e.fetchGoogleResults(ctx, apiURL)
@@ -226,19 +236,31 @@ func (e *GoogleEngine) Search(ctx context.Context, query string, maxResults int)
 }
 
 // buildGoogleAPIURL constructs the Google Custom Search API URL.
-func buildGoogleAPIURL(baseURL, apiKey, cseID, query string, maxResults int) string {
+// Query parameters already present in baseURL are kept, and key, cx, q and num are set on top of them.
+func buildGoogleAPIURL(baseURL, apiKey, cseID, query string, maxResults int) (string, error) {
 	if baseURL == "" {
 		baseURL = GoogleDefaultBaseURL
 	}
 
-	return fmt.Sprintf(
-		"%s?key=%s&cx=%s&q=%s&num=%d",
-		strings.TrimRight(baseURL, "/"),
-		apiKey,
-		cseID,
-		url.QueryEscape(query),
-		maxResults,
-	)
+	if strings.Contains(baseURL, "#") {
+		return "", fmt.Errorf("%w: google_base_url must not contain a fragment", errUtils.ErrWebSearchFailed)
+	}
+
+	endpoint, err := url.Parse(baseURL)
+	if err != nil {
+		return "", wrapSearchError(errUtils.ErrWebSearchFailed, err)
+	}
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/")
+	endpoint.RawPath = strings.TrimRight(endpoint.RawPath, "/")
+
+	values := endpoint.Query()
+	values.Set("key", apiKey)
+	values.Set("cx", cseID)
+	values.Set("q", query)
+	values.Set("num", strconv.Itoa(maxResults))
+	endpoint.RawQuery = values.Encode()
+
+	return endpoint.String(), nil
 }
 
 // fetchGoogleResults performs the API request and returns the items.
