@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
@@ -345,10 +346,10 @@ func TestFetchBytesIsBoundedAndDigestVerified(t *testing.T) {
 
 	wrongSize := descriptor
 	wrongSize.Size++
-	_, err = oci.FetchBytes(ctx, fetchOverride{descriptor.Digest.String(): content}, wrongSize, 1<<10)
+	_, err = oci.FetchBytes(ctx, fetchOverride(t, map[string][]byte{descriptor.Digest.String(): content}), wrongSize, 1<<10)
 	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
 
-	tampered := fetchOverride{descriptor.Digest.String(): []byte(`{"hello":"WORLD"}`)}
+	tampered := fetchOverride(t, map[string][]byte{descriptor.Digest.String(): []byte(`{"hello":"WORLD"}`)})
 	_, err = oci.FetchBytes(ctx, tampered, descriptor, 1<<10)
 	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity, "same size, different bytes")
 
@@ -357,25 +358,31 @@ func TestFetchBytesIsBoundedAndDigestVerified(t *testing.T) {
 	require.ErrorIs(t, err, errdef.ErrNotFound)
 }
 
-type fetchOverride map[string][]byte
-
-func (f fetchOverride) Fetch(_ context.Context, target ocispec.Descriptor) (io.ReadCloser, error) {
-	return io.NopCloser(strings.NewReader(string(f[target.Digest.String()]))), nil
+// fetchOverride returns a generated source whose Fetch serves the supplied bytes by digest.
+func fetchOverride(t *testing.T, contents map[string][]byte) *oci.MockReadOnlyStore {
+	t.Helper()
+	store := oci.NewMockReadOnlyStore(gomock.NewController(t))
+	store.EXPECT().Fetch(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, target ocispec.Descriptor) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(string(contents[target.Digest.String()]))), nil
+	}).AnyTimes()
+	return store
 }
 
-// cancellingSource cancels the copy after a number of fetches and counts how many nodes were read.
-type cancellingSource struct {
-	oci.ReadOnlyStore
-	fetches     atomic.Int32
-	cancelAfter int32
-	cancel      context.CancelFunc
-}
-
-func (c *cancellingSource) Fetch(ctx context.Context, target ocispec.Descriptor) (io.ReadCloser, error) {
-	if c.fetches.Add(1) == c.cancelAfter {
-		c.cancel()
-	}
-	return c.ReadOnlyStore.Fetch(ctx, target)
+// cancellingSource returns a generated source that delegates to base, cancels the copy after
+// cancelAfter fetches, and counts how many nodes were read.
+func cancellingSource(t *testing.T, base oci.ReadOnlyStore, cancelAfter int32, cancel context.CancelFunc) (*oci.MockReadOnlyStore, *atomic.Int32) {
+	t.Helper()
+	var fetches atomic.Int32
+	store := oci.NewMockReadOnlyStore(gomock.NewController(t))
+	store.EXPECT().Fetch(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, target ocispec.Descriptor) (io.ReadCloser, error) {
+		if fetches.Add(1) == cancelAfter {
+			cancel()
+		}
+		return base.Fetch(ctx, target)
+	}).AnyTimes()
+	store.EXPECT().Exists(gomock.Any(), gomock.Any()).DoAndReturn(base.Exists).AnyTimes()
+	store.EXPECT().Resolve(gomock.Any(), gomock.Any()).DoAndReturn(base.Resolve).AnyTimes()
+	return store, &fetches
 }
 
 func TestCancellationStopsGraphTraversalAndLeavesNoReference(t *testing.T) {
@@ -388,22 +395,22 @@ func TestCancellationStopsGraphTraversalAndLeavesNoReference(t *testing.T) {
 	require.NoError(t, err)
 
 	// Establish how many nodes an uninterrupted copy fetches.
-	complete := &cancellingSource{ReadOnlyStore: base, cancelAfter: -1}
+	complete, completeFetches := cancellingSource(t, base, -1, nil)
 	full, err := oci.OpenLayout(t.Context(), filepath.Join(t.TempDir(), "full"))
 	require.NoError(t, err)
 	_, err = oci.Copy(t.Context(), oci.Source{Store: complete, Reference: digest.String()}, oci.Destination{Store: full, Reference: "1.0.0"}, oci.WithCopyConcurrency(1))
 	require.NoError(t, err)
-	total := complete.fetches.Load()
+	total := completeFetches.Load()
 	require.Greater(t, total, int32(3))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	interrupted := &cancellingSource{ReadOnlyStore: base, cancelAfter: 2, cancel: cancel}
+	interrupted, interruptedFetches := cancellingSource(t, base, 2, cancel)
 	target, err := oci.OpenLayout(t.Context(), filepath.Join(t.TempDir(), "target"))
 	require.NoError(t, err)
 	_, err = oci.Copy(ctx, oci.Source{Store: interrupted, Reference: digest.String()}, oci.Destination{Store: target, Reference: "1.0.0"}, oci.WithCopyConcurrency(1))
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Less(t, interrupted.fetches.Load(), total, "traversal must stop once the context ends")
+	assert.Less(t, interruptedFetches.Load(), total, "traversal must stop once the context ends")
 	assert.Empty(t, target.References(), "an interrupted copy must not publish the reference")
 	_, err = target.Resolve(t.Context(), "1.0.0")
 	require.Error(t, err)
@@ -414,37 +421,48 @@ func TestCancellationStopsGraphTraversalAndLeavesNoReference(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-// landingDestination reports a failed reference push after (optionally) completing it.
-type landingDestination struct {
-	oci.Store
-	land   bool
-	err    error
-	pushes atomic.Int32
+// landingDestination returns a generated destination over layout whose reference push reports err
+// after (optionally) completing it, and counts the push attempts.
+func landingDestination(t *testing.T, layout *oci.Layout, land bool, pushErr error) (*oci.MockRepositoryStore, *atomic.Int32) {
+	t.Helper()
+	var pushes atomic.Int32
+	store := oci.NewMockRepositoryStore(gomock.NewController(t))
+	store.EXPECT().Fetch(gomock.Any(), gomock.Any()).DoAndReturn(layout.Fetch).AnyTimes()
+	store.EXPECT().Exists(gomock.Any(), gomock.Any()).DoAndReturn(layout.Exists).AnyTimes()
+	store.EXPECT().Push(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(layout.Push).AnyTimes()
+	store.EXPECT().Resolve(gomock.Any(), gomock.Any()).DoAndReturn(layout.Resolve).AnyTimes()
+	store.EXPECT().Tag(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(layout.Tag).AnyTimes()
+	store.EXPECT().PushReference(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, expected ocispec.Descriptor, content io.Reader, reference string) error {
+			pushes.Add(1)
+			if land {
+				if err := layout.Push(ctx, expected, content); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+					return err
+				}
+				if err := layout.Tag(ctx, expected, reference); err != nil {
+					return err
+				}
+			}
+			return pushErr
+		},
+	).AnyTimes()
+	return store, &pushes
 }
 
-func (l *landingDestination) PushReference(ctx context.Context, expected ocispec.Descriptor, content io.Reader, reference string) error {
-	l.pushes.Add(1)
-	if l.land {
-		if err := l.Push(ctx, expected, content); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
-			return err
+// movingSource returns a generated source whose tag resolves once and then fails, as if it moved.
+func movingSource(t *testing.T, base oci.ReadOnlyStore) (*oci.MockReadOnlyStore, *atomic.Int32) {
+	t.Helper()
+	var calls atomic.Int32
+	store := oci.NewMockReadOnlyStore(gomock.NewController(t))
+	store.EXPECT().Fetch(gomock.Any(), gomock.Any()).DoAndReturn(base.Fetch).AnyTimes()
+	store.EXPECT().Exists(gomock.Any(), gomock.Any()).DoAndReturn(base.Exists).AnyTimes()
+	store.EXPECT().Resolve(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, ref string) (ocispec.Descriptor, error) {
+		if calls.Add(1) > 1 {
+			return ocispec.Descriptor{}, errors.New("source tag moved")
 		}
-		if err := l.Tag(ctx, expected, reference); err != nil {
-			return err
-		}
-	}
-	return l.err
-}
-
-type movingSource struct {
-	oci.ReadOnlyStore
-	calls atomic.Int32
-}
-
-func (s *movingSource) Resolve(ctx context.Context, ref string) (ocispec.Descriptor, error) {
-	if s.calls.Add(1) > 1 {
-		return ocispec.Descriptor{}, errors.New("source tag moved")
-	}
-	return s.ReadOnlyStore.Resolve(ctx, ref)
+		return base.Resolve(ctx, ref)
+	}).AnyTimes()
+	return store, &calls
 }
 
 func TestCopyReconcilesAmbiguousFailuresAgainstTheDestination(t *testing.T) {
@@ -470,17 +488,76 @@ func TestCopyReconcilesAmbiguousFailuresAgainstTheDestination(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			layout, err := oci.OpenLayout(t.Context(), filepath.Join(t.TempDir(), "target"))
 			require.NoError(t, err)
-			destination := &landingDestination{Store: layout, land: tc.land, err: tc.err}
-			moving := &movingSource{ReadOnlyStore: source}
+			destination, pushes := landingDestination(t, layout, tc.land, tc.err)
+			moving, resolves := movingSource(t, source)
 			root, err := oci.Copy(t.Context(), oci.Source{Store: moving, Reference: digest.String()}, oci.Destination{Store: destination, Reference: "1.0.0"})
-			assert.Equal(t, int32(1), destination.pushes.Load(), "the mutation is attempted exactly once")
-			assert.Equal(t, int32(1), moving.calls.Load(), "reconciliation must use the selected root")
+			assert.Equal(t, int32(1), pushes.Load(), "the mutation is attempted exactly once")
+			assert.Equal(t, int32(1), resolves.Load(), "reconciliation must use the selected root")
 			if tc.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
 			assert.Equal(t, digest.String(), root.Digest.String())
+		})
+	}
+}
+
+func TestCopyReconcilesAnAttachmentOnlyOnceItIsRegisteredUnderItsSubject(t *testing.T) {
+	ctx := t.Context()
+	source, err := oci.OpenLayout(ctx, filepath.Join(t.TempDir(), "source"))
+	require.NoError(t, err)
+	config := oci.Descriptor(ocispec.MediaTypeEmptyJSON, []byte("{}"))
+	require.NoError(t, source.Push(ctx, config, strings.NewReader("{}")))
+	subject := oci.Descriptor(ocispec.MediaTypeImageManifest, []byte("subject manifest"))
+	raw, err := json.Marshal(ocispec.Manifest{
+		MediaType:    ocispec.MediaTypeImageManifest,
+		ArtifactType: "application/vnd.example.signature",
+		Config:       config,
+		Layers:       []ocispec.Descriptor{},
+		Subject:      &subject,
+	})
+	require.NoError(t, err)
+	attachment := oci.Descriptor(ocispec.MediaTypeImageManifest, raw)
+	require.NoError(t, source.Push(ctx, attachment, strings.NewReader(string(raw))))
+	require.NoError(t, source.Tag(ctx, attachment, "sig"))
+
+	for _, tc := range []struct {
+		name      string
+		referrers []ocispec.Descriptor
+		wantErr   bool
+	}{
+		{"registered under the subject", []ocispec.Descriptor{attachment}, false},
+		{"manifest exists but is not registered", nil, true},
+		{"only another attachment is registered", []ocispec.Descriptor{oci.Descriptor(ocispec.MediaTypeImageManifest, []byte("other"))}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			destination := oci.NewMockRepositoryStore(gomock.NewController(t))
+			destination.EXPECT().Exists(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+			destination.EXPECT().Push(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, _ ocispec.Descriptor, content io.Reader) error {
+					_, err := io.Copy(io.Discard, content)
+					return err
+				},
+			).AnyTimes()
+			destination.EXPECT().PushReference(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("connection reset by peer")).AnyTimes()
+			destination.EXPECT().Resolve(gomock.Any(), "1.0.0").Return(attachment, nil).AnyTimes()
+			destination.EXPECT().Fetch(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, ocispec.Descriptor) (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader(string(raw))), nil
+				},
+			).AnyTimes()
+			destination.EXPECT().Predecessors(gomock.Any(), subject).Return(tc.referrers, nil).AnyTimes()
+
+			got, err := oci.Copy(ctx, oci.Source{Store: source, Reference: "sig"}, oci.Destination{Store: destination, Reference: "1.0.0"}, oci.WithoutSubjectTraversal())
+
+			if tc.wantErr {
+				require.Error(t, err)
+				require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, attachment.Digest, got.Digest)
 		})
 	}
 }

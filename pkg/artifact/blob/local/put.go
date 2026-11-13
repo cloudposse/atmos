@@ -240,15 +240,22 @@ func (s *Store) statCommitted(root *os.Root, key, target string, pending *staged
 	return &blob.ObjectInfo{Key: key, Size: pending.size, ETag: pending.etag, LastModified: info.ModTime()}, nil
 }
 
-// discard removes any temporary files that were not committed.
+// discard removes any temporary files that were not committed, then prunes the staging
+// directories that this put created and left empty. Non-empty directories are kept.
 func (p *staged) discard(root *os.Root) {
 	if p.preserve {
 		return
 	}
+	var dirs []string
 	if p.tempPath != "" {
 		_ = root.Remove(p.tempPath)
+		dirs = append(dirs, filepath.Dir(p.tempPath))
 	}
 	if p.attrsTemp != "" {
 		_ = root.Remove(p.attrsTemp)
+		dirs = append(dirs, filepath.Dir(p.attrsTemp))
+	}
+	for _, dir := range dirs {
+		rootRemoveEmptyDirs(root, dir)
 	}
 }

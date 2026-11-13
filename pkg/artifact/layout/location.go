@@ -30,10 +30,13 @@ const deleteRune = 0x7f
 // depend only on the captured publication inputs: not on the clock, the process environment, the
 // network, or randomness.
 var nonHermeticFunctions = []string{
-	"now", "env", "expandenv", "getHostByName", "uuidv4", "randAlphaNum", "randAlpha", "randNumeric",
-	"randAscii", "randBytes", "shuffle", "genPrivateKey", "genCA", "genCAWithKey", "genSelfSignedCert",
+	"now", "ago", "env", "expandenv", "getHostByName", "uuidv4", "randAlphaNum", "randAlpha", "randNumeric",
+	"randAscii", "randBytes", "randInt", "shuffle", "genPrivateKey", "genCA", "genCAWithKey", "genSelfSignedCert",
 	"genSelfSignedCertWithKey", "genSignedCert", "genSignedCertWithKey", "buildCustomCert", "derivePassword",
 	"htpasswd", "bcrypt", "encryptAES", "decryptAES",
+	// Sprig's zone-aware date helpers fall back to the current time for unsupported input and
+	// format in the host's local zone. The "date" function is replaced by a UTC variant instead.
+	"dateInZone", "date_in_zone", "htmlDate", "htmlDateInZone",
 }
 
 // PatternInput holds the values a key_pattern may reference: .Name, .Version, .Kind, and

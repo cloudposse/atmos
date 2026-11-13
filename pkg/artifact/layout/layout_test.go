@@ -45,6 +45,12 @@ func TestPaths(t *testing.T) {
 	assert.NotEqual(t, LockPath("a"), LockPath("b"))
 }
 
+func TestOperationFileNameCannotCollideWithHashedNames(t *testing.T) {
+	hashed := OperationFileName("op/with/slash")
+	require.True(t, strings.HasPrefix(hashed, "sha256-"))
+	assert.NotEqual(t, hashed, OperationFileName(hashed), "a literal id equal to another id's hashed name is hashed itself")
+}
+
 func TestOperationFileName(t *testing.T) {
 	tests := []struct {
 		name string
@@ -58,6 +64,7 @@ func TestOperationFileName(t *testing.T) {
 		{"traversal", "../x", false},
 		{"overlong", strings.Repeat("a", 200), false},
 		{"empty", "", false},
+		{"reserved hash prefix", "sha256-deadbeef", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -127,6 +134,23 @@ func TestRenderLocation(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestRenderLocation_RejectsRandomAndClockDependentFunctions(t *testing.T) {
+	in := &PatternInput{Name: "app", Version: "1", Kind: "x", CreatedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)}
+	for _, name := range []string{
+		"now", "ago", "env", "randAlphaNum", "randAlpha", "randNumeric", "randAscii", "randInt", "uuidv4",
+		"shuffle", "dateInZone", "date_in_zone", "htmlDate", "htmlDateInZone",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := RenderLocation("{{ "+name+" }}", in, artifact.PackagingNone)
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid, "%s must not be defined in key_pattern", name)
+			assert.Contains(t, err.Error(), "not defined")
+		})
+	}
+	got, err := RenderLocation("{{ .Name }}/{{ date \"2006\" .CreatedAt }}", in, artifact.PackagingNone)
+	require.NoError(t, err)
+	assert.Equal(t, "app/2026", got, "the deterministic UTC date function remains available")
 }
 
 func TestRenderLocation_DateIsUTCAndStable(t *testing.T) {
@@ -373,6 +397,13 @@ func TestOperation_JournalRoundTrip(t *testing.T) {
 	broken.Prior = &Prior{}
 	_, err = broken.Marshal()
 	require.Error(t, err)
+	for _, malformed := range []digest.Digest{"x", "sha256:short", digest.Digest("md5:" + digestA.Encoded()), digest.Digest(strings.Repeat("g", 71))} {
+		broken = sampleOperation()
+		broken.Prior = &Prior{RecordDigest: malformed, Location: "2026/10/29/team/app/1.0.0"}
+		_, err = broken.Marshal()
+		require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed, "malformed prior digest %q", malformed)
+		require.ErrorIs(t, err, errUtils.ErrArtifactRecordInvalid)
+	}
 }
 
 func TestEvidence_EnvelopeBindsFileNameToContent(t *testing.T) {
