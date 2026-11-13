@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-//go:generate go run go.uber.org/mock/mockgen -destination mock_transport.go -package oci github.com/cloudposse/atmos/pkg/oci Store,RepositoryStore,Transport
+//go:generate go run go.uber.org/mock/mockgen -destination mock_transport.go -package oci github.com/cloudposse/atmos/pkg/oci ReadOnlyStore,Store,RepositoryStore,Transport
 
 // Repository identifies one OCI repository independently of any client library.
 // Registry is the host (with optional port) and Path the repository name.

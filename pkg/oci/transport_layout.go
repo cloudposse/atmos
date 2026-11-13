@@ -173,6 +173,7 @@ func (l *Layout) recordRoot(desc ocispec.Descriptor) error {
 	return l.recordRootLocked(desc)
 }
 
+// recordRootLocked is recordRoot for a caller that already holds l.mu.
 func (l *Layout) recordRootLocked(desc ocispec.Descriptor) error {
 	for i := range l.index {
 		if l.index[i].Digest == desc.Digest {
@@ -203,6 +204,8 @@ func (l *Layout) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]o
 func (l *Layout) Tag(ctx context.Context, desc ocispec.Descriptor, reference string) error {
 	defer perf.Track(nil, "oci.Layout.Tag")()
 
+	// The mutex covers the resolver update and the index commit so concurrent updates to the same
+	// reference are ordered: the last resolver write is also the last index write.
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if err := l.store.Tag(ctx, desc, reference); err != nil {

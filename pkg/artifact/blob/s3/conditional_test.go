@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"testing"
 
@@ -227,6 +228,50 @@ func TestAmbiguousCompletionLeavesTheUploadForReconciliation(t *testing.T) {
 	assert.Equal(t, data, object.Data)
 }
 
+func TestUnconditionalCompletionLostResponseIsAmbiguousAndNotRetried(t *testing.T) {
+	fake := newFake(t)
+	fake.Inject(s3test.Fault{Op: s3test.OpCompleteMultipartUpload, Action: s3test.DropAfterCommit})
+	s := newTestStore(t, fake)
+	data := patterned(smallPart*2 + 9)
+
+	_, err := s.Put(context.Background(), "big", bytes.NewReader(data), blob.PutOptions{Size: int64(len(data))})
+	require.Error(t, err)
+	assert.True(t, blob.IsAmbiguous(err), "a lost completion response is not a definite failure: %v", err)
+	assert.Len(t, fake.RequestsFor(s3test.OpCompleteMultipartUpload), 1, "completion is never retried by the SDK")
+	assert.Empty(t, fake.RequestsFor(s3test.OpAbortMultipartUpload), "the upload is left for reconciliation")
+	object, ok := fake.Object("big")
+	require.True(t, ok)
+	assert.Equal(t, data, object.Data)
+}
+
+// failingReader serves data, then fails with err.
+type failingReader struct {
+	data []byte
+	err  error
+}
+
+func (r *failingReader) Read(p []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, r.err
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	return n, nil
+}
+
+func TestSourceUnexpectedEOFAbortsMultipartPublication(t *testing.T) {
+	fake := newFake(t)
+	s := newTestStore(t, fake)
+	body := &failingReader{data: patterned(smallPart*2 + 9), err: io.ErrUnexpectedEOF}
+
+	_, err := s.Put(context.Background(), "big", body, blob.PutOptions{Size: blob.UnknownSize})
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF, "the source failure is not mistaken for end of input")
+	_, ok := fake.Object("big")
+	assert.False(t, ok, "a truncated source never becomes an object")
+	assert.Empty(t, fake.RequestsFor(s3test.OpCompleteMultipartUpload))
+	assert.NotEmpty(t, fake.RequestsFor(s3test.OpAbortMultipartUpload))
+}
+
 func TestServiceCodesMapToKinds(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -269,6 +314,34 @@ func TestProbeCleanupFailureIsReturnedAndNotCached(t *testing.T) {
 	fake.ClearFaults()
 	require.NoError(t, s.ProbeConditionalWrites(context.Background()))
 	assert.Len(t, fake.RequestsFor(s3test.OpPutObject), 6)
+}
+
+func TestProbeCleansUpWhenFirstPutResponseIsLost(t *testing.T) {
+	fake := newFake(t)
+	fake.Inject(s3test.Fault{Op: s3test.OpPutObject, Action: s3test.DropAfterCommit})
+	s := newTestStore(t, fake, WithConditionalMode(ConditionalProbe))
+
+	err := s.ProbeConditionalWrites(context.Background())
+	require.Error(t, err)
+	assert.True(t, blob.IsAmbiguous(err), "%v", err)
+	assert.Empty(t, fake.Keys(), "the probe object committed by the lost response is removed")
+}
+
+func TestProbeCleanupFailureKeepsUnsupportedVerdictAndIsNotCached(t *testing.T) {
+	fake := newFake(t, s3test.WithConditionalBehavior(s3test.ConditionalIgnore))
+	fake.Inject(s3test.Fault{Op: s3test.OpDeleteObject, Status: http.StatusForbidden, Code: "AccessDenied"})
+	s := newTestStore(t, fake, WithConditionalMode(ConditionalProbe))
+
+	err := s.ProbeConditionalWrites(context.Background())
+	require.ErrorContains(t, err, "cleanup probe object")
+	assert.True(t, blob.IsConditionalUnsupported(err), "the probe verdict stays visible: %v", err)
+
+	fake.ClearFaults()
+	err = s.ProbeConditionalWrites(context.Background())
+	require.Error(t, err)
+	assert.True(t, blob.IsConditionalUnsupported(err))
+	assert.NotContains(t, err.Error(), "cleanup probe object", "the verdict was not cached with the failed cleanup")
+	assert.Len(t, fake.RequestsFor(s3test.OpPutObject), 4, "the probe ran again after the failed cleanup")
 }
 
 type ignoresIfMatch struct {

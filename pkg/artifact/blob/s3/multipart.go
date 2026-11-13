@@ -187,16 +187,20 @@ func acquireBuffer(ctx context.Context, free chan []byte, partSize int64) ([]byt
 // readPart fills buf from body, starting with a carried byte when one was already consumed. It
 // returns the bytes in buf; zero means the body ended exactly on the previous boundary.
 func readPart(body io.Reader, buf, carry []byte) (int, error) {
-	offset := copy(buf, carry)
-	n, err := io.ReadFull(body, buf[offset:])
-	switch {
-	case err == nil:
-		return offset + n, nil
-	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return offset + n, nil
-	default:
-		return 0, err
+	filled := copy(buf, carry)
+	for filled < len(buf) {
+		n, err := body.Read(buf[filled:])
+		filled += n
+		if errors.Is(err, io.EOF) {
+			return filled, nil
+		}
+		if err != nil {
+			// Any other error, including a source-returned io.ErrUnexpectedEOF, is a read failure
+			// and must abort publication.
+			return 0, err
+		}
 	}
+	return filled, nil
 }
 
 // uploadPart sends one part and returns its ETag.
@@ -215,7 +219,9 @@ func (m *multipart) uploadPart(ctx context.Context, number int32, data []byte) (
 	return out.ETag, nil
 }
 
-// complete assembles the parts into the object under the write condition.
+// complete assembles the parts into the object under the write condition. SDK retries are always
+// disabled, conditional or not: a retried completion whose first attempt already committed would
+// meet a consumed upload ID and look like a definite failure.
 func (m *multipart) complete(ctx context.Context, parts []types.CompletedPart, total int64) (*blob.ObjectInfo, error) {
 	cond := m.plan.opts.Condition
 	in := &s3.CompleteMultipartUploadInput{
@@ -225,7 +231,7 @@ func (m *multipart) complete(ctx context.Context, parts []types.CompletedPart, t
 		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
 	}
 	in.IfNoneMatch, in.IfMatch = conditionHeaders(cond)
-	out, err := m.plan.api.CompleteMultipartUpload(ctx, in, append(retryOptions(cond.IsConditional()), skipOptionalChecksums)...)
+	out, err := m.plan.api.CompleteMultipartUpload(ctx, in, noRetry, skipOptionalChecksums)
 	if err != nil {
 		classified := classify(m.plan.request(true), err)
 		if blob.IsAmbiguous(classified) {

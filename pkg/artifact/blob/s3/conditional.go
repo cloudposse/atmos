@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -44,9 +45,12 @@ func unsupportedConditionalFrom(key string, probeErr error) error {
 }
 
 // ProbeConditionalWrites verifies that the endpoint enforces If-None-Match by creating a throwaway
-// object twice: the second create must be rejected. A definite answer is cached for the life of the
-// store; a transient failure is returned without being cached. It returns an error matching
-// ErrBlobConditionalUnsupported when the endpoint ignores or rejects the condition.
+// object twice: the second create must be rejected. It then checks that stale If-Match validators
+// are rejected on PutObject and DeleteObject. The guarantee covers those single-object requests
+// only; conditional enforcement on CompleteMultipartUpload is not probed. A definite answer is
+// cached for the life of the store; a transient failure is returned without being cached. It
+// returns an error matching ErrBlobConditionalUnsupported when the endpoint ignores or rejects the
+// condition.
 func (s *Store) ProbeConditionalWrites(ctx context.Context) error {
 	defer perf.Track(nil, "blob.s3.ProbeConditionalWrites")()
 
@@ -59,21 +63,42 @@ func (s *Store) ProbeConditionalWrites(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = s.runProbe(ctx, api)
-	if err == nil || blob.IsConditionalUnsupported(err) {
-		s.probed, s.probeError = true, err
+	verdict, cleanupErr := s.runProbe(ctx, api)
+	if cleanupErr != nil {
+		// A leftover probe object is a transient failure: neither verdict is cached, and both
+		// errors stay visible to callers.
+		return errors.Join(verdict, cleanupErr)
 	}
-	return err
+	if verdict == nil || blob.IsConditionalUnsupported(verdict) {
+		s.probed, s.probeError = true, verdict
+	}
+	return verdict
 }
 
-// runProbe performs the double create and cleans up the probe object.
-func (s *Store) runProbe(ctx context.Context, api API) (resultErr error) {
+// runProbe performs the double create and removes the probe object. The verdict is the probe
+// result; cleanupErr reports a failure to delete the probe object.
+func (s *Store) runProbe(ctx context.Context, api API) (verdict, cleanupErr error) {
 	var raw [8]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		return blob.NewError(blob.KindOther, probeOperation, "", err)
+		return blob.NewError(blob.KindOther, probeOperation, "", err), nil
 	}
 	key := probePrefix + hex.EncodeToString(raw[:])
 	objectKey := s.objectKey(key)
+	// Cleanup is scheduled before the first create: a PUT that returns an ambiguous error may
+	// still have written the probe object.
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), probeCleanupTimeout)
+		defer cancel()
+		_, err := api.DeleteObject(cleanupCtx, &s3.DeleteObjectInput{Bucket: aws.String(s.cfg.bucket), Key: aws.String(objectKey)}, noRetry)
+		if err != nil {
+			cleanupErr = blob.NewError(blob.KindOther, probeOperation, key, fmt.Errorf("cleanup probe object: %w", err))
+		}
+	}()
+	return s.probeCreate(ctx, api, key, objectKey), nil
+}
+
+// probeCreate creates the probe object twice and checks the second create is rejected.
+func (s *Store) probeCreate(ctx context.Context, api API, key, objectKey string) error {
 	create := func() error {
 		_, err := api.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:      aws.String(s.cfg.bucket),
@@ -86,14 +111,6 @@ func (s *Store) runProbe(ctx context.Context, api API) (resultErr error) {
 	if err := create(); err != nil {
 		return err
 	}
-	defer func() {
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), probeCleanupTimeout)
-		defer cancel()
-		_, err := api.DeleteObject(cleanupCtx, &s3.DeleteObjectInput{Bucket: aws.String(s.cfg.bucket), Key: aws.String(objectKey)}, noRetry)
-		if err != nil {
-			resultErr = blob.NewError(blob.KindOther, probeOperation, key, fmt.Errorf("cleanup probe object: %w", err))
-		}
-	}()
 	err := create()
 	if blob.IsPreconditionFailed(err) {
 		return s.probeIfMatch(ctx, api, key, objectKey)
