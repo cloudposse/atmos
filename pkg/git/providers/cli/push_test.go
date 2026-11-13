@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,7 +77,7 @@ func TestPushExhaustsRetries(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitPushRejected))
-	assert.Contains(t, err.Error(), "origin/main")
+	assert.Contains(t, err.Error(), "3 attempt(s)")
 	assert.Contains(t, err.Error(), "2 retries")
 
 	// 3 push attempts (initial + 2 retries), 2 rebases between them.
@@ -134,4 +135,22 @@ func TestClassifyPatterns(t *testing.T) {
 	assert.True(t, errors.Is(plain, errUtils.ErrGitCommandExited))
 
 	assert.NoError(t, classify(nil, atmosgit.RunResult{}, "noop"))
+}
+
+func TestPushInvalidRetries(t *testing.T) {
+	for _, retries := range []int{-1, math.MaxInt} {
+		runner := newFakeRunner()
+		err := New(WithRunner(runner)).Push(context.Background(), &atmosgit.PushOptions{Retries: retries})
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		require.Empty(t, runner.calls)
+	}
+}
+
+func TestPushAlreadyCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	runner := newFakeRunner()
+	err := New(WithRunner(runner)).Push(ctx, &atmosgit.PushOptions{Retries: 3})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, runner.calls)
 }
