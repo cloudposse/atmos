@@ -17,9 +17,7 @@ jobs:
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: credential.helper
           GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
-        run: |
-          atmos git clone --ci
-          git checkout --detach "$GITHUB_SHA"
+        run: atmos git clone --ci --ref "$GITHUB_SHA"
 
       - id: affected
         run: atmos describe affected --format=matrix
@@ -39,9 +37,7 @@ jobs:
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: credential.helper
           GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
-        run: |
-          atmos git clone --ci
-          git checkout --detach "$GITHUB_SHA"
+        run: atmos git clone --ci --ref "$GITHUB_SHA"
 
       - env:
           COMPONENT: ${{ matrix.component }}
