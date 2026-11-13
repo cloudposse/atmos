@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	charm "github.com/charmbracelet/log"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -224,9 +225,11 @@ func TestWarnDiagnosticShowsTheSameWarningOncePerInvocation(t *testing.T) {
 	other := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "remote_state_encryption_not_generated", Summary: "Encryption is not generated", Unit: "app", Stack: "prod", Severity: pluginv1.Severity_SEVERITY_WARNING}}
 	WarnDiagnostic(other, warnings)
 	assert.False(t, warnings.firstTime("diagnostic", "app", "prod", "remote_state_encryption_not_generated", "Encryption is not generated (Component `app` in stack `prod`)"), "another stack is its own warning, recorded by its own call")
-	assert.Equal(t, 2, strings.Count(output.String(), "Encryption is not generated"))
-	assert.Equal(t, 1, strings.Count(output.String(), "stack dev"), "%q", output.String())
-	assert.Equal(t, 1, strings.Count(output.String(), "stack prod"), "%q", output.String())
+	// Styling may split the visible text with ANSI sequences, so count what the user sees.
+	visible := ansi.Strip(output.String())
+	assert.Equal(t, 2, strings.Count(visible, "Encryption is not generated"), "%q", visible)
+	assert.Equal(t, 1, strings.Count(visible, "stack dev"), "%q", visible)
+	assert.Equal(t, 1, strings.Count(visible, "stack prod"), "%q", visible)
 }
 
 func TestFailureLogsRenderBeforeTheErrorAtTheAtmosLevel(t *testing.T) {
