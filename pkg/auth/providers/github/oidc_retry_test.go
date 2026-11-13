@@ -116,9 +116,15 @@ func startTokenServer(t *testing.T, http2 bool, handlers ...http.HandlerFunc) *t
 			ts.conns.Add(1)
 		}
 	}
+	release := make(chan struct{})
+	ts.Config.BaseContext = func(net.Listener) context.Context {
+		return context.WithValue(context.Background(), hangReleaseKey{}, release)
+	}
 	ts.EnableHTTP2 = http2
 	ts.StartTLS()
 	t.Cleanup(ts.Close)
+	// Cleanups run last-in first-out: release hanging handlers before Close waits for them.
+	t.Cleanup(func() { close(release) })
 	return ts
 }
 
@@ -141,9 +147,16 @@ func respondBody(body string) http.HandlerFunc {
 }
 
 // respondHang blocks until the client gives up on the request.
+// The hangReleaseKey type carries the token server's release channel into each request context.
+type hangReleaseKey struct{}
+
+// respondHang never answers: it holds the request until the test ends, so the client's own
+// timeout always ends the attempt. Waiting only on the request context is not enough, because a
+// context that ends first returns an empty 200 response that the client reads as EOF.
 func respondHang() http.HandlerFunc {
 	return func(_ http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
+		release, _ := r.Context().Value(hangReleaseKey{}).(chan struct{})
+		<-release
 	}
 }
 
