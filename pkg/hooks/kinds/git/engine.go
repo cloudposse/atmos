@@ -62,6 +62,7 @@ type publishTarget struct {
 	signing     gitsvc.SigningMode
 	author      *gitsvc.Author
 	pushRetries int
+	pushRetry   *schema.RetryConfig
 	// sourceSHA is the current repository HEAD, recorded as provenance when
 	// cheaply available (current-repository case only).
 	sourceSHA string
@@ -160,6 +161,7 @@ func (e *Engine) resolveNamedTarget(ctx *hooks.ExecContext) (*publishTarget, err
 		signing:     resolved.Signing,
 		author:      resolved.Author,
 		pushRetries: resolved.PushRetries,
+		pushRetry:   resolved.PushRetry,
 	}, nil
 }
 
@@ -267,6 +269,7 @@ func (e *Engine) publish(ctx *hooks.ExecContext, target *publishTarget) error {
 	return target.provider.Push(runCtx, &gitsvc.PushOptions{
 		RepoContext: target.repoCtx,
 		Retries:     target.pushRetries,
+		Retry:       target.pushRetry,
 	})
 }
 

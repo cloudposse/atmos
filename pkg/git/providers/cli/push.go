@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -24,25 +25,42 @@ const (
 // Push pushes the current branch, retrying on non-fast-forward rejection —
 // the most common GitOps publishing failure (a concurrent publisher pushed
 // first). Each retry rebases local commits onto the updated remote ref and
-// pushes again after jittered exponential backoff, bounded by opts.Retries
-// and a 30-second deadline. Atmos never adds force-push options.
+// pushes again using the configured shared retry policy. Legacy retry counts
+// use jittered exponential backoff and a 30-second deadline. Atmos never adds force-push options.
 func (p *Provider) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 	defer perf.Track(nil, "cli.Provider.Push")()
 
+	config, err := pushRetryConfig(opts)
+	if err != nil {
+		return err
+	}
+	// Also bound running Git commands when the shared policy specifies a budget.
+	if config.MaxElapsedTime != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *config.MaxElapsedTime)
+		defer cancel()
+	}
+	return p.pushWithRetry(ctx, opts, config)
+}
+
+// pushRetryConfig preserves legacy defaults unless an explicit shared policy is supplied.
+func pushRetryConfig(opts *atmosgit.PushOptions) (*schema.RetryConfig, error) {
+	if opts.Retry != nil {
+		if err := retry.Validate(opts.Retry); err != nil {
+			return nil, fmt.Errorf("%w: push retry: %w", errUtils.ErrInvalidConfig, err)
+		}
+		return opts.Retry, nil
+	}
 	if opts.Retries < 0 || opts.Retries == math.MaxInt {
-		return fmt.Errorf("%w: push retries must be nonnegative and less than MaxInt", errUtils.ErrInvalidConfig)
+		return nil, fmt.Errorf("%w: push retries must be nonnegative and less than MaxInt", errUtils.ErrInvalidConfig)
 	}
 	attempts := opts.Retries + 1
 	initial, maximum, budget := pushRetryInitialDelay, pushRetryMaxDelay, pushRetryBudget
 	jitter := pushRetryJitter
-	config := schema.RetryConfig{
+	return &schema.RetryConfig{
 		MaxAttempts: &attempts, BackoffStrategy: schema.BackoffExponential,
 		InitialDelay: &initial, MaxDelay: &maximum, RandomJitter: &jitter, MaxElapsedTime: &budget,
-	}
-	// The deadline also bounds a running Git command and the final retry wait.
-	ctx, cancel := context.WithTimeout(ctx, budget)
-	defer cancel()
-	return p.pushWithRetry(ctx, opts, &config)
+	}, nil
 }
 
 // pushWithRetry keeps Git recovery state local to this invocation. The generic
@@ -50,10 +68,14 @@ func (p *Provider) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 func (p *Provider) pushWithRetry(ctx context.Context, opts *atmosgit.PushOptions,
 	config *schema.RetryConfig, executorOptions ...retry.Option,
 ) error {
+	patterns, err := retry.CompileConditions(config.Conditions)
+	if err != nil {
+		return err
+	}
 	start := time.Now()
 	attempts := 0
 	rejected := false
-	err := retry.New(*config, executorOptions...).ExecuteWithPredicate(ctx, func() error {
+	err = retry.New(*config, executorOptions...).ExecuteWithPredicate(ctx, func() error {
 		if rejected {
 			rejected = false
 			if err := p.rebaseOntoRemote(ctx, opts.RepoContext); err != nil {
@@ -69,7 +91,7 @@ func (p *Provider) pushWithRetry(ctx context.Context, opts *atmosgit.PushOptions
 			return ctx.Err()
 		}
 		// Authentication failures must win even if the output also mentions rejection.
-		if !matchesAny(result.StderrTail, authPatterns) && isRejectedPush(result) {
+		if retryablePushResult(result, patterns) {
 			rejected = true
 			return errUtils.ErrGitPushRejected
 		}
@@ -117,4 +139,12 @@ func pluralRetry(n int) string {
 		return "y"
 	}
 	return "ies"
+}
+
+// retryablePushResult keeps configured conditions within safe rejected-push recovery.
+func retryablePushResult(result atmosgit.RunResult, patterns []*regexp.Regexp) bool {
+	if matchesAny(result.StderrTail, authPatterns) || !isRejectedPush(result) {
+		return false
+	}
+	return len(patterns) == 0 || retry.MatchesAny(patterns, result.StderrTail)
 }

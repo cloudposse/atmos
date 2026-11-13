@@ -312,6 +312,7 @@ func commitAndPushResult(ctx context.Context, s *repoSession, cfg *config, artif
 		return s.provider.Push(ctx, &atmosgit.PushOptions{
 			RepoContext: s.rc,
 			Retries:     s.resolved.PushRetries,
+			Retry:       s.resolved.PushRetry,
 		})
 	})
 	return result.SHA, atmosgit.WrapOperationError(

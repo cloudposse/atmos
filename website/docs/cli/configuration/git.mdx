@@ -74,7 +74,14 @@ git:
           name: atmos[bot]
           email: atmos-bot@acme.com
       push:
-        retries: 3
+        retry:
+          max_attempts: 4                  # initial attempt plus up to three retries
+          backoff_strategy: exponential
+          initial_delay: 250ms
+          max_delay: 5s
+          multiplier: 2
+          random_jitter: 0.5
+          max_elapsed_time: 30s
       init:
         from: https://github.com/acme/flux-template.git   # optional seed source for `atmos git init`
         keep_history: false                # preserve source history as `upstream` (requires `from`)
@@ -142,9 +149,14 @@ git:
     Commit author identity, passed per invocation (`-c user.name=... -c user.email=...`) without mutating repository or global Git config. Required in CI, where runners typically have no `user.name`/`user.email` configured. Locally, when Git already resolves an author, Atmos passes nothing — your own Git config wins.
   </dd>
 
-  <dt>`push.retries`</dt>
+  <dt>`push.retry`</dt>
   <dd>
-    Bounded retry count for rejected non-fast-forward pushes (`pull --rebase`, then re-push). Default: `3`. `0` disables retries.
+    Shared [retry policy](/steps/retry) for rejected pushes. The example above shows the default contention backoff: four total attempts, exponential delays starting at 250 ms, a 5-second cap before ±50% jitter, and a 30-second deadline including Git commands. An explicit policy uses the shared retry semantics: omitted fields are not filled from these defaults, and `retry: {}` makes one attempt. Set `max_attempts: 1` to disable retries. `conditions` can narrow which rejected-push messages are retried; authentication failures and other non-rejection errors always fail immediately.
+  </dd>
+
+  <dt>`push.retries` (legacy)</dt>
+  <dd>
+    Retry count after the initial attempt. Default: `3`; `0` disables retries. Prefer `push.retry.max_attempts`, which counts the initial attempt too. When both are supplied, `push.retry` takes precedence.
   </dd>
 
   <dt>`init.from`</dt>

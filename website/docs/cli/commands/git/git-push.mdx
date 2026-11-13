@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Push commits from a repository configured under [`git.repositories`](/cli/configuration/git), or from any local path, to its remote. Atmos **never force-pushes**. When a push is rejected because the remote moved (another job or human pushed first), Atmos automatically retries: `pull --rebase`, then re-push, bounded by `push.retries` (default `3`).
+Push commits from a repository configured under [`git.repositories`](/cli/configuration/git), or from any local path, to its remote. Atmos **never force-pushes**. When a push is rejected because the remote moved (another job or human pushed first), Atmos automatically retries: `pull --rebase`, then re-push, bounded by the shared `push.retry` policy (four total attempts by default).
 </Intro>
 
 <CastPlayer title="atmos git push --help" src="/casts/screengrabs/atmos-git-push--help.cast" static chrome />
@@ -59,8 +59,24 @@ atmos git push flux-deploy -- --follow-tags
 A rejected non-fast-forward push is the most common failure mode in GitOps publishing — multiple components, CI jobs, or humans pushing to the same deployment branch. Atmos handles it instead of surfacing a raw Git error:
 
 1. On rejection, including a concurrent remote ref update (`cannot lock ref ... is at ... but expected ...`), run `pull --rebase`, then re-push.
-2. Repeat up to `push.retries` times (default `3`; configurable per repository).
+2. Wait with exponential backoff and random jitter, then retry according to `push.retry` (four total attempts by default; configurable per repository).
 3. After exhaustion, fail with a clear error and hints (serialize publishers, or batch publishing).
+
+Configure backoff and jitter using the shared [retry policy](/steps/retry) under `git.repositories.<name>.push`:
+
+```yaml
+push:
+  retry:
+    max_attempts: 4                  # initial attempt plus up to three retries
+    backoff_strategy: exponential
+    initial_delay: 250ms
+    max_delay: 5s
+    multiplier: 2
+    random_jitter: 0.5
+    max_elapsed_time: 30s
+```
+
+`max_attempts` includes the initial attempt. `max_elapsed_time` bounds the entire operation, including running Git commands. The delay cap applies before jitter. An explicit policy uses shared retry semantics without inheriting omitted fields from the defaults; `retry: {}` or `max_attempts: 1` makes one attempt. Legacy `push.retries` remains supported when `push.retry` is absent. Optional `conditions` narrow the rejected-push messages eligible for retry; they never enable retries for authentication failures or unrelated errors.
 
 ## Arguments
 
@@ -111,4 +127,4 @@ atmos git push flux-deploy -- --follow-tags
 
 - [`atmos git commit`](/cli/commands/git/commit) — create the commit to push
 - [`kind: git` hooks](/stacks/hooks#kind-git) — commit and push automatically on lifecycle events
-- [Git Configuration](/cli/configuration/git) — `push.retries` and authentication resolution
+- [Git Configuration](/cli/configuration/git) — `push.retry` and authentication resolution

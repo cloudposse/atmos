@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -70,6 +71,7 @@ func runPush(ctx context.Context, arg string, opts *pushOptions) error {
 
 	var workdir, identity, effectiveRemote, effectiveBranch string
 	var retries int
+	var retryConfig *schema.RetryConfig
 
 	if kind == argKindName {
 		resolved, err := resolveRepoByName(arg, cfg)
@@ -81,6 +83,7 @@ func runPush(ctx context.Context, arg string, opts *pushOptions) error {
 		effectiveRemote = resolveStringPrecedence(opts.Remote, resolved.Remote)
 		effectiveBranch = resolveStringPrecedence(opts.Branch, resolved.Branch)
 		retries = resolved.PushRetries
+		retryConfig = resolved.PushRetry
 	} else {
 		if kind == argKindURI {
 			return errUtils.Build(errUtils.ErrGitRepositoryRequired).
@@ -117,6 +120,7 @@ func runPush(ctx context.Context, arg string, opts *pushOptions) error {
 			Env:     env,
 		},
 		Retries:   retries,
+		Retry:     retryConfig,
 		ExtraArgs: opts.ExtraArgs,
 	})
 }
