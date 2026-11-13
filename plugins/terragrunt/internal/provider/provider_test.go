@@ -158,6 +158,34 @@ func TestPrepareReturnsExecutionInDeclarationOrder(t *testing.T) {
 	require.Equal(t, []string{"x", "y"}, got.ErrorHooks[0].OnErrors)
 }
 
+// The apply-time evaluation crosses the boundary distinctly, including an empty one, which
+// means apply runs nothing rather than the plan-time metadata.
+func TestPrepareReturnsApplyTimeExecution(t *testing.T) {
+	request := componentRequest(t)
+	execution := &model.Execution{
+		BeforeHooks: []model.Hook{{Name: "plan_only", Commands: []string{"plan"}, Execute: []string{"tool", "plan"}}},
+		Apply:       &model.Execution{AfterHooks: []model.Hook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}}},
+	}
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Execution: execution, Source: request.RootDirectory, WorkingDir: request.RootDirectory, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	got := result.GetExecution()
+	require.Equal(t, "plan_only", got.GetBeforeHooks()[0].GetName())
+	require.Empty(t, got.GetAfterHooks())
+	require.Len(t, got.GetApply().GetAfterHooks(), 1)
+	require.Equal(t, "notify", got.GetApply().GetAfterHooks()[0].GetName())
+	require.Equal(t, []string{"tool", "notify"}, got.GetApply().GetAfterHooks()[0].GetExecute())
+	require.Nil(t, got.GetApply().GetApply())
+
+	execution.Apply = &model.Execution{}
+	result, err = p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, result.GetExecution().GetApply(), "an empty apply-time evaluation must be preserved")
+	require.Empty(t, result.GetExecution().GetApply().GetBeforeHooks())
+}
+
 func TestPrepareOmitsExecutionWithoutHooks(t *testing.T) {
 	request := componentRequest(t)
 	p := New(func(context.Context, model.Request) (*model.Resolution, error) {

@@ -572,3 +572,99 @@ func TestPolicyPlanUsesProviderOutputArguments(t *testing.T) {
 		})
 	}
 }
+
+// TestInitRecoveryRetriesInsideOneHookLifecycle verifies that smart init's recovery retry
+// stays inside the main command's lifecycle: before and after hooks run once around both
+// attempts, and the forced init runs between them.
+func TestInitRecoveryRetriesInsideOneHookLifecycle(t *testing.T) {
+	attempts := 0
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if call.command != "terraform" {
+			return nil
+		}
+		attempts++
+		if attempts == 1 {
+			_, _ = io.WriteString(call.options.ExecMetadataStderrCapture, "Error: Backend configuration changed")
+			return errUtils.ExitCodeError{Code: 1}
+		}
+		_, _ = io.WriteString(call.options.ExecMetadataStdoutCapture, "Apply complete!")
+		return nil
+	}}
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = shell.execute
+	var timeline []string
+	executor.executeTerraformInitForcedFn = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _, _ string, reconfigure, _ bool, _ ...ShellCommandOption) error {
+		require.True(t, reconfigure)
+		timeline = append(timeline, "forced init")
+		return nil
+	}
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.Init.Reconfigure = schema.TerraformInitReconfigureAuto
+	info := hookInfo("apply", &schema.ComponentExecution{
+		BeforeHooks: []schema.ComponentHook{execHook("before", "apply")},
+		AfterHooks:  []schema.ComponentHook{execHook("after", "apply")},
+	})
+	execCtx := &componentExecContext{componentPath: t.TempDir()}
+
+	err := executor.runMainCommandPhase(config, info, execCtx, []string{"apply"}, execCtx.componentPath, false)
+	require.NoError(t, err)
+	require.Equal(t, []string{"hook-before arg", "terraform apply", "terraform apply", "hook-after arg"}, shell.names(),
+		"hooks must wrap the user command once, not each recovery attempt")
+	require.Equal(t, []string{"forced init"}, timeline)
+	require.Equal(t, "Apply complete!", info.ExecMetadataRawOutput, "exec metadata must reflect only the retry")
+}
+
+// TestInitRecoveryWithoutHooksStillRetriesOnce verifies that a component without provider
+// hooks keeps the existing recovery path and retries the main command exactly once.
+func TestInitRecoveryWithoutHooksStillRetriesOnce(t *testing.T) {
+	attempts := 0
+	shell := &fakeShell{run: func(call *shellCall) error {
+		attempts++
+		if attempts == 1 {
+			_, _ = io.WriteString(call.options.ExecMetadataStderrCapture, "Error: Backend configuration changed")
+			return errUtils.ExitCodeError{Code: 1}
+		}
+		return nil
+	}}
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = shell.execute
+	forced := 0
+	executor.executeTerraformInitForcedFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
+		forced++
+		return nil
+	}
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.Init.Reconfigure = schema.TerraformInitReconfigureAuto
+	info := hookInfo("apply", nil)
+	execCtx := &componentExecContext{componentPath: t.TempDir()}
+
+	require.NoError(t, executor.runMainCommandPhase(config, info, execCtx, []string{"apply"}, execCtx.componentPath, false))
+	require.Equal(t, []string{"terraform apply", "terraform apply"}, shell.names())
+	require.Equal(t, 1, forced)
+}
+
+// TestInitRecoveryInsideLifecycleRunsOnlyWhenDiagnosed verifies that a hooked command failing
+// for another reason is not retried and still reaches its after hooks once.
+func TestInitRecoveryInsideLifecycleRunsOnlyWhenDiagnosed(t *testing.T) {
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if call.command == "terraform" {
+			_, _ = io.WriteString(call.options.ExecMetadataStderrCapture, "Error: unrelated validation failure")
+			return errUtils.ExitCodeError{Code: 1}
+		}
+		return nil
+	}}
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = shell.execute
+	executor.executeTerraformInitForcedFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
+		t.Fatal("forced init must not run without an init-required diagnosis")
+		return nil
+	}
+	always := execHook("after", "apply")
+	always.RunOnError = true
+	info := hookInfo("apply", &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{always}})
+	execCtx := &componentExecContext{componentPath: t.TempDir()}
+
+	err := executor.runMainCommandPhase(&schema.AtmosConfiguration{}, info, execCtx, []string{"apply"}, execCtx.componentPath, false)
+	require.Equal(t, 1, resolveExitCode(err))
+	require.Equal(t, []string{"terraform apply", "hook-after arg"}, shell.names())
+}

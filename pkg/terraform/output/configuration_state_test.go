@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -123,7 +124,7 @@ func TestPluginOutputUsesBackendOnlyScratchDirectory(t *testing.T) {
 				require.Equal(t, filepath.Join(stateRoot, "terraform.tfstate.d"), local["workspace_dir"])
 				return runner, nil
 			}))
-			result, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true)
+			result, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{}, true)
 			if fail {
 				require.ErrorContains(t, err, "workspace prod does not exist")
 			} else {
@@ -214,4 +215,139 @@ func TestConfigurationStateSectionsNamedWorkspaceWithoutBackendSettings(t *testi
 	resolved := ConfigurationStateSections(map[string]any{}, state)
 	require.Equal(t, filepath.Join(root, "terraform.tfstate.d", "prod", "terraform.tfstate"), resolved["backend"].(map[string]any)["path"])
 	require.Nil(t, state.Backend)
+}
+
+// TestPluginOutputSkipInitReadsTheInitializedUnit verifies that skipping init is honored for a
+// plugin-owned component: outputs are read from the unit's initialized directory as it is, with no
+// init, no workspace selection, and no generated files.
+func TestPluginOutputSkipInitReadsTheInitializedUnit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runner := NewMockTerraformRunner(ctrl)
+	runner.EXPECT().SetEnv(gomock.Any()).Return(nil)
+	runner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{"result": {Type: json.RawMessage(`"string"`), Value: json.RawMessage(`"applied"`)}}, nil)
+	config := validAtmosConfig(t)
+	unit := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(unit, ".terraform"), 0o700))
+	config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+		return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
+	}}
+	sections := validSections()
+	sections["settings"] = map[string]any{"configuration": true}
+	sections["providers"] = map[string]any{"aws": map[string]any{"region": "us-east-2"}}
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	sections["command"] = binary
+	executor := NewExecutor(nil, WithRunnerFactory(func(dir, _ string) (TerraformRunner, error) {
+		require.Equal(t, unit, dir, "skipping init must read the unit's own initialized directory")
+		return runner, nil
+	}))
+
+	result, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true)
+	require.NoError(t, err)
+	require.Equal(t, "applied", result["result"])
+	files, err := os.ReadDir(unit)
+	require.NoError(t, err)
+	require.Len(t, files, 1, "no backend, provider, or marker file may be written into the unit")
+	require.Equal(t, ".terraform", files[0].Name())
+}
+
+// TestPluginOutputSkipInitRejectsAnUninitializedUnit verifies that skipping init never falls back
+// to initializing anything: a unit that was never initialized fails with a clear error.
+func TestPluginOutputSkipInitRejectsAnUninitializedUnit(t *testing.T) {
+	for name, state := range map[string]*schema.ComponentConfigurationState{
+		"no working directory": {BackendType: "local", Workspace: "prod"},
+		"not initialized":      {BackendType: "local", Workspace: "prod", WorkingDirectory: t.TempDir()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			config := validAtmosConfig(t)
+			config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+				return state, nil
+			}}
+			sections := validSections()
+			sections["settings"] = map[string]any{"configuration": true}
+			executor := NewExecutor(nil, WithRunnerFactory(func(string, string) (TerraformRunner, error) {
+				t.Fatal("no Terraform process may start")
+				return nil, nil
+			}))
+			_, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true)
+			require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
+		})
+	}
+}
+
+// TestPluginOutputDoesNotResolveTheExecutionWorkdir verifies that a plugin-owned state read
+// succeeds even when the component's execution workdir cannot be resolved.
+func TestPluginOutputDoesNotResolveTheExecutionWorkdir(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runner := NewMockTerraformRunner(ctrl)
+	runner.EXPECT().SetEnv(gomock.Any()).Return(nil)
+	runner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{"result": {Type: json.RawMessage(`"string"`), Value: json.RawMessage(`"applied"`)}}, nil)
+	config := validAtmosConfig(t)
+	unit := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(unit, ".terraform"), 0o700))
+	config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+		return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
+	}}
+	sections := validSections()
+	sections["settings"] = map[string]any{"configuration": true}
+	// No base component: an ordinary component could not resolve its execution path at all.
+	delete(sections, "component")
+	_, err := ExtractComponentConfig(config, sections, "network", "live")
+	require.ErrorIs(t, err, errUtils.ErrMissingComponentPath, "precondition: the execution path is unresolvable")
+	executor := NewExecutor(nil, WithRunnerFactory(func(string, string) (TerraformRunner, error) { return runner, nil }))
+
+	result, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true)
+	require.NoError(t, err)
+	require.Equal(t, "applied", result["result"])
+}
+
+// TestConfigurationStateSectionsKeepsExplicitRemoteStateOverrides verifies that remote-state read
+// settings the stack configured survive for a plugin-owned component, layered on the plugin's
+// backend, while the discovery placeholder backend never leaks into the read.
+func TestConfigurationStateSectionsKeepsExplicitRemoteStateOverrides(t *testing.T) {
+	state := &schema.ComponentConfigurationState{BackendType: "s3", Backend: map[string]any{"bucket": "unit-state", "key": "live/network.tfstate", "region": "us-east-2"}, Workspace: "default"}
+	placeholder := map[string]any{"bucket": "placeholder", "region": "us-east-2"}
+	for _, test := range []struct {
+		name       string
+		remoteType string
+		remote     map[string]any
+		wantType   string
+		want       map[string]any
+	}{
+		{name: "no override derives nothing", remoteType: "s3", remote: maps.Clone(placeholder)},
+		{
+			name: "read role override is layered on the plugin backend", remoteType: "s3",
+			remote:   map[string]any{"bucket": "placeholder", "region": "us-east-2", "role_arn": "arn:aws:iam::1:role/read"},
+			wantType: "s3", want: map[string]any{"bucket": "unit-state", "key": "live/network.tfstate", "region": "us-east-2", "role_arn": "arn:aws:iam::1:role/read"},
+		},
+		{
+			name: "explicit separate location wins over the plugin backend", remoteType: "s3",
+			remote:   map[string]any{"bucket": "mirror", "region": "us-east-2"},
+			wantType: "s3", want: map[string]any{"bucket": "mirror", "key": "live/network.tfstate", "region": "us-east-2"},
+		},
+		{
+			name: "a different backend type is a separate read location", remoteType: "gcs",
+			remote:   map[string]any{"bucket": "gcs-mirror", "prefix": "network"},
+			wantType: "gcs", want: map[string]any{"bucket": "gcs-mirror", "prefix": "network"},
+		},
+		{
+			name: "static remote state is kept", remoteType: "static",
+			remote:   map[string]any{"vpc_id": "vpc-1"},
+			wantType: "static", want: map[string]any{"vpc_id": "vpc-1"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			sections := map[string]any{"backend_type": "s3", "backend": maps.Clone(placeholder), "remote_state_backend_type": test.remoteType, "remote_state_backend": test.remote}
+			resolved := ConfigurationStateSections(sections, state)
+			require.Equal(t, state.Backend, resolved["backend"], "the plugin backend stays the primary location")
+			if test.wantType == "" {
+				require.NotContains(t, resolved, "remote_state_backend")
+				require.NotContains(t, resolved, "remote_state_backend_type")
+				return
+			}
+			require.Equal(t, test.wantType, resolved["remote_state_backend_type"])
+			require.Equal(t, test.want, resolved["remote_state_backend"])
+			require.Equal(t, map[string]any{"bucket": "unit-state", "key": "live/network.tfstate", "region": "us-east-2"}, state.Backend, "the plugin state must not be modified")
+		})
+	}
 }

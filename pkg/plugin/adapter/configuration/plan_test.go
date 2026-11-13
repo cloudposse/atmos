@@ -246,6 +246,30 @@ func TestSourceDigests(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, before["link.hcl"], after["link.hcl"], "edits behind a symlink must change the digest")
 	})
+	t.Run("directory symlink inside a watched directory is rejected, not followed", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "shared"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "shared", "inputs.hcl"), []byte("x"), 0o600))
+		require.NoError(t, os.Mkdir(filepath.Join(root, "unit"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "unit", "main.tf"), []byte("m"), 0o600))
+		if err := os.Symlink(filepath.Join(root, "shared"), filepath.Join(root, "unit", "shared")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		_, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "unit", Directory: true}})
+		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+		require.Contains(t, err.Error(), "unit/shared")
+	})
+	t.Run("file symlinks inside a watched directory are still digested", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "shared.hcl"), []byte("one"), 0o600))
+		require.NoError(t, os.Mkdir(filepath.Join(root, "unit"), 0o700))
+		if err := os.Symlink(filepath.Join(root, "shared.hcl"), filepath.Join(root, "unit", "link.hcl")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		got, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "unit", Directory: true}})
+		require.NoError(t, err)
+		require.Contains(t, got, "unit/link.hcl")
+	})
 	t.Run("missing sources are recorded as absent", func(t *testing.T) {
 		got, err := sourceDigests(t.Context(), t.TempDir(), []schema.ComponentConfigurationSource{{Path: "missing.hcl"}, {Path: "nodir", Directory: true}})
 		require.NoError(t, err)

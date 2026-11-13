@@ -31,9 +31,32 @@ func TestYAMLImportsRegisterBeforeDiscovery(t *testing.T) {
 	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t))}
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: runtime}
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
-	_, err := ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
+	importsConfig := map[string]map[string]any{}
+	_, err := ProcessYAMLConfigFile(config, root, path, importsConfig, nil, false, true, false, false, nil, nil, nil, nil, "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
+	require.Equal(t, map[string]map[string]any{"terragrunt://live": {}}, importsConfig,
+		"a provider import must appear in the stack import report without contributing YAML")
+}
+
+func TestStackImportReportListsProviderImports(t *testing.T) {
+	root := t.TempDir()
+	stacks := filepath.Join(root, "stacks")
+	require.NoError(t, os.MkdirAll(filepath.Join(stacks, "catalog"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(stacks, "catalog", "base.yaml"), []byte("import:\n  - terragrunt://live/demo\nvars:\n  team: core\n"), 0o600))
+	path := filepath.Join(stacks, "dev.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("import:\n  - terragrunt://live/demo\n  - catalog/base\nvars:\n  stage: dev\n"), 0o600))
+	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t))}
+	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: runtime}
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
+
+	importsConfig := map[string]map[string]any{}
+	_, err := ProcessYAMLConfigFile(config, stacks, path, importsConfig, nil, false, true, false, false, nil, nil, nil, nil, "")
+	require.NoError(t, err)
+	require.Contains(t, importsConfig, "terragrunt://live/demo", "a provider import repeated by a nested manifest is reported once")
+	require.Empty(t, importsConfig["terragrunt://live/demo"])
+	require.Contains(t, importsConfig, "catalog/base", "ordinary imports are still reported")
+	require.Len(t, importsConfig, 2)
 }
 
 func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {

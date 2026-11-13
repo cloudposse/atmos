@@ -24,7 +24,8 @@ func preparedRequest(t *testing.T, info *schema.ConfigAndStacksInfo) *pluginv1.C
 	provider := NewMockProvider(gomock.NewController(t))
 	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
 	component := unit(t, "app")
-	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{component}}, nil)
+	// The session discovers once; each Prepare rediscovers to revalidate dependencies.
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{component}}, nil).MinTimes(1)
 	inputs, err := adapter.EncodeObject(map[string]any{})
 	require.NoError(t, err)
 	backend, err := adapter.EncodeObject(map[string]any{"path": "state.tfstate"})

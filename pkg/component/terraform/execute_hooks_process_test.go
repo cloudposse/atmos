@@ -25,6 +25,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	autoinit "github.com/cloudposse/atmos/pkg/terraform/autoinit"
 )
 
 const (
@@ -391,4 +392,81 @@ func TestCaptureFileReportsFailures(t *testing.T) {
 	_, err = file.finish().Open()
 	require.ErrorIs(t, err, errUtils.ErrComponentOutputCapture, "a removed capture reports a read failure")
 	capture.cleanup()
+}
+
+// Smart init must see the init settings a provider adds through extra arguments. Otherwise an
+// edited init-only backend file would leave the previous initialization trusted.
+func TestSmartInitFingerprintIncludesProviderInitSettings(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), []byte(`terraform {
+  backend "local" {}
+}
+`), 0o600))
+	backendFile := filepath.Join(dir, "backend.hcl")
+	varFile := filepath.Join(t.TempDir(), "init.tfvars")
+	require.NoError(t, os.WriteFile(backendFile, []byte(`path = "a.tfstate"`), 0o600))
+	require.NoError(t, os.WriteFile(varFile, []byte(`a = 1`), 0o600))
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{Command: "terraform", ComponentEnvList: []string{"BASE=1"}, ComponentExecution: &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{
+			{Commands: []string{"init"}, Arguments: []string{"-backend-config=backend.hcl", "-backend-config", "bucket=one", "-var-file", varFile}},
+			{Commands: []string{"plan"}, Arguments: []string{"-backend-config=ignored-by-init"}, Environment: map[string]string{"PLAN_ONLY": "1"}},
+		},
+	}}
+	fingerprint := func() autoinit.Fingerprint {
+		t.Helper()
+		in := newAutoInitInputs(atmosConfig, info, dir, "")
+		require.NotNil(t, in)
+		result, err := autoinit.Compute(in)
+		require.NoError(t, err)
+		return result
+	}
+	base := fingerprint()
+	require.Equal(t, base, fingerprint(), "unchanged settings keep the fingerprint")
+
+	// Settings for other commands do not affect init.
+	info.ComponentExecution.ExtraArguments[1].Arguments = []string{"-lock=false"}
+	info.ComponentExecution.ExtraArguments[1].Environment = nil
+	require.Equal(t, base.Hash, fingerprint().Hash)
+
+	for name, change := range map[string]func(){
+		"backend file contents": func() { require.NoError(t, os.WriteFile(backendFile, []byte(`path = "b.tfstate"`), 0o600)) },
+		"backend file removed":  func() { require.NoError(t, os.Remove(backendFile)) },
+		"var file contents":     func() { require.NoError(t, os.WriteFile(varFile, []byte(`a = 2`), 0o600)) },
+		"backend value":         func() { info.ComponentExecution.ExtraArguments[0].Arguments[2] = "bucket=two" },
+		"init environment": func() {
+			info.ComponentExecution.ExtraArguments[0].Environment = map[string]string{"TF_CLI_ARGS_init": "-upgrade"}
+		},
+	} {
+		previous := fingerprint().Hash
+		change()
+		require.NotEqual(t, previous, fingerprint().Hash, name)
+	}
+}
+
+// The data directory an init-only TF_DATA_DIR selects is where smart init looks for its marker.
+func TestSmartInitUsesProviderInitDataDirectory(t *testing.T) {
+	dir := t.TempDir()
+	data := filepath.Join(t.TempDir(), "data")
+	info := &schema.ConfigAndStacksInfo{Command: "terraform", ComponentExecution: &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"init"}, Environment: map[string]string{"TF_DATA_DIR": data}}},
+	}}
+	in := newAutoInitInputs(&schema.AtmosConfiguration{}, info, dir, "")
+	value, ok := in.EnvLookup("TF_DATA_DIR")
+	require.True(t, ok)
+	require.Equal(t, data, value)
+	require.Equal(t, data, autoinit.DataDir(dir, in.EnvLookup))
+
+	// Without provider execution, the inputs are unchanged.
+	info.ComponentExecution = nil
+	plain := newAutoInitInputs(&schema.AtmosConfiguration{}, info, dir, "")
+	require.Empty(t, plain.Extra)
+}
+
+// Settings smart init cannot evaluate never let a recorded marker be trusted.
+func TestSmartInitDistrustsUnresolvableProviderInitSettings(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Command: "terraform", ComponentExecution: &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"init"}, RequiredVarFiles: []string{"missing.tfvars"}}},
+	}}
+	require.Nil(t, newAutoInitInputs(&schema.AtmosConfiguration{}, info, t.TempDir(), ""))
 }

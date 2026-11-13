@@ -122,6 +122,69 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 	require.Contains(t, strings.Split(string(args), "\n"), planPath)
 }
 
+// Terragrunt evaluates the configuration again for apply, so a hook enabled only for apply is
+// absent from the plan-time preparation. Applying the reviewed plan runs the apply-time hooks
+// recorded with it, and not the plan-time ones.
+func TestApplyOfReviewedPlanRunsApplyTimeHooks(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	hook := func(name string) schema.ComponentHook {
+		return schema.ComponentHook{Name: name, Commands: []string{"apply"}, Execute: []string{exe, name}}
+	}
+	project := newReviewedPlanProject(t)
+	reviewed := project.prepared()
+	reviewed.Execution = &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{hook("plan-time")},
+		Apply:      &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("notify"), hook("always")}},
+	}
+	info := project.info(t, "plan")
+	project.provider.EXPECT().Prepare(gomock.Any(), info).Return(reviewed, nil)
+	planned, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+	require.NoError(t, err)
+	planPath := filepath.Join(planned.workingDir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, info, planned, []string{"-out=" + planPath}))
+
+	apply := project.reviewedApply(t, planPath)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("notify"), hook("always")}}, apply.ComponentExecution)
+
+	// Terraform and the hooks are all the test binary, which records every invocation.
+	log := filepath.Join(t.TempDir(), "hooks.jsonl")
+	apply.SkipInit = true
+	apply.ComponentBackendType = "http" // Avoid a separate workspace subprocess.
+	apply.ComponentEnvList = append(apply.ComponentEnvList, testEnvHookChild+"=1", testEnvHookLog+"="+log)
+	require.NoError(t, testExecutor(t).executeCommandPipeline(project.config, apply, execution))
+	var ran []string
+	for _, record := range readHookLog(t, log) {
+		ran = append(ran, record.Arguments[0])
+	}
+	require.Equal(t, []string{"apply", "notify", "always"}, ran)
+}
+
+// Plan runs with the provider's module source, so its directory follows source target rules,
+// including an explicit working_directory. A new apply process whose discovered section carries
+// no source must locate the same retained directory without provisioning anything.
+func TestApplyOfReviewedPlanFindsRetainedWorkdirWithoutDiscoveredSource(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	plan := project.info(t, "plan")
+	delete(plan.ComponentSection, "source")
+	project.provider.EXPECT().Prepare(gomock.Any(), plan).Return(project.prepared(), nil)
+	planned, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, plan, false)
+	require.NoError(t, err)
+	require.Equal(t, project.workdir, planned.workingDir)
+	planPath := filepath.Join(planned.workingDir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, plan, planned, []string{"-out=" + planPath}))
+
+	apply := project.reviewedApply(t, planPath)
+	delete(apply.ComponentSection, "source")
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err)
+	require.Equal(t, project.workdir, execution.componentPath)
+}
+
 func TestApplyOfReviewedPlanRejectsChangedWorkdir(t *testing.T) {
 	project := newReviewedPlanProject(t)
 	planPath := project.review(t)

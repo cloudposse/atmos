@@ -172,6 +172,7 @@ func executionResponse(execution *model.Execution) *pluginv1.ComponentExecutionC
 		BeforeHooks: hooksResponse(execution.BeforeHooks),
 		AfterHooks:  hooksResponse(execution.AfterHooks),
 		ErrorHooks:  hooksResponse(execution.ErrorHooks),
+		Apply:       executionResponse(execution.Apply),
 	}
 	for i := range execution.ExtraArguments {
 		extra := &execution.ExtraArguments[i]

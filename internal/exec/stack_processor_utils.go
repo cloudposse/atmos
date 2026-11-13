@@ -1639,6 +1639,13 @@ func processYAMLConfigFileWithContextInternal(
 			if importErr != nil {
 				return nil, nil, importErr
 			}
+			// Report the provider import with the stack's other imports, keyed by its URI as
+			// remote imports are. It contributes no YAML, so its recorded configuration is empty.
+			importsConfigLock.Lock()
+			if _, recorded := importsConfig[imp]; !recorded {
+				importsConfig[imp] = map[string]any{}
+			}
+			importsConfigLock.Unlock()
 			continue
 		}
 

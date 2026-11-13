@@ -19,7 +19,8 @@ func preparationSession(t *testing.T) (*Session, *MockProvider, *schema.ConfigAn
 	t.Helper()
 	provider := NewMockProvider(gomock.NewController(t))
 	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
-	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil).MaxTimes(1)
+	// The session discovers lazily, and Prepare rediscovers to revalidate dependencies.
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil).AnyTimes()
 	session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
 		return map[string]Provider{"terragrunt": provider}, nil
 	})
@@ -62,6 +63,28 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 	require.Equal(t, []string{"-var=a=1", "-lock=false"}, sent.Operation.TerraformArguments)
 	info.AdditionalArgsAndFlags[0] = "mutated"
 	require.Equal(t, "-var=a=1", sent.Operation.TerraformArguments[0], "the request owns a copy of the arguments")
+}
+
+func TestPrepareRejectsDependenciesChangedSinceDiscovery(t *testing.T) {
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	network, app := unit(t, "network"), unit(t, "app")
+	moved := unit(t, "app")
+	moved.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+	gomock.InOrder(
+		provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil),
+		provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, moved}}, nil),
+	)
+	session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "apply", ComponentSettingsSection: map[string]any{"configuration": true}}
+
+	prepared, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "preparation changed discovered dependency paths")
+	require.Nil(t, prepared, "Prepare must not run when dependencies changed")
 }
 
 func TestPrepareFailsClosed(t *testing.T) {

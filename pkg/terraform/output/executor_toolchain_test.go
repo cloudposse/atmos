@@ -206,7 +206,7 @@ func TestPluginOwnedOutputReadUsesIdentityEnvironmentAndToolchain(t *testing.T) 
 	sections[cfg.CommandSectionName] = "tofu"
 	sections["dependencies"] = map[string]any{"tools": map[string]any{"tofu": "1.0.0", "fixture-tool": "1.0.0"}}
 
-	outputs, err := executor.execute(t.Context(), setup.config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true, manager)
+	outputs, err := executor.execute(t.Context(), setup.config, "network", "live", sections, nil, &OutputOptions{}, true, manager)
 	require.NoError(t, err)
 	require.Equal(t, "value", outputs["id"])
 

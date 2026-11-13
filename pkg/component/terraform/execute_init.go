@@ -89,10 +89,11 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 // newAutoInitInputs builds this invocation's fingerprint inputs -- the thin internal/exec-local
-// wrapper around autoinit.InputsFromInfo shared by buildInitSubcommandArgs, recordAutoInit, and
-// executeTerraformInitForced.
+// wrapper around autoinit.InputsFromInfo shared by buildInitSubcommandArgs, recordAutoInit,
+// executeTerraformInitCommand, and executeTerraformInitForced. It adds the init settings that
+// provider extra arguments contribute, which the init phase applies.
 func newAutoInitInputs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string) *autoinit.Inputs {
-	return autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile)
+	return withProviderInitSettings(autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile), info, componentPath)
 }
 
 // decideAutoInit resolves atmos.yaml's init policy plus force into an autoinit.Request and
@@ -324,7 +325,7 @@ func prerequisiteOutputOptions(info *schema.ConfigAndStacksInfo, opts []componen
 func (e *Executor) executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...component.ExecutionOption) error {
 	defer perf.Track(atmosConfig, "exec.executeTerraformInitCommand")()
 
-	in := autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile)
+	in := newAutoInitInputs(atmosConfig, info, componentPath, varFile)
 	decision := autoinit.Decide(autoinit.RequestFromInfo(atmosConfig, info, in, false))
 
 	if !decision.RunInit {

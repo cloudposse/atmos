@@ -92,10 +92,43 @@ func TestPreparedConfigurationRejectsUnrunnableHooks(t *testing.T) {
 		{"no command", &pluginv1.ComponentExecutionConfiguration{BeforeHooks: []*pluginv1.ComponentHook{{Name: "h", Commands: []string{"plan"}}}}},
 		{"bad pattern", &pluginv1.ComponentExecutionConfiguration{ErrorHooks: []*pluginv1.ComponentHook{{Name: "h", Commands: []string{"plan"}, Execute: []string{"t"}, OnErrors: []string{"("}}}}},
 		{"nil hook", &pluginv1.ComponentExecutionConfiguration{AfterHooks: []*pluginv1.ComponentHook{nil}}},
+		{"unrunnable apply hook", &pluginv1.ComponentExecutionConfiguration{Apply: &pluginv1.ComponentExecutionConfiguration{AfterHooks: []*pluginv1.ComponentHook{{Name: "h", Commands: []string{"apply"}}}}}},
+		{"nested apply", &pluginv1.ComponentExecutionConfiguration{Apply: &pluginv1.ComponentExecutionConfiguration{Apply: &pluginv1.ComponentExecutionConfiguration{}}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := preparedConfiguration(executionResponse(t, test.execution))
 			require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 		})
 	}
+}
+
+// A plan preparation carries the apply-time evaluation separately. An empty one is kept,
+// because it means apply runs nothing rather than falling back to the plan-time hooks.
+func TestPreparedConfigurationCarriesApplyTimeExecution(t *testing.T) {
+	got, err := preparedConfiguration(roundTrip(t, executionResponse(t, &pluginv1.ComponentExecutionConfiguration{
+		BeforeHooks: []*pluginv1.ComponentHook{{Name: "plan_only", Commands: []string{"plan"}, Execute: []string{"tool", "plan"}}},
+		Apply: &pluginv1.ComponentExecutionConfiguration{
+			AfterHooks: []*pluginv1.ComponentHook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}},
+		},
+	})))
+	require.NoError(t, err)
+	require.Equal(t, []schema.ComponentHook{{Name: "plan_only", Commands: []string{"plan"}, Execute: []string{"tool", "plan"}}}, got.Execution.BeforeHooks)
+	require.Equal(t, &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}},
+	}, got.Execution.Apply)
+	require.Same(t, got.Execution.Apply, got.Execution.ForSavedPlanApply())
+
+	// Apply adds nothing, while plan adds nothing either: the empty evaluation still wins.
+	got, err = preparedConfiguration(roundTrip(t, executionResponse(t, &pluginv1.ComponentExecutionConfiguration{Apply: &pluginv1.ComponentExecutionConfiguration{}})))
+	require.NoError(t, err)
+	require.NotNil(t, got.Execution)
+	require.True(t, got.Execution.IsEmpty())
+	require.Equal(t, &schema.ComponentExecution{}, got.Execution.ForSavedPlanApply())
+
+	// Without an apply-time evaluation, a saved plan applies the plan-time metadata.
+	got, err = preparedConfiguration(roundTrip(t, executionResponse(t, &pluginv1.ComponentExecutionConfiguration{
+		AfterHooks: []*pluginv1.ComponentHook{{Name: "always", Commands: []string{"apply"}, Execute: []string{"tool"}}},
+	})))
+	require.NoError(t, err)
+	require.Same(t, got.Execution, got.Execution.ForSavedPlanApply())
 }

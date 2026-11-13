@@ -74,15 +74,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if command == "" || command == "discover" || command == "generate" {
 		command = "plan"
 	}
-	pctx := config.NewParsingContext().WithFileReadTracking()
-	pctx.WorkingDir, pctx.RootWorkingDir = filepath.Dir(path), filepath.Dir(path)
-	pctx.TerragruntConfigPath, pctx.OriginalTerragruntConfigPath = path, path
-	pctx.TFPath, pctx.TerraformCommand = request.Tofu, command
-	pctx.OriginalTerraformCommand = command
-	pctx.TerraformCliArgs.SetCommand(command).AppendArgument(request.Arguments...)
-	pctx.DownloadDir = filepath.Join(filepath.Dir(path), ".terragrunt-cache")
-	pctx.AutoInit = true
-	pctx.MaxFoldersToCheck = options.DefaultMaxFoldersToCheck
+	pctx := parsingContext(path, request.Tofu, command, request.Arguments)
 	if filepath.Base(path) == "terragrunt.stack.hcl" {
 		if generate {
 			if err := atmosbridge.Generate(ctx, logger, environment, path, request.Tofu); err != nil {
@@ -215,6 +207,12 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 		if execution, err = executionFromConfig(cfg.Terraform); err != nil {
 			return nil, err
 		}
+		reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
+			return config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
+		}
+		if execution, err = applyTimeExecution(request, path, execution, environment.FS, pctx.FilesRead.Paths(), reparse); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
 		return nil, fmt.Errorf("unit is protected by prevent_destroy")
@@ -253,4 +251,18 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 		return nil, err
 	}
 	return result, nil
+}
+
+// parsingContext configures Terragrunt evaluation of the unit at path as the named command.
+func parsingContext(path, tofu, command string, arguments []string) *config.ParsingContext {
+	pctx := config.NewParsingContext().WithFileReadTracking()
+	pctx.WorkingDir, pctx.RootWorkingDir = filepath.Dir(path), filepath.Dir(path)
+	pctx.TerragruntConfigPath, pctx.OriginalTerragruntConfigPath = path, path
+	pctx.TFPath, pctx.TerraformCommand = tofu, command
+	pctx.OriginalTerraformCommand = command
+	pctx.TerraformCliArgs.SetCommand(command).AppendArgument(arguments...)
+	pctx.DownloadDir = filepath.Join(filepath.Dir(path), ".terragrunt-cache")
+	pctx.AutoInit = true
+	pctx.MaxFoldersToCheck = options.DefaultMaxFoldersToCheck
+	return pctx
 }

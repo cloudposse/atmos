@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -197,4 +198,91 @@ func TestValidateHookRequiresRunnableExecuteList(t *testing.T) {
 		})
 	}
 	require.NoError(t, validateHook("before_hook", &model.Hook{Name: "h", Commands: []string{"plan"}, Execute: []string{"tool"}}))
+}
+
+// A saved plan is applied from its plan-time preparation, but Terragrunt evaluates the
+// configuration again for apply. Hooks that depend on the command are recorded for apply.
+func TestPlanPreparationRecordsApplyTimeExecution(t *testing.T) {
+	body := `
+  before_hook "plan_only" {
+    commands = ["plan", "apply"]
+    execute  = ["tool", "plan"]
+    if       = get_terraform_command() == "plan"
+  }
+  after_hook "notify" {
+    commands = ["apply"]
+    execute  = ["tool", "notify"]
+    if       = get_terraform_command() == "apply"
+  }
+  after_hook "always" {
+    commands = ["apply"]
+    execute  = ["tool", "always"]
+  }
+`
+	planned, err := Resolve(t.Context(), executionUnit(t, body))
+	require.NoError(t, err)
+	require.Equal(t, []string{"plan_only"}, hookNames(planned.Execution.BeforeHooks))
+	require.Equal(t, []string{"always"}, hookNames(planned.Execution.AfterHooks))
+	require.NotNil(t, planned.Execution.Apply)
+	require.Empty(t, planned.Execution.Apply.BeforeHooks)
+	require.Equal(t, []string{"notify", "always"}, hookNames(planned.Execution.Apply.AfterHooks))
+	require.Nil(t, planned.Execution.Apply.Apply)
+
+	apply := executionUnit(t, body)
+	apply.Command = "apply"
+	applied, err := Resolve(t.Context(), apply)
+	require.NoError(t, err)
+	require.Nil(t, applied.Execution.Apply, "apply already evaluates as apply")
+	require.Equal(t, planned.Execution.Apply.AfterHooks, applied.Execution.AfterHooks)
+}
+
+func TestPlanPreparationRecordsThatApplyRunsNothing(t *testing.T) {
+	result, err := Resolve(t.Context(), executionUnit(t, `
+  before_hook "plan_only" {
+    commands = ["plan", "apply"]
+    execute  = ["tool", "plan"]
+    if       = get_terraform_command() == "plan"
+  }
+`))
+	require.NoError(t, err)
+	require.Len(t, result.Execution.BeforeHooks, 1)
+	require.NotNil(t, result.Execution.Apply, "an empty apply-time evaluation must not fall back to plan hooks")
+	require.Empty(t, result.Execution.Apply.BeforeHooks)
+}
+
+func TestPlanPreparationOmitsApplyWhenCommandIsNotObserved(t *testing.T) {
+	for name, body := range map[string]string{
+		"no command function": `
+  after_hook "always" {
+    commands = ["apply"]
+    execute  = ["tool", "always"]
+  }
+`,
+		"same result for apply": `
+  after_hook "always" {
+    commands = ["apply"]
+    execute  = ["tool", "always"]
+    if       = length(get_terraform_command()) > 0
+  }
+`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := Resolve(t.Context(), executionUnit(t, body))
+			require.NoError(t, err)
+			require.Equal(t, []string{"always"}, hookNames(result.Execution.AfterHooks))
+			require.Nil(t, result.Execution.Apply)
+		})
+	}
+}
+
+func TestObservesCommandAssumesUnreadableFilesDo(t *testing.T) {
+	require.True(t, observesCommand(afero.NewMemMapFs(), []string{"missing.hcl"}))
+}
+
+func hookNames(hooks []model.Hook) []string {
+	var names []string
+	for i := range hooks {
+		names = append(names, hooks[i].Name)
+	}
+	return names
 }

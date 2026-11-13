@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -90,7 +91,42 @@ func ConfigurationStateSections(sections map[string]any, state *schema.Component
 	delete(result, "provision")
 	delete(result, "remote_state_backend")
 	delete(result, "remote_state_backend_type")
+	if remoteType, remote := explicitRemoteStateBackend(sections, state.BackendType, backend); remoteType != "" {
+		result["remote_state_backend_type"], result["remote_state_backend"] = remoteType, remote
+	}
 	return result
+}
+
+// explicitRemoteStateBackend keeps the remote-state read settings the stack configured, applied to
+// the plugin's backend. Atmos stores remote_state_backend as the component's backend with those
+// settings layered on top. For a plugin-owned component that backend is a discovery placeholder,
+// so only what differs from it was configured explicitly. A static remote state is kept as is.
+// The plugin's backend stays the fallback for everything the stack did not override.
+func explicitRemoteStateBackend(sections map[string]any, pluginType string, pluginBackend map[string]any) (string, map[string]any) {
+	remoteType, _ := sections["remote_state_backend_type"].(string)
+	remote, _ := sections["remote_state_backend"].(map[string]any)
+	if remoteType == "static" {
+		return remoteType, remote
+	}
+	placeholderType, _ := sections["backend_type"].(string)
+	overrides := remoteStateOverrides(remote, remoteType, placeholderType, sections)
+	explicitType := remoteType != "" && remoteType != placeholderType
+	if !explicitType && len(overrides) == 0 {
+		return "", nil
+	}
+	if !explicitType {
+		remoteType = pluginType
+	}
+	if remoteType != pluginType {
+		// A different backend type is a separate read location; it is not layered on the plugin's.
+		return remoteType, overrides
+	}
+	merged := maps.Clone(pluginBackend)
+	if merged == nil {
+		merged = make(map[string]any, len(overrides))
+	}
+	maps.Copy(merged, overrides)
+	return remoteType, merged
 }
 
 // configurationOutputConfig uses a disposable backend-only directory. Output reads must not
@@ -125,6 +161,63 @@ func configurationOutputConfig(config *ComponentConfig, state *schema.ComponentC
 	config.Providers, config.Vars = nil, nil
 	config.PassVars = false
 	return func() { _ = os.RemoveAll(root) }, nil
+}
+
+// configurationInitializedOutputConfig reads outputs from the unit's own working directory when
+// the caller skips init. Nothing is generated or initialized there: the directory is used exactly
+// as the unit's last execution left it, so a directory that was never initialized fails clearly.
+func configurationInitializedOutputConfig(config *ComponentConfig, state *schema.ComponentConfigurationState, component, stack string) error {
+	if state.WorkingDirectory == "" {
+		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithExplanationf("Component '%s' in stack '%s' reported no working directory to read outputs from without init.", component, stack).
+			WithHint("Run the command without --skip-init so Atmos can initialize a temporary state reader").
+			Err()
+	}
+	dataDir := ".terraform"
+	if configured, ok := config.Env["TF_DATA_DIR"].(string); ok && configured != "" {
+		dataDir = configured
+	}
+	if !filepath.IsAbs(dataDir) {
+		dataDir = filepath.Join(state.WorkingDirectory, dataDir)
+	}
+	if info, err := os.Stat(dataDir); err != nil || !info.IsDir() {
+		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithExplanationf("Component '%s' in stack '%s' has not been initialized in %s.", component, stack, state.WorkingDirectory).
+			WithHint("Run the command without --skip-init so Atmos can initialize a temporary state reader").
+			Err()
+	}
+	config.ComponentPath = state.WorkingDirectory
+	config.ReadOnlyState = true
+	config.Workspace = state.Workspace
+	config.AutoGenerateBackend = false
+	config.AutoProvisionWorkdirForOutputs = false
+	config.Providers, config.Vars = nil, nil
+	config.PassVars = false
+	return nil
+}
+
+// remoteStateOverrides returns the remote-state settings that differ from the placeholder backend.
+// A remote state of another type shares nothing with the placeholder, so all of it is explicit.
+func remoteStateOverrides(remote map[string]any, remoteType, placeholderType string, sections map[string]any) map[string]any {
+	placeholder, _ := sections["backend"].(map[string]any)
+	overrides := make(map[string]any)
+	for key, value := range remote {
+		existing, ok := placeholder[key]
+		if remoteType != placeholderType || !ok || !reflect.DeepEqual(existing, value) {
+			overrides[key] = value
+		}
+	}
+	return overrides
+}
+
+// configurationStateReader points config at the directory a plugin-owned state read runs in and
+// returns its cleanup. Skipping init reads the unit's already-initialized directory as it is;
+// otherwise a disposable backend-only scratch directory is initialized.
+func configurationStateReader(config *ComponentConfig, state *schema.ComponentConfigurationState, opts *OutputOptions, component, stack string) (func(), error) {
+	if opts != nil && opts.SkipInit {
+		return func() {}, configurationInitializedOutputConfig(config, state, component, stack)
+	}
+	return configurationOutputConfig(config, state)
 }
 
 // configurationEnvironment retains an explicitly empty sanitized environment.
