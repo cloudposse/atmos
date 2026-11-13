@@ -229,7 +229,7 @@ func TestComponentAdmissionRunsBeforeAuthentication(t *testing.T) {
 			atmosConfig := setup(t)
 			calls := countAuth(t)
 			info := tc.info
-			_, err := setupTerraformAuth(&atmosConfig, &info)
+			_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 			require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 			require.Zero(t, *calls, "auth must not run for a denied command")
 		})
@@ -247,7 +247,7 @@ func TestComponentAdmissionRunsBeforeAuthentication(t *testing.T) {
 		atmosConfig := setup(t)
 		calls := countAuth(t)
 		info := newInfo("plan")
-		_, err := setupTerraformAuth(&atmosConfig, &info)
+		_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 		require.NoError(t, err)
 		require.Equal(t, 1, *calls)
 	})

@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -173,7 +174,7 @@ type mocksFallbackCase struct {
 	// input is the YAML function expression; stack is always dev.
 	input string
 	// lookupExpr is the output expression the real getter must receive. Empty means the whole
-	// output map is requested (terraformAllOutputsExpression), which is what fallback mode does
+	// output map is requested (terraformcomponent.TerraformAllOutputsExpression), which is what fallback mode does
 	// for a component that declares mocks.
 	lookupExpr string
 	// lookupValue / lookupErr are what the real getter returns; skipLookup means the getter must
@@ -332,7 +333,7 @@ func mocksFallbackCases(function string) []mocksFallbackCase {
 
 func (c *mocksFallbackCase) expectedLookupExpr() string {
 	if c.lookupExpr == "" {
-		return terraformAllOutputsExpression
+		return terraformcomponent.TerraformAllOutputsExpression
 	}
 	return c.lookupExpr
 }
@@ -397,7 +398,7 @@ func TestTerraformComponentMocksFallbackHintsAtAlwaysMode(t *testing.T) {
 	t.Run("terraform.state", func(t *testing.T) {
 		atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
 		stateMock, _ := installMockGetters(t)
-		expectStateLookup(stateMock, terraformAllOutputsExpression, nil, errMocksAccessDenied)
+		expectStateLookup(stateMock, terraformcomponent.TerraformAllOutputsExpression, nil, errMocksAccessDenied)
 
 		_, err := processTagTerraformState(atmosConfig, "!terraform.state vpc vpc_id", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
 
@@ -408,7 +409,7 @@ func TestTerraformComponentMocksFallbackHintsAtAlwaysMode(t *testing.T) {
 	t.Run("terraform.output", func(t *testing.T) {
 		atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
 		_, outputMock := installMockGetters(t)
-		expectOutputLookup(outputMock, terraformAllOutputsExpression, nil, false, errMocksAccessDenied)
+		expectOutputLookup(outputMock, terraformcomponent.TerraformAllOutputsExpression, nil, false, errMocksAccessDenied)
 
 		_, err := processTagTerraformOutput(atmosConfig, "!terraform.output vpc vpc_id", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
 
@@ -427,8 +428,8 @@ func TestTerraformOutputComponentMocksFallbackOnMissingOutput(t *testing.T) {
 		lookupExpr string
 		want       any
 	}{
-		{name: "mock resolves a missing output map", input: "!terraform.output vpc vpc_id", useMocks: true, lookupExpr: terraformAllOutputsExpression, want: "vpc-local"},
-		{name: "no mock for the output returns nil like before", input: "!terraform.output vpc missing", useMocks: true, lookupExpr: terraformAllOutputsExpression, want: nil},
+		{name: "mock resolves a missing output map", input: "!terraform.output vpc vpc_id", useMocks: true, lookupExpr: terraformcomponent.TerraformAllOutputsExpression, want: "vpc-local"},
+		{name: "no mock for the output returns nil like before", input: "!terraform.output vpc missing", useMocks: true, lookupExpr: terraformcomponent.TerraformAllOutputsExpression, want: nil},
 		{name: "no mocks declared and a YQ default uses the default", input: `!terraform.output app '.missing // "yq-fallback"'`, useMocks: true, lookupExpr: `.missing // "yq-fallback"`, want: "yq-fallback"},
 		{name: "mocks off keeps returning nil", input: "!terraform.output vpc vpc_id", useMocks: false, lookupExpr: "vpc_id", want: nil},
 	}
@@ -451,7 +452,7 @@ func TestTerraformOutputComponentMocksFallbackOnMissingOutput(t *testing.T) {
 func TestTerraformOutputComponentMocksWrapsRecoverableError(t *testing.T) {
 	atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
 	_, outputMock := installMockGetters(t)
-	expectOutputLookup(outputMock, terraformAllOutputsExpression, nil, false, fmt.Errorf("not yet: %w", errUtils.ErrTerraformStateNotProvisioned))
+	expectOutputLookup(outputMock, terraformcomponent.TerraformAllOutputsExpression, nil, false, fmt.Errorf("not yet: %w", errUtils.ErrTerraformStateNotProvisioned))
 
 	got, err := processTagTerraformOutput(atmosConfig, "!terraform.output vpc missing", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
 
@@ -467,7 +468,7 @@ func TestTerraformStateComponentMocksDoesNotMutateInputs(t *testing.T) {
 		atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
 		stateMock, _ := installMockGetters(t)
 		realOutputs := map[string]any{"vpc_id": "vpc-real", "extra": map[string]any{"k": "v"}}
-		expectStateLookup(stateMock, terraformAllOutputsExpression, realOutputs, nil)
+		expectStateLookup(stateMock, terraformcomponent.TerraformAllOutputsExpression, realOutputs, nil)
 
 		got, err := processTagTerraformState(atmosConfig, "!terraform.state vpc private_subnet_ids", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
 
@@ -479,9 +480,9 @@ func TestTerraformStateComponentMocksDoesNotMutateInputs(t *testing.T) {
 	t.Run("merge helper isolates the result from both sources", func(t *testing.T) {
 		mocks := map[string]any{"vpc_id": "vpc-local", "mock_only": "m"}
 		realOutputs := map[string]any{"vpc_id": "vpc-real", "real_only": "r"}
-		lookup := &terraformStateLookup{stack: "dev", component: "vpc", output: "vpc_id"}
+		lookup := &terraformcomponent.TerraformStateLookup{Stack: "dev", Component: "vpc", Output: "vpc_id"}
 
-		got, err := resolveTerraformOutputWithMocks(&schema.AtmosConfiguration{}, lookup, mocks, realOutputs, nil)
+		got, err := terraformExecutor.ResolveTerraformOutputWithMocks(&schema.AtmosConfiguration{}, lookup, mocks, realOutputs, nil)
 
 		require.NoError(t, err)
 		assert.Equal(t, "vpc-real", got)
@@ -491,7 +492,7 @@ func TestTerraformStateComponentMocksDoesNotMutateInputs(t *testing.T) {
 		// Mutating the sources afterwards must not matter to a later evaluation either.
 		mocks["vpc_id"] = "changed"
 		realOutputs["vpc_id"] = "changed"
-		got, err = resolveTerraformOutputWithMocks(&schema.AtmosConfiguration{}, lookup, map[string]any{"vpc_id": "vpc-local"}, map[string]any{}, nil)
+		got, err = terraformExecutor.ResolveTerraformOutputWithMocks(&schema.AtmosConfiguration{}, lookup, map[string]any{"vpc_id": "vpc-local"}, map[string]any{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "vpc-local", got)
 	})
@@ -508,127 +509,22 @@ func TestTerraformAllOutputsExpression(t *testing.T) {
 	}
 
 	t.Run("backend variable returns the whole map", func(t *testing.T) {
-		got, err := tb.GetTerraformBackendVariable(atmosConfig, outputs, terraformAllOutputsExpression)
+		got, err := tb.GetTerraformBackendVariable(atmosConfig, outputs, terraformcomponent.TerraformAllOutputsExpression)
 		require.NoError(t, err)
 		assert.Equal(t, outputs, got)
 	})
 
 	t.Run("output layer reports the whole map as existing", func(t *testing.T) {
-		got, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, "vpc", "dev", outputs, terraformAllOutputsExpression)
+		got, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, "vpc", "dev", outputs, terraformcomponent.TerraformAllOutputsExpression)
 		require.NoError(t, err)
 		assert.True(t, exists)
 		assert.Equal(t, outputs, got)
 	})
 
 	t.Run("an empty map still reports as existing", func(t *testing.T) {
-		got, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, "vpc", "dev", map[string]any{}, terraformAllOutputsExpression)
+		got, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, "vpc", "dev", map[string]any{}, terraformcomponent.TerraformAllOutputsExpression)
 		require.NoError(t, err)
 		assert.True(t, exists)
 		assert.Empty(t, got)
-	})
-}
-
-func TestMergeRealOverMocks(t *testing.T) {
-	mocks := map[string]any{
-		"vpc_id":  "vpc-mock",
-		"network": map[string]any{"cidr": "10.0.0.0/16", "tags": map[string]any{"env": "mock", "team": "mock"}},
-		"subnets": []any{"mock-a", "mock-b"},
-		"only":    "mock-only",
-	}
-	real := map[string]any{
-		"vpc_id":  "vpc-real",
-		"network": map[string]any{"name": "real", "tags": map[string]any{"env": "real"}},
-		"subnets": []any{"real-a"},
-		"nulled":  nil,
-	}
-
-	merged := mergeRealOverMocks(mocks, real)
-
-	assert.Equal(t, map[string]any{
-		"vpc_id":  "vpc-real",
-		"network": map[string]any{"name": "real", "cidr": "10.0.0.0/16", "tags": map[string]any{"env": "real", "team": "mock"}},
-		"subnets": []any{"real-a"},
-		"only":    "mock-only",
-		"nulled":  nil,
-	}, merged)
-
-	// Neither input is mutated by the merge, and the result does not alias their nested maps.
-	assert.Equal(t, map[string]any{"cidr": "10.0.0.0/16", "tags": map[string]any{"env": "mock", "team": "mock"}}, mocks["network"])
-	assert.Equal(t, map[string]any{"name": "real", "tags": map[string]any{"env": "real"}}, real["network"])
-	merged["network"].(map[string]any)["cidr"] = "changed"
-	assert.Equal(t, "10.0.0.0/16", mocks["network"].(map[string]any)["cidr"])
-}
-
-func TestResolvedFromMocks(t *testing.T) {
-	mocks := map[string]any{"vpc_id": "vpc-mock", "network": map[string]any{"cidr": "10.0.0.0/16"}}
-	real := map[string]any{"vpc_id": "vpc-real", "network": map[string]any{"name": "real"}}
-	tests := []struct {
-		output string
-		want   bool
-	}{
-		{output: "vpc_id", want: false},
-		{output: ".network.cidr", want: true},
-		{output: ".network.name", want: false},
-		{output: "missing", want: false},
-		{output: `.network.cidr // "x"`, want: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.output, func(t *testing.T) {
-			assert.Equal(t, tt.want, resolvedFromMocks(mocks, real, tt.output))
-		})
-	}
-}
-
-func TestMockPathExists(t *testing.T) {
-	mocks := map[string]any{
-		"vpc_id":   "vpc-1",
-		"nullable": nil,
-		"network":  map[string]any{"cidr": "10.0.0.0/16"},
-	}
-	tests := []struct {
-		output         string
-		wantExists     bool
-		wantDecidable  bool
-		wantOutputFlag bool
-	}{
-		{output: "vpc_id", wantExists: true, wantDecidable: true, wantOutputFlag: true},
-		{output: "nullable", wantExists: true, wantDecidable: true, wantOutputFlag: true},
-		{output: "missing", wantExists: false, wantDecidable: true, wantOutputFlag: false},
-		{output: ".network.cidr", wantExists: true, wantDecidable: true, wantOutputFlag: true},
-		{output: ".network.missing", wantExists: false, wantDecidable: true, wantOutputFlag: false},
-		{output: ".vpc_id.deeper", wantExists: false, wantDecidable: true, wantOutputFlag: false},
-		{output: `.missing // "x"`, wantExists: false, wantDecidable: false, wantOutputFlag: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.output, func(t *testing.T) {
-			exists, decidable := mockPathExists(mocks, tt.output)
-			assert.Equal(t, tt.wantExists, exists)
-			assert.Equal(t, tt.wantDecidable, decidable)
-			assert.Equal(t, tt.wantOutputFlag, mockOutputExists(mocks, tt.output))
-		})
-	}
-}
-
-// TestResolveTerraformMockOutputInvalidMode verifies that an unknown
-// components.terraform.mocks.mode (only reachable through atmos.yaml, since the
-// env var and flag paths validate it) fails loudly under --use-mocks instead of
-// silently matching neither mode, and is ignored when mocks are off.
-func TestResolveTerraformMockOutputInvalidMode(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	atmosConfig.Components.Terraform.Mocks.Mode = schema.TerraformMocksMode("bogus")
-
-	t.Run("use-mocks on errors", func(t *testing.T) {
-		value, handled, err := resolveTerraformMockOutput(atmosConfig, &schema.ConfigAndStacksInfo{UseMocks: true}, "dev", "vpc", "vpc_id")
-		require.ErrorIs(t, err, errUtils.ErrInvalidMocksMode)
-		assert.True(t, handled)
-		assert.Nil(t, value)
-		assert.Contains(t, err.Error(), `"bogus"`)
-	})
-
-	t.Run("use-mocks off ignores the mode", func(t *testing.T) {
-		value, handled, err := resolveTerraformMockOutput(atmosConfig, &schema.ConfigAndStacksInfo{UseMocks: false}, "dev", "vpc", "vpc_id")
-		require.NoError(t, err)
-		assert.False(t, handled)
-		assert.Nil(t, value)
 	})
 }
