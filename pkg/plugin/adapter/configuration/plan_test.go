@@ -17,13 +17,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// identifiedProvider adds the optional Identity capability to the generated provider mock.
-type identifiedProvider struct {
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_identified_provider_test.go -package=$GOPACKAGE -mock_names=identifiedProvider=MockIdentifiedProvider
+
+// identifiedProvider is a provider with the optional Identity capability that binds saved plans.
+type identifiedProvider interface {
 	Provider
-	identity func(context.Context) (string, error)
+	identityProvider
 }
 
-func (p *identifiedProvider) Identity(ctx context.Context) (string, error) { return p.identity(ctx) }
+// The generated mock implements the contract that PlanIdentity asserts.
+var _ identifiedProvider = (*MockIdentifiedProvider)(nil)
 
 // planCase describes every input that a saved-plan binding is expected to cover.
 type planCase struct {
@@ -47,16 +50,16 @@ func planSession(t *testing.T, c *planCase) (*Session, *schema.ConfigAndStacksIn
 	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
 	settings.Options = c.options
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
-	mock := NewMockProvider(gomock.NewController(t))
+	mock := NewMockIdentifiedProvider(gomock.NewController(t))
 	mock.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	mock.EXPECT().Identity(gomock.Any()).Return(c.identity, nil).AnyTimes()
 	component := unit(t, c.component)
 	configuration, err := adapter.EncodeObject(map[string]any{"source": c.source})
 	require.NoError(t, err)
 	component.Configuration = configuration
 	mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{component}}, nil)
-	provider := &identifiedProvider{Provider: mock, identity: func(context.Context) (string, error) { return c.identity, nil }}
 	session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
-		return map[string]Provider{"terragrunt": provider}, nil
+		return map[string]Provider{"terragrunt": mock}, nil
 	})
 	require.NoError(t, err)
 	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: c.component, SubCommand: c.subCommand, AdditionalArgsAndFlags: c.args, ComponentEnvList: c.env}
@@ -201,7 +204,9 @@ func TestPlanIdentityRejectsUnboundableRequests(t *testing.T) {
 		_, err := session.Discover(t.Context())
 		require.NoError(t, err)
 		failure := errors.New("executable unreadable")
-		session.registry["terragrunt"] = &identifiedProvider{Provider: NewMockProvider(gomock.NewController(t)), identity: func(context.Context) (string, error) { return "", failure }}
+		provider := NewMockIdentifiedProvider(gomock.NewController(t))
+		provider.EXPECT().Identity(gomock.Any()).Return("", failure)
+		session.registry["terragrunt"] = provider
 		_, err = session.PlanIdentity(t.Context(), info, nil)
 		require.ErrorIs(t, err, failure)
 	})
