@@ -84,7 +84,7 @@ func TestAttributeFileHiddenAndRemoved(t *testing.T) {
 
 func TestReservedAndUnsafeKeysRejected(t *testing.T) {
 	store := newStore(t)
-	for _, key := range []string{"../escape", "a/../../b", "/abs", "a//b", "a/", ".", "d/" + tempPrefix + "x", "d/x" + attrsSuffix, lockName, "a\\b"} {
+	for _, key := range []string{"../escape", "a/../../b", "/abs", "a//b", "a/", ".", "d/" + tempPrefix + "x", "d/x" + attrsSuffix, tempPrefix + "dir/child", "a/" + tempPrefix + "dir/child", "x" + attrsSuffix + "/child", lockName, "a\\b"} {
 		_, err := store.Put(context.Background(), key, bytes.NewReader(nil), blob.PutOptions{Size: 0})
 		require.Error(t, err, key)
 		assert.ErrorIs(t, err, errUtils.ErrBlobInvalid, key)
@@ -277,4 +277,43 @@ func TestPutDirectoryConflictPreservesExistingSidecar(t *testing.T) {
 	got, err := os.ReadFile(sidecar)
 	require.NoError(t, err)
 	assert.Equal(t, original, got)
+}
+
+func TestFailedPutPrunesEmptyStagingDirectories(t *testing.T) {
+	for name, opts := range map[string][]Option{"managed": nil, "plain": {WithPlainFileCompatibility()}} {
+		t.Run(name, func(t *testing.T) {
+			store := newStore(t, opts...)
+			_, err := store.Put(context.Background(), "keep/sibling", bytes.NewReader([]byte("ok")), blob.PutOptions{Size: 2})
+			require.NoError(t, err)
+
+			_, err = store.Put(context.Background(), "keep/new/deep/object", bytes.NewReader([]byte("abc")), blob.PutOptions{Size: 1})
+			require.ErrorIs(t, err, errUtils.ErrBlobInvalid, "a body longer than the declared size fails")
+
+			assert.NoDirExists(t, filepath.Join(store.Root(), "keep", "new"), "staging directories created by the failed put are pruned")
+			assert.DirExists(t, filepath.Join(store.Root(), "keep"), "a non-empty parent is left intact")
+			assert.FileExists(t, filepath.Join(store.Root(), "keep", "sibling"))
+		})
+	}
+}
+
+func TestListPrefixHonorsLiteralBackslashes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("backslash is a path separator on Windows")
+	}
+	strict := newStore(t)
+	_, err := strict.List(context.Background(), blob.ListOptions{Prefix: `dir\`})
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalid, "backslashes stay rejected unless the store opts in")
+
+	literal := newStore(t, WithLiteralBackslashes())
+	_, err = literal.Put(context.Background(), `dir\file`, bytes.NewReader([]byte("x")), blob.PutOptions{Size: 1})
+	require.NoError(t, err)
+	page, err := literal.List(context.Background(), blob.ListOptions{Prefix: `dir\`})
+	require.NoError(t, err)
+	require.Len(t, page.Objects, 1)
+	assert.Equal(t, `dir\file`, page.Objects[0].Key)
+
+	for _, prefix := range []string{"/abs", "a\x00b", "../x"} {
+		_, err = literal.List(context.Background(), blob.ListOptions{Prefix: prefix})
+		require.ErrorIs(t, err, errUtils.ErrBlobInvalid, "%q stays rejected", prefix)
+	}
 }

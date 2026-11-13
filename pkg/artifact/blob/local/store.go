@@ -85,17 +85,28 @@ func (s *Store) Capabilities() blob.Capabilities {
 // validate rejects keys that are unsafe on a filesystem or collide with the store's own files.
 func (s *Store) validate(op, key string) error {
 	validationKey := key
-	if s.allowBackslash && os.PathSeparator != '\\' {
+	if s.literalBackslashes() {
 		validationKey = strings.ReplaceAll(key, "\\", "_")
 	}
 	if err := blob.ValidateKey(validationKey); err != nil {
 		return err
 	}
-	last := key[strings.LastIndexByte(key, '/')+1:]
-	if strings.HasPrefix(last, tempPrefix) || strings.HasSuffix(last, attrsSuffix) || key == lockName {
+	if key == lockName || hasReservedSegment(key) {
 		return blob.NewError(blob.KindInvalid, op, key, fmt.Errorf("%w: key uses a reserved name", errUtils.ErrBlobInvalid))
 	}
 	return nil
+}
+
+// hasReservedSegment reports whether any slash-separated segment of key looks like one of the
+// store's own temporary or attribute files. A reserved directory name would otherwise hide the
+// objects under it from listings, which skip those names at every level.
+func hasReservedSegment(key string) bool {
+	for _, segment := range strings.Split(key, "/") {
+		if strings.HasPrefix(segment, tempPrefix) || strings.HasSuffix(segment, attrsSuffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkContext fails fast when ctx is already done.

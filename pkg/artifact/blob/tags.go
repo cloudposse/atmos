@@ -16,6 +16,9 @@ const (
 	MaxTagValueChars = 256
 )
 
+// supplementaryPlane is the first rune that needs a UTF-16 surrogate pair.
+const supplementaryPlane = 0x10000
+
 // MergeTags returns defaults overlaid with overrides. It returns nil when both are empty and never
 // aliases either input.
 func MergeTags(defaults, overrides map[string]string) map[string]string {
@@ -31,7 +34,7 @@ func MergeTags(defaults, overrides map[string]string) map[string]string {
 }
 
 // ValidateTags checks the S3 object tag limits: at most [MaxTags] tags, non-empty keys of at most
-// [MaxTagKeyChars] characters, and values of at most [MaxTagValueChars] characters.
+// [MaxTagKeyChars] UTF-16 code units, and values of at most [MaxTagValueChars] UTF-16 code units.
 func ValidateTags(tags map[string]string) error {
 	defer perf.Track(nil, "blob.ValidateTags")()
 
@@ -39,14 +42,27 @@ func ValidateTags(tags map[string]string) error {
 		return tagError(fmt.Sprintf("%d tags exceed the limit of %d", len(tags), MaxTags))
 	}
 	for key, value := range tags {
-		if key == "" || !utf8.ValidString(key) || utf8.RuneCountInString(key) > MaxTagKeyChars {
+		if key == "" || !utf8.ValidString(key) || utf16Len(key) > MaxTagKeyChars {
 			return tagError(fmt.Sprintf("tag key %q must be 1-%d characters", key, MaxTagKeyChars))
 		}
-		if !utf8.ValidString(value) || utf8.RuneCountInString(value) > MaxTagValueChars {
+		if !utf8.ValidString(value) || utf16Len(value) > MaxTagValueChars {
 			return tagError(fmt.Sprintf("tag %q value exceeds %d characters", key, MaxTagValueChars))
 		}
 	}
 	return nil
+}
+
+// utf16Len counts UTF-16 code units, which is how S3 measures tag lengths: a supplementary
+// character counts as two.
+func utf16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		n++
+		if r >= supplementaryPlane {
+			n++
+		}
+	}
+	return n
 }
 
 func tagError(reason string) error {
