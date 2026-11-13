@@ -935,6 +935,7 @@ atmos terraform plan vpc -s live/dev
 
 - `dependency` and `dependencies` blocks become ordering and output edges, and dependency outputs are refreshed in the same apply.
 - `extra_arguments` and `before_hook`, `after_hook`, and `error_hook` blocks run with the same environment, identity, and toolchain as the Terraform command. A hook that lists `plan` does not run for `apply`. The implicit `init` matches hooks for `init`, not for the requested command.
+- Dry runs do not evaluate Terragrunt configuration. Their command previews may omit dynamically computed extra arguments, required var files, and environment variables. Real runs include these values.
 - Generated files and backend configuration keep their Terragrunt identity, so existing state stays addressable.
 - `atmos terraform plan` followed by `atmos terraform apply --from-plan` applies exactly the reviewed plan. Atmos rejects the apply if the plan file, the unit's configuration, or the working directory changed after the plan. The original working directory must still exist.
 - Remote Git and HTTPS module sources are fetched by Atmos. Local module sources are re-copied on every run so edits take effect.

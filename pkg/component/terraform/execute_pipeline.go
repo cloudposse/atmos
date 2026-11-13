@@ -198,6 +198,9 @@ func (e *Executor) executeCommandPipeline(
 	opts ...component.ExecutionOption,
 ) error {
 	componentPath := execCtx.componentPath
+	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
+		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
+	}
 
 	if shouldRunTerraformInit(atmosConfig, info) {
 		// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
