@@ -15,15 +15,20 @@ import (
 // CommandInput is the canonical command path without argument values.
 // Destroy is the only value derived from arguments: a normalized boolean, see IsDestroyInvocation.
 type CommandInput struct {
-	Command string   `json:"command"`
+	Command     string   `json:"command"`
+	CommandPath []string `json:"command_path"`
+	// Path is the deprecated name of CommandPath, kept for policies written for 1.234.0.
 	Path    []string `json:"path"`
 	Destroy bool     `json:"destroy"`
 }
 
 // ComponentCommandInput describes shared component admission.
 type ComponentCommandInput struct {
-	Agents        []string `json:"agents"`
-	Command       string   `json:"command"`
+	Agents  []string `json:"agents"`
+	Command string   `json:"command"`
+	// CommandPath is the canonical CLI command path, such as ["terraform", "shell"]
+	// or ["secret", "shell"], matching the `command` input's command_path.
+	CommandPath   []string `json:"command_path"`
 	ComponentType string   `json:"component_type"`
 	Component     string   `json:"component"`
 	Stack         string   `json:"stack"`

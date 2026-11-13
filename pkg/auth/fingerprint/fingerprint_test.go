@@ -17,6 +17,11 @@ func TestKeyedDigest(t *testing.T) {
 	require.NotEqual(t, digest, keyedDigest(secret, []byte("another auth scope")))
 }
 
+func TestKeyUsesProcessSecret(t *testing.T) {
+	identity := []byte("same auth scope")
+	require.Equal(t, keyedDigest([]byte(processSecret()), identity), Key(identity))
+}
+
 func TestKeyStableAcrossConcurrentCallers(t *testing.T) {
 	const callers = 32
 	results := make(chan string, callers)

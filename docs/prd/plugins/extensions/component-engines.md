@@ -1,6 +1,6 @@
 # Component configuration and engine plugins
 
-**Status:** Implementation in progress. The protocol, SDK, native runtime clients, static component descriptors, explicit package loader, and configuration-service adapters exist. CLI discovery, stack adaptation, and native Terraform preparation are wired on this branch. End-to-end validation is limited to local Terragrunt fixtures; the full release gates remain.
+**Status:** Planned. The component protocol, SDK handlers, host adapters, and CLI integration described here are not available on this branch.
 
 **Decision:** Separate component type, configuration provider, and execution engine. Negotiate optional capabilities independently. A configuration provider must not need an executor.
 
@@ -22,7 +22,7 @@ The component registry currently allows replacement registrations. External plug
 
 ## Independent contracts
 
-The checked-in [protocol](../../../../proto/atmos/plugin/v1/plugin.proto) is authoritative. The first component services use contract version 1.
+The checked-in [protocol](../../../../proto/atmos/plugin/v1/plugin.proto) is authoritative for available services. The proposed component services use contract version 1.
 
 | Capability | Service | Responsibility |
 |---|---|---|
@@ -33,7 +33,7 @@ The checked-in [protocol](../../../../proto/atmos/plugin/v1/plugin.proto) is aut
 
 The following contracts still require implementation:
 
-- Static metadata for modes, commands, and typed options. Component family, provider export name, package-local settings schema, and service version are implemented.
+- Static metadata for modes, commands, and typed options. Component family, provider export name, package-local settings schema, and service version are planned.
 - Optional execution with stdout, stderr, diagnostics/logs, lifecycle events, and one authoritative outcome.
 - Scoped host process, filesystem, toolchain, and logging APIs. The existing broker does not provide these services yet.
 - External engine CI reporting. Native Terraform adaptation retains the existing Terraform CI path.
@@ -44,7 +44,7 @@ Do not transmit Go callbacks, writers, `ExecutionContext`, `AtmosConfiguration`,
 
 `ComponentValue` carries cty type JSON, cty MessagePack, and sensitivity paths. Preserve exact numbers, collection types, nulls, nested unknowns, and marks. Never use `protobuf.Struct` for infrastructure values. Reject unsupported marks and invalid sensitivity paths. Error messages must not contain payloads.
 
-The SDK provides `component.Encode` and `component.Decode`. Translate language-specific sensitivity marks deliberately. The host must decode to its own typed values and masking rules. A byte round trip does not establish secret-safe rendering.
+The SDK is planned to provide `component.Encode` and `component.Decode`. Translate language-specific sensitivity marks deliberately. The host must decode to its own typed values and masking rules. A byte round trip does not establish secret-safe rendering.
 
 Generated content is evaluated bytes, not a second template. Validate destination paths, ownership policies, and write scope. Reject unknown ownership policies. Saved plans must bind exact artifact bytes, provider version, source revision, effective options, state identity, and engine. Verify these before apply; never replace reviewed inputs by reevaluating them.
 
@@ -71,15 +71,15 @@ Use static metadata for help without starting plugins. Use `pkg/flags.NewStandar
 - Include effective options in cache and saved-plan identity. Never log sensitive values.
 - Reject unsupported native options. Executable passthrough must be explicit and must not create a second scheduler.
 
-`ComponentOperation` currently transmits resolved provider options. It does not implement parsing or authorize arbitrary passthrough.
+The proposed `ComponentOperation` transmits resolved provider options. It does not implement parsing or authorize arbitrary passthrough.
 
 ## Host integration
 
-`pkg/plugin/adapter/component` supplies discovery, validation, preparation, and state clients. Its immutable registry is private to the invocation. It does not register or replace execution engines. Compose these providers with registered engines in the stack and execution adapters. Keep business logic out of `internal/exec`.
+The planned `pkg/plugin/adapter/component` will supply discovery, validation, preparation, and state clients. Its immutable registry is private to the invocation and does not register or replace execution engines. Compose these providers with registered engines in the stack and execution adapters. Keep business logic out of `internal/exec`.
 
 Open remaining closed type lists through registry metadata: `schema.Components.GetComponentConfig`, component auto-detection, stack component processing, component/reverse base paths, list extraction, `list sources`, stack-section validation/inheritance, dependency/affected dispatch, and CI dispatch.
 
-`bootstrap.LoadComponents` accepts explicit capability-qualified provider references. It uses the existing package policy, OCI cache, lock, and restoration paths. An empty reference list does not inspect package manifests. Disabled packages cannot satisfy references. Schema validation and ownership checks precede native startup; a failed batch returns no registry. Activation does not call discovery or execute the engine.
+The planned `bootstrap.LoadComponents` accepts explicit capability-qualified provider references. It uses the existing package policy, OCI cache, lock, and restoration paths. An empty reference list does not inspect package manifests. Disabled packages cannot satisfy references. Schema validation and ownership checks precede native startup; a failed batch returns no registry. Activation does not call discovery or execute the engine.
 
 Declare each service under `spec.capabilities.components.discovery`, `.validation`, `.preparation`, or `.state`. Each export declares `component_type` and a package-local `schema`. All capabilities for one provider must agree on package identity, executable, schema, type, and negotiated description. Keep provider settings separate from resolved component inputs in every request.
 
@@ -93,11 +93,11 @@ Cancellation must stop invocations, processes, callbacks, and descendants. Test 
 
 | Layer | Required result | State |
 |---|---|---|
-| Protocol and SDK | Independent services, lossless values, optional registration, native transport tests. | Implemented in this branch; not activated by installation. |
-| Host activation | Static descriptors, provider settings schemas, private registry, package selection, and service adapters. | Implemented; opt-in CLI discovery is wired. |
-| Host composition | Flags, scoped services, discovery/import and engine adapters. | Scoped discovery and native preparation are wired. Imports and typed plugin flags remain. |
-| Terragrunt plugin | Separately built SDK package runs the advanced native fixture on stock Atmos. | Local package runs advanced and nested-stack fixtures through the CLI. Published installation remains. |
-| Integration | Lists, state functions, affected, dependencies, UI, saved plans, and Pro share instances. | Lists and dependency scheduling are wired. Remaining integrations require validation. |
+| Protocol and SDK | Independent services, lossless values, optional registration, native transport tests. | Planned. |
+| Host activation | Static descriptors, provider settings schemas, private registry, package selection, and service adapters. | Planned. |
+| Host composition | Flags, scoped services, discovery/import and engine adapters. | Planned. |
+| Terragrunt plugin | Separately built SDK package runs the advanced native fixture on stock Atmos. | Planned. |
+| Integration | Lists, state functions, affected, dependencies, UI, saved plans, and Pro share instances. | Planned. |
 | Compatibility | Differential tests for supported constructs and explicit failures for unsupported behavior. | Required. |
 
 Require at least 90% patch coverage per layer. Test failures as well as successful calls. A protocol fixture does not prove installed-plugin or Terragrunt compatibility.

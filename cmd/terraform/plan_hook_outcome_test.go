@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -81,6 +82,72 @@ components:
 	require.ErrorContains(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", errUtils.ExitCodeError{Code: 2}), "required-after-plan-was-enforced")
 	// A failed engine plan must not run this success-only hook.
 	require.NoError(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", errUtils.ExitCodeError{Code: 1}))
+}
+
+// Exercise planCmd's deferred dispatch with a real child process returning Terraform's
+// detailed exit code, rather than invoking the hook dispatcher directly.
+func TestPlanCommandDispatchesSuccessHookOnDetailedExit(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "terraform", "probe"), 0o755))
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(fmt.Sprintf(`base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+    command: %q
+    auto_generate_backend_file: false
+stacks:
+  base_path: stacks
+  included_paths: ['*.yaml']
+  name_template: '{{ .vars.stage }}'
+`, executable)), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars: {stage: dev}
+components:
+  terraform:
+    probe:
+      hooks:
+        required-after:
+          kind: step
+          type: script
+          events: [after.terraform.plan]
+          on_failure: fail
+          with:
+            interpreter: starlark
+            script: 'fail("required-after-plan-was-enforced")'
+`), 0o600))
+	t.Chdir(root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Setenv("_ATMOS_TEST_PLAN_EXIT_TWO", "1")
+	withoutCIDetection(t)
+	initOutputTestIO(t)
+	rootCmd := &cobra.Command{Use: "atmos"}
+	rootCmd.PersistentFlags().String("base-path", "", "")
+	rootCmd.PersistentFlags().StringSlice("config", nil, "")
+	rootCmd.PersistentFlags().StringSlice("config-path", nil, "")
+	rootCmd.PersistentFlags().StringSlice("profile", nil, "")
+	oldParent := terraformCmd.Parent()
+	rootCmd.AddCommand(terraformCmd)
+	t.Cleanup(func() {
+		rootCmd.RemoveCommand(terraformCmd)
+		if oldParent != nil {
+			oldParent.AddCommand(terraformCmd)
+		}
+	})
+	stackFlag := terraformCmd.PersistentFlags().Lookup("stack")
+	oldStack, stackChanged := stackFlag.Value.String(), stackFlag.Changed
+	skipInitFlag := terraformCmd.PersistentFlags().Lookup("skip-init")
+	oldSkipInit, skipInitChanged := skipInitFlag.Value.String(), skipInitFlag.Changed
+	t.Cleanup(func() {
+		_ = terraformCmd.PersistentFlags().Set("stack", oldStack)
+		stackFlag.Changed = stackChanged
+		_ = terraformCmd.PersistentFlags().Set("skip-init", oldSkipInit)
+		skipInitFlag.Changed = skipInitChanged
+	})
+	require.NoError(t, terraformCmd.PersistentFlags().Set("stack", "dev"))
+	require.NoError(t, terraformCmd.PersistentFlags().Set("skip-init", "true"))
+	require.ErrorContains(t, planCmd.RunE(planCmd, []string{"probe"}), "required-after-plan-was-enforced")
 }
 
 func TestPrerequisiteErrorKeepsMessageAndChain(t *testing.T) {

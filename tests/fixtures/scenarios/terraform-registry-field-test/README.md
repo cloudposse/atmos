@@ -22,7 +22,8 @@ fixtures at a production account, existing state bucket, or shared cache.
 
 Build the two immutable revisions with the same Go toolchain/settings in independent
 source archives. Then run from the repository root, choosing a **new** output directory
-for each command (the harness refuses to overwrite existing case roots):
+outside the fixture for each command (the harness refuses to overwrite existing case roots
+and rejects output inside `core/`, including through relative paths or symlinks):
 
 ```sh
 python3 tests/fixtures/scenarios/terraform-registry-field-test/core/run.py \
@@ -37,8 +38,17 @@ python3 tests/fixtures/scenarios/terraform-registry-field-test/core/run_retry.py
 
 The runners execute both engines separately. `results.json` contains assertions;
 `commands/` contains argv, controlled environment overrides, stdout, stderr, status,
-engine subprocess traces and hook events. Inspect assertions, not just the Python
-process exit. Controlled Packer dispatch is explicitly a stub; real Packer validation
+engine subprocess traces and hook events. A failed assertion does not stop later cases;
+after the last case the runner lists failed assertions on stderr and exits nonzero. A
+failed initial fixture plan still aborts the run immediately. Inspect the assertions for
+details. The runner self-tests need no Atmos or engine binaries:
+
+```sh
+python3 -m unittest discover -p test_run.py \
+  -s tests/fixtures/scenarios/terraform-registry-field-test/core
+```
+
+Controlled Packer dispatch is explicitly a stub; real Packer validation
 is recorded separately in the retained field report. Shared callers never deploy Helm
 releases or publish images. The local stored-plan store has CI checks/comments disabled.
 

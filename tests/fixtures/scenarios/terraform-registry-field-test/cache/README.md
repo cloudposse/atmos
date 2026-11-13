@@ -14,24 +14,26 @@ Copy this directory into a new temporary directory, run `git init` there, and po
 
 ```shell
 export HOME="$PWD/home" XDG_CACHE_HOME="$PWD/xdg-cache"
+export ATMOS_XDG_CACHE_HOME="$PWD/xdg-cache"
+export ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION="$PWD/xdg-cache/atmos/terraform/registry"
 export ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR="$PWD/plugin-cache"
 export ATMOS_COMPONENTS_TERRAFORM_COMMAND=terraform   # Repeat every scenario with tofu.
 ```
 
-On macOS and Windows, run `atmos terraform cache trust` once before enabling the registry cache. Linux needs no trust step.
+On macOS and Windows, enable the registry cache and run a Terraform command first to generate its certificate. The command may fail the trust check; run `atmos terraform cache trust`, then retry it. Linux needs no trust step.
 
 ## Cache combinations
 
-Run `atmos terraform apply provider-a -s dev`, `provider-b`, and `modules` for each combination of `ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE` and `ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED` (`true`/`false` each). Use a fresh copy per combination, then repeat the applies in the same copy.
+Run `atmos terraform apply provider-a -s dev`, `provider-b`, and `modules` for each combination of `ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE` and `ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED` (`true`/`false` each). Use a fresh copy per combination, then repeat the applies in the same copy. When the registry cache is enabled, remove each component's `.terraform/` directory before its repeated apply.
 
 - Every apply exits 0 and `provider-a` and `provider-b` report outputs `alpha` and `beta`.
 - With the plugin cache enabled, `plugin-cache/registry.terraform.io/hashicorp/null/3.2.4/` exists once and serves both provider components.
-- With the registry cache enabled, `atmos terraform cache list` shows the `hashicorp/null` provider and the `cloudposse/label/null` 0.25.0 module, and the repeated run prints a savings report.
+- With the registry cache enabled, `atmos terraform cache list` shows the `hashicorp/null` provider and the `cloudposse/label/null` 0.25.0 module. A repeated run that serves cached artifacts prints a savings report.
 - With both disabled, nothing is written under `plugin-cache/` or `xdg-cache/atmos/terraform/registry`.
 
 ## Offline reuse and corruption
 
-After a warm registry-cache run, block outbound network access (for example, run the copy in a container with `--network none`), delete each component's `.terraform/` directory, and apply again. The applies must succeed from the cache alone. Next, overwrite one cached provider archive under `xdg-cache/atmos/terraform/registry/providers/` with garbage bytes. The following apply must fail with an integrity error, never install the corrupted archive, and recover after `atmos terraform cache delete <key>` with network access restored.
+After a warm registry-cache run, block outbound network access (for example, run the copy in a container with `--network none`), delete each component's `.terraform/` directory, and apply again. The applies must succeed from the cache alone. Next, overwrite one cached provider archive under `xdg-cache/atmos/terraform/registry/providers/` with garbage bytes. Disable the plugin cache and remove the affected provider component's `.terraform/` directory before applying it again. The apply must fail with an integrity error, never install the corrupted archive, and recover after `atmos terraform cache delete <key>` with network access restored.
 
 ## Smart init
 

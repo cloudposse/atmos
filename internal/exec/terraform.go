@@ -53,6 +53,7 @@ func NewTerraformExecutor() *terraformcomponent.Executor {
 		},
 		ProcessStacks:                    ProcessStacks,
 		ValidateComponent:                ValidateComponent,
+		AdmitComponent:                   AdmitComponent,
 		AttachComponentReporting:         attachComponentReporting,
 		CreateAndAuthenticateAuthManager: createAndAuthenticateAuthManager,
 		DefaultAuthManagerCreator: func(identity string, config *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, context auth.ReExecContext) (auth.AuthManager, error) {

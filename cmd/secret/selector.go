@@ -25,6 +25,7 @@ func newSelectorEvaluator(atmosConfig *schema.AtmosConfiguration, authManager au
 		section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 			AtmosConfig:          atmosConfig,
 			Component:            scope.Component,
+			CommandPath:          scope.CommandPath,
 			Stack:                scope.Stack,
 			ComponentType:        scope.ComponentType,
 			ProcessTemplates:     true,

@@ -26,16 +26,9 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
 		return nil, fmt.Errorf("%w: plugin saved-plan binding is not implemented", errUtils.ErrPluginUnsupportedExtension)
 	}
-	if err := s.ensure(ctx); err != nil {
+	instance, provider, err := s.preparationTarget(ctx, info)
+	if err != nil {
 		return nil, err
-	}
-	instance := s.instances[[3]string{info.Stack, "terraform", info.ComponentFromArg}]
-	if instance == nil {
-		return nil, errUtils.ErrPluginInvalidConfig
-	}
-	provider, ok := s.registry[instance.Provider]
-	if !ok {
-		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
 	settings := s.providerSettings(instance.Provider)
 	env := preparationEnvironment(info)
@@ -61,6 +54,23 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 		s.prepared.Store(addressKey(instance.Address), proto.Clone(result.State))
 	}
 	return preparedConfiguration(result)
+}
+
+// preparationTarget resolves the discovered instance selected by info and the
+// provider that owns it, after the session inventory has been loaded.
+func (s *Session) preparationTarget(ctx context.Context, info *schema.ConfigAndStacksInfo) (*pluginv1.DiscoveredComponent, Provider, error) {
+	if err := s.ensure(ctx); err != nil {
+		return nil, nil, err
+	}
+	instance := s.instances[[3]string{info.Stack, "terraform", info.ComponentFromArg}]
+	if instance == nil {
+		return nil, nil, errUtils.ErrPluginInvalidConfig
+	}
+	provider, ok := s.registry[instance.Provider]
+	if !ok {
+		return nil, nil, errUtils.ErrPluginUnsupportedExtension
+	}
+	return instance, provider, nil
 }
 
 // Reevaluate the inventory without preparation effects before any dependency

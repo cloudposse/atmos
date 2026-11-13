@@ -73,7 +73,7 @@ func TestSourceRefreshBackupFailureRestoresEarlierFiles(t *testing.T) {
 	require.Equal(t, before, after)
 }
 
-func TestSourceRefreshRefusesDanglingOwnedArtifact(t *testing.T) {
+func TestSourceRefreshRemovesDanglingOwnedArtifact(t *testing.T) {
 	src, target := t.TempDir(), filepath.Join(t.TempDir(), "target")
 	refreshWrite(t, src, "custom.data", "source")
 	spec := &schema.VendorComponentSource{Uri: src}
@@ -83,13 +83,27 @@ func TestSourceRefreshRefusesDanglingOwnedArtifact(t *testing.T) {
 	if err := os.Symlink(filepath.Join(t.TempDir(), "missing-state"), path); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	before, err := downloader.TreeSHA256(target)
-	require.NoError(t, err)
 	require.NoError(t, os.Remove(filepath.Join(src, "custom.data")))
-	require.ErrorContains(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(nil)), "inspect runtime artifact")
-	after, err := downloader.TreeSHA256(target)
+	require.NoError(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(nil)))
+	_, err := os.Lstat(path)
+	require.True(t, os.IsNotExist(err))
+}
+
+func TestRuntimeOwnedSymlinkStateAndInspectionError(t *testing.T) {
+	dir := t.TempDir()
+	refreshWrite(t, dir, "state", `{"version":4,"lineage":"preserved","serial":3}`)
+	link := filepath.Join(dir, "custom.data")
+	if err := os.Symlink(filepath.Join(dir, "state"), link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	owned, err := runtimeOwned(link, "custom.data", nil)
 	require.NoError(t, err)
-	require.Equal(t, before, after, "failed state inspection must not remove the owned path")
+	require.True(t, owned, "a symlink to state must remain protected")
+
+	require.NoError(t, os.Remove(link))
+	require.NoError(t, os.Symlink(link, link))
+	_, err = runtimeOwned(link, "custom.data", nil)
+	require.Error(t, err, "symlink inspection errors other than a missing target must propagate")
 }
 
 func TestSourceExplicitWorkdirRefusesUnverifiableOwner(t *testing.T) {

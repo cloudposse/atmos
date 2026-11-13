@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -89,6 +90,9 @@ type secretScope struct {
 	Identity      string
 	// SharedOnly excludes instance declarations for componentless validation.
 	SharedOnly bool
+	// CommandPath is the invoking command, such as ["secret", "shell"], which component
+	// admission sees as its command and path.
+	CommandPath []string
 }
 
 // parseFacets reads the persistent flags as optional facets (filters). Unlike parseScope it never
@@ -104,6 +108,7 @@ func parseFacets(cmd *cobra.Command) (secretScope, error) {
 		Component:     v.GetString("component"),
 		ComponentType: v.GetString("type"),
 		Identity:      v.GetString(cfg.IdentityFlagName),
+		CommandPath:   internal.PolicyCommandPath(cmd),
 	}, nil
 }
 
@@ -132,6 +137,7 @@ func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 		Component:     v.GetString("component"),
 		ComponentType: v.GetString("type"),
 		Identity:      v.GetString(cfg.IdentityFlagName),
+		CommandPath:   internal.PolicyCommandPath(cmd),
 	}
 
 	if scope.Stack == "" {
@@ -222,6 +228,7 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		AtmosConfig:          atmosConfig,
 		Component:            scope.Component,
+		CommandPath:          scope.CommandPath,
 		Stack:                scope.Stack,
 		ComponentType:        scope.ComponentType,
 		ProcessTemplates:     true,
@@ -274,6 +281,7 @@ func loadServiceForList(scope secretScope, verify bool) (*secrets.Service, error
 	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		AtmosConfig:          &atmosConfig,
 		Component:            scope.Component,
+		CommandPath:          scope.CommandPath,
 		Stack:                scope.Stack,
 		ComponentType:        scope.ComponentType,
 		ProcessTemplates:     true,
@@ -297,6 +305,7 @@ func buildAuthManager(atmosConfig *schema.AtmosConfiguration, scope secretScope)
 	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		AtmosConfig:          atmosConfig,
 		Component:            scope.Component,
+		CommandPath:          scope.CommandPath,
 		Stack:                scope.Stack,
 		ComponentType:        scope.ComponentType,
 		ProcessTemplates:     false,

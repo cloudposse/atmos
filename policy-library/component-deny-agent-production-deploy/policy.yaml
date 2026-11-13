@@ -2,15 +2,15 @@ apiVersion: atmos/v1
 kind: Policy
 metadata:
   name: component-deny-agent-production-deploy
-  description: Deny production apply and deploy commands launched by Claude Code or Codex.
+  description: Deny production apply, deploy, shell, and exec commands launched by Claude Code or Codex.
 spec:
   policies:
     guard:
       on: component.command
       action: deny
-      reason: Production apply and deploy are blocked from coding-agent sessions. Use a reviewed deployment workflow.
+      reason: Production apply, deploy, shell, and exec are blocked from coding-agent sessions. Use a reviewed deployment workflow.
       rule: |
         ((has(env.CLAUDECODE) && env.CLAUDECODE == '1') ||
         (has(env.CODEX_THREAD_ID) && env.CODEX_THREAD_ID != '')) &&
-        input.command in ['apply', 'deploy'] &&
+        input.command in ['apply', 'deploy', 'shell', 'exec'] &&
         input.stack.matches('(?i)(^|[-_/])(prod|production)([-_/]|$)')
