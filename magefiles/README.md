@@ -204,6 +204,8 @@ name the actual blocking results and are quoted as evidence, never instructions.
 | `bench:compare <snapshotsDir> <candidateDir> <outputDir>` | Compare the same candidate independently with each snapshot; write `report.md`, `report.json`, and separate benchstat output for each pair. |
 | `bench:report <repo> <runID>` | Validate a completed PR benchmark run, download data, regenerate comparisons with trusted code, and update the composite comment, summary, and labels. |
 | `quality:report <repo>` | Reconcile quality gates only for PRs associated with the Actions event (including fork and stacked PRs): a release label or milestone change, or CI completion for their head. Skips repository-wide events and never falls back to every open PR. Recover missing benchmark reports. |
+| `quality:reportPR <repo> <number>` | Refresh exactly one PR from live GitHub evidence, ignoring the triggering event. Requires a positive decimal PR number; benchmark recovery also writes only to this PR. Does not rerun CI. |
+| `quality:status <repo> <number>` | Print one JSON snapshot with current PR revision and `pending`, `ready`, or `blocked`. Read-only; verifies the trusted bot report, rejects mismatched revisions, and checks current CI before returning ready. API errors exit nonzero. |
 | `quality:reconcile <repo>` | True up quality gates after a repository-wide event. Scheduled runs select open PRs with a head commit from the last 24 hours or no final report for their current head and base, plus `quality:ready` PRs whose head now has a failing commit status (for example `Release milestone`). Merges, milestone and release changes, and manual runs reconcile all open PRs targeting this repository, regardless of base branch. Refuses per-PR events: release label and milestone changes on an open PR, and CI completion. |
 
 Run these from the repository root with `go tool mage`, for example:
@@ -318,11 +320,11 @@ newest first, for ten compatible snapshots. Empty history reports
 “comparison unavailable”; history bootstraps naturally after merge without
 rebuilding old commits.
 
-`CI Timing Summary` is the single automatic completion coordinator: it checks
-that the latest PR workflows and their jobs have finished, posts its timing
-comment using the existing TypeScript stopwatch action, then calls the reusable
-`Quality Gate` workflow (`quality:report`) whenever the timing coordinator succeeds, even if
-stopwatch defers publication because CI is still running.
+`CI Timing Summary` is the single automatic completion coordinator. Its independent
+jobs update timing through the TypeScript stopwatch action and call the reusable
+`Quality Gate` workflow (`quality:report`). Timing cancellation and failure cannot
+skip or cancel the quality job. The timing job coalesces by commit; the quality
+job retains its per-PR replace-pending group without cancelling active reporting.
 The Go reporter publishes its own separate quality/benchmark comment. Only the
 workflow scheduling is shared; no timing content is passed into Go. Failed or
 canceled completed runs still produce reports. The standalone `Benchmark Report` workflow
@@ -335,8 +337,8 @@ forks. The publisher owns only its marked bot comment, rechecks the head before
 writing, rejects older benchmark runs/attempts, and preserves benchmark results
 only for the current head. Stopwatch continues to manage its own timing comment.
 
-The read-only `Quality Gate Signal` forwards PR/review activity to the same
-completion coordinator. Quality Gate no longer independently subscribes to
+The read-only `Quality Gate Signal` forwards PR lifecycle, release-label,
+milestone and review activity to the same completion coordinator. Quality Gate no longer independently subscribes to
 workflow completions, checks, statuses, or comments. The separate
 `Quality Gate Reconcile` workflow (`quality:reconcile`) runs a 15-minute best-effort
 schedule that recovers missed events and late external results, including Codecov and
@@ -357,8 +359,22 @@ or fails every run cannot keep the PRs behind it from being visited.
 Event-associated reports are not restricted by age.
 Commits that exist only in a fork are resolved through the fork's head branch
 (`workflow_run` payloads) or a commit SHA search, and a PR matches only while its
-head is exactly that commit. Manual runs select all open PRs targeting this
-repository, regardless of base branch.
+head is exactly that commit. Manual `quality-reconcile.yml` runs select all open
+PRs targeting this repository, regardless of base branch. To refresh only one PR,
+dispatch `quality-report.yml` from main with required input `pr_number`, or run
+`go tool mage quality:reportPR cloudposse/atmos 1234` with an appropriately scoped
+token. Both use current evidence and preserve the head/base checks before publication.
+The developer shortcuts are `atmos dev quality refresh 1234` (dispatches the
+trusted workflow on main) and `atmos dev quality status 1234` (prints JSON from
+the local read-only helper; run from a trusted checkout).
+Pushes to main trigger a true-up after merges without privileged PR events.
+Signals held for fork approval or suppressed by merge conflicts can be recovered
+manually; scheduled recovery remains bounded by the selection rules above.
+Manual refreshes upload a versioned `quality-result.json` artifact. Agents can also
+read the latest published snapshot through `quality:status`; see the
+[quality action contract](../.github/actions/quality-gate/README.md). A successful
+workflow means the operation completed, not that the PR passed. Reporter
+cancellation is not CI failure; the head-matched gate snapshot is the verdict.
 While Actions workflows are pending, reconciliation publishes one initial
 snapshot for the current head/base revision and clears stale readiness. Later
 completions retain that snapshot until CI finishes, then publish the full report

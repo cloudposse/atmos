@@ -243,6 +243,9 @@ func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag("redirect-stderr", "", defaults.RedirectStderr, "File descriptor to redirect stderr to. Errors can be redirected to any file or any standard file descriptor (including '/dev/null')"))
 	b.options = append(b.options, WithEnvVars("redirect-stderr", "ATMOS_REDIRECT_STDERR"))
 
+	b.options = append(b.options, WithStringFlag("links", "", defaults.Links, "How long URLs (such as sign-in links) are shown: auto, osc8, clipboard, or raw"))
+	b.options = append(b.options, WithEnvVars("links", "ATMOS_TERMINAL_LINKS"))
+
 	// Verbose flag for error formatting.
 	b.WithVerbose()
 

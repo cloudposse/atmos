@@ -74,6 +74,7 @@ Arguments after -- are passed verbatim to the underlying git clone invocation:
 type cloneOptions struct {
 	RepoURI      string
 	Branch       string
+	Ref          string
 	Remote       string
 	Workdir      string
 	Filter       string
@@ -106,6 +107,7 @@ func parseCloneFlags(cmd *cobra.Command, v *viper.Viper) (*cloneOptions, error) 
 	return &cloneOptions{
 		RepoURI:         v.GetString(viperKey(cloneViperPrefix, flagRepoURI)),
 		Branch:          v.GetString(viperKey(cloneViperPrefix, flagBranch)),
+		Ref:             v.GetString(viperKey(cloneViperPrefix, flagRef)),
 		Remote:          v.GetString(viperKey(cloneViperPrefix, flagRemote)),
 		Workdir:         v.GetString(viperKey(cloneViperPrefix, flagWorkdir)),
 		Depth:           v.GetInt(viperKey(cloneViperPrefix, flagDepth)),
@@ -157,6 +159,9 @@ func ciCloneModeFromBool(enabled bool) ciCloneMode {
 // runClone orchestrates the clone subcommand.
 func runClone(ctx context.Context, opts *cloneOptions, args []string) error {
 	defer perf.Track(nil, "git.runClone")()
+	if opts.Ref != "" && opts.Branch != "" {
+		return fmt.Errorf("%w: --ref and --branch are mutually exclusive", errUtils.ErrInvalidConfig)
+	}
 
 	if opts.All && len(args) > 0 {
 		return errUtils.Build(errUtils.ErrInvalidConfig).
@@ -214,7 +219,7 @@ func runCloneNamed(ctx context.Context, name string, opts *cloneOptions) error {
 	}
 
 	workdir := resolveWorkdir(opts.Workdir, resolved.Workdir)
-	branch := resolveStringPrecedence(opts.Branch, resolved.Branch)
+	branch := cloneBranch(opts, resolved.Branch)
 	remote := resolveStringPrecedence(opts.Remote, resolved.Remote)
 	depth := resolveIntPrecedence(opts.Depth, resolved.Clone.Depth)
 	filter := resolveStringPrecedence(opts.Filter, resolved.Clone.Filter)
@@ -222,7 +227,7 @@ func runCloneNamed(ctx context.Context, name string, opts *cloneOptions) error {
 	// Named repositories are admin-declared in atmos.yaml, so a cross-repo URI
 	// is trusted; pass an empty URI so only a pull-request ref override (e.g.
 	// --branch refs/pull/N/merge) trips the gate, not the configured URI.
-	if err := guardForkCheckout(branch, "", opts); err != nil {
+	if err := guardForkCheckout(resolveStringPrecedence(opts.Ref, branch), "", opts); err != nil {
 		return err
 	}
 
@@ -234,6 +239,7 @@ func runCloneNamed(ctx context.Context, name string, opts *cloneOptions) error {
 			Env:     env,
 		},
 		URI:          resolved.URI,
+		Ref:          opts.Ref,
 		Depth:        depth,
 		Filter:       filter,
 		SingleBranch: opts.SingleBranch || resolved.Clone.SingleBranch,
@@ -257,10 +263,10 @@ func runCloneURI(ctx context.Context, rawURI string, opts *cloneOptions) error {
 	}
 
 	// Flag precedence: flag > query param > 0/empty.
-	branch := resolveStringPrecedence(opts.Branch, parsed.Branch)
+	branch := cloneBranch(opts, parsed.Branch)
 	depth := resolveIntPrecedence(opts.Depth, parsed.Depth)
 
-	if err := guardForkCheckout(branch, parsed.URI, opts); err != nil {
+	if err := guardForkCheckout(resolveStringPrecedence(opts.Ref, branch), parsed.URI, opts); err != nil {
 		return err
 	}
 
@@ -288,6 +294,7 @@ func runCloneURI(ctx context.Context, rawURI string, opts *cloneOptions) error {
 			Env:     env,
 		},
 		URI:          parsed.URI,
+		Ref:          opts.Ref,
 		Depth:        depth,
 		Filter:       opts.Filter,
 		SingleBranch: opts.SingleBranch,
@@ -376,8 +383,8 @@ func runCICheckout(ctx context.Context, providerName string, ciCtx *ci.Context, 
 	// ciCtx.Branch is the already-parsed short name (e.g. "main"); ciCtx.Ref is
 	// the raw ref (e.g. "refs/heads/main" or "refs/pull/123/merge") and is not
 	// a valid `git clone --branch` argument.
-	branch := resolveStringPrecedence(opts.Branch, ciCtx.Branch)
-	if err := guardForkCheckout(branch, ciCtx.CloneURL, opts); err != nil {
+	branch := cloneBranch(opts, ciCtx.Branch)
+	if err := guardForkCheckout(resolveStringPrecedence(opts.Ref, branch), ciCtx.CloneURL, opts); err != nil {
 		return err
 	}
 
@@ -404,6 +411,7 @@ func runCICheckout(ctx context.Context, providerName string, ciCtx *ci.Context, 
 			Env:     env,
 		},
 		URI:       ciCtx.CloneURL,
+		Ref:       opts.Ref,
 		Depth:     opts.Depth,
 		ExtraArgs: opts.ExtraArgs,
 	}
@@ -455,6 +463,14 @@ func guardForkCheckout(ref, uri string, opts *cloneOptions) error {
 			WithCause(err).
 			WithExplanation("unable to read CI context for fork-checkout safety evaluation").
 			WithHint("Fix CI metadata detection, or pass --allow-unsafe-fork only if this workflow is intentionally trusted.").
+			WithExitCode(2).
+			Err()
+	}
+
+	if opts.Ref != "" && ciCtx.ElevatedEvent && ciCtx.PullRequest != nil && ciCtx.PullRequest.Fork {
+		return errUtils.Build(errUtils.ErrUnsafeForkCheckout).
+			WithExplanation("An explicit detached ref in an elevated fork event may select untrusted code.").
+			WithHint("Use a pull_request event, or --allow-unsafe-fork only for intentionally trusted workflows.").
 			WithExitCode(2).
 			Err()
 	}
@@ -530,6 +546,7 @@ func runConcurrent(ctx context.Context, names []string, f func(context.Context, 
 
 func init() {
 	cloneParser.RegisterFlags(cloneCmd)
+	cloneCmd.MarkFlagsMutuallyExclusive(flagRef, flagBranch)
 	if err := cloneParser.BindToViper(viper.GetViper()); err != nil {
 		panic(fmt.Sprintf("git clone: BindToViper: %v", err))
 	}
@@ -537,4 +554,11 @@ func init() {
 		cloneCmd,
 		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/clone"),
 	)
+}
+
+func cloneBranch(opts *cloneOptions, fallback string) string {
+	if opts.Ref != "" {
+		return ""
+	}
+	return resolveStringPrecedence(opts.Branch, fallback)
 }

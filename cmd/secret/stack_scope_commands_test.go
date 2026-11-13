@@ -138,7 +138,8 @@ func TestStackScope_CommandsWithoutComponent(t *testing.T) {
 			require.NoError(t, runSecretSubcommand(t, tt.args(t)...))
 
 			require.Len(t, *scopes, 1)
-			assert.Equal(t, secretScope{Stack: "dev", Component: "vpc", ComponentType: "terraform", SharedOnly: true}, (*scopes)[0])
+			got := withoutCommandPath(t, &(*scopes)[0])
+			assert.Equal(t, secretScope{Stack: "dev", Component: "vpc", ComponentType: "terraform", SharedOnly: true}, got)
 			tt.verify(t, svc)
 		})
 	}
@@ -189,7 +190,7 @@ func TestStackScope_ExplicitComponentKeepsInstanceScope(t *testing.T) {
 			require.NoError(t, runSecretSubcommand(t, args...))
 
 			require.Len(t, *scopes, 1)
-			assert.Equal(t, secretScope{Stack: "dev", Component: "vpc"}, (*scopes)[0])
+			assert.Equal(t, secretScope{Stack: "dev", Component: "vpc"}, withoutCommandPath(t, &(*scopes)[0]))
 		})
 	}
 }
@@ -319,4 +320,14 @@ func TestStackScope_DeleteAllRejectsName(t *testing.T) {
 	assert.Empty(t, *scopes)
 	assert.Zero(t, svc.deleteAllCalls)
 	assert.Empty(t, svc.deletedNames)
+}
+
+// withoutCommandPath asserts that a loaded scope names its invoking command (for component
+// admission) and returns the scope without it, so tests can compare the remaining facets.
+func withoutCommandPath(t *testing.T, scope *secretScope) secretScope {
+	t.Helper()
+	assert.NotEmpty(t, scope.CommandPath, "secret commands pass their command path to component admission")
+	stripped := *scope
+	stripped.CommandPath = nil
+	return stripped
 }

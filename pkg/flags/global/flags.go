@@ -76,6 +76,7 @@ type Flags struct {
 
 	// System configuration.
 	RedirectStderr string
+	Links          string // How long URLs are delivered: auto, osc8, clipboard, or raw (--links).
 	Version        bool
 	Docs           string // Open documentation, or render it with "md" or "markdown".
 	Example        bool   // Discover and initialize related examples.

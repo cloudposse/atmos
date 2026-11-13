@@ -51,13 +51,17 @@ func (cr *ContainerRunner) Start(ctx context.Context, step *schema.WorkflowStep,
 		return nil, fmt.Errorf("%w: background container %q command %q: %w", schema.ErrWorkflowControlStepInvalid, step.Name, run.Command, err)
 	}
 
+	ports, err := toPortBindings(run.Ports)
+	if err != nil {
+		return nil, err
+	}
 	cfg := &container.NamedConfig{
 		Stack:            cr.Stack,
 		ComponentType:    backgroundComponentType,
 		Component:        step.Name,
 		Image:            run.Image,
 		Command:          command,
-		Ports:            toPortBindings(run.Ports),
+		Ports:            ports,
 		Mounts:           toMounts(run.Mounts),
 		Env:              envpkg.SliceToMap(env),
 		User:             run.User,
@@ -142,27 +146,9 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// defaultPortProtocol is assumed when a port mapping omits its protocol.
-const defaultPortProtocol = "tcp"
-
 // toPortBindings maps schema port specs onto runtime PortBindings.
-func toPortBindings(ports []schema.ContainerPort) []container.PortBinding {
-	if len(ports) == 0 {
-		return nil
-	}
-	out := make([]container.PortBinding, 0, len(ports))
-	for _, p := range ports {
-		protocol := p.Protocol
-		if protocol == "" {
-			protocol = defaultPortProtocol
-		}
-		out = append(out, container.PortBinding{
-			HostPort:      p.Host,
-			ContainerPort: p.Container,
-			Protocol:      protocol,
-		})
-	}
-	return out
+func toPortBindings(ports []schema.ContainerPort) ([]container.PortBinding, error) {
+	return container.PortBindingsFromSchema(ports)
 }
 
 // toMounts maps schema mounts onto runtime Mounts.

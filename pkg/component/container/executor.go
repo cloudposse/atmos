@@ -349,7 +349,10 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if r.spec.Run == nil || strings.TrimSpace(r.spec.Run.Command) == "" {
 		return fmt.Errorf("%w: component %q has no run.command for run", errUtils.ErrComponentConfigInvalid, r.component)
 	}
-	ports := r.spec.Ports()
+	ports, err := r.spec.Ports()
+	if err != nil {
+		return err
+	}
 	if r.dryRun {
 		ui.Infof("[dry-run] run %s: %s", image, r.spec.Run.Command)
 		return nil
@@ -371,8 +374,11 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		User:    r.runUser(),
 		Labels:  ctr.InstanceLabels(r.stack, cfg.ContainerComponentType, r.component),
 		Host:    r.spec.HostRuntime(),
+		RunArgs: r.spec.RunArgs(),
 	}
-	ctr.AttachSharedNetwork(ctx, runtime, &runConfig.Networks, r.stack, r.component)
+	if !ctr.HasExplicitNetworkOverride(runConfig.RunArgs) {
+		ctr.AttachSharedNetwork(ctx, runtime, &runConfig.Networks, r.stack, r.component)
+	}
 	if _, err := ctr.RunEphemeralContainer(ctx, runtime, runConfig); err != nil {
 		return fmt.Errorf("%w: run %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
 	}
@@ -395,7 +401,10 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	ports := r.spec.Ports()
+	ports, err := r.spec.Ports()
+	if err != nil {
+		return err
+	}
 	command, err := r.spec.CommandArgs()
 	if err != nil {
 		return err
@@ -413,6 +422,7 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		Host:          r.spec.HostRuntime(),
 		Restart:       r.spec.RestartPolicy(),
 		HealthCheck:   r.spec.HealthCheck(),
+		RunArgs:       r.spec.RunArgs(),
 	}
 	if r.dryRun {
 		ui.Infof("[dry-run] up %s as %s", image, ctr.RuntimeName(r.stack, cfg.ContainerComponentType, r.component))
@@ -422,7 +432,9 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	ctr.AttachSharedNetwork(ctx, runtime, &namedConfig.Networks, r.stack, r.component)
+	if !ctr.HasExplicitNetworkOverride(namedConfig.RunArgs) {
+		ctr.AttachSharedNetwork(ctx, runtime, &namedConfig.Networks, r.stack, r.component)
+	}
 	if err := r.ensureImage(ctx, runtime, image, componentPath); err != nil {
 		return err
 	}
