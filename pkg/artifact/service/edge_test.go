@@ -370,7 +370,7 @@ func TestCopy_ForeignGraphNeedsANativeTransfer(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
 	})
 	t.Run("native transfer carries the graph", func(t *testing.T) {
-		native := &nativeRepository{Repository: artifacttest.New(artifacttest.Options{}), compat: true}
+		native := newNativeRepository(t, artifacttest.New(artifacttest.Options{}))
 		svc := build(t, native)
 		result, err := svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
 		require.NoError(t, err)
@@ -378,7 +378,7 @@ func TestCopy_ForeignGraphNeedsANativeTransfer(t *testing.T) {
 		assert.Equal(t, "tools/example:1.0.0", result.Ref)
 	})
 	t.Run("a digest-only graph has no tag to publish under", func(t *testing.T) {
-		native := &nativeRepository{Repository: artifacttest.New(artifacttest.Options{}), compat: true}
+		native := newNativeRepository(t, artifacttest.New(artifacttest.Options{}))
 		svc := build(t, native)
 		digestRef := artifact.Ref{Name: "tools/example", Digest: digest.FromString("graph-root")}
 		_, err := svc.Copy(context.Background(), artifact.CopyRequest{Ref: digestRef, From: "src", To: "dst"})
@@ -391,7 +391,12 @@ func TestCopy_EvidenceCarryFailuresAreReported(t *testing.T) {
 	published := e.publish("src", e.source("hello"))
 	_, err := e.svc.Sign(context.Background(), artifact.SignRequest{Repository: "src", Ref: artifact.Ref{Name: "tools/example", Digest: published.Operation.RecordDigest}})
 	require.NoError(t, err)
-	e.static.Repositories["src"] = failingEvidenceReader{Repository: e.repos["src"]}
+	reader := artifact.NewMockEvidenceReader(gomock.NewController(t))
+	reader.EXPECT().ReadEvidence(gomock.Any(), gomock.Any()).Return(nil, errTransport).AnyTimes()
+	e.static.Repositories["src"] = struct {
+		artifact.Repository
+		artifact.EvidenceReader
+	}{e.repos["src"], reader}
 
 	result, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
 	require.NoError(t, err)
@@ -400,12 +405,6 @@ func TestCopy_EvidenceCarryFailuresAreReported(t *testing.T) {
 		warned = warned || diagnostic.Code == "evidence-read-failed"
 	}
 	assert.True(t, warned)
-}
-
-type failingEvidenceReader struct{ artifact.Repository }
-
-func (failingEvidenceReader) ReadEvidence(context.Context, *artifact.PinnedReference) ([]artifact.EvidenceBlob, error) {
-	return nil, errTransport
 }
 
 func TestSign_RejectsADigestThatIsNotTheSignableSubject(t *testing.T) {
