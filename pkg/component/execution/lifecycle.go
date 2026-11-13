@@ -1,9 +1,11 @@
 package execution
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 
@@ -13,15 +15,32 @@ import (
 )
 
 // Runner executes one hook and reports its failure and captured output.
-// The output feeds error hook matching and is never printed again.
+// The output feeds error hook matching and is never printed again. A nil output means
+// nothing was captured.
 type Runner interface {
-	RunHook(ctx context.Context, kind HookKind, hook *schema.ComponentHook) (output string, err error)
+	RunHook(ctx context.Context, kind HookKind, hook *schema.ComponentHook) (output Output, err error)
 }
+
+// Output is captured phase output. Error hook matching reads it as a stream, so output of
+// any size is never loaded into memory as a whole.
+type Output interface {
+	// Open returns a new reader positioned at the start of the output. A reader that
+	// implements io.Closer is closed after use. An error reports a failed capture.
+	Open() (io.Reader, error)
+}
+
+// TextOutput is output that is already in memory.
+type TextOutput string
+
+// Open returns a reader over the text.
+//
+//nolint:lintroller // Trivial accessor; no I/O.
+func (t TextOutput) Open() (io.Reader, error) { return strings.NewReader(string(t)), nil }
 
 // failure is a failed phase with the output it produced.
 type failure struct {
 	err    error
-	output string
+	output Output
 }
 
 // Run executes the command lifecycle: before hooks, the action, after hooks, then error hooks.
@@ -30,7 +49,7 @@ type failure struct {
 // run_on_error. Error hooks run when any earlier phase failed and an on_errors expression matches
 // that phase's error or output. Cancellation stops every remaining hook. The action's error is
 // returned unchanged when nothing else failed.
-func Run(ctx context.Context, config *schema.ComponentExecution, command string, runner Runner, action func() (string, error)) error {
+func Run(ctx context.Context, config *schema.ComponentExecution, command string, runner Runner, action func() (Output, error)) error {
 	defer perf.Track(nil, "execution.Run")()
 
 	if config == nil || (len(config.BeforeHooks)+len(config.AfterHooks)+len(config.ErrorHooks) == 0) {
@@ -83,16 +102,12 @@ func runErrorHooks(ctx context.Context, runner Runner, hooks []*schema.Component
 	if len(hooks) == 0 || len(prior) == 0 {
 		return nil
 	}
-	var text strings.Builder
-	for _, item := range prior {
-		text.WriteString(item.err.Error() + "\n" + item.output + "\n")
-	}
 	var failures []failure
 	for _, hook := range hooks {
 		if ctx.Err() != nil {
 			break
 		}
-		matched, err := matchesAny(hook.OnErrors, text.String())
+		matched, err := matchesAny(hook.OnErrors, prior)
 		if err != nil {
 			failures = append(failures, failure{err: fmt.Errorf("matching on_errors of error hook %q: %w", hook.Name, err)})
 			continue
@@ -107,17 +122,67 @@ func runErrorHooks(ctx context.Context, runner Runner, hooks []*schema.Component
 	return failures
 }
 
-func matchesAny(patterns []string, text string) (bool, error) {
+// matchesAny matches each pattern against every prior failure's error and output, in order,
+// as one text. The text is streamed, so memory use does not grow with the output size.
+func matchesAny(patterns []string, prior []failure) (bool, error) {
 	for _, pattern := range patterns {
-		matched, err := regexp.MatchString(pattern, text)
+		expression, err := regexp.Compile(pattern)
 		if err != nil {
 			return false, err
 		}
-		if matched {
-			return true, nil
+		matched, err := matchFailures(expression, prior)
+		if err != nil || matched {
+			return matched, err
 		}
 	}
 	return false, nil
+}
+
+func matchFailures(expression *regexp.Regexp, prior []failure) (bool, error) {
+	readers := make([]io.Reader, 0, 3*len(prior))
+	var closers []io.Closer
+	defer func() {
+		for _, closer := range closers {
+			_ = closer.Close()
+		}
+	}()
+	for _, item := range prior {
+		readers = append(readers, strings.NewReader(item.err.Error()+"\n"))
+		if item.output != nil {
+			reader, err := item.output.Open()
+			if err != nil {
+				return false, err
+			}
+			if closer, ok := reader.(io.Closer); ok {
+				closers = append(closers, closer)
+			}
+			readers = append(readers, reader)
+		}
+		readers = append(readers, strings.NewReader("\n"))
+	}
+	stream := &errorReader{reader: bufio.NewReader(io.MultiReader(readers...))}
+	matched := expression.MatchReader(stream)
+	if stream.err != nil {
+		return false, stream.err
+	}
+	return matched, nil
+}
+
+// errorReader keeps the first read error, which regexp.MatchReader treats as end of input.
+type errorReader struct {
+	reader *bufio.Reader
+	err    error
+}
+
+// ReadRune reads the next rune and remembers the first error other than end of input.
+//
+//nolint:lintroller // Called for every rune matched; tracking would dominate matching.
+func (r *errorReader) ReadRune() (rune, int, error) {
+	value, size, err := r.reader.ReadRune()
+	if err != nil && !errors.Is(err, io.EOF) && r.err == nil {
+		r.err = err
+	}
+	return value, size, err
 }
 
 func hookError(kind HookKind, hook *schema.ComponentHook, err error) error {

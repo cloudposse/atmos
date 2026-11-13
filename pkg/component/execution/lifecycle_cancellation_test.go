@@ -32,10 +32,10 @@ func TestRunCancellationDuringActionIsReported(t *testing.T) {
 				AfterHooks:  []schema.ComponentHook{{Name: "a", Commands: []string{"plan"}, Execute: []string{"tool"}, RunOnError: true}},
 				ErrorHooks:  []schema.ComponentHook{errorHook("e")},
 			}
-			err := Run(ctx, config, "plan", r, func() (string, error) {
+			err := Run(ctx, config, "plan", r, func() (Output, error) {
 				r.calls = append(r.calls, "action")
 				cancel()
-				return "", test.actionErr
+				return nil, test.actionErr
 			})
 			require.ErrorIs(t, err, context.Canceled)
 			require.Equal(t, test.wantFailure, errors.Is(err, failure), "the action's own failure must stay visible")

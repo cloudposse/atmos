@@ -324,3 +324,71 @@ func TestPipelineCancellationStopsAHookAndEverythingAfterIt(t *testing.T) {
 	names := timeline(readHookLog(t, pipeline.log))
 	require.Equal(t, "slow", names[len(names)-1], "nothing may start after the canceled hook: %v", names)
 }
+
+// TestErrorHookCaptureUsesTemporaryFiles verifies error hooks match command and hook output
+// recorded in temporary files rather than memory, and that every file is removed afterwards.
+func TestErrorHookCaptureUsesTemporaryFiles(t *testing.T) {
+	temp := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, temp)
+	}
+	capturedDuringCommand := 0
+	shell := &fakeShell{run: func(call *shellCall) error {
+		switch call.command {
+		case "terraform":
+			_, _ = call.options.StderrCapture.Write([]byte("Error: Throttled"))
+			entries, err := os.ReadDir(temp)
+			require.NoError(t, err)
+			capturedDuringCommand = len(entries)
+			return errUtils.ExitCodeError{Code: 1}
+		case "hook-after":
+			_, _ = call.options.StdoutCapture.Write([]byte("HookNeedle"))
+			return errUtils.ExitCodeError{Code: 2}
+		}
+		return nil
+	}}
+	after := execHook("after", "apply")
+	after.RunOnError = true
+	info := hookInfo("apply", &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{after},
+		ErrorHooks: []schema.ComponentHook{
+			{Name: "throttle", Commands: []string{"apply"}, Execute: []string{"hook-throttle"}, OnErrors: []string{"Throttled"}},
+			{Name: "needle", Commands: []string{"apply"}, Execute: []string{"hook-needle"}, OnErrors: []string{"HookNeedle"}},
+			{Name: "absent", Commands: []string{"apply"}, Execute: []string{"hook-absent"}, OnErrors: []string{"NotInAnyOutput"}},
+		},
+	})
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"apply"}, t.TempDir())
+	require.Error(t, err)
+	require.Equal(t, []string{"terraform apply", "hook-after arg", "hook-throttle", "hook-needle"}, shell.names())
+	require.Equal(t, 1, capturedDuringCommand, "the command output is written to one temporary file")
+	entries, err := os.ReadDir(temp)
+	require.NoError(t, err)
+	require.Empty(t, entries, "every capture file is removed")
+}
+
+// TestCaptureFileReportsFailures verifies capture failures surface when error hooks read the
+// output, without failing the writer chain of the command being recorded.
+func TestCaptureFileReportsFailures(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, missing)
+	}
+	capture := &phaseCapture{}
+	file := capture.create()
+	written, err := file.Write([]byte("output"))
+	require.NoError(t, err, "a capture failure never fails the command")
+	require.Equal(t, 6, written)
+	_, err = file.finish().Open()
+	require.ErrorIs(t, err, errUtils.ErrComponentOutputCapture)
+	capture.cleanup()
+
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("TMP", os.Getenv("TMPDIR"))
+	t.Setenv("TEMP", os.Getenv("TMPDIR"))
+	file = capture.create()
+	_, _ = file.Write([]byte("kept"))
+	require.NoError(t, os.Remove(file.path))
+	_, err = file.finish().Open()
+	require.ErrorIs(t, err, errUtils.ErrComponentOutputCapture, "a removed capture reports a read failure")
+	capture.cleanup()
+}

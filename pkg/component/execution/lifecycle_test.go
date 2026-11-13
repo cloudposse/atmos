@@ -3,6 +3,8 @@ package execution
 import (
 	"context"
 	"errors"
+	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,21 +25,21 @@ type recorder struct {
 	onCall func(name string)
 }
 
-func (r *recorder) RunHook(_ context.Context, kind HookKind, hook *schema.ComponentHook) (string, error) {
+func (r *recorder) RunHook(_ context.Context, kind HookKind, hook *schema.ComponentHook) (Output, error) {
 	name := string(kind) + ":" + hook.Name
 	r.calls = append(r.calls, name)
 	if r.onCall != nil {
 		r.onCall(name)
 	}
-	return r.output[hook.Name], r.failures[hook.Name]
+	return TextOutput(r.output[hook.Name]), r.failures[hook.Name]
 }
 
-func (r *recorder) action() (string, error) {
+func (r *recorder) action() (Output, error) {
 	r.calls = append(r.calls, "action")
 	if r.onCall != nil {
 		r.onCall("action")
 	}
-	return r.output["action"], r.failures["action"]
+	return TextOutput(r.output["action"]), r.failures["action"]
 }
 
 func hook(name string, commands ...string) schema.ComponentHook {
@@ -257,6 +259,79 @@ func TestValidate(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require.ErrorIs(t, Validate(test.config), errUtils.ErrPluginProtocol)
+		})
+	}
+}
+
+// streamOutput is captured output that records how it was read.
+type streamOutput struct {
+	text    string
+	openErr error
+	readErr error
+	closed  int
+}
+
+func (o *streamOutput) Open() (io.Reader, error) {
+	if o.openErr != nil {
+		return nil, o.openErr
+	}
+	var reader io.Reader = strings.NewReader(o.text)
+	if o.readErr != nil {
+		reader = io.MultiReader(reader, &failingReader{err: o.readErr})
+	}
+	return &closingReader{Reader: reader, output: o}, nil
+}
+
+type closingReader struct {
+	io.Reader
+	output *streamOutput
+}
+
+func (r *closingReader) Close() error {
+	r.output.closed++
+	return nil
+}
+
+type failingReader struct{ err error }
+
+func (r *failingReader) Read([]byte) (int, error) { return 0, r.err }
+
+// TestErrorHooksStreamCapturedOutput verifies error hook matching reads captured output as a
+// stream, closes every reader, keeps matching across failure boundaries, and reports capture
+// failures instead of silently skipping the hook.
+func TestErrorHooksStreamCapturedOutput(t *testing.T) {
+	failed := errors.New("exit status 1")
+	readFailure := errors.New("capture read failed")
+	large := strings.Repeat("x", 4<<20) + "\nError: AccessDenied\n"
+	for _, test := range []struct {
+		name    string
+		output  *streamOutput
+		pattern string
+		hookRan bool
+		wantErr error
+	}{
+		{name: "match at end of large output", output: &streamOutput{text: large}, pattern: "AccessDenied", hookRan: true},
+		{name: "match spans error and output", output: &streamOutput{text: "Error: Throttled"}, pattern: "(?s)exit status 1.*Throttled", hookRan: true},
+		{name: "anchored pattern on the whole text", output: &streamOutput{text: "tail"}, pattern: "^exit status 1\ntail\n$", hookRan: true},
+		{name: "no match", output: &streamOutput{text: large}, pattern: "Throttled"},
+		{name: "capture cannot be opened", output: &streamOutput{openErr: readFailure}, pattern: ".*", wantErr: readFailure},
+		{name: "capture read fails", output: &streamOutput{text: "partial", readErr: readFailure}, pattern: "never", wantErr: readFailure},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := &recorder{}
+			config := &schema.ComponentExecution{ErrorHooks: []schema.ComponentHook{{Name: "e", Commands: []string{"plan"}, OnErrors: []string{test.pattern}, Execute: []string{"tool"}}}}
+			err := Run(t.Context(), config, "plan", r, func() (Output, error) {
+				r.calls = append(r.calls, "action")
+				return test.output, failed
+			})
+			require.ErrorIs(t, err, failed, "the action failure stays visible")
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+			}
+			require.Equal(t, test.hookRan, slices.Contains(r.calls, "error_hook:e"), r.calls)
+			if test.output.openErr == nil {
+				require.Equal(t, 1, test.output.closed, "every opened reader is closed")
+			}
 		})
 	}
 }

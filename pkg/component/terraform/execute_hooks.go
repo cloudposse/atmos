@@ -1,14 +1,18 @@
 package terraform
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/execution"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -133,12 +137,17 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		return action(&phaseInfo, applied.Args, opts)
 	}
 
-	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts)}
+	var capture *phaseCapture
+	if len(config.ErrorHooks) > 0 {
+		capture = &phaseCapture{}
+		defer capture.cleanup()
+	}
+	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts), capture: capture}
 	// A detailed plan exit code of 2 reports changes, not a failure: ordinary after hooks run and
 	// error hooks do not. The status itself is returned unchanged once the hooks have run.
 	var detailedResult error
-	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (string, error) {
-		output, err := runPhaseAction(&phaseInfo, applied.Args, opts, len(config.ErrorHooks) > 0, action)
+	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (execution.Output, error) {
+		output, err := runPhaseAction(&phaseInfo, applied.Args, opts, capture, action)
 		if isDetailedPlanChanges(phase, applied.Args, err) {
 			detailedResult = err
 			return output, nil
@@ -152,15 +161,16 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 }
 
 // runPhaseAction runs the wrapped subprocess. Error hooks match against the failed command's
-// output, which the caller may also be capturing, so it is captured only when they exist.
-func runPhaseAction(info *schema.ConfigAndStacksInfo, args []string, opts []component.ExecutionOption, capture bool, action phaseAction) (string, error) {
-	if !capture {
-		return "", action(info, args, opts)
+// output, which the caller may also be capturing, so it is captured only when they exist. The
+// capture goes to a temporary file, never to memory, and keeps every retry attempt's output.
+func runPhaseAction(info *schema.ConfigAndStacksInfo, args []string, opts []component.ExecutionOption, capture *phaseCapture, action phaseAction) (execution.Output, error) {
+	if capture == nil {
+		return nil, action(info, args, opts)
 	}
-	var output bytes.Buffer
-	stdout, stderr := composeRetryCaptureWriters(opts, &output)
+	file := capture.create()
+	stdout, stderr := composeRetryCaptureWriters(opts, file)
 	err := action(info, args, append(slices.Clone(opts), component.WithStdoutCapture(stdout), component.WithStderrCapture(stderr)))
-	return output.String(), err
+	return file.finish(), err
 }
 
 // isDetailedPlanChanges reports whether err is plan's "-detailed-exitcode" status for changes present.
@@ -198,11 +208,13 @@ type hookRunner struct {
 	info        *schema.ConfigAndStacksInfo
 	phase       *executionPhase
 	opts        []component.ExecutionOption
+	// capture records hook output for error hook matching; nil means no error hooks exist.
+	capture *phaseCapture
 }
 
 // RunHook runs one hook and returns its captured output for error hook matching.
 // Hook stdout goes to the UI channel (stderr), never to the data channel, unless suppressed.
-func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *schema.ComponentHook) (string, error) {
+func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *schema.ComponentHook) (execution.Output, error) {
 	defer perf.Track(r.atmosConfig, "terraform.hookRunner.RunHook")()
 
 	ui.Info(fmt.Sprintf("Executing %s: %s", strings.ReplaceAll(string(kind), "_", " "), hook.Name))
@@ -219,8 +231,12 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 		stdout = io.Discard
 	}
 
-	var output bytes.Buffer
-	captured := &syncWriter{w: &output}
+	captured := io.Discard
+	var file *captureFile
+	if r.capture != nil {
+		file = r.capture.create()
+		captured = file
+	}
 	opts := append(
 		slices.Clone(r.opts),
 		component.WithStdoutOverride(stdout),
@@ -234,7 +250,10 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 		hookEnvHookName+"="+hook.Name,
 	)
 	err := r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], hook.Execute[1:], r.workingDirectory(hook), env, false, "", opts...)
-	return output.String(), err
+	if file == nil {
+		return nil, err
+	}
+	return file.finish(), err
 }
 
 // workingDirectory defaults to the provisioned module directory; relative paths resolve there.
@@ -309,4 +328,102 @@ func extraArgumentsPosition(info *schema.ConfigAndStacksInfo, args []string) int
 		position++
 	}
 	return position
+}
+
+// phaseCapture owns the temporary files that record phase and hook output for error hook
+// matching. Cleanup removes every file once the lifecycle, including matching, has finished.
+type phaseCapture struct {
+	mu    sync.Mutex
+	files []*captureFile
+}
+
+// create starts a new capture file. If the file cannot be created, the command still runs and
+// the capture reports the failure when error hooks read it.
+func (c *phaseCapture) create() *captureFile {
+	file, err := os.CreateTemp("", "atmos-phase-output-*")
+	capture := &captureFile{file: file}
+	if err != nil {
+		capture.err = captureError(err)
+		return capture
+	}
+	capture.path = file.Name()
+	c.mu.Lock()
+	c.files = append(c.files, capture)
+	c.mu.Unlock()
+	return capture
+}
+
+// cleanup closes and removes every capture file.
+func (c *phaseCapture) cleanup() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, file := range c.files {
+		file.close()
+		if err := os.Remove(file.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			log.Debug("Failed to remove captured command output", "path", file.path, "error", err)
+		}
+	}
+	c.files = nil
+}
+
+// captureFile records output in a temporary file. A write failure is kept and reported when
+// the output is read. The command keeps running, so a full disk cannot fail it.
+type captureFile struct {
+	mu   sync.Mutex
+	file *os.File
+	path string
+	err  error
+}
+
+// Write appends to the capture and always reports success to the writer chain.
+//
+//nolint:lintroller // Called for every output chunk; tracking would dominate the copy.
+func (c *captureFile) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err == nil && c.file != nil {
+		if _, err := c.file.Write(p); err != nil {
+			c.err = captureError(err)
+		}
+	}
+	return len(p), nil
+}
+
+// finish closes the file for writing and returns it as lifecycle output.
+func (c *captureFile) finish() execution.Output {
+	c.close()
+	return c
+}
+
+func (c *captureFile) close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.file == nil {
+		return
+	}
+	if err := c.file.Close(); err != nil && c.err == nil {
+		c.err = captureError(err)
+	}
+	c.file = nil
+}
+
+// Open returns a reader over the captured output, or the capture failure.
+func (c *captureFile) Open() (io.Reader, error) {
+	defer perf.Track(nil, "terraform.captureFile.Open")()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err != nil {
+		return nil, c.err
+	}
+	file, err := os.Open(c.path)
+	if err != nil {
+		return nil, captureError(err)
+	}
+	return file, nil
+}
+
+// captureError marks a failure to record or read captured command output.
+func captureError(err error) error {
+	return fmt.Errorf("%w: %w", errUtils.ErrComponentOutputCapture, err)
 }
