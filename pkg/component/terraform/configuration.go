@@ -257,7 +257,7 @@ func validateRetainedFile(directory string, file schema.ComponentConfigurationFi
 	}
 	root, err := os.OpenRoot(directory)
 	if err != nil {
-		return err
+		return retainedFileError(file.Path, err)
 	}
 	defer root.Close()
 	stat, err := root.Lstat(file.Path)
@@ -265,14 +265,14 @@ func validateRetainedFile(directory string, file schema.ComponentConfigurationFi
 		return nil
 	}
 	if err != nil {
-		return err
+		return retainedFileError(file.Path, err)
 	}
 	if !stat.Mode().IsRegular() {
 		return retainedBackendError(file.Path)
 	}
 	retained, err := root.ReadFile(file.Path)
 	if err != nil {
-		return err
+		return retainedFileError(file.Path, err)
 	}
 	if bytes.Equal(retained, file.Content) {
 		return nil
@@ -281,6 +281,12 @@ func validateRetainedFile(directory string, file schema.ComponentConfigurationFi
 		return retainedBackendError(file.Path)
 	}
 	return nil
+}
+
+// retainedFileError classifies a failure to inspect a retained generated file as invalid
+// configuration, as configuration.WriteFiles does for its working directory, and keeps the cause.
+func retainedFileError(path string, err error) error {
+	return fmt.Errorf("%w: retained generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err)
 }
 
 func retainedBackendError(path string) error {

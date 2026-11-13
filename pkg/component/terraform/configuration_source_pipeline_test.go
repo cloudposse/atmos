@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
@@ -16,24 +17,39 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// sourcePipelineProvider replaces only the RPC boundary; source validation is
-// performed by the real Session.Prepare reached through component preparation.
-type sourcePipelineProvider struct {
-	// The embedded interface leaves calls this test does not expect, such as ResolveState, unimplemented.
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_configuration_provider_test.go -package=$GOPACKAGE -mock_names=configurationProvider=MockConfigurationProvider
+
+// configurationProvider is the plugin boundary a configuration session calls.
+type configurationProvider interface {
 	configurationadapter.Provider
+}
+
+// The generated mock implements the provider contract the session asserts.
+var _ configurationProvider = (*MockConfigurationProvider)(nil)
+
+// sourcePipelineProvider holds the responses the generated provider returns and counts preparations.
+// It replaces only the RPC boundary; source validation is performed by the real Session.Prepare
+// reached through component preparation.
+type sourcePipelineProvider struct {
 	unit     *pluginv1.DiscoveredComponent
 	result   *pluginv1.PrepareComponentResponse
 	prepares int
 }
 
-func (*sourcePipelineProvider) ComponentType() string { return "terraform" }
-func (p *sourcePipelineProvider) Discover(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-	return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{p.unit}}, nil
-}
-
-func (p *sourcePipelineProvider) Prepare(context.Context, *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
-	p.prepares++
-	return p.result, nil
+// mock returns a generated provider that answers from the fixture. ResolveState has no
+// expectation, so gomock rejects it.
+func (p *sourcePipelineProvider) mock(t *testing.T) *MockConfigurationProvider {
+	t.Helper()
+	provider := NewMockConfigurationProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{p.unit}}, nil
+	}).AnyTimes()
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		p.prepares++
+		return p.result, nil
+	}).AnyTimes()
+	return provider
 }
 
 func TestConfigurationSourceSymlinkRejectedBeforeInitAndMain(t *testing.T) {
@@ -63,7 +79,7 @@ func TestConfigurationSourceSymlinkRejectedBeforeInitAndMain(t *testing.T) {
 			}
 			project.config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true, Discovery: schema.ComponentDiscoveryConfig{Enabled: true}}}
 			session, err := configurationadapter.New(t.Context(), project.config, "validate", func(context.Context, []string) (map[string]configurationadapter.Provider, error) {
-				return map[string]configurationadapter.Provider{"terragrunt": provider}, nil
+				return map[string]configurationadapter.Provider{"terragrunt": provider.mock(t)}, nil
 			})
 			require.NoError(t, err)
 			project.config.ComponentConfigurations = session

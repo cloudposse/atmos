@@ -624,6 +624,9 @@ func TestDetailedExitCodeEnabledFollowsTerraformPrecedence(t *testing.T) {
 		{"command line enables over environment", []string{"plan", "-detailed-exitcode"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode=false"}, true},
 		{"other command environment", []string{"plan"}, []string{"TF_CLI_ARGS_apply=-detailed-exitcode"}, false},
 		{"later component value wins", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS_plan="}, false},
+		{"single-quoted environment value", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-input=false -detailed-exitcode='true'"}, true},
+		{"double-quoted global value", []string{"plan"}, []string{`TF_CLI_ARGS=-detailed-exitcode="true"`}, true},
+		{"quoted false disables", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS=-detailed-exitcode='false'"}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.want, detailedExitCodeEnabled("plan", test.args, test.env))
