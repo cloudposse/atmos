@@ -99,11 +99,13 @@ func RepresentationPath(key string) string {
 
 // OperationFileName returns the file stem for an operation identifier. Safe identifiers are used
 // verbatim; anything else (slashes, spaces, overlong values) maps to a hash so that no identifier
-// can address a path outside the operations directory.
+// can address a path outside the operations directory. The hashed prefix is reserved: an
+// identifier that starts with it is hashed too, so a literal identifier can never collide with
+// the hashed file name of another identifier.
 func OperationFileName(operationID string) string {
 	defer perf.Track(nil, "layout.OperationFileName")()
 
-	if len(operationID) <= maxSafeOperationID && safeOperationID.MatchString(operationID) && !windowsDeviceName(operationID) {
+	if len(operationID) <= maxSafeOperationID && !strings.HasPrefix(operationID, hashedOperationPrefix) && safeOperationID.MatchString(operationID) && !windowsDeviceName(operationID) {
 		return operationID
 	}
 	sum := sha256.Sum256([]byte(operationID))

@@ -10,36 +10,39 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/layout"
 )
 
-// stubVerifier returns a canned verifier outcome.
-type stubVerifier struct {
-	result *artifact.VerificationResult
-	err    error
-	seen   int
+// verifierProbe records how many evidence blobs reached the verifier.
+type verifierProbe struct{ seen int }
+
+// mockVerifier returns a generated verifier mock with a canned outcome. Its probe records the
+// evidence count of the latest Verify call.
+func mockVerifier(t *testing.T, result *artifact.VerificationResult, err error) (*artifact.MockVerifier, *verifierProbe) {
+	t.Helper()
+	probe := &verifierProbe{}
+	verifier := artifact.NewMockVerifier(gomock.NewController(t))
+	verifier.EXPECT().Formats().AnyTimes().Return([]artifact.EvidenceFormat{artifact.EvidenceSigstoreBundle})
+	verifier.EXPECT().Verify(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().
+		DoAndReturn(func(_ context.Context, _ artifact.SignatureSubject, evidence []artifact.EvidenceBlob, _ artifact.VerificationPolicy) (*artifact.VerificationResult, error) {
+			probe.seen = len(evidence)
+			return result, err
+		})
+	return verifier, probe
 }
 
-func (*stubVerifier) Formats() []artifact.EvidenceFormat {
-	return []artifact.EvidenceFormat{artifact.EvidenceSigstoreBundle}
-}
-
-func (s *stubVerifier) Verify(_ context.Context, _ artifact.SignatureSubject, evidence []artifact.EvidenceBlob, _ artifact.VerificationPolicy) (*artifact.VerificationResult, error) {
-	s.seen = len(evidence)
-	return s.result, s.err
-}
-
-type fixedSigner struct{ data []byte }
-
-func (*fixedSigner) Formats() []artifact.EvidenceFormat {
-	return []artifact.EvidenceFormat{artifact.EvidenceSigstoreBundle}
-}
-
-func (f *fixedSigner) Sign(context.Context, artifact.SignatureSubject) (*artifact.EvidencePayload, error) {
-	return &artifact.EvidencePayload{Format: artifact.EvidenceSigstoreBundle, MediaType: "application/json", Data: f.data}, nil
+// mockSigner returns a generated signer mock that always signs data.
+func mockSigner(t *testing.T, data []byte) *artifact.MockSigner {
+	t.Helper()
+	signer := artifact.NewMockSigner(gomock.NewController(t))
+	signer.EXPECT().Formats().AnyTimes().Return([]artifact.EvidenceFormat{artifact.EvidenceSigstoreBundle})
+	signer.EXPECT().Sign(gomock.Any(), gomock.Any()).AnyTimes().
+		Return(&artifact.EvidencePayload{Format: artifact.EvidenceSigstoreBundle, MediaType: "application/json", Data: data}, nil)
+	return signer
 }
 
 func signedWith(t *testing.T, verifier artifact.Verifier) (*Repository, artifact.SignatureSubject) {
@@ -47,7 +50,7 @@ func signedWith(t *testing.T, verifier artifact.Verifier) (*Repository, artifact
 	repo := newRepo(t, &repoSpec{opts: []Option{WithVerifier(verifier)}})
 	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
 	subject := recordSubject(t, repo)
-	_, err := repo.Sign(context.Background(), subject, &fixedSigner{data: []byte(`{"bundle":1}`)}, artifact.SignOptions{})
+	_, err := repo.Sign(context.Background(), subject, mockSigner(t, []byte(`{"bundle":1}`)), artifact.SignOptions{})
 	require.NoError(t, err)
 	return repo, subject
 }
@@ -73,7 +76,7 @@ func TestVerify_TranslatesVerifierOutcomes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stub := &stubVerifier{result: tt.result, err: tt.err}
+			stub, probe := mockVerifier(t, tt.result, tt.err)
 			repo, subject := signedWith(t, stub)
 			result, err := repo.Verify(context.Background(), subject, trustedPolicy)
 			if tt.wantErr != nil {
@@ -85,16 +88,16 @@ func TestVerify_TranslatesVerifierOutcomes(t *testing.T) {
 			assert.Equal(t, tt.wantStatus, result.Status)
 			assert.Equal(t, subject, result.Subject)
 			assert.NotEmpty(t, result.PolicyFingerprint, "the applied policy is always fingerprinted")
-			assert.Equal(t, 1, stub.seen)
+			assert.Equal(t, 1, probe.seen)
 		})
 	}
 }
 
 func TestVerify_ReportsDiagnosticsAlongsideTheVerifier(t *testing.T) {
-	stub := &stubVerifier{result: &artifact.VerificationResult{
+	stub, _ := mockVerifier(t, &artifact.VerificationResult{
 		Status: artifact.VerificationVerified, PolicyFingerprint: "verifier-fingerprint",
 		Diagnostics: []artifact.Diagnostic{{Severity: artifact.SeverityInfo, Code: "from-verifier", Message: "ok"}},
-	}}
+	}, nil)
 	repo, subject := signedWith(t, stub)
 	dir := filepath.Join(repo.root, filepath.FromSlash(layout.SignatureDir(artifact.SubjectRecord, subject.Digest)))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "note.txt"), []byte("x"), 0o644))
@@ -113,7 +116,7 @@ func TestVerify_ReportsDiagnosticsAlongsideTheVerifier(t *testing.T) {
 }
 
 func TestVerify_ReadsAllValidEvidence(t *testing.T) {
-	stub := &stubVerifier{result: &artifact.VerificationResult{Status: artifact.VerificationVerified}}
+	stub, probe := mockVerifier(t, &artifact.VerificationResult{Status: artifact.VerificationVerified}, nil)
 	repo, subject := signedWith(t, stub)
 	for index := range maxMalformedEvidence + 5 {
 		evidence, err := layout.NewEvidence(subject, &artifact.EvidencePayload{Format: artifact.EvidenceSigstoreBundle, MediaType: "x", Data: []byte(fmt.Sprintf("bundle-%d", index))})
@@ -125,22 +128,23 @@ func TestVerify_ReadsAllValidEvidence(t *testing.T) {
 	}
 	result, err := repo.Verify(context.Background(), subject, trustedPolicy)
 	require.NoError(t, err)
-	assert.Equal(t, maxMalformedEvidence+6, stub.seen, "all valid evidence reaches the verifier")
+	assert.Equal(t, maxMalformedEvidence+6, probe.seen, "all valid evidence reaches the verifier")
 	assert.Equal(t, artifact.VerificationVerified, result.Status)
 }
 
 func TestSign_RejectsOversizeEvidence(t *testing.T) {
-	repo := newRepo(t, &repoSpec{opts: []Option{WithVerifier(&stubVerifier{})}})
+	verifier, _ := mockVerifier(t, nil, nil)
+	repo := newRepo(t, &repoSpec{opts: []Option{WithVerifier(verifier)}})
 	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
 	subject := recordSubject(t, repo)
-	_, err := repo.Sign(context.Background(), subject, &fixedSigner{data: make([]byte, artifact.MaxEvidenceSize+1)}, artifact.SignOptions{})
+	_, err := repo.Sign(context.Background(), subject, mockSigner(t, make([]byte, artifact.MaxEvidenceSize+1)), artifact.SignOptions{})
 	require.ErrorIs(t, err, errUtils.ErrArtifactTooLarge)
-	_, err = repo.Sign(context.Background(), subject, &fixedSigner{data: nil}, artifact.SignOptions{})
+	_, err = repo.Sign(context.Background(), subject, mockSigner(t, nil), artifact.SignOptions{})
 	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed, "empty evidence is invalid")
 }
 
 func TestVerifyRejectsUnreadableEvidenceDirectory(t *testing.T) {
-	stub := &stubVerifier{result: &artifact.VerificationResult{Status: artifact.VerificationVerified}}
+	stub, probe := mockVerifier(t, &artifact.VerificationResult{Status: artifact.VerificationVerified}, nil)
 	repo, subject := signedWith(t, stub)
 	dir := filepath.Join(repo.root, filepath.FromSlash(layout.SignatureDir(subject.Kind, subject.Digest)))
 	require.NoError(t, os.RemoveAll(dir))
@@ -148,11 +152,11 @@ func TestVerifyRejectsUnreadableEvidenceDirectory(t *testing.T) {
 	result, err := repo.Verify(context.Background(), subject, trustedPolicy)
 	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
 	require.Contains(t, result.Diagnostics[0].Code, "evidence-read-failed")
-	assert.Zero(t, stub.seen)
+	assert.Zero(t, probe.seen)
 }
 
 func TestVerifyFailsClosedOnTooManyMalformedEvidenceFiles(t *testing.T) {
-	stub := &stubVerifier{result: &artifact.VerificationResult{Status: artifact.VerificationVerified}}
+	stub, probe := mockVerifier(t, &artifact.VerificationResult{Status: artifact.VerificationVerified}, nil)
 	repo, subject := signedWith(t, stub)
 	dir := filepath.Join(repo.root, filepath.FromSlash(layout.SignatureDir(subject.Kind, subject.Digest)))
 	for i := range maxMalformedEvidence + 1 {
@@ -161,5 +165,5 @@ func TestVerifyFailsClosedOnTooManyMalformedEvidenceFiles(t *testing.T) {
 	_, err := repo.Verify(context.Background(), subject, trustedPolicy)
 	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
 	require.ErrorIs(t, err, errTooManyMalformedEvidence)
-	assert.Zero(t, stub.seen)
+	assert.Zero(t, probe.seen)
 }
