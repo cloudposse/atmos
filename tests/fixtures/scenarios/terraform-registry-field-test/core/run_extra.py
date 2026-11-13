@@ -12,7 +12,7 @@ import time
 
 import yaml
 
-from run import Case
+from run import Case, exit_status
 
 
 def simple(c):
@@ -43,6 +43,7 @@ def upgrade(root, engine, baseline, candidate):
     dev.write_text(dev.read_text().replace("dev-producer-v3", "dev-producer-v2"))
     c.command("candidate-stable-plan", ["terraform", "plan", "producer", "-s", "dev", "-detailed-exitcode"], [0])
     c.save()
+    return c
 
 
 def affected(c):
@@ -214,8 +215,11 @@ if __name__ == "__main__":
     root, baseline, candidate = sys.argv[1:]
     root = Path(root).resolve()
     baseline, candidate = str(Path(baseline).resolve()), str(Path(candidate).resolve())
+    cases = []
     for engine in ("terraform", "tofu"):
-        upgrade(root, engine, baseline, candidate)
+        cases.append(upgrade(root, engine, baseline, candidate))
         for revision, binary in (("baseline", baseline), ("candidate", candidate)):
             for name, operation in (("affected", affected), ("editions", editions), ("interrupt", interrupted), ("terminal", terminal)):
-                operation(Case(root / f"{engine}-{revision}-{name}", revision, engine, binary))
+                cases.append(Case(root / f"{engine}-{revision}-{name}", revision, engine, binary))
+                operation(cases[-1])
+    sys.exit(exit_status(cases))

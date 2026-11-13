@@ -5,7 +5,7 @@ import sys
 
 import yaml
 
-from run import Case
+from run import Case, exit_status
 from run_extra import simple
 
 
@@ -145,9 +145,13 @@ def stored_plan(c):
 if __name__ == "__main__":
     root, baseline, candidate = sys.argv[1:]
     root = Path(root)
+    cases = []
     for engine in ("terraform", "tofu"):
         for revision, binary in (("baseline", baseline), ("candidate", candidate)):
             for name, operation in (("generation", generation), ("failure", failure), ("stored-plan", stored_plan)):
-                operation(Case(root / f"{engine}-{revision}-{name}", revision, engine, binary))
+                cases.append(Case(root / f"{engine}-{revision}-{name}", revision, engine, binary))
+                operation(cases[-1])
     for revision, binary in (("baseline", baseline), ("candidate", candidate)):
-        shared_callers(Case(root / f"{revision}-shared", revision, "terraform", binary))
+        cases.append(Case(root / f"{revision}-shared", revision, "terraform", binary))
+        shared_callers(cases[-1])
+    sys.exit(exit_status(cases))

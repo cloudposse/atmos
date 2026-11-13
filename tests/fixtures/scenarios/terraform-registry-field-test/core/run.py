@@ -1,6 +1,7 @@
 """Paired real-CLI field harness. Requires Python 3, PyYAML, Git and both engines.
 
 All runtime changes are confined to a new output directory; the fixture is copied.
+The output directory must be outside this fixture. The runner exits nonzero when any check fails.
 Usage: python3 run.py RUN_DIRECTORY BASELINE_BINARY CANDIDATE_BINARY
 """
 import concurrent.futures
@@ -17,13 +18,37 @@ import time
 import yaml
 
 
+SOURCE = Path(__file__).parent.resolve()
+
+
+def reject_nested_output(root):
+    """Return the resolved case root, or fail when it lies inside the fixture source.
+
+    copytree() would otherwise copy the growing case into itself.
+    """
+    resolved = Path(root).resolve()
+    if resolved == SOURCE or SOURCE in resolved.parents:
+        raise ValueError(f"output directory {resolved} must be outside the fixture source {SOURCE}")
+    return resolved
+
+
+def exit_status(cases):
+    """Report failed checks across all cases and return the process exit status."""
+    failed = [(case.root.name, check) for case in cases for check in case.checks if not check["passed"]]
+    for name, check in failed:
+        print(f"FAIL {name}: {check['name']}", file=sys.stderr, flush=True)
+    total = sum(len(case.checks) for case in cases)
+    print(f"{total - len(failed)}/{total} checks passed across {len(cases)} cases", file=sys.stderr, flush=True)
+    return 1 if failed else 0
+
+
 class Case:
     def __init__(self, root, revision, engine, binary):
-        self.root = Path(root).resolve()
+        self.root = reject_nested_output(root)
         self.revision, self.engine, self.binary = revision, engine, str(Path(binary).resolve())
         self.project = self.root / "project"
         self.root.mkdir(parents=True, exist_ok=False)
-        shutil.copytree(Path(__file__).parent, self.project, ignore=shutil.ignore_patterns("run.py", "__pycache__", ".terraform", "*.tfstate*", "terraform.tfstate.d"))
+        shutil.copytree(SOURCE, self.project, ignore=shutil.ignore_patterns("run.py", "test_run.py", "__pycache__", ".terraform", "*.tfstate*", "terraform.tfstate.d"))
         self.logs = self.root / "commands"
         self.logs.mkdir()
         self.records, self.checks = [], []
@@ -199,6 +224,9 @@ def lifecycle(case):
 
 if __name__ == "__main__":
     root, baseline, candidate = sys.argv[1:]
+    cases = []
     for engine in ("terraform", "tofu"):
         for revision, binary in (("baseline", baseline), ("candidate", candidate)):
-            lifecycle(Case(Path(root) / f"{engine}-{revision}", revision, engine, binary))
+            cases.append(Case(Path(root) / f"{engine}-{revision}", revision, engine, binary))
+            lifecycle(cases[-1])
+    sys.exit(exit_status(cases))
