@@ -42,13 +42,7 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	if err := checkSigningCapability(request.Repository, &info, s.signer, subject); err != nil {
 		return err
 	}
-	subjectResource := subjectLockResource(request.Ref.Name)
-	resource := subjectResource
-	targets := []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: subjectResource}}
-	if inspection.Record != nil {
-		resource = inspection.Record.Name + ":" + inspection.Record.Version
-		targets = append(targets, lockTarget{alias: request.Repository, repo: repo, info: &info, resource: resource})
-	}
+	targets, resource := signLockTargets(request, &info, repo, inspection)
 	locks, err := s.acquireLocks(ctx, op, opSign, targets)
 	if err != nil {
 		return err
@@ -70,6 +64,19 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	op.result.LockScope = locks.scope()
 	op.info("signed-not-verified", "the subject is signed; signing alone does not verify it against trust policy, use verify")
 	return nil
+}
+
+// signLockTargets returns the locks a signature takes and the resource whose lock guards the
+// evidence write: the subject lock, plus the canonical name:version reference when the subject
+// has a Record.
+func signLockTargets(request *artifact.SignRequest, info *RepositoryInfo, repo artifact.Repository, inspection *artifact.Inspection) ([]lockTarget, string) {
+	resource := subjectLockResource(request.Ref.Name)
+	targets := []lockTarget{{alias: request.Repository, repo: repo, info: info, resource: resource}}
+	if inspection.Record != nil {
+		resource = inspection.Record.Name + ":" + inspection.Record.Version
+		targets = append(targets, lockTarget{alias: request.Repository, repo: repo, info: info, resource: resource})
+	}
+	return targets, resource
 }
 
 func verifyLockedSubject(ctx context.Context, repo artifact.Repository, ref artifact.Ref, pinned *artifact.PinnedReference) error {
