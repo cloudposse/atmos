@@ -47,7 +47,7 @@ The Gitea provider supports commit statuses, marker-based pull request comment u
 
 For affected-component detection, check out the pull request's **head SHA**. Atmos resolves its base SHA from the event payload; unknown pull request checkouts remain unresolved. Push runs use the event's `before` SHA. A new branch with an all-zero `before` has no inferred base.
 
-Gitea does not automatically use GitHub artifact storage. Configure a shared [planfile store](/ci/planfile-storage) when plans need to survive between jobs; otherwise, Atmos uses local storage. The provider does not yet support remote Actions cache, GitHub Checks annotations, commit comments, or merged-pull-request plan provenance resolution.
+Gitea does not automatically use GitHub artifact storage. Configure a shared [planfile store](/ci/planfile-storage) when plans need to survive between jobs. Without a configured planfile store, Atmos skips planfile upload and download, so plans do not persist between jobs. The provider does not yet support remote Actions cache, GitHub Checks annotations, commit comments, or merged-pull-request plan provenance resolution.
 
 ## Workflow Guides
 
