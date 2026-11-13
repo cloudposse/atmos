@@ -86,7 +86,10 @@ func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, fil
 		var err error
 		policy, err = utils.ConfineScaffoldIncludes(policy, includeRoot)
 		if err != nil {
-			return nil, err
+			return nil, errUtils.Build(errUtils.ErrManifestIncludeRoot).
+				WithCause(err).
+				WithExplanationf("Cannot confine includes to `%s`", includeRoot).
+				Err()
 		}
 	}
 	if err := utils.WalkYAMLTags(atmosConfig, &doc, file, policy); err != nil {
