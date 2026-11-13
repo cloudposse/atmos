@@ -226,6 +226,9 @@ commands:
           from cast_checks import assert_no_dumb_term_recordings
           assert_no_dumb_term_recordings()
       - type: shell
+        name: backstage-service-catalog
+        command: atmos casts validate examples backstage service-catalog
+      - type: shell
         name: native-auth-plugins-lifecycle
         command: atmos casts validate examples native-auth-plugins lifecycle
       - type: shell

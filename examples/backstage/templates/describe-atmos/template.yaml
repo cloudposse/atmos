@@ -1,0 +1,31 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: describe-atmos
+  title: Inspect an Atmos stack
+  description: Resolve inherited service defaults and environment overrides with Atmos.
+spec:
+  owner: platform-team
+  type: service
+  parameters:
+    - title: Select an environment
+      required: [stack]
+      properties:
+        stack:
+          title: Atmos stack
+          type: string
+          default: dev
+          enum: [dev, prod]
+  steps:
+    - id: describe
+      name: Resolve component configuration
+      action: atmos:describe
+      input:
+        stack: ${{ parameters.stack }}
+  output:
+    text:
+      - title: Resolved Atmos configuration
+        content: |
+          ```json
+          ${{ steps.describe.output.configuration }}
+          ```

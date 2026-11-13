@@ -1,0 +1,35 @@
+name: Atmos infrastructure
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+jobs:
+  plan:
+    if: gitea.event_name == 'pull_request'
+    runs-on: atmos-local
+    env:
+      BASE_REVISION: ${{ gitea.event.pull_request.base.sha }}
+    steps:
+      - name: Check out requested commit
+        env:
+          REVISION: ${{ gitea.event.pull_request.head.sha }}
+        run: |
+          atmos git clone http://local-backstage-git:3000/atmos/deployments.git \
+            --ref "$REVISION" --workdir . --depth 0
+      - name: Validate and plan with Atmos
+        run: atmos ci/run.star plan
+  deploy:
+    if: gitea.event_name == 'push'
+    runs-on: atmos-local
+    env:
+      BASE_REVISION: ${{ gitea.event.before }}
+    steps:
+      - name: Check out merged commit
+        env:
+          REVISION: ${{ gitea.sha }}
+        run: |
+          atmos git clone http://local-backstage-git:3000/atmos/deployments.git \
+            --ref "$REVISION" --workdir . --depth 0
+      - name: Provision and register with Atmos
+        run: atmos ci/run.star apply

@@ -1,0 +1,15 @@
+base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+    auto_generate_backend_file: false
+    deploy_run_init: true
+stacks:
+  base_path: stacks
+  included_paths: [deploy/**/*]
+  name_template: "{{ .vars.stage }}"
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: local/backstage-aws

@@ -1,0 +1,31 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: {{ .Config.service_name }}
+  description: Service with an S3 bucket provisioned by Atmos in the local AWS emulator.
+  annotations:
+    backstage.io/techdocs-entity: component:default/payments
+    atmos.tools/component: bucket
+    atmos.tools/stack: dev-{{ .Config.service_name }}
+    backstage.io/source-location: url:http://localhost:3001/atmos/deployments/src/branch/main/
+  links:
+    - url: http://localhost:3001/atmos/deployments/src/branch/main/stacks/deploy/services/{{ .Config.service_name }}.yaml
+      title: Atmos stack in Git
+spec:
+  type: service
+  lifecycle: experimental
+  owner: platform-team
+  dependsOn:
+    - resource:default/{{ .Config.service_name }}-bucket
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: {{ .Config.service_name }}-bucket
+  description: Local S3 bucket atmos-backstage-dev-{{ .Config.service_name }}
+  annotations:
+    atmos.tools/component: bucket
+    atmos.tools/stack: dev-{{ .Config.service_name }}
+spec:
+  type: s3-bucket
+  owner: platform-team

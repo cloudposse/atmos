@@ -1,0 +1,33 @@
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
+spec:
+  type: team
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: payments
+spec:
+  owner: platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payments
+  description: A service whose environment configuration is managed by Atmos.
+  annotations:
+    # Illustrative metadata for your own plugins; not built-in Backstage features.
+    backstage.io/techdocs-ref: dir:./techdocs
+    atmos.tools/component: service
+    atmos.tools/stacks: dev,prod
+  links:
+    - url: http://localhost:3000/create/templates/default/describe-atmos
+      title: Inspect Atmos configuration
+spec:
+  type: service
+  lifecycle: experimental
+  owner: platform-team
+  system: payments

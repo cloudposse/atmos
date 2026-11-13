@@ -1,0 +1,207 @@
+base_path: "."
+
+components:
+  terraform:
+    base_path: components/terraform
+  container:
+    base_path: .
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - deploy/**/*
+  name_template: "{{ .vars.stage }}"
+
+container:
+  runtime:
+    provider: docker
+
+# Throwaway emulator credentials, never a real Git account.
+git:
+  repositories:
+    deployments:
+      uri: http://atmos:atmos@localhost:3001/atmos/deployments.git
+      branch: main
+      workdir: .atmos/git/deployments
+      commit:
+        signing: never
+        author:
+          name: Atmos Portal
+          email: portal@localhost
+
+commands:
+  - name: portal
+    description: Manage the local Backstage container with Atmos
+    commands:
+      - name: up
+        description: Start Git/AWS emulators and Backstage (first build takes several minutes)
+        flags:
+          - name: open
+            type: bool
+            default: false
+            description: Open the Backstage dashboard in the default browser
+        steps:
+          - type: script
+            interpreter: starlark
+            script: |
+              atmos.validate("stacks")
+              atmos.emulator("up", "backstage-git", flags = {"stack": "local"})
+              atmos.emulator("up", "backstage-aws", flags = {"stack": "local"})
+          - type: script
+            source: scripts/seed.star
+          - type: script
+            interpreter: starlark
+            script: |
+              atmos.container("build", "backstage", flags = {"stack": "local"})
+              atmos.container("up", "backstage", flags = {"stack": "local"})
+              runner = module.load("scripts/modules/runner.star")
+              runner.build_binary()
+              atmos.container("build", "backstage-runner", flags = {"stack": "local"})
+              atmos.container("up", "backstage-runner", flags = {"stack": "local"})
+              ui.info("TechDocs: http://localhost:3000/catalog/default/component/payments/docs")
+              ui.info("Actions: http://localhost:3001/atmos/deployments/actions")
+              ui.info("Backstage dashboard: http://localhost:3000 (sign in as guest)")
+              ui.info("Gitea: http://localhost:3001 (login: atmos / atmos)")
+              if ctx.flags["open"]:
+                  browser.open("http://localhost:3000")
+      - name: open
+        description: Open the Backstage dashboard in the default browser
+        steps:
+          - type: script
+            interpreter: starlark
+            script: |
+              browser.open("http://localhost:3000")
+      - name: down
+        description: Reset the portal, ephemeral emulators, and managed Git repository
+        steps:
+          - type: script
+            interpreter: starlark
+            script: |
+              atmos.container("down", "backstage-runner", flags = {"stack": "local"})
+              atmos.container("down", "backstage", flags = {"stack": "local"})
+              atmos.emulator("down", "backstage-aws", flags = {"stack": "local"})
+              atmos.emulator("down", "backstage-git", flags = {"stack": "local"})
+              atmos.git("clean", "deployments", flags = {"force": True})
+              exec.run(["rm", "-rf", ".atmos/ci"])
+      - name: logs
+        description: Show Backstage logs
+        steps:
+          - type: script
+            interpreter: starlark
+            script: |
+              atmos.container("logs", "backstage", flags = {"stack": "local"})
+      - name: status
+        description: Show the Backstage container status
+        steps:
+          - type: script
+            interpreter: starlark
+            script: |
+              atmos.container("ps", "backstage", flags = {"stack": "local"})
+      - name: test
+        description: Verify Backstage; optionally test the full Git-to-provisioning flow
+        flags:
+          - name: provision
+            type: bool
+            default: false
+            description: Create and merge a test PR, provision its local bucket, and verify the catalog
+        steps:
+          - name: backstage-tests
+            type: test
+            title: Backstage integration
+            steps:
+              - name: checks
+                type: parallel
+                max_concurrency: 3
+                steps:
+                  - name: backend-ready
+                    title: Backend readiness
+                    type: http
+                    url: http://localhost:7007/.backstage/health/v1/readiness
+                    expect:
+                      status: [200]
+                    timeout: 2s
+                    retry:
+                      max_attempts: 120
+                      initial_delay: 1s
+                      backoff_strategy: constant
+                  - name: dashboard
+                    title: Dashboard responds
+                    type: http
+                    url: http://localhost:3000
+                    expect:
+                      status: [200]
+                    timeout: 10s
+                  - name: catalog
+                    title: Catalog and templates
+                    needs: [backend-ready]
+                    type: script
+                    interpreter: starlark
+                    script: |
+                      checks = module.load("scripts/modules/backstage_tests.star")
+                      checks.catalog_entities()
+                  - name: docs-metadata
+                    title: TechDocs entity metadata
+                    needs: [backend-ready]
+                    type: script
+                    interpreter: starlark
+                    script: |
+                      checks = module.load("scripts/modules/backstage_tests.star")
+                      checks.techdocs_metadata()
+                  - name: docs-content
+                    title: TechDocs handbook content
+                    needs: [backend-ready]
+                    type: script
+                    interpreter: starlark
+                    script: |
+                      checks = module.load("scripts/modules/backstage_tests.star")
+                      checks.techdocs_content()
+                  - name: describe-dev
+                    title: Dev stack inheritance and overrides
+                    needs: [backend-ready]
+                    type: script
+                    interpreter: starlark
+                    script: |
+                      checks = module.load("scripts/modules/backstage_tests.star")
+                      checks.describe_stack("dev", 2)
+                  - name: describe-prod
+                    title: Prod stack inheritance and overrides
+                    needs: [backend-ready]
+                    type: script
+                    interpreter: starlark
+                    script: |
+                      checks = module.load("scripts/modules/backstage_tests.star")
+                      checks.describe_stack("prod", 4)
+                  - name: reject-stack
+                    title: Reject unknown stack
+                    needs: [backend-ready]
+                    type: script
+                    interpreter: starlark
+                    script: |
+                      checks = module.load("scripts/modules/backstage_tests.star")
+                      checks.reject_unknown_stack()
+                  - name: reject-service
+                    title: Reject invalid service names
+                    needs: [backend-ready]
+                    type: script
+                    interpreter: starlark
+                    script: |
+                      checks = module.load("scripts/modules/backstage_tests.star")
+                      checks.reject_invalid_service()
+          - type: script
+            source: scripts/test-provision.star
+      - name: plan
+        description: Plan a merged service request against the local AWS emulator
+        flags:
+          - name: service
+            required: true
+        steps:
+          - type: script
+            source: scripts/plan.star
+      - name: apply
+        description: Apply a merged service request and register its Git-backed catalog entry
+        flags:
+          - name: service
+            required: true
+        steps:
+          - type: script
+            source: scripts/apply.star
