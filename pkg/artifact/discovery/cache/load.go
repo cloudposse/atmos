@@ -2,8 +2,10 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"os"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -63,7 +65,7 @@ func Load[T any, P interface {
 		return update(ctx, store, source, mode, path)
 	}
 	if err := os.MkdirAll(store.directory, DirectoryMode); err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("%w: %w", errUtils.ErrCacheDir, err)
 	}
 	var (
 		result P
