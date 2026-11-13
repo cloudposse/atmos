@@ -14,6 +14,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_runner_test.go -package=execution . Runner
+
 // Runner executes one hook and reports its failure and captured output.
 // The output feeds error hook matching and is never printed again. A nil output means
 // nothing was captured.
