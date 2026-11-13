@@ -198,11 +198,25 @@ func (r *Repository) Verify(ctx context.Context, subject artifact.SignatureSubje
 		return result, err
 	}
 	if len(blobs) == 0 {
+		if truncated(diagnostics) {
+			result.Diagnostics = append(result.Diagnostics, artifact.Diagnostic{Severity: artifact.SeverityError, Code: "evidence-incomplete", Message: "signature evidence could not be fully inspected; no valid signature was found among the inspected referrers"})
+			return result, fmt.Errorf("%w: signature evidence of %s could not be fully inspected", errUtils.ErrArtifactVerificationFailed, subject.Digest)
+		}
 		result.Diagnostics = append(result.Diagnostics, artifact.Diagnostic{Severity: artifact.SeverityError, Code: "no-evidence", Message: "no signature evidence is attached to the subject"})
 		return result, fmt.Errorf("%w: no signature evidence is attached to %s", errUtils.ErrArtifactVerificationFailed, subject.Digest)
 	}
 	verified, verifyErr := r.settings.verifier.Verify(ctx, subject, blobs, policy)
 	return finishVerification(result, verified, verifyErr)
+}
+
+// truncated reports whether evidence collection stopped before every candidate was inspected.
+func truncated(diagnostics []artifact.Diagnostic) bool {
+	for index := range diagnostics {
+		if diagnostics[index].Code == "evidence-truncated" {
+			return true
+		}
+	}
+	return false
 }
 
 // collectEvidence gathers the evidence bound to a subject across its located roots.
