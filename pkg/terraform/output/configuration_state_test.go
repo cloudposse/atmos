@@ -13,24 +13,29 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/terraform-exec/tfexec"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-type stateRuntimeFixture struct {
-	resolve func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error)
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_configuration_state_test.go -package=$GOPACKAGE -mock_names=configurationStateRuntime=MockConfigurationStateRuntime
+
+// configurationStateRuntime is a configuration runtime that can resolve component state.
+type configurationStateRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationStateRuntime
 }
 
-func (*stateRuntimeFixture) Discover(context.Context) (map[string]map[string]any, error) {
-	panic("unexpected discovery")
-}
+// The generated mock implements the contract that the code under test asserts.
+var _ configurationStateRuntime = (*MockConfigurationStateRuntime)(nil)
 
-func (*stateRuntimeFixture) Prepare(context.Context, *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
-	panic("state reads must not prepare")
-}
-
-func (s *stateRuntimeFixture) ResolveState(ctx context.Context, info *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-	return s.resolve(ctx, info)
+// stateRuntime returns a generated state runtime that expects ResolveState once and answers
+// through resolve. Discover and Prepare have no expectations, so gomock rejects them.
+func stateRuntime(t *testing.T, resolve func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error)) *MockConfigurationStateRuntime {
+	t.Helper()
+	runtime := NewMockConfigurationStateRuntime(gomock.NewController(t))
+	runtime.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(resolve)
+	return runtime
 }
 
 func TestResolveConfigurationStateUsesTargetEnvironment(t *testing.T) {
@@ -42,12 +47,12 @@ func TestResolveConfigurationStateUsesTargetEnvironment(t *testing.T) {
 	sections["settings"] = map[string]any{"configuration": true}
 	sections["env"] = map[string]any{"EXPLICIT": "component"}
 	config := validAtmosConfig(t)
-	config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+	config.ComponentConfigurations = stateRuntime(t, func(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		require.Equal(t, []string{"EXPLICIT=component"}, info.SanitizedEnv)
 		require.Equal(t, "output", info.SubCommand)
 		require.Equal(t, "network", info.ComponentFromArg)
 		return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "default"}, nil
-	}}
+	})
 	state, err := ResolveConfigurationState(t.Context(), config, &ConfigurationStateRequest{Sections: sections, Component: "network", Stack: "live", AuthManagers: []any{manager}})
 	require.NoError(t, err)
 	require.Equal(t, "local", state.BackendType)
@@ -98,9 +103,9 @@ func TestPluginOutputUsesBackendOnlyScratchDirectory(t *testing.T) {
 			}
 			config := validAtmosConfig(t)
 			stateRoot := t.TempDir()
-			config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+			config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 				return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate")}, Workspace: "prod", WorkingDirectory: stateRoot}, nil
-			}}
+			})
 			sections := validSections()
 			sections["settings"] = map[string]any{"configuration": true}
 			sections["source"] = map[string]any{"uri": "https://must-not-fetch.invalid/module"}
@@ -143,9 +148,9 @@ func TestConfigurationStateFailureAndScratchCleanup(t *testing.T) {
 	config := validAtmosConfig(t)
 	sections := validSections()
 	sections["settings"] = map[string]any{"configuration": true}
-	config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		return nil, context.Canceled
-	}}
+	})
 	_, err := NewExecutor(nil).execute(t.Context(), config, "network", "live", sections, nil, nil, true)
 	require.ErrorIs(t, err, context.Canceled)
 	badTemp := filepath.Join(t.TempDir(), "does-not-exist")
@@ -228,9 +233,9 @@ func TestPluginOutputSkipInitReadsTheInitializedUnit(t *testing.T) {
 	config := validAtmosConfig(t)
 	unit := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(unit, ".terraform"), 0o700))
-	config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
-	}}
+	})
 	sections := validSections()
 	sections["settings"] = map[string]any{"configuration": true}
 	sections["providers"] = map[string]any{"aws": map[string]any{"region": "us-east-2"}}
@@ -260,9 +265,9 @@ func TestPluginOutputSkipInitRejectsAnUninitializedUnit(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			config := validAtmosConfig(t)
-			config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+			config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 				return state, nil
-			}}
+			})
 			sections := validSections()
 			sections["settings"] = map[string]any{"configuration": true}
 			executor := NewExecutor(nil, WithRunnerFactory(func(string, string) (TerraformRunner, error) {
@@ -318,9 +323,9 @@ func TestPluginOutputDoesNotResolveTheExecutionWorkdir(t *testing.T) {
 	config := validAtmosConfig(t)
 	unit := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(unit, ".terraform"), 0o700))
-	config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
-	}}
+	})
 	sections := validSections()
 	sections["settings"] = map[string]any{"configuration": true}
 	// No base component: an ordinary component could not resolve its execution path at all.
@@ -383,4 +388,61 @@ func TestConfigurationStateSectionsKeepsExplicitRemoteStateOverrides(t *testing.
 			require.Equal(t, map[string]any{"bucket": "unit-state", "key": "live/network.tfstate", "region": "us-east-2"}, state.Backend, "the plugin state must not be modified")
 		})
 	}
+}
+
+func TestResolveConfigurationStateRejectsProviderWithoutStateOrError(t *testing.T) {
+	config := validAtmosConfig(t)
+	sections := validSections()
+	sections["settings"] = map[string]any{"configuration": true}
+	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+		return nil, nil
+	})
+	state, err := ResolveConfigurationState(t.Context(), config, &ConfigurationStateRequest{Sections: sections, Component: "network", Stack: "live"})
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol, "a provider that owns a component must always identify its state")
+	require.Nil(t, state)
+}
+
+func TestSetupEnvironmentFiltersProhibitedVariablesFromBaseEnvironment(t *testing.T) {
+	setup := &defaultEnvironmentSetup{}
+	result, err := setup.SetupEnvironment(&ComponentConfig{BaseEnvironment: []string{
+		"KEEP=value", "WITH_EQUALS=a=b", "malformed-entry-without-separator",
+		"TF_INPUT=0", "TF_WORKSPACE=other", "TF_LOG=trace",
+		"TF_VAR_region=us-east-1", "TF_CLI_ARGS_plan=-lock=false", "TF_CLI_ARGS=-no-color",
+	}}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"KEEP": "value", "WITH_EQUALS": "a=b"}, result, "only terraform-exec owned variables are removed")
+}
+
+func TestSetupEnvironmentBaseEnvironmentReplacesAmbientEnvironment(t *testing.T) {
+	t.Setenv("AMBIENT_ONLY", "must-not-leak")
+	result, err := (&defaultEnvironmentSetup{}).SetupEnvironment(&ComponentConfig{BaseEnvironment: []string{}}, nil)
+	require.NoError(t, err)
+	assert.NotContains(t, result, "AMBIENT_ONLY", "an explicitly empty sanitized base is authoritative")
+	assert.Empty(t, result)
+}
+
+func TestPluginOutputFailsBeforeRunnerWhenScratchDirectoryCannotBeCreated(t *testing.T) {
+	config := validAtmosConfig(t)
+	stateRoot := t.TempDir()
+	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+		return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate")}, Workspace: "default", WorkingDirectory: stateRoot}, nil
+	})
+	sections := validSections()
+	sections["settings"] = map[string]any{"configuration": true}
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	t.Setenv("TMPDIR", missing)
+	t.Setenv("TMP", missing)
+	t.Setenv("TEMP", missing)
+	runnerCreated := false
+	executor := NewExecutor(nil, WithRunnerFactory(func(string, string) (TerraformRunner, error) {
+		runnerCreated = true
+		return nil, nil
+	}))
+	result, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.False(t, runnerCreated, "no Terraform runner may start without its isolated backend directory")
+	entries, readErr := os.ReadDir(stateRoot)
+	require.NoError(t, readErr)
+	require.Empty(t, entries, "the plugin's state directory is never used as scratch space")
 }

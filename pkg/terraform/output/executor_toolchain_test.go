@@ -198,9 +198,9 @@ func TestPluginOwnedOutputReadUsesIdentityEnvironmentAndToolchain(t *testing.T) 
 		return runner, nil
 	}))
 	stateRoot := t.TempDir()
-	setup.config.ComponentConfigurations = &stateRuntimeFixture{resolve: func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+	setup.config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate")}, Workspace: "prod", WorkingDirectory: stateRoot}, nil
-	}}
+	})
 	sections := validSections()
 	sections["settings"] = map[string]any{"configuration": true}
 	sections[cfg.CommandSectionName] = "tofu"
