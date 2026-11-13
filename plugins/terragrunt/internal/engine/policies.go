@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/go-version"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -67,4 +68,31 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 		return err
 	}
 	return check("terraform_version_constraint", terraform, result.Version)
+}
+
+// checkUnitPolicies rejects Terragrunt semantics that the native adapter cannot
+// represent faithfully. Backend reads skip the version probe, which may execute
+// the selected binary.
+func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.TerragruntConfig) error {
+	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
+		return fmt.Errorf("native adapter requires terraform.source")
+	}
+	if request.Phase != "backend" {
+		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
+			return err
+		}
+	}
+	if cfg.TerraformBinary != "" {
+		return fmt.Errorf("native adaptation of terraform_binary is not implemented")
+	}
+	if len(cfg.Terraform.BeforeHooks)+len(cfg.Terraform.AfterHooks)+len(cfg.Terraform.ErrorHooks)+len(cfg.Terraform.ExtraArgs) > 0 {
+		return fmt.Errorf("native adaptation of hooks/extra_arguments is not implemented")
+	}
+	if cfg.PreventDestroy != nil && *cfg.PreventDestroy {
+		return fmt.Errorf("native adaptation of prevent_destroy is not implemented")
+	}
+	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
+		return fmt.Errorf("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
+	}
+	return nil
 }
