@@ -89,6 +89,8 @@ var (
 	ErrComponentVarFileMissing = errors.New("required variable file does not exist")
 	// ErrComponentHookWorkingDirectory identifies a hook whose working directory does not exist.
 	ErrComponentHookWorkingDirectory = errors.New("hook working directory does not exist")
+	// ErrComponentOutputCapture identifies command output that could not be recorded for error hook matching.
+	ErrComponentOutputCapture = errors.New("failed to capture command output for error hooks")
 
 	ErrInvalidCredentialCodec    = errors.New("invalid credential codec")
 	ErrDuplicateCredentialCodec  = errors.New("duplicate credential codec")

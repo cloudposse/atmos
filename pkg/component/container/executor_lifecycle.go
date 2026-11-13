@@ -6,6 +6,9 @@ package container
 import (
 	"context"
 	"fmt"
+	"os"
+
+	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -15,6 +18,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
+
+var stdinIsTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
 
 // ExecuteDown stops and removes the long-lived container.
 func ExecuteDown(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
@@ -57,7 +64,8 @@ func ExecuteExec(ctx context.Context, info *schema.ConfigAndStacksInfo, command 
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          true,
+		// Preserve piped stdin, but only allocate a TTY for an actual terminal.
+		Tty: stdinIsTerminal(),
 	}); err != nil {
 		return fmt.Errorf("%w: exec %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
 	}

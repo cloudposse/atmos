@@ -149,13 +149,9 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	registry, err := s.providers(ctx)
+	provider, err := s.importProvider(ctx, template.Provider)
 	if err != nil {
 		return nil, err
-	}
-	provider, exists := registry[template.Provider]
-	if !exists || provider.ComponentType() != terraformType {
-		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
 	request := proto.Clone(template).(*pluginv1.DiscoverComponentsRequest)
 	request.IncludePaths, request.ExcludePaths, request.Imports = nil, nil, []string{key}
@@ -163,12 +159,8 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 	if err != nil {
 		return nil, err
 	}
-	// A broken unit that is imported by name fails the import, naming the unit: the user asked for it.
-	for _, diagnostic := range discovered.Diagnostics {
-		if diagnosticErr := adapter.DiagnosticError(diagnostic); diagnosticErr != nil {
-			return nil, diagnosticErr
-		}
-		adapter.WarnDiagnostic(diagnostic)
+	if err := importDiagnostics(discovered.Diagnostics); err != nil {
+		return nil, err
 	}
 	if len(discovered.Components) == 0 {
 		return nil, errUtils.Build(errUtils.ErrConfigurationImportEmpty).
@@ -184,6 +176,31 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 		names[instance.Address.Component] = instance
 	}
 	return discovered.Components, nil
+}
+
+// importProvider starts the providers and returns the Terraform provider an import names.
+func (s *Session) importProvider(ctx context.Context, name string) (Provider, error) {
+	registry, err := s.providers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	provider, exists := registry[name]
+	if !exists || provider.ComponentType() != terraformType {
+		return nil, errUtils.ErrPluginUnsupportedExtension
+	}
+	return provider, nil
+}
+
+// importDiagnostics fails an import on a broken unit, naming the unit: the user asked for it by
+// name. Other diagnostics are shown as warnings.
+func importDiagnostics(diagnostics []*pluginv1.Diagnostic) error {
+	for _, diagnostic := range diagnostics {
+		if err := adapter.DiagnosticError(diagnostic); err != nil {
+			return err
+		}
+		adapter.WarnDiagnostic(diagnostic)
+	}
+	return nil
 }
 
 // ForValidation shares cached imports but never registers additional executable units.

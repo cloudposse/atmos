@@ -84,14 +84,14 @@ func execMetadataOutputCaptureFromOpts(opts ...ShellCommandOption) (io.Writer, i
 	return component.MetadataOutputCaptureFromOptions(opts...)
 }
 
-// WithStdoutCapture tees masked subprocess stdout to the supplied writer.
+// WithStdoutCapture tees raw (unmasked) subprocess stdout to the supplied writer.
 func WithStdoutCapture(w io.Writer) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithStdoutCapture")()
 
 	return component.WithStdoutCapture(w)
 }
 
-// WithStderrCapture tees masked subprocess stderr to the supplied writer.
+// WithStderrCapture tees raw (unmasked) subprocess stderr to the supplied writer.
 func WithStderrCapture(w io.Writer) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithStderrCapture")()
 

@@ -1,14 +1,19 @@
 package terraform
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentpkg "github.com/cloudposse/atmos/pkg/component"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -71,6 +76,8 @@ func TestPrepareConfigurationGuards(t *testing.T) {
 		want    error
 	}{
 		{name: "ordinary"},
+		{name: "explicitly disabled", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": false}}},
+		{name: "null", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": nil}}},
 		{name: "unavailable", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": true}}, want: errUtils.ErrPluginUnsupportedExtension},
 		{name: "abstract", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": true}, SubCommand: "apply", ComponentIsAbstract: true}, want: errUtils.ErrAbstractComponentCantBeProvisioned},
 		{name: "dry run", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": true}, DryRun: true}},
@@ -101,6 +108,13 @@ func TestConfigurationArtifactNames(t *testing.T) {
 	info.Stack = "live/dev"
 	info.ComponentFromArg = "other/app"
 	require.NotEqual(t, first, ConstructTerraformComponentVarfileName(info))
+	// Without ComponentFromArg the component identity still keeps names distinct.
+	info.ComponentFromArg, info.Component = "", "region/app"
+	app := ConstructTerraformComponentPlanfileName(info)
+	info.Component = "region/other"
+	require.NotEqual(t, app, ConstructTerraformComponentPlanfileName(info))
+	info.ComponentFromArg, info.Component = "region/app", "ignored"
+	require.Equal(t, app, ConstructTerraformComponentPlanfileName(info), "ComponentFromArg keeps precedence")
 	info.ComponentSettingsSection = nil
 	_, owned := configurationArtifactName(info, ".plan")
 	require.False(t, owned)
@@ -141,6 +155,28 @@ func TestCacheLocalStatePath(t *testing.T) {
 	}
 }
 
+func TestCheckConfigurationWorkspace(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		base      []string
+		component []string
+		want      error
+	}{
+		{name: "unset", base: []string{}},
+		{name: "empty", base: []string{"TF_WORKSPACE="}},
+		{name: "matching base", base: []string{"TF_WORKSPACE=stage"}},
+		{name: "matching component", base: []string{}, component: []string{"TF_WORKSPACE=stage"}},
+		{name: "conflicting base", base: []string{"TF_WORKSPACE=prod"}, want: errUtils.ErrPluginInvalidConfig},
+		{name: "conflicting component", base: []string{"TF_WORKSPACE=stage"}, component: []string{"TF_WORKSPACE=prod"}, want: errUtils.ErrPluginInvalidConfig},
+		{name: "component overrides conflicting base", base: []string{"TF_WORKSPACE=prod"}, component: []string{"TF_WORKSPACE=stage"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{TerraformWorkspace: "stage", SanitizedEnv: test.base, ComponentEnvList: test.component}
+			require.ErrorIs(t, checkConfigurationWorkspace(info), test.want)
+		})
+	}
+}
+
 // Warning about cache-local state must never change where the state lives or fail the command.
 func TestPrepareConfigurationKeepsCacheLocalStateLocation(t *testing.T) {
 	runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
@@ -155,4 +191,70 @@ func TestPrepareConfigurationKeepsCacheLocalStateLocation(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, cache, info.ComponentBackendSection["path"])
+}
+
+func TestRejectRuntimeArtifacts(t *testing.T) {
+	require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}}))
+	for _, path := range []string{"examples/terraform.tfstate", "nested/provider.tf"} {
+		require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: path}}), path)
+	}
+	for _, path := range []string{"terraform.tfstate", "terraform.tfstate.backup", ".terraform.tfstate.lock.info", ".terraform/environment", "nested/.terraform/modules/modules.json", "terraform.tfstate.d/stage/terraform.tfstate", ".terraform.lock.hcl", "nested/.dev-app.terraform.lock.hcl", ".atmos/metadata.json"} {
+		files := []schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}, {Path: path, IfExists: "overwrite"}}
+		require.ErrorIs(t, rejectRuntimeArtifacts(files), errUtils.ErrPluginInvalidConfig, path)
+	}
+}
+
+func TestPreparedConfigurationSensitiveInputsNeverHitDisk(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	for _, disabled := range []bool{false, true} {
+		atmosio.ApplyMaskingConfig(&atmosio.Config{DisableMasking: disabled})
+		runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+		config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+		binary, err := os.Executable()
+		require.NoError(t, err)
+		info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+		inputs := map[string]any{"credentials": map[string]any{"secret-input-key": ""}, "empty": map[string]any{}, "null": nil, "public": "visible"}
+		prepared := &schema.PreparedComponentConfiguration{Inputs: inputs, SensitiveInputKeys: map[string]bool{"credentials": true, "empty": true, "null": true, "absent": true}}
+		runtime.EXPECT().Prepare(gomock.Any(), info).Return(prepared, nil)
+		_, err = prepareConfiguration(t.Context(), config, info)
+		require.NoError(t, err)
+		// Partition repeatedly without relying on registered secret strings.
+		ComputeTerraformSecretVarKeys(info)
+		ComputeTerraformSecretVarKeys(info)
+		require.Equal(t, map[string]bool{"credentials": true, "empty": true, "null": true}, info.TerraformSecretVarKeys)
+		require.Equal(t, map[string]any{"public": "visible"}, DiskSafeVars(info))
+		env, err := SecretVarEnv(info)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{`TF_VAR_credentials={"secret-input-key":""}`, `TF_VAR_empty={}`, `TF_VAR_null=null`}, env)
+	}
+}
+
+// failingStateRuntime owns the component but cannot identify its backend.
+type failingStateRuntime struct {
+	schema.ComponentConfigurationRuntime
+	err error
+}
+
+func (r failingStateRuntime) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+	return nil, r.err
+}
+
+func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
+	failure := errors.New("provider could not locate state")
+	executor := testExecutor(t)
+	executor.services.ExecuteDescribeComponent = func(params *componentpkg.ExecuteDescribeComponentParams) (map[string]any, error) {
+		assert.Equal(t, "network", params.Component)
+		assert.Equal(t, "live", params.Stack)
+		return map[string]any{
+			"settings": map[string]any{"configuration": true},
+			"backend":  map[string]any{"path": "must-not-be-read"},
+		}, nil
+	}
+	config := &schema.AtmosConfiguration{ComponentConfigurations: failingStateRuntime{err: failure}}
+
+	result, err := executor.GetTerraformState(config, "!terraform.state", "live", "network", "vpc_id", true, nil, nil)
+	require.ErrorIs(t, err, failure, "the provider's failure is returned as is, not retried against a guessed backend")
+	require.Nil(t, result)
 }

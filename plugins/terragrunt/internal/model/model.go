@@ -89,6 +89,9 @@ type Execution struct {
 	BeforeHooks    []Hook           `json:"before_hooks,omitempty"`
 	AfterHooks     []Hook           `json:"after_hooks,omitempty"`
 	ErrorHooks     []Hook           `json:"error_hooks,omitempty"`
+	// Apply is the metadata evaluated for the apply command while preparing a plan whose
+	// configuration depends on the command. Nil means the plan-time metadata applies.
+	Apply *Execution `json:"apply,omitempty"`
 }
 
 // ExtraArguments adds arguments, variable files, and environment to the listed commands.

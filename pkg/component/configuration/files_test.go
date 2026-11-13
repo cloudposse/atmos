@@ -111,3 +111,22 @@ func TestEnsureModeWrapsPermissionFailures(t *testing.T) {
 	require.NoError(t, root.WriteFile("present.tf", nil, 0o644))
 	require.NoError(t, ensureMode(root, "present.tf"))
 }
+
+func TestWatchPaths(t *testing.T) {
+	root := t.TempDir()
+	for _, provider := range []bool{true, false} {
+		settings := map[string]any{}
+		if provider {
+			settings["configuration"] = map[string]any{"provider": "terragrunt"}
+		}
+		absolute := filepath.Join(root, "module")
+		deps := []schema.ComponentDependency{{Path: "root.hcl"}, {Path: absolute}}
+		require.Equal(t, provider, WatchPaths(&schema.AtmosConfiguration{BasePathAbsolute: root}, settings, deps))
+		require.Equal(t, absolute, deps[1].Path)
+		if provider {
+			require.Equal(t, filepath.Join(root, "root.hcl"), deps[0].Path)
+		} else {
+			require.Equal(t, "root.hcl", deps[0].Path)
+		}
+	}
+}

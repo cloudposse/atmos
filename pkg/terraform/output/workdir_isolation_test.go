@@ -70,3 +70,18 @@ func TestWorkdirProvisioningIsolatesChangedCredentials(t *testing.T) {
 		require.NoError(t, executor.ensureWorkdirProvisioned(t.Context(), &schema.AtmosConfiguration{BasePath: base}, sections, nil, "vpc", "dev", config))
 	}
 }
+
+func TestWorkdirProvisioningIsolatesChangedAuthContext(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	t.Cleanup(ResetWorkdirProvisionCache)
+	provisioner := NewMockWorkdirProvisioner(gomock.NewController(t))
+	executor := NewExecutor(nil, WithWorkdirProvisioner(provisioner))
+	provisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	base := t.TempDir()
+	config := &ComponentConfig{ComponentPath: base, AutoProvisionWorkdirForOutputs: true}
+	sections := jitSections()
+	for _, profile := range []string{"initial-profile", "initial-profile", "rotated-profile"} {
+		authContext := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: profile}}
+		require.NoError(t, executor.ensureWorkdirProvisioned(t.Context(), &schema.AtmosConfiguration{BasePath: base}, sections, authContext, "vpc", "dev", config))
+	}
+}

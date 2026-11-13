@@ -17,13 +17,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// identifiedProvider adds the optional Identity capability to the generated provider mock.
-type identifiedProvider struct {
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_identified_provider_test.go -package=$GOPACKAGE -mock_names=identifiedProvider=MockIdentifiedProvider
+
+// identifiedProvider is a provider with the optional Identity capability that binds saved plans.
+type identifiedProvider interface {
 	Provider
-	identity func(context.Context) (string, error)
+	identityProvider
 }
 
-func (p *identifiedProvider) Identity(ctx context.Context) (string, error) { return p.identity(ctx) }
+// The generated mock implements the contract that PlanIdentity asserts.
+var _ identifiedProvider = (*MockIdentifiedProvider)(nil)
 
 // planCase describes every input that a saved-plan binding is expected to cover.
 type planCase struct {
@@ -47,16 +50,16 @@ func planSession(t *testing.T, c *planCase) (*Session, *schema.ConfigAndStacksIn
 	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
 	settings.Options = c.options
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
-	mock := NewMockProvider(gomock.NewController(t))
+	mock := NewMockIdentifiedProvider(gomock.NewController(t))
 	mock.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	mock.EXPECT().Identity(gomock.Any()).Return(c.identity, nil).AnyTimes()
 	component := unit(t, c.component)
 	configuration, err := adapter.EncodeObject(map[string]any{"source": c.source})
 	require.NoError(t, err)
 	component.Configuration = configuration
 	mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{component}}, nil)
-	provider := &identifiedProvider{Provider: mock, identity: func(context.Context) (string, error) { return c.identity, nil }}
 	session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
-		return map[string]Provider{"terragrunt": provider}, nil
+		return map[string]Provider{"terragrunt": mock}, nil
 	})
 	require.NoError(t, err)
 	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: c.component, SubCommand: c.subCommand, AdditionalArgsAndFlags: c.args, ComponentEnvList: c.env}
@@ -201,7 +204,9 @@ func TestPlanIdentityRejectsUnboundableRequests(t *testing.T) {
 		_, err := session.Discover(t.Context())
 		require.NoError(t, err)
 		failure := errors.New("executable unreadable")
-		session.registry["terragrunt"] = &identifiedProvider{Provider: NewMockProvider(gomock.NewController(t)), identity: func(context.Context) (string, error) { return "", failure }}
+		provider := NewMockIdentifiedProvider(gomock.NewController(t))
+		provider.EXPECT().Identity(gomock.Any()).Return("", failure)
+		session.registry["terragrunt"] = provider
 		_, err = session.PlanIdentity(t.Context(), info, nil)
 		require.ErrorIs(t, err, failure)
 	})
@@ -246,6 +251,30 @@ func TestSourceDigests(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, before["link.hcl"], after["link.hcl"], "edits behind a symlink must change the digest")
 	})
+	t.Run("directory symlink inside a watched directory is rejected, not followed", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "shared"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "shared", "inputs.hcl"), []byte("x"), 0o600))
+		require.NoError(t, os.Mkdir(filepath.Join(root, "unit"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "unit", "main.tf"), []byte("m"), 0o600))
+		if err := os.Symlink(filepath.Join(root, "shared"), filepath.Join(root, "unit", "shared")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		_, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "unit", Directory: true}})
+		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+		require.Contains(t, err.Error(), "unit/shared")
+	})
+	t.Run("file symlinks inside a watched directory are still digested", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "shared.hcl"), []byte("one"), 0o600))
+		require.NoError(t, os.Mkdir(filepath.Join(root, "unit"), 0o700))
+		if err := os.Symlink(filepath.Join(root, "shared.hcl"), filepath.Join(root, "unit", "link.hcl")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		got, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "unit", Directory: true}})
+		require.NoError(t, err)
+		require.Contains(t, got, "unit/link.hcl")
+	})
 	t.Run("missing sources are recorded as absent", func(t *testing.T) {
 		got, err := sourceDigests(t.Context(), t.TempDir(), []schema.ComponentConfigurationSource{{Path: "missing.hcl"}, {Path: "nodir", Directory: true}})
 		require.NoError(t, err)
@@ -253,13 +282,14 @@ func TestSourceDigests(t *testing.T) {
 	})
 	t.Run("missing project root fails", func(t *testing.T) {
 		_, err := sourceDigests(t.Context(), filepath.Join(t.TempDir(), "gone"), nil)
+		require.ErrorIs(t, err, errUtils.ErrReadFile)
 		require.ErrorIs(t, err, os.ErrNotExist)
 	})
 	t.Run("directory watched as a file fails", func(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(root, "modules"), 0o700))
 		_, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "modules"}})
-		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrReadFile)
 	})
 	t.Run("canceled context stops digesting", func(t *testing.T) {
 		root := t.TempDir()

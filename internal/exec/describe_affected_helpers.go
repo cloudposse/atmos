@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	g "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -523,11 +524,17 @@ func ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 // (repo path / clone-and-diff / local ref checkout). Exported so other
 // affected-target dispatchers (e.g. `atmos terraform lint --affected`) reuse
 // this switch instead of re-declaring it against the same three
-// ExecuteDescribeAffectedWith* functions.
+// ExecuteDescribeAffectedWith* functions. The args.ErrorMode field selects how recoverable
+// discovery errors are handled; an empty or "strict" mode keeps the historical fail-fast behavior.
 func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 	defer perf.Track(nil, "exec.GetAffectedComponents")()
 
-	return GetAffectedComponentsWithOptions(args, DescribeStacksErrorOptions{})
+	if args == nil {
+		return nil, errUtils.ErrNilParam
+	}
+	errOptions, collector := ErrorOptionsFromMode(args.ErrorMode)
+	defer PrintErrorModeSummary(args.ErrorMode, collector)
+	return GetAffectedComponentsWithOptions(args, errOptions)
 }
 
 // GetAffectedComponentsWithOptions is GetAffectedComponents plus opt-in graceful degradation
@@ -549,6 +556,7 @@ func GetAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions 
 //
 //nolint:gocritic // Forward the value-based options consistently with the describe entry points below.
 func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
+	ref, sha := affectedComparisonRevision(args)
 	switch {
 	case args.RepoPath != "":
 		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
@@ -569,8 +577,8 @@ func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOpt
 	case args.CloneTargetRef:
 		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 			args.CLIConfig,
-			args.Ref,
-			args.SHA,
+			ref,
+			sha,
 			args.SSHKeyPath,
 			args.SSHKeyPassword,
 			args.IncludeSpaceliftAdminStacks,
@@ -588,8 +596,8 @@ func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOpt
 	default:
 		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 			args.CLIConfig,
-			args.Ref,
-			args.SHA,
+			ref,
+			sha,
 			args.TargetBranch,
 			args.IncludeSpaceliftAdminStacks,
 			args.IncludeSettings,
@@ -603,5 +611,19 @@ func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOpt
 			errOptions,
 		)
 		return affectedList, err
+	}
+}
+
+// affectedComparisonRevision returns the Ref and SHA to compare against. A non-empty Base
+// takes precedence over both, matching the --base flag: a commit SHA selects that commit
+// (keeping Ref as the clone target), and anything else selects that ref.
+func affectedComparisonRevision(args *DescribeAffectedCmdArgs) (string, string) {
+	switch {
+	case args.Base == "":
+		return args.Ref, args.SHA
+	case ci.IsCommitSHA(args.Base):
+		return args.Ref, args.Base
+	default:
+		return args.Base, ""
 	}
 }

@@ -323,6 +323,12 @@ message ComponentExecutionConfiguration {
   repeated ComponentHook before_hooks = 2;
   repeated ComponentHook after_hooks = 3;
   repeated ComponentHook error_hooks = 4;
+  // Metadata evaluated as the apply command would see it. Providers set it when
+  // preparing a plan whose execution depends on the command, so a saved plan
+  // applied later runs the apply-time hooks recorded with the reviewed plan.
+  // Unset means the plan-time metadata applies unchanged; an empty message
+  // means apply adds nothing.
+  ComponentExecutionConfiguration apply = 5;
 }
 message ComponentExtraArguments {
   repeated string commands = 1;

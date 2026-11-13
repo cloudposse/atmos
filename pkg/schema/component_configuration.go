@@ -68,6 +68,8 @@ type PreparedComponentConfiguration struct {
 	BackendGenerated bool
 	// Execution is data the host runs; it is nil when the provider adds no hooks or arguments.
 	Execution *ComponentExecution
+	// SensitiveInputKeys projects provider sensitivity paths onto whole input variables.
+	SensitiveInputKeys map[string]bool
 }
 
 // ComponentConfigurationFile must bypass template rendering.
@@ -78,6 +80,19 @@ type ComponentConfigurationFile struct {
 	Sensitive bool
 	// UnitFileCopy identifies a literal adjacent unit-file copy, not explicit generation.
 	UnitFileCopy bool
+}
+
+// ConfigurationOwned reports whether a configuration provider owns a component's settings.
+// Discovery records ownership as a map; an explicit false or null leaves an ordinary component.
+func ConfigurationOwned(settings map[string]any) bool {
+	switch value := settings["configuration"].(type) {
+	case nil:
+		return false
+	case bool:
+		return value
+	default:
+		return true
+	}
 }
 
 // HasComponentDiscovery reports an explicit opt-in without consulting plugins or the filesystem.

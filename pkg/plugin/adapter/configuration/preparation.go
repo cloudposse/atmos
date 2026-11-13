@@ -22,7 +22,7 @@ import (
 func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
 	defer perf.Track(nil, "configurationadapter.Prepare")()
 
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return nil, nil
 	}
 	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
@@ -32,7 +32,7 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
-	result, err := runProviderPrepare(ctx, info, selected)
+	result, err := s.runProviderPrepare(ctx, info, selected)
 	if err != nil {
 		return nil, err
 	}
@@ -48,13 +48,17 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 
 // runProviderPrepare asks the owning provider to reevaluate the selected unit with every effect
 // granted, after checking module ownership and engine selection. Only an explicit --command
-// flag may switch the engine discovered from the global configuration.
-func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
+// flag may switch the engine discovered from the global configuration. The dependencies the
+// scheduler ordered are rechecked first, so no provider effect runs when they changed.
+func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
 	if err := checkSourceOverride(info, selected.instance); err != nil {
 		return nil, err
 	}
 	if engine := expectedEngine(info, selected.instance); engine != selected.instance.Engine && info.ComponentCommand == "" {
 		return nil, engineMismatch(info, selected.instance.Engine, engine)
+	}
+	if err := s.checkPreparationDependencies(ctx, selected.instance, selected.request.Invocation.Environment, info.SubCommand); err != nil {
+		return nil, err
 	}
 	selected.request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
 	result, err := selected.provider.Prepare(ctx, selected.request)
@@ -63,6 +67,9 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 	}
 	if result.Engine != expectedEngine(info, selected.instance) {
 		return nil, errUtils.ErrPluginProtocol
+	}
+	if result.State != nil {
+		s.prepared.Store(addressKey(selected.instance.Address), proto.Clone(result.State))
 	}
 	return result, nil
 }
@@ -190,8 +197,175 @@ func (s *Session) instanceFor(info *schema.ConfigAndStacksInfo) *pluginv1.Discov
 	return instance
 }
 
+// Reevaluate the inventory without preparation effects before any dependency
+// outputs are read. Identity and component environment overrides must not change
+// the units that the scheduler ordered using the original discovery result.
+func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pluginv1.DiscoveredComponent, env map[string]string, command string) error {
+	baseline := s.preparationBaseline(instance)
+	if baseline == nil {
+		return errUtils.ErrPluginInvalidConfig
+	}
+	request := proto.Clone(baseline.request).(*pluginv1.DiscoverComponentsRequest)
+	request.Invocation = &pluginv1.Invocation{Environment: env}
+	request.Operation = &pluginv1.ComponentOperation{Command: command, Mode: "native"}
+	response, err := s.registry[instance.Provider].Discover(ctx, request)
+	if err != nil {
+		return err
+	}
+	current := make(map[[3]string]*pluginv1.DiscoveredComponent)
+	if err := addDiscovered(make(map[string]map[string]any), current, response); err != nil {
+		return err
+	}
+	selected := current[addressKey(baseline.self.Address)]
+	if !sameDependencyUnit(baseline.self, selected) || !sameDependencies(baseline.self.Dependencies, selected.Dependencies) {
+		return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
+	}
+	for _, dependency := range selected.Dependencies {
+		key := addressKey(dependency.Target)
+		if !sameDependencyUnit(baseline.units[key], current[key]) {
+			return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
+		}
+	}
+	return s.checkDependencyStates(ctx, baseline, selected.Dependencies, env, command)
+}
+
+// preparationEvidence is the discovery request that found a unit, every unit that request found,
+// and the unit as that request reported it, all under the provider's own addresses.
+type preparationEvidence struct {
+	request *pluginv1.DiscoverComponentsRequest
+	units   map[[3]string]*pluginv1.DiscoveredComponent
+	self    *pluginv1.DiscoveredComponent
+}
+
+// preparationBaseline finds the evidence for a discovered unit in its provider's discovery
+// request, and for an imported unit in the import that resolved it. An imported unit is
+// addressed by the importing stack, so its provider address comes from the cached import.
+func (s *Session) preparationBaseline(instance *pluginv1.DiscoveredComponent) *preparationEvidence {
+	if discovered := s.instances[addressKey(instance.Address)]; discovered != nil && discovered.Source == instance.Source {
+		for _, request := range s.requests {
+			if request.Provider == instance.Provider {
+				return &preparationEvidence{request: request, units: s.instances, self: discovered}
+			}
+		}
+		return nil
+	}
+	return s.importBaseline(instance)
+}
+
+// importBaseline finds the cached import that resolved an imported unit.
+func (s *Session) importBaseline(instance *pluginv1.DiscoveredComponent) *preparationEvidence {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
+	reported := s.imported[instance.Source]
+	if reported == nil {
+		return nil
+	}
+	for key, units := range s.importResults {
+		if !slices.Contains(units, reported) {
+			continue
+		}
+		template := s.importTemplate(instance.Provider)
+		if template == nil {
+			return nil
+		}
+		request := proto.Clone(template).(*pluginv1.DiscoverComponentsRequest)
+		request.IncludePaths, request.ExcludePaths, request.Imports = nil, nil, []string{key}
+		byAddress := make(map[[3]string]*pluginv1.DiscoveredComponent, len(units))
+		for _, unit := range units {
+			byAddress[addressKey(unit.Address)] = unit
+		}
+		return &preparationEvidence{request: request, units: byAddress, self: reported}
+	}
+	return nil
+}
+
+// importTemplate returns the import request template of a provider, under any configured alias.
+func (s *Session) importTemplate(provider string) *pluginv1.DiscoverComponentsRequest {
+	for _, template := range s.importProviders {
+		if template.Provider == provider {
+			return template
+		}
+	}
+	return nil
+}
+
+// checkDependencyStates keeps output reads on the dependency's own state. The
+// provider evaluates a dependency's remote_state under the dependent's
+// environment, so an identity or component override can select different state.
+// The reference is the identity the dependency was prepared with in this
+// invocation, or else its identity under the discovery environment.
+func (s *Session) checkDependencyStates(ctx context.Context, baseline *preparationEvidence, dependencies []*pluginv1.ComponentDependency, env map[string]string, command string) error {
+	discovery := baseline.request
+	for _, dependency := range dependencies {
+		if dependency.Kind != pluginv1.ComponentDependency_OUTPUT {
+			continue
+		}
+		key := addressKey(dependency.Target)
+		target := baseline.units[key]
+		current, err := s.dependencyState(ctx, discovery, target, env, command)
+		if err != nil {
+			return err
+		}
+		expected, err := s.referenceState(ctx, discovery, target, key, command)
+		if err != nil {
+			return err
+		}
+		if !proto.Equal(expected, current) {
+			return fmt.Errorf("%w: dependency %s/%s state differs under the dependent's environment", errUtils.ErrPluginInvalidConfig, key[0], key[2])
+		}
+	}
+	return nil
+}
+
+func (s *Session) referenceState(ctx context.Context, discovery *pluginv1.DiscoverComponentsRequest, target *pluginv1.DiscoveredComponent, key [3]string, command string) (*pluginv1.ComponentStateIdentity, error) {
+	if prepared, ok := s.prepared.Load(key); ok {
+		return prepared.(*pluginv1.ComponentStateIdentity), nil
+	}
+	return s.dependencyState(ctx, discovery, target, discovery.GetInvocation().GetEnvironment(), command)
+}
+
+func (s *Session) dependencyState(ctx context.Context, discovery *pluginv1.DiscoverComponentsRequest, target *pluginv1.DiscoveredComponent, env map[string]string, command string) (*pluginv1.ComponentStateIdentity, error) {
+	result, err := s.registry[target.Provider].ResolveState(ctx, &pluginv1.ComponentRequest{
+		Provider: target.Provider, Address: target.Address, Source: target.Source, RootDirectory: s.root,
+		Configuration: target.Configuration, ProviderConfiguration: discovery.ProviderConfiguration,
+		Invocation: &pluginv1.Invocation{Environment: env},
+		Operation:  &pluginv1.ComponentOperation{Command: command, Mode: "native"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.State == nil {
+		return nil, errUtils.ErrPluginProtocol
+	}
+	return result.State, nil
+}
+
+func sameDependencyUnit(before, after *pluginv1.DiscoveredComponent) bool {
+	return before != nil && after != nil && before.Source == after.Source && before.Provider == after.Provider && before.Engine == after.Engine
+}
+
+func sameDependencies(before, after []*pluginv1.ComponentDependency) bool {
+	type edge struct {
+		target [3]string
+		kind   pluginv1.ComponentDependency_Kind
+	}
+	counts := make(map[edge]int)
+	for _, dependency := range before {
+		counts[edge{addressKey(dependency.Target), dependency.Kind}]++
+	}
+	for _, dependency := range after {
+		counts[edge{addressKey(dependency.Target), dependency.Kind}]--
+	}
+	for _, count := range counts {
+		if count != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.PreparedComponentConfiguration, error) {
-	inputs, err := adapter.DecodeObject(result.Inputs)
+	inputs, sensitiveKeys, err := adapter.DecodeObjectWithSensitiveKeys(result.Inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +376,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	if result.State.BackendType == "local" {
 		resolveLocalBackend(backend, result.State.WorkingDirectory)
 	}
-	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
+	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, SensitiveInputKeys: sensitiveKeys, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
 	execution, err := preparedExecution(result.Execution)
 	if err != nil {
 		return nil, err

@@ -202,3 +202,20 @@ func createFile(root *os.Root, path string, content []byte) error {
 func generatedFileError(path string, err error) error {
 	return fmt.Errorf("%w: generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err)
 }
+
+// WatchPaths resolves provider-owned watches against the project
+// root without putting checkout-specific absolute paths into stack comparisons.
+// Existing YAML dependency path semantics remain unchanged. It reports whether
+// the dependencies belong to a provider-discovered component.
+func WatchPaths(config *schema.AtmosConfiguration, settings map[string]any, deps []schema.ComponentDependency) bool {
+	defer perf.Track(nil, "configuration.WatchPaths")()
+	if !schema.ConfigurationOwned(settings) {
+		return false
+	}
+	for i := range deps {
+		if !filepath.IsAbs(deps[i].Path) {
+			deps[i].Path = filepath.Join(config.BasePathAbsolute, deps[i].Path)
+		}
+	}
+	return true
+}

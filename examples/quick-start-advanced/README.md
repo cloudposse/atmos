@@ -22,7 +22,7 @@ related_docs:
 # Atmos Quick Start (Advanced)
 
 [Atmos](https://atmos.tools/) is a universal tool for DevOps and cloud automation. This advanced
-example provisions a small AWS application stack — **entirely offline** — against a local AWS
+example provisions a small AWS application stack against a local AWS
 emulator ([Floci](https://github.com/floci-io/floci)), so you can learn the patterns end to end without a real AWS
 account or any credentials.
 
@@ -56,7 +56,9 @@ publish applied outputs, and `!secret` resolves declared secrets from the SSM/Se
 ## Run it end to end
 
 Everything runs against the local emulator. You need [Atmos](https://atmos.tools/install) and a
-container runtime (Docker or Podman).
+container runtime (Docker or Podman). Atmos installs the pinned OpenTofu 1.10.10 and Checkov
+through its toolchain when a component needs them; no separate Terraform or OpenTofu installation is
+required. Initial tool and provider downloads require internet access.
 
 The `test` custom command brings up the emulator, seeds secrets, plans and applies the full component
 DAG in dependency order, confirms the cross-component wiring resolves, then tears everything down:

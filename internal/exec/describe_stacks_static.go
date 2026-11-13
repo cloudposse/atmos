@@ -22,7 +22,20 @@ func findDescribeStacksMap(config *schema.AtmosConfiguration, stack string, igno
 	_, stacks, raw, deferred, err := processYAMLConfigFilesWithOptions(config, config.StacksBaseAbsolutePath,
 		config.TerraformDirAbsolutePath, config.HelmfileDirAbsolutePath, config.PackerDirAbsolutePath,
 		config.AnsibleDirAbsolutePath, files, false, true, ignoreMissing, &StackLoadOptions{SkipTemplates: true, StaticOnly: true})
-	return stacks, raw, deferred, err
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := mergeStaticStacks(config, stacks, raw, deferred); err != nil {
+		return nil, nil, nil, err
+	}
+	return stacks, raw, deferred, nil
+}
+
+// mergeStaticStacks adds stacks that come from outside YAML manifests, such as provider
+// discovery, to static inspection. Sources must contribute literal data only: static
+// inspection never authenticates or renders templates. YAML-only builds leave it a no-op.
+var mergeStaticStacks = func(*schema.AtmosConfiguration, map[string]any, map[string]map[string]any, AllStacksDeferredContexts) error {
+	return nil
 }
 
 func (p *describeStacksProcessor) resolveStackName(file, manifest string, info schema.ConfigAndStacksInfo, vars map[string]any) (string, schema.Context, error) { //nolint:gocritic // Mirrors the existing read-only name resolver.

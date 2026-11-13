@@ -205,7 +205,7 @@ func reconcileExecutionRequest(ctx *component.ExecutionContext) (schema.ConfigAn
 func (e *Executor) GenerateArtifacts(ctx *component.ExecutionContext) error {
 	defer perf.Track(nil, "terraform.Executor.GenerateArtifacts")()
 	info := ctx.ConfigAndStacksInfo
-	return e.GenerateConfigFiles(ctx.AtmosConfig, &info, ctx.WorkingDir)
+	return e.GenerateConfigFilesWithContext(ctx.GoContext(), ctx.AtmosConfig, &info, ctx.WorkingDir)
 }
 
 // Services supplies the shared Atmos facilities used by one Terraform executor.
@@ -223,23 +223,25 @@ type Services struct {
 	NewDependencyParserWithDelimiter              func(builder *dependency.GraphBuilder, nodeMap map[string]string, targetStates map[string]string, leftDelim string) DependencyParser
 	ProcessStacks                                 func(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo, checkStack bool, processTemplates bool, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error)
 	ValidateComponent                             func(atmosConfig *schema.AtmosConfiguration, componentName string, componentSection map[string]any, schemaPath string, schemaType string, modulePaths []string, timeoutSeconds int) (bool, error)
-	AttachComponentReporting                      func(result *error, info *schema.ConfigAndStacksInfo, componentType string, command string)
-	CreateAndAuthenticateAuthManager              func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error)
-	DefaultAuthManagerCreator                     func(string, *schema.AuthConfig, string, *schema.AtmosConfiguration, auth.ReExecContext) (auth.AuthManager, error)
-	DefaultMergedAuthConfigGetter                 func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error)
-	DeferredTargetAuth                            func(ac *schema.AtmosConfiguration, component string, stack string, parents ...auth.AuthManager) (auth.AuthManager, error)
-	DeferredTargetAuthAndCache                    func(ac *schema.AtmosConfiguration, component string, stack string, parents ...auth.AuthManager) (auth.AuthManager, *deferred.ValueCache, error)
-	EnvVarFromList                                func(env []string, key string) string
-	ExecTerraformShellCommand                     func(atmosConfig *schema.AtmosConfiguration, component string, stack string, componentEnvList []string, varFile string, workingDir string, workspaceName string, componentPath string) error
-	GetMergedAuthConfig                           func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error)
-	HasYqDefault                                  func(yqExpr string) bool
-	IsComponentEnabled                            func(metadataSection map[string]any, componentName string) bool
-	MapCIExitCode                                 func(atmosConfig *schema.AtmosConfiguration, exitCode int) int
-	ResolveIdentityConfigError                    func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, err error, wrapSentinel error) error
-	ResolvedTargetAuthContext                     func(ac *schema.AtmosConfiguration, manager auth.AuthManager, fallback *schema.AuthContext, disabled bool) *schema.AuthContext
-	ShouldUploadStatus                            func(info *schema.ConfigAndStacksInfo) bool
-	StoreAutoDetectedIdentity                     func(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo)
-	UploadStatus                                  func(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error
+	// AdmitComponent evaluates component admission policy before any identity is resolved.
+	AdmitComponent                   func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager) error
+	AttachComponentReporting         func(result *error, info *schema.ConfigAndStacksInfo, componentType string, command string)
+	CreateAndAuthenticateAuthManager func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error)
+	DefaultAuthManagerCreator        func(string, *schema.AuthConfig, string, *schema.AtmosConfiguration, auth.ReExecContext) (auth.AuthManager, error)
+	DefaultMergedAuthConfigGetter    func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error)
+	DeferredTargetAuth               func(ac *schema.AtmosConfiguration, component string, stack string, parents ...auth.AuthManager) (auth.AuthManager, error)
+	DeferredTargetAuthAndCache       func(ac *schema.AtmosConfiguration, component string, stack string, parents ...auth.AuthManager) (auth.AuthManager, *deferred.ValueCache, error)
+	EnvVarFromList                   func(env []string, key string) string
+	ExecTerraformShellCommand        func(atmosConfig *schema.AtmosConfiguration, component string, stack string, componentEnvList []string, varFile string, workingDir string, workspaceName string, componentPath string) error
+	GetMergedAuthConfig              func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error)
+	HasYqDefault                     func(yqExpr string) bool
+	IsComponentEnabled               func(metadataSection map[string]any, componentName string) bool
+	MapCIExitCode                    func(atmosConfig *schema.AtmosConfiguration, exitCode int) int
+	ResolveIdentityConfigError       func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, err error, wrapSentinel error) error
+	ResolvedTargetAuthContext        func(ac *schema.AtmosConfiguration, manager auth.AuthManager, fallback *schema.AuthContext, disabled bool) *schema.AuthContext
+	ShouldUploadStatus               func(info *schema.ConfigAndStacksInfo) bool
+	StoreAutoDetectedIdentity        func(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo)
+	UploadStatus                     func(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error
 }
 
 // Executor owns Terraform's execution pipeline and reference lookups.
@@ -353,17 +355,33 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 func (s *Operations) GenerateConfigFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(atmosConfig, "terraform.Operations.GenerateConfigFiles")()
 
-	if err := GenerateBackendConfig(atmosConfig, info, workingDir); err != nil {
-		return err
+	return s.GenerateConfigFilesWithContext(context.Background(), atmosConfig, info, workingDir)
+}
+
+// GenerateConfigFilesWithContext is GenerateConfigFiles bound to ctx: contributors and
+// generators receive ctx, and a cancellation stops generation before the next stage writes.
+func (s *Operations) GenerateConfigFilesWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	defer perf.Track(atmosConfig, "terraform.Operations.GenerateConfigFilesWithContext")()
+
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	if err := s.host.GenerateFilesForComponent(atmosConfig, info, workingDir); err != nil {
-		return err
+	stages := []func() error{
+		func() error { return GenerateBackendConfig(atmosConfig, info, workingDir) },
+		func() error { return s.host.GenerateFilesForComponent(atmosConfig, info, workingDir) },
+		func() error { return generateProviderOverridesWithContext(ctx, atmosConfig, info, workingDir) },
+		// Generate required_providers (terraform_override.tf.json) for version pinning (DEV-3124).
+		func() error { return generateRequiredProvidersWithContext(ctx, atmosConfig, info, workingDir) },
 	}
-	if err := GenerateProviderOverrides(atmosConfig, info, workingDir); err != nil {
-		return err
+	for _, stage := range stages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := stage(); err != nil {
+			return err
+		}
 	}
-	// Generate required_providers (terraform_override.tf.json) for version pinning (DEV-3124).
-	return GenerateRequiredProviders(atmosConfig, info, workingDir)
+	return nil
 }
 
 // GenerateBackendConfig delegates backend-file generation using the resolved configuration and working directory.
@@ -378,10 +396,15 @@ func GenerateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 func GenerateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(atmosConfig, "terraform.GenerateProviderOverrides")()
 
+	return generateProviderOverridesWithContext(context.Background(), atmosConfig, info, workingDir)
+}
+
+// generateProviderOverridesWithContext is GenerateProviderOverrides with ctx passed to contributors.
+func generateProviderOverridesWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Let registered provider-config contributors (e.g. an emulator binding) deep-merge
 	// provider fragments UNDER the explicit `providers:` section before generation.
 	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
-	if merged, err := generator.ApplyProviderContributors(context.Background(), genCtx); err != nil {
+	if merged, err := generator.ApplyProviderContributors(ctx, genCtx); err != nil {
 		return err
 	} else if merged != nil {
 		info.ComponentProvidersSection = merged
@@ -410,6 +433,11 @@ func GenerateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 func GenerateRequiredProviders(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(atmosConfig, "exec.GenerateRequiredProviders")()
 
+	return generateRequiredProvidersWithContext(context.Background(), atmosConfig, info, workingDir)
+}
+
+// generateRequiredProvidersWithContext is GenerateRequiredProviders with ctx passed to the generator.
+func generateRequiredProvidersWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Skip if no required_version or required_providers configured, removing a stale file
 	// so an earlier stack's version pins don't apply to this one.
 	if info.RequiredVersion == "" && len(info.RequiredProviders) == 0 {
@@ -431,5 +459,5 @@ func GenerateRequiredProviders(atmosConfig *schema.AtmosConfiguration, info *sch
 	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
 
 	// Generate and write using the generator package.
-	return generator.Generate(context.Background(), required_providers.Name, genCtx, generator.NewFileWriter())
+	return generator.Generate(ctx, required_providers.Name, genCtx, generator.NewFileWriter())
 }

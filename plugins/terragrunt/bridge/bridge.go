@@ -5,21 +5,28 @@ package atmosbridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
 
+	"github.com/gruntwork-io/terragrunt/internal/configbridge"
 	"github.com/gruntwork-io/terragrunt/internal/iacargs"
-	"github.com/gruntwork-io/terragrunt/internal/stacks/generate"
 	"github.com/gruntwork-io/terragrunt/internal/tf"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
 	"github.com/gruntwork-io/terragrunt/internal/vexec"
 	"github.com/gruntwork-io/terragrunt/internal/vhttp"
 	"github.com/gruntwork-io/terragrunt/internal/vsops"
+	"github.com/gruntwork-io/terragrunt/internal/worker"
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
 	"github.com/spf13/afero"
 )
+
+// Venv is the pinned upstream virtual environment. The alias lets evaluator
+// phases pass it between helpers without importing upstream internals.
+type Venv = venv.Venv
 
 // Environment isolates invocation environments and output writers.
 func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
@@ -50,15 +57,27 @@ func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory s
 	return resolved.WorkingDir, nil
 }
 
-// Generate expands nested stacks through Terragrunt's real Go implementation.
-// It does not execute the Terragrunt CLI or apply infrastructure.
-func Generate(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu string) error {
+// GenerateStack materializes the units and nested stack files declared by one
+// stack file through Terragrunt's real Go implementation. Unlike directory-wide
+// generation, it never lists or generates other stack files under the same
+// directory; callers recurse into the nested stacks the file declares. It does
+// not execute the Terragrunt CLI or apply infrastructure.
+func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu string) error {
 	opts := options.NewTerragruntOptions(env.Exec)
 	opts.WorkingDir = filepath.Dir(path)
 	opts.RootWorkingDir = opts.WorkingDir
 	opts.TerragruntStackConfigPath = path
 	opts.TFPath = tofu
-	return generate.NewGenerator().GenerateStacks(ctx, logger, env, opts, nil)
+	scoped, pctx, err := configbridge.NewParsingContext(opts).WithConfigPath(logger, path)
+	if err != nil {
+		return err
+	}
+	pool := worker.NewWorkerPool(opts.Parallelism)
+	defer pool.Stop()
+	if err := config.GenerateStackFile(ctx, scoped, env, pctx, pool, path); err != nil {
+		return errors.Join(err, pool.Wait())
+	}
+	return pool.Wait()
 }
 
 // IsDestroyOperation uses upstream boolean flag parsing, including last-value precedence.

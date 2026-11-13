@@ -15,6 +15,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -715,7 +716,9 @@ var _ = component.ExecutionOptions{StdoutCapture: nil, StderrCapture: nil}
 func TestExecuteShellCommandWithRetry_CancellationStopsBackoff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	delay := 100 * time.Millisecond
+	delay := 10 * time.Second
+	waiting := make(chan struct{})
+	ctx = &backoffSignalContext{Context: ctx, waiting: waiting}
 	info := schema.ConfigAndStacksInfo{
 		ComponentRetrySection: &schema.RetryConfig{
 			MaxAttempts:  intPtr(2),
@@ -730,13 +733,63 @@ func TestExecuteShellCommandWithRetry_CancellationStopsBackoff(t *testing.T) {
 		capture := applyOptsForTest(opts)
 		_, err := capture.StderrCapture.Write([]byte("502 Bad Gateway"))
 		require.NoError(t, err)
-		cancel()
 		return errors.New("transient gateway failure")
 	}
 
-	err := ExecuteShellCommandWithRetry(&schema.AtmosConfiguration{}, &info, "plan", invoke,
-		component.WithProcessContext(ctx))
+	result := make(chan error, 1)
+	go func() {
+		result <- ExecuteShellCommandWithRetry(&schema.AtmosConfiguration{}, &info, "plan", invoke, component.WithProcessContext(ctx))
+	}()
+	select {
+	case <-waiting:
+	case <-time.After(2 * time.Second):
+		t.Fatal("retry did not enter backoff")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancellation did not interrupt backoff")
+	}
 
-	require.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, 1, called, "cancellation during retry backoff must prevent another command")
+}
+
+// backoffSignalContext signals when the retry loop starts selecting on Done.
+type backoffSignalContext struct {
+	context.Context
+	waiting chan struct{}
+}
+
+func (c *backoffSignalContext) Done() <-chan struct{} {
+	close(c.waiting)
+	return c.Context.Done()
+}
+
+func TestExecutorExecute_InvokesMainCommandOnce(t *testing.T) {
+	root := t.TempDir()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	write := func(name, content string) {
+		path := filepath.Join(root, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+	write("atmos.yaml", "base_path: .\ncomponents:\n  terraform:\n    command: "+strconv.Quote(exe)+"\n    base_path: components/terraform\nstacks:\n  base_path: stacks\n  included_paths: ['**/*.yaml']\n  name_template: '{{ .vars.stage }}'\nsettings:\n  telemetry:\n    enabled: false\n")
+	write("stacks/test.yaml", "vars:\n  stage: test\ncomponents:\n  terraform:\n    app:\n      backend_type: http\n")
+	write("components/terraform/app/main.tf", "terraform {}\n")
+	counter := filepath.Join(root, "counter")
+	t.Setenv("ATMOS_BASE_PATH", root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Setenv("_ATMOS_TEST_COUNTER_FILE", counter)
+	t.Setenv("_ATMOS_TEST_ARGS_FILE", filepath.Join(root, "args"))
+	t.Chdir(root)
+	err = testExecutor(t).Execute(&component.ExecutionContext{Context: t.Context(), ConfigAndStacksInfo: schema.ConfigAndStacksInfo{
+		Stack: "test", ComponentType: "terraform", ComponentFromArg: "app", SubCommand: "plan", SkipInit: true, ProcessTemplates: true, ProcessFunctions: true,
+	}})
+	require.NoError(t, err)
+	data, err := os.ReadFile(counter)
+	require.NoError(t, err)
+	assert.Equal(t, "x", string(data))
 }

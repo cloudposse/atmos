@@ -1,20 +1,21 @@
 package engine
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/spf13/afero"
-
-	"github.com/gruntwork-io/terragrunt/pkg/config"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
@@ -60,6 +61,68 @@ func executionFromConfig(terraform *config.TerraformConfig) (*model.Execution, e
 		return nil, nil
 	}
 	return result, nil
+}
+
+// commandFunctions are the Terragrunt functions whose value depends on the Terraform command.
+var commandFunctions = [][]byte{[]byte("get_terraform_command"), []byte("get_terraform_cli_args")}
+
+// applyTimeExecution records how the apply command sees hooks and extra arguments when a
+// plan is prepared. A saved plan is applied later from that preparation, while Terragrunt
+// evaluates the configuration again for apply; without this, a hook enabled only for apply
+// (for example `if = get_terraform_command() == "apply"`) would silently never run.
+// Configuration that cannot observe the command evaluates identically, so it is not parsed twice.
+func applyTimeExecution(request model.Request, path string, planned *model.Execution, filesystem afero.Fs, read []string,
+	parse func(*config.ParsingContext) (*config.TerragruntConfig, error),
+) (*model.Execution, []string, error) {
+	if request.Command != "plan" || !observesCommand(filesystem, append(slices.Clone(read), path)) {
+		return planned, nil, nil
+	}
+	apply := parsingContext(path, request.Tofu, "apply", nil)
+	cfg, err := parse(apply)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Configuration read only when evaluating for apply also shapes the reviewed plan.
+	files := apply.FilesRead.Paths()
+	applied, err := executionFromConfig(cfg.Terraform)
+	if err != nil {
+		return nil, nil, err
+	}
+	if applied == nil {
+		applied = &model.Execution{}
+	}
+	if planned == nil {
+		planned = &model.Execution{}
+	}
+	if reflect.DeepEqual(*applied, *planned) {
+		return nilIfEmpty(planned), files, nil
+	}
+	planned.Apply = applied
+	return planned, files, nil
+}
+
+// observesCommand reports whether any configuration file the unit read can call a function
+// that depends on the command. An unreadable file is assumed to, so apply is evaluated.
+func observesCommand(filesystem afero.Fs, paths []string) bool {
+	for _, path := range paths {
+		contents, err := afero.ReadFile(filesystem, path)
+		if err != nil {
+			return true
+		}
+		for _, name := range commandFunctions {
+			if bytes.Contains(contents, name) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func nilIfEmpty(execution *model.Execution) *model.Execution {
+	if execution.Apply == nil && len(execution.ExtraArguments)+len(execution.BeforeHooks)+len(execution.AfterHooks)+len(execution.ErrorHooks) == 0 {
+		return nil
+	}
+	return execution
 }
 
 func extraArguments(source *config.TerraformExtraArguments) model.ExtraArguments {

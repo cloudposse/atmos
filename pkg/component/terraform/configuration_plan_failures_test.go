@@ -1,7 +1,6 @@
 package terraform
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,28 +8,27 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// identityOnlyRuntime can bind plans but cannot resolve backend state.
-type identityOnlyRuntime struct {
-	schema.ComponentConfigurationRuntime
+// identityOnlyRuntime returns a generated runtime that can bind plans but cannot resolve backend state.
+func identityOnlyRuntime(t *testing.T) *MockPlanIdentityRuntime {
+	t.Helper()
+	runtime := NewMockPlanIdentityRuntime(gomock.NewController(t))
+	runtime.EXPECT().PlanIdentity(gomock.Any(), gomock.Any(), gomock.Any()).Return("provider-source-options", nil).AnyTimes()
+	return runtime
 }
 
-func (identityOnlyRuntime) PlanIdentity(context.Context, *schema.ConfigAndStacksInfo, []schema.ComponentConfigurationSource) (string, error) {
-	return "provider-source-options", nil
-}
-
-// stateFailureRuntime accepts the plan identity but fails to resolve the backend.
-type stateFailureRuntime struct {
-	*planRuntimeFixture
-	stateErr error
-}
-
-func (r stateFailureRuntime) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-	return nil, r.stateErr
+// stateFailureRuntime returns a generated runtime that accepts the plan identity but fails to resolve the backend.
+func stateFailureRuntime(t *testing.T, fixture *planRuntimeFixture, stateErr error) *MockReviewedPlanRuntime {
+	t.Helper()
+	runtime := NewMockReviewedPlanRuntime(gomock.NewController(t))
+	runtime.EXPECT().PlanIdentity(gomock.Any(), gomock.Any(), gomock.Any()).Return(fixture.identity, fixture.err).AnyTimes()
+	runtime.EXPECT().ResolveState(gomock.Any(), gomock.Any()).Return(nil, stateErr).AnyTimes()
+	return runtime
 }
 
 // recordedPlan records a plan companion and prepares the invocation for a direct apply.
@@ -54,7 +52,7 @@ func TestRestoreConfigurationPlanRequiresPlanBindingRuntime(t *testing.T) {
 
 func TestRestoreConfigurationPlanRequiresStateRuntime(t *testing.T) {
 	config, info, _, _, _ := recordedPlan(t)
-	config.ComponentConfigurations = identityOnlyRuntime{}
+	config.ComponentConfigurations = identityOnlyRuntime(t)
 	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
 	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension, "a provider that cannot prove the backend is unchanged must not apply a saved plan")
 	require.Nil(t, prepared)
@@ -64,7 +62,7 @@ func TestRestoreConfigurationPlanBackendResolution(t *testing.T) {
 	failure := errors.New("backend unreachable")
 	t.Run("resolution error is propagated", func(t *testing.T) {
 		config, info, _, runtime, _ := recordedPlan(t)
-		config.ComponentConfigurations = stateFailureRuntime{planRuntimeFixture: runtime, stateErr: failure}
+		config.ComponentConfigurations = stateFailureRuntime(t, runtime, failure)
 		_, err := restoreConfigurationPlan(t.Context(), config, info)
 		require.ErrorIs(t, err, failure)
 		require.NotErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "an unreachable backend is not a verification mismatch")
@@ -156,7 +154,7 @@ func TestConfigurationWorkdirDigestSkipsOnlyNestedMutableDirectories(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, baseline, same, "mutable data does not alter the retained-bytes digest")
 
-	for _, retained := range []string{"modules/child/main.tf", "terragrunt.hcl", ".terraform.lock.hcl", "settings.atmos.json"} {
+	for _, retained := range []string{"modules/child/main.tf", "terragrunt.hcl", ".terraform.lock.hcl", "settings.atmos.json", ".terraform/modules/vpc/.atmos/hook.sh", ".terraform/modules/vpc/.terragrunt-cache/main.tf", ".terraform/modules/vpc/.git/hooks/post-checkout"} {
 		write(retained)
 		changed, err := configurationWorkdirDigest(root, plan)
 		require.NoError(t, err)

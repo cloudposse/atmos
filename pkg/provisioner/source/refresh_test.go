@@ -334,9 +334,11 @@ func TestSourceRefreshProtectsFlatBackendPathState(t *testing.T) {
 				src, target := t.TempDir(), filepath.Join(t.TempDir(), "target")
 				refreshWrite(t, src, "exports/main.tf", "# first")
 				refreshWrite(t, src, collision, "source fixture")
-				config := map[string]any{"component": "exports", "backend": backend}
 				spec := &schema.VendorComponentSource{Uri: src}
-				require.NoError(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(config)))
+				// The source owns the file before the backend path is configured; a fresh checkout with the
+				// backend already configured refuses to install it at all.
+				require.NoError(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(map[string]any{"component": "exports"})))
+				config := map[string]any{"component": "exports", "backend": backend}
 				refreshWrite(t, target, collision, "opaque runtime bytes")
 				refreshWrite(t, src, collision, "changed source fixture")
 				err := VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(config))

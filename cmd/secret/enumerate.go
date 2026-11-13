@@ -295,6 +295,7 @@ func checkStackSopsCollisions(scope secretScope) error {
 				Component:     entry.Component,
 				ComponentType: entry.ComponentType,
 				Identity:      scope.Identity,
+				CommandPath:   scope.CommandPath,
 			})))
 		entryPlacements, placementErr := svc.SopsPlacements()
 		placements = append(placements, entryPlacements...)

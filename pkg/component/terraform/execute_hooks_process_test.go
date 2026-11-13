@@ -25,6 +25,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	autoinit "github.com/cloudposse/atmos/pkg/terraform/autoinit"
 )
 
 const (
@@ -323,4 +324,151 @@ func TestPipelineCancellationStopsAHookAndEverythingAfterIt(t *testing.T) {
 	require.Less(t, time.Since(started), 50*time.Second, "the sleeping hook must be stopped, not waited for")
 	names := timeline(readHookLog(t, pipeline.log))
 	require.Equal(t, "slow", names[len(names)-1], "nothing may start after the canceled hook: %v", names)
+}
+
+// TestErrorHookCaptureUsesTemporaryFiles verifies error hooks match command and hook output
+// recorded in temporary files rather than memory, and that every file is removed afterwards.
+func TestErrorHookCaptureUsesTemporaryFiles(t *testing.T) {
+	temp := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, temp)
+	}
+	capturedDuringCommand := 0
+	shell := &fakeShell{run: func(call *shellCall) error {
+		switch call.command {
+		case "terraform":
+			_, _ = call.options.StderrCapture.Write([]byte("Error: Throttled"))
+			entries, err := os.ReadDir(temp)
+			require.NoError(t, err)
+			capturedDuringCommand = len(entries)
+			return errUtils.ExitCodeError{Code: 1}
+		case "hook-after":
+			_, _ = call.options.StdoutCapture.Write([]byte("HookNeedle"))
+			return errUtils.ExitCodeError{Code: 2}
+		}
+		return nil
+	}}
+	after := execHook("after", "apply")
+	after.RunOnError = true
+	info := hookInfo("apply", &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{after},
+		ErrorHooks: []schema.ComponentHook{
+			{Name: "throttle", Commands: []string{"apply"}, Execute: []string{"hook-throttle"}, OnErrors: []string{"Throttled"}},
+			{Name: "needle", Commands: []string{"apply"}, Execute: []string{"hook-needle"}, OnErrors: []string{"HookNeedle"}},
+			{Name: "absent", Commands: []string{"apply"}, Execute: []string{"hook-absent"}, OnErrors: []string{"NotInAnyOutput"}},
+		},
+	})
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"apply"}, t.TempDir())
+	require.Error(t, err)
+	require.Equal(t, []string{"terraform apply", "hook-after arg", "hook-throttle", "hook-needle"}, shell.names())
+	require.Equal(t, 1, capturedDuringCommand, "the command output is written to one temporary file")
+	entries, err := os.ReadDir(temp)
+	require.NoError(t, err)
+	require.Empty(t, entries, "every capture file is removed")
+}
+
+// TestCaptureFileReportsFailures verifies capture failures surface when error hooks read the
+// output, without failing the writer chain of the command being recorded.
+func TestCaptureFileReportsFailures(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, missing)
+	}
+	capture := &phaseCapture{}
+	file := capture.create()
+	written, err := file.Write([]byte("output"))
+	require.NoError(t, err, "a capture failure never fails the command")
+	require.Equal(t, 6, written)
+	_, err = file.finish().Open()
+	require.ErrorIs(t, err, errUtils.ErrComponentOutputCapture)
+	capture.cleanup()
+
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("TMP", os.Getenv("TMPDIR"))
+	t.Setenv("TEMP", os.Getenv("TMPDIR"))
+	file = capture.create()
+	_, _ = file.Write([]byte("kept"))
+	// Close the capture before removing it: Windows cannot remove a file that is still open.
+	output := file.finish()
+	require.NoError(t, os.Remove(file.path))
+	_, err = output.Open()
+	require.ErrorIs(t, err, errUtils.ErrComponentOutputCapture, "a removed capture reports a read failure")
+	capture.cleanup()
+}
+
+// Smart init must see the init settings a provider adds through extra arguments. Otherwise an
+// edited init-only backend file would leave the previous initialization trusted.
+func TestSmartInitFingerprintIncludesProviderInitSettings(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), []byte(`terraform {
+  backend "local" {}
+}
+`), 0o600))
+	backendFile := filepath.Join(dir, "backend.hcl")
+	varFile := filepath.Join(t.TempDir(), "init.tfvars")
+	require.NoError(t, os.WriteFile(backendFile, []byte(`path = "a.tfstate"`), 0o600))
+	require.NoError(t, os.WriteFile(varFile, []byte(`a = 1`), 0o600))
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{Command: "terraform", ComponentEnvList: []string{"BASE=1"}, ComponentExecution: &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{
+			{Commands: []string{"init"}, Arguments: []string{"-backend-config=backend.hcl", "-backend-config", "bucket=one", "-var-file", varFile}},
+			{Commands: []string{"plan"}, Arguments: []string{"-backend-config=ignored-by-init"}, Environment: map[string]string{"PLAN_ONLY": "1"}},
+		},
+	}}
+	fingerprint := func() autoinit.Fingerprint {
+		t.Helper()
+		in := newAutoInitInputs(atmosConfig, info, dir, "")
+		require.NotNil(t, in)
+		result, err := autoinit.Compute(in)
+		require.NoError(t, err)
+		return result
+	}
+	base := fingerprint()
+	require.Equal(t, base, fingerprint(), "unchanged settings keep the fingerprint")
+
+	// Settings for other commands do not affect init.
+	info.ComponentExecution.ExtraArguments[1].Arguments = []string{"-lock=false"}
+	info.ComponentExecution.ExtraArguments[1].Environment = nil
+	require.Equal(t, base.Hash, fingerprint().Hash)
+
+	for name, change := range map[string]func(){
+		"backend file contents": func() { require.NoError(t, os.WriteFile(backendFile, []byte(`path = "b.tfstate"`), 0o600)) },
+		"backend file removed":  func() { require.NoError(t, os.Remove(backendFile)) },
+		"var file contents":     func() { require.NoError(t, os.WriteFile(varFile, []byte(`a = 2`), 0o600)) },
+		"backend value":         func() { info.ComponentExecution.ExtraArguments[0].Arguments[2] = "bucket=two" },
+		"init environment": func() {
+			info.ComponentExecution.ExtraArguments[0].Environment = map[string]string{"TF_CLI_ARGS_init": "-upgrade"}
+		},
+	} {
+		previous := fingerprint().Hash
+		change()
+		require.NotEqual(t, previous, fingerprint().Hash, name)
+	}
+}
+
+// The data directory an init-only TF_DATA_DIR selects is where smart init looks for its marker.
+func TestSmartInitUsesProviderInitDataDirectory(t *testing.T) {
+	dir := t.TempDir()
+	data := filepath.Join(t.TempDir(), "data")
+	info := &schema.ConfigAndStacksInfo{Command: "terraform", ComponentExecution: &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"init"}, Environment: map[string]string{"TF_DATA_DIR": data}}},
+	}}
+	in := newAutoInitInputs(&schema.AtmosConfiguration{}, info, dir, "")
+	value, ok := in.EnvLookup("TF_DATA_DIR")
+	require.True(t, ok)
+	require.Equal(t, data, value)
+	require.Equal(t, data, autoinit.DataDir(dir, in.EnvLookup))
+
+	// Without provider execution, the inputs are unchanged.
+	info.ComponentExecution = nil
+	plain := newAutoInitInputs(&schema.AtmosConfiguration{}, info, dir, "")
+	require.Empty(t, plain.Extra)
+}
+
+// Settings smart init cannot evaluate never let a recorded marker be trusted.
+func TestSmartInitDistrustsUnresolvableProviderInitSettings(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Command: "terraform", ComponentExecution: &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"init"}, RequiredVarFiles: []string{"missing.tfvars"}}},
+	}}
+	require.Nil(t, newAutoInitInputs(&schema.AtmosConfiguration{}, info, t.TempDir(), ""))
 }

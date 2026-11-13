@@ -52,20 +52,54 @@ func Publish(ctx context.Context, client atmosoci.Registry, directory, destinati
 }
 
 func publishIndex(ctx context.Context, client atmosoci.Registry, reference name.Reference, release *Release, index v1.ImageIndex) error {
-	existing, err := client.Head(ctx, reference)
-	if err == nil {
-		if existing.Digest.String() != release.Digest {
-			return errUtils.ErrPluginImmutableRelease
-		}
-		return nil
-	}
-	if !atmosoci.IsNotFound(err) {
+	exists, err := checkAvailableVersion(ctx, client, reference, release.Digest)
+	if err != nil || exists {
 		return err
 	}
 	if err := client.WriteIndex(ctx, reference, index); err != nil {
 		return err
 	}
 	return checkPublished(ctx, client, reference, release.Digest)
+}
+
+// CheckPublication checks a packed layout against its immutable registry version
+// without uploading it. Missing versions and identical bytes are acceptable;
+// registry failures are not treated as evidence that a version is available.
+// Publishers must still check again under their publication lock.
+func CheckPublication(ctx context.Context, client atmosoci.Registry, directory, destination string) error {
+	defer perf.Track(nil, "pluginoci.CheckPublication")()
+
+	if err := pluginpolicy.Source(ctx, "publish", destination); err != nil {
+		return err
+	}
+	repository, err := ParseDestination(destination)
+	if err != nil {
+		return err
+	}
+	index, err := atmosoci.LoadIndex(directory, "")
+	if err != nil {
+		return err
+	}
+	release, err := Inspect(index, "")
+	if err != nil {
+		return err
+	}
+	_, err = checkAvailableVersion(ctx, client, repository.Tag(release.Version), release.Digest)
+	return err
+}
+
+func checkAvailableVersion(ctx context.Context, client atmosoci.Registry, reference name.Reference, digest string) (bool, error) {
+	existing, err := client.Head(ctx, reference)
+	if err == nil {
+		if existing.Digest.String() != digest {
+			return true, errUtils.ErrPluginImmutableRelease
+		}
+		return true, nil
+	}
+	if !atmosoci.IsNotFound(err) {
+		return false, err
+	}
+	return false, nil
 }
 
 func validatePayloads(release *Release, descriptors *extension.Registry, configured *options) error {

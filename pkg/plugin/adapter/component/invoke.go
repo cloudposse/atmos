@@ -3,8 +3,11 @@ package component
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -55,6 +58,8 @@ func invocationError(err error) error {
 		return errors.Join(errUtils.ErrPluginAPI, context.Canceled)
 	case codes.DeadlineExceeded:
 		return errors.Join(errUtils.ErrPluginAPI, context.DeadlineExceeded)
+	case codes.InvalidArgument:
+		return discoveryDiagnostic(err)
 	case codes.Unimplemented:
 		return errUtils.ErrPluginUnsupportedExtension
 	default:
@@ -104,4 +109,40 @@ func (p *Provider) validateOperation(ctx context.Context, handle *native.Handle,
 		return errUtils.ErrPluginProtocol
 	}
 	return firstDiagnosticError(result.Diagnostics)
+}
+
+// discoveryDiagnostic accepts only the versioned discovery contract. Messages,
+// unknown categories, and extra metadata never become host diagnostics. File is
+// a root-relative configuration identity (including virtual generated files),
+// not a path or source snippet extracted from an HCL error message.
+func discoveryDiagnostic(err error) error {
+	for _, detail := range status.Convert(err).Details() {
+		info, ok := detail.(*errdetails.ErrorInfo)
+		if !ok || info.Domain != "atmos.terragrunt.discovery.v1" || len(info.Metadata) != 1 {
+			continue
+		}
+		file := info.Metadata["file"]
+		if !validDiscoveryFile(file) {
+			continue
+		}
+		var message string
+		switch info.Reason {
+		case "MISSING_TERRAFORM_SOURCE":
+			message = "inline Terraform modules require terraform.source"
+		case "NONLOCAL_SOURCE":
+			message = "discovery requires a local source"
+		case "EVALUATION_FAILED":
+			message = "configuration evaluation failed"
+		default:
+			continue
+		}
+		return fmt.Errorf("%w: Terragrunt discovery in %q: %s", errUtils.ErrPluginAPI, file, message)
+	}
+	return errUtils.ErrPluginAPI
+}
+
+func validDiscoveryFile(file string) bool {
+	const maxDiagnosticPathBytes = 4096
+	return len(file) <= maxDiagnosticPathBytes && filepath.IsLocal(file) &&
+		!strings.ContainsAny(file, "\\\r\n\x00") && filepath.ToSlash(filepath.Clean(file)) == file
 }

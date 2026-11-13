@@ -23,6 +23,9 @@ const configurationPlanSuffix = ".atmos.json"
 // configurationPlanVersion is bumped whenever the stored binding changes shape.
 const configurationPlanVersion = 2
 
+// subcommandPlan names the Terraform plan command.
+const subcommandPlan = "plan"
+
 // planBindingSuffix names the binding of a default saved plan, which Atmos writes as "*.planfile".
 const planBindingSuffix = ".planfile" + configurationPlanSuffix
 
@@ -304,57 +307,15 @@ func backendIdentityDigest(backend map[string]any) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-// validatePlanOutputFlags rejects ambiguous plan destinations before hooks or Terraform run.
-func validatePlanOutputFlags(command string, args []string) error {
-	if command != "plan" {
-		return nil
-	}
-	count := 0
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "-out" || arg == "--out" {
-			count++
-			i++
-		} else if strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=") {
-			count++
-		}
-		if count > 1 {
-			return fmt.Errorf("%w: multiple plan output flags", errUtils.ErrPlanVerificationFailed)
-		}
-	}
-	return nil
-}
-
-func plannedOutputPath(directory string, args []string) string {
-	for i, arg := range args {
-		path := ""
-		switch {
-		case (arg == "-out" || arg == "--out") && i+1 < len(args):
-			path = args[i+1]
-		case strings.HasPrefix(arg, "-out="):
-			path = strings.TrimPrefix(arg, "-out=")
-		case strings.HasPrefix(arg, "--out="):
-			path = strings.TrimPrefix(arg, "--out=")
-		}
-		if path != "" {
-			if filepath.IsAbs(path) {
-				return path
-			}
-			return filepath.Join(directory, path)
-		}
-	}
-	return ""
-}
-
 func fileDigest(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", planIOError(err)
 	}
 	defer file.Close()
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
-		return "", err
+		return "", planIOError(err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
@@ -362,17 +323,25 @@ func fileDigest(path string) (string, error) {
 func writePlanBinding(path string, data []byte) error {
 	file, err := os.CreateTemp(filepath.Dir(path), ".atmos-plan-*")
 	if err != nil {
-		return err
+		return planIOError(err)
 	}
 	defer os.Remove(file.Name())
 	if _, err := file.Write(data); err != nil {
 		file.Close()
-		return err
+		return planIOError(err)
 	}
 	if err := file.Close(); err != nil {
-		return err
+		return planIOError(err)
 	}
-	return os.Rename(file.Name(), path)
+	if err := os.Rename(file.Name(), path); err != nil {
+		return planIOError(err)
+	}
+	return nil
+}
+
+// planIOError wraps a saved-plan filesystem failure while keeping the underlying cause.
+func planIOError(err error) error {
+	return fmt.Errorf("%w: %w", errUtils.ErrPlanVerificationFailed, err)
 }
 
 // verifyConfigurationPlanState rejects a changed backend without reading dependency outputs.
@@ -397,6 +366,15 @@ func verifyConfigurationPlanState(ctx context.Context, config *schema.AtmosConfi
 	return nil
 }
 
+// excludedWorkdirFile reports a file the working directory digest ignores: the plan and its
+// binding, Terraform's cache outside downloaded modules, and runtime files outside modules.
+func excludedWorkdirFile(root, path, planPath, name string) bool {
+	if path == planPath || path == planPath+configurationPlanSuffix || insideTerraformCacheOutsideModules(root, path) {
+		return true
+	}
+	return !insideTerraformModules(root, path) && ignoredWorkdirFile(path, planPath, name)
+}
+
 // configurationWorkdirDigest binds retained module/configuration bytes, excluding mutable execution data.
 func configurationWorkdirDigest(root, planPath string) (string, error) {
 	// An explicit plan path may be absolute while the directory is relative, or the reverse.
@@ -416,7 +394,7 @@ func configurationWorkdirDigest(root, planPath string) (string, error) {
 			}
 			return nil
 		}
-		if path == planPath || path == planPath+configurationPlanSuffix || insideTerraformCacheOutsideModules(root, path) || (!insideTerraformModules(root, path) && ignoredWorkdirFile(path, planPath, entry.Name())) {
+		if excludedWorkdirFile(root, path, planPath, entry.Name()) {
 			return nil
 		}
 		return recordWorkdirFile(root, path, entry, files)
@@ -460,8 +438,16 @@ func resolvedPath(path string) (string, error) {
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
 // The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
 // that even a read-only lookup of the retained directory creates), never executed content.
+// Name-based exclusions apply only outside downloaded modules: a module's own subdirectories
+// are content Terraform may execute during apply, whatever they are called.
 func skipWorkdirDirectory(root, path, name string) bool {
-	return path != root && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || insideTerraformCacheOutsideModules(root, path))
+	if path == root {
+		return false
+	}
+	if insideTerraformCacheOutsideModules(root, path) {
+		return true
+	}
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache
