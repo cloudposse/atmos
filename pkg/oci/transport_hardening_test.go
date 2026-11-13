@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/name"
@@ -211,4 +213,34 @@ func TestReferrersPresentRequiresEveryReferrerAtTheDestination(t *testing.T) {
 	assert.False(t, referrersPresent(ctx, src, dst, root), "the root alone does not complete an extended copy")
 	require.NoError(t, dst.Push(ctx, signature, bytes.NewReader(sigRaw)))
 	assert.True(t, referrersPresent(ctx, src, dst, root))
+}
+
+func TestLayoutConcurrentTagsKeepResolverAndIndexInStep(t *testing.T) {
+	const writers = 16
+	dir := t.TempDir()
+	layout, err := OpenLayout(t.Context(), dir)
+	require.NoError(t, err)
+	descriptors := make([]ocispec.Descriptor, writers)
+	for i := range descriptors {
+		descriptors[i] = pushManifest(t, layout, fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","size":2},"layers":[],"annotations":{"n":"%d"}}`, i))
+	}
+
+	var wg sync.WaitGroup
+	for i := range descriptors {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.NoError(t, layout.Tag(t.Context(), descriptors[i], "release"))
+		}()
+	}
+	wg.Wait()
+
+	resolved, err := layout.Resolve(t.Context(), "release")
+	require.NoError(t, err)
+	reopened, err := OpenLayout(t.Context(), dir)
+	require.NoError(t, err)
+	persisted, err := reopened.Resolve(t.Context(), "release")
+	require.NoError(t, err)
+	assert.Equal(t, resolved.Digest, persisted.Digest, "the persisted index names the same manifest the resolver returns")
+	assert.Equal(t, []string{"release"}, reopened.References())
 }
