@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -679,6 +680,43 @@ func TestErrorsPolicyMatchesStandardErrorOnly(t *testing.T) {
 	require.Len(t, shell.calls, 1)
 }
 
+func TestErrorsPolicyMatchesHookStderrWithoutCapturingItAsCommandOutput(t *testing.T) {
+	attempts := 0
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if call.command != "hook-lint" {
+			return nil
+		}
+		attempts++
+		if attempts == 1 {
+			_, _ = io.WriteString(call.options.StderrCapture, "connection timeout")
+			return errors.New("hook failed")
+		}
+		return nil
+	}}
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 2}}}
+	info := errorsInfo("plan", policy, execHook("lint", "plan"))
+	var callerCapture strings.Builder
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan"}, t.TempDir(), component.WithStderrCapture(&callerCapture))
+	require.NoError(t, err)
+	require.Equal(t, 2, attempts)
+	require.NotContains(t, callerCapture.String(), "connection timeout", "hook diagnostics stay out of command capture")
+}
+
+func TestErrorsPolicyDoesNotMatchHookStdout(t *testing.T) {
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if call.command != "hook-lint" {
+			return nil
+		}
+		_, _ = io.WriteString(call.options.StdoutCapture, "connection timeout")
+		return errors.New("hook failed")
+	}}
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 2}}}
+	info := errorsInfo("plan", policy, execHook("lint", "plan"))
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan"}, t.TempDir())
+	require.Error(t, err)
+	require.Len(t, shell.calls, 1, "hook stdout alone must not match the retry policy")
+}
+
 func TestErrorsPolicyIgnoresAFailureAndWritesSignals(t *testing.T) {
 	dir := t.TempDir()
 	shell := &fakeShell{run: scriptedFailures([]string{"Error: already exists"}, errUtils.ExitCodeError{Code: 1})}
@@ -902,7 +940,7 @@ func TestInitFromModuleHooksWrapTheSourceFetch(t *testing.T) {
 	wrapper := e.initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
 	require.NotNil(t, wrapper)
 	var timeline []string
-	require.NoError(t, wrapper(t.Context(), func(context.Context) error {
+	require.NoError(t, wrapper(t.Context(), &source.Target{Dir: unit}, func(context.Context) error {
 		timeline = append(timeline, strings.Join(shell.names(), ","))
 		return nil
 	}))
@@ -910,7 +948,7 @@ func TestInitFromModuleHooksWrapTheSourceFetch(t *testing.T) {
 	require.Equal(t, []string{"hook-before", "hook-after"}, shell.names())
 
 	shell.calls = nil
-	err := wrapper(t.Context(), func(context.Context) error { return errors.New("download failed: 404") })
+	err := wrapper(t.Context(), &source.Target{Dir: unit}, func(context.Context) error { return errors.New("download failed: 404") })
 	require.Error(t, err)
 	require.Equal(t, []string{"hook-before", "hook-report"}, shell.names(), "a failed fetch skips the after hook and runs the matching error hook")
 
@@ -935,7 +973,7 @@ func TestSourceFetchFollowsTheErrorsPolicyInsideTheHooks(t *testing.T) {
 	wrapper := e.initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
 	require.NotNil(t, wrapper)
 	attempts := 0
-	require.NoError(t, wrapper(t.Context(), func(context.Context) error {
+	require.NoError(t, wrapper(t.Context(), &source.Target{Dir: unit}, func(context.Context) error {
 		attempts++
 		if attempts < 3 {
 			return errors.New("flaky download")
@@ -945,13 +983,32 @@ func TestSourceFetchFollowsTheErrorsPolicyInsideTheHooks(t *testing.T) {
 	require.Equal(t, 3, attempts)
 	require.Equal(t, []string{"hook-fetch"}, shell.names(), "the hooks wrap the retries, they do not repeat with them")
 
-	err := wrapper(t.Context(), func(context.Context) error { return errors.New("permanently gone") })
+	err := wrapper(t.Context(), &source.Target{Dir: unit}, func(context.Context) error { return errors.New("permanently gone") })
 	require.ErrorIs(t, err, errUtils.ErrComponentRunIgnored)
-	err = wrapper(t.Context(), func(context.Context) error { return errors.New("other failure") })
+	err = wrapper(t.Context(), &source.Target{Dir: unit}, func(context.Context) error { return errors.New("other failure") })
 	require.EqualError(t, err, "other failure")
 
 	// An errors policy alone is enough to wrap the fetch.
 	require.NotNil(t, e.initFromModuleWrapper(&schema.AtmosConfiguration{}, hookInfo("plan", &schema.ComponentExecution{Errors: policy})))
+}
+
+func TestIgnoredSourceRefreshWritesSignalsInModuleDirectory(t *testing.T) {
+	workdir := t.TempDir()
+	moduleDir := filepath.Join(workdir, "module")
+	require.NoError(t, os.Mkdir(moduleDir, 0o755))
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{
+		Name: "missing", Patterns: []string{"download failed"}, Signals: map[string]any{"fetch_failed": true},
+	}}}
+	info := hookInfo("plan", &schema.ComponentExecution{Errors: policy})
+	info.BaseComponentPath = "module"
+	wrapper := hookExecutor(&fakeShell{}).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	err := wrapper(t.Context(), &source.Target{Dir: workdir, IsWorkdir: true},
+		func(context.Context) error { return errors.New("download failed") })
+	require.ErrorIs(t, err, errUtils.ErrComponentRunIgnored)
+	data, err := os.ReadFile(filepath.Join(moduleDir, "error-signals.json"))
+	require.NoError(t, err)
+	require.JSONEq(t, `{"fetch_failed": true}`, string(data))
+	require.NoFileExists(t, filepath.Join(workdir, "error-signals.json"))
 }
 
 func TestOnlyRunIgnoredKeepsIndependentHookFailures(t *testing.T) {

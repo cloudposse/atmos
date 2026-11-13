@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
@@ -34,8 +36,10 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	if cfg.Terraform != nil && cfg.Terraform.Version != nil {
 		constraint = *cfg.Terraform.Version
 	}
-	resolved, err := atmosbridge.ResolveRegistrySource(ctx, logger, atmosbridge.RegistryRequest{
-		Client: registryClient, Source: result.Source, Constraint: constraint, Environment: request.Environment, OpenTofu: IsOpenTofu(request.Tofu),
+	resolved, err := retryRegistryResolution(ctx, result.Errors, func() (string, error) {
+		return atmosbridge.ResolveRegistrySource(ctx, logger, atmosbridge.RegistryRequest{
+			Client: registryClient, Source: result.Source, Constraint: constraint, Environment: request.Environment, OpenTofu: IsOpenTofu(request.Tofu),
+		})
 	})
 	if err != nil {
 		return registryProblem(result.Source, err)
@@ -46,6 +50,49 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	}
 	result.Source = resolved
 	return nil
+}
+
+// retryRegistryResolution applies the unit's source-fetch retry patterns to
+// registry discovery and version lookup, which happen before the host fetch.
+func retryRegistryResolution(ctx context.Context, policies *model.Errors, resolve func() (string, error)) (string, error) {
+	for attempt := 1; ; attempt++ {
+		resolved, err := resolve()
+		if err == nil || policies == nil || ctx.Err() != nil {
+			return resolved, err
+		}
+		var retry *model.RetryPolicy
+		for i := range policies.Retry {
+			if registryErrorMatches(err.Error(), policies.Retry[i].Patterns) {
+				retry = &policies.Retry[i]
+				break
+			}
+		}
+		if retry == nil || attempt >= retry.MaxAttempts {
+			return "", err
+		}
+		timer := time.NewTimer(time.Duration(retry.SleepIntervalSec) * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return "", ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func registryErrorMatches(message string, patterns []string) bool {
+	matched := false
+	for _, pattern := range patterns {
+		negative := strings.HasPrefix(pattern, "!")
+		expression, err := regexp.Compile(strings.TrimPrefix(pattern, "!"))
+		if err == nil && expression.MatchString(message) {
+			if negative {
+				return false
+			}
+			matched = true
+		}
+	}
+	return matched
 }
 
 // IsOpenTofu reports whether the selected executable is OpenTofu. The executable name decides, as it does

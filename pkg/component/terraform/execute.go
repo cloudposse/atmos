@@ -233,12 +233,7 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, component.WithEnvironment(info.SanitizedEnv))
-	err = e.executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
-	if onlyRunIgnored(err) {
-		// An ignored error in a preparatory step ends the run successfully, without the command.
-		cleanupTerraformFiles(&atmosConfig, &info)
-		err = nil
-	}
+	err = e.runPreparedPipeline(&atmosConfig, &info, execCtx, opts...)
 	// A Terraform command can create, change, or remove state, and a failed apply can
 	// still persist partial changes. Drop any preflight snapshot either way so a later
 	// graph node (including one in a keep-going run) reads the current outputs.

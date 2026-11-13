@@ -2,6 +2,7 @@ package atmosbridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -164,6 +165,17 @@ func TestResolveRegistrySourceErrors(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), test.wantErr)
 		})
+	}
+	for _, test := range []struct {
+		source string
+		want   error
+	}{
+		{"https://example.test/module.zip", ErrInvalidRegistrySource},
+		{registry.source("/acme/vpc/aws", "?version="), ErrMalformedRegistryVersion},
+		{registry.source("/acme/vpc/aws", "?version=~%3E1.0"), ErrRegistryVersionConstraint},
+	} {
+		_, err := resolveTestSource(t, registry, test.source, "", map[string]string{})
+		require.True(t, errors.Is(err, test.want), "expected %v in %v", test.want, err)
 	}
 }
 

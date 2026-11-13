@@ -154,7 +154,8 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts)}
 	// With -detailed-exitcode, exit status 2 reports a plan with changes. Hooks must not see that
 	// as a failure, but the status still has to reach the caller once the hooks are done.
-	attempt := func(attemptOpts []component.ExecutionOption) (changesPresent, runErr error) {
+	attempt := func(attemptOpts []component.ExecutionOption, hookStderr io.Writer) (changesPresent, runErr error) {
+		runner.recoveryStderr = hookStderr
 		runErr = execution.Run(component.ContextFromOptions(attemptOpts...), config, phase.command, runner, func() (string, error) {
 			output, actionErr := runObservedAction(&phaseInfo, applied.Args, attemptOpts, config, action)
 			if isDetailedExitCodeChanges(phase.command, applied.Args, phaseInfo.ComponentEnvList, actionErr, attemptOpts...) {
@@ -169,7 +170,7 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	if config.Errors != nil {
 		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempt)
 	}
-	changesPresent, err := attempt(opts)
+	changesPresent, err := attempt(opts, nil)
 	if err != nil {
 		return err
 	}
@@ -293,6 +294,8 @@ type hookRunner struct {
 	info        *schema.ConfigAndStacksInfo
 	phase       *executionPhase
 	opts        []component.ExecutionOption
+	// recoveryStderr is per attempt and separate from the caller's command capture.
+	recoveryStderr io.Writer
 }
 
 // RunHook runs one hook and returns its captured output for error hook matching.
@@ -316,11 +319,15 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 
 	var output bytes.Buffer
 	captured := &syncWriter{w: &output}
+	var stderrCapture io.Writer = captured
+	if r.recoveryStderr != nil {
+		stderrCapture = io.MultiWriter(captured, &syncWriter{w: r.recoveryStderr})
+	}
 	opts := append(
 		slices.Clone(r.opts),
 		component.WithStdoutOverride(stdout),
 		component.WithStdoutCapture(captured),
-		component.WithStderrCapture(captured),
+		component.WithStderrCapture(stderrCapture),
 	)
 	env := append(
 		slices.Clone(r.info.ComponentEnvList),
@@ -332,7 +339,14 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 	if err != nil {
 		return "", err
 	}
-	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], hook.Execute[1:], directory, env, false, "", opts...)
+	arguments := hook.Execute[1:]
+	if hook.Execute[0] == "tflint" {
+		arguments, err = resolveTflintHookArguments(arguments, directory)
+		if err != nil {
+			return "", fmt.Errorf("tflint hook %q: %w", hook.Name, err)
+		}
+	}
+	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], arguments, directory, env, false, "", opts...)
 	return output.String(), err
 }
 

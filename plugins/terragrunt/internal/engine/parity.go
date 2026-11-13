@@ -391,6 +391,10 @@ const (
 	tflintExecutable   = "tflint"
 	tflintExternalFlag = "--terragrunt-external-tflint"
 	tflintConfigName   = ".tflint.hcl"
+	// The host resolves this marker against the provisioned module directory when the hook runs.
+	tflintOptionalVarFilePrefix = "--atmos-optional-var-file="
+	// The host searches for this config only when the selected hook executes.
+	tflintConfigSearchPrefix = "--atmos-tflint-config-search="
 	// tflintMaxParents bounds the search for .tflint.hcl, like Terragrunt's default folder limit.
 	tflintMaxParents = 100
 )
@@ -471,11 +475,9 @@ func splitLifecycle(hook model.Hook, unitDir string) []model.Hook {
 // arguments of the command that is running.
 func expandTflint(hook *model.Hook, execution *model.Execution, path string, inputs map[string]any) ([]model.Hook, error) {
 	arguments := slices.DeleteFunc(slices.Clone(hook.Execute), func(arg string) bool { return arg == tflintExternalFlag })
-	configFile, err := tflintConfig(arguments, filepath.Dir(path))
-	if err != nil {
-		return nil, setting(model.CodeUnsupportedHook, fmt.Sprintf("hook %q", hook.Name), path, fmt.Sprintf("tflint hook %q cannot find its configuration", hook.Name),
-			"Terragrunt looks for `.tflint.hcl` in the unit directory and each parent directory, and none was found.",
-			"Add a `.tflint.hcl` file next to the unit or in a parent directory, or pass `--config <file>` in `execute`.")
+	configFile := tflintConfigSearchPrefix + filepath.Dir(path)
+	if explicit, found := explicitTflintConfig(arguments, filepath.Dir(path)); found {
+		configFile = explicit
 	}
 	inputVariables, err := tflintVariables(inputs)
 	if err != nil {
@@ -499,15 +501,8 @@ func expandTflint(hook *model.Hook, execution *model.Execution, path string, inp
 
 // tflintConfig returns the configuration named by --config/-c, or the nearest .tflint.hcl.
 func tflintConfig(arguments []string, unitDir string) (string, error) {
-	for i, arg := range arguments {
-		for _, flag := range []string{"--config", "-c"} {
-			if arg == flag && len(arguments) > i+1 {
-				return anchored(arguments[i+1], unitDir), nil
-			}
-			if value, found := strings.CutPrefix(arg, flag+"="); found {
-				return anchored(value, unitDir), nil
-			}
-		}
+	if explicit, found := explicitTflintConfig(arguments, unitDir); found {
+		return explicit, nil
 	}
 	dir := unitDir
 	for range tflintMaxParents {
@@ -522,6 +517,20 @@ func tflintConfig(arguments []string, unitDir string) (string, error) {
 		dir = parent
 	}
 	return "", os.ErrNotExist
+}
+
+func explicitTflintConfig(arguments []string, unitDir string) (string, bool) {
+	for i, arg := range arguments {
+		for _, flag := range []string{"--config", "-c"} {
+			if arg == flag && len(arguments) > i+1 {
+				return anchored(arguments[i+1], unitDir), true
+			}
+			if value, found := strings.CutPrefix(arg, flag+"="); found {
+				return anchored(value, unitDir), true
+			}
+		}
+	}
+	return "", false
 }
 
 func anchored(path, dir string) string {
@@ -609,9 +618,7 @@ func extraArgumentVariables(extra *model.ExtraArguments) []string {
 		variables = append(variables, "--var-file="+file)
 	}
 	for _, file := range extra.OptionalVarFiles {
-		if _, err := os.Stat(file); err == nil {
-			variables = append(variables, "--var-file="+file)
-		}
+		variables = append(variables, tflintOptionalVarFilePrefix+file)
 	}
 	return variables
 }

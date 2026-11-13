@@ -221,8 +221,9 @@ func TestAutoProvisionSourceRunsTheWrapperOnlyWhenProvisioning(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	calls := 0
 	var wrapperErr error
-	ctx := WithProvisionWrapper(t.Context(), func(ctx context.Context, provision func(context.Context) error) error {
+	ctx := WithProvisionWrapper(t.Context(), func(ctx context.Context, target *Target, provision func(context.Context) error) error {
 		calls++
+		assert.NotEmpty(t, target.Dir)
 		if wrapperErr != nil {
 			return wrapperErr
 		}
@@ -250,7 +251,7 @@ func TestAutoProvisionSourceRunsTheWrapperOnlyWhenProvisioning(t *testing.T) {
 
 func TestProvisionWithoutWrapperRunsDirectly(t *testing.T) {
 	ran := false
-	require.NoError(t, provisionWithWrapper(t.Context(), func(context.Context) error { ran = true; return nil }))
+	require.NoError(t, provisionWithWrapper(t.Context(), nil, func(context.Context) error { ran = true; return nil }))
 	assert.True(t, ran)
 }
 

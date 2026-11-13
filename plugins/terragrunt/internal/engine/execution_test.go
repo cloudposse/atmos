@@ -399,6 +399,7 @@ func TestFeatureDefaultsAreRenderedAsStrings(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"enabled": "false", "size": "3", "tier": "basic"}, result.FeatureFlags)
 	require.Equal(t, false, result.Inputs["enabled"])
+	require.Equal(t, json.Number("3"), result.Inputs["size"])
 	require.Equal(t, "basic", result.Inputs["tier"])
 }
 
@@ -409,6 +410,7 @@ func TestFeatureOverridesReplaceDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"enabled": "true", "size": "8", "tier": "premium"}, result.FeatureFlags)
 	require.Equal(t, true, result.Inputs["enabled"], "a boolean feature is typed from its override")
+	require.Equal(t, "8", result.Inputs["size"], "Terragrunt keeps a numeric feature override as its CLI string")
 	require.Equal(t, "premium", result.Inputs["tier"])
 }
 
@@ -546,9 +548,9 @@ func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Execution.BeforeHooks, 2)
 	initHook, lintHook := result.Execution.BeforeHooks[0], result.Execution.BeforeHooks[1]
-	require.Equal(t, []string{"tflint", "--init", "--config", config, "--chdir", "."}, initHook.Execute)
+	require.Equal(t, []string{"tflint", "--init", "--config", tflintConfigSearchPrefix + root, "--chdir", "."}, initHook.Execute)
 	require.Equal(t, []string{
-		"tflint", "--config", config, "--chdir", ".",
+		"tflint", "--config", tflintConfigSearchPrefix + root, "--chdir", ".",
 		"--var=count=2", "--var=name=web",
 		"--var=zone=a", "--var=region=eu", "--var-file=required.tfvars",
 		"--minimum-failure-severity=error",
@@ -557,20 +559,14 @@ func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
 	require.Equal(t, []string{"plan"}, lintHook.Commands)
 }
 
-func TestTflintHookWithoutConfigurationNamesTheHook(t *testing.T) {
+func TestTflintHookDefersConfigurationLookup(t *testing.T) {
 	root := t.TempDir()
 	unit := filepath.Join(root, "a", "b")
 	require.NoError(t, os.MkdirAll(unit, 0o755))
-	// No .tflint.hcl exists in any parent below the temporary root, so the search must end with a problem.
-	_, err := tflintConfig(nil, unit)
-	if err == nil {
-		t.Skip("a .tflint.hcl exists above the temporary directory")
-	}
-	_, err = expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"), nil)
-	problem := asProblem(t, err)
-	require.Equal(t, model.CodeUnsupportedHook, problem.Code)
-	require.Contains(t, problem.Summary, `"lint"`)
-	require.NotEmpty(t, problem.Hints)
+	hooks, err := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"), nil)
+	require.NoError(t, err)
+	require.Len(t, hooks, 2)
+	require.Contains(t, hooks[0].Execute, tflintConfigSearchPrefix+unit)
 }
 
 func TestTflintConfigFlagForms(t *testing.T) {
@@ -657,11 +653,7 @@ func TestFinalizeExecutionHandlesAbsentAndFailingHooks(t *testing.T) {
 		"error":  {ErrorHooks: []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := tflintConfig(nil, filepath.Dir(unit)); err == nil {
-				t.Skip("a .tflint.hcl exists above the temporary directory")
-			}
-			err := finalizeExecution(execution, unit, nil)
-			require.Equal(t, model.CodeUnsupportedHook, asProblem(t, err).Code)
+			require.NoError(t, finalizeExecution(execution, unit, nil))
 		})
 	}
 	// Inputs that cannot be rendered fail the whole unit with the error, not a silent gap.
@@ -678,7 +670,7 @@ func TestTflintVariablesFromExtraArguments(t *testing.T) {
 		{Commands: []string{"apply"}, Arguments: []string{"-var=ignored=1"}},
 		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false", "-var", "c=3", "-var-file", "d.tfvars"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
 	}}
-	require.Equal(t, []string{"--var=b=2", "--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", "--var-file=" + existing}, tflintExtraVariables("plan", execution))
+	require.Equal(t, []string{"--var=b=2", "--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", tflintOptionalVarFilePrefix + existing, tflintOptionalVarFilePrefix + "absent.tfvars"}, tflintExtraVariables("plan", execution))
 	require.Equal(t, []string{"--var=ignored=1"}, tflintExtraVariables("apply", execution))
 }
 

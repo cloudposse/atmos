@@ -52,6 +52,45 @@ func registryUnit(t *testing.T, terraformBody string) model.Request {
 	return model.Request{Path: path, BasePath: root, Command: "plan", Tofu: "/bin/tofu", Environment: map[string]string{"HOME": root}}
 }
 
+func TestRegistryDiscoveryRetriesTransientFailure(t *testing.T) {
+	var discoveryCalls atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/terraform.json", func(w http.ResponseWriter, _ *http.Request) {
+		if discoveryCalls.Add(1) == 1 {
+			http.Error(w, "temporary", http.StatusServiceUnavailable)
+			return
+		}
+		fmt.Fprint(w, `{"modules.v1":"/v1/modules/"}`)
+	})
+	mux.HandleFunc("/v1/modules/acme/vpc/aws/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Terraform-Get", "https://example.test/module.zip")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+	previous := registryClient
+	registryClient = server.Client()
+	defer func() { registryClient = previous }()
+	address, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	request := registryUnit(t, `source = "tfr://`+address.Host+`/acme/vpc/aws?version=1.0.0"`)
+	file := `terraform {
+  source = "tfr://` + address.Host + `/acme/vpc/aws?version=1.0.0"
+}
+errors {
+  retry "registry" {
+    retryable_errors = ["status code 503"]
+    max_attempts = 2
+    sleep_interval_sec = 0
+  }
+}`
+	require.NoError(t, os.WriteFile(request.Path, []byte(file), 0o644))
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "https://example.test/module.zip", result.Source)
+	require.EqualValues(t, 2, discoveryCalls.Load())
+}
+
 func TestRegistrySourceResolvesAtPreparation(t *testing.T) {
 	host, requests := registryServer(t)
 	request := registryUnit(t, `source = "tfr://`+host+`/acme/vpc/aws//modules/nat?version=1.4.0"`)

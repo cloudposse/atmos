@@ -2,6 +2,7 @@ package atmosbridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,15 @@ import (
 
 // registryTimeout bounds each registry request when the caller supplies no client.
 const registryTimeout = 30 * time.Second
+
+var (
+	// ErrInvalidRegistrySource identifies a source that cannot use the tfr getter.
+	ErrInvalidRegistrySource = errors.New("invalid Terraform registry source")
+	// ErrMalformedRegistryVersion identifies an invalid exact version query.
+	ErrMalformedRegistryVersion = errors.New("malformed Terraform registry version")
+	// ErrRegistryVersionConstraint identifies a constraint in an exact-version query.
+	ErrRegistryVersionConstraint = errors.New("Terraform registry version constraint requires the terraform block")
+)
 
 // RegistryRequest describes one `tfr://` module source to resolve.
 type RegistryRequest struct {
@@ -37,8 +47,11 @@ type RegistryRequest struct {
 // selection, and the X-Terraform-Get header. A `//subdir` on the module path is appended to the result.
 func ResolveRegistrySource(ctx context.Context, logger log.Logger, request RegistryRequest) (string, error) {
 	source, err := url.Parse(request.Source)
-	if err != nil || source.Scheme != getter.SchemeTFR {
-		return "", fmt.Errorf("%q is not a tfr:// source", request.Source)
+	if err != nil {
+		return "", fmt.Errorf("%w %q: %w", ErrInvalidRegistrySource, request.Source, err)
+	}
+	if source.Scheme != getter.SchemeTFR {
+		return "", fmt.Errorf("%w: %q is not a tfr:// source", ErrInvalidRegistrySource, request.Source)
 	}
 	implementation := tfimpl.Terraform
 	if request.OpenTofu {
@@ -86,10 +99,10 @@ func registryVersion(ctx context.Context, logger log.Logger, client *http.Client
 	versions, present := source.Query()["version"]
 	if present {
 		if len(versions) != 1 || versions[0] == "" {
-			return "", fmt.Errorf("tfr getter URL is malformed: the version query must appear once and not be empty")
+			return "", fmt.Errorf("%w: the version query must appear once and not be empty", ErrMalformedRegistryVersion)
 		}
 		if getter.SourceHasVersionConstraint(request.Source) {
-			return "", fmt.Errorf("the source %q sets a version constraint in its ?version= query, which accepts an exact version only; express a constraint with the terraform block's version attribute instead", request.Source)
+			return "", fmt.Errorf("%w: the source %q sets a version constraint in its ?version= query, which accepts an exact version only; express a constraint with the terraform block's version attribute instead", ErrRegistryVersionConstraint, request.Source)
 		}
 		return versions[0], nil
 	}
