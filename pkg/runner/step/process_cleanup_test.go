@@ -3,7 +3,6 @@ package step
 import (
 	"context"
 	"os"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,51 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/api"
 )
 
-// gatedTestDeadline starts the real timeout only after the test helper reports readiness.
-type gatedTestDeadline struct {
-	context.Context
-	expired *atomic.Bool
-}
-
-func (d gatedTestDeadline) Err() error {
-	err := d.Context.Err()
-	if err != nil && d.expired.Load() {
-		return context.DeadlineExceeded
-	}
-	return err
-}
-
-func gatedTestTimeout(gate <-chan struct{}) stepTimeoutFactory {
-	var calls atomic.Int32
-	return func(parent context.Context, duration time.Duration) (context.Context, context.CancelFunc) {
-		// Ensure the owning deadline fires before a handler’s nested deadline.
-		if calls.Add(1) > 1 {
-			duration *= 2
-		}
-		ctx, cancel := context.WithCancel(parent)
-		expired := &atomic.Bool{}
-		go func() {
-			select {
-			case <-gate:
-			case <-ctx.Done():
-				return
-			}
-			timer := time.NewTimer(duration)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				expired.Store(true)
-				cancel()
-			case <-ctx.Done():
-			}
-		}()
-		return gatedTestDeadline{Context: ctx, expired: expired}, cancel
-	}
-}
-
-// processTreeTimeout is long enough for the helper tree to start on a loaded CI runner and short
-// enough to keep the test quick.
-const processTreeTimeout = "3s"
+// processTreeTimeout allows both race-instrumented subprocesses to start on a loaded CI runner.
+// Cleanup latency is checked separately after the deadline rather than including startup time.
+const processTreeTimeout = "30s"
 
 // startedStepHelpers waits until both helpers of the spawn-grandchild tree recorded their pids.
 func startedStepHelpers(t *testing.T, dir string) (int, int) {
@@ -68,7 +25,7 @@ func startedStepHelpers(t *testing.T, dir string) (int, int) {
 	require.Eventually(t, func() bool {
 		parent, child = stepHelperPID(dir, "parent"), stepHelperPID(dir, "child")
 		return parent > 0 && child > 0
-	}, 30*time.Second, 25*time.Millisecond, "the helper process tree never started")
+	}, 25*time.Second, 25*time.Millisecond, "the helper process tree never started; the step timeout may be too short for this machine")
 	return parent, child
 }
 
@@ -118,18 +75,26 @@ func TestStepTimeoutEndsTheWholeProcessTree(t *testing.T) {
 			}
 
 			library := NewAutomationLibrary(NewVariables(), nil)
-			gate := make(chan struct{})
 			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			ctx = context.WithValue(ctx, stepTimeoutFactoryKey{}, gatedTestTimeout(gate))
-			done := make(chan error, 1)
-			go func() {
-				_, err := library.Run(ctx, &api.StepCall{Type: tc.stepType, Configuration: fields, WorkingDirectory: dir})
-				done <- err
+			result := make(chan error, 1)
+			done := make(chan struct{})
+			defer func() {
+				cancel()
+				<-done
 			}()
+			go func() {
+				defer close(done)
+				_, runErr := library.Run(ctx, &api.StepCall{Type: tc.stepType, Configuration: fields, WorkingDirectory: dir})
+				result <- runErr
+			}()
+
 			parent, child := startedStepHelpers(t, dir)
-			close(gate)
-			runErr := <-done
+			select {
+			case runErr := <-result:
+				t.Fatalf("step ended before the helper tree was observed: %v", runErr)
+			default:
+			}
+			runErr := <-result
 			require.ErrorIs(t, runErr, errUtils.ErrStepTimeout, "a step that outlives its timeout reports the step timeout")
 			requireStepProcessesGone(t, map[string]int{"command started by the step": parent, "grandchild of that command": child})
 		})
