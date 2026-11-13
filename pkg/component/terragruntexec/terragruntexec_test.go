@@ -18,9 +18,18 @@ import (
 
 // Compile-time sentinels for the schema fields these tests depend on.
 var (
-	_ = schema.ComponentProviderOption{Value: "", Sensitive: true}
+	_ = schema.ComponentProviderOption{Value: "", Sensitive: true, FromCLI: true}
 	_ = schema.ConfigAndStacksInfo{ComponentVarsSection: nil, ComponentProvidersSection: nil, UseTerraformPlan: true}
 )
+
+// TestMain clears the feature variables a developer or runner may export, so tests that assert exact
+// arguments see only the features they set; the precedence tests set their own values with t.Setenv.
+func TestMain(m *testing.M) {
+	for _, name := range featureEnvironment {
+		_ = os.Unsetenv(name)
+	}
+	os.Exit(m.Run())
+}
 
 func request() *Request {
 	return &Request{
@@ -181,6 +190,35 @@ func TestBuildCommandComponentFeatureWinsOverProcessOption(t *testing.T) {
 	assert.NotContains(t, BuildCommand(r).Args, "tier=process")
 	r.Options["feature"] = schema.ComponentProviderOption{Value: map[string]any{"tier": "cli"}, FromCLI: true}
 	assert.Contains(t, BuildCommand(r).Args, "tier=cli")
+}
+
+// An option read from the process environment never replaces the variable the component `env` sets for the
+// same setting, since Terragrunt ranks a flag above its variable; an explicit command-line option still does.
+func TestBuildCommandComponentEnvironmentWinsOverProcessOptions(t *testing.T) {
+	r := request()
+	r.Environment = append(r.Environment,
+		"TG_IAM_ASSUME_ROLE=arn:aws:iam::1:role/component", "TG_IAM_ASSUME_ROLE_DURATION=1800",
+		"TG_IAM_ASSUME_ROLE_SESSION_NAME=component", "TG_DOWNLOAD_DIR=/component-cache",
+		"TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN=component-token")
+	r.Options = map[string]schema.ComponentProviderOption{
+		"iam_assume_role":                    {Value: "arn:aws:iam::1:role/process"},
+		"iam_assume_role_duration":           {Value: 900},
+		"iam_assume_role_session_name":       {Value: "process"},
+		"download_dir":                       {Value: "/process-cache"},
+		"iam_assume_role_web_identity_token": {Value: "process-token", Sensitive: true},
+	}
+	command := BuildCommand(r)
+	assert.Equal(t, []string{"--working-dir", unitDir(t), "run", "--", "plan", "-no-color"}, command.Args, "no process option becomes a flag")
+	token, found := envValue(command.Env, "TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN")
+	assert.True(t, found)
+	assert.Equal(t, "component-token", token)
+
+	r.Options["iam_assume_role"] = schema.ComponentProviderOption{Value: "arn:aws:iam::1:role/cli", FromCLI: true}
+	r.Options["iam_assume_role_web_identity_token"] = schema.ComponentProviderOption{Value: "cli-token", Sensitive: true, FromCLI: true}
+	command = BuildCommand(r)
+	assert.Equal(t, []string{"--iam-assume-role", "arn:aws:iam::1:role/cli", "--"}, command.Args[3:6], "an explicit option still wins")
+	token, _ = envValue(command.Env, "TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN")
+	assert.Equal(t, "cli-token", token)
 }
 
 func TestBuildCommandOmitsAbsentOptions(t *testing.T) {

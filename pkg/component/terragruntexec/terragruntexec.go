@@ -244,20 +244,32 @@ func optionFlags(options map[string]schema.ComponentProviderOption, configured m
 	for _, name := range slices.Sorted(maps.Keys(features)) {
 		args = append(args, "--feature", name+"="+fmt.Sprint(features[name]))
 	}
-	for _, flag := range []struct{ option, flag string }{
-		{"iam_assume_role", "--iam-assume-role"},
-		{"iam_assume_role_duration", "--iam-assume-role-duration"},
-		{"iam_assume_role_session_name", "--iam-assume-role-session-name"},
-		{"download_dir", "--download-dir"},
+	// Terragrunt ranks a flag above its variable, so an option read from the process environment becomes a
+	// flag only when the component `env` does not set that variable: the component's own setting, such as
+	// the role its unit runs under, must not be replaced by the Atmos process environment.
+	for _, flag := range []struct{ option, flag, variable string }{
+		{"iam_assume_role", "--iam-assume-role", "TG_IAM_ASSUME_ROLE"},
+		{"iam_assume_role_duration", "--iam-assume-role-duration", "TG_IAM_ASSUME_ROLE_DURATION"},
+		{"iam_assume_role_session_name", "--iam-assume-role-session-name", "TG_IAM_ASSUME_ROLE_SESSION_NAME"},
+		{"download_dir", "--download-dir", "TG_DOWNLOAD_DIR"},
 	} {
-		if option, set := options[flag.option]; set {
+		if option, set := options[flag.option]; set && (option.FromCLI || !componentSets(environment, flag.variable)) {
 			args = append(args, flag.flag, fmt.Sprint(option.Value))
 		}
 	}
-	if token, set := options["iam_assume_role_web_identity_token"]; set {
-		env = append(env, "TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN="+fmt.Sprint(token.Value))
+	const tokenVariable = "TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN"
+	if token, set := options["iam_assume_role_web_identity_token"]; set && (token.FromCLI || !componentSets(environment, tokenVariable)) {
+		env = append(env, tokenVariable+"="+fmt.Sprint(token.Value))
 	}
 	return args, env
+}
+
+// componentSets reports whether the component environment sets the variable.
+func componentSets(environment []string, name string) bool {
+	return slices.ContainsFunc(environment, func(entry string) bool {
+		key, _, found := strings.Cut(entry, "=")
+		return found && key == name
+	})
 }
 
 // environmentFeatures reads the features the environment sets: the component `env` first, then the
