@@ -50,11 +50,34 @@ func delegatingRepository(t *testing.T, base artifact.Repository, hooks repoHook
 	return mock
 }
 
-// nativeDestination composes a repository with a generated Copier so a test can add a native
-// transfer to a destination.
-type nativeDestination struct {
+// nativeRepository adds a native transfer, backed by a generated Copier, to a repository. It
+// records how often and with which options the transfer ran.
+type nativeRepository struct {
 	artifact.Repository
 	artifact.Copier
+	copies  int
+	options artifact.CopyFromOptions
+	compat  bool
+}
+
+func newNativeRepository(t *testing.T, base artifact.Repository) *nativeRepository {
+	t.Helper()
+	native := &nativeRepository{Repository: base, compat: true}
+	copier := artifact.NewMockCopier(gomock.NewController(t))
+	copier.EXPECT().CanCopyFrom(gomock.Any()).DoAndReturn(func(artifact.Repository) bool { return native.compat }).AnyTimes()
+	copier.EXPECT().CopyFrom(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, source artifact.Repository, pinned artifact.PinnedReference, options artifact.CopyFromOptions) (*artifact.PublishResult, error) {
+			native.copies++
+			native.options = options
+			inspection, err := source.Inspect(ctx, pinned)
+			if err != nil {
+				return nil, err
+			}
+			return &artifact.PublishResult{Outcome: artifact.OutcomeCreated, Pinned: pinned, Representation: inspection.Representation, Location: "native://copy"}, nil
+		},
+	).AnyTimes()
+	native.Copier = copier
+	return native
 }
 
 // withoutRecord returns a copy of the inspection that carries no portable Record, like a foreign graph.

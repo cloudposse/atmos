@@ -11,7 +11,6 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -232,31 +231,10 @@ func TestCopy_WarnsWhenEvidenceCannotTravel(t *testing.T) {
 	assert.True(t, warned, "missing evidence transfer is reported, never silently dropped")
 }
 
-// nativeRepository adds a compatible native transfer to the in-memory repository.
-type nativeRepository struct {
-	*artifacttest.Repository
-	copies  int
-	options artifact.CopyFromOptions
-	compat  bool
-}
-
-func (n *nativeRepository) CanCopyFrom(artifact.Repository) bool { return n.compat }
-
-//nolint:gocritic // The pinned reference is passed by value because artifact.Copier fixes the signature.
-func (n *nativeRepository) CopyFrom(ctx context.Context, source artifact.Repository, pinned artifact.PinnedReference, options artifact.CopyFromOptions) (*artifact.PublishResult, error) {
-	n.copies++
-	n.options = options
-	inspection, err := source.Inspect(ctx, pinned)
-	if err != nil {
-		return nil, err
-	}
-	return &artifact.PublishResult{Outcome: artifact.OutcomeCreated, Pinned: pinned, Representation: inspection.Representation, Location: "native://copy"}, nil
-}
-
 func TestCopy_UsesNativeTransferWhenCompatible(t *testing.T) {
 	e := copyEnv(t, artifact.PackagingNone, artifact.PackagingNone)
 	published := e.publish("src", e.source("hello"))
-	native := &nativeRepository{Repository: e.repos["dst"], compat: true}
+	native := newNativeRepository(t, e.repos["dst"])
 	e.static.Repositories["dst"] = native
 	reads := e.repos["src"].Calls("Read")
 
@@ -290,10 +268,10 @@ func TestCopy_RepeatedNativeGraphCopyWithoutRecordIsUnchanged(t *testing.T) {
 			}})
 			pinned, err := e.repos["src"].Resolve(context.Background(), exampleRef)
 			require.NoError(t, err)
-			var copied atomic.Int32
+			var native *nativeRepository
 			destination := delegatingRepository(t, e.repos["dst"], repoHooks{
 				resolve: func(context.Context, artifact.Ref) (artifact.PinnedReference, error) {
-					if copied.Load() == 0 {
+					if native.copies == 0 {
 						return artifact.PinnedReference{}, errUtils.ErrArtifactNotFound
 					}
 					return pinned, nil
@@ -306,20 +284,9 @@ func TestCopy_RepeatedNativeGraphCopyWithoutRecordIsUnchanged(t *testing.T) {
 					return withoutRecord(inspection), nil
 				},
 			})
-			copier := artifact.NewMockCopier(gomock.NewController(t))
-			copier.EXPECT().CanCopyFrom(gomock.Any()).Return(true).AnyTimes()
-			copier.EXPECT().CopyFrom(gomock.Any(), gomock.Any(), pinned, gomock.Any()).DoAndReturn(
-				func(ctx context.Context, _ artifact.Repository, p artifact.PinnedReference, _ artifact.CopyFromOptions) (*artifact.PublishResult, error) {
-					copied.Add(1)
-					inspection, err := e.repos["src"].Inspect(ctx, p)
-					if err != nil {
-						return nil, err
-					}
-					return &artifact.PublishResult{Outcome: artifact.OutcomeCreated, Pinned: p, Representation: inspection.Representation, Location: "native://copy"}, nil
-				},
-			).Times(1)
+			native = newNativeRepository(t, destination)
 			e.static.Repositories["src"] = source
-			e.static.Repositories["dst"] = &nativeDestination{Repository: destination, Copier: copier}
+			e.static.Repositories["dst"] = native
 
 			first, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
 			require.NoError(t, err)
@@ -328,6 +295,7 @@ func TestCopy_RepeatedNativeGraphCopyWithoutRecordIsUnchanged(t *testing.T) {
 			again, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst", Force: force})
 			require.NoError(t, err)
 			assert.Equal(t, artifact.OutcomeUnchanged, again.Outcome, "the destination already points at the source root")
+			assert.Equal(t, 1, native.copies, "an unchanged destination is not copied again")
 		})
 	}
 }
