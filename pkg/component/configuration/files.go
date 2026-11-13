@@ -15,10 +15,34 @@ import (
 )
 
 const (
-	fileMode      = 0o644
-	secretMode    = 0o600
-	directoryMode = 0o755
+	fileMode              = 0o644
+	secretMode            = 0o600
+	directoryMode         = 0o755
+	sensitiveTempAttempts = 10
 )
+
+// CreateSensitiveTemp creates a private file in directory for data that will be
+// renamed into place. The file is restricted before the caller writes to it.
+func CreateSensitiveTemp(directory string) (*os.File, string, error) {
+	defer perf.Track(nil, "configuration.CreateSensitiveTemp")()
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return nil, "", err
+	}
+	defer root.Close()
+	for range sensitiveTempAttempts {
+		name := ".atmos-plan-" + rand.Text()
+		file, err := createSensitiveTempFile(root, name)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return nil, "", err
+		}
+		return file, filepath.Join(directory, name), nil
+	}
+	return nil, "", os.ErrExist
+}
 
 // WriteFiles materializes evaluated bytes under the provisioned module, without templating.
 //
@@ -83,14 +107,10 @@ func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string)
 func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded string) (string, error) {
 	remove, err := checkFileOwnership(root, file, recorded)
 	if err != nil {
-		return "", err
+		return "", generatedFileError(file.Path, err)
 	}
 	if remove {
-		err := root.Remove(file.Path)
-		if errors.Is(err, os.ErrNotExist) {
-			return "", nil
-		}
-		return "", err
+		return "", removeGeneratedFile(root, file.Path)
 	}
 	// Register sensitive bytes even when the file is kept, so a hook that prints it is masked.
 	if file.Sensitive {
@@ -107,6 +127,14 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded s
 		}
 	}
 	return digest, replaceFile(root, file, exists)
+}
+
+// removeGeneratedFile treats an already absent file as successfully removed.
+func removeGeneratedFile(root *os.Root, path string) error {
+	if err := root.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return generatedFileError(path, err)
+	}
+	return nil
 }
 
 // unchangedFileOutcome retains ownership only when an identical file belongs to this host.
@@ -175,7 +203,7 @@ func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists b
 	}
 	temporary := filepath.Join(filepath.Dir(file.Path), "."+filepath.Base(file.Path)+"."+rand.Text()+".tmp")
 	if err := createFile(root, temporary, file.Content); err != nil {
-		return err
+		return generatedFileError(file.Path, err)
 	}
 	if err := root.Rename(temporary, file.Path); err != nil {
 		_ = root.Remove(temporary)
@@ -189,9 +217,14 @@ func replaceSensitiveWindowsFile(root *os.Root, file schema.ComponentConfigurati
 	if err != nil {
 		return generatedFileError(file.Path, err)
 	}
+	return writeSensitiveGeneratedFile(output, file, exists)
+}
+
+// writeSensitiveGeneratedFile retains both operation and close failures on the secured handle.
+func writeSensitiveGeneratedFile(output *os.File, file schema.ComponentConfigurationFile, exists bool) error {
 	if exists {
 		if err := output.Truncate(0); err != nil {
-			return errors.Join(err, output.Close())
+			return generatedFileError(file.Path, errors.Join(err, output.Close()))
 		}
 	}
 	_, writeErr := output.Write(file.Content)

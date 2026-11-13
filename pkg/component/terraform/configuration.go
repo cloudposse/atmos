@@ -137,7 +137,7 @@ func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration,
 }
 
 // applyPreparedConfiguration records the prepared values on the invocation.
-func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
+func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
 	info.PreparedSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
@@ -157,7 +157,7 @@ func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.
 	info.ComponentSection["source"] = source
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
-	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
+	info.SetBackendFileGeneration(!prepared.BackendGenerated)
 	warnOnCacheLocalState(info, prepared)
 }
 

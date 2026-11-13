@@ -159,3 +159,13 @@ func (s *Session) hasProviderOptions() bool {
 	}
 	return false
 }
+
+func (s *Session) providerSettings(name string) *pluginv1.ComponentValue {
+	var settings *pluginv1.ComponentValue
+	for _, request := range s.importProviders {
+		if request.Provider == name {
+			settings = request.ProviderConfiguration
+		}
+	}
+	return settings
+}

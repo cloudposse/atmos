@@ -162,6 +162,53 @@ func localSourceProblem(filesystem afero.Fs, path, source, resolved string) *mod
 	return nil
 }
 
+// resolveLocalModuleSource validates both the repository root and selected
+// module while retaining // in the source identity passed to the provisioner.
+func resolveLocalModuleSource(filesystem afero.Fs, unit, source string) (resolved, root string, handled bool, problem *model.Problem) {
+	base, subdir, hasSubdir := localModuleSubdir(source)
+	if !hasSubdir && !plainLocalSource(source) {
+		return "", "", false, nil
+	}
+	if hasSubdir && !safeModuleSubdir(subdir) {
+		return "", "", true, &model.Problem{
+			Code: model.CodeInvalidSource, Summary: "The local module subdirectory is invalid",
+			Detail: "A local `terraform.source` subdirectory must stay inside its source root.",
+			Hints:  []string{"Use `root//modules/name` without parent (`..`) or absolute subdirectory segments."},
+			File:   unit, Key: "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
+		}
+	}
+	if !hasSubdir {
+		base = source
+	}
+	root = localPath(filepath.Dir(unit), base)
+	module := root
+	if hasSubdir {
+		module = filepath.Join(root, filepath.FromSlash(subdir))
+	}
+	if problem := localSourceProblem(filesystem, unit, source, root); problem != nil {
+		return "", "", true, problem
+	}
+	if problem := localSourceProblem(filesystem, unit, source, module); problem != nil {
+		return "", "", true, problem
+	}
+	if hasSubdir {
+		canonicalRoot, rootErr := canonicalPath(root)
+		canonicalModule, moduleErr := canonicalPath(module)
+		if rootErr == nil && moduleErr == nil && !within(canonicalModule, canonicalRoot) {
+			return "", "", true, &model.Problem{
+				Code: model.CodeInvalidSource, Summary: "The local module subdirectory escapes its source root",
+				Detail: "The selected module resolves outside the local source root.",
+				Hints:  []string{"Select a module directory inside the source root."},
+				File:   unit, Key: "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
+			}
+		}
+	}
+	if hasSubdir {
+		return root + "//" + filepath.ToSlash(filepath.FromSlash(subdir)), root, true, nil
+	}
+	return root, root, true, nil
+}
+
 // dependencyProblem keeps evaluated target paths out of safe details; the cause remains available
 // for classification and local debugging.
 func dependencyProblem(file, _ string, err error) *model.Problem {

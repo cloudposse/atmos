@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -191,4 +192,68 @@ func TestErrorPolicyDoesNotClaimAnIdenticalModuleFile(t *testing.T) {
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, content, got, "removing the block keeps the module's file")
+}
+
+func TestWriteFilesClassifiesOwnershipFailure(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "parent"), []byte("file"), 0o600))
+	err := WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "parent/child.tf", IfExists: "overwrite"}})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "generated file parent/child.tf")
+	var cause *os.PathError
+	require.ErrorAs(t, err, &cause)
+	require.ErrorIs(t, err, cause.Err)
+}
+
+func TestWriteFilesClassifiesRemovalFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not prevent deletion on Windows")
+	}
+	directory := t.TempDir()
+	parent := filepath.Join(directory, "parent")
+	require.NoError(t, os.Mkdir(parent, 0o700))
+	path := filepath.Join(parent, "generated.tf")
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+	require.NoError(t, os.Chmod(parent, 0o500))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(parent, 0o700)) })
+	// Privileged processes can bypass directory permissions.
+	probe := filepath.Join(parent, "probe")
+	if err := os.WriteFile(probe, nil, 0o600); err == nil {
+		t.Skip("process can bypass directory permissions")
+	}
+	err := WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "parent/generated.tf", IfExists: "remove"}})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrPermission)
+	require.ErrorContains(t, err, "generated file parent/generated.tf")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "original", string(content))
+}
+
+func TestSensitiveGeneratedFileClassifiesHandleFailures(t *testing.T) {
+	for _, exists := range []bool{false, true} {
+		t.Run(map[bool]string{false: "write", true: "truncate"}[exists], func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "secret.tf")
+			require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+			output, err := os.Open(path)
+			require.NoError(t, err)
+			require.NoError(t, output.Close())
+			err = writeSensitiveGeneratedFile(output, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement")}, exists)
+			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			require.ErrorIs(t, err, os.ErrClosed)
+			require.ErrorContains(t, err, "generated file secret.tf")
+			var joined interface{ Unwrap() []error }
+			// The classified error wraps a join retaining the operation and close errors.
+			outer, ok := err.(interface{ Unwrap() []error })
+			require.True(t, ok)
+			require.True(t, errors.As(outer.Unwrap()[1], &joined))
+			require.Len(t, joined.Unwrap(), 2)
+			for _, cause := range joined.Unwrap() {
+				require.ErrorIs(t, cause, os.ErrClosed)
+			}
+			content, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, "original", string(content))
+		})
+	}
 }

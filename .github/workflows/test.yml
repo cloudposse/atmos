@@ -220,6 +220,11 @@ jobs:
         run: |
           atmos build version --target=${{ matrix.target }}
 
+      - name: Verify Windows plan-binding ACL
+        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        shell: bash
+        run: go test ./pkg/component/terraform -run '^TestPlanBindingPrivateACLUnderPermissiveParent$' -count=1 -v
+
       # Mage keeps the cross-platform acceptance orchestration in typed,
       # unit-tested Go code while the workflow remains a one-command dispatch.
       # Reuse this job's warm Go cache to compile the large test binaries once.

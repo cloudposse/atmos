@@ -1,7 +1,6 @@
 package source
 
 import (
-	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -116,7 +115,7 @@ const generatedBackendFile = "backend.tf.json"
 // Installing it would replace the generated backend, and the next generation would overwrite the
 // source's copy, so neither owner's version could be trusted.
 func rejectGeneratedBackendCollision(config *schema.AtmosConfiguration, stage, target string, componentConfig map[string]any) error {
-	if config == nil || !config.Components.Terraform.AutoGenerateBackendFile {
+	if config == nil || !schema.GenerateBackendFileForSection(config, componentConfig) {
 		return nil
 	}
 	for _, root := range moduleRoots(target, componentConfig) {
@@ -439,6 +438,8 @@ func moduleRoots(target string, config map[string]any) []string {
 	if metadata, ok := config["metadata"].(map[string]any); ok {
 		subpath, _ := metadata["component"].(string)
 		candidates = append(candidates, subpath)
+		moduleSubdir, _ := metadata["source_subdir"].(string)
+		candidates = append(candidates, moduleSubdir)
 	}
 	for _, candidate := range candidates {
 		if candidate != "" && filepath.IsLocal(candidate) {
@@ -545,20 +546,6 @@ func rejectSourceTypeChange(target, name string) error {
 		}
 	}
 	return nil
-}
-
-func isTerraformPlan(path string) bool {
-	archive, err := zip.OpenReader(path)
-	if err != nil {
-		return false
-	}
-	defer archive.Close()
-	for _, file := range archive.File {
-		if file.Name == "tfplan" {
-			return true
-		}
-	}
-	return false
 }
 
 // sourceChange distinguishes files owned by the source from runtime artifacts.

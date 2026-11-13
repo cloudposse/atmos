@@ -31,6 +31,39 @@ func plainLocalSource(source string) bool {
 	return !strings.ContainsAny(path, "?:") && !strings.Contains(filepath.ToSlash(path), "//")
 }
 
+// localModuleSubdir separates Terragrunt's local root//module spelling without
+// cleaning away the delimiter. A subdirectory may descend within the root,
+// but must never select a parent or an absolute path.
+func localModuleSubdir(source string) (root, subdir string, ok bool) {
+	volume := filepath.VolumeName(source)
+	rest := source[len(volume):]
+	if strings.ContainsAny(rest, "?:") {
+		return "", "", false
+	}
+	index := strings.Index(filepath.ToSlash(rest), "//")
+	if index <= 0 {
+		return "", "", false
+	}
+	root, subdir = volume+rest[:index], rest[index+2:]
+	first := strings.SplitN(strings.TrimPrefix(root, "./"), "/", 2)[0]
+	if strings.Contains(first, ".") && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) {
+		return "", "", false
+	}
+	return root, subdir, true
+}
+
+func safeModuleSubdir(subdir string) bool {
+	if subdir == "" || filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`) {
+		return false
+	}
+	for _, part := range strings.Split(filepath.ToSlash(subdir), "/") {
+		if part == "" || part == ".." || part == "." {
+			return false
+		}
+	}
+	return true
+}
+
 func checkVersions(ctx context.Context, request model.Request, terraform, terragrunt string) error {
 	check := func(name, constraint, actual string) error {
 		if constraint == "" {

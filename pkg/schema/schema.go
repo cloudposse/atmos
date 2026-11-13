@@ -2169,6 +2169,9 @@ type ConfigAndStacksInfo struct {
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
 	SanitizedEnv            []string
 	ComponentBackendSection AtmosSectionMapType
+	// BackendFileGeneration is the prepared component's invocation-local choice.
+	// Nil retains the project-wide auto_generate_backend_file default.
+	BackendFileGeneration *bool `json:"-" yaml:"-" mapstructure:"-"`
 	// ComponentRetrySection holds the per-component `retry:` block parsed from stack
 	// manifests. When non-nil and `Conditions` is populated, each subprocess invocation
 	// in the terraform execution pipeline (init, workspace, main) is retried independently
