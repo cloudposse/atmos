@@ -5,11 +5,13 @@ import (
 	_ "crypto/sha256" // Registers crypto.SHA256 for Hash.
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -144,7 +146,7 @@ func Scope(parts ...any) (string, error) {
 
 	raw, err := json.Marshal(parts)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %w", errUtils.ErrCacheMarshal, err)
 	}
 	return Hash(raw), nil
 }
@@ -171,6 +173,9 @@ func Key(scope, kind, reference string) string {
 func (s *Store) Fresh(fetched time.Time) bool {
 	defer perf.Track(nil, "cache.Store.Fresh")()
 
+	if s.ttl <= 0 {
+		return false
+	}
 	age := s.now().Sub(fetched)
 	return age < s.ttl
 }
@@ -198,10 +203,13 @@ func (s *Store) WriteSnapshot(path string, value any, errTooLarge error) error {
 
 	raw, err := json.Marshal(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUtils.ErrCacheMarshal, err)
 	}
 	if int64(len(raw)) > s.maxSize {
 		return errTooLarge
 	}
-	return filesystem.NewOSFileSystem().WriteFileAtomic(path, raw, FileMode)
+	if err := filesystem.NewOSFileSystem().WriteFileAtomic(path, raw, FileMode); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrCacheWrite, err)
+	}
+	return nil
 }

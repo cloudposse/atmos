@@ -143,7 +143,7 @@ func checkEntry(entry *Entry) error {
 		return fmt.Errorf("%w: entry %q: %w", errUtils.ErrArtifactCatalogInvalid, entry.Name, err)
 	}
 	if !strings.HasPrefix(entry.Source, sourceScheme) || strings.ContainsAny(entry.Source, "@?#") || strings.Contains(strings.TrimPrefix(entry.Source, sourceScheme), "://") {
-		return invalid("entry %q has source %q; a source is an oci://<registry>/<path> repository path without credentials, tag, or digest", entry.Name, entry.Source)
+		return invalid("entry %q has an invalid source; a source is an oci://<registry>/<path> repository path without credentials, tag, or digest", entry.Name)
 	}
 	if len(entry.Versions) == 0 {
 		return invalid("entry %q lists no versions", entry.Name)

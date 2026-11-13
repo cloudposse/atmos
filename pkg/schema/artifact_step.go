@@ -50,7 +50,14 @@ func decodeStepQuery(node *yaml.Node, stepType string, params *map[string]string
 	if node.Kind != yaml.MappingNode {
 		return fmt.Errorf("%w: `query` must be a mapping (http) or a string (artifact search text)", ErrWorkflowControlStepInvalid)
 	}
-	return node.Decode(params)
+	// Decode into a fresh map so an explicit mapping replaces, rather than merges into, entries
+	// already inherited from merged defaults.
+	fresh := map[string]string{}
+	if err := node.Decode(&fresh); err != nil {
+		return err
+	}
+	*params = fresh
+	return nil
 }
 
 // normalizeSearchQueryMap moves a scalar `query` into `search_query`, so mapstructure, which cannot

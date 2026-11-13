@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact/discovery/cache"
 )
 
@@ -408,7 +409,7 @@ func TestScopeSeparatesSnapshotsAndIsDeterministic(t *testing.T) {
 	assert.Equal(t, filepath.Join(dir, cache.Key(first, "repository", "ref")+".json"), a.Path("repository", "ref"))
 
 	_, err = cache.Scope(make(chan int))
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrCacheMarshal)
 }
 
 func TestSnapshotsInDifferentScopesNeverCrossOver(t *testing.T) {
@@ -431,7 +432,7 @@ func TestWriteSnapshotIsAtomicAndSizeBounded(t *testing.T) {
 	store := cache.New("", "", cache.WithMaxSize(128))
 
 	require.ErrorIs(t, store.WriteSnapshot(path, listing{Items: []string{strings.Repeat("x", 200)}}, errTooLarge), errTooLarge)
-	require.Error(t, store.WriteSnapshot(path, listing{Header: cache.Header{FetchedAt: time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)}}, errTooLarge))
+	require.ErrorIs(t, store.WriteSnapshot(path, listing{Header: cache.Header{FetchedAt: time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)}}, errTooLarge), errUtils.ErrCacheMarshal)
 	current, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, original, current, "a rejected write leaves the previous contents in place")
@@ -453,7 +454,7 @@ func TestLoadFailsWhenTheDirectoryCannotBeCreated(t *testing.T) {
 	store := cache.New(filepath.Join(blocker, "discovery"), "scope")
 	h := newHarness(t, "scope")
 	_, _, err := cache.Load(t.Context(), store, h.source("repository"), cache.Mode{})
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrCacheDir)
 	assert.Zero(t, h.fetches.Load(), "nothing is fetched when the cache cannot be written")
 }
 
@@ -474,4 +475,19 @@ func TestFreshnessRejectsFutureTimestamps(t *testing.T) {
 	assert.True(t, h.store.Fresh(epoch.Add(-time.Minute)))
 	assert.True(t, h.store.Fresh(epoch.Add(time.Minute)), "clock skew does not force refresh churn")
 	assert.False(t, h.store.Fresh(epoch.Add(-cache.DefaultTTL)))
+}
+
+func TestFreshnessZeroTTLIsNeverFreshEvenForFutureTimestamps(t *testing.T) {
+	h := newHarness(t, "scope", cache.WithTTL(0))
+	assert.False(t, h.store.Fresh(epoch.Add(-time.Minute)))
+	assert.False(t, h.store.Fresh(epoch))
+	assert.False(t, h.store.Fresh(epoch.Add(time.Minute)), "a future timestamp must not bypass a zero TTL")
+}
+
+func TestWriteSnapshotWrapsFilesystemFailures(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "occupied")
+	require.NoError(t, os.WriteFile(blocker, []byte("file"), cache.FileMode))
+	store := cache.New(t.TempDir(), "scope")
+	err := store.WriteSnapshot(filepath.Join(blocker, "snapshot.json"), listing{Items: []string{"ok"}}, errTooLarge)
+	require.ErrorIs(t, err, errUtils.ErrCacheWrite)
 }

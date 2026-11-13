@@ -28,31 +28,26 @@ const (
 	testResolvedDigest = digest.Digest("sha256:2222222222222222222222222222222222222222222222222222222222222222")
 )
 
-// recordingCollector captures every entry a step records.
-type recordingCollector struct {
-	mu      sync.Mutex
-	entries []report.Entry
-}
-
-func (c *recordingCollector) Record(entry *report.Entry) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries = append(c.entries, *entry)
-}
-
 // artifactEnv is a step environment with an injected service and a fixed operation identity.
 type artifactEnv struct {
 	t         *testing.T
 	service   *artifact.MockService
 	vars      *Variables
-	collector *recordingCollector
+	collector *report.MockCollector
+	entries   []report.Entry
 	dir       string
 }
 
 func newArtifactEnv(t *testing.T) *artifactEnv {
 	t.Helper()
 	ctrl := gomock.NewController(t)
-	env := &artifactEnv{t: t, service: artifact.NewMockService(ctrl), vars: NewVariables(), collector: &recordingCollector{}, dir: t.TempDir()}
+	env := &artifactEnv{t: t, service: artifact.NewMockService(ctrl), vars: NewVariables(), collector: report.NewMockCollector(ctrl), dir: t.TempDir()}
+	var mu sync.Mutex
+	env.collector.EXPECT().Record(gomock.Any()).Do(func(entry *report.Entry) {
+		mu.Lock()
+		defer mu.Unlock()
+		env.entries = append(env.entries, *entry)
+	}).AnyTimes()
 	env.vars.SetAtmosConfig(&schema.AtmosConfiguration{})
 	env.vars.SetArtifactCollector(env.collector)
 
@@ -327,9 +322,9 @@ func TestArtifactHandler_FailureReturnsThePartialResult(t *testing.T) {
 	assert.Equal(t, string(testRecordDigest), result.Outputs["record_digest"])
 	assert.NotContains(t, result.Outputs, "location", "values the operation never resolved are omitted")
 
-	require.Len(t, env.collector.entries, 1)
-	assert.Error(t, env.collector.entries[0].Err)
-	assert.Equal(t, "op-1", env.collector.entries[0].OperationID)
+	require.Len(t, env.entries, 1)
+	assert.Error(t, env.entries[0].Err)
+	assert.Equal(t, "op-1", env.entries[0].OperationID)
 }
 
 // TestArtifactHandler_RetryKeepsTheOperationIdentity covers the wrapper-level retry contract: the
@@ -376,11 +371,11 @@ func TestArtifactHandler_RetryKeepsTheOperationIdentity(t *testing.T) {
 	assert.NotEqual(t, executions[0].OperationID, executions[3].OperationID)
 	assert.NotEqual(t, executions[0].PreparedAt, executions[3].PreparedAt)
 
-	require.Len(t, env.collector.entries, 4)
+	require.Len(t, env.entries, 4)
 	for index, want := range []int{1, 2, 3, 1} {
-		assert.Equal(t, want, env.collector.entries[index].Attempt)
+		assert.Equal(t, want, env.entries[index].Attempt)
 	}
-	assert.Equal(t, env.collector.entries[0].OperationID, env.collector.entries[2].OperationID, "a report deduplicates attempts by operation ID")
+	assert.Equal(t, env.entries[0].OperationID, env.entries[2].OperationID, "a report deduplicates attempts by operation ID")
 }
 
 func TestArtifactHandler_DifferentInputIsADifferentOperation(t *testing.T) {
@@ -434,7 +429,7 @@ func TestArtifactHandler_WorkflowDryRun(t *testing.T) {
 			result, err := env.run(step)
 			require.NoError(t, err, action)
 			assert.True(t, result.Skipped, action)
-			assert.Empty(t, env.collector.entries, "a skipped step reports nothing")
+			assert.Empty(t, env.entries, "a skipped step reports nothing")
 		}
 	})
 	t.Run("reads run normally", func(t *testing.T) {
