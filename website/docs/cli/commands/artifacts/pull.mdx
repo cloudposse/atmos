@@ -84,7 +84,9 @@ An existing output directory with different content needs `--force`. The new con
 
 ## Output
 
-Stdout carries `outcome` (`read`), `ref`, `location` (the output directory), the digests, and `size`. Stderr carries the status line.
+Stdout carries `outcome`, `ref`, `location` (the output directory), the digests, and `size`. Stderr carries the status line.
+
+The `outcome` is `read` when the command downloaded the artifact into the output directory. It is `unchanged` when the output directory already matches the artifact, so nothing is downloaded and a repeated pull succeeds.
 
 ## Errors
 
