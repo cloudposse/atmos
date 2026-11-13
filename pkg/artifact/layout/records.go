@@ -393,6 +393,9 @@ func validatePrior(prior *Prior) error {
 	if prior.RecordDigest == "" {
 		return invalid(kindOperation, "prior needs a record_digest")
 	}
+	if err := artifact.ValidateDigest(prior.RecordDigest); err != nil {
+		return invalid(kindOperation, "prior record_digest is malformed: %v", err)
+	}
 	if prior.Location != "" {
 		if _, err := CleanLocation(prior.Location); err != nil {
 			return invalid(kindOperation, "prior location %q is not a valid relative location", prior.Location)

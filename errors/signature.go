@@ -13,4 +13,7 @@ var (
 
 	// ErrSignatureOffline indicates trust material cannot be fetched while verifying offline.
 	ErrSignatureOffline = errors.New("signature trust material is unavailable offline")
+
+	// ErrSignatureSigningFailed indicates a signing backend failed to produce signature evidence.
+	ErrSignatureSigningFailed = errors.New("signing backend failed to produce a signature")
 )

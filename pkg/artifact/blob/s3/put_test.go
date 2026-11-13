@@ -260,3 +260,21 @@ func (r *errAfterReader) Read(p []byte) (int, error) {
 	r.data = r.data[n:]
 	return n, nil
 }
+
+func TestInvalidConditionsAreRejectedBeforeAnyRequest(t *testing.T) {
+	cases := map[string]blob.Condition{
+		"unknown kind":      {Kind: blob.ConditionKind(99)},
+		"negative kind":     {Kind: blob.ConditionKind(-1)},
+		"if-match no etag":  {Kind: blob.ConditionIfMatch},
+		"unknown with etag": {Kind: blob.ConditionKind(7), ETag: `"abc"`},
+	}
+	for name, cond := range cases {
+		t.Run(name, func(t *testing.T) {
+			fake := newFake(t)
+			s := newTestStore(t, fake)
+			_, err := s.Put(context.Background(), "k", bytes.NewReader([]byte("x")), blob.PutOptions{Size: 1, Condition: cond})
+			require.ErrorIs(t, err, errUtils.ErrBlobInvalid)
+			assert.Empty(t, fake.Requests(), "an invalid condition never reaches the endpoint")
+		})
+	}
+}

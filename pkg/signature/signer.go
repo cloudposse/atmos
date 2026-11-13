@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 
 	"github.com/sigstore/sigstore-go/pkg/bundle"
 
@@ -27,7 +28,7 @@ func SignBlob(ctx context.Context, signer BlobSigner, artifact []byte) ([]byte, 
 
 	signed, err := signer.Sign(ctx, artifact)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(errUtils.ErrSignatureSigningFailed, err)
 	}
 	if err := CheckBundleSubject(signed, artifact); err != nil {
 		return nil, err

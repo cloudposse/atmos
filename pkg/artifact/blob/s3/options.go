@@ -29,7 +29,9 @@ const (
 	ConditionalAuto ConditionalMode = iota
 
 	// ConditionalProbe is like Auto, but first proves once per store that the endpoint enforces
-	// If-None-Match and If-Match on writes and deletes (see [Store.ProbeConditionalWrites]). Use it for endpoints that
+	// If-None-Match and If-Match on single-object PutObject and DeleteObject requests (see
+	// [Store.ProbeConditionalWrites]). The probe does not exercise CompleteMultipartUpload, so
+	// enforcement on multipart completion is trusted, not verified. Use it for endpoints that
 	// might silently ignore the headers.
 	ConditionalProbe
 

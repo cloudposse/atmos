@@ -36,3 +36,18 @@ func TestProducerRegistry(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, []string{KindFiles, "scaffold"}, registry.Kinds())
 }
+
+// A signer is refused before it runs when the repository can store none of its formats.
+func TestCapabilitiesCheckSignerFormats(t *testing.T) {
+	caps := &Capabilities{EvidenceFormats: []EvidenceFormat{EvidenceSigstoreBundle}}
+
+	usable := NewMockSigner(gomock.NewController(t))
+	usable.EXPECT().Formats().Return([]EvidenceFormat{"other", EvidenceSigstoreBundle})
+	require.NoError(t, caps.CheckSignerFormats("repo", usable), "one storable format is enough")
+
+	unusable := NewMockSigner(gomock.NewController(t))
+	unusable.EXPECT().Formats().Return([]EvidenceFormat{"a", "b"})
+	err := caps.CheckSignerFormats("repo", unusable)
+	require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+	assert.Contains(t, err.Error(), "evidence/a,b")
+}
