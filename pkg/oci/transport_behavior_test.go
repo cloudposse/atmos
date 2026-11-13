@@ -1,4 +1,3 @@
-//nolint:gocritic // Descriptor-by-value parameters mirror the ORAS content contracts.
 package oci_test
 
 import (

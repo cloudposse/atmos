@@ -137,14 +137,7 @@ func (r *Repository) checkSubject(operation string, subject artifact.SignatureSu
 func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, options artifact.SignOptions) (result []artifact.SignatureEvidence, err error) {
 	defer perf.Track(nil, "local.Repository.Sign")()
 
-	if err := r.checkSubject("sign", subject); err != nil {
-		return nil, err
-	}
-	if signer == nil {
-		return nil, fmt.Errorf("%w: no signer supplied", errUtils.ErrArtifactConfigInvalid)
-	}
-	caps := r.Capabilities()
-	if err := caps.CheckSignerFormats(r.alias, signer); err != nil {
+	if err := r.checkSignRequest(subject, signer); err != nil {
 		return nil, err
 	}
 	t, err := r.openTree(false)
@@ -187,6 +180,19 @@ func (r *Repository) signLocked(ctx context.Context, t *tree, subject artifact.S
 		return nil, err
 	}
 	return []artifact.SignatureEvidence{stored}, nil
+}
+
+// checkSignRequest refuses an unsupported subject, a missing signer, and a signer whose evidence
+// formats the repository cannot store, before anything is opened or signed.
+func (r *Repository) checkSignRequest(subject artifact.SignatureSubject, signer artifact.Signer) error {
+	if err := r.checkSubject("sign", subject); err != nil {
+		return err
+	}
+	if signer == nil {
+		return fmt.Errorf("%w: no signer supplied", errUtils.ErrArtifactConfigInvalid)
+	}
+	caps := r.Capabilities()
+	return caps.CheckSignerFormats(r.alias, signer)
 }
 
 // storeEvidence validates and writes one evidence payload.
