@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Push commits from a repository configured under [`git.repositories`](/cli/configuration/git), or from any local path, to its remote. Atmos **never force-pushes**. When a push is rejected because the remote moved (another job or human pushed first), Atmos automatically retries: `pull --ff-only`, then re-push, bounded by `push.retries` (default `3`).
+Push commits from a repository configured under [`git.repositories`](/cli/configuration/git), or from any local path, to its remote. Atmos **never force-pushes**. When a push is rejected because the remote moved (another job or human pushed first), Atmos automatically retries: `pull --rebase`, then re-push, bounded by `push.retries` (default `3`).
 </Intro>
 
 <CastPlayer title="atmos git push --help" src="/casts/screengrabs/atmos-git-push--help.cast" static chrome />
@@ -28,7 +28,7 @@ git:
     flux-deploy:
       uri: https://github.com/acme/flux-deploy.git
       push:
-        retries: 3        # bounded pull --ff-only + re-push loop on rejection
+        retries: 3        # bounded pull --rebase + re-push loop on rejection
 ```
 
 ```shell
@@ -58,7 +58,7 @@ atmos git push flux-deploy -- --follow-tags
 
 A rejected non-fast-forward push is the most common failure mode in GitOps publishing — multiple components, CI jobs, or humans pushing to the same deployment branch. Atmos handles it instead of surfacing a raw Git error:
 
-1. On rejection, run `pull --ff-only`, then re-push.
+1. On rejection, including a concurrent remote ref update (`cannot lock ref ... is at ... but expected ...`), run `pull --rebase`, then re-push.
 2. Repeat up to `push.retries` times (default `3`; configurable per repository).
 3. After exhaustion, fail with a clear error and hints (serialize publishers, or batch publishing).
 
@@ -101,7 +101,7 @@ A rejected non-fast-forward push is the most common failure mode in GitOps publi
 
 ## Native Git Arguments
 
-Arguments after `--` are passed verbatim to each underlying `git push` invocation (not to the `pull --ff-only` recovery between retries).
+Arguments after `--` are passed verbatim to each underlying `git push` invocation (not to the `pull --rebase` recovery between retries).
 
 ```shell
 atmos git push flux-deploy -- --follow-tags

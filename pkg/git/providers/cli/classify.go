@@ -49,9 +49,12 @@ func classify(err error, result atmosgit.RunResult, op string) error {
 	return err
 }
 
-// isRejectedPush reports whether stderr indicates a non-fast-forward rejection.
+// isRejectedPush reports whether stderr indicates a non-fast-forward rejection
+// or a remote ref compare-and-swap race with another publisher.
 func isRejectedPush(result atmosgit.RunResult) bool {
-	return matchesAny(result.StderrTail, rejectedPatterns)
+	stderr := strings.ToLower(result.StderrTail)
+	return matchesAny(stderr, rejectedPatterns) ||
+		(strings.Contains(stderr, "cannot lock ref 'refs/heads/") && strings.Contains(stderr, "but expected"))
 }
 
 // isNoTrackingBranch reports whether a pull failed because the branch has no
