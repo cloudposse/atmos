@@ -38,7 +38,8 @@ opentofu:
   - registry.opentofu.org:443
 helm:
   - get.helm.sh:443
-# Trivy installer (aquasecurity/setup-trivy); redirects to GitHub release assets.
+# Trivy's install.sh (v0.70+) fetches the tarball via get.trivy.dev, which
+# redirects to GitHub release assets (covered by github-releases).
 trivy:
   - get.trivy.dev:443
 docker-hub:

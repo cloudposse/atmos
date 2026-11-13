@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -35,6 +36,18 @@ func TestCloudBackendIdentityWithoutNetwork(t *testing.T) {
 	}
 }
 
+func TestLocalBackendWithoutConfigUsesDefaults(t *testing.T) {
+	request := nativeUnit(t, `remote_state {
+ backend = "local"
+ config = null
+}`)
+	request.Phase = "backend"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(result.WorkingDir, "terraform.tfstate"), result.Backend["path"])
+	require.Equal(t, filepath.Join(result.WorkingDir, "terraform.tfstate.d"), result.Backend["workspace_dir"])
+}
+
 func TestRemoteBackendGenerationRetainsPathAndPolicy(t *testing.T) {
 	request := nativeUnit(t, `remote_state {
  backend = "s3"
@@ -52,6 +65,7 @@ func TestRemoteBackendGenerationRetainsPathAndPolicy(t *testing.T) {
 	require.True(t, result.BackendGenerated)
 	path := filepath.Join("custom", "backend.tf")
 	require.Equal(t, "overwrite_terragrunt", result.GeneratedPolicies[path])
+	require.True(t, result.SensitiveGenerated[path], "a generated backend can hold credentials")
 	require.Contains(t, result.Generated[path], `backend "s3"`)
 	require.Contains(t, result.Generated[path], `assume_role = {`)
 	require.NotContains(t, result.Generated[path], "skip_bucket_versioning")
@@ -143,6 +157,77 @@ func TestRemoteStateEncryptionRejectsTerraform(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestRemoteStateEncryptionChecksTheUnitExecutable checks that a unit's terraform_binary, not the host's
+// default executable, decides whether the encryption block is supported.
+func TestRemoteStateEncryptionChecksTheUnitExecutable(t *testing.T) {
+	for _, test := range []struct {
+		name, unit, host string
+		rejected         bool
+	}{
+		{name: "unit OpenTofu over host Terraform", unit: "/opt/bin/tofu", host: "/opt/bin/terraform"},
+		{name: "unit Terraform over host OpenTofu", unit: "/opt/bin/terraform", host: "/opt/bin/tofu", rejected: true},
+		{name: "host executable without a unit binary", host: "/opt/bin/tofu"},
+		{name: "host Terraform without a unit binary", host: "/opt/bin/terraform", rejected: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := &model.Resolution{Path: "unit/terragrunt.hcl", TerraformBinary: test.unit}
+			err := checkEncryption(true, true, result, &model.Request{Tofu: test.host})
+			if !test.rejected {
+				require.NoError(t, err)
+				return
+			}
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, "remote_state.encryption", problem.Key)
+		})
+	}
+}
+
+func TestGeneratedBackendIdentityRejectedAcrossPhases(t *testing.T) {
+	for _, phase := range []string{"", "backend"} {
+		for _, backend := range []string{
+			"terraform {\n backend \"local\" { path = \"other.tfstate\" }\n}",
+			"terraform {\n backend \"s3\" {\n bucket = \"other-bucket\"\n key = \"state\"\n region = \"us-east-1\"\n }\n}",
+			"terraform {\n cloud { organization = \"example\" }\n}",
+		} {
+			for _, remote := range []string{"", "remote_state {\n backend = \"local\"\n config = { path = \"known.tfstate\" }\n}\n"} {
+				t.Run(phase+backend+remote, func(t *testing.T) {
+					request := nativeUnit(t, remote+fmt.Sprintf("generate \"backend\" {\n path = \"custom.tf\"\n if_exists = \"skip\"\n contents = %q\n}", backend))
+					request.Phase = phase
+					owned := filepath.Join(filepath.Dir(request.Path), "custom.tf")
+					require.NoError(t, os.WriteFile(owned, []byte("user-owned"), 0o600))
+					result, err := Resolve(t.Context(), request)
+					require.ErrorIs(t, err, ErrUnsupportedExecution)
+					require.ErrorContains(t, err, "Cannot verify the backend identity")
+					require.Nil(t, result)
+					bytes, err := os.ReadFile(owned)
+					require.NoError(t, err)
+					require.Equal(t, "user-owned", string(bytes))
+					require.NoDirExists(t, filepath.Join(filepath.Dir(request.Path), ".terragrunt-cache"))
+				})
+			}
+		}
+	}
+}
+
+func TestBackendGenerationPartialParseFailsClosed(t *testing.T) {
+	for name, extra := range map[string]string{
+		"json":    "path = \"backend.tf.json\"\n contents = \"{\\\"terraform\\\":{\\\"backend\\\":{\\\"s3\\\":{}}}}\"",
+		"dynamic": "path = \"backend.tf\"\n contents = run_cmd(\"must-not-execute\")",
+		"path":    "path = run_cmd(\"must-not-execute\")\n contents = \"# harmless\"",
+		"disable": "path = \"backend.tf\"\n disable = run_cmd(\"must-not-execute\")\n contents = \"# harmless\"",
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := nativeUnit(t, "generate \"x\" {\n if_exists = \"overwrite\"\n"+extra+"\n}\ninputs = { value = run_cmd(\"must-not-evaluate-inputs\") }")
+			request.Phase = "backend"
+			result, err := Resolve(t.Context(), request)
+			require.ErrorContains(t, err, "Cannot verify the backend identity")
+			require.NotContains(t, err.Error(), "must-not")
+			require.Nil(t, result)
+		})
+	}
+}
+
 func TestRemoteStateEncryptionWithoutGenerateWarns(t *testing.T) {
 	request := nativeUnit(t, encryptedBackend(""))
 	request.Tofu = "/opt/bin/terraform"
@@ -170,4 +255,69 @@ func TestRemoteStateDisableInitDoesNotChangeTheBackend(t *testing.T) {
 	require.Contains(t, disabled.Generated["backend.tf"], `backend "s3"`)
 	require.Equal(t, plain.Generated["backend.tf"], disabled.Generated["backend.tf"])
 	require.True(t, disabled.BackendGenerated)
+}
+
+func TestBackendGenerationPartialParseInspectsIncludes(t *testing.T) {
+	request := nativeUnit(t, "include \"parent\" { path = \"parent.hcl\" }")
+	request.Phase = "backend"
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "parent.hcl"), []byte("generate \"backend\" {\n path = \"backend.tf\"\n if_exists = \"overwrite\"\n contents = \"terraform {\\n backend \\\"local\\\" {}\\n}\"\n}"), 0o600))
+	result, err := Resolve(t.Context(), request)
+	require.ErrorContains(t, err, "Cannot verify the backend identity")
+	require.Nil(t, result)
+}
+
+func TestBackendGenerationPartialParsePreservesResolvedIdentity(t *testing.T) {
+	for _, backend := range []string{"local", "s3"} {
+		request := nativeUnit(t, fmt.Sprintf(`remote_state {
+ backend = %q
+ generate = { path = "backend.tf", if_exists = "overwrite_terragrunt" }
+ config = { bucket = "known", key = "state", region = "us-east-1" }
+}
+generate "provider" {
+ path = "provider.tf"
+ if_exists = "overwrite"
+ contents = "provider \"aws\" {}"
+}
+generate "disabled" {
+ path = "old.tf"
+ if_exists = "overwrite"
+ disable = true
+ contents = run_cmd("must-not-evaluate-disabled")
+}
+inputs = { value = run_cmd("must-not-evaluate-inputs") }
+`, backend))
+		request.Phase = "backend"
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Equal(t, backend, result.BackendType)
+		require.True(t, result.BackendGenerated)
+		require.Contains(t, result.Generated["backend.tf"], "backend \""+backend+"\"")
+	}
+}
+
+func TestBackendGenerationPartialParseRejectsAttributeForm(t *testing.T) {
+	request := nativeUnit(t, `generate = {
+ backend = {
+  path = "backend.tf"
+  if_exists = "overwrite"
+  contents = "terraform {\n backend \"local\" {}\n}"
+ }
+}`)
+	request.Phase = "backend"
+	result, err := Resolve(t.Context(), request)
+	require.ErrorContains(t, err, "Cannot verify the backend identity")
+	require.Nil(t, result)
+}
+
+func TestBackendGenerationPartialParseInspectsAutoIncludes(t *testing.T) {
+	request := nativeUnit(t, "")
+	request.Phase = "backend"
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "terragrunt.autoinclude.hcl"), []byte(`generate "backend" {
+ path = "backend.tf"
+ if_exists = "overwrite"
+ contents = "terraform {\n backend \"local\" {}\n}"
+}`), 0o600))
+	result, err := Resolve(t.Context(), request)
+	require.ErrorContains(t, err, "Cannot verify backend identity from an automatic include")
+	require.Nil(t, result)
 }

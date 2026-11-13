@@ -71,7 +71,7 @@ func DecodeObject(input *pluginv1.ComponentValue) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	object, ok := result.(map[string]any)
+	object, ok := nativeNumbers(result).(map[string]any)
 	if !ok {
 		return nil, errUtils.ErrPluginProtocol
 	}
@@ -94,7 +94,25 @@ func DecodeInputs(input *pluginv1.ComponentValue) (map[string]any, error) {
 	if !value.IsWhollyKnown() && !value.IsNull() && (value.Type().IsObjectType() || value.Type().IsMapType()) {
 		return nil, unknownInputError(value)
 	}
-	return DecodeObject(input)
+	return exactInputObject(input, value)
+}
+
+func exactInputObject(input *pluginv1.ComponentValue, value cty.Value) (map[string]any, error) {
+	if value.IsNull() || (!value.Type().IsObjectType() && !value.Type().IsMapType()) {
+		return nil, errUtils.ErrPluginProtocol
+	}
+	if err := registerSensitivePaths(value, input.SensitivePaths); err != nil {
+		return nil, err
+	}
+	result, err := objectJSON(value)
+	if err != nil {
+		return nil, err
+	}
+	object, ok := result.(map[string]any)
+	if !ok {
+		return nil, errUtils.ErrPluginProtocol
+	}
+	return object, nil
 }
 
 // unknownInputError names the first input, in key order, that holds an unknown value.
@@ -136,10 +154,18 @@ func formatPath(path cty.Path) string {
 		case cty.GetAttrStep:
 			text.WriteString("." + step.Name)
 		case cty.IndexStep:
-			if step.Key.Type() == cty.String {
+			if !step.Key.IsKnown() || step.Key.IsNull() {
+				return text.String()
+			}
+			switch step.Key.Type() {
+			case cty.String:
 				text.WriteString("[" + strconv.Quote(step.Key.AsString()) + "]")
-			} else {
+			case cty.Number:
 				text.WriteString("[" + step.Key.AsBigFloat().String() + "]")
+			default:
+				// Set element keys can contain entire objects, including secrets.
+				// Stop at the containing value rather than rendering the key.
+				return text.String()
 			}
 		}
 	}
@@ -189,6 +215,65 @@ func DecodeString(input *pluginv1.ComponentValue) (string, error) {
 		return "", err
 	}
 	return value.AsString(), nil
+}
+
+// DecodeObjectWithSensitiveKeys retains validated sensitivity paths as top-level
+// input keys. Terraform partitions whole variables, so a sensitive descendant
+// makes its containing input sensitive even when it has no non-empty leaves.
+func DecodeObjectWithSensitiveKeys(input *pluginv1.ComponentValue) (map[string]any, map[string]bool, error) {
+	defer perf.Track(nil, "componentadapter.DecodeObjectWithSensitiveKeys")()
+
+	object, err := DecodeObject(input)
+	if err != nil {
+		return nil, nil, err
+	}
+	keys := make(map[string]bool)
+	for _, path := range input.GetSensitivePaths() {
+		if len(path.Steps) == 0 {
+			for key := range object {
+				keys[key] = true
+			}
+			continue
+		}
+		switch selector := path.Steps[0].GetSelector().(type) {
+		case *pluginv1.ComponentValueStep_Attribute:
+			keys[selector.Attribute] = true
+		case *pluginv1.ComponentValueStep_Index:
+			// DecodeObject already validated this path against an object or map.
+			index, err := sensitiveIndex(selector.Index)
+			if err != nil || index.Type() != cty.String {
+				return nil, nil, errUtils.ErrPluginProtocol
+			}
+			keys[index.AsString()] = true
+		}
+	}
+	return object, keys, nil
+}
+
+// Float64Bits is the bit size strconv uses for float64 formatting.
+const float64Bits = 64
+
+// nativeNumbers converts JSON numbers to int64 or float64 when that is exact, so YAML
+// output keeps them numeric. A number neither type can hold exactly stays a json.Number.
+func nativeNumbers(value any) any {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, child := range value {
+			value[key] = nativeNumbers(child)
+		}
+	case []any:
+		for i, child := range value {
+			value[i] = nativeNumbers(child)
+		}
+	case json.Number:
+		if integer, err := value.Int64(); err == nil {
+			return integer
+		}
+		if float, err := value.Float64(); err == nil && strconv.FormatFloat(float, 'g', -1, float64Bits) == value.String() {
+			return float
+		}
+	}
+	return value
 }
 
 func decodePlain(input *pluginv1.ComponentValue) (cty.Value, error) {
@@ -246,27 +331,11 @@ func objectJSON(value cty.Value) (any, error) {
 	return result, nil
 }
 
-// RegisterSensitiveValues registers the sensitive parts of a plugin value with masked I/O without decoding
-// it for use. Call it before rendering anything else the same response carries, such as log events, so a
-// value the plugin marked sensitive is masked there too. A value that cannot be decoded registers nothing;
-// decoding it for use reports the problem.
-func RegisterSensitiveValues(input *pluginv1.ComponentValue) {
-	defer perf.Track(nil, "componentadapter.RegisterSensitiveValues")()
-
-	if input == nil || len(input.SensitivePaths) == 0 {
-		return
-	}
-	value, err := decodePlain(input)
-	if err != nil || !value.IsWhollyKnown() {
-		return
-	}
-	_ = registerSensitivePaths(value, input.SensitivePaths)
-}
-
 func registerSensitive(value any) {
 	switch value := value.(type) {
 	case map[string]any:
-		for _, child := range value {
+		for key, child := range value {
+			atmosio.RegisterSecretValue(key)
 			registerSensitive(child)
 		}
 	case []any:

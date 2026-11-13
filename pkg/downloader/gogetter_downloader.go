@@ -74,20 +74,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		return nil, err
 	}
 
-	// Lazily provision ambient credential brokers (e.g., Atmos Pro github/sts) before the first
-	// remote read so private repositories are reachable. Brokers export GIT_CONFIG_*/tokens into
-	// the process env, which the git subprocess this client spawns inherits. Process-once and
-	// gated (CI + configured), so local-only fetches and non-Pro repos pay nothing.
-	remote := f.atmosConfig != nil && isRemoteSource(src)
-	if remote {
-		broker.EnsureCredentials(ctx, f.atmosConfig)
-	}
-
-	// When Atmos brokered a fresh token this process, a freshly minted GitHub token can
-	// briefly 401 before GitHub propagates it. Let the git getter retry such auth failures
-	// within a bounded window — only for remote, brokered reads, so static credentials still
-	// fail fast.
-	retryAuthErrors := remote && broker.HasBrokeredCredentials()
+	retryAuthErrors := brokeredAuthRetry(ctx, f.atmosConfig, src)
 
 	// Create HTTP getter with optional custom client, always wrapped in a metadataCapturingTransport
 	// so a caller can retrieve ETag/Last-Modified after Get() runs (see goGetterClient.Metadata).
@@ -128,6 +115,16 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		}
 	}
 	return &goGetterClient{client: client, metadata: capture}, nil
+}
+
+// brokeredAuthRetry provisions ambient credential brokers only for remote sources.
+// Fresh brokered GitHub tokens can briefly 401 before propagation.
+func brokeredAuthRetry(ctx context.Context, config *schema.AtmosConfiguration, src string) bool {
+	if config == nil || !isRemoteSource(src) {
+		return false
+	}
+	broker.EnsureCredentials(ctx, config)
+	return broker.HasBrokeredCredentials()
 }
 
 // customDetectors creates a private detector list for each client. Global detectors are never mutated.
@@ -295,5 +292,6 @@ func (f *goGetterClientFactory) metadataHTTPGetter(ctx context.Context) (*getter
 		}
 	}
 
+	httpGetter.Client = authorizedHTTPClient(ctx, httpGetter.Client)
 	return httpGetter, capture
 }

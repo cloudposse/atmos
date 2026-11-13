@@ -236,6 +236,8 @@ service Commands {
 // implement an executor or replace the built-in Terraform component provider.
 // Negotiate each service through Info using component.discovery,
 // component.validation, component.preparation, and component.state respectively.
+// component.preparation is version 2: it adds terraform_arguments,
+// backend_generated, and execution. A version-1 host must reject the plugin.
 
 // ComponentValue uses cty's JSON type encoding and MessagePack value encoding.
 // Unlike protobuf.Struct, it preserves exact numbers, nulls, unknowns, and
@@ -366,6 +368,9 @@ message ComponentGeneratedFile {
   // default. Content is evaluated bytes, not another template language.
   string if_exists = 3;
   bool sensitive = 4;
+  // True only for a literal file copied from beside the configuration unit,
+  // never for an explicit generate block. Absent means normal policy handling.
+  bool unit_file_copy = 5;
 }
 // Evaluated command metadata; the host executes it with the invocation's
 // environment, toolchain, cancellation, and I/O. Lists retain declaration order.
@@ -374,6 +379,12 @@ message ComponentExecutionConfiguration {
   repeated ComponentHook before_hooks = 2;
   repeated ComponentHook after_hooks = 3;
   repeated ComponentHook error_hooks = 4;
+  // Metadata evaluated as the apply command would see it. Providers set it when
+  // preparing a plan whose execution depends on the command, so a saved plan
+  // applied later runs the apply-time hooks recorded with the reviewed plan.
+  // Unset means the plan-time metadata applies unchanged; an empty message
+  // means apply adds nothing.
+  ComponentExecutionConfiguration apply = 5;
 }
 message ComponentExtraArguments {
   repeated string commands = 1;
@@ -437,7 +448,13 @@ message PrepareComponentResponse {
   // them. A plugin may leave this field unset.
   map<string, string> feature_flags = 18;
   // Engine log events produced while preparing. See LogEntry.
-  repeated LogEntry logs = 19;
+  repeated LogEntry logs = 22;
+  // Authorization for an archive returned by a module registry. This value is
+  // sensitive and may be sent only to module_source_auth_origin.
+  ComponentValue module_source_authorization = 19;
+  string module_source_auth_origin = 20;
+  // Time spent resolving a tfr:// source, including its bounded retries.
+  uint64 registry_resolution_nanos = 21;
 }
 
 // ComponentErrorsConfiguration mirrors the Terragrunt errors block. The host retries or ignores a failed

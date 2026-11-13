@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/samber/lo"
@@ -12,6 +13,7 @@ import (
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	configurationadapter "github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/component/typedetect"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -21,7 +23,6 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
-	configurationadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
 	p "github.com/cloudposse/atmos/pkg/provenance"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
@@ -313,6 +314,7 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 		AuthManager:          params.AuthManager,
 		AuthDisabled:         params.AuthDisabled,
 		ErrorOptions:         params.ErrorOptions,
+		CommandPath:          params.CommandPath,
 	})
 	if err != nil {
 		return nil, err
@@ -477,6 +479,9 @@ type DescribeComponentContextParams struct {
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management.
 	AuthDisabled         bool
 	ErrorOptions         DescribeStacksErrorOptions
+	// CommandPath names the CLI command that needs the component for admission.
+	// Empty means `describe component`.
+	CommandPath []string
 }
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
@@ -598,6 +603,11 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	configAndStacksInfo.ComponentFromArg = params.Component
 	configAndStacksInfo.Stack = params.Stack
 	configAndStacksInfo.CliArgs = []string{"describe", "component"}
+	if len(params.CommandPath) > 0 {
+		// Admission sees the command that needs the component, not `describe component`.
+		configAndStacksInfo.CliArgs = slices.Clone(params.CommandPath)
+		configAndStacksInfo.SubCommand = params.CommandPath[len(params.CommandPath)-1]
+	}
 	configAndStacksInfo.ComponentSection = make(map[string]any)
 	configAndStacksInfo.AuthDisabled = params.AuthDisabled
 	configAndStacksInfo.UseMocks = params.UseMocks

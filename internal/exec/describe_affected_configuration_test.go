@@ -5,11 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
-	"syscall"
 	"testing"
-	"time"
 
+	"github.com/cloudposse/atmos/pkg/component/configuration"
+
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -17,13 +17,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// revisionConfigurationRuntime composes the generated runtime and revision mocks,
+// because a revision-capable provider implements both schema interfaces.
 type revisionConfigurationRuntime struct {
 	*MockComponentConfigurationRuntime
-	revision func(string) (schema.ComponentConfigurationRuntime, error)
-}
-
-func (r *revisionConfigurationRuntime) ForRevision(root string) (schema.ComponentConfigurationRuntime, error) {
-	return r.revision(root)
+	*MockComponentConfigurationRevisionRuntime
 }
 
 func affectedConfigurationDefinitions(names ...string) map[string]map[string]any {
@@ -62,11 +60,12 @@ func TestAffectedConfigurationRevisions(t *testing.T) {
 			previous := NewMockComponentConfigurationRuntime(ctrl)
 			previous.EXPECT().Discover(gomock.Any()).Return(affectedConfigurationDefinitions(tc.before...), tc.discoverErr).AnyTimes()
 			forked := false
-			runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: current, revision: func(root string) (schema.ComponentConfigurationRuntime, error) {
-				require.Equal(t, baseRoot, root)
+			revisions := NewMockComponentConfigurationRevisionRuntime(ctrl)
+			revisions.EXPECT().ForRevision(baseRoot).DoAndReturn(func(string) (schema.ComponentConfigurationRuntime, error) {
 				forked = true
 				return previous, tc.forkErr
-			}}
+			}).Times(1)
+			runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: current, MockComponentConfigurationRevisionRuntime: revisions}
 			config.ComponentConfigurations = runtime
 			affected, _, _, err := executeDescribeAffected(config, headRoot, baseRoot, head, base, false, false, "", false, false, nil, AffectedFilter{}, nil, true, DescribeStacksErrorOptions{})
 			require.True(t, forked, "BASE must discover independently")
@@ -94,12 +93,15 @@ func TestAffectedConfigurationRevisions(t *testing.T) {
 
 func TestAffectedConfigurationForkErrors(t *testing.T) {
 	require.NoError(t, rebaseConfigurationDiscovery(&schema.AtmosConfiguration{}))
-	original := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	ctrl := gomock.NewController(t)
+	original := NewMockComponentConfigurationRuntime(ctrl)
 	config := &schema.AtmosConfiguration{ComponentConfigurations: original}
 	require.ErrorIs(t, rebaseConfigurationDiscovery(config), errUtils.ErrPluginUnsupportedExtension)
 	require.Same(t, original, config.ComponentConfigurations)
 	for _, failure := range []error{context.Canceled, errUtils.ErrPluginInvalidConfig} {
-		runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: original, revision: func(string) (schema.ComponentConfigurationRuntime, error) { return nil, failure }}
+		revisions := NewMockComponentConfigurationRevisionRuntime(ctrl)
+		revisions.EXPECT().ForRevision(gomock.Any()).Return(nil, failure).Times(1)
+		runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: original, MockComponentConfigurationRevisionRuntime: revisions}
 		config.ComponentConfigurations = runtime
 		require.ErrorIs(t, rebaseConfigurationDiscovery(config), failure)
 		require.Same(t, runtime, config.ComponentConfigurations)
@@ -123,7 +125,7 @@ func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
 	settings := map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}
 	watches := func() []schema.ComponentDependency {
 		deps := []schema.ComponentDependency{{Kind: "folder", Path: "modules/unit"}}
-		require.True(t, configurationWatchPaths(config, settings, deps))
+		require.True(t, configuration.WatchPaths(config, settings, deps))
 		return deps
 	}
 
@@ -131,7 +133,7 @@ func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
 		resolvedIndex, matched := configurationMatchInputs(index, deps, provider)
 		changed, kind, path, err := isComponentDependentFolderOrFileChangedIndexed(resolvedIndex, matched)
 		require.NoError(t, err)
-		return changed, kind, configuredDependencyPath(deps, matched, path)
+		return changed, kind, configuration.ConfiguredDependencyPath(deps, matched, path)
 	}
 
 	deps := watches()
@@ -154,28 +156,53 @@ func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
 	require.False(t, changed)
 }
 
-func TestAffectedConfigurationWatchRoot(t *testing.T) {
+// Native discovery starts during configuration initialization, so the command's cancellation must reach it.
+func TestParseDescribeAffectedCliArgsPassesCommandContext(t *testing.T) {
 	root := t.TempDir()
-	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
-	for _, provider := range []bool{true, false} {
-		settings := map[string]any{}
-		if provider {
-			settings["configuration"] = map[string]any{"provider": "terragrunt"}
-		}
-		absolute := filepath.Join(root, "module")
-		deps := []schema.ComponentDependency{{Kind: "file", Path: "root.hcl"}, {Kind: "folder", Path: absolute}}
-		configurationWatchPaths(config, settings, deps)
-		require.Equal(t, absolute, deps[1].Path)
-		if provider {
-			require.Equal(t, filepath.Join(root, "root.hcl"), deps[0].Path)
-			changed, kind, _, err := isComponentDependentFolderOrFileChangedIndexed(newChangedFilesIndex(config, []string{"root.hcl"}, root), deps)
-			require.NoError(t, err)
-			require.True(t, changed)
-			require.Equal(t, "file", kind)
-		} else {
-			require.Equal(t, "root.hcl", deps[0].Path)
-		}
+	config := `base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+    terragrunt:
+      enabled: true
+      discovery:
+        enabled: true
+        included_paths: ["live/**"]
+stacks:
+  base_path: stacks
+  included_paths: ["**/*"]
+  name_template: "{{ .vars.stage }}"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(config), 0o600))
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Setenv("ATMOS_BASE_PATH", root)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	cmd := &cobra.Command{Use: "affected"}
+	cmd.Flags().AddFlagSet(newDescribeAffectedFlagSet())
+	cmd.Flags().StringSlice("profile", nil, "")
+	cmd.Flags().StringSlice("config-path", nil, "")
+	cmd.Flags().StringSlice("config", nil, "")
+	cmd.Flags().String("base-path", "", "")
+	cmd.SetContext(ctx)
+	_, err := ParseDescribeAffectedCliArgs(cmd, nil)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestResolvedChangedFilesPerIndex(t *testing.T) {
+	first := &changedFilesIndex{allFiles: []string{filepath.Join(t.TempDir(), "first")}}
+	second := &changedFilesIndex{allFiles: []string{filepath.Join(t.TempDir(), "second")}}
+	const n = 20
+	results := make(chan *changedFilesIndex, n)
+	for range n {
+		go func() { results <- resolvedChangedFiles(first) }()
 	}
+	initial := <-results
+	for i := 1; i < n; i++ {
+		require.Same(t, initial, <-results)
+	}
+	require.NotSame(t, initial, resolvedChangedFiles(second))
+	require.Same(t, initial, resolvedChangedFiles(first))
 }
 
 // watchFixture builds a project with many units that each watch their own files and folder,
@@ -323,75 +350,39 @@ func TestSortAffectedIsDeterministic(t *testing.T) {
 	require.Equal(t, []string{"alpha", "zeta", "chart"}, []string{deleted[0].Component, deleted[1].Component, deleted[2].Component})
 }
 
-func TestRemoveOnSignalCleansUpBeforeExit(t *testing.T) {
-	exited := make(chan int, 1)
-	original := exitProcess
-	exitProcess = func(code int) { exited <- code }
-	t.Cleanup(func() { exitProcess = original })
+// The BASE policy inventory resolves provider imports with a session of its own checkout; the
+// HEAD inventory keeps the invocation's session, which is never replaced.
+func TestAffectedPolicyInventoryUsesARevisionSession(t *testing.T) {
+	headRoot, _ := affectedPolicyRepo(t, map[string]string{"README": "unchanged"})
+	baseRoot, _ := affectedPolicyRepo(t, map[string]string{"README": "unchanged"})
+	config := affectedPolicyTestConfig(headRoot)
+	ctrl := gomock.NewController(t)
+	current := NewMockComponentConfigurationRuntime(ctrl)
+	previous := NewMockComponentConfigurationRuntime(ctrl)
+	forkedAt := ""
+	revisions := NewMockComponentConfigurationRevisionRuntime(ctrl)
+	gomock.InOrder(
+		revisions.EXPECT().ForRevision(gomock.Any()).DoAndReturn(func(root string) (schema.ComponentConfigurationRuntime, error) {
+			forkedAt = root
+			return previous, nil
+		}),
+		revisions.EXPECT().ForRevision(gomock.Any()).Return(nil, context.Canceled),
+	)
+	runtime := &revisionConfigurationRuntime{MockComponentConfigurationRuntime: current, MockComponentConfigurationRevisionRuntime: revisions}
+	config.ComponentConfigurations = runtime
 
-	var cleaned atomic.Int32
-	stop := removeOnSignal(func() { cleaned.Add(1) })
-	defer stop()
-	process, err := os.FindProcess(os.Getpid())
+	base, err := affectedPolicyConfig(config, headRoot, baseRoot)
 	require.NoError(t, err)
-	if err := process.Signal(syscall.SIGTERM); err != nil {
-		t.Skipf("signals cannot be delivered on this platform: %v", err)
-	}
-	select {
-	case code := <-exited:
-		require.Equal(t, 128+int(syscall.SIGTERM), code)
-		require.Equal(t, int32(1), cleaned.Load(), "the worktree is removed before the process exits")
-	case <-time.After(10 * time.Second):
-		t.Fatal("signal was not handled")
-	}
-}
+	require.Same(t, previous, base.ComponentConfigurations)
+	require.Equal(t, base.BasePathAbsolute, forkedAt)
+	require.Same(t, runtime, config.ComponentConfigurations, "the caller's session is not replaced")
 
-func TestRemoveOnSignalStopReleasesWatcher(t *testing.T) {
-	var cleaned atomic.Int32
-	removeOnSignal(func() { cleaned.Add(1) })()
-	// After a normal return the watcher is gone: it must never run cleanup on its own.
-	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, int32(0), cleaned.Load())
-}
-
-func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {
-	root := t.TempDir()
-	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
-	index := newChangedFilesIndex(config, []string{filepath.Join("live", ".terragrunt-cache", "generated.tf"), filepath.Join("live", "new.yaml")}, root)
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/.terragrunt-cache/**"}}}
-	filtered, err := configurationWatchIndex(config, settings, index)
+	forkedAt = ""
+	head, err := affectedPolicyConfig(config, headRoot, headRoot)
 	require.NoError(t, err)
-	require.Equal(t, []string{filepath.Join(root, "live", "new.yaml")}, filtered.getAllFiles())
-	require.Len(t, index.getAllFiles(), 2)
-	unchanged, err := configurationWatchIndex(config, nil, index)
-	require.NoError(t, err)
-	require.Same(t, index, unchanged)
-	for _, invalid := range []any{"[", 42} {
-		settings["configuration"].(map[string]any)["watch_excludes"] = []any{invalid}
-		_, err = configurationWatchIndex(config, settings, index)
-		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	}
-}
+	require.Same(t, runtime, head.ComponentConfigurations)
+	require.Empty(t, forkedAt)
 
-func TestConfigurationWatchExclusionsFailClosedOnPathsOutsideTheProject(t *testing.T) {
-	// A relative project root cannot be compared with absolute changed files; the watch must not silently match nothing.
-	config := &schema.AtmosConfiguration{BasePathAbsolute: "relative-root"}
-	absolute := filepath.Join(t.TempDir(), "live", "new.yaml")
-	index := newChangedFilesIndex(config, []string{absolute}, "")
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/*.tf"}}}
-	filtered, err := configurationWatchIndex(config, settings, index)
-	require.Error(t, err)
-	require.Nil(t, filtered)
-}
-
-func TestDependencyChangeCheckReportsInvalidWatchExclusions(t *testing.T) {
-	root := t.TempDir()
-	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
-	index := newChangedFilesIndex(config, []string{filepath.Join("live", "changed.hcl")}, root)
-	component := map[string]any{}
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"["}}}
-	var affected []schema.Affected
-	err := checkDependencyChangesIndexed(&affected, config, "app", "dev", "terraform", &component, settings, index, false, nil, false)
-	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	require.Empty(t, affected, "an invalid exclusion must not be treated as a clean comparison")
+	_, err = affectedPolicyConfig(config, headRoot, baseRoot)
+	require.ErrorIs(t, err, context.Canceled)
 }

@@ -165,15 +165,14 @@ func inspectDefinition(release *Release, annotations map[string]string) error {
 		return err
 	}
 	expected := releaseAnnotations(definition, release.Manifest)
-	// The publisher may override the manifest repository with an explicit source;
-	// it is still held to the same publishable shape.
-	if source, overridden := annotations[annotationSource]; overridden {
-		if _, ok := publishableSource(source); !ok {
-			return errUtils.ErrOCIIntegrity
-		}
-		expected[annotationSource] = source
+	// Releases packed before OCI display annotations were added used only the
+	// three Atmos integrity annotations. Accept that exact historical set.
+	legacy := map[string]string{
+		annotationName:     expected[annotationName],
+		annotationVersion:  expected[annotationVersion],
+		annotationManifest: expected[annotationManifest],
 	}
-	if !maps.Equal(annotations, expected) {
+	if !maps.Equal(annotations, legacy) && !matchesReleaseAnnotations(annotations, expected) {
 		return errUtils.ErrOCIIntegrity
 	}
 	if len(definition.Spec.Platforms) != len(release.Platforms) {
@@ -186,6 +185,18 @@ func inspectDefinition(release *Release, annotations map[string]string) error {
 	}
 	release.Name, release.Version, release.Definition = definition.Metadata.Name, definition.Metadata.Version, definition
 	return nil
+}
+
+func matchesReleaseAnnotations(annotations, expected map[string]string) bool {
+	// The publisher may override the manifest repository with an explicit source;
+	// it is still held to the same publishable shape.
+	if source, overridden := annotations[annotationSource]; overridden {
+		if _, ok := publishableSource(source); !ok {
+			return false
+		}
+		expected[annotationSource] = source
+	}
+	return maps.Equal(annotations, expected)
 }
 
 func inspectPlatformConfig(img v1.Image, imageManifest *v1.Manifest, platform *v1.Platform) (*v1.ConfigFile, error) {

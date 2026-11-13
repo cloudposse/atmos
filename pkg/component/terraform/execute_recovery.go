@@ -55,7 +55,7 @@ func (r *recoveryReporter) SignalsWritten(path string) {
 
 // attemptFunc runs the hooks and the command once. It returns the exit status 2 of
 // `plan -detailed-exitcode` separately, because that is a result and not a failure.
-type attemptFunc func(opts []component.ExecutionOption) (changes, err error)
+type attemptFunc func(opts []component.ExecutionOption, hookStderr io.Writer) (changes, err error)
 
 // recoverPhase runs an attempt under the component's errors policy. Error text for matching is
 // the command's standard error, as it is for Terragrunt, so output on stdout never triggers a policy.
@@ -77,7 +77,7 @@ func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executi
 		}
 		var stderr bytes.Buffer
 		var runErr error
-		changes, runErr = attempt(withStderrCapture(opts, &stderr))
+		changes, runErr = attempt(withStderrCapture(opts, &stderr), &stderr)
 		return stderr.String(), runErr
 	})
 	switch {
@@ -162,10 +162,10 @@ func (e *Executor) initFromModuleWrapper(atmosConfig *schema.AtmosConfiguration,
 		return nil
 	}
 	stage := lifecycleStage{command: execution.CommandInitFromModule, config: config}
-	return func(ctx context.Context, provision func(context.Context) error) error {
+	return func(ctx context.Context, target *source.Target, provision func(context.Context) error) error {
 		fetch := provision
 		if recovered {
-			fetch = recoveringFetch(info, config.Errors, provision)
+			fetch = recoveringFetch(info, target, config.Errors, provision)
 		}
 		return e.runLifecycle(ctx, atmosConfig, info, stage, fetch)
 	}
@@ -174,9 +174,18 @@ func (e *Executor) initFromModuleWrapper(atmosConfig *schema.AtmosConfiguration,
 // recoveringFetch applies the errors policy to the source fetch, inside the init-from-module
 // hooks, as Terragrunt does for its download. An ignored failure ends the unit's run, because
 // there is no source to run the command against.
-func recoveringFetch(info *schema.ConfigAndStacksInfo, policy *schema.ComponentErrors, provision func(context.Context) error) func(context.Context) error {
+func recoveringFetch(info *schema.ConfigAndStacksInfo, target *source.Target, policy *schema.ComponentErrors, provision func(context.Context) error) func(context.Context) error {
 	return func(ctx context.Context) error {
-		recoverer := execution.NewRecoverer(policy, execution.WithReporter(&recoveryReporter{info: info}))
+		moduleDir := target.Dir
+		if target.IsWorkdir {
+			var err error
+			moduleDir, err = component.ResolveWorkdirSubpath(info.BaseComponentPath, target.Dir)
+			if err != nil {
+				return err
+			}
+		}
+		recoverer := execution.NewRecoverer(policy, execution.WithReporter(&recoveryReporter{info: info}),
+			execution.WithSignalsFile(filepath.Join(moduleDir, execution.SignalsFileName)))
 		ignored, err := recoverer.Run(ctx, func(ctx context.Context) (string, error) {
 			if err := provision(ctx); err != nil {
 				return err.Error(), err
@@ -220,11 +229,11 @@ func (e *Executor) runLifecycle(ctx context.Context, atmosConfig *schema.AtmosCo
 	phase := &executionPhase{command: stage.command}
 	hookOpts := hookOptions([]component.ExecutionOption{component.WithProcessContext(ctx), component.WithEnvironment(info.SanitizedEnv)})
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: info, phase: phase, opts: hookOpts}
-	return execution.Run(ctx, stage.config, stage.command, runner, func() (string, error) {
+	return execution.Run(ctx, stage.config, stage.command, runner, func() (execution.Output, error) {
 		err := action(ctx)
 		if err == nil {
-			return "", nil
+			return nil, nil
 		}
-		return strings.TrimSpace(err.Error()), err
+		return execution.TextOutput(strings.TrimSpace(err.Error())), err
 	})
 }

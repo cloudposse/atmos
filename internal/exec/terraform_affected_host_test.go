@@ -7,7 +7,9 @@ import (
 	"github.com/agiledragon/gomonkey/v2"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -483,5 +485,55 @@ func BenchmarkGetAffectedComponents(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = GetAffectedComponents(args)
+	}
+}
+
+func TestAffectedComparisonRevision(t *testing.T) {
+	const commit = "0123456789abcdef0123456789abcdef01234567"
+	cases := []struct {
+		name     string
+		args     DescribeAffectedCmdArgs
+		ref, sha string
+	}{
+		{name: "no base keeps ref and sha", args: DescribeAffectedCmdArgs{Ref: "refs/heads/main", SHA: commit}, ref: "refs/heads/main", sha: commit},
+		{name: "ref base overrides ref and sha", args: DescribeAffectedCmdArgs{Base: "refs/heads/release", Ref: "refs/heads/main", SHA: commit}, ref: "refs/heads/release"},
+		{name: "sha base overrides sha and keeps clone ref", args: DescribeAffectedCmdArgs{Base: commit, Ref: "refs/heads/main", SHA: "fedcba9876543210fedcba9876543210fedcba98"}, ref: "refs/heads/main", sha: commit},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ref, sha := affectedComparisonRevision(&tc.args)
+			assert.Equal(t, tc.ref, ref)
+			assert.Equal(t, tc.sha, sha)
+		})
+	}
+}
+
+func TestGetAffectedComponentsNilArgs(t *testing.T) {
+	_, err := GetAffectedComponents(nil)
+	require.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
+func TestGetAffectedComponentsHonorsErrorMode(t *testing.T) {
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to observe GetAffectedComponentsWithOptions")
+
+	for mode, lenient := range map[string]bool{"": false, "strict": false, "warn": true, "silent": true} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			var got DescribeStacksErrorOptions
+			called := false
+			patch := gomonkey.ApplyFunc(GetAffectedComponentsWithOptions,
+				func(_ *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
+					called, got = true, errOptions
+					return nil, nil
+				})
+			defer patch.Reset()
+
+			_, err := GetAffectedComponents(&DescribeAffectedCmdArgs{ErrorMode: mode})
+			require.NoError(t, err)
+			if !called {
+				t.Skip("gomonkey function mocking failed (likely due to compiler optimizations or platform issues)")
+			}
+			assert.Equal(t, lenient, got.OnError == OnErrorWarn)
+			assert.Equal(t, lenient, got.OnWarning != nil)
+		})
 	}
 }

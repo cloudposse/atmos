@@ -485,30 +485,30 @@ func (e *Executor) execute(
 	// ExtractComponentConfig uses utils.GetComponentPath internally to ensure
 	// proper path resolution that works correctly with --chdir and when running
 	// from non-project-root directories.
-	config, err := ExtractComponentConfig(atmosConfig, sections, component, stack)
+	// Plugin-owned state is located first: its reads never run in the component's execution
+	// workdir, so that workdir is neither resolved nor required.
+	state, err := ResolveConfigurationState(ctx, atmosConfig, &ConfigurationStateRequest{Sections: sections, Component: component, Stack: stack, AuthContext: authContext, AuthManagers: authManagers})
 	if err != nil {
 		return nil, err
 	}
-
-	state, err := ResolveConfigurationState(ctx, atmosConfig, &ConfigurationStateRequest{Sections: sections, Component: component, Stack: stack, AuthContext: authContext, AuthManagers: authManagers})
+	var config *ComponentConfig
+	if state != nil {
+		config, err = extractConfigurationStateConfig(atmosConfig, sections, component, stack)
+	} else {
+		config, err = ExtractComponentConfig(atmosConfig, sections, component, stack)
+	}
 	if err != nil {
 		return nil, err
 	}
 	if state != nil {
 		config.BaseEnvironment = configurationEnvironment(authManagers)
-		cleanup, err := configurationOutputConfig(config, state)
+		cleanup, err := configurationStateReader(config, state, opts, component, stack)
 		if err != nil {
 			return nil, err
 		}
 		defer cleanup()
-		// The scratch directory always needs init, even after an earlier apply.
-		copy := OutputOptions{}
-		if opts != nil {
-			copy = *opts
-		}
-		copy.SkipInit = false
-		opts = &copy
-		processYamlFunctions = true
+		// Only the scratch reader regenerates its backend; the initialized unit is read as it is.
+		processYamlFunctions = opts == nil || !opts.SkipInit
 	}
 
 	// Step 2.5: Auto-provision JIT workdir if needed before toolchain resolution and init.

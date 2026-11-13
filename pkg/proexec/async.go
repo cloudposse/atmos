@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -198,6 +199,9 @@ func FlagsFromCommand(cmd *cobra.Command) []string {
 func flagAsTyped(f *pflag.Flag) []string {
 	if f.Value.Type() == "bool" {
 		return []string{"--" + f.Name}
+	}
+	if len(f.Annotations[flags.SensitiveMetadataAnnotation]) > 0 {
+		return []string{"--" + f.Name, "[REDACTED]"}
 	}
 	return []string{"--" + f.Name, f.Value.String()}
 }

@@ -171,3 +171,20 @@ func TestAFailedCallStillShowsItsLogsAndNothingTwice(t *testing.T) {
 	require.True(t, ok)
 	assert.NotEmpty(t, detail.Logs, "without live delivery the failure carries the events that explain it")
 }
+
+func TestLiveDeliveryWithholdsUnknownSensitiveValues(t *testing.T) {
+	request := brokenUnit(t)
+	require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "terragrunt.hcl"), []byte("terraform { source = \"./module\" }\nlocals { token = sensitive(\"secret-live-2718\") }\ninputs = { token = local.token, broken = local.absent }\n"), 0o644))
+	receiver := &logReceiver{}
+	_, err := New(nil, WithAPI(apiClient(t, receiver))).Prepare(t.Context(), request)
+	require.Error(t, err)
+	delivered, _, _ := receiver.snapshot()
+	for _, entry := range delivered {
+		assert.NotContains(t, entry.GetMessage(), "secret-live-2718")
+		for _, value := range entry.GetFields() {
+			assert.NotContains(t, value, "secret-live-2718")
+		}
+	}
+	assert.Contains(t, messagesOf(delivered), "Evaluating unit")
+	assert.NotEmpty(t, delivered)
+}

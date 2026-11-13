@@ -2,7 +2,9 @@ package configuration
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,9 +12,11 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // importRejectedCharacters cannot appear in a provider import path.
@@ -26,6 +30,10 @@ const importRejectedCharacters = `\?#*[{`
 func (s *Session) ImportComponents(ctx context.Context, uri string) (map[string]any, bool, error) {
 	defer perf.Track(nil, "configuration.Session.ImportComponents")()
 
+	return s.importComponents(ctx, uri, false)
+}
+
+func (s *Session) importComponents(ctx context.Context, uri string, validation bool) (map[string]any, bool, error) {
 	name, path, found := strings.Cut(uri, "://")
 	if !found {
 		return nil, false, nil
@@ -43,32 +51,74 @@ func (s *Session) ImportComponents(ctx context.Context, uri string) (map[string]
 		return nil, true, err
 	}
 
-	// Imports are resolved one at a time; the lock also orders them before discovery starts.
-	s.importMu.Lock()
-	defer s.importMu.Unlock()
-	instances, resolved := s.importResults[key]
-	if !resolved {
-		// Stack manifests may be read again after discovery; only a new import is too late.
-		if s.started {
-			return nil, true, fmt.Errorf("%w: cannot add import %q after configuration discovery", errUtils.ErrPluginInvalidConfig, key)
-		}
-		if instances, err = s.resolveImport(ctx, template, key); err != nil {
-			return nil, true, err
-		}
-		s.importResults[key] = instances
-		for _, instance := range instances {
-			s.imported[instance.Source] = instance
-		}
+	instances, err := s.resolveCachedImport(ctx, template, key, validation)
+	if err != nil {
+		return nil, true, err
 	}
+	components, err := importedComponents(instances)
+	return components, true, err
+}
+
+// resolveCachedImport serializes import evaluation and orders executable imports
+// before discovery starts. Validation reads share results without changing inventory.
+func (s *Session) resolveCachedImport(ctx context.Context, template *pluginv1.DiscoverComponentsRequest, key string, validation bool) ([]*pluginv1.DiscoveredComponent, error) {
+	if err := s.importMu.lockContext(ctx, s.ctx); err != nil {
+		return nil, err
+	}
+	defer s.importMu.unlock()
+	// Another import may have run while this one waited; a caller that gave up meanwhile gets its
+	// cancellation, not that import's cached result.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := s.ctx.Err(); err != nil {
+		return nil, err
+	}
+	instances, resolved := s.importResults[key]
+	if validation && !resolved {
+		instances, resolved = s.validationImports[key]
+	}
+	if resolved {
+		return instances, nil
+	}
+	if s.started && !validation {
+		return nil, fmt.Errorf("%w: cannot add import %q after configuration discovery", errUtils.ErrPluginInvalidConfig, key)
+	}
+	instances, err := s.resolveImport(ctx, template, key)
+	if err != nil {
+		return nil, err
+	}
+	s.cacheImport(key, instances, validation)
+	return instances, nil
+}
+
+// cacheImport stores successful results under importMu. Validation-only units must
+// never become discovery exclusions or preparation sources.
+func (s *Session) cacheImport(key string, instances []*pluginv1.DiscoveredComponent, validation bool) {
+	if validation {
+		if s.validationImports == nil {
+			s.validationImports = make(map[string][]*pluginv1.DiscoveredComponent)
+		}
+		s.validationImports[key] = instances
+		return
+	}
+	s.importResults[key] = instances
+	for _, instance := range instances {
+		s.imported[instance.Source] = instance
+	}
+}
+
+// importedComponents translates resolved units without changing the cached provider results.
+func importedComponents(instances []*pluginv1.DiscoveredComponent) (map[string]any, error) {
 	components := make(map[string]any, len(instances))
 	for _, instance := range instances {
 		config, err := instanceConfig(instance, true)
 		if err != nil {
-			return nil, true, err
+			return nil, err
 		}
 		components[instance.Address.Component] = config
 	}
-	return components, true, nil
+	return components, nil
 }
 
 // importKey validates an import path and returns its canonical URI. The path must be a
@@ -89,7 +139,12 @@ func (s *Session) importKey(ctx context.Context, scheme, provider, path string) 
 	}
 	clean := filepath.ToSlash(filepath.Clean(path))
 	key := provider + "://" + clean
-	if _, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(clean))); err != nil {
+	_, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(clean)))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		// Only a missing path is reported as missing; other failures keep their cause.
+		return "", fmt.Errorf("%w: import %q: cannot read %s: %w", errUtils.ErrPluginInvalidConfig, scheme+"://"+clean, clean, err)
+	}
+	if err != nil {
 		return "", errUtils.Build(fmt.Errorf("%w: import %q: %s does not exist in the project", errUtils.ErrPluginInvalidConfig, scheme+"://"+clean, clean)).
 			WithHint("Provider imports name a file or directory relative to the Atmos base path (`base_path` in `atmos.yaml`), not to the importing stack file").
 			Err()
@@ -99,13 +154,21 @@ func (s *Session) importKey(ctx context.Context, scheme, provider, path string) 
 
 // resolveImport asks the provider for the units under one import. The caller holds importMu.
 func (s *Session) resolveImport(ctx context.Context, template *pluginv1.DiscoverComponentsRequest, key string) ([]*pluginv1.DiscoveredComponent, error) {
-	registry, err := s.providers(ctx)
-	if err != nil {
+	// Keep caller deadlines and values while also stopping work when the session ends.
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(s.ctx, cancel)
+	defer stop()
+	defer cancel()
+	// Cancellation may have happened while this import waited for importMu.
+	if err := s.ctx.Err(); err != nil {
 		return nil, err
 	}
-	provider, exists := registry[template.Provider]
-	if !exists || provider.ComponentType() != terraformType {
-		return nil, errUtils.ErrPluginUnsupportedExtension
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	provider, err := s.importProvider(ctx, template.Provider)
+	if err != nil {
+		return nil, err
 	}
 	request := proto.Clone(template).(*pluginv1.DiscoverComponentsRequest)
 	request.IncludePaths, request.ExcludePaths, request.Imports = nil, nil, []string{key}
@@ -113,13 +176,9 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 	if err != nil {
 		return nil, err
 	}
-	adapter.RenderLogs(adapter.LogScope{Provider: request.Provider}, discovered.GetLogs())
-	// A broken unit that is imported by name fails the import, naming the unit: the user asked for it.
-	for _, diagnostic := range discovered.Diagnostics {
-		if diagnosticErr := adapter.DiagnosticError(diagnostic); diagnosticErr != nil {
-			return nil, diagnosticErr
-		}
-		adapter.WarnDiagnostic(diagnostic)
+	adapter.RenderLogs(adapter.LogScope{Provider: request.Provider, Warnings: &s.warnings}, discovered.GetLogs())
+	if err := importDiagnostics(discovered.Diagnostics, &s.warnings); err != nil {
+		return nil, err
 	}
 	if len(discovered.Components) == 0 {
 		return nil, errUtils.Build(errUtils.ErrConfigurationImportEmpty).
@@ -130,19 +189,47 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 	names := make(map[string]*pluginv1.DiscoveredComponent, len(discovered.Components))
 	for _, instance := range discovered.Components {
 		if previous := names[instance.Address.Component]; previous != nil {
-			return nil, importConflict(instance.Address.Component, previous.Source, instance.Source, key)
+			return nil, configuration.ImportConflict(instance.Address.Component, previous.Source, instance.Source, key)
 		}
 		names[instance.Address.Component] = instance
 	}
 	return discovered.Components, nil
 }
 
-// importConflict reports two units that would become one component of the importing stack.
-func importConflict(component, first, second, where string) error {
-	return errUtils.Build(fmt.Errorf("%w: units %s and %s both become component %q (%s)", errUtils.ErrConfigurationImportConflict, first, second, component, where)).
-		WithContext("component", component).
-		WithContext("unit", first).
-		WithContext("other_unit", second).
-		WithHint("Import the units from different stack files, or import a narrower directory or a single `terragrunt.hcl`").
-		Err()
+// importProvider starts the providers and returns the Terraform provider an import names.
+func (s *Session) importProvider(ctx context.Context, name string) (Provider, error) {
+	registry, err := s.providers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	provider, exists := registry[name]
+	if !exists || provider.ComponentType() != terraformType {
+		return nil, errUtils.ErrPluginUnsupportedExtension
+	}
+	return provider, nil
+}
+
+// importDiagnostics fails an import on a broken unit, naming the unit: the user asked for it by
+// name. Other diagnostics are shown as warnings.
+func importDiagnostics(diagnostics []*pluginv1.Diagnostic, warnings *adapter.WarningDeduper) error {
+	for _, diagnostic := range diagnostics {
+		if err := adapter.DiagnosticError(diagnostic); err != nil {
+			return err
+		}
+		adapter.WarnDiagnostic(diagnostic, warnings)
+	}
+	return nil
+}
+
+// ForValidation shares cached imports but never registers additional executable units.
+func (s *Session) ForValidation() schema.ComponentConfigurationRuntime {
+	defer perf.Track(nil, "configuration.Session.ForValidation")()
+	return &validationSession{Session: s}
+}
+
+type validationSession struct{ *Session }
+
+func (s *validationSession) ImportComponents(ctx context.Context, uri string) (map[string]any, bool, error) {
+	defer perf.Track(nil, "configuration.validationSession.ImportComponents")()
+	return s.importComponents(ctx, uri, true)
 }

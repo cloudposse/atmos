@@ -25,6 +25,9 @@ func resolveBackend(cfg *config.TerragruntConfig, result *model.Resolution, requ
 	if result.BackendType != "local" {
 		return nil
 	}
+	if result.Backend == nil {
+		result.Backend = make(map[string]any)
+	}
 	// Local state remains relative to Terragrunt's source cache identity,
 	// independently of the execution directory chosen by Atmos.
 	for key, fallback := range map[string]string{"path": "terraform.tfstate", "workspace_dir": "terraform.tfstate.d"} {
@@ -40,7 +43,9 @@ func resolveBackend(cfg *config.TerragruntConfig, result *model.Resolution, requ
 // checkEncryption validates the state encryption settings. Terragrunt writes `encryption` into the
 // `terraform { encryption }` block of the file that `remote_state.generate` produces and nowhere else, so it
 // has no effect without `generate`; that is reported as a warning rather than silently ignored. The block is
-// OpenTofu syntax, so it is rejected before Terraform fails on it at init.
+// OpenTofu syntax, so it is rejected before Terraform fails on it at init. Whether the generated file is
+// written is decided later, by the host in the provisioned working directory: when `if_exists = "skip"` keeps
+// an existing file and nothing else configures encryption, the host warns that the state is not encrypted.
 func checkEncryption(encrypted, generated bool, result *model.Resolution, request *model.Request) error {
 	if !encrypted || request.Phase == "backend" {
 		return nil
@@ -52,7 +57,12 @@ func checkEncryption(encrypted, generated bool, result *model.Resolution, reques
 		})
 		return nil
 	}
-	if IsOpenTofu(request.Tofu) {
+	// The unit's terraform_binary, resolved before the backend, is the executable that runs it.
+	binary := result.TerraformBinary
+	if binary == "" {
+		binary = request.Tofu
+	}
+	if IsOpenTofu(binary) {
 		return nil
 	}
 	return &model.Problem{

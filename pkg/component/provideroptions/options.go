@@ -179,21 +179,15 @@ func overlaps(left, right []string) bool {
 }
 
 func parseOption(provider string, fields map[string]any) (Option, error) {
-	for key := range fields {
-		if !slices.Contains(optionKeys, key) {
-			return Option{}, declarationError(stringField(fields, "name"), fmt.Sprintf("unsupported key `%s`; use one of %s", key, strings.Join(optionKeys, ", ")))
-		}
+	if err := validateOptionFields(fields); err != nil {
+		return Option{}, err
 	}
 	option := Option{
 		Name: stringField(fields, "name"), Flag: stringField(fields, "flag"), Type: stringField(fields, "type"),
 		Config: stringField(fields, "config"), Deprecated: stringField(fields, "deprecated"), Description: stringField(fields, "description"),
 	}
 	var err error
-	sensitive, isBool := fields["sensitive"].(bool)
-	if raw, present := fields["sensitive"]; present && raw != nil && !isBool {
-		return Option{}, declarationError(option.Name, fmt.Sprintf("`sensitive` must be true or false, not %T", raw))
-	}
-	option.Sensitive = sensitive
+	option.Sensitive, _ = fields["sensitive"].(bool)
 	for target, key := range map[*[]string]string{&option.Aliases: "aliases", &option.Env: "env", &option.Modes: "modes", &option.Commands: "commands"} {
 		if *target, err = stringList(fields[key]); err != nil {
 			return Option{}, declarationError(option.Name, fmt.Sprintf("`%s` must be a list of strings", key))
@@ -206,6 +200,27 @@ func parseOption(provider string, fields map[string]any) (Option, error) {
 		return Option{}, err
 	}
 	return option, nil
+}
+
+func validateOptionFields(fields map[string]any) error {
+	name := stringField(fields, "name")
+	for key := range fields {
+		if !slices.Contains(optionKeys, key) {
+			return declarationError(name, fmt.Sprintf("unsupported key `%s`; use one of %s", key, strings.Join(optionKeys, ", ")))
+		}
+	}
+	for _, key := range []string{"flag", "config", "deprecated"} {
+		if raw := fields[key]; raw != nil {
+			if _, ok := raw.(string); !ok {
+				return declarationError(name, fmt.Sprintf("`%s` must be a string, not %T", key, raw))
+			}
+		}
+	}
+	_, isBool := fields["sensitive"].(bool)
+	if raw, present := fields["sensitive"]; present && !isBool {
+		return declarationError(name, fmt.Sprintf("`sensitive` must be true or false, not %T", raw))
+	}
+	return nil
 }
 
 func validateOption(provider string, option *Option) error {

@@ -7,12 +7,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
@@ -60,6 +64,33 @@ func TestPreparationAndStateUseSeparatePhases(t *testing.T) {
 	require.Equal(t, result.State.WorkingDirectory, state.State.WorkingDirectory)
 }
 
+func TestIAMProbeReturnsOnlyRoleSettings(t *testing.T) {
+	request := componentRequest(t)
+	request.Operation.Mode = "iam-probe"
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		require.Equal(t, "iam", req.Phase)
+		return &model.Resolution{IAM: &model.IAM{Role: "arn:aws:iam::1:role/x"}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "arn:aws:iam::1:role/x", result.Iam.Role)
+	require.Empty(t, result.ModuleSource)
+	require.Nil(t, result.State)
+}
+
+func TestPreparationCarriesSensitiveRegistryAuthorization(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Source: "https://registry.example/archive.tar.gz", WorkingDir: request.RootDirectory, RegistryAuth: &model.RegistryAuth{Origin: "https://registry.example", Authorization: "Bearer secret"}, Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	response, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "https://registry.example", response.ModuleSourceAuthOrigin)
+	require.Len(t, response.ModuleSourceAuthorization.SensitivePaths, 1)
+	require.Empty(t, response.ModuleSourceAuthorization.SensitivePaths[0].Steps)
+	require.NotContains(t, response.ModuleSource, "secret")
+}
+
 func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 	for _, test := range []struct {
 		name   string
@@ -97,6 +128,13 @@ func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 	cancel()
 	_, err := p.Validate(ctx, componentRequest(t))
 	require.Equal(t, codes.Canceled, status.Code(err))
+	// Prepare and Resolve keep the validation status instead of re-mapping it to InvalidArgument.
+	_, err = p.Prepare(ctx, componentRequest(t))
+	require.Equal(t, codes.Canceled, status.Code(err))
+	unsupported := componentRequest(t)
+	unsupported.Operation.Mode = "cli"
+	_, err = p.Resolve(t.Context(), unsupported)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
 }
 
 func TestEvaluatorErrorsDoNotExposePayloads(t *testing.T) {
@@ -150,6 +188,34 @@ func TestPrepareReturnsExecutionInDeclarationOrder(t *testing.T) {
 	require.True(t, got.AfterHooks[0].RunOnError)
 	require.Len(t, got.ErrorHooks, 1)
 	require.Equal(t, []string{"x", "y"}, got.ErrorHooks[0].OnErrors)
+}
+
+// The apply-time evaluation crosses the boundary distinctly, including an empty one, which
+// means apply runs nothing rather than the plan-time metadata.
+func TestPrepareReturnsApplyTimeExecution(t *testing.T) {
+	request := componentRequest(t)
+	execution := &model.Execution{
+		BeforeHooks: []model.Hook{{Name: "plan_only", Commands: []string{"plan"}, Execute: []string{"tool", "plan"}}},
+		Apply:       &model.Execution{AfterHooks: []model.Hook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}}},
+	}
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Execution: execution, Source: request.RootDirectory, WorkingDir: request.RootDirectory, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	got := result.GetExecution()
+	require.Equal(t, "plan_only", got.GetBeforeHooks()[0].GetName())
+	require.Empty(t, got.GetAfterHooks())
+	require.Len(t, got.GetApply().GetAfterHooks(), 1)
+	require.Equal(t, "notify", got.GetApply().GetAfterHooks()[0].GetName())
+	require.Equal(t, []string{"tool", "notify"}, got.GetApply().GetAfterHooks()[0].GetExecute())
+	require.Nil(t, got.GetApply().GetApply())
+
+	execution.Apply = &model.Execution{}
+	result, err = p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, result.GetExecution().GetApply(), "an empty apply-time evaluation must be preserved")
+	require.Empty(t, result.GetExecution().GetApply().GetBeforeHooks())
 }
 
 func TestPrepareOmitsExecutionWithoutHooks(t *testing.T) {
@@ -488,6 +554,19 @@ func TestOptionsRejectUnknownNamesAndWrongTypes(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupported)
 	_, err = applyOptions(map[string]string{}, map[string]*pluginv1.ComponentValue{"download_dir": {}})
 	require.ErrorIs(t, err, ErrUnsupported)
+	for name, values := range map[string][]any{
+		"download_dir":             {map[string]any{"path": "/cache"}, 42, true},
+		"iam_assume_role_duration": {"900", 1.5, map[string]any{"seconds": 900}},
+	} {
+		for _, value := range values {
+			t.Run(fmt.Sprintf("%s/%v", name, value), func(t *testing.T) {
+				env := map[string]string{}
+				_, err := applyOptions(env, map[string]*pluginv1.ComponentValue{name: encodedOption(t, value)})
+				require.ErrorIs(t, err, ErrUnsupported)
+				require.Empty(t, env)
+			})
+		}
+	}
 }
 
 func TestFeatureOptionsRankAboveEnvironmentAndConfiguration(t *testing.T) {
@@ -572,13 +651,156 @@ func TestManifestDeclaresExactlyTheOptionsThePluginAccepts(t *testing.T) {
 	for _, option := range declared.Options {
 		names = append(names, option.Name)
 		require.NotEmpty(t, option.Commands, option.Name)
-		if option.Sensitive {
-			require.Equal(t, "iam_assume_role_web_identity_token", option.Name)
-		}
+		require.Equal(t, option.Name == "iam_assume_role_web_identity_token", option.Sensitive, option.Name)
 	}
 	accepted := []string{"feature"}
 	for name := range toolEnvironment {
 		accepted = append(accepted, name)
 	}
 	require.ElementsMatch(t, accepted, names)
+}
+
+func TestPreparationTransmitsUnitFileCopyProvenance(t *testing.T) {
+	for _, copied := range []bool{false, true} {
+		t.Run(map[bool]string{false: "explicit generation", true: "adjacent copy"}[copied], func(t *testing.T) {
+			request := componentRequest(t)
+			p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+				return &model.Resolution{
+					Generated:         map[string]string{".terraform.lock.hcl": "# pinned\n"},
+					GeneratedPolicies: map[string]string{".terraform.lock.hcl": "overwrite"},
+					UnitFileCopies:    map[string]bool{".terraform.lock.hcl": copied},
+				}, nil
+			})
+			result, err := p.Prepare(t.Context(), request)
+			require.NoError(t, err)
+			require.Len(t, result.Files, 1)
+			wire, err := proto.Marshal(result)
+			require.NoError(t, err)
+			decoded := &pluginv1.PrepareComponentResponse{}
+			require.NoError(t, proto.Unmarshal(wire, decoded))
+			require.Equal(t, copied, decoded.Files[0].UnitFileCopy)
+			require.Equal(t, "overwrite", result.Files[0].IfExists)
+		})
+	}
+}
+
+func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
+	request := componentRequest(t)
+	parsing := make(chan struct{})
+	release := make(chan struct{})
+	secondGeneration := make(chan struct{}, 1)
+	var calls atomic.Int32
+	p := New(func(ctx context.Context, req model.Request) (*model.Resolution, error) {
+		if req.Phase == "discover" {
+			if calls.Add(1) == 2 {
+				secondGeneration <- struct{}{}
+			}
+		} else if calls.Load() == 1 {
+			close(parsing)
+			<-release
+		}
+		return &model.Resolution{Source: request.RootDirectory, WorkingDir: request.RootDirectory}, nil
+	})
+	first := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); first <- err }()
+	<-parsing
+	second := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); second <- err }()
+	select {
+	case <-secondGeneration:
+		t.Fatal("second generation started before the first parse finished")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	select {
+	case <-secondGeneration:
+	default:
+		t.Fatal("second generation did not run")
+	}
+}
+
+// A unit that fails discovery is reported as a diagnostic for that unit; neither evaluated
+// values nor the absolute project path reach the response.
+func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
+	for _, test := range []struct{ name, content string }{
+		{"inline", "locals { password = \"secret-evaluated-value\" }"},
+		{"parse", "locals { password = \"secret-evaluated-value\""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := componentRequest(t)
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "terragrunt.hcl"), []byte(test.content), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "main.tf"), []byte("terraform {}"), 0o600))
+			response, err := New(nil).Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
+				RootDirectory: request.RootDirectory, Provider: request.Provider,
+				ProviderConfiguration: request.ProviderConfiguration, Operation: request.Operation, IncludePaths: []string{"**"},
+			})
+			require.NoError(t, err)
+			require.Empty(t, response.GetComponents())
+			require.NotEmpty(t, response.GetDiagnostics(), "the failed unit is reported")
+			serialized := prototext.Format(response)
+			require.NotContains(t, serialized, "secret-evaluated-value")
+			require.NotContains(t, serialized, request.RootDirectory)
+		})
+	}
+}
+
+// Scheduling edges must be available from discovery, before preparation can read outputs.
+func TestDiscoveryOutputDependencyOrdering(t *testing.T) {
+	for _, test := range []struct {
+		name, blocks string
+		kinds        []pluginv1.ComponentDependency_Kind
+	}{
+		{"output only", `dependency "network" { config_path = "../network" }`, []pluginv1.ComponentDependency_Kind{pluginv1.ComponentDependency_OUTPUT}},
+		{"output and ordering", `dependency "network" { config_path = "../network" }
+dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDependency_Kind{pluginv1.ComponentDependency_OUTPUT}},
+		{"ordering only", `dependencies { paths = ["../network"] }`, []pluginv1.ComponentDependency_Kind{pluginv1.ComponentDependency_ORDER}},
+		{"skip outputs", `dependency "network" {
+ config_path = "../network"
+ skip_outputs = true
+}`, []pluginv1.ComponentDependency_Kind{pluginv1.ComponentDependency_ORDER}},
+		{"disabled", `dependency "network" {
+ config_path = "../network"
+ enabled = false
+}`, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			for _, dir := range []string{"module", "live/app", "live/network"} {
+				require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
+			}
+			config := "terraform { source = \"../../module\" }\n"
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live/network/terragrunt.hcl"), []byte(config), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live/app/terragrunt.hcl"), []byte(config+test.blocks+"\ninputs = { deferred = run_cmd(\"must-not-execute\") }\n"), 0o600))
+			opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true}})
+			require.NoError(t, err)
+			var phases []string
+			p := New(func(ctx context.Context, req model.Request) (*model.Resolution, error) {
+				phases = append(phases, req.Phase)
+				return engine.Resolve(ctx, req)
+			})
+			response, err := p.Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
+				RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts,
+				IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"},
+				Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}},
+			})
+			require.NoError(t, err)
+			require.Empty(t, response.Diagnostics)
+			require.Equal(t, []string{"inventory"}, phases)
+			require.Len(t, response.Components, 2)
+			app := response.Components[0]
+			network := response.Components[1]
+			require.Equal(t, "app", app.Address.Component)
+			require.Equal(t, "network", network.Address.Component)
+			require.Len(t, app.Dependencies, len(test.kinds))
+			for i, kind := range test.kinds {
+				require.Equal(t, kind, app.Dependencies[i].Kind)
+				require.Equal(t, network.Address, app.Dependencies[i].Target)
+			}
+			require.Empty(t, network.Dependencies)
+			require.NoDirExists(t, filepath.Join(root, "live/app/.terragrunt-cache"))
+		})
+	}
 }

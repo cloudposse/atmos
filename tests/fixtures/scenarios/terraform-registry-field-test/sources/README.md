@@ -34,7 +34,9 @@ The separate vendor interface is exercised with `atmos vendor pull`, followed by
 `atmos terraform apply vendor-alias -s dev -auto-approve --identity=false`.
 After modifying the module, a normal pull preserves the materialized dependency;
 use `atmos vendor pull --refresh-lock` to fetch the modified local source and
-apply again to verify its output. The `vendor.yaml` excludes README files.
+apply again to verify its output. The `vendor.yaml` excludes README files. After the first pull, verify that
+`components/terraform/vendor-marker/main.tf` exists and
+`components/terraform/vendor-marker/README.md` does not; both checks must pass.
 
 Run `atmos terraform shell source-local -s dev` in a terminal, inspect `pwd`,
 `ATMOS_COMPONENT`, `ATMOS_STACK`, and `TF_CLI_ARGS_plan`, then execute the engine's

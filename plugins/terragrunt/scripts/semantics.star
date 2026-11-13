@@ -273,7 +273,8 @@ variable "marker" {
 }
 resource "terraform_data" "flaky" {
   provisioner "local-exec" {
-    command = "test -f '${var.marker}' || { touch '${var.marker}'; echo transient-failure >&2; exit 1; }"
+    interpreter = ["sh", "-c"]
+    command     = "test -f '${var.marker}' || { touch '${var.marker}'; echo transient-failure >&2; exit 1; }"
   }
 }
 output "value" {
@@ -282,9 +283,14 @@ output "value" {
 """
 
 FAILING_MODULE = """
+variable "marker" {
+  type    = string
+  default = ""
+}
 resource "terraform_data" "broken" {
   provisioner "local-exec" {
-    command = "echo known-problem >&2; exit 1"
+    interpreter = ["sh", "-c"]
+    command     = "test -z '${var.marker}' || echo attempt >> '${var.marker}'; echo known-problem >&2; exit 1"
   }
 }
 output "value" {
@@ -324,11 +330,13 @@ def errors_block():
     unmatched = terraform(root, "apply", "unmatched", ["-auto-approve"], failing=True)
     expect_absent(unmatched, "Retryable error matched", "apply of an unmatched failure")
     always = 'errors {\n  retry "always" {\n    retryable_errors   = [".*known-problem.*"]\n    max_attempts       = 2\n    sleep_interval_sec = 0\n  }\n}\n'
-    lifecycle.write_unit(root, "exhausted", errors_unit("failing", always))
+    exhausted_marker = root + "/exhausted.attempts"
+    lifecycle.write_unit(root, "exhausted", errors_unit("failing", always, exhausted_marker))
     exhausted = terraform(root, "apply", "exhausted", ["-auto-approve"], failing=True)
     expect(exhausted, "attempt 1 of 2", "apply with a retry policy that never succeeds")
     expect(exhausted, "maximum retry attempts reached", "apply with a retry policy that never succeeds")
     lifecycle.expect_count(output_of(exhausted), "attempt 1 of 2", 1, "exhausted retry policy")
+    lifecycle.expect_count(fs.read_file(exhausted_marker), "attempt", 2, "failing provisioner invocations")
 
     # A negative pattern vetoes the policy.
     veto = 'errors {\n  retry "vetoed" {\n    retryable_errors   = [".*known-problem.*", "!.*known-problem.*"]\n    max_attempts       = 3\n    sleep_interval_sec = 0\n  }\n}\n'
@@ -506,7 +514,9 @@ def tflint_hook():
     fixtures.write(root, ".tflint.hcl", "# test configuration\n")
     unit = 'terraform {\n  source = "../../../modules/unit"\n\n  before_hook "lint" {\n    commands = ["plan"]\n    execute  = ["tflint", "--terragrunt-external-tflint", "--minimum-failure-severity=error"]\n  }\n}\ninputs = { greeting = "hi" }\n'
     lifecycle.write_unit(root, "linted", unit)
-    result = terraform(root, "plan", "linted", path=path_dir + ":/usr/bin:/bin")
+    windows = exec.run(["go", "env", "GOOS"], output="capture").stdout.strip() == "windows"
+    system = [echo.replace("\\", "/").rsplit("/", 1)[0]] if windows else ["/usr/bin", "/bin"]
+    result = terraform(root, "plan", "linted", path=(";" if windows else ":").join([path_dir] + system))
     lifecycle.expect_count(result.stderr, "Executing before hook: lint", 2, "plan with a tflint hook")
     lines = fs.read_file(path_dir + "/invocations.log").splitlines()
     fixtures.check(len(lines) == 2, "tflint should run twice (init and lint): " + str(lines))

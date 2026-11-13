@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -65,6 +66,10 @@ func TestParseRejectsInvalidDeclarations(t *testing.T) {
 		"bad mode":          declaration(map[string]any{"modes": []any{"fast"}}),
 		"duplicate aliases": declaration(map[string]any{"aliases": []any{"tool-level"}}),
 		"sensitive string":  declaration(map[string]any{"sensitive": "true"}),
+		"sensitive null":    declaration(map[string]any{"sensitive": nil}),
+		"flag list":         declaration(map[string]any{"flag": []any{"custom-level"}}),
+		"config number":     declaration(map[string]any{"config": 42}),
+		"deprecated bool":   declaration(map[string]any{"deprecated": true}),
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -221,6 +226,7 @@ func TestResolvePreservesExplicitFalseZeroAndEmpty(t *testing.T) {
 	assert.Equal(t, 0, values["retries"].Value)
 	assert.Equal(t, "", values["level"].Value)
 	assert.NotNil(t, values["paths"].Value)
+	assert.Equal(t, []string{}, values["paths"].Value)
 	assert.Len(t, values, 4)
 }
 
@@ -283,6 +289,49 @@ func TestResolveMarksSensitiveValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resolved["tool"]["token"].Sensitive)
 	assert.Equal(t, "s3cret-value", resolved["tool"]["token"].Value)
+	assert.True(t, resolved["tool"]["token"].FromCLI)
+}
+
+func TestResolvePreservesEnvironmentProvenance(t *testing.T) {
+	resolved, err := resolveWith(t, sample, nil, map[string]string{"ATMOS_TOOL_FEATURE": "tier=process"})
+	require.NoError(t, err)
+	assert.False(t, resolved["tool"]["feature"].FromCLI)
+}
+
+func TestSensitiveProviderFlagsCarryMetadataAnnotation(t *testing.T) {
+	root, plan, _ := newTree()
+	require.NoError(t, Register(root, []Provider{providerFor(t, "tool", sample)}))
+	for _, name := range []string{"tool-token"} {
+		require.Equal(t, []string{"true"}, plan.Flags().Lookup(name).Annotations[flags.SensitiveMetadataAnnotation])
+	}
+	assert.Empty(t, plan.Flags().Lookup("tool-level").Annotations[flags.SensitiveMetadataAnnotation])
+}
+
+func TestSensitiveIntegerFlagValidation(t *testing.T) {
+	raw := []any{map[string]any{"name": "pin", "type": "int", "sensitive": true, "description": "PIN.", "commands": []any{"plan"}, "aliases": []any{"tool-code"}}}
+	for _, flag := range []string{"tool-pin", "tool-code"} {
+		t.Run(flag, func(t *testing.T) {
+			resolved, err := resolveWith(t, raw, []string{"--" + flag + "=42"}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, 42, resolved["tool"]["pin"].Value)
+			assert.True(t, resolved["tool"]["pin"].Sensitive)
+
+			_, err = resolveWith(t, raw, []string{"--" + flag + "=secret-invalid"}, nil)
+			require.ErrorIs(t, err, errUtils.ErrProviderOption)
+			assert.NotContains(t, err.Error(), "secret-invalid")
+		})
+	}
+}
+
+func TestResolveEmptyListAlias(t *testing.T) {
+	raw := []any{map[string]any{"name": "paths", "type": "list", "description": "Paths.", "commands": []any{"plan"}, "aliases": []any{"tool-path"}}}
+	resolved, err := resolveWith(t, raw, []string{"--tool-path="}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{}, resolved["tool"]["paths"].Value)
+
+	resolved, err = resolveWith(t, raw, []string{"--tool-path=a", "--tool-path=b"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, resolved["tool"]["paths"].Value)
 }
 
 func TestResolveAcceptsAliasFlags(t *testing.T) {

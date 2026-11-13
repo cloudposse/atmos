@@ -28,6 +28,7 @@ type Provider interface {
 	ComponentType() string
 	Discover(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error)
 	Prepare(context.Context, *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error)
+	ResolveState(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error)
 }
 
 // Loader resolves the requested configuration providers through package policy and locks.
@@ -35,6 +36,7 @@ type Loader func(context.Context, []string) (map[string]Provider, error)
 
 // Session holds one command's discovery result; it is never a process-global cache.
 type Session struct {
+	warnings        adapter.WarningDeduper
 	ctx             context.Context
 	root, command   string
 	requests        []*pluginv1.DiscoverComponentsRequest
@@ -46,14 +48,16 @@ type Session struct {
 	instances       map[[3]string]*pluginv1.DiscoveredComponent
 	failures        map[failedKey]*failedUnit
 	err             error
-	importMu        sync.Mutex
+	importMu        importLock
 	importProviders map[string]*pluginv1.DiscoverComponentsRequest
 	// importResults caches each resolved import by URI; imported indexes the same units by
 	// source so Prepare can find a unit under whichever stack imported it.
 	importResults map[string][]*pluginv1.DiscoveredComponent
-	imported      map[string]*pluginv1.DiscoveredComponent
-	started       bool
-	loadMu        sync.Mutex
+	// validationImports caches extra manifest reads without registering executable units.
+	validationImports map[string][]*pluginv1.DiscoveredComponent
+	imported          map[string]*pluginv1.DiscoveredComponent
+	started           bool
+	loadMu            sync.Mutex
 	// configErr holds a settings problem found while reading configuration. Reading never fails on it,
 	// so `atmos config set` can always repair the file; the first use of the provider reports it.
 	configErr error
@@ -62,6 +66,9 @@ type Session struct {
 	settingsErrs map[string]error
 	// options holds the provider-owned keys of each enabled section, by section name.
 	options map[string]map[string]any
+	// prepared records the state identity each instance was prepared with, so a
+	// dependent's output reads can be checked against it within this invocation.
+	prepared sync.Map
 }
 
 // New snapshots the explicitly enabled scope without starting plugins or scanning directories.
@@ -189,16 +196,14 @@ func (s *Session) ensure(ctx context.Context) error {
 		return err
 	}
 	s.once.Do(func() {
-		s.importMu.Lock()
+		s.importMu.lock()
 		s.started = true
-		s.importMu.Unlock()
+		s.importMu.unlock()
 		go func() {
 			defer close(s.done)
-			call, cancel := context.WithCancel(s.ctx)
-			stop := context.AfterFunc(ctx, cancel)
-			defer stop()
-			defer cancel()
-			s.err = s.discover(call)
+			// Shared discovery is owned by the session: one caller giving up must not
+			// cancel it or cache that cancellation for the other waiters.
+			s.err = s.discover(s.ctx)
 		}()
 	})
 	select {
@@ -237,4 +242,39 @@ func discoveryRequest(config *schema.AtmosConfiguration, settings *schema.Compon
 	env := environment()
 	env["ATMOS_TERRAFORM_BINARY"] = config.Components.Terraform.Command
 	return &pluginv1.DiscoverComponentsRequest{Provider: name, RootDirectory: root, IncludePaths: includes, ExcludePaths: slices.Clone(settings.Discovery.ExcludedPaths), ProviderConfiguration: value, Operation: &pluginv1.ComponentOperation{Command: command, Mode: "native"}, Invocation: &pluginv1.Invocation{Environment: env, LogLevel: adapter.HostLogLevel()}}, nil
+}
+
+// importLock serializes import evaluation and the session's import records. A waiter for an
+// import can give up when its context ends, instead of waiting for another import to finish.
+// The zero value is unlocked.
+type importLock struct {
+	once    sync.Once
+	channel chan struct{}
+}
+
+func (l *importLock) slot() chan struct{} {
+	l.once.Do(func() { l.channel = make(chan struct{}, 1) })
+	return l.channel
+}
+
+// lock waits for the lock.
+func (l *importLock) lock() {
+	l.slot() <- struct{}{}
+}
+
+// unlock releases the lock.
+func (l *importLock) unlock() {
+	<-l.slot()
+}
+
+// lockContext waits for the lock until either context ends, and reports why it gave up.
+func (l *importLock) lockContext(ctx, session context.Context) error {
+	select {
+	case l.slot() <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-session.Done():
+		return session.Err()
+	}
 }

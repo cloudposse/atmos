@@ -10,11 +10,13 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/component/provideroptions"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	authadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/auth"
 	componentadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
+	configurationadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
 	"github.com/cloudposse/atmos/pkg/plugin/config"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	"github.com/cloudposse/atmos/pkg/plugin/install"
@@ -166,26 +168,62 @@ func declaredComponentBindings(ctx context.Context, atmos *schema.AtmosConfigura
 	if err != nil {
 		return nil, err
 	}
+	lookup := componentBindingLookup{atmos: atmos, state: state, file: file, cache: cache, registry: registry, wanted: wanted}
 	var result []extension.Binding
 	for _, alias := range slices.Sorted(maps.Keys(atmos.Plugins.Packages)) {
-		declaration := atmos.Plugins.Packages[alias]
-		directory := packageDirectory(alias, state, file, cache)
-		if !enabled(&declaration) || directory == "" {
-			continue
-		}
-		bindings, err := discoveryBindings(registry, directory, wanted)
-		switch {
-		case errors.Is(err, errUtils.ErrProviderOption):
+		bindings, err := lookup.packageBindings(alias)
+		if err != nil {
 			return nil, err
-		case err != nil:
-			// One unreadable package, such as a cached package that declares a capability this Atmos does
-			// not support, must not take every other provider's flags with it. Activation reports it.
-			log.Debug("Skipped plugin package while reading provider options", "package", alias, "error", err)
-			continue
 		}
 		result = append(result, bindings...)
 	}
 	return result, nil
+}
+
+type componentBindingLookup struct {
+	atmos    *schema.AtmosConfiguration
+	state    *config.Selections
+	file     *pluginlock.File
+	cache    *install.Cache
+	registry *extension.Registry
+	wanted   map[string][]string
+}
+
+func (lookup componentBindingLookup) packageBindings(alias string) ([]extension.Binding, error) {
+	declaration := lookup.atmos.Plugins.Packages[alias]
+	if !enabled(&declaration) || !packageExportsWanted(alias, lookup.state, lookup.file, lookup.wanted) {
+		return nil, nil
+	}
+	directory := packageDirectory(alias, lookup.state, lookup.file, lookup.cache)
+	if directory == "" {
+		return nil, nil
+	}
+	bindings, err := discoveryBindings(lookup.registry, directory, lookup.wanted)
+	if errors.Is(err, errUtils.ErrProviderOption) {
+		return nil, err
+	}
+	if err != nil {
+		// One unreadable package must not take every other provider's flags with it.
+		log.Debug("Skipped plugin package while reading provider options", "package", alias, "error", err)
+		return nil, nil
+	}
+	return bindings, nil
+}
+
+func packageExportsWanted(alias string, state *config.Selections, file *pluginlock.File, wanted map[string][]string) bool {
+	if _, local := state.Packages[alias]; local {
+		return true // Local packages have no lock exports; inspect their manifest.
+	}
+	entry, locked := file.Spec.Packages[alias]
+	if !locked {
+		return false
+	}
+	for _, export := range entry.Exports {
+		if export.Capability == extension.ComponentDiscovery && wanted[export.Name] != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // discoveryBindings reads a package manifest and keeps the discovery exports of the wanted providers.
@@ -216,7 +254,7 @@ func packageDirectory(alias string, state *config.Selections, file *pluginlock.F
 	if !locked {
 		return ""
 	}
-	directory, err := cache.Installed(&entry, install.CurrentPlatform())
+	directory, err := cache.DiscoveryDirectory(&entry, install.CurrentPlatform())
 	if err != nil {
 		return ""
 	}
@@ -377,4 +415,30 @@ func missingProviderError(references []ComponentReference) error {
 		WithHint("If the project ships a profile that supplies a local build, such as the Terragrunt example's `dev` profile, activate it with `--profile` or `ATMOS_PROFILE`.").
 		WithHintf("To stop using the provider, set `components.terraform.%s.enabled` to false.", names[0]).
 		Err()
+}
+
+func init() {
+	// Register the constructor, never an invocation's provider or discovered stack map.
+	if err := configuration.Register("plugin", newConfigurationSession); err != nil {
+		panic(err)
+	}
+}
+
+func newConfigurationSession(ctx context.Context, config *schema.AtmosConfiguration, operation string) (schema.ComponentConfigurationRuntime, error) {
+	snapshot := *config
+	return configurationadapter.New(ctx, config, operation, func(call context.Context, names []string) (map[string]configurationadapter.Provider, error) {
+		references := make([]ComponentReference, 0, len(names))
+		for _, name := range names {
+			references = append(references, ComponentReference{Provider: name, Capability: extension.ComponentDiscovery})
+		}
+		registry, err := LoadComponents(call, &snapshot, references)
+		if err != nil {
+			return nil, err
+		}
+		providers := make(map[string]configurationadapter.Provider)
+		for _, name := range registry.Names() {
+			providers[name], _ = registry.Get(name)
+		}
+		return providers, nil
+	})
 }

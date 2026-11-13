@@ -224,3 +224,28 @@ func TestDescribeStacksStaticEmptyStacks(t *testing.T) {
 		})
 	}
 }
+
+var errStaticMerge = errors.New("static merge failed")
+
+func TestFindDescribeStacksMapStaticMergesExtraStacks(t *testing.T) {
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, StacksBaseAbsolutePath: filepath.Join(root, "stacks")}
+	original := mergeStaticStacks
+	t.Cleanup(func() { mergeStaticStacks = original })
+
+	mergeStaticStacks = func(_ *schema.AtmosConfiguration, stacks map[string]any, raw map[string]map[string]any, _ AllStacksDeferredContexts) error {
+		stacks["extra"] = map[string]any{"components": map[string]any{}}
+		raw["extra"] = map[string]any{"name": "extra"}
+		return nil
+	}
+	stacks, raw, _, err := findDescribeStacksMap(config, "extra", false, true)
+	require.NoError(t, err)
+	require.Contains(t, stacks, "extra")
+	require.Equal(t, "extra", raw["extra"]["name"])
+
+	mergeStaticStacks = func(*schema.AtmosConfiguration, map[string]any, map[string]map[string]any, AllStacksDeferredContexts) error {
+		return errStaticMerge
+	}
+	_, _, _, err = findDescribeStacksMap(config, "", false, true)
+	require.ErrorIs(t, err, errStaticMerge)
+}

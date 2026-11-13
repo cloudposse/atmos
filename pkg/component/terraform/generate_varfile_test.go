@@ -19,6 +19,7 @@ import (
 	schema "github.com/cloudposse/atmos/pkg/schema"
 	store "github.com/cloudposse/atmos/pkg/store"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	tfconfig "github.com/hashicorp/terraform-config-inspect/tfconfig"
 	assert "github.com/stretchr/testify/assert"
 	require "github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
@@ -423,4 +424,75 @@ func TestSecretReferenceReachesTerraformPlan(t *testing.T) {
 	assert.Contains(t, stdout.String(), "plan credential: "+iolib.MaskReplacement)
 	assert.Contains(t, stderr.String(), "diagnostic credential: "+iolib.MaskReplacement)
 	assert.NotContains(t, stdout.String()+stderr.String(), nativeReferenceSecret)
+}
+
+// writeSensitiveModule writes a root module declaring one sensitive and one plain input.
+func writeSensitiveModule(t *testing.T, dir string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	module := "variable \"db_password\" {\n  sensitive = true\n}\n\nvariable \"region\" {}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "variables.tf"), []byte(module), 0o600))
+}
+
+func TestRefreshTerraformModuleInfoLoadsProvisionedModule(t *testing.T) {
+	provisioned := filepath.Join(t.TempDir(), "workdir")
+	writeSensitiveModule(t, provisioned)
+	// Stack processing inspected the not-yet-provisioned source directory and found nothing.
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+		"component_info": map[string]any{
+			cfg.ComponentPathSectionName: filepath.Join(t.TempDir(), "missing"),
+			"terraform_config":           nil,
+		},
+	}}
+	require.Empty(t, terraformSensitiveVarKeys(info))
+
+	refreshTerraformModuleInfo(info, provisioned)
+
+	assert.Equal(t, map[string]bool{"db_password": true}, terraformSensitiveVarKeys(info))
+}
+
+func TestRefreshTerraformModuleInfoKeepsInspectedModule(t *testing.T) {
+	componentPath := t.TempDir()
+	writeSensitiveModule(t, componentPath)
+	inspected := &tfconfig.Module{Variables: map[string]*tfconfig.Variable{}}
+	componentInfo := map[string]any{cfg.ComponentPathSectionName: componentPath, "terraform_config": inspected}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"component_info": componentInfo}}
+
+	refreshTerraformModuleInfo(info, componentPath)
+
+	assert.Same(t, inspected, componentInfo["terraform_config"], "a module inspected at the same path is not reloaded")
+}
+
+func TestRefreshTerraformModuleInfoKeepsValueWhenUninspectable(t *testing.T) {
+	componentInfo := map[string]any{cfg.ComponentPathSectionName: "elsewhere", "terraform_config": nil}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"component_info": componentInfo}}
+
+	refreshTerraformModuleInfo(info, filepath.Join(t.TempDir(), "absent"))
+
+	assert.Nil(t, componentInfo["terraform_config"])
+}
+
+func TestTerraformTestVarsKeepSensitiveRootVariablesOutOfVarfile(t *testing.T) {
+	componentPath := t.TempDir()
+	writeSensitiveModule(t, componentPath)
+	module, diags := tfconfig.LoadModule(componentPath)
+	require.False(t, diags.HasErrors())
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:           "test",
+		ComponentVarsSection: map[string]any{"db_password": "component-value", "region": "us-east-1"},
+		ComponentSection: map[string]any{
+			"component_info": map[string]any{cfg.ComponentPathSectionName: componentPath, "terraform_config": module},
+			cfg.TestSectionName: map[string]any{
+				cfg.VarsSectionName: map[string]any{"db_password": "unregistered-test-value", "region": "us-west-2"},
+			},
+		},
+	}
+	require.True(t, iolib.MaskingEnabled(), "masking must be enabled for declaration-aware partitioning")
+
+	assert.Equal(t, map[string]any{"region": "us-west-2"}, diskSafeTerraformTestVars(info))
+	// The colliding component value is dropped too, so the test value's TF_VAR_ entry wins.
+	assert.NotContains(t, diskSafeVars(info), "db_password")
+	env, err := terraformTestSecretVarEnv(info)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"TF_VAR_db_password=unregistered-test-value"}, env)
 }

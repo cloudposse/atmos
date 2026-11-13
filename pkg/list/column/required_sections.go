@@ -37,6 +37,14 @@ var derivedFields = map[string]struct{}{
 	"component_base": {}, "inherits": {}, "type": {}, "tags": {}, "labels": {}, "stack_count": {},
 }
 
+// derivedFieldInputs lists the component fields a derived field is computed from. RequiredPaths
+// evaluates exactly these fields, so a templated input never decides the value raw, without
+// requiring (and fully evaluating) the sections that contain them. The engine comes from
+// settings.configuration.engine or the component command.
+var derivedFieldInputs = map[string][][]string{
+	"engine": {{"settings", "configuration", "engine"}, {"command"}},
+}
+
 // RequiredSections statically determines which top-level Atmos component sections (vars,
 // settings, metadata, env, backend) the given column templates actually reference, by walking
 // each column's parsed Go-template AST for field references (see pkg/template.ExtractFieldRefs)
@@ -110,6 +118,7 @@ func RequiredPaths(columns []Config) [][]string {
 				if _, ok := sectionBackedFields[ref.Path[0]]; ok {
 					paths = append(paths, ref.Path)
 				}
+				paths = append(paths, derivedFieldInputs[ref.Path[0]]...)
 			}
 		}
 	}

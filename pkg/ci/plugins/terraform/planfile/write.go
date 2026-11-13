@@ -118,8 +118,7 @@ func WritePlanfileResultsForVerification(results []FileResult, storedPlanPath, c
 	return nil
 }
 
-// writeFileResult writes a single file result to the given destination path with mode. Replacing
-// an existing file also resets its mode, so a looser earlier copy cannot keep a record readable.
+// writeFileResult writes a single file result to the given destination path with mode.
 func writeFileResult(r FileResult, destPath string, mode os.FileMode) error {
 	// Ensure parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
@@ -130,13 +129,29 @@ func writeFileResult(r FileResult, destPath string, mode os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("%w: failed to read %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, err)
 	}
-	file, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	flags := os.O_WRONLY | os.O_CREATE
+	if r.Name != BindingFilename {
+		flags |= os.O_TRUNC
+	}
+	file, err := os.OpenFile(destPath, flags, mode)
 	if err != nil {
 		return fmt.Errorf("%w: failed to write %s to %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, destPath, err)
 	}
+	// Restrict an existing record before replacing its contents. Other files retain
+	// their existing permissions, or the permissions selected by the umask.
+	if r.Name == BindingFilename {
+		if err := file.Chmod(mode); err != nil {
+			_ = file.Close()
+			return fmt.Errorf("%w: failed to write %s to %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, destPath, err)
+		}
+		if err := file.Truncate(0); err != nil {
+			_ = file.Close()
+			return fmt.Errorf("%w: failed to write %s to %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, destPath, err)
+		}
+	}
 	_, writeErr := file.Write(fileData)
 	closeErr := file.Close()
-	if err := errors.Join(writeErr, closeErr, os.Chmod(destPath, mode)); err != nil {
+	if err := errors.Join(writeErr, closeErr); err != nil {
 		return fmt.Errorf("%w: failed to write %s to %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, destPath, err)
 	}
 

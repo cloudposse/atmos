@@ -225,6 +225,7 @@ func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, compon
 			Heatmap:         GetBool(parsedConfig.Flags, "heatmap"),
 			HeatmapMode:     GetString(parsedConfig.Flags, "heatmap-mode"),
 			RedirectStderr:  GetString(parsedConfig.Flags, "redirect-stderr"),
+			Links:           GetString(parsedConfig.Flags, "links"),
 			Version:         GetBool(parsedConfig.Flags, "version"),
 		},
 		Stack:                       GetString(parsedConfig.Flags, "stack"),

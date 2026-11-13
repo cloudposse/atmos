@@ -13,7 +13,7 @@ import (
 
 // Discover expands local stacks in an isolated overlay without preparing units.
 func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory())
+	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetProviderConfiguration())
 	response, err := p.discover(ctx, request)
 	if response != nil {
 		response.Logs = logs.entries()
@@ -155,6 +155,8 @@ func importPaths(request *pluginv1.DiscoverComponentsRequest) ([]string, error) 
 		if !found || !filepath.IsLocal(path) || strings.ContainsAny(path, "\\?#*[{") {
 			return nil, ErrUnsupported
 		}
+		// Match the engine's clean relative unit paths, whatever spelling the import used.
+		path = filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
 		info, err := os.Stat(filepath.Join(request.RootDirectory, filepath.FromSlash(path)))
 		if err != nil {
 			return nil, err

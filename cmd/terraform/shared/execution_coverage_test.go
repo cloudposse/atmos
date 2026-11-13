@@ -637,6 +637,40 @@ func TestPromptMissingComponentAndStack_SetsPromptedFlags(t *testing.T) {
 	assert.False(t, preSupplied.StackPrompted, "command-line-supplied stack must not be flagged as prompted")
 }
 
+func TestInteractiveSelectionPassesProviderOptionsToDiscovery(t *testing.T) {
+	origInteractive, origSelect := isInteractiveFn, selectFromOptions
+	origDescribe, origInit := executeDescribeStacks, initCliConfig
+	t.Cleanup(func() {
+		isInteractiveFn, selectFromOptions = origInteractive, origSelect
+		executeDescribeStacks, initCliConfig = origDescribe, origInit
+	})
+
+	options := map[string]map[string]schema.ComponentProviderOption{
+		"terragrunt": {"feature": {}},
+	}
+	var seen int
+	initCliConfig = func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		assert.Equal(t, options, info.ComponentProviderOptions)
+		seen++
+		return schema.AtmosConfiguration{}, nil
+	}
+	isInteractiveFn = func() bool { return true }
+	executeDescribeStacks = func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+		return map[string]any{"dev": map[string]any{
+			"components": map[string]any{"terraform": map[string]any{"vpc": map[string]any{}}},
+		}}, nil
+	}
+	selectFromOptions = func(_ string, _ string, values []string) (string, error) { return values[0], nil }
+
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.Flags().String("stack", "", "Stack")
+	info := &schema.ConfigAndStacksInfo{ComponentProviderOptions: options}
+	require.NoError(t, HandleInteractiveComponentStackSelection(info, cmd))
+	assert.Equal(t, "vpc", info.ComponentFromArg)
+	assert.Equal(t, "dev", info.Stack)
+	assert.Equal(t, 2, seen, "component and stack discovery must both receive the options")
+}
+
 func TestHandleInteractiveComponentStackSelectionPropagatesComponentPromptError(t *testing.T) {
 	// Force interactive mode and make the component picker's underlying stack
 	// enumeration fail, so PromptForComponent surfaces ErrLoadSelectionOptions
@@ -757,4 +791,77 @@ func TestParseRunOptions_ScalarLabelsPreserveSpaces(t *testing.T) {
 	opts, err := ParseRunOptions(v)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"team": "platform", "owner": "platform engineering"}, opts.Labels)
+}
+
+// TestHandleInteractiveIdentitySelectionAdmitsBeforeSelecting verifies that a bare
+// --identity cannot select and authenticate an identity for a command that policy
+// denies. Headless, identity selection fails with ErrFailedToInitializeAuthManager,
+// so reaching it instead of ErrPolicyDenied means admission ran too late.
+func TestHandleInteractiveIdentitySelectionAdmitsBeforeSelecting(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(`
+base_path: ""
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths: ["**/*"]
+  name_pattern: "{stage}"
+auth:
+  identities:
+    dev:
+      kind: "ambient"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "stacks", "prod.yaml"), []byte(`
+vars:
+  stage: prod
+components:
+  terraform:
+    vpc: {}
+`), 0o644))
+	t.Chdir(tmpDir)
+	policyDir := t.TempDir()
+	t.Setenv("ATMOS_POLICY_DIR", policyDir)
+	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "guard.yaml"), []byte(`apiVersion: atmos/v1
+kind: Policy
+metadata: {name: no-destroy}
+spec:
+  policies:
+    guard:
+      on: component.command
+      action: deny
+      rule: input.command == 'destroy'
+`), 0o600))
+	newInfo := func(subCommand string) *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{
+			AtmosConfigDirsFromArg: []string{tmpDir}, ComponentFromArg: "vpc", Stack: "prod",
+			ComponentType: cfg.TerraformComponentType, SubCommand: subCommand, Identity: cfg.IdentityFlagSelectValue,
+		}
+	}
+
+	err := HandleInteractiveIdentitySelection(newInfo("destroy"))
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	assert.NotErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
+
+	// An admitted command proceeds to identity selection.
+	err = HandleInteractiveIdentitySelection(newInfo("plan"))
+	require.ErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
+	assert.NotErrorIs(t, err, errUtils.ErrPolicyDenied)
+
+	// A configuration error that prevents admission fails before identity selection.
+	previousInit := initCliConfig
+	t.Cleanup(func() { initCliConfig = previousInit })
+	configErr := errors.New("broken stack config")
+	initCliConfig = func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		if processStacks {
+			return schema.AtmosConfiguration{}, configErr
+		}
+		return previousInit(info, processStacks)
+	}
+	err = HandleInteractiveIdentitySelection(newInfo("plan"))
+	require.ErrorIs(t, err, errUtils.ErrInitializeCLIConfig)
+	require.ErrorIs(t, err, configErr)
+	assert.NotErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
 }

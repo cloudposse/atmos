@@ -77,8 +77,8 @@ func (s *Session) discoverRequests(
 		if err != nil {
 			return nil, err
 		}
-		adapter.RenderLogs(adapter.LogScope{Provider: request.Provider}, discovered.GetLogs())
-		if err := recordDiagnostics(request.Provider, discovered.Diagnostics, failures); err != nil {
+		adapter.RenderLogs(adapter.LogScope{Provider: request.Provider, Warnings: &s.warnings}, discovered.GetLogs())
+		if err := recordDiagnostics(request.Provider, discovered.Diagnostics, failures, &s.warnings); err != nil {
 			return nil, err
 		}
 		if err := addDiscovered(definitions, instances, s.withoutImported(discovered)); err != nil {
@@ -91,8 +91,8 @@ func (s *Session) discoverRequests(
 // withoutImported drops units that a stack imported explicitly: an imported unit is a
 // component of the importing stack, not also a component of a derived stack.
 func (s *Session) withoutImported(discovered *pluginv1.DiscoverComponentsResponse) *pluginv1.DiscoverComponentsResponse {
-	s.importMu.Lock()
-	defer s.importMu.Unlock()
+	s.importMu.lock()
+	defer s.importMu.unlock()
 	if len(s.imported) == 0 {
 		return discovered
 	}

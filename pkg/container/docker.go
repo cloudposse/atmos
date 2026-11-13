@@ -479,7 +479,11 @@ func parseDockerPort(portStr string) (PortBinding, bool) {
 	if !ok {
 		return PortBinding{}, false
 	}
-	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, true
+	bind := ""
+	if idx := strings.LastIndex(strings.TrimSpace(left), ":"); idx >= 0 {
+		bind = strings.Trim(strings.TrimSpace(left)[:idx], "[]")
+	}
+	return PortBinding{Bind: bind, ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, true
 }
 
 func parseDockerContainerPort(portStr string) (int, string, bool) {

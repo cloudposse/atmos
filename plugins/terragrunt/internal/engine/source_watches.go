@@ -129,7 +129,15 @@ func (t *watchTracker) scanFile(next queuedFile) error {
 		return nil
 	}
 	body := file.Body.(*hclsyntax.Body)
-	scan := fileScan{base: filepath.Dir(next.path), ctx: t.context(t.locals(body))}
+	// Terragrunt evaluates a file read with read_terragrunt_config as that file's own
+	// configuration, so get_terragrunt_dir() there names the read file's directory.
+	// The unit's own files and includes keep the unit's directory.
+	evaluator := t.watchEvaluator
+	if !next.required {
+		evaluator.unit = filepath.Dir(next.path)
+		evaluator.parent = evaluator.includeParent(body)
+	}
+	scan := fileScan{base: filepath.Dir(next.path), ctx: evaluator.context(evaluator.locals(body))}
 	if inputs := body.Attributes["inputs"]; inputs != nil {
 		t.visit(scan, inputs.Expr)
 	}
@@ -232,8 +240,38 @@ func (t *watchTracker) scanTerraform(scan fileScan, block *hclsyntax.Block) {
 					t.watchList(scan, attribute.Expr)
 				}
 			}
+			if attribute := child.Body.Attributes["arguments"]; attribute != nil {
+				t.watchVarFileArguments(scan, attribute.Expr)
+			}
 		case "before_hook", "after_hook", "error_hook":
 			t.watchHook(scan, child.Body)
+		}
+	}
+}
+
+// watchVarFileArguments finds explicit Terraform var files in extra_arguments.
+// An unresolved word could itself be a var-file flag or its path, so it must
+// conservatively watch the project even when other arguments are known.
+func (t *watchTracker) watchVarFileArguments(scan fileScan, expression hclsyntax.Expression) {
+	words, resolved := hookWords(scan, expression)
+	if !resolved {
+		t.fallback()
+	}
+	for index := 0; index < len(words); index++ {
+		word := words[index]
+		if word == "-var-file" {
+			if index+1 == len(words) || words[index+1] == "" {
+				t.fallback()
+				continue
+			}
+			index++
+			t.add(t.files, localPath(t.unit, words[index]))
+		} else if path, found := strings.CutPrefix(word, "-var-file="); found {
+			if path == "" {
+				t.fallback()
+				continue
+			}
+			t.add(t.files, localPath(t.unit, path))
 		}
 	}
 }
@@ -271,25 +309,35 @@ func (t *watchTracker) watchList(scan fileScan, expression hclsyntax.Expression)
 // the project, plus the hook working directory. Resolution is best effort: a
 // program found on PATH is not a project file.
 func (t *watchTracker) watchHook(scan fileScan, body *hclsyntax.Body) {
-	if execute := body.Attributes["execute"]; execute != nil {
-		words, resolved := hookWords(scan, execute.Expr)
-		if !resolved {
-			// An unresolved word may name a project script, so widen the watch.
-			t.fallback()
-		}
-		for index, word := range words {
-			if !strings.ContainsAny(word, `/\`) {
-				continue
-			}
-			path := localPath(t.unit, word)
-			if info, err := t.fs.Stat(path); index == 0 || (err == nil && !info.IsDir()) {
-				t.add(t.files, path)
-			}
-		}
-	}
+	// Relative script paths resolve against the hook's working directory when it names one.
+	// The whole directory is watched, which also covers slashless script arguments in it.
+	base := t.unit
 	if attribute := body.Attributes["working_dir"]; attribute != nil {
-		if directory, ok := stringOf(attribute.Expr, scan.ctx); ok {
-			t.add(t.folders, localPath(t.unit, directory))
+		directory, ok := stringOf(attribute.Expr, scan.ctx)
+		if !ok {
+			// A script may live anywhere the unresolved directory points, so widen the watch.
+			t.fallback()
+			return
+		}
+		base = localPath(t.unit, directory)
+		t.add(t.folders, base)
+	}
+	execute := body.Attributes["execute"]
+	if execute == nil {
+		return
+	}
+	words, resolved := hookWords(scan, execute.Expr)
+	if !resolved {
+		// An unresolved word may name a project script, so widen the watch.
+		t.fallback()
+	}
+	for index, word := range words {
+		if !strings.ContainsAny(word, `/\`) {
+			continue
+		}
+		path := localPath(base, word)
+		if info, err := t.fs.Stat(path); index == 0 || (err == nil && !info.IsDir()) {
+			t.add(t.files, path)
 		}
 	}
 }
@@ -349,8 +397,32 @@ func (t *watchTracker) addStaticWatches() {
 	if source := t.result.Source; source != "" && !plainLocalSource(source) {
 		if copied, ok := copiedSourceRoot(t.unit, source); ok {
 			t.add(t.folders, copied)
+		} else if repository, ok := gitFileRepository(source); ok {
+			t.add(t.folders, repository)
 		}
 	}
+}
+
+// gitFileRepository returns the local repository a `git::file://` source clones. When it lies in
+// the project it is watched whole, so the module and the relative var files copied with it select
+// the unit. add drops a repository outside the project, whose changes the project cannot contain.
+func gitFileRepository(source string) (string, bool) {
+	rest, found := strings.CutPrefix(source, "git::file://")
+	if !found {
+		return "", false
+	}
+	rest, _, _ = strings.Cut(rest, "?")
+	if index := strings.Index(rest, "//"); index > 0 {
+		rest = rest[:index]
+	}
+	// file:///C:/repo names a Windows volume after the leading slash.
+	if len(rest) > 2 && rest[0] == '/' && rest[2] == ':' {
+		rest = rest[1:]
+	}
+	if rest == "" {
+		return "", false
+	}
+	return filepath.Clean(filepath.FromSlash(rest)), true
 }
 
 // copiedSourceRoot returns the directory a local `dir//subdir` source copies: the

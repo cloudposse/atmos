@@ -296,6 +296,18 @@ func TestComponentOptionsSkipPackagesThatAreNotInstalled(t *testing.T) {
 	require.Equal(t, "tool", providers[0].Name)
 }
 
+func TestFlagDiscoverySkipsUnrelatedLockedExports(t *testing.T) {
+	state := &config.Selections{Packages: map[string]config.Selection{}}
+	file := pluginlock.New()
+	file.Spec.Packages["other"] = pluginlock.Entry{Exports: []pluginlock.Export{{Capability: extension.ComponentDiscovery, Name: "other/hcl"}}}
+	wanted := map[string][]string{"fixture/hcl": {"terraform"}}
+	require.False(t, packageExportsWanted("other", state, file, wanted))
+	entry := file.Spec.Packages["other"]
+	entry.Exports = append(entry.Exports, pluginlock.Export{Capability: extension.ComponentDiscovery, Name: "fixture/hcl"})
+	file.Spec.Packages["other"] = entry
+	require.True(t, packageExportsWanted("other", state, file, wanted))
+}
+
 func TestComponentOptionsSurviveAnUnrelatedPackageThatCannotBeRead(t *testing.T) {
 	atmos := optionsFixture(t, "executable", optionsManifest)
 	unrelated := localPackageFixture(t)

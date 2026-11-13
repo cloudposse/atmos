@@ -8,6 +8,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -103,4 +104,35 @@ func TestInstanceEngineReachesRenderedColumns(t *testing.T) {
 		{"hcl", "live", "terraform", "opentofu"},
 		{"yaml", "live", "terraform", "terraform"},
 	}, rows)
+}
+
+// TestEngineColumnEvaluatesItsInputs verifies that selecting the Engine column evaluates the
+// fields the engine is derived from, so a templated command decides it only after rendering,
+// while the narrowed evaluation still leaves unrelated fields alone.
+func TestEngineColumnEvaluatesItsInputs(t *testing.T) {
+	columns := []column.Config{{Name: "Engine", Value: "{{ .engine }}"}}
+	sections, ok := column.RequiredSections(columns)
+	require.True(t, ok)
+	require.Empty(t, sections, "the inputs are narrowed to fields, not whole sections")
+	require.ElementsMatch(t, [][]string{{"settings", "configuration", "engine"}, {"command"}}, column.RequiredPaths(columns))
+
+	config := &schema.AtmosConfiguration{}
+	paths := resolveInstancesEvaluationPaths(config, columns, &InstancesCommandOptions{})
+	require.Contains(t, paths, []string{"command"})
+	require.Contains(t, paths, []string{"settings", "configuration", "engine"})
+	require.NotContains(t, paths, []string{"settings"}, "settings are not evaluated wholesale for the engine")
+
+	component := map[string]any{
+		"command":  "{{ .settings.tool }}",
+		"settings": map[string]any{"tool": "tofu", "configuration": map[string]any{"engine": ""}},
+		"vars":     map[string]any{"secret": "!terraform.output other live password"},
+	}
+	expanded := deferred.ExpandEvaluationPaths(component, paths)
+	selected, _ := deferred.SplitEvaluationFields(component, expanded)
+	require.Contains(t, selected, "command", "the templated command must be evaluated before the engine is derived")
+	require.Contains(t, expanded, []string{"settings", "tool"}, "the command's own template inputs are evaluated too")
+	require.NotContains(t, selected, "vars", "unrelated sections stay unevaluated")
+
+	// Other derived columns still read nothing.
+	require.Empty(t, column.RequiredPaths([]column.Config{{Name: "Component", Value: "{{ .component }}"}}))
 }

@@ -1,6 +1,6 @@
 # Opt-in CLI acceptance tests for the IAM, state encryption, and registry source features of native
-# Terragrunt execution. Every fixture is generated here and uses OpenTofu with local state and built-in
-# terraform_data resources. Nothing reaches a cloud: the IAM scenarios end at an unreachable STS endpoint,
+# Terragrunt execution. Every fixture is generated here and uses local state and built-in terraform_data
+# resources. State encryption needs OpenTofu; the other scenarios also run with Terraform. Nothing reaches a cloud: the IAM scenarios end at an unreachable STS endpoint,
 # and the successful STS exchange is covered by Go tests against an STS test server.
 #
 # Importing this module has no effects; each integration step calls one scenario function.
@@ -26,8 +26,14 @@ def tofu():
     return binary
 
 
-def new_project(prefix, auth=False):
-    binary = tofu()
+def engine():
+    binary = exec.which("tofu") or exec.which("terraform")
+    fixtures.check(binary != None, "Install OpenTofu or Terraform for integration tests")
+    return binary
+
+
+def new_project(prefix, auth=False, binary=None):
+    binary = binary or engine()
     work = fixtures.workspace(prefix)
     root = work + "/project"
     config = fixtures.configuration(fs.resolve("."), binary=binary)
@@ -98,7 +104,10 @@ remote_state {
 
 
 def state_encryption():
-    root, work = new_project("atmos-terragrunt-encryption-")
+    if exec.which("tofu") == None:
+        ui.warning("State encryption scenario needs OpenTofu; skipped")
+        return
+    root, work = new_project("atmos-terragrunt-encryption-", binary=tofu())
     write_hcl(root, "secure", MODULE_UNIT + ENCRYPTED_BACKEND.replace("@PASSPHRASE@", PASSPHRASE))
     applied = terraform(root, work, "apply", "secure")
     expect(applied, ["Apply complete! Resources: 1 added"], "apply with state encryption")
@@ -126,6 +135,20 @@ remote_state {
     expect(ignored, ["no effect without remote_state.generate"], "encryption without generate")
     forbid(ignored, [PASSPHRASE], "encryption without generate")
     fixtures.check("encrypted_data" not in fs.read_file(lifecycle.state_path(root, "plain")), "State was encrypted without generate")
+
+    # A module that already ships the backend file would keep it under if_exists = "skip", so the
+    # generated encryption block would never be written and the state would stay plain. Atmos refuses
+    # the run before writing anything or running the engine, and leaves the module's file alone.
+    fixtures.write(root, "modules/kept/main.tf", lifecycle.UNIT_MODULE)
+    fixtures.write(root, "modules/kept/backend.tf", "terraform {\n  backend \"local\" {}\n}\n")
+    write_hcl(root, "kept", """
+terraform {
+  source = "../../../modules/kept"
+}
+""" + ENCRYPTED_BACKEND.replace("overwrite_terragrunt", "skip").replace("@PASSPHRASE@", PASSPHRASE))
+    kept = terraform(root, work, "plan", "kept", failing=True)
+    expect(kept, ["cannot verify backend identity for retained generated file backend.tf"], "skipped encrypted backend")
+    forbid(kept, [PASSPHRASE, "Plan:"], "skipped encrypted backend")
     ui.success("State encryption: pbkdf2 encrypts the OpenTofu state, plans decrypt it, and the passphrase stays out of output")
 
 

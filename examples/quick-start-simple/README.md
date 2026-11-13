@@ -32,6 +32,8 @@ Learn more in the [Quick Start Guide](https://atmos.tools/quick-start/).
 
 ## Try It
 
+Install [Atmos](https://atmos.tools/install). The example pins OpenTofu and Atmos installs it automatically when needed.
+
 From this example's directory, run:
 
 ```shell
@@ -52,4 +54,4 @@ atmos terraform plan --all -s dev
 | `atmos.yaml` | Minimal Atmos configuration |
 | `stacks/deploy/` | Environment-specific stack files (dev, staging, prod) |
 | `stacks/catalog/` | Shared component defaults |
-| `components/terraform/station/` | Simple Terraform component |
+| `components/terraform/weather/` | Simple Terraform component |

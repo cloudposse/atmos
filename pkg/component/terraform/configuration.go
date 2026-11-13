@@ -1,8 +1,10 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"maps"
@@ -11,14 +13,21 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
+
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclparse"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	awsidentity "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/backend"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -38,7 +47,7 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 // returned reviewedRebuild is non-nil when the reviewed plan was verified but its working directory
 // must be re-provisioned and checked before the plan can be applied.
 func prepareConfigurationForExecution(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *reviewedRebuild, error) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return nil, nil, nil
 	}
 	if err := checkConfigurationPreconditions(config, info); err != nil {
@@ -50,6 +59,10 @@ func prepareConfigurationForExecution(ctx context.Context, config *schema.AtmosC
 	if err := resolveConfigurationBinary(info); err != nil {
 		return nil, nil, err
 	}
+	stagedIAM, err := stageConfigurationIAM(ctx, config, info)
+	if err != nil {
+		return nil, nil, err
+	}
 	prepared, rebuild, err := obtainConfiguration(ctx, config, info)
 	if err != nil || prepared == nil {
 		return prepared, nil, err
@@ -57,11 +70,18 @@ func prepareConfigurationForExecution(ctx context.Context, config *schema.AtmosC
 	if err = applyStackOverrides(config, info, prepared); err != nil {
 		return nil, nil, err
 	}
-	if err = applyIAMRole(ctx, info, prepared.IAM); err != nil {
+	if err = finishIAM(ctx, info, prepared, stagedIAM); err != nil {
 		return nil, nil, err
 	}
 	applyPreparedConfiguration(config, info, prepared)
 	return prepared, rebuild, nil
+}
+
+func stageConfigurationIAM(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.ComponentIAM, error) {
+	if usesConfigurationPlan(info) {
+		return nil, nil
+	}
+	return probeAndApplyIAM(ctx, config.ComponentConfigurations, info)
 }
 
 // checkConfigurationPreconditions rejects what no preparation can fix: no provider, a restricted
@@ -119,7 +139,10 @@ func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration,
 // applyPreparedConfiguration records the prepared values on the invocation.
 func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
-	info.ComponentExecution = prepared.Execution
+	info.PreparedSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
+	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
+	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)
+	info.SourceAuthorization = prepared.SourceAuthorization
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
 	info.ComponentSection["vars"] = prepared.Inputs
@@ -203,9 +226,32 @@ func warnOnCacheLocalState(info *schema.ConfigAndStacksInfo, prepared *schema.Pr
 		"`path = \"${get_terragrunt_dir()}/terraform.tfstate\"`, and move the existing state file there.")
 }
 
+// invocationExecution returns the hooks and extra arguments the invocation runs. A saved plan was
+// prepared for plan, so applying it runs the apply-time metadata recorded with it.
+func invocationExecution(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) *schema.ComponentExecution {
+	if usesConfigurationPlan(info) {
+		return prepared.Execution.ForSavedPlanApply()
+	}
+	return prepared.Execution
+}
+
 // useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.
 // A new process has not provisioned anything, so the path is derived the way provisioning does.
 func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	// A downloaded plan and record can be the only files in an explicit workdir.
+	// Resolve a relative override without source ownership checks here; the
+	// reviewed-plan restore verifies the exact transport set before provisioning.
+	if override := workingDirectoryOverride(info); override != "" && !filepath.IsAbs(override) {
+		clean := filepath.Clean(override)
+		if clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			base, err := filepath.Abs(config.BasePath)
+			if err != nil {
+				return err
+			}
+			info.ComponentSection[provWorkdir.WorkdirPathKey] = filepath.Join(base, clean)
+			return nil
+		}
+	}
 	fallback, err := u.GetComponentPath(config, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
@@ -215,10 +261,15 @@ func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 func configurationArtifactName(info *schema.ConfigAndStacksInfo, suffix string) (string, bool) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return "", false
 	}
-	return "atmos-" + configurationIdentity(info.Stack, info.ComponentFromArg) + suffix, true
+	component := info.ComponentFromArg
+	if component == "" {
+		// Callers that resolve a component without CLI arguments still name distinct files.
+		component = info.Component
+	}
+	return "atmos-" + configurationIdentity(info.Stack, component) + suffix, true
 }
 
 // configurationIdentity names a stack and component pair for artifact files. The name must be the same in
@@ -235,7 +286,7 @@ func configurationIdentity(stack, component string) string {
 // prepareConfigurationEnvironment applies the same authentication, RC, cache,
 // and toolchain environment as Terraform before the evaluator can spawn children.
 func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool) (*dependencies.ToolchainEnvironment, error) {
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned || info.DryRun {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
 		return nil, nil
 	}
 	if err := checkComponentRestrictions(info); err != nil {
@@ -266,69 +317,265 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 	return tenv, nil
 }
 
-// assumeInlineRole is replaced by tests that must not call STS.
-var assumeInlineRole = awsidentity.AssumeInlineRole
-
-// applyIAMRole assumes the role a component asks for, on top of the credentials of the invocation, and
-// exports the session to every command the component runs. An Atmos identity that the user selected
-// explicitly decides who the component runs as, so it replaces the role instead of being layered under it.
-// The session lives only in the environment of this invocation: it is neither written to a file nor to a
-// saved plan, and it is registered with the output masker.
-func applyIAMRole(ctx context.Context, info *schema.ConfigAndStacksInfo, iam *schema.ComponentIAM) error {
-	if iam == nil {
-		return nil
+// writePreparedConfiguration verifies retained files before relinquishing the host backend
+// and applying provider file policies.
+func writePreparedConfiguration(directory string, prepared *schema.PreparedComponentConfiguration) error {
+	if err := validateRetainedConfiguration(directory, prepared.Files); err != nil {
+		return err
 	}
-	if requested := requestedIdentity(info); requested != "" {
-		ui.Infof("Component `%s` in stack `%s` runs as Atmos identity `%s`; its Terragrunt `iam_role` `%s` is not assumed.", info.ComponentFromArg, info.Stack, info.Identity, iam.Role)
-		return nil
-	}
-	role := awsidentity.InlineRole{Role: iam.Role, SessionName: iam.SessionName, Duration: time.Duration(iam.DurationSeconds) * time.Second, WebIdentityToken: iam.WebIdentityToken}
-	if iam.WebIdentityTokenFile != "" {
-		token, err := os.ReadFile(iam.WebIdentityTokenFile)
-		if err != nil {
-			return iamRoleError(info, iam, fmt.Errorf("%w: web identity token file: %w", errUtils.ErrAuthenticationFailed, err))
+	if prepared.BackendGenerated {
+		if err := backend.RemoveHostBackend(directory); err != nil {
+			return err
 		}
-		role.WebIdentityToken = strings.TrimSpace(string(token))
 	}
-	if iam.WebIdentityTokenLiteral && role.WebIdentityToken == "" {
-		return iamRoleError(info, iam, fmt.Errorf("%w: the web identity token is not stored with a saved plan", errUtils.ErrAuthenticationFailed))
-	}
-	base := info.SanitizedEnv
-	if base == nil {
-		base = os.Environ()
-	}
-	session, err := assumeInlineRole(ctx, role, append(slices.Clone(base), info.ComponentEnvList...))
-	if err != nil {
-		return iamRoleError(info, iam, err)
-	}
-	for _, key := range slices.Sorted(maps.Keys(session)) {
-		info.ComponentEnvList = append(info.ComponentEnvList, key+"="+session[key])
+	return configuration.WriteFiles(directory, prepared.Files)
+}
+
+// validateRetainedConfiguration runs before any backend cleanup or file writes.
+// A skipped Terraform file may disagree with the provider's resolved state identity.
+// Accept different bytes only when both versions are provably free of backend/cloud
+// declarations; otherwise fail closed without replacing the user's retained file.
+func validateRetainedConfiguration(directory string, files []schema.ComponentConfigurationFile) error {
+	defer perf.Track(nil, "terraform.validateRetainedConfiguration")()
+
+	for _, file := range files {
+		if file.IfExists != "skip" || !terraformConfigurationPath(file.Path) {
+			continue
+		}
+		if err := validateRetainedFile(directory, file); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// requestedIdentity returns what the user asked for with --identity or ATMOS_IDENTITY, or empty when no
-// identity was requested. A default identity that authentication selected on its own is not a request, so
-// the role is assumed on top of it. Disabling authentication requests nothing either.
-func requestedIdentity(info *schema.ConfigAndStacksInfo) string {
-	requested := info.Identity
-	if info.RequestedIdentity != nil {
-		requested = *info.RequestedIdentity
+func validateRetainedFile(directory string, file schema.ComponentConfigurationFile) error {
+	if !filepath.IsLocal(file.Path) {
+		return errUtils.ErrPluginProtocol
 	}
-	if requested == cfg.IdentityFlagDisabledValue {
-		return ""
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return retainedFileError(file.Path, err)
 	}
-	return requested
+	defer root.Close()
+	stat, err := root.Lstat(file.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return retainedFileError(file.Path, err)
+	}
+	if !stat.Mode().IsRegular() {
+		return retainedBackendError(file.Path)
+	}
+	retained, err := root.ReadFile(file.Path)
+	if err != nil {
+		return retainedFileError(file.Path, err)
+	}
+	if bytes.Equal(retained, file.Content) {
+		return nil
+	}
+	if configurationHasBackend(file.Path, retained) || configurationHasBackend(file.Path, file.Content) {
+		return retainedBackendError(file.Path)
+	}
+	return nil
 }
 
-func iamRoleError(info *schema.ConfigAndStacksInfo, iam *schema.ComponentIAM, cause error) error {
-	return errUtils.Build(errUtils.ErrAuthenticationFailed).
-		WithCause(cause).
-		WithExplanationf("Component `%s` in stack `%s` sets the Terragrunt `iam_role` `%s`, and Atmos could not assume it", info.ComponentFromArg, info.Stack, iam.Role).
-		WithHint("Check that the credentials in use may assume the role, and that its trust policy allows them").
-		WithHint("To run as an Atmos identity instead of assuming `iam_role`, select it with `--identity <name>`").
-		WithHint("A web identity token must be a file path when a plan is saved and applied later").
-		WithContext("component", info.ComponentFromArg).
-		WithContext("stack", info.Stack).
-		Err()
+// retainedFileError classifies a failure to inspect a retained generated file as invalid
+// configuration, as configuration.WriteFiles does for its working directory, and keeps the cause.
+func retainedFileError(path string, err error) error {
+	return fmt.Errorf("%w: retained generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err)
+}
+
+func retainedBackendError(path string) error {
+	return fmt.Errorf("%w: cannot verify backend identity for retained generated file %s (if_exists = \"skip\"); use matching generated content or an explicit overwrite policy", errUtils.ErrPluginInvalidConfig, path)
+}
+
+func terraformConfigurationPath(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json")
+}
+
+// configurationHasBackend also returns true for unparseable configuration: absence
+// of a backend cannot then be established. Diagnostics never expose retained secrets.
+func configurationHasBackend(path string, content []byte) bool {
+	parser := hclparse.NewParser()
+	var file *hcl.File
+	var diagnostics hcl.Diagnostics
+	if strings.HasSuffix(strings.ToLower(path), ".json") {
+		file, diagnostics = parser.ParseJSON(content, path)
+	} else {
+		file, diagnostics = parser.ParseHCL(content, path)
+	}
+	if diagnostics.HasErrors() {
+		return true
+	}
+	body, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}}})
+	if diagnostics.HasErrors() {
+		return true
+	}
+	for _, block := range body.Blocks {
+		nested, _, diags := block.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "backend", LabelNames: []string{"type"}}, {Type: "cloud"}}})
+		if diags.HasErrors() || len(nested.Blocks) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// checkConfigurationWorkspace rejects a TF_WORKSPACE that would make Terraform use a different
+// workspace than the one the configuration provider prepared, before any initialization runs.
+// The component environment overrides the base environment, as it does for the Terraform process.
+func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
+	base := info.SanitizedEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	workspace := ""
+	for _, entries := range [][]string{base, info.ComponentEnvList} {
+		for _, entry := range entries {
+			if key, value, ok := strings.Cut(entry, "="); ok && key == "TF_WORKSPACE" {
+				workspace = value
+			}
+		}
+	}
+	if workspace != "" && workspace != info.TerraformWorkspace {
+		return fmt.Errorf("%w: TF_WORKSPACE %q differs from the prepared workspace %q", errUtils.ErrPluginInvalidConfig, workspace, info.TerraformWorkspace)
+	}
+	return nil
+}
+
+// Workdir runtime paths generated artifacts must never write. They mirror the paths the
+// workdir sync preserves: Terraform data and workspace-state directories, Atmos metadata,
+// provider lock files at any depth, and the default local-backend state files at the root.
+var (
+	runtimeArtifactDirs  = map[string]bool{".terraform": true, "terraform.tfstate.d": true, provWorkdir.AtmosDir: true}
+	runtimeArtifactFiles = map[string]bool{"terraform.tfstate": true, "terraform.tfstate.backup": true, ".terraform.tfstate.lock.info": true}
+)
+
+// rejectRuntimeArtifacts checks the whole artifact set before any file is written, so a
+// generated file can never replace Terraform state, provider locks, or workdir metadata,
+// even with an overwrite policy.
+func rejectRuntimeArtifacts(files []schema.ComponentConfigurationFile) error {
+	for _, file := range files {
+		if isRuntimeArtifact(file.Path) {
+			return fmt.Errorf("%w: generated file %s overlaps Terraform state or workdir runtime files", errUtils.ErrPluginInvalidConfig, file.Path)
+		}
+	}
+	return nil
+}
+
+func isRuntimeArtifact(path string) bool {
+	path = filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
+	if runtimeArtifactFiles[path] || strings.HasSuffix(path, provisioner.CanonicalLockFilename) {
+		return true
+	}
+	for _, segment := range strings.Split(path, "/") {
+		if runtimeArtifactDirs[segment] {
+			return true
+		}
+	}
+	return false
+}
+
+// validatePlanOutputFlags rejects ambiguous plan destinations before hooks or Terraform run.
+func validatePlanOutputFlags(command string, args []string) error {
+	if command != "plan" {
+		return nil
+	}
+	count := 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-out" || arg == "--out" {
+			count++
+			i++
+		} else if strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=") {
+			count++
+		}
+		if count > 1 {
+			return fmt.Errorf("%w: multiple plan output flags", errUtils.ErrPlanVerificationFailed)
+		}
+	}
+	return nil
+}
+
+// validateEnvironmentPlanOutput rejects plan output flags in TF_CLI_ARGS or
+// TF_CLI_ARGS_plan for a configuration-owned plan. Terraform reads these
+// variables itself, so a flag there could choose a plan file that Atmos does not
+// see and therefore does not bind. The check inspects the effective value of each
+// variable in the subprocess environment: the sanitized process environment (or
+// the inherited one when auth did not sanitize it), the global atmos.yaml
+// environment, the component environment, and provider extra-argument
+// environment, with later layers overriding earlier ones. Hooks run as child
+// processes and cannot change it.
+func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) error {
+	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != subcommandPlan {
+		return nil
+	}
+	effective := make(map[string]string)
+	for _, entry := range planEnvironment(atmosConfig, info) {
+		if name, value, ok := strings.Cut(entry, "="); ok {
+			effective[name] = value
+		}
+	}
+	for _, name := range []string{tfCliArgsEnvVar, tfCliArgsEnvVar + "_" + subcommandPlan} {
+		if containsOutputFlag(parseArgs(effective[name])) {
+			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
+		}
+	}
+	return nil
+}
+
+// planEnvironment lists the environment layers a plan subprocess receives, in precedence order.
+func planEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) []string {
+	base := info.SanitizedEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	entries := slices.Clone(base)
+	if atmosConfig != nil {
+		entries = envpkg.MergeGlobalEnv(entries, atmosConfig.Env)
+	}
+	entries = append(entries, info.ComponentEnvList...)
+	if info.ComponentExecution == nil {
+		return entries
+	}
+	for i := range info.ComponentExecution.ExtraArguments {
+		item := &info.ComponentExecution.ExtraArguments[i]
+		if !slices.Contains(item.Commands, subcommandPlan) {
+			continue
+		}
+		for name, value := range item.Environment {
+			entries = append(entries, name+"="+value)
+		}
+	}
+	return entries
+}
+
+// containsOutputFlag reports any plan output flag, with or without a value.
+func containsOutputFlag(args []string) bool {
+	return slices.ContainsFunc(args, func(arg string) bool {
+		return arg == "-out" || arg == "--out" || strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=")
+	})
+}
+
+func plannedOutputPath(directory string, args []string) string {
+	for i, arg := range args {
+		path := ""
+		switch {
+		case (arg == "-out" || arg == "--out") && i+1 < len(args):
+			path = args[i+1]
+		case strings.HasPrefix(arg, "-out="):
+			path = strings.TrimPrefix(arg, "-out=")
+		case strings.HasPrefix(arg, "--out="):
+			path = strings.TrimPrefix(arg, "--out=")
+		}
+		if path != "" {
+			if filepath.IsAbs(path) {
+				return path
+			}
+			return filepath.Join(directory, path)
+		}
+	}
+	return ""
 }

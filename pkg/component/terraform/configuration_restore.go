@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
@@ -119,12 +120,20 @@ func lockFileDigest(dir string) (string, error) {
 	return digest, err
 }
 
-// transportFiles lists the restored artifacts that may sit in the workdir: the plan, its record, and the lock file.
+// transportFiles lists the restored artifacts that may sit in the workdir, as slash-separated paths relative
+// to it: the lock file, and the plan with its record when the plan is inside the workdir, also in a
+// subdirectory such as `plans/reviewed.planfile`.
 func (r *reviewedRebuild) transportFiles() map[string]bool {
 	files := map[string]bool{terraformLockFile: true}
-	if sameDirectory(filepath.Dir(r.planPath), r.workdir) {
-		files[filepath.Base(r.planPath)] = true
-		files[filepath.Base(r.planPath)+configurationPlanSuffix] = true
+	workdir, errWorkdir := resolvedPath(r.workdir)
+	planDir, errPlan := resolvedPath(filepath.Dir(r.planPath))
+	if errWorkdir != nil || errPlan != nil {
+		return files
+	}
+	if relative, err := filepath.Rel(workdir, planDir); err == nil && filepath.IsLocal(relative) {
+		plan := filepath.ToSlash(filepath.Join(relative, filepath.Base(r.planPath)))
+		files[plan] = true
+		files[plan+configurationPlanSuffix] = true
 	}
 	return files
 }
@@ -136,21 +145,52 @@ func sameDirectory(first, second string) bool {
 }
 
 // holdsOnlyTransport reports whether the workdir is absent, empty, or contains just the restored artifacts.
+// A subdirectory is accepted only on the way to an artifact, and then holds nothing else either.
 func (r *reviewedRebuild) holdsOnlyTransport() (bool, error) {
-	entries, err := os.ReadDir(r.workdir)
-	if errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(r.workdir); errors.Is(err, fs.ErrNotExist) {
 		return true, nil
 	}
+	allowed := r.transportFiles()
+	only := true
+	err := filepath.WalkDir(r.workdir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == r.workdir {
+			return nil
+		}
+		relative, err := filepath.Rel(r.workdir, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if entry.IsDir() {
+			if !leadsToTransport(relative, allowed) {
+				only = false
+				return filepath.SkipAll
+			}
+			return nil
+		}
+		if !allowed[relative] {
+			only = false
+			return filepath.SkipAll
+		}
+		return nil
+	})
 	if err != nil {
 		return false, err
 	}
-	allowed := r.transportFiles()
-	for _, entry := range entries {
-		if entry.IsDir() || !allowed[entry.Name()] {
-			return false, nil
+	return only, nil
+}
+
+// leadsToTransport reports whether a directory is a parent of one of the restored artifacts.
+func leadsToTransport(directory string, allowed map[string]bool) bool {
+	for name := range allowed {
+		if strings.HasPrefix(name, directory+"/") {
+			return true
 		}
 	}
-	return true, nil
+	return false
 }
 
 // stage moves the restored artifacts aside so the workdir can be provisioned into an empty place, and
@@ -188,10 +228,21 @@ func putBack(holding, workdir string, names []string) error {
 	}
 	for _, name := range names {
 		destination := filepath.Join(workdir, name)
+		staged := filepath.Join(holding, name)
+		if _, err := os.Lstat(staged); errors.Is(err, fs.ErrNotExist) {
+			// An earlier restore attempt may already have moved this artifact.
+			if _, destinationErr := os.Lstat(destination); destinationErr == nil {
+				continue
+			} else {
+				return errors.Join(err, destinationErr)
+			}
+		} else if err != nil {
+			return err
+		}
 		if err := os.Remove(destination); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
-		if err := os.Rename(filepath.Join(holding, name), destination); err != nil {
+		if err := os.Rename(staged, destination); err != nil {
 			return err
 		}
 	}
@@ -217,6 +268,32 @@ func (r *reviewedRebuild) verify(workdir string) error {
 	if lock != r.plan.LockDigest {
 		return errUtils.Build(fmt.Errorf("%w: the provider lock file differs from the reviewed one", errUtils.ErrPlanVerificationFailed)).
 			WithHint("Restore `.terraform.lock.hcl` together with the plan (`atmos terraform planfile download` does), or create a new plan.").
+			Err()
+	}
+	return nil
+}
+
+// downloadedModulesDir is where `init` and `get` install child modules.
+var downloadedModulesDir = filepath.Join(".terraform", "modules")
+
+// hasDownloadedModules reports whether a workdir holds downloaded child modules.
+func hasDownloadedModules(workdir string) bool {
+	info, err := os.Stat(filepath.Join(workdir, downloadedModulesDir))
+	return err == nil && info.IsDir()
+}
+
+// installReviewedModules downloads the child modules of a reviewed plan into the rebuilt workdir before it
+// is verified, as `init` did before the plan was made. The modules stay covered by RebuildDigest, so a
+// source that now resolves to different code fails verification instead of being applied; nothing is
+// restored from the plan artifacts.
+func (e *Executor) installReviewedModules(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rebuild *reviewedRebuild, workdir string) error {
+	if rebuild == nil || !rebuild.plan.Modules || info.DryRun {
+		return nil
+	}
+	if err := e.services.ExecuteShellCommand(*atmosConfig, info.Command, []string{"get"}, workdir, info.ComponentEnvList, false, info.RedirectStdErr); err != nil {
+		return errUtils.Build(fmt.Errorf("%w: downloading the reviewed child modules: %w", errUtils.ErrPlanVerificationFailed, err)).
+			WithExplanation("The reviewed plan uses downloaded child modules, which must be downloaded again and match before the plan is applied.").
+			WithHint("Check that the module sources are reachable from this runner, or apply on the runner that created the plan.").
 			Err()
 	}
 	return nil

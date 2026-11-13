@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,6 +69,9 @@ func errorsFromConfig(block *config.ErrorsConfig, path string) (*model.Errors, e
 		if retry.SleepIntervalSec < 0 {
 			return nil, errorsProblem(key, path, fmt.Sprintf("`sleep_interval_sec` is %d in %s", retry.SleepIntervalSec, key), "The sleep between attempts cannot be negative.", "Set `sleep_interval_sec` to 0 or more.")
 		}
+		if int64(retry.MaxAttempts) > math.MaxUint32 || int64(retry.SleepIntervalSec) > math.MaxUint32 {
+			return nil, errorsProblem(key, path, fmt.Sprintf("A value is too large in %s", key), "`max_attempts` and `sleep_interval_sec` must fit in 32 bits.", fmt.Sprintf("Use values no larger than %d.", uint32(math.MaxUint32)))
+		}
 		if err := checkPatterns(key, path, retry.RetryableErrors); err != nil {
 			return nil, err
 		}
@@ -121,7 +126,9 @@ func signalValues(signals map[string]cty.Value) (map[string]any, error) {
 			return nil, err
 		}
 		var plain any
-		if err := json.Unmarshal(data, &plain); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(data))
+		decoder.UseNumber()
+		if err := decoder.Decode(&plain); err != nil {
 			return nil, err
 		}
 		result[name] = plain
@@ -173,6 +180,33 @@ func PreventsRun(exclude *model.Exclude, command string) bool {
 	default:
 		return ExcludeListsAction(exclude.Actions, command)
 	}
+}
+
+// OperationCommand is the command name Terragrunt matches exclude actions against: destroy for
+// `apply -destroy`, apply for deploy, otherwise the command itself.
+func OperationCommand(command string, arguments []string) string {
+	if command == "deploy" {
+		command = "apply"
+	}
+	if command == "destroy" {
+		return command
+	}
+	if command == "apply" {
+		for _, argument := range slices.Backward(arguments) {
+			name, value, hasValue := strings.Cut(argument, "=")
+			if name != "-destroy" && name != "--destroy" {
+				continue
+			}
+			if !hasValue {
+				return "destroy"
+			}
+			if parsed, err := strconv.ParseBool(value); err == nil && parsed {
+				return "destroy"
+			}
+			return command
+		}
+	}
+	return command
 }
 
 // featureFlagValues returns the effective value of every declared feature, as a string. An override
@@ -357,6 +391,10 @@ const (
 	tflintExecutable   = "tflint"
 	tflintExternalFlag = "--terragrunt-external-tflint"
 	tflintConfigName   = ".tflint.hcl"
+	// The host resolves this marker against the provisioned module directory when the hook runs.
+	tflintOptionalVarFilePrefix = "--atmos-optional-var-file="
+	// The host searches for this config only when the selected hook executes.
+	tflintConfigSearchPrefix = "--atmos-tflint-config-search="
 	// tflintMaxParents bounds the search for .tflint.hcl, like Terragrunt's default folder limit.
 	tflintMaxParents = 100
 )
@@ -432,42 +470,39 @@ func splitLifecycle(hook model.Hook, unitDir string) []model.Hook {
 
 // expandTflint replaces a hook that executes tflint with the two commands Terragrunt runs for it:
 // `tflint --init` and the lint itself. Both run in the module directory against the .tflint.hcl
-// that Terragrunt would find, with the unit's inputs and variable files passed as variables.
+// that Terragrunt would find, with the unit's inputs and variable files passed as variables. A hook
+// that lists several commands expands once per command, so each lint sees only the extra
+// arguments of the command that is running.
 func expandTflint(hook *model.Hook, execution *model.Execution, path string, inputs map[string]any) ([]model.Hook, error) {
 	arguments := slices.DeleteFunc(slices.Clone(hook.Execute), func(arg string) bool { return arg == tflintExternalFlag })
-	configFile, err := tflintConfig(arguments, filepath.Dir(path))
-	if err != nil {
-		return nil, setting(model.CodeUnsupportedHook, fmt.Sprintf("hook %q", hook.Name), path, fmt.Sprintf("tflint hook %q cannot find its configuration", hook.Name),
-			"Terragrunt looks for `.tflint.hcl` in the unit directory and each parent directory, and none was found.",
-			"Add a `.tflint.hcl` file next to the unit or in a parent directory, or pass `--config <file>` in `execute`.")
+	configFile := tflintConfigSearchPrefix + filepath.Dir(path)
+	if explicit, found := explicitTflintConfig(arguments, filepath.Dir(path)); found {
+		configFile = explicit
 	}
-	variables, err := tflintVariables(inputs)
+	inputVariables, err := tflintVariables(inputs)
 	if err != nil {
 		return nil, err
 	}
-	variables = append(variables, tflintExtraVariables(hook, execution)...)
 	passthrough := withoutConfigFlag(arguments[1:])
-
-	initHook := *hook
-	initHook.Execute = []string{tflintExecutable, "--init", "--config", configFile, "--chdir", "."}
-	runHook := *hook
-	runHook.Execute = append(append([]string{tflintExecutable, "--config", configFile, "--chdir", "."}, variables...), passthrough...)
-	// The module directory is where tflint runs; a working_dir would only change the lock key upstream.
-	initHook.WorkingDirectory, runHook.WorkingDirectory = "", ""
-	return []model.Hook{initHook, runHook}, nil
+	var result []model.Hook
+	for _, command := range hook.Commands {
+		variables := append(slices.Clone(inputVariables), tflintExtraVariables(command, execution)...)
+		initHook := *hook
+		initHook.Commands = []string{command}
+		initHook.Execute = []string{tflintExecutable, "--init", "--config", configFile, "--chdir", "."}
+		runHook := initHook
+		runHook.Execute = append(append([]string{tflintExecutable, "--config", configFile, "--chdir", "."}, variables...), passthrough...)
+		// The module directory is where tflint runs; a working_dir would only change the lock key upstream.
+		initHook.WorkingDirectory, runHook.WorkingDirectory = "", ""
+		result = append(result, initHook, runHook)
+	}
+	return result, nil
 }
 
 // tflintConfig returns the configuration named by --config/-c, or the nearest .tflint.hcl.
 func tflintConfig(arguments []string, unitDir string) (string, error) {
-	for i, arg := range arguments {
-		for _, flag := range []string{"--config", "-c"} {
-			if arg == flag && len(arguments) > i+1 {
-				return anchored(arguments[i+1], unitDir), nil
-			}
-			if value, found := strings.CutPrefix(arg, flag+"="); found {
-				return anchored(value, unitDir), nil
-			}
-		}
+	if explicit, found := explicitTflintConfig(arguments, unitDir); found {
+		return explicit, nil
 	}
 	dir := unitDir
 	for range tflintMaxParents {
@@ -482,6 +517,20 @@ func tflintConfig(arguments []string, unitDir string) (string, error) {
 		dir = parent
 	}
 	return "", os.ErrNotExist
+}
+
+func explicitTflintConfig(arguments []string, unitDir string) (string, bool) {
+	for i, arg := range arguments {
+		for _, flag := range []string{"--config", "-c"} {
+			if arg == flag && len(arguments) > i+1 {
+				return anchored(arguments[i+1], unitDir), true
+			}
+			if value, found := strings.CutPrefix(arg, flag+"="); found {
+				return anchored(value, unitDir), true
+			}
+		}
+	}
+	return "", false
 }
 
 func anchored(path, dir string) string {
@@ -520,7 +569,7 @@ func tflintVariables(inputs map[string]any) ([]string, error) {
 	return variables, nil
 }
 
-// variableValue renders a string as itself and any other value as JSON, escaping interpolation.
+// variableValue renders a string as itself and any other value as JSON, escaping HCL templates.
 func variableValue(value any) (string, error) {
 	if text, ok := value.(string); ok {
 		return text, nil
@@ -529,16 +578,16 @@ func variableValue(value any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.ReplaceAll(string(data), "${", "$${"), nil
+	return strings.NewReplacer("${", "$${", "%{", "%%{").Replace(string(data)), nil
 }
 
 // tflintExtraVariables mirrors the variables Terragrunt takes from extra_arguments that apply to
-// the same commands as the hook.
-func tflintExtraVariables(hook *model.Hook, execution *model.Execution) []string {
+// the command the hook runs for.
+func tflintExtraVariables(command string, execution *model.Execution) []string {
 	var variables []string
 	for i := range execution.ExtraArguments {
 		extra := &execution.ExtraArguments[i]
-		if slices.ContainsFunc(extra.Commands, func(command string) bool { return slices.Contains(hook.Commands, command) }) {
+		if slices.Contains(extra.Commands, command) {
 			variables = append(variables, extraArgumentVariables(extra)...)
 		}
 	}
@@ -546,28 +595,28 @@ func tflintExtraVariables(hook *model.Hook, execution *model.Execution) []string
 }
 
 // extraArgumentVariables lists the --var and --var-file flags one extra_arguments block implies.
+// Both `-var=x` and `-var x` forms are recognized, as Terraform accepts both.
+// TF_VAR_ entries of env_vars are not turned into --var flags, unlike Terragrunt: a flag would
+// override terraform.tfvars, while Terraform ranks the environment below it. The hook inherits the
+// phase environment, and TFLint reads TF_VAR_ variables with the same precedence as Terraform.
 func extraArgumentVariables(extra *model.ExtraArguments) []string {
 	var variables []string
-	for _, name := range slices.Sorted(maps.Keys(extra.Environment)) {
-		if variable, found := strings.CutPrefix(name, "TF_VAR_"); found {
-			variables = append(variables, fmt.Sprintf("--var=%s=%s", variable, extra.Environment[name]))
-		}
-	}
-	for _, argument := range extra.Arguments {
-		if variable, found := strings.CutPrefix(argument, "-var="); found {
-			variables = append(variables, "--var="+variable)
-		}
-		if file, found := strings.CutPrefix(argument, "-var-file="); found {
-			variables = append(variables, "--var-file="+file)
+	for i := 0; i < len(extra.Arguments); i++ {
+		argument := extra.Arguments[i]
+		for _, flag := range []string{"var", "var-file"} {
+			if value, found := strings.CutPrefix(argument, "-"+flag+"="); found {
+				variables = append(variables, "--"+flag+"="+value)
+			} else if argument == "-"+flag && i+1 < len(extra.Arguments) {
+				i++
+				variables = append(variables, "--"+flag+"="+extra.Arguments[i])
+			}
 		}
 	}
 	for _, file := range extra.RequiredVarFiles {
 		variables = append(variables, "--var-file="+file)
 	}
 	for _, file := range extra.OptionalVarFiles {
-		if _, err := os.Stat(file); err == nil {
-			variables = append(variables, "--var-file="+file)
-		}
+		variables = append(variables, tflintOptionalVarFilePrefix+file)
 	}
 	return variables
 }

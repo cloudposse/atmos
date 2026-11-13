@@ -201,12 +201,16 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 	stacks := map[string]any{"dev": map[string]any{}}
 	var described bool
 	var scheduled bool
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var initializerContext context.Context
 
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
 	// The query path loads configuration through InitCliConfigWithContext. InitCliConfig is only a
 	// wrapper around it, so patching the wrapper would not intercept this call.
-	patches.ApplyFunc(cfg.InitCliConfigWithContext, func(_ context.Context, info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	patches.ApplyFunc(cfg.InitCliConfigWithContext, func(got context.Context, info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		initializerContext = got
 		require.Equal(t, "dev", info.Stack)
 		require.True(t, processStacks)
 		return schema.AtmosConfiguration{}, nil
@@ -266,9 +270,12 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		ProcessFunctions: true,
 		Skip:             []string{"skip-me"},
 	}
-	require.NoError(t, testExecutor(t).ExecuteTerraformQuery(info))
+	require.NoError(t, testExecutor(t).ExecuteTerraformQueryWithContext(ctx, info))
 	require.True(t, described)
 	require.True(t, scheduled)
+	require.NotNil(t, initializerContext)
+	cancel()
+	require.ErrorIs(t, initializerContext.Err(), context.Canceled)
 }
 
 func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
@@ -789,7 +796,7 @@ func TestCleanTerraformWorkspace(t *testing.T) {
 
 			// Test the function.
 			config := schema.AtmosConfiguration{}
-			cleanTerraformWorkspace(config, testDir)
+			cleanTerraformWorkspace(config, testDir, nil)
 
 			// Verify the result.
 			envFilePath := filepath.Join(tfDataDir, "environment")
@@ -801,6 +808,28 @@ func TestCleanTerraformWorkspace(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCleanTerraformWorkspaceHonorsComponentEnv verifies that a TF_DATA_DIR supplied by the
+// component environment wins over the process environment, and that the process-level data
+// directory is left untouched in that case.
+func TestCleanTerraformWorkspaceHonorsComponentEnv(t *testing.T) {
+	testDir := t.TempDir()
+	t.Setenv("TF_DATA_DIR", "process-tf-dir")
+
+	componentEnvFile := filepath.Join(testDir, "component-tf-dir", "environment")
+	processEnvFile := filepath.Join(testDir, "process-tf-dir", "environment")
+	for _, envFile := range []string{componentEnvFile, processEnvFile} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(envFile), 0o755))
+		require.NoError(t, os.WriteFile(envFile, []byte("test-workspace"), 0o644))
+	}
+
+	cleanTerraformWorkspace(schema.AtmosConfiguration{}, testDir, []string{"TF_DATA_DIR=component-tf-dir"})
+
+	_, statErr := os.Stat(componentEnvFile)
+	assert.True(t, os.IsNotExist(statErr), "component TF_DATA_DIR environment file should be removed")
+	_, statErr = os.Stat(processEnvFile)
+	assert.NoError(t, statErr, "process TF_DATA_DIR environment file should be untouched")
 }
 
 func TestShouldProcessStacks(t *testing.T) {

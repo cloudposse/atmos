@@ -39,8 +39,6 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/policy"
-	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -1245,18 +1243,8 @@ func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.Co
 // admission rules are configured. Other resolution failures are left to the
 // executor, which reports them authoritatively.
 func admitNodeComponent(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	enabled, err := admission.HasRules(policy.ComponentCommand)
-	if err != nil {
-		return err
-	}
-	if !enabled || info.ComponentFromArg == "" {
-		return nil
-	}
 	authManager, _ := info.AuthManager.(authtypes.AuthManager)
-	if _, err := e.ProcessStacks(atmosConfig, *info, true, false, false, nil, authManager); h.IsPolicyAdmissionError(err) {
-		return err
-	}
-	return nil
+	return e.AdmitComponent(atmosConfig, info, authManager)
 }
 
 // nodeKey identifies a graph node across its Before and After hook calls.
@@ -2188,11 +2176,15 @@ func handlePromptError(err error, name string) error {
 // promptForComponent delegates to shared.PromptForComponent.
 // If stack is provided, filters components to only those in that stack.
 // Declared as a var so tests can stub the interactive prompt.
-var promptForComponent = shared.PromptForComponent
+var promptForComponent = func(cmd *cobra.Command, stack string) (string, error) {
+	return shared.PromptForComponent(cmd, stack)
+}
 
 // promptForStack delegates to shared.PromptForStack.
 // Declared as a var so tests can stub the interactive prompt.
-var promptForStack = shared.PromptForStack
+var promptForStack = func(cmd *cobra.Command, component string) (string, error) {
+	return shared.PromptForStack(cmd, component)
+}
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
 // This is needed because --heatmap must be detected before flag parsing occurs.

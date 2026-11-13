@@ -98,6 +98,8 @@ func TestPreparedConfigurationRejectsUnrunnableHooks(t *testing.T) {
 		{"no command", &pluginv1.ComponentExecutionConfiguration{BeforeHooks: []*pluginv1.ComponentHook{{Name: "h", Commands: []string{"plan"}}}}},
 		{"bad pattern", &pluginv1.ComponentExecutionConfiguration{ErrorHooks: []*pluginv1.ComponentHook{{Name: "h", Commands: []string{"plan"}, Execute: []string{"t"}, OnErrors: []string{"("}}}}},
 		{"nil hook", &pluginv1.ComponentExecutionConfiguration{AfterHooks: []*pluginv1.ComponentHook{nil}}},
+		{"unrunnable apply hook", &pluginv1.ComponentExecutionConfiguration{Apply: &pluginv1.ComponentExecutionConfiguration{AfterHooks: []*pluginv1.ComponentHook{{Name: "h", Commands: []string{"apply"}}}}}},
+		{"nested apply", &pluginv1.ComponentExecutionConfiguration{Apply: &pluginv1.ComponentExecutionConfiguration{Apply: &pluginv1.ComponentExecutionConfiguration{}}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := preparedConfiguration(executionResponse(t, test.execution))
@@ -134,6 +136,24 @@ func TestPreparedConfigurationCarriesIAM(t *testing.T) {
 	require.Nil(t, got.IAM, "an IAM message without a role asks for nothing")
 }
 
+func TestPreparedRegistryAuthorizationRequiresSameOriginAndSensitivity(t *testing.T) {
+	response := executionResponse(t, nil)
+	response.ModuleSource = "https://registry.example/module.tar.gz//subdir"
+	response.ModuleSourceAuthOrigin = "https://registry.example"
+	response.ModuleSourceAuthorization = sensitiveString(t, "Bearer registry-secret")
+	prepared, err := preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Equal(t, &schema.SourceAuthorization{Origin: "https://registry.example", Header: "Bearer registry-secret"}, prepared.SourceAuthorization)
+
+	response.ModuleSourceAuthOrigin = "https://other.example"
+	_, err = preparedConfiguration(roundTrip(t, response))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	response.ModuleSourceAuthOrigin = "https://registry.example"
+	response.ModuleSourceAuthorization.SensitivePaths = nil
+	_, err = preparedConfiguration(roundTrip(t, response))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
 func TestPreparedIAMDistinguishesTokenFilesFromLiteralTokens(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "token")
 	require.NoError(t, os.WriteFile(file, []byte("file-token\n"), 0o600))
@@ -168,4 +188,62 @@ func TestDecodeStringRejectsNonStrings(t *testing.T) {
 	require.NoError(t, err)
 	_, err = adapter.DecodeString(number)
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
+// A plan preparation carries the apply-time evaluation separately. An empty one is kept,
+// because it means apply runs nothing rather than falling back to the plan-time hooks.
+func TestPreparedConfigurationCarriesApplyTimeExecution(t *testing.T) {
+	got, err := preparedConfiguration(roundTrip(t, executionResponse(t, &pluginv1.ComponentExecutionConfiguration{
+		BeforeHooks: []*pluginv1.ComponentHook{{Name: "plan_only", Commands: []string{"plan"}, Execute: []string{"tool", "plan"}}},
+		Apply: &pluginv1.ComponentExecutionConfiguration{
+			AfterHooks: []*pluginv1.ComponentHook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}},
+		},
+	})))
+	require.NoError(t, err)
+	require.Equal(t, []schema.ComponentHook{{Name: "plan_only", Commands: []string{"plan"}, Execute: []string{"tool", "plan"}}}, got.Execution.BeforeHooks)
+	require.Equal(t, &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}},
+	}, got.Execution.Apply)
+	require.Same(t, got.Execution.Apply, got.Execution.ForSavedPlanApply())
+
+	// Apply adds nothing, while plan adds nothing either: the empty evaluation still wins.
+	got, err = preparedConfiguration(roundTrip(t, executionResponse(t, &pluginv1.ComponentExecutionConfiguration{Apply: &pluginv1.ComponentExecutionConfiguration{}})))
+	require.NoError(t, err)
+	require.NotNil(t, got.Execution)
+	require.True(t, got.Execution.IsEmpty())
+	require.Equal(t, &schema.ComponentExecution{}, got.Execution.ForSavedPlanApply())
+
+	// Without an apply-time evaluation, a saved plan applies the plan-time metadata.
+	got, err = preparedConfiguration(roundTrip(t, executionResponse(t, &pluginv1.ComponentExecutionConfiguration{
+		AfterHooks: []*pluginv1.ComponentHook{{Name: "always", Commands: []string{"apply"}, Execute: []string{"tool"}}},
+	})))
+	require.NoError(t, err)
+	require.Same(t, got.Execution, got.Execution.ForSavedPlanApply())
+}
+
+// The unit's errors block is not command specific, so a saved plan applied with the
+// apply-time metadata keeps the retry and ignore policies of the reviewed preparation.
+func TestPreparedApplyTimeExecutionKeepsErrorPolicies(t *testing.T) {
+	response := executionResponse(t, &pluginv1.ComponentExecutionConfiguration{
+		Apply: &pluginv1.ComponentExecutionConfiguration{
+			AfterHooks: []*pluginv1.ComponentHook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}},
+		},
+	})
+	response.Errors = &pluginv1.ComponentErrorsConfiguration{
+		Retry: []*pluginv1.ComponentRetryPolicy{{Name: "net", RetryableErrors: []string{"timeout"}, MaxAttempts: 3, SleepIntervalSeconds: 1}},
+	}
+	got, err := preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.NotNil(t, got.Execution.Errors)
+	applied := got.Execution.ForSavedPlanApply()
+	require.Same(t, got.Execution.Apply, applied)
+	require.Equal(t, got.Execution.Errors, applied.Errors)
+	require.Equal(t, "net", applied.Errors.Retry[0].Name)
+
+	// Without errors policies, the apply-time metadata has none either.
+	response.Errors = nil
+	got, err = preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Nil(t, got.Execution.Errors)
+	require.Nil(t, got.Execution.ForSavedPlanApply().Errors)
 }

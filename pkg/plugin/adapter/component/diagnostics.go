@@ -181,7 +181,7 @@ func firstDiagnosticError(diagnostics []*pluginv1.Diagnostic) error {
 }
 
 // WarnDiagnostic prints a warning-severity diagnostic on the UI channel with secrets masked.
-func WarnDiagnostic(diagnostic *pluginv1.Diagnostic) {
+func WarnDiagnostic(diagnostic *pluginv1.Diagnostic, warnings ...*WarningDeduper) {
 	defer perf.Track(nil, "componentadapter.WarnDiagnostic")()
 
 	detail := diagnostic.GetDetail()
@@ -196,7 +196,11 @@ func WarnDiagnostic(diagnostic *pluginv1.Diagnostic) {
 		text += ": " + detail.Detail
 	}
 	// Preparation reruns before every step of a command, so the same warning would repeat.
-	if !firstTime("diagnostic", detail.GetUnit(), detail.GetStack(), detail.GetCode(), mask(text)) {
+	var deduper *WarningDeduper
+	if len(warnings) > 0 {
+		deduper = warnings[0]
+	}
+	if !deduper.firstTime("diagnostic", detail.GetUnit(), detail.GetStack(), detail.GetCode(), mask(text)) {
 		return
 	}
 	ui.Warning(mask(text))

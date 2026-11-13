@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -54,9 +55,9 @@ func (s *Session) PlanIdentity(ctx context.Context, info *schema.ConfigAndStacks
 	}
 	payload, err := json.Marshal(struct {
 		Provider string
-		Request  string
+		Request  []byte
 		Sources  map[string]string
-	}{identity, string(raw), files})
+	}{identity, raw, files})
 	if err != nil {
 		return "", err
 	}
@@ -67,7 +68,7 @@ func (s *Session) PlanIdentity(ctx context.Context, info *schema.ConfigAndStacks
 func sourceDigests(ctx context.Context, root string, sources []schema.ComponentConfigurationSource) (map[string]string, error) {
 	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return nil, err
+		return nil, sourceReadError(err)
 	}
 	result := map[string]string{}
 	for _, source := range sources {
@@ -93,7 +94,7 @@ func digestSourceDirectory(ctx context.Context, root, sourcePath string, result 
 	top := filepath.Join(root, filepath.FromSlash(sourcePath))
 	err := filepath.WalkDir(top, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			return sourceReadError(err)
 		}
 		if entry.IsDir() {
 			if path != top && excludedPlanSource(entry.Name()) {
@@ -104,17 +105,50 @@ func digestSourceDirectory(ctx context.Context, root, sourcePath string, result 
 		if excludedPlanSource(entry.Name()) {
 			return nil
 		}
+		if err := rejectDirectorySymlink(root, path, entry); err != nil {
+			return err
+		}
 		return digestSource(ctx, root, path, result)
 	})
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		result[sourcePath] = "absent"
 		return nil
 	}
 	return err
 }
 
+// sourceReadError wraps a filesystem failure met while fingerprinting watched sources.
+func sourceReadError(err error) error {
+	return fmt.Errorf("%w: fingerprint watched source: %w", errUtils.ErrReadFile, err)
+}
+
+// rejectDirectorySymlink fails clearly on a symlink to a directory inside a watched directory.
+// Atmos does not follow directory symlinks when it copies or binds sources, so the saved plan
+// cannot fingerprint what the link leads to. File symlinks and dangling links are left to
+// digestSource, which digests or records them.
+func rejectDirectorySymlink(root, path string, entry fs.DirEntry) error {
+	if entry.Type()&fs.ModeSymlink == 0 {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return nil //nolint:nilerr // Dangling links and file links are handled by digestSource.
+	}
+	shown, relErr := filepath.Rel(root, path)
+	if relErr != nil {
+		shown = path
+	}
+	shown = filepath.ToSlash(shown)
+	return errUtils.Build(fmt.Errorf("%w: watched source %s is a symlink to a directory", errUtils.ErrPluginInvalidConfig, shown)).
+		WithContext("source", shown).
+		WithHint("Atmos does not follow directory symlinks in watched sources. Replace the link with a copy of the directory, or watch its target directly").
+		Err()
+}
+
+// excludedPlanSource skips mutable data, saved plans, and their bindings. Ordinary *.atmos.json
+// configuration, such as settings.atmos.json, is a source and is digested.
 func excludedPlanSource(name string) bool {
-	return name == ".atmos" || name == ".git" || name == ".terraform" || name == ".terragrunt-cache" || name == ".terragrunt-stack" || strings.HasPrefix(name, "terraform.tfstate") || strings.HasSuffix(name, ".planfile") || strings.HasSuffix(name, ".atmos.json")
+	return name == ".atmos" || name == ".git" || name == ".terraform" || name == ".terragrunt-cache" || name == ".terragrunt-stack" || strings.HasPrefix(name, "terraform.tfstate") || strings.HasSuffix(name, ".planfile") || strings.HasSuffix(name, ".planfile.atmos.json")
 }
 
 func digestSource(ctx context.Context, root, path string, result map[string]string) error {
@@ -131,7 +165,7 @@ func digestSource(ctx context.Context, root, path string, result map[string]stri
 		return nil
 	}
 	if err != nil {
-		return err
+		return sourceReadError(err)
 	}
 	relative, err := filepath.Rel(root, real)
 	if err != nil || !filepath.IsLocal(relative) {
@@ -139,7 +173,7 @@ func digestSource(ctx context.Context, root, path string, result map[string]stri
 	}
 	data, err := os.ReadFile(real)
 	if err != nil {
-		return err
+		return sourceReadError(err)
 	}
 	sum := sha256.Sum256(data)
 	relative, err = filepath.Rel(root, path)
@@ -189,11 +223,15 @@ func checkSourcesInRoot(ctx context.Context, root string, sources []schema.Compo
 
 // checkSourcePath rejects a watched path whose own location leaves the project root through a
 // symlinked parent directory, such as `shared/inputs.hcl` when `shared` links outside. A missing
-// path is left for the first read to report.
+// path is left for the first read to report; any other resolution failure, such as a permission
+// error, is reported now, as fingerprinting would report it later.
 func checkSourcePath(root, top string) error {
 	real, err := filepath.EvalSymlinks(top)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return nil //nolint:nilerr // A missing or dangling path is not a boundary violation.
+		return sourceReadError(err)
 	}
 	if relative, err := filepath.Rel(root, real); err != nil || !filepath.IsLocal(relative) {
 		return sourceOutsideRoot(root, top, real)
@@ -225,14 +263,17 @@ func checkSourceTree(ctx context.Context, root, top string) error {
 }
 
 // checkSourceLink rejects a symlink entry that resolves outside the project root. A broken
-// link is left for the first read to report.
+// link is left for the first read to report; other resolution failures are reported now.
 func checkSourceLink(root, path string, entry fs.DirEntry) error {
 	if entry.Type()&fs.ModeSymlink == 0 || excludedPlanSource(entry.Name()) {
 		return nil
 	}
 	real, err := filepath.EvalSymlinks(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return nil //nolint:nilerr // A dangling link is not a boundary violation.
+		return sourceReadError(err)
 	}
 	if relative, err := filepath.Rel(root, real); err != nil || !filepath.IsLocal(relative) {
 		return sourceOutsideRoot(root, path, real)

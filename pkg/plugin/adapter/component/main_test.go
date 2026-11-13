@@ -130,6 +130,10 @@ func (f *componentFixture) Prepare(ctx context.Context, request *pluginv1.Compon
 	if err := recordCall(request.RootDirectory, "preparation", request); err != nil {
 		return nil, err
 	}
+	if request.GetOperation().GetCommand() == "wait-prepare" {
+		<-ctx.Done()
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
 	var returned []*pluginv1.LogEntry
 	switch request.GetOperation().GetCommand() {
 	case "live-logs":

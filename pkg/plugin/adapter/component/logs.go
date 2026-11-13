@@ -20,6 +20,7 @@ type LogScope struct {
 	Provider  string
 	Component string
 	Stack     string
+	Warnings  *WarningDeduper
 }
 
 type logScopeKey struct{}
@@ -55,32 +56,29 @@ func (l liveLogs) WriteLogs(_ context.Context, entries []*pluginv1.LogEntry) {
 // logOff is the level that tells a plugin to return no log events.
 const logOff = "off"
 
-// shown holds the messages already shown during this invocation, so that the several evaluations one command
-// makes (preparation reruns before every step) do not repeat the same warning.
-var shown = struct {
+// WarningDeduper is owned by one configuration session, so concurrent stack queries
+// cannot hide each other's warnings and its cache leaves with the session.
+type WarningDeduper struct {
 	sync.Mutex
 	keys map[string]struct{}
-}{keys: map[string]struct{}{}}
-
-// firstTime reports whether the message identified by parts is shown for the first time in this invocation.
-func firstTime(parts ...string) bool {
-	key := strings.Join(parts, "\x00")
-	shown.Lock()
-	defer shown.Unlock()
-	if _, seen := shown.keys[key]; seen {
-		return false
-	}
-	shown.keys[key] = struct{}{}
-	return true
 }
 
-// ResetShownMessages forgets which warnings were shown. Tests use it for isolation.
-func ResetShownMessages() {
-	defer perf.Track(nil, "componentadapter.ResetShownMessages")()
-
-	shown.Lock()
-	defer shown.Unlock()
-	clear(shown.keys)
+// firstTime reports whether the message identified by parts is shown for the first time in this invocation.
+func (d *WarningDeduper) firstTime(parts ...string) bool {
+	if d == nil {
+		return true
+	}
+	key := strings.Join(parts, "\x00")
+	d.Lock()
+	defer d.Unlock()
+	if d.keys == nil {
+		d.keys = make(map[string]struct{})
+	}
+	if _, seen := d.keys[key]; seen {
+		return false
+	}
+	d.keys[key] = struct{}{}
+	return true
 }
 
 // HostLogLevel returns the Atmos log level in the vocabulary of the plugin protocol, so a plugin can skip
@@ -117,7 +115,7 @@ func RenderLogs(scope LogScope, entries []*pluginv1.LogEntry) {
 		fields := logFields(scope, entry)
 		// The key covers the provider and the fields, so warnings that share a message but name a
 		// different dependency or file are each shown; only an identical repeat is suppressed.
-		if level >= charm.WarnLevel && !firstTime(append([]string{"log", entry.GetLevel().String(), message}, fieldStrings(fields)...)...) {
+		if level >= charm.WarnLevel && !scope.Warnings.firstTime(append([]string{"log", entry.GetLevel().String(), message}, fieldStrings(fields)...)...) {
 			continue
 		}
 		log.Log(level, message, fields...)

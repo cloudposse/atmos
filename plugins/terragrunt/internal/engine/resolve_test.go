@@ -82,6 +82,16 @@ remote_state {
 	require.ErrorContains(t, err, "cannot inspect selected executable")
 }
 
+func TestBackendGenerateDoesNotWriteStack(t *testing.T) {
+	root := t.TempDir()
+	fixture := filepath.Join("..", "..", "fixtures", "explicit-stack")
+	require.NoError(t, os.CopyFS(root, os.DirFS(fixture)))
+	request := model.Request{Path: filepath.Join(root, "live", "terragrunt.stack.hcl"), BasePath: root, Phase: "backend", Command: "generate", Tofu: "must-not-execute", Environment: map[string]string{}}
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NoDirExists(t, filepath.Join(root, "live", ".terragrunt-stack"))
+}
+
 func TestDiscoveryDeniesCommands(t *testing.T) {
 	request := nativeUnit(t, `locals { value = run_cmd("must-not-execute") }
 inputs = { value = local.value }
@@ -258,11 +268,30 @@ inputs = {
 
 	files := []string{"/unit/terragrunt.hcl", "/root.hcl", "/broken.hcl", "/data.json", "/missing.hcl"}
 	// A for expression that yields sensitive values is marked as a whole.
-	require.Equal(t, [][]string{{"dynamic"}, {"own"}, {"shared"}}, SensitiveInputs(fsys, files, inputs))
+	require.Equal(t, [][]string{{"dynamic"}, {"looped"}, {"own"}, {"shared"}}, SensitiveInputs(fsys, files, inputs))
 
 	require.Equal(t, [][]string{nil}, SensitiveInputs(fsys, []string{"/whole.hcl"}, inputs), "sensitive(...) around the whole inputs marks every input")
 	require.Empty(t, SensitiveInputs(fsys, files, map[string]any{"open": "o"}), "a path that is not among the evaluated inputs is dropped")
 	require.Empty(t, SensitiveInputs(fsys, nil, inputs))
+}
+
+func TestSensitiveInputsFollowExposedIncludeLocal(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	require.NoError(t, fsys.MkdirAll("/live/app", 0o755))
+	require.NoError(t, afero.WriteFile(fsys, "/root.hcl", []byte(`locals {
+  token = sensitive("secret")
+  plain = "visible"
+}`), 0o644))
+	require.NoError(t, afero.WriteFile(fsys, "/live/app/terragrunt.hcl", []byte(`include "root" {
+  path = find_in_parent_folders("root.hcl")
+  expose = true
+}
+inputs = {
+  token = include.root.locals.token
+  plain = include.root.locals.plain
+}`), 0o644))
+	paths := SensitiveInputs(fsys, []string{"/live/app/terragrunt.hcl", "/root.hcl"}, map[string]any{"token": "secret", "plain": "visible"})
+	require.Equal(t, [][]string{{"token"}}, paths)
 }
 
 func TestSensitiveInputsFollowNestedLocalReferences(t *testing.T) {
@@ -290,7 +319,33 @@ inputs = {
 
 	// An index with a literal key follows the local like an attribute, and a function applied to a
 	// sensitive value makes its whole result sensitive.
-	require.Equal(t, [][]string{{"call"}, {"cond"}, {"indexed"}, {"inner"}, {"key"}, {"token"}, {"wholekey"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
+	require.Equal(t, [][]string{{"call"}, {"cond"}, {"indexed"}, {"inner"}, {"key"}, {"missing"}, {"token"}, {"wholekey"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
+}
+
+func TestSensitiveInputsFailClosedWhenPathsCannotBeResolved(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fsys, "/unit.hcl", []byte(`locals {
+  a = local.b
+  b = local.c
+  c = local.d
+  d = local.e
+  e = local.f
+  f = local.g
+  g = local.h
+  h = local.i
+  i = sensitive("secret")
+  config = merge({ token = sensitive("secret") }, { open = "visible" })
+}
+inputs = {
+  dynamic = { (local.key) = sensitive("secret") }
+  chain = local.a
+  wrapped = upper(local.a)
+  composed = local.config.token
+  plain = "visible"
+}
+`), 0o644))
+	inputs := map[string]any{"dynamic": map[string]any{"key": "secret"}, "chain": "secret", "wrapped": "SECRET", "composed": "secret", "plain": "visible"}
+	require.Equal(t, [][]string{{"chain"}, {"composed"}, {"dynamic"}, {"wrapped"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
 }
 
 // A sensitive value that object keys cannot address marks the whole input, so it never reaches a varfile.

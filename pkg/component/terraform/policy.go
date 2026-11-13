@@ -114,6 +114,14 @@ func validateTerraformPolicyOperation(info *schema.ConfigAndStacksInfo, gate *pl
 	return nil
 }
 
+// Executable mode does not yet evaluate the plan produced by Terragrunt.
+func rejectTerragruntPlanPolicy(info *schema.ConfigAndStacksInfo, gate *planfile.Guard) error {
+	if info.SubCommand == "plan" && gate != nil {
+		return fmt.Errorf("%w: terraform plan policies are not supported for Terragrunt executable mode", errUtils.ErrPolicyPlan)
+	}
+	return nil
+}
+
 func terraformPolicyInvocation(
 	atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, args []string, dir string, opts []component.ExecutionOption,
 ) (context.Context, planfile.Invocation) {

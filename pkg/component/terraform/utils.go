@@ -49,8 +49,8 @@ func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 // cleanTerraformWorkspace delegates workspace cleanup to the Terraform component.
 //
 //nolint:gocritic // Preserve the existing value-based workspace cleanup contract.
-func cleanTerraformWorkspace(_ schema.AtmosConfiguration, componentPath string) {
-	CleanTerraformWorkspace(componentPath)
+func cleanTerraformWorkspace(_ schema.AtmosConfiguration, componentPath string, envList []string) {
+	CleanTerraformWorkspaceWithEnv(componentPath, envList)
 }
 
 // isTerraformCurrentWorkspace reports whether the given workspace name matches the workspace

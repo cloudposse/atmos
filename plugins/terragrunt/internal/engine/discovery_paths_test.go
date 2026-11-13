@@ -1,11 +1,16 @@
 package engine
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -254,4 +259,247 @@ func TestIncludePatternMatchingOnlyOrdinaryFilesIsReported(t *testing.T) {
 	require.Len(t, scan.Warnings, 1)
 	require.Equal(t, model.WarningPatternUnmatched, scan.Warnings[0].Code)
 	require.Equal(t, "docs", scan.Warnings[0].Path)
+}
+
+// A generated child that fails is reported at its own address; its siblings are still discovered.
+func TestDiscoveryKeepsSiblingsOfAFailedGeneratedUnit(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	write := func(name, content string) {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	write("modules/unit/main.tf", "")
+	write("catalog/good/terragrunt.hcl", "terraform { source = \"${get_repo_root()}/modules/unit\" }\n")
+	write("catalog/broken/terragrunt.hcl", "terraform { source = \"${get_repo_root()}/modules/unit\" }\nerrors {\n  retry \"x\" {\n    retryable_errors = [\".*\"]\n    max_attempts = 0\n    sleep_interval_sec = 1\n  }\n}\n")
+	write(".git/HEAD", "ref: refs/heads/main\n")
+	write("live/terragrunt.stack.hcl", `
+unit "a_broken" {
+  source = "../catalog/broken"
+  path   = "a_broken"
+}
+unit "z_good" {
+  source = "../catalog/good"
+  path   = "z_good"
+}
+`)
+	result, err := Resolve(t.Context(), model.Request{BasePath: root, Phase: "inventory", Command: "plan", Tofu: "must-not-execute", Environment: map[string]string{}, IncludedPaths: []string{"live"}})
+	require.NoError(t, err)
+	require.Len(t, result.Inventory, 1)
+	require.Equal(t, "z_good", result.Inventory[0].Name)
+	require.Len(t, result.Failures, 1)
+	require.Equal(t, "live", result.Failures[0].Stack)
+	require.Equal(t, "a_broken", result.Failures[0].Name)
+	problem := asProblem(t, result.Failures[0].Err)
+	require.Equal(t, `errors.retry "x"`, problem.Key)
+}
+
+// stackProject writes a module, a catalog unit pointing at it, and the given files.
+func stackProject(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	module := filepath.Join(root, "modules", "unit")
+	source, err := json.Marshal(filepath.ToSlash(module))
+	require.NoError(t, err)
+	files["modules/unit/main.tf"] = "terraform {}\n"
+	files["catalog/units/app/terragrunt.hcl"] = "terraform { source = " + string(source) + " }\n"
+	for name, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	return root
+}
+
+func inventoryNames(t *testing.T, result *model.Resolution) []string {
+	t.Helper()
+	names := make([]string, 0, len(result.Inventory))
+	for _, unit := range result.Inventory {
+		names = append(names, unit.Stack+"/"+unit.Name)
+	}
+	return names
+}
+
+func TestDiscoveryPreservesExpandedInstanceIdentities(t *testing.T) {
+	root := stackProject(t, map[string]string{"live/terragrunt.stack.hcl": `
+unit "aurora" {
+  expansion {
+    for_each = toset(["web", "api"])
+  }
+  source = "../catalog/units/app"
+  path   = "aurora/${each.key}"
+}
+
+unit "shard" {
+  expansion {
+    count = 2
+  }
+  source = "../catalog/units/app"
+  path   = "shard/${count.index}"
+}
+
+unit "vpc" {
+  source = "../catalog/units/app"
+  path   = "vpc"
+}
+`})
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/aurora/api", "live/aurora/web", "live/shard/0", "live/shard/1", "live/vpc"}, inventoryNames(t, result))
+	paths := map[string]bool{}
+	for _, unit := range result.Inventory {
+		paths[unit.Config.Path] = true
+	}
+	require.Len(t, paths, 5, "each expansion element keeps its own generated unit")
+}
+
+func TestInstanceIdentityRejectsUnrepresentableKeys(t *testing.T) {
+	id, err := instanceIdentity("unit", "app", "", false)
+	require.NoError(t, err)
+	require.Equal(t, "app", id, "unexpanded blocks keep their label")
+	id, err = instanceIdentity("unit", "app", "web", true)
+	require.NoError(t, err)
+	require.Equal(t, "app/web", id)
+	for _, key := range []string{"", ".", "..", "a/b", `a\b`} {
+		_, err := instanceIdentity("stack", "app", key, true)
+		require.ErrorContains(t, err, "unsupported stack expansion key", key)
+	}
+}
+
+// Generation must not materialize stack files that the selected stack does not
+// declare, including excluded stack files nested under its directory.
+func TestStackGenerationIsScopedToDeclaredStacks(t *testing.T) {
+	root := stackProject(t, map[string]string{
+		"live/terragrunt.stack.hcl": `
+unit "app" {
+  source = "../catalog/units/app"
+  path   = "app"
+}
+`,
+		// Undeclared and excluded: generating it would fail on the missing value.
+		"live/other/terragrunt.stack.hcl": `
+unit "app" {
+  source = values.missing
+  path   = "app"
+}
+`,
+	})
+	request := model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, ExcludedPaths: []string{"live/other/**"}, Environment: map[string]string{}}
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/app"}, inventoryNames(t, result))
+	require.NoDirExists(t, filepath.Join(root, "live", ".terragrunt-stack"), "discovery generates only into its overlay")
+
+	request.ExcludedPaths = nil
+	result, err = Resolve(t.Context(), request)
+	require.NoError(t, err, "a broken stack is reported as a failure of its own, not of the whole discovery")
+	require.Equal(t, []string{"live/app"}, inventoryNames(t, result))
+	require.Len(t, result.Failures, 1, "an included broken stack is still reported")
+	require.Equal(t, "live/other", result.Failures[0].Stack)
+}
+
+// A unit that a stack generates beside its stack file belongs to that stack; a
+// copy already on disk must not be discovered again as a standalone unit.
+func TestDiscoverySkipsStackOwnedGeneratedUnits(t *testing.T) {
+	root := stackProject(t, map[string]string{
+		"live/terragrunt.stack.hcl": `
+unit "app" {
+  source = "../catalog/units/app"
+  path   = "app"
+  no_dot_terragrunt_stack = true
+}
+`,
+		"live/standalone/terragrunt.hcl": "",
+	})
+	module, err := json.Marshal(filepath.ToSlash(filepath.Join(root, "modules", "unit")))
+	require.NoError(t, err)
+	unit := "terraform { source = " + string(module) + " }\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, "live", "standalone", "terragrunt.hcl"), []byte(unit), 0o644))
+	// Materialized by an earlier `terragrunt stack generate`.
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "live", "app"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "live", "app", "terragrunt.hcl"), []byte(unit), 0o644))
+
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/app", "live/standalone"}, inventoryNames(t, result))
+	require.Equal(t, filepath.Join(root, "live", "terragrunt.stack.hcl"), result.Inventory[0].GenerationRoot, "the stack owns the generated unit")
+	require.Empty(t, result.Inventory[1].GenerationRoot)
+}
+
+// Inject errors during evaluation, after discovery has begun, without global
+// parser hooks or timing-dependent cancellation goroutines.
+func TestDiscoveryEvaluationErrors(t *testing.T) {
+	for _, stage := range []string{"generation", "stack", "unit", "child stack", "child unit"} {
+		for _, cause := range []error{context.Canceled, context.DeadlineExceeded, errors.New("invalid unit")} {
+			t.Run(stage+"/"+cause.Error(), func(t *testing.T) {
+				root, err := filepath.EvalSymlinks(t.TempDir())
+				require.NoError(t, err)
+				first := filepath.Join(root, "a", "terragrunt.stack.hcl")
+				if stage == "unit" {
+					first = filepath.Join(root, "a", "terragrunt.hcl")
+				}
+				later := filepath.Join(root, "z", "terragrunt.hcl")
+				for _, path := range []string{first, later} {
+					require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+					require.NoError(t, os.WriteFile(path, nil, 0o644))
+				}
+				child := filepath.Join(root, "generated", "terragrunt.hcl")
+				if stage == "child stack" {
+					child = filepath.Join(root, "generated", "terragrunt.stack.hcl")
+				}
+				failed, continued := false, false
+				evaluate := func(_ context.Context, req model.Request, _ afero.Fs) (*model.Resolution, error) {
+					if req.Path == later {
+						continued = true
+						return &model.Resolution{Path: later, Source: "module"}, nil
+					}
+					target := req.Path == child || (req.Path == first && (stage == "unit" || (stage == "generation" && req.Command == "generate") || (stage == "stack" && req.Command != "generate")))
+					if target {
+						failed = true
+						return nil, fmt.Errorf("evaluating %s: %w", req.Path, cause)
+					}
+					result := &model.Resolution{}
+					if req.Command != "generate" {
+						if stage == "child stack" {
+							result.StackConfigs = map[string]string{"child": child}
+							result.StackSources = map[string]string{"child": filepath.Join(root, "catalog")}
+							result.Stacks = map[string]string{"child": "child"}
+						} else if stage == "child unit" {
+							result.UnitConfigs = map[string]string{"child": child}
+							result.UnitSources = map[string]string{"child": filepath.Join(root, "catalog")}
+						}
+					}
+					return result, nil
+				}
+				result, err := discoverProjectWithResolver(t.Context(), model.Request{BasePath: root}, evaluate)
+				require.True(t, failed, "must reach the intended evaluation failure")
+				if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+					require.ErrorIs(t, err, cause)
+					require.Nil(t, result, "canceled discovery must not return partial inventory")
+					require.False(t, continued, "must stop before evaluating subsequent units")
+				} else {
+					require.NoError(t, err)
+					require.True(t, continued)
+					require.Len(t, result.Failures, 1)
+					require.Len(t, result.Inventory, 1)
+					require.Equal(t, later, result.Inventory[0].Config.Path)
+				}
+			})
+		}
+	}
+}
+
+func TestDiscoveryContextCanceledDuringEvaluation(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "terragrunt.hcl"), nil, 0o644))
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result, err := discoverProjectWithResolver(ctx, model.Request{BasePath: root}, func(context.Context, model.Request, afero.Fs) (*model.Resolution, error) {
+		cancel()
+		return &model.Resolution{}, nil
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, result)
 }

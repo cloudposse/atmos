@@ -27,6 +27,12 @@ const configurationPlanSuffix = ".atmos.json"
 // configurationPlanVersion is bumped whenever the stored binding changes shape.
 const configurationPlanVersion = 3
 
+// subcommandPlan names the Terraform plan command.
+const subcommandPlan = "plan"
+
+// planBindingSuffix names the binding of a default saved plan, which Atmos writes as "*.planfile".
+const planBindingSuffix = ".planfile" + configurationPlanSuffix
+
 // configurationPlan is the private record stored beside a saved plan. It binds the plan to the
 // exact preparation it was made from. Evaluated inputs and backend settings are not stored:
 // the plan file already embodies the inputs, and the backend is re-resolved at apply time and
@@ -39,8 +45,14 @@ const configurationPlanVersion = 3
 type configurationPlan struct {
 	Version                                                                               int
 	Stack, Component, Identity, EngineDigest, PlanDigest, WorkingDirectory, WorkingDigest string
-	BackendDigest, RebuildDigest, LockDigest                                              string
-	Prepared                                                                              *schema.PreparedComponentConfiguration
+	// WorkingIdentity binds a relative working_directory override to its checkout-relative location.
+	// Older records omit it and remain bound to their original absolute directory.
+	WorkingIdentity                          string
+	BackendDigest, RebuildDigest, LockDigest string
+	// Modules records that the reviewed workdir held downloaded child modules, which RebuildDigest covers.
+	// A rebuild downloads them again before verification. Older records omit it.
+	Modules  bool `json:",omitempty"`
+	Prepared *schema.PreparedComponentConfiguration
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -58,10 +70,10 @@ func usesConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
 }
 
 // dropCIPlanLocation forgets the plan path the CI download hook records while it fetches a stored
-// plan for `deploy`. Every way a user names a plan to apply also sets UseTerraformPlan, so a PlanFile
-// that comes with a StoredPlanFile and no UseTerraformPlan is only the place the hook looked.
+// plan for `deploy`. An apply may have an explicitly supplied PlanFile even when
+// UseTerraformPlan is false, so only deploy's hook path is discarded.
 func dropCIPlanLocation(info *schema.ConfigAndStacksInfo) {
-	if info.PlanFile != "" && !info.UseTerraformPlan && info.StoredPlanFile != "" {
+	if info.SubCommand == "deploy" && info.PlanFile != "" && !info.UseTerraformPlan && info.StoredPlanFile != "" {
 		info.PlanFile = ""
 	}
 }
@@ -115,6 +127,13 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	if err != nil {
 		return nil, nil, err
 	}
+	if plan.WorkingIdentity != "" {
+		workdir := filepath.Clean(ConstructTerraformComponentWorkingDir(config, info))
+		if relativeWorkdirIdentity(config, info, workdir) != plan.WorkingIdentity {
+			return nil, nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+		}
+		plan.WorkingDirectory = workdir
+	}
 	if err := verifyReviewedArtifacts(ctx, config, info, plan, path); err != nil {
 		return nil, nil, err
 	}
@@ -127,6 +146,7 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	if err != nil {
 		return nil, nil, err
 	}
+	info.ConfigurationPlanImplicit = info.ConfigurationPlanImplicit || info.PlanFile == ""
 	info.UseTerraformPlan = true
 	info.PlanFile = absolute
 	return plan.Prepared, rebuild, nil
@@ -282,7 +302,7 @@ func recordConfigurationPlan(ctx context.Context, config *schema.AtmosConfigurat
 	if err != nil {
 		return err
 	}
-	plan, err := newConfigurationPlan(info, execCtx, identity, path)
+	plan, err := newConfigurationPlan(config, info, execCtx, identity, path)
 	if err != nil {
 		return err
 	}
@@ -302,7 +322,7 @@ func recordedPlanPath(info *schema.ConfigAndStacksInfo, execCtx *componentExecCo
 }
 
 // newConfigurationPlan binds the identity to the digests of the plan, engine, and working directory.
-func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, identity, path string) (*configurationPlan, error) {
+func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, identity, path string) (*configurationPlan, error) {
 	planDigest, err := fileDigest(path)
 	if err != nil {
 		return nil, err
@@ -334,7 +354,48 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: rebuildDigest, LockDigest: lock, Prepared: &stored}, nil
+	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: rebuildDigest, LockDigest: lock, Modules: hasDownloadedModules(execCtx.workingDir), Prepared: &stored}, nil
+}
+
+// relativeWorkdirIdentity is set only when an explicit relative override actually resolves
+// beneath the checkout root. Absolute and legacy workdirs retain exact-path verification.
+func relativeWorkdirIdentity(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workdir string) string {
+	if config == nil || info == nil {
+		return ""
+	}
+	override := workingDirectoryOverride(info)
+	if override == "" || filepath.IsAbs(override) {
+		return ""
+	}
+	base, err := filepath.Abs(config.BasePath)
+	if err != nil {
+		return ""
+	}
+	actual, err := filepath.Abs(workdir)
+	if err != nil {
+		return ""
+	}
+	relative, err := filepath.Rel(base, actual)
+	if err != nil || !matchesRelativeWorkdir(relative, override) {
+		return ""
+	}
+	return "relative:" + filepath.ToSlash(relative)
+}
+
+func matchesRelativeWorkdir(relative, override string) bool {
+	return relative != "." && relative != ".." &&
+		!strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
+		relative == filepath.Clean(override)
+}
+
+func workingDirectoryOverride(info *schema.ConfigAndStacksInfo) string {
+	for _, section := range []string{"metadata", "settings"} {
+		values, _ := info.ComponentSection[section].(map[string]any)
+		if value, ok := values["working_directory"].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // withoutSensitiveContent copies files, dropping the bytes of every sensitive one.
@@ -355,7 +416,7 @@ func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurati
 	}
 	root, err := os.OpenRoot(workdir)
 	if err != nil {
-		return err
+		return planIOError(err)
 	}
 	defer root.Close()
 	for i := range files {
@@ -381,34 +442,15 @@ func backendIdentityDigest(backend map[string]any) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func plannedOutputPath(directory string, args []string) string {
-	for i, arg := range args {
-		path := ""
-		if arg == "-out" && i+1 < len(args) {
-			path = args[i+1]
-		}
-		if strings.HasPrefix(arg, "-out=") {
-			path = strings.TrimPrefix(arg, "-out=")
-		}
-		if path != "" {
-			if filepath.IsAbs(path) {
-				return path
-			}
-			return filepath.Join(directory, path)
-		}
-	}
-	return ""
-}
-
 func fileDigest(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", planIOError(err)
 	}
 	defer file.Close()
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
-		return "", err
+		return "", planIOError(err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
@@ -416,17 +458,25 @@ func fileDigest(path string) (string, error) {
 func writePlanBinding(path string, data []byte) error {
 	file, err := os.CreateTemp(filepath.Dir(path), ".atmos-plan-*")
 	if err != nil {
-		return err
+		return planIOError(err)
 	}
 	defer os.Remove(file.Name())
 	if _, err := file.Write(data); err != nil {
 		file.Close()
-		return err
+		return planIOError(err)
 	}
 	if err := file.Close(); err != nil {
-		return err
+		return planIOError(err)
 	}
-	return os.Rename(file.Name(), path)
+	if err := os.Rename(file.Name(), path); err != nil {
+		return planIOError(err)
+	}
+	return nil
+}
+
+// planIOError wraps a saved-plan filesystem failure while keeping the underlying cause.
+func planIOError(err error) error {
+	return fmt.Errorf("%w: %w", errUtils.ErrPlanVerificationFailed, err)
 }
 
 // verifyConfigurationPlanState rejects a changed backend without reading dependency outputs.
@@ -476,7 +526,7 @@ func workdirDigest(root, planPath string, ignore func(relative string) bool) (st
 			}
 			return nil
 		}
-		if ignoredWorkdirFile(path, planPath, entry.Name()) || ignoredRelative(root, path, ignore) {
+		if skipWorkdirFile(root, path, planPath, entry.Name(), ignore) {
 			return nil
 		}
 		return recordWorkdirFile(root, path, entry, files)
@@ -490,6 +540,13 @@ func workdirDigest(root, planPath string, ignore func(relative string) bool) (st
 	}
 	digest := sha256.Sum256(data)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+func skipWorkdirFile(root, path, planPath, name string, ignore func(string) bool) bool {
+	if path == planPath || path == planPath+configurationPlanSuffix || insideTerraformCacheOutsideModules(root, path) {
+		return true
+	}
+	return (!insideTerraformModules(root, path) && ignoredWorkdirFile(path, planPath, name)) || ignoredRelative(root, path, ignore)
 }
 
 // ignoredRelative applies a caller's filter to the slash-separated path relative to root.
@@ -529,8 +586,46 @@ func resolvedPath(path string) (string, error) {
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
 // The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
 // that even a read-only lookup of the retained directory creates), never executed content.
+// Name-based exclusions apply only outside downloaded modules: a module's own subdirectories
+// are content Terraform may execute during apply, whatever they are called.
 func skipWorkdirDirectory(root, path, name string) bool {
-	return path != root && (name == ".terraform" || name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
+	if path == root {
+		return false
+	}
+	if insideTerraformCacheOutsideModules(root, path) {
+		return true
+	}
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
+}
+
+// Terraform's downloaded modules can contain scripts executed during apply. Other cache
+// content, including providers and state, remains mutable and is excluded.
+func insideTerraformCacheOutsideModules(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(relative, string(filepath.Separator))
+	for i, part := range parts {
+		if part == ".terraform" && i+1 < len(parts) && parts[i+1] != "modules" {
+			return true
+		}
+	}
+	return false
+}
+
+func insideTerraformModules(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(relative, string(filepath.Separator))
+	for i, part := range parts {
+		if part == ".terraform" && i+1 < len(parts) && parts[i+1] == "modules" {
+			return true
+		}
+	}
+	return false
 }
 
 // ignoredWorkdirFile reports whether a file is a plan, its binding, or mutable state. Plan files are
@@ -538,7 +633,7 @@ func skipWorkdirDirectory(root, path, name string) bool {
 // still lying in the directory, the stored plan `deploy` downloads for comparison, and the fresh
 // plan it generates.
 func ignoredWorkdirFile(path, planPath, name string) bool {
-	return path == planPath || strings.HasSuffix(name, configurationPlanSuffix) || strings.HasSuffix(name, ".planfile") ||
+	return path == planPath || strings.HasSuffix(name, planBindingSuffix) || strings.HasSuffix(name, ".planfile") ||
 		name == ciplanfile.StoredPlanPrefix+ciplanfile.PlanFilename || name == freshPlanName ||
 		strings.HasPrefix(name, ".atmos-plan-") || strings.HasPrefix(name, "terraform.tfstate")
 }
@@ -571,12 +666,17 @@ func finishConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Con
 	if !ownsConfigurationPlan(info) || info.DryRun {
 		return
 	}
+	// A CI exit-code mapping can report a failed apply as success. The subprocess's own status
+	// decides, so a plan whose apply failed (for example on a state lock) can be applied again.
+	if info.ExecMetadataRawExitCode != 0 {
+		return
+	}
 	if _, changes := stateChangingSubcommands[info.SubCommand]; !changes {
 		return
 	}
 	canonical := ConstructTerraformComponentPlanfilePath(config, info)
 	// A plan file the user named is theirs even when it is the canonical path, so it is kept.
-	if info.PlanFile == "" || filepath.Clean(configurationPlanPath(config, info)) != filepath.Clean(canonical) {
+	if info.PlanFile == "" || info.ConfigurationPlanImplicit || filepath.Clean(configurationPlanPath(config, info)) != filepath.Clean(canonical) {
 		removeTerraformFile(canonical, "Failed to remove consumed plan file")
 	}
 	removeTerraformFile(canonical+configurationPlanSuffix, "Failed to remove consumed plan record")

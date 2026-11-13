@@ -2,12 +2,15 @@ package terraform
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/terragruntexec"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -23,12 +26,16 @@ type terragruntHost struct {
 	atmosConfig *schema.AtmosConfiguration
 	info        *schema.ConfigAndStacksInfo
 	opts        []component.ExecutionOption
+	lookupErr   error
 }
 
 // Version asks the executable for its version in the same environment the unit will run in.
 func (h *terragruntHost) Version(ctx context.Context, binary string, env []string) (string, error) {
 	defer perf.Track(h.atmosConfig, "terraform.terragruntHost.Version")()
 
+	if h.lookupErr != nil {
+		return "", h.lookupErr
+	}
 	command := exec.CommandContext(ctx, binary, "--version")
 	base := h.info.SanitizedEnv
 	if base == nil {
@@ -81,31 +88,47 @@ func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schem
 			return err
 		}
 	}
+	binary, lookupErr := terragruntExecutable(tenv, info)
+	request := terragruntRequest(atmosConfig, info, binary)
+	err = terragruntexec.Run(ctx, &terragruntHost{executor: e, atmosConfig: atmosConfig, info: info, opts: opts, lookupErr: lookupErr}, request)
+	info.ExecMetadataRawExitCode = resolveExitCode(err)
+	if !info.DryRun {
+		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
+		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
+	}
+	return e.finishMainTerraformCommand(atmosConfig, info, err, false)
+}
+
+func terragruntExecutable(tenv *dependencies.ToolchainEnvironment, info *schema.ConfigAndStacksInfo) (string, error) {
 	binary := terragruntTool
 	if tenv != nil {
-		binary = tenv.Resolve(binary)
+		if pinned, ok := tenv.ResolvePinned(binary); ok {
+			binary = pinned
+		}
 	}
+	if filepath.IsAbs(binary) {
+		return binary, nil
+	}
+	resolved, err := resolveTerragruntPath(binary, info.SanitizedEnv, info.ComponentEnvList)
+	if err != nil {
+		return binary, err
+	}
+	return resolved, nil
+}
+
+func terragruntRequest(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, binary string) *terragruntexec.Request {
 	configuration, _ := info.ComponentSettingsSection["configuration"].(map[string]any)
 	unit, _ := configuration["source"].(string)
 	provider, _ := configuration["provider"].(string)
 	section := providerSection(atmosConfig, provider)
 	features, _ := atmosConfig.Components.Terraform.ConfigurationProviders[section].Options["features"].(map[string]any)
-	request := &terragruntexec.Request{
+	return &terragruntexec.Request{
 		Component: info.ComponentFromArg, Stack: info.Stack, Binary: binary, Engine: info.Command,
 		Unit: unit, Root: atmosConfig.BasePathAbsolute, SubCommand: info.SubCommand, SubCommand2: info.SubCommand2,
 		Arguments: info.AdditionalArgsAndFlags, Options: info.ComponentProviderOptions[section], Features: features,
-		Environment: info.ComponentEnvList, DryRun: info.DryRun, SkipInit: info.SkipInit,
+		Environment: info.ComponentEnvList, DryRun: info.DryRun,
+		SkipInit: info.SkipInit || (info.SubCommand == "plan" && atmosConfig.Components.Terraform.EffectiveInitMode() == schema.TerraformInitModeNever),
 	}
-	err = terragruntexec.Run(ctx, &terragruntHost{executor: e, atmosConfig: atmosConfig, info: info, opts: opts}, request)
-	info.ExecMetadataRawExitCode = resolveExitCode(err)
-	if err = e.finishMainTerraformCommand(atmosConfig, info, err, false); err != nil {
-		return err
-	}
-	if !info.DryRun {
-		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
-		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
-	}
-	return nil
 }
 
 // providerSection returns the key under `components.terraform` that enabled the provider.
@@ -120,4 +143,31 @@ func providerSection(atmosConfig *schema.AtmosConfiguration, provider string) st
 		}
 	}
 	return provider
+}
+
+// resolveTerragruntPath searches the same environment passed to the subprocess.
+func resolveTerragruntPath(binary string, base, overrides []string) (string, error) {
+	if base == nil {
+		base = os.Environ()
+	}
+	path, _ := lastEnvListValue(base, "PATH")
+	if value, ok := lastEnvListValue(overrides, "PATH"); ok {
+		path = value
+	}
+	if strings.ContainsAny(binary, `/\`) {
+		return filepath.Abs(binary)
+	}
+	for _, dir := range filepath.SplitList(path) {
+		if dir == "" {
+			continue
+		}
+		candidate, err := filepath.Abs(filepath.Join(dir, binary))
+		if err != nil {
+			continue
+		}
+		if resolved, err := exec.LookPath(candidate); err == nil {
+			return resolved, nil
+		}
+	}
+	return "", fmt.Errorf("%s: %w", binary, exec.ErrNotFound)
 }

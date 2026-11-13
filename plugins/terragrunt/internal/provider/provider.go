@@ -178,13 +178,15 @@ func applyOptions(env map[string]string, options map[string]*pluginv1.ComponentV
 		if !known {
 			return nil, optionProblem(name, "Check the option name against the package's declared options.")
 		}
-		var value any
-		if err := decode(options[name], &value); err != nil {
+		var text string
+		if name == "iam_assume_role_duration" {
+			var value int
+			if err := decode(options[name], &value); err != nil {
+				return nil, optionProblem(name, "The value has an unexpected type.")
+			}
+			text = fmt.Sprint(value)
+		} else if err := decode(options[name], &text); err != nil {
 			return nil, optionProblem(name, "The value has an unexpected type.")
-		}
-		text := fmt.Sprint(value)
-		if number, isNumber := value.(json.Number); isNumber {
-			text = number.String()
 		}
 		env[variable] = text
 	}
@@ -196,7 +198,7 @@ func optionProblem(name, hint string) *model.Problem {
 }
 
 func operation(root, name string, op *pluginv1.ComponentOperation, invocation *pluginv1.Invocation) (model.Request, error) {
-	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || (op.Mode != ModeNative && op.Mode != ModeExecutable) {
+	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || (op.Mode != ModeNative && op.Mode != ModeExecutable && op.Mode != "iam-probe") {
 		return model.Request{}, ErrUnsupported
 	}
 	env := maps.Clone(invocation.GetEnvironment())
@@ -211,11 +213,17 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 	if binary == "" {
 		binary = "terraform"
 	}
-	return model.Request{BasePath: root, Mode: ModeNative, Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env, Features: features}, nil
+	request := model.Request{BasePath: root, Mode: ModeNative, Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env, Features: features}
+	if op.Mode == "iam-probe" {
+		request.Phase = "iam"
+	}
+	return request, nil
 }
 
 func engineName(binary string) string {
-	if engine.IsOpenTofu(binary) {
+	// Match the host's executable-name detection, which treats any basename containing
+	// "tofu", case-insensitively, as OpenTofu.
+	if strings.Contains(strings.ToLower(filepath.Base(binary)), "tofu") {
 		return "opentofu"
 	}
 	return "terraform"
@@ -258,19 +266,19 @@ func sources(root string, resolved *model.Resolution) ([]*pluginv1.ComponentSour
 
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
 func (p *Provider) Validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
-	response, err := p.validate(ctx, request)
-	return response, scoped(err, "validate", request.GetRootDirectory(), request.GetAddress())
-}
-
-func (p *Provider) validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, rpcError(err)
-	}
-	if _, err := operation(request.GetRootDirectory(), request.GetProvider(), request.GetOperation(), request.GetInvocation()); err != nil {
-		return nil, rpcError(err)
-	}
-	if err := settings(request.GetProviderConfiguration()); err != nil {
-		return nil, rpcError(err)
+	if err := validate(ctx, request); err != nil {
+		return nil, scoped(rpcError(err), "validate", request.GetRootDirectory(), request.GetAddress())
 	}
 	return &pluginv1.ValidateResponse{}, nil
+}
+
+// validate returns the unconverted cause so callers map it to a status code exactly once.
+func validate(ctx context.Context, request *pluginv1.ComponentRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := operation(request.GetRootDirectory(), request.GetProvider(), request.GetOperation(), request.GetInvocation()); err != nil {
+		return err
+	}
+	return settings(request.GetProviderConfiguration())
 }

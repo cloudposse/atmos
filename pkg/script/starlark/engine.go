@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/api"
+	"github.com/cloudposse/atmos/pkg/browser"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -35,6 +36,7 @@ import (
 
 // Engine contains immutable host services shared by independent invocations.
 type Engine struct {
+	browser    browser.Opener
 	gitRunner  atmosgit.Runner
 	schemaHTTP *http.Client
 	filesystem api.FileSystem
@@ -83,7 +85,7 @@ func WithTaskObserver(observe func(TaskEvent)) Option {
 func New(opts ...Option) *Engine {
 	defer perf.Track(nil, "starlark.New")()
 
-	e := &Engine{schemaHTTP: &http.Client{}, filesystem: api.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, writeFile: atomicWriteFile, executable: os.Executable}
+	e := &Engine{browser: browser.New(), schemaHTTP: &http.Client{}, filesystem: api.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, writeFile: atomicWriteFile, executable: os.Executable}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -310,6 +312,7 @@ func (s *session) predeclared() starlark.StringDict {
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
 		"cast":         s.castModule(),
+		"browser":      s.browserModule(),
 		"digest":       digestmodule.New(),
 		"os": module("os", starlark.StringDict{
 			"arch":     starlark.String(runtime.GOARCH),

@@ -77,13 +77,12 @@ func preparedExclusion(source *pluginv1.ComponentExclude) *schema.ComponentExclu
 // discovery, because discovery handed it to the host as the component's `command`. A difference
 // means the unit's configuration changed between the two evaluations.
 func checkTerraformBinary(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent, binary string) error {
-	if binary == "" {
-		return nil
-	}
 	discovered, err := adapter.DecodeObject(instance.Configuration)
 	if err != nil {
 		return err
 	}
+	// A terraform_binary removed after discovery is a change too: the host would otherwise keep
+	// running the executable discovery selected.
 	command, _ := discovered["command"].(string)
 	if command == binary {
 		return nil
@@ -96,9 +95,9 @@ func checkTerraformBinary(info *schema.ConfigAndStacksInfo, instance *pluginv1.D
 }
 
 // warnDiagnostics prints the provider's warnings about a unit and never fails the command.
-func warnDiagnostics(diagnostics []*pluginv1.Diagnostic) {
+func warnDiagnostics(diagnostics []*pluginv1.Diagnostic, warnings *adapter.WarningDeduper) {
 	for _, diagnostic := range diagnostics {
-		adapter.WarnDiagnostic(diagnostic)
+		adapter.WarnDiagnostic(diagnostic, warnings)
 	}
 }
 
@@ -115,6 +114,11 @@ func applyParity(prepared *schema.PreparedComponentConfiguration, result *plugin
 			prepared.Execution = &schema.ComponentExecution{}
 		}
 		prepared.Execution.Errors = policies
+		// The unit's errors block is evaluated once, so a saved plan applied with the
+		// apply-time metadata keeps the same retry and ignore policies.
+		if prepared.Execution.Apply != nil {
+			prepared.Execution.Apply.Errors = policies
+		}
 	}
 	prepared.TerraformBinary = result.GetTerraformBinary()
 	prepared.Exclusion = preparedExclusion(result.GetExclude())

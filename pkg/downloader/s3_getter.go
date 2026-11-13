@@ -19,3 +19,10 @@ func WithAWSAuthContext(ctx context.Context, auth *schema.AWSAuthContext) contex
 	defer perf.Track(nil, "downloader.WithAWSAuthContext")()
 	return s3source.WithAuthContext(ctx, auth)
 }
+
+// WithAWSSession scopes a component's assumed AWS session to its source downloads. The session takes
+// precedence over an Atmos auth context, because the role is assumed on top of it.
+func WithAWSSession(ctx context.Context, session map[string]string) context.Context {
+	defer perf.Track(nil, "downloader.WithAWSSession")()
+	return s3source.WithSession(ctx, session)
+}

@@ -559,6 +559,45 @@ func TestResolveAndProvisionComponentPath_MissingWithoutGenerationFails(t *testi
 	require.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
 }
 
+// TestResolveAndProvisionComponentPath_DryRunMissingPath verifies a dry run rejects a missing plain
+// local component, and accepts a missing directory only when a skipped step would have created it.
+func TestResolveAndProvisionComponentPath_DryRunMissingPath(t *testing.T) {
+	originalProvisioner := provisionAndResolveTerraformComponentPath
+	t.Cleanup(func() { provisionAndResolveTerraformComponentPath = originalProvisioner })
+
+	componentDir := filepath.Join(t.TempDir(), "missing")
+	provisionAndResolveTerraformComponentPath = func(_ context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, _ string) (string, bool, error) {
+		return componentDir, false, nil
+	}
+
+	tests := []struct {
+		name     string
+		section  map[string]any
+		generate bool
+		wantErr  bool
+	}{
+		{name: "plain local component", section: map[string]any{}, wantErr: true},
+		{name: "JIT source", section: map[string]any{"source": "github.com/org/repo//modules/vpc"}},
+		{name: "workdir", section: map[string]any{"provision": map[string]any{"workdir": map[string]any{"enabled": true}}}},
+		{name: "generated files", section: map[string]any{"generate": map[string]any{"main.tf": "# generated"}}, generate: true},
+		{name: "generate section without auto-generation", section: map[string]any{"generate": map[string]any{"main.tf": "# generated"}}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir()}
+			atmosConfig.Components.Terraform.AutoGenerateFiles = tt.generate
+			info := schema.ConfigAndStacksInfo{FinalComponent: "missing", DryRun: true, ComponentSection: tt.section}
+
+			_, err := NewExecutor(Services{}).resolveAndProvisionComponentPath(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // handleDeploySubcommand
 // ──────────────────────────────────────────────────────────────────────────────
@@ -805,6 +844,19 @@ func TestTerraformSensitiveDeclaredVars_NeverHitDisk(t *testing.T) {
 	env, err := SecretVarEnv(info)
 	require.NoError(t, err)
 	assert.Contains(t, strings.Join(env, "\n"), "TF_VAR_sensitive_value=ordinary-resolved-value")
+}
+
+func TestPreparedSensitiveEmptyInputNeverHitsVarfile(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection:       map[string]any{"password": "", "region": "us-east-1"},
+		PreparedSensitiveInputKeys: map[string]bool{"password": true},
+	}
+	ComputeTerraformSecretVarKeys(info)
+	require.True(t, info.TerraformSecretVarKeys["password"])
+	assert.NotContains(t, diskSafeVars(info), "password")
+	env, err := SecretVarEnv(info)
+	require.NoError(t, err)
+	assert.Contains(t, env, "TF_VAR_password=")
 }
 
 func TestTerraformSensitiveDeclaredVars_MaskingDisabledPreservesJSONCompatibility(t *testing.T) {

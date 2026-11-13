@@ -2,17 +2,20 @@ package configuration
 
 import (
 	"context"
-	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -46,7 +49,12 @@ func TestImportedUnitsBecomeComponentsOfTheImportingStack(t *testing.T) {
 		require.Equal(t, []string{"terragrunt://live"}, req.Imports)
 		require.Nil(t, req.Effects)
 		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil
-	})
+	}).Times(2) // The import, then the dependency recheck that preparation runs under its own environment.
+	// The recheck confirms the output dependency still reads the state it was discovered with.
+	provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		require.Equal(t, network.Source, req.Source)
+		return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local"}}, nil
+	}).Times(2)
 	loads := 0
 	session, err := New(t.Context(), importOnlyConfig(t), "list", func(_ context.Context, names []string) (map[string]Provider, error) {
 		loads++
@@ -69,6 +77,8 @@ func TestImportedUnitsBecomeComponentsOfTheImportingStack(t *testing.T) {
 	appConfig := first["app"].(map[string]any)
 	require.Equal(t, []any{map[string]any{"name": "network", "kind": "terraform"}}, appConfig["dependencies"].(map[string]any)["components"], "an imported unit depends on its siblings in the importing stack")
 	require.Equal(t, "live/app/terragrunt.hcl", appConfig["settings"].(map[string]any)["configuration"].(map[string]any)["source"])
+	appConfig["settings"].(map[string]any)["configuration"].(map[string]any)["source"] = "corrupt"
+	require.Equal(t, "live/app/terragrunt.hcl", second["app"].(map[string]any)["settings"].(map[string]any)["configuration"].(map[string]any)["source"])
 	first["app"] = "corrupt"
 	require.IsType(t, map[string]any{}, second["app"])
 
@@ -115,6 +125,43 @@ func TestImportedUnitsAreNotAlsoDiscoveredInADerivedStack(t *testing.T) {
 	require.Contains(t, derived, "db")
 	_, _, err = session.ImportComponents(t.Context(), "terragrunt://late")
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig, "imports after discovery would be silently ignored")
+}
+
+// A discovered unit and an imported unit with another source that claim one stack and component
+// are a conflict: preparation names both sources instead of running either unit.
+func TestDiscoveredAndImportedUnitAtOneAddressConflict(t *testing.T) {
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	catalog := unit(t, "db")
+	catalog.Source = "catalog/db/terragrunt.hcl"
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		if len(req.Imports) > 0 {
+			return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{catalog}}, nil
+		}
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app"), unit(t, "db")}}, nil
+	}).Times(2)
+	config := enabledConfig(t)
+	directories(t, config.BasePathAbsolute, "catalog")
+	session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	_, _, err = session.ImportComponents(t.Context(), "terragrunt://catalog")
+	require.NoError(t, err)
+	_, err = session.Discover(t.Context())
+	require.NoError(t, err)
+
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "db", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": catalog.Source}}}
+	_, err = session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
+	require.ErrorContains(t, err, "live/db/terragrunt.hcl")
+	require.ErrorContains(t, err, "catalog/db/terragrunt.hcl")
+
+	// Without a competing import, the discovered unit is still found at its address.
+	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"source": "live/db/terragrunt.hcl"}}
+	instance, err := session.instanceFor(info)
+	require.NoError(t, err)
+	require.Equal(t, "live/db/terragrunt.hcl", instance.Source)
 }
 
 func TestImportOfUnitsWithTheSameNameFails(t *testing.T) {
@@ -232,15 +279,15 @@ func TestImportConflictsRejectOnlyDifferentUnits(t *testing.T) {
 		return map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": source}}}
 	}
 	fragment := func(name string, component map[string]any) map[string]any {
-		return ImportFragment(map[string]any{name: component})
+		return configuration.ImportFragment(map[string]any{name: component})
 	}
 	yaml := map[string]any{"components": map[string]any{"terraform": map[string]any{"vpc": map[string]any{"vars": map[string]any{"a": 1}}}}}
 
-	require.NoError(t, CheckImportConflicts("stacks/dev.yaml", nil))
-	require.NoError(t, CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("vpc", unitComponent("live/vpc/terragrunt.hcl")), fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))}), "the same unit imported twice is one component")
-	require.NoError(t, CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("app", unitComponent("live/app/terragrunt.hcl")), yaml}))
+	require.NoError(t, configuration.CheckImportConflicts("stacks/dev.yaml", nil))
+	require.NoError(t, configuration.CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("vpc", unitComponent("live/vpc/terragrunt.hcl")), fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))}), "the same unit imported twice is one component")
+	require.NoError(t, configuration.CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("app", unitComponent("live/app/terragrunt.hcl")), yaml}))
 
-	err := CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("vpc", unitComponent("live/dev/vpc/terragrunt.hcl")), fragment("vpc", unitComponent("live/prod/vpc/terragrunt.hcl"))})
+	err := configuration.CheckImportConflicts("stacks/dev.yaml", []map[string]any{fragment("vpc", unitComponent("live/dev/vpc/terragrunt.hcl")), fragment("vpc", unitComponent("live/prod/vpc/terragrunt.hcl"))})
 	require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
 	require.ErrorContains(t, err, "live/dev/vpc/terragrunt.hcl")
 	require.ErrorContains(t, err, "live/prod/vpc/terragrunt.hcl")
@@ -251,15 +298,15 @@ func TestImportConflictsRejectOnlyDifferentUnits(t *testing.T) {
 		{yaml, fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))},
 		{fragment("vpc", unitComponent("live/vpc/terragrunt.hcl")), yaml, fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))},
 	} {
-		require.NoError(t, CheckImportConflicts("stacks/dev.yaml", configs))
+		require.NoError(t, configuration.CheckImportConflicts("stacks/dev.yaml", configs))
 	}
 }
 
 func TestOwnsComponentRecognizesProviderSections(t *testing.T) {
 	owned := map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}}
-	require.True(t, OwnsComponent(owned))
-	require.False(t, OwnsComponent(map[string]any{"settings": map[string]any{"team": "platform"}}))
-	require.False(t, OwnsComponent(nil))
+	require.True(t, configuration.OwnsComponent(owned))
+	require.False(t, configuration.OwnsComponent(map[string]any{"settings": map[string]any{"team": "platform"}}))
+	require.False(t, configuration.OwnsComponent(nil))
 }
 
 // An explicit import of a configured provider whose settings are invalid reports the setting and
@@ -284,49 +331,200 @@ func TestImportOfAProviderWithInvalidSettingsReportsTheSetting(t *testing.T) {
 	require.False(t, handled)
 }
 
-// importStub serves provider imports without the rest of the runtime.
-type importStub struct {
-	schema.ComponentConfigurationRuntime
-	imports []string
-	err     error
-}
-
-func (r *importStub) ImportComponents(_ context.Context, uri string) (map[string]any, bool, error) {
-	r.imports = append(r.imports, uri)
-	unit := map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": "live/app/terragrunt.hcl"}}}
-	return map[string]any{"app": unit}, true, r.err
-}
-
-func TestImportProviderComponentsRouting(t *testing.T) {
-	config := &schema.AtmosConfiguration{}
-	for _, uri := range []string{"ordinary", "https://example.com/config.yaml"} {
-		_, handled, err := ImportProviderComponents(config, uri, &schema.StackImport{})
-		require.NoError(t, err)
-		require.False(t, handled)
-	}
-	_, handled, err := ImportProviderComponents(nil, "terragrunt://live", &schema.StackImport{})
+func TestValidationImportsDoNotChangeRunningDiscovery(t *testing.T) {
+	config := enabledConfig(t)
+	directories(t, config.BasePathAbsolute, "live/app")
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	started, finish := make(chan struct{}), make(chan struct{})
+	app := unit(t, "app")
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		if len(req.Imports) == 0 {
+			close(started)
+			<-finish
+		}
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{app}}, nil
+	}).Times(2)
+	session, err := New(t.Context(), config, "describe affected", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
 	require.NoError(t, err)
-	require.False(t, handled)
-	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {}}
-	_, _, err = ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
-	require.ErrorContains(t, err, "disabled")
-	config.Components.Terraform.ConfigurationProviders["terragrunt"] = schema.ComponentConfiguration{Enabled: true}
-	_, _, err = ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
-	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
-	runtime := &importStub{}
-	config.ComponentConfigurations = runtime
-	for _, declaration := range []schema.StackImport{{Context: map[string]any{"stage": "dev"}}, {SkipIfMissing: true}, {TTL: "1h"}, {NestedImports: "local"}} {
-		_, _, err := ImportProviderComponents(config, "terragrunt://live", &declaration)
-		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	done := make(chan error, 1)
+	go func() { _, err := session.Discover(t.Context()); done <- err }()
+	<-started
+	validation := session.ForValidation().(schema.ComponentConfigurationImportRuntime)
+	var workers sync.WaitGroup
+	for range 10 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			components, handled, err := validation.ImportComponents(t.Context(), "terragrunt://live/app")
+			if err != nil || !handled || components["app"] == nil {
+				t.Errorf("validation import: handled=%v, err=%v, components=%v", handled, err, components)
+			}
+		}()
 	}
-	fragment, handled, err := ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
+	workers.Wait()
+	close(finish)
+	require.NoError(t, <-done)
+	definitions, err := session.Discover(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, definitions["live"]["components"].(map[string]any)["terraform"], "app")
+	require.Empty(t, session.imported, "validation must not register preparation sources")
+	_, _, err = session.ImportComponents(t.Context(), "terragrunt://live/app")
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig, "a validation cache entry does not authorize a late execution import")
+	first, _, err := validation.ImportComponents(t.Context(), "terragrunt://live/app")
+	require.NoError(t, err)
+	first["app"].(map[string]any)["settings"] = "corrupt"
+	again, _, err := validation.ImportComponents(t.Context(), "terragrunt://live/app")
+	require.NoError(t, err)
+	require.IsType(t, map[string]any{}, again["app"].(map[string]any)["settings"])
+	revision, err := session.ForRevision(t.TempDir())
+	require.NoError(t, err)
+	require.Empty(t, revision.(*Session).validationImports)
+}
+
+func TestImportInProgressCancellation(t *testing.T) {
+	for _, phase := range []string{"loader", "discovery"} {
+		for _, origin := range []string{"session", "caller", "deadline"} {
+			t.Run(phase+"/"+origin, func(t *testing.T) {
+				sessionCtx, cancelSession := context.WithCancel(t.Context())
+				defer cancelSession()
+				callerCtx, cancelCaller := context.WithCancel(t.Context())
+				defer cancelCaller()
+				// A generous caller deadline also verifies that composition retains the deadline.
+				deadline := time.Now().Add(time.Minute)
+				if origin == "deadline" {
+					deadline = time.Now().Add(time.Second)
+				}
+				callerCtx, cancelDeadline := context.WithDeadline(callerCtx, deadline)
+				defer cancelDeadline()
+				started := make(chan context.Context, 1)
+				block := func(ctx context.Context) error {
+					started <- ctx
+					<-ctx.Done()
+					return ctx.Err()
+				}
+				provider := NewMockProvider(gomock.NewController(t))
+				if phase == "discovery" {
+					provider.EXPECT().ComponentType().Return("terraform")
+					provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+						return nil, block(ctx)
+					})
+				}
+				session, err := New(sessionCtx, importOnlyConfig(t), "list", func(ctx context.Context, _ []string) (map[string]Provider, error) {
+					if phase == "loader" {
+						return nil, block(ctx)
+					}
+					return map[string]Provider{"terragrunt": provider}, nil
+				})
+				require.NoError(t, err)
+				done := make(chan error, 1)
+				go func() {
+					_, _, err := session.ImportComponents(callerCtx, "terragrunt://live")
+					done <- err
+				}()
+				select {
+				case ctx := <-started:
+					got, ok := ctx.Deadline()
+					require.True(t, ok)
+					require.Equal(t, deadline, got)
+				case <-time.After(5 * time.Second):
+					t.Fatal("import did not reach provider")
+				}
+				switch origin {
+				case "session":
+					cancelSession()
+				case "caller":
+					cancelCaller()
+				}
+				select {
+				case err := <-done:
+					want := context.Canceled
+					if origin == "deadline" {
+						want = context.DeadlineExceeded
+					}
+					require.ErrorIs(t, err, want)
+				case <-time.After(5 * time.Second):
+					t.Fatal("cancellation did not unblock import")
+				}
+				require.Empty(t, session.importResults, "failed imports must not be cached")
+			})
+		}
+	}
+}
+
+// An import waiting for another import of the same URI gives up when its context ends, and never
+// returns the other import's cached units after its own cancellation.
+func TestCanceledImportWaiterDoesNotReturnCachedSuccess(t *testing.T) {
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	started, release := make(chan struct{}), make(chan struct{})
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		close(started)
+		<-release
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil
+	})
+	session, err := New(t.Context(), importOnlyConfig(t), "list", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	first := make(chan error, 1)
+	go func() {
+		_, _, err := session.ImportComponents(t.Context(), "terragrunt://live")
+		first <- err
+	}()
+	<-started
+
+	waiter, cancel := context.WithCancel(t.Context())
+	second := make(chan error, 1)
+	go func() {
+		_, _, err := session.ImportComponents(waiter, "terragrunt://live")
+		second <- err
+	}()
+	cancel()
+	select {
+	case err := <-second:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a canceled waiter must not wait for the in-flight import")
+	}
+	close(release)
+	require.NoError(t, <-first)
+
+	// A later caller with a live context still shares the cached result.
+	components, handled, err := session.ImportComponents(t.Context(), "terragrunt://live")
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
-	require.Contains(t, fragment["components"].(map[string]any)["terraform"], "app")
-	runtime.err = errors.New("registration failed")
-	_, _, err = ImportProviderComponents(config, "terragrunt://live", &schema.StackImport{})
-	require.ErrorIs(t, err, runtime.err)
+	require.Contains(t, components, "app")
 }
 
-// Imported units are merged into the manifest that imports them (and so into every stack that
+// An import path that exists but cannot be inspected keeps its filesystem cause; only a missing
+// path gets the "does not exist" diagnostic.
+func TestImportPathFilesystemFailuresKeepTheirCause(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not block path inspection on Windows")
+	}
+	config := importOnlyConfig(t)
+	locked := filepath.Join(config.BasePathAbsolute, "locked")
+	require.NoError(t, os.MkdirAll(filepath.Join(locked, "unit"), 0o755))
+	require.NoError(t, os.Chmod(locked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if _, err := os.Stat(filepath.Join(locked, "unit")); err == nil {
+		t.Skip("the process bypasses directory permissions")
+	}
+	session, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) {
+		t.Fatal("an unreadable import path must be rejected before the provider runs")
+		return nil, nil
+	})
+	require.NoError(t, err)
+	_, handled, err := session.ImportComponents(t.Context(), "terragrunt://locked/unit")
+	require.True(t, handled)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, fs.ErrPermission)
+	require.NotContains(t, err.Error(), "does not exist")
+
+	_, _, err = session.ImportComponents(t.Context(), "terragrunt://absent")
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "does not exist")
+}

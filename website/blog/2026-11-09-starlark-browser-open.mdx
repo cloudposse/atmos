@@ -1,0 +1,52 @@
+---
+slug: starlark-browser-open
+title: "Open a Browser from Automation Scripts"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+A custom command that starts a local dashboard usually ends by opening it. Doing that portably has meant
+detecting the operating system and shelling out to `open`, `xdg-open`, or `start`, each with its own quoting
+rules and failure modes. Atmos automation scripts can now call
+[`browser.open`](/functions/automation/browser.open) to open a URL in the default browser on any platform.
+
+<!--truncate-->
+
+## The Problem
+
+Opening a URL is one of the most common last steps in developer tooling: a local portal, a docs preview, a
+login page. Scripts had no built-in way to do it, so each command carried its own operating-system check and
+passed the URL through a shell, where a stray character could change what was run.
+
+## The Fix
+
+The new `browser.open(url)` function uses the same cross-platform browser launcher Atmos already uses
+elsewhere. It accepts only absolute HTTP or HTTPS URLs without embedded credentials, so local file paths,
+`javascript:` URLs, and argument-like strings are rejected before anything launches. Launch failures fail the
+script with a clear error, and dry runs never open a browser.
+
+## How to Use It
+
+Add it to any [script step](/steps/type/script) or standalone script:
+
+```yaml
+commands:
+  - name: portal
+    commands:
+      - name: open
+        description: Open the local dashboard
+        steps:
+          - type: script
+            interpreter: starlark
+            script: |
+              browser.open("http://localhost:3000")
+```
+
+Then run `atmos portal open`. The function is also available inside helpers loaded with
+[`module.load`](/functions/automation/module.load).
+
+## Get Involved
+
+Try it in your own custom commands and let us know what else your scripts need on
+[GitHub](https://github.com/cloudposse/atmos/issues) or in the
+[Cloud Posse community Slack](https://cloudposse.com/slack).

@@ -45,11 +45,9 @@ func captureLiveLogs(t *testing.T, level charm.Level) *syncBuffer {
 	previousLevel := log.GetLevel()
 	log.SetOutput(output)
 	log.SetLevel(level)
-	ResetShownMessages()
 	t.Cleanup(func() {
 		log.SetOutput(os.Stderr)
 		log.SetLevel(previousLevel)
-		ResetShownMessages()
 	})
 	return output
 }

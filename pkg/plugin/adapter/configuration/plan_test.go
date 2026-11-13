@@ -3,8 +3,11 @@ package configuration
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,13 +19,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// identifiedProvider adds the optional Identity capability to the generated provider mock.
-type identifiedProvider struct {
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_identified_provider_test.go -package=$GOPACKAGE -mock_names=identifiedProvider=MockIdentifiedProvider
+
+// identifiedProvider is a provider with the optional Identity capability that binds saved plans.
+type identifiedProvider interface {
 	Provider
-	identity func(context.Context) (string, error)
+	identityProvider
 }
 
-func (p *identifiedProvider) Identity(ctx context.Context) (string, error) { return p.identity(ctx) }
+// The generated mock implements the contract that PlanIdentity asserts.
+var _ identifiedProvider = (*MockIdentifiedProvider)(nil)
 
 // planCase describes every input that a saved-plan binding is expected to cover.
 type planCase struct {
@@ -46,16 +52,16 @@ func planSession(t *testing.T, c *planCase) (*Session, *schema.ConfigAndStacksIn
 	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
 	settings.Options = c.options
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
-	mock := NewMockProvider(gomock.NewController(t))
+	mock := NewMockIdentifiedProvider(gomock.NewController(t))
 	mock.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	mock.EXPECT().Identity(gomock.Any()).Return(c.identity, nil).AnyTimes()
 	component := unit(t, c.component)
 	configuration, err := adapter.EncodeObject(map[string]any{"source": c.source})
 	require.NoError(t, err)
 	component.Configuration = configuration
 	mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{component}}, nil)
-	provider := &identifiedProvider{Provider: mock, identity: func(context.Context) (string, error) { return c.identity, nil }}
 	session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
-		return map[string]Provider{"terragrunt": provider}, nil
+		return map[string]Provider{"terragrunt": mock}, nil
 	})
 	require.NoError(t, err)
 	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: c.component, SubCommand: c.subCommand, AdditionalArgsAndFlags: c.args, ComponentEnvList: c.env}
@@ -98,6 +104,13 @@ func TestPlanIdentityDetectsEveryBoundInputAndIgnoresInvocationOnlyInputs(t *tes
 			require.Equal(t, baseline, planIdentity(t, c), "apply must accept the plan reviewed with the same bound inputs")
 		})
 	}
+}
+
+func TestPlanIdentityDistinguishesBinaryNumericOptions(t *testing.T) {
+	first, second := defaultPlanCase(), defaultPlanCase()
+	first.options = map[string]any{"value": math.Float64frombits(0x3ff0000000000080)}
+	second.options = map[string]any{"value": math.Float64frombits(0x3ff0000000000081)}
+	require.NotEqual(t, planIdentity(t, first), planIdentity(t, second))
 }
 
 func TestPlanIdentityIsStableAcrossProjectRoots(t *testing.T) {
@@ -152,7 +165,7 @@ func TestPlanIdentityBindsWatchedSources(t *testing.T) {
 	// Runtime artifacts and state never invalidate a plan, at any depth.
 	for _, ignored := range []string{
 		"modules/.terraform/providers.json", "modules/.git/HEAD", "modules/terraform.tfstate", "modules/terraform.tfstate.backup",
-		"modules/saved.planfile", "modules/unit.atmos.json", "modules/.terragrunt-cache/x/main.tf", "modules/.terragrunt-stack/stack.hcl",
+		"modules/saved.planfile", "modules/saved.planfile.atmos.json", "modules/.terragrunt-cache/x/main.tf", "modules/.terragrunt-stack/stack.hcl",
 		"modules/nested/.atmos/state", "modules/nested/.terraform/x",
 	} {
 		write(ignored, "noise")
@@ -193,7 +206,9 @@ func TestPlanIdentityRejectsUnboundableRequests(t *testing.T) {
 		_, err := session.Discover(t.Context())
 		require.NoError(t, err)
 		failure := errors.New("executable unreadable")
-		session.registry["terragrunt"] = &identifiedProvider{Provider: NewMockProvider(gomock.NewController(t)), identity: func(context.Context) (string, error) { return "", failure }}
+		provider := NewMockIdentifiedProvider(gomock.NewController(t))
+		provider.EXPECT().Identity(gomock.Any()).Return("", failure)
+		session.registry["terragrunt"] = provider
 		_, err = session.PlanIdentity(t.Context(), info, nil)
 		require.ErrorIs(t, err, failure)
 	})
@@ -238,6 +253,30 @@ func TestSourceDigests(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, before["link.hcl"], after["link.hcl"], "edits behind a symlink must change the digest")
 	})
+	t.Run("directory symlink inside a watched directory is rejected, not followed", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "shared"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "shared", "inputs.hcl"), []byte("x"), 0o600))
+		require.NoError(t, os.Mkdir(filepath.Join(root, "unit"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "unit", "main.tf"), []byte("m"), 0o600))
+		if err := os.Symlink(filepath.Join(root, "shared"), filepath.Join(root, "unit", "shared")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		_, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "unit", Directory: true}})
+		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+		require.Contains(t, err.Error(), "unit/shared")
+	})
+	t.Run("file symlinks inside a watched directory are still digested", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "shared.hcl"), []byte("one"), 0o600))
+		require.NoError(t, os.Mkdir(filepath.Join(root, "unit"), 0o700))
+		if err := os.Symlink(filepath.Join(root, "shared.hcl"), filepath.Join(root, "unit", "link.hcl")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		got, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "unit", Directory: true}})
+		require.NoError(t, err)
+		require.Contains(t, got, "unit/link.hcl")
+	})
 	t.Run("missing sources are recorded as absent", func(t *testing.T) {
 		got, err := sourceDigests(t.Context(), t.TempDir(), []schema.ComponentConfigurationSource{{Path: "missing.hcl"}, {Path: "nodir", Directory: true}})
 		require.NoError(t, err)
@@ -245,13 +284,14 @@ func TestSourceDigests(t *testing.T) {
 	})
 	t.Run("missing project root fails", func(t *testing.T) {
 		_, err := sourceDigests(t.Context(), filepath.Join(t.TempDir(), "gone"), nil)
+		require.ErrorIs(t, err, errUtils.ErrReadFile)
 		require.ErrorIs(t, err, os.ErrNotExist)
 	})
 	t.Run("directory watched as a file fails", func(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(root, "modules"), 0o700))
 		_, err := sourceDigests(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "modules"}})
-		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrReadFile)
 	})
 	t.Run("canceled context stops digesting", func(t *testing.T) {
 		root := t.TempDir()
@@ -270,7 +310,7 @@ func TestSourceDigests(t *testing.T) {
 func TestExcludedPlanSource(t *testing.T) {
 	for name, excluded := range map[string]bool{
 		".atmos": true, ".git": true, ".terraform": true, ".terragrunt-cache": true, ".terragrunt-stack": true,
-		"terraform.tfstate": true, "terraform.tfstate.backup": true, "a.planfile": true, "b.atmos.json": true,
+		"terraform.tfstate": true, "terraform.tfstate.backup": true, "a.planfile": true, "a.planfile.atmos.json": true, "settings.atmos.json": false,
 		"main.tf": false, "terragrunt.hcl": false, ".terraform.lock.hcl": false, "state.json": false,
 	} {
 		require.Equal(t, excluded, excludedPlanSource(name), name)
@@ -317,4 +357,36 @@ func TestWatchedFileUnderASymlinkedParentThatLeavesTheProjectIsRejected(t *testi
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.ErrorContains(t, err, "shared/inputs.hcl")
 	require.ErrorContains(t, err, "leaves the project root")
+}
+
+// A watched link whose target cannot be resolved for a reason other than absence is reported
+// during preparation, as fingerprinting would report it, while a dangling link is still allowed.
+func TestSourceLinkResolutionFailuresAreReported(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not block path resolution on Windows")
+	}
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	locked := filepath.Join(root, "locked")
+	require.NoError(t, os.MkdirAll(filepath.Join(locked, "inner"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(locked, "inner", "inputs.hcl"), nil, 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "watched"), 0o755))
+	if err := os.Symlink(filepath.Join(locked, "inner", "inputs.hcl"), filepath.Join(root, "watched", "inputs.hcl")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	require.NoError(t, os.Symlink(filepath.Join(root, "absent.hcl"), filepath.Join(root, "watched", "dangling.hcl")))
+	require.NoError(t, os.Symlink(filepath.Join(locked, "inner", "inputs.hcl"), filepath.Join(root, "direct.hcl")))
+	require.NoError(t, os.Chmod(locked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if _, err := filepath.EvalSymlinks(filepath.Join(root, "direct.hcl")); err == nil {
+		t.Skip("the process bypasses directory permissions")
+	}
+
+	for _, source := range []string{"watched", "direct.hcl"} {
+		err := checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: source}})
+		require.ErrorIs(t, err, errUtils.ErrReadFile, source)
+		require.ErrorIs(t, err, fs.ErrPermission, source)
+	}
+	require.NoError(t, os.Chmod(locked, 0o755))
+	require.NoError(t, checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "watched"}}), "a dangling link is left for the first read")
 }

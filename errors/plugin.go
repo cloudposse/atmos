@@ -107,6 +107,8 @@ var (
 	ErrExecutableNotFound = errors.New("terragrunt executable not found")
 	// ErrExecutableVersion identifies a terragrunt executable that is older than the supported minimum.
 	ErrExecutableVersion = errors.New("terragrunt version is not supported")
+	// ErrComponentOutputCapture identifies output that could not be recorded for error hook matching.
+	ErrComponentOutputCapture = errors.New("failed to capture command output for error hooks")
 
 	ErrInvalidCredentialCodec    = errors.New("invalid credential codec")
 	ErrDuplicateCredentialCodec  = errors.New("duplicate credential codec")

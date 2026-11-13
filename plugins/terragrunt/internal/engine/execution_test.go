@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
@@ -280,6 +283,16 @@ func TestErrorsBlockRejectsInvalidPolicies(t *testing.T) {
     max_attempts = 1
     sleep_interval_sec = -1
   }`, `errors.retry "x"`, "sleep_interval_sec"},
+		"attempts out of range": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 4294967296
+    sleep_interval_sec = 1
+  }`, `errors.retry "x"`, "too large"},
+		"sleep out of range": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 1
+    sleep_interval_sec = 4294967296
+  }`, `errors.retry "x"`, "too large"},
 		"bad retry pattern": {`retry "x" {
     retryable_errors = ["("]
     max_attempts = 1
@@ -387,6 +400,7 @@ func TestFeatureDefaultsAreRenderedAsStrings(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"enabled": "false", "size": "3", "tier": "basic"}, result.FeatureFlags)
 	require.Equal(t, false, result.Inputs["enabled"])
+	require.Equal(t, json.Number("3"), result.Inputs["size"])
 	require.Equal(t, "basic", result.Inputs["tier"])
 }
 
@@ -397,6 +411,7 @@ func TestFeatureOverridesReplaceDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"enabled": "true", "size": "8", "tier": "premium"}, result.FeatureFlags)
 	require.Equal(t, true, result.Inputs["enabled"], "a boolean feature is typed from its override")
+	require.Equal(t, "8", result.Inputs["size"], "Terragrunt keeps a numeric feature override as its CLI string")
 	require.Equal(t, "premium", result.Inputs["tier"])
 }
 
@@ -534,31 +549,25 @@ func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Execution.BeforeHooks, 2)
 	initHook, lintHook := result.Execution.BeforeHooks[0], result.Execution.BeforeHooks[1]
-	require.Equal(t, []string{"tflint", "--init", "--config", config, "--chdir", "."}, initHook.Execute)
+	require.Equal(t, []string{"tflint", "--init", "--config", tflintConfigSearchPrefix + root, "--chdir", "."}, initHook.Execute)
 	require.Equal(t, []string{
-		"tflint", "--config", config, "--chdir", ".",
+		"tflint", "--config", tflintConfigSearchPrefix + root, "--chdir", ".",
 		"--var=count=2", "--var=name=web",
-		"--var=zone=a", "--var=region=eu", "--var-file=required.tfvars",
+		"--var=region=eu", "--var-file=required.tfvars",
 		"--minimum-failure-severity=error",
 	}, lintHook.Execute)
 	require.Equal(t, "lint", initHook.Name)
 	require.Equal(t, []string{"plan"}, lintHook.Commands)
 }
 
-func TestTflintHookWithoutConfigurationNamesTheHook(t *testing.T) {
+func TestTflintHookDefersConfigurationLookup(t *testing.T) {
 	root := t.TempDir()
 	unit := filepath.Join(root, "a", "b")
 	require.NoError(t, os.MkdirAll(unit, 0o755))
-	// No .tflint.hcl exists in any parent below the temporary root, so the search must end with a problem.
-	_, err := tflintConfig(nil, unit)
-	if err == nil {
-		t.Skip("a .tflint.hcl exists above the temporary directory")
-	}
-	_, err = expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"), nil)
-	problem := asProblem(t, err)
-	require.Equal(t, model.CodeUnsupportedHook, problem.Code)
-	require.Contains(t, problem.Summary, `"lint"`)
-	require.NotEmpty(t, problem.Hints)
+	hooks, err := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"), nil)
+	require.NoError(t, err)
+	require.Len(t, hooks, 2)
+	require.Contains(t, hooks[0].Execute, tflintConfigSearchPrefix+unit)
 }
 
 func TestTflintConfigFlagForms(t *testing.T) {
@@ -587,6 +596,13 @@ func TestVariableValueRendering(t *testing.T) {
 	text, err = variableValue(map[string]any{"a": []any{1, "${x}"}})
 	require.NoError(t, err)
 	require.Equal(t, `{"a":[1,"$${x}"]}`, text)
+	text, err = variableValue(map[string]any{"literal": "%{ if true } ${x}"})
+	require.NoError(t, err)
+	expr, diags := hclsyntax.ParseExpression([]byte(text), "input", hcl.Pos{Line: 1, Column: 1})
+	require.False(t, diags.HasErrors(), diags.Error())
+	value, diags := expr.Value(nil)
+	require.False(t, diags.HasErrors(), diags.Error())
+	require.Equal(t, "%{ if true } ${x}", value.GetAttr("literal").AsString())
 	_, err = variableValue(make(chan int))
 	require.Error(t, err)
 }
@@ -607,12 +623,16 @@ func TestSignalValuesConvertToPlainJSON(t *testing.T) {
 	signals := mustSignals(t, map[string]cty.Value{
 		"text":    cty.StringVal("x"),
 		"number":  cty.NumberIntVal(3),
+		"large":   cty.NumberIntVal(9007199254740993),
 		"list":    cty.TupleVal([]cty.Value{cty.True, cty.StringVal("y")}),
 		"nothing": cty.NullVal(cty.String),
 		"unknown": cty.UnknownVal(cty.String),
 	})
 	assert.Equal(t, "x", signals["text"])
-	assert.EqualValues(t, 3, signals["number"])
+	assert.Equal(t, json.Number("3"), signals["number"])
+	data, err := json.Marshal(signals)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"large":9007199254740993`)
 	assert.Equal(t, []any{true, "y"}, signals["list"])
 	assert.Nil(t, signals["nothing"])
 	assert.Nil(t, signals["unknown"])
@@ -634,11 +654,7 @@ func TestFinalizeExecutionHandlesAbsentAndFailingHooks(t *testing.T) {
 		"error":  {ErrorHooks: []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := tflintConfig(nil, filepath.Dir(unit)); err == nil {
-				t.Skip("a .tflint.hcl exists above the temporary directory")
-			}
-			err := finalizeExecution(execution, unit, nil)
-			require.Equal(t, model.CodeUnsupportedHook, asProblem(t, err).Code)
+			require.NoError(t, finalizeExecution(execution, unit, nil))
 		})
 	}
 	// Inputs that cannot be rendered fail the whole unit with the error, not a silent gap.
@@ -651,12 +667,33 @@ func TestFinalizeExecutionHandlesAbsentAndFailingHooks(t *testing.T) {
 func TestTflintVariablesFromExtraArguments(t *testing.T) {
 	existing := filepath.Join(t.TempDir(), "optional.tfvars")
 	require.NoError(t, os.WriteFile(existing, nil, 0o644))
-	hook := &model.Hook{Commands: []string{"plan"}}
 	execution := &model.Execution{ExtraArguments: []model.ExtraArguments{
 		{Commands: []string{"apply"}, Arguments: []string{"-var=ignored=1"}},
-		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
+		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false", "-var", "c=3", "-var-file", "d.tfvars"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
 	}}
-	require.Equal(t, []string{"--var=b=2", "--var-file=a.tfvars", "--var-file=" + existing}, tflintExtraVariables(hook, execution))
+	require.Equal(t, []string{"--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", tflintOptionalVarFilePrefix + existing, tflintOptionalVarFilePrefix + "absent.tfvars"}, tflintExtraVariables("plan", execution))
+	require.Equal(t, []string{"--var=ignored=1"}, tflintExtraVariables("apply", execution))
+	require.Empty(t, tflintExtraVariables("plan", &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Environment: map[string]string{"TF_VAR_b": "2"}},
+	}}), "TFLint reads TF_VAR_ from the hook environment, below terraform.tfvars")
+}
+
+func TestTflintHookScopesExtraArgumentsToEachCommand(t *testing.T) {
+	unit := filepath.Join(t.TempDir(), "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(unit), ".tflint.hcl"), nil, 0o644))
+	execution := &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Arguments: []string{"-var=only=plan"}},
+		{Commands: []string{"apply"}, Arguments: []string{"-var=only=apply"}},
+	}}
+	hooks, err := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan", "apply"}, Execute: []string{"tflint"}}, execution, unit, nil)
+	require.NoError(t, err)
+	require.Len(t, hooks, 4)
+	require.Equal(t, []string{"plan"}, hooks[1].Commands)
+	require.Contains(t, hooks[1].Execute, "--var=only=plan")
+	require.NotContains(t, hooks[1].Execute, "--var=only=apply")
+	require.Equal(t, []string{"apply"}, hooks[3].Commands)
+	require.Contains(t, hooks[3].Execute, "--var=only=apply")
+	require.NotContains(t, hooks[3].Execute, "--var=only=plan")
 }
 
 func TestExcludeFromConfigWithoutBlock(t *testing.T) {
@@ -698,4 +735,328 @@ func TestCheckFeatureOverridesLeavesParseErrorsToTheEvaluator(t *testing.T) {
 	}
 	require.NoError(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "false"}, declared))
 	require.Error(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "maybe"}, declared))
+}
+
+// effectChildEnv makes the test binary act as a cross-platform effect command (see TestMain).
+const effectChildEnv = "ATMOS_TERRAGRUNT_EFFECT_CHILD"
+
+// effectCommand returns a run_cmd call that appends text to ./effects and prints it, using the
+// test binary itself instead of a platform shell.
+func effectCommand(t *testing.T, text string) string {
+	t.Helper()
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	quoted, err := json.Marshal(executable)
+	require.NoError(t, err)
+	return "run_cmd(" + string(quoted) + ", \"" + text + "\")"
+}
+
+// effectUnit is executionUnit with the effect child enabled for run_cmd.
+func effectUnit(t *testing.T, body string) model.Request {
+	t.Helper()
+	request := executionUnit(t, body)
+	request.Environment[effectChildEnv] = "1"
+	return request
+}
+
+func TestDiscoveryDefersExecutionValues(t *testing.T) {
+	request := effectUnit(t, `
+ before_hook "dynamic" {
+   commands = ["plan"]
+   execute = ["echo", dependency.base.outputs.value, `+effectCommand(t, "hook")+`]
+ }
+ extra_arguments "dynamic" {
+   commands = ["plan"]
+   arguments = [dependency.base.outputs.value, `+effectCommand(t, "args")+`]
+ }
+ `)
+	body, err := os.ReadFile(request.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(request.BasePath, "base"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "base", "terragrunt.hcl"), []byte("inputs = {}"), 0o644))
+	body = append(body, []byte(`
+ dependency "base" {
+   config_path = "./base"
+   skip_outputs = true
+   mock_outputs = { value = "from-dependency" }
+ }
+ `)...)
+	require.NoError(t, os.WriteFile(request.Path, body, 0o644))
+	request.Phase = "discover"
+	discovered, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Nil(t, discovered.Execution)
+	require.NoFileExists(t, filepath.Join(request.BasePath, "effects"))
+	request.Phase = ""
+	prepared, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"echo", "from-dependency", "hook"}, prepared.Execution.BeforeHooks[0].Execute)
+	require.Equal(t, []string{"from-dependency", "args"}, prepared.Execution.ExtraArguments[0].Arguments)
+	effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+	require.NoError(t, err)
+	require.Contains(t, string(effects), "hook")
+	require.Contains(t, string(effects), "args")
+}
+
+func TestDiscoveryValidatesExecutionSyntaxWithoutEffects(t *testing.T) {
+	for _, test := range []struct {
+		name, body, want string
+	}{
+		{"missing execute", `before_hook "hook" {
+ commands = ["plan"]
+}`, "execute"},
+		{"unknown argument setting", `extra_arguments "args" {
+ commands = ["plan"]
+ unexpected = run_cmd("must-not-execute")
+}`, "unexpected"},
+		{"invalid regex", `error_hook "hook" {
+ commands = ["plan"]
+ execute = [run_cmd("must-not-execute")]
+ on_errors = ["["]
+}`, "Invalid `on_errors`"},
+		{"disabled", `before_hook "hook" {
+ if = false
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, ""},
+		{"dynamic condition", `before_hook "hook" {
+ if = run_cmd("must-not-execute") == "enabled"
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, test.body)
+			request.Phase = "discover"
+			_, err := Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, test.want)
+			}
+		})
+	}
+}
+
+// A saved plan is applied from its plan-time preparation, but Terragrunt evaluates the
+// configuration again for apply. Hooks that depend on the command are recorded for apply.
+func TestPlanPreparationRecordsApplyTimeExecution(t *testing.T) {
+	body := `
+  before_hook "plan_only" {
+    commands = ["plan", "apply"]
+    execute  = ["tool", "plan"]
+    if       = get_terraform_command() == "plan"
+  }
+  after_hook "notify" {
+    commands = ["apply"]
+    execute  = ["tool", "notify"]
+    if       = get_terraform_command() == "apply"
+  }
+  after_hook "always" {
+    commands = ["apply"]
+    execute  = ["tool", "always"]
+  }
+`
+	planned, err := Resolve(t.Context(), executionUnit(t, body))
+	require.NoError(t, err)
+	require.Equal(t, []string{"plan_only"}, hookNames(planned.Execution.BeforeHooks))
+	require.Equal(t, []string{"always"}, hookNames(planned.Execution.AfterHooks))
+	require.NotNil(t, planned.Execution.Apply)
+	require.Empty(t, planned.Execution.Apply.BeforeHooks)
+	require.Equal(t, []string{"notify", "always"}, hookNames(planned.Execution.Apply.AfterHooks))
+	require.Nil(t, planned.Execution.Apply.Apply)
+
+	apply := executionUnit(t, body)
+	apply.Command = "apply"
+	applied, err := Resolve(t.Context(), apply)
+	require.NoError(t, err)
+	require.Nil(t, applied.Execution.Apply, "apply already evaluates as apply")
+	require.Equal(t, planned.Execution.Apply.AfterHooks, applied.Execution.AfterHooks)
+}
+
+// Configuration that only the apply-time evaluation reads also shapes the reviewed plan, so the
+// plan's watched sources include it.
+func TestPlanPreparationWatchesApplyTimeReads(t *testing.T) {
+	request := nativeUnit(t, `locals {
+  hooks = read_terragrunt_config(get_terraform_command() == "apply" ? "apply-hooks.hcl" : "plan-hooks.hcl")
+}`)
+	root := filepath.Dir(request.Path)
+	for _, name := range []string{"apply-hooks.hcl", "plan-hooks.hcl"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte("locals {}\n"), 0o600))
+	}
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	var names []string
+	for _, file := range result.Files {
+		names = append(names, filepath.Base(file))
+	}
+	require.Contains(t, names, "plan-hooks.hcl")
+	require.Contains(t, names, "apply-hooks.hcl", "apply-time reads must be watched by the saved plan")
+	require.Contains(t, names, "terragrunt.hcl")
+}
+
+func TestPlanPreparationRecordsThatApplyRunsNothing(t *testing.T) {
+	result, err := Resolve(t.Context(), executionUnit(t, `
+  before_hook "plan_only" {
+    commands = ["plan", "apply"]
+    execute  = ["tool", "plan"]
+    if       = get_terraform_command() == "plan"
+  }
+`))
+	require.NoError(t, err)
+	require.Len(t, result.Execution.BeforeHooks, 1)
+	require.NotNil(t, result.Execution.Apply, "an empty apply-time evaluation must not fall back to plan hooks")
+	require.Empty(t, result.Execution.Apply.BeforeHooks)
+}
+
+func TestPlanPreparationOmitsApplyWhenCommandIsNotObserved(t *testing.T) {
+	for name, body := range map[string]string{
+		"no command function": `
+  after_hook "always" {
+    commands = ["apply"]
+    execute  = ["tool", "always"]
+  }
+`,
+		"same result for apply": `
+  after_hook "always" {
+    commands = ["apply"]
+    execute  = ["tool", "always"]
+    if       = length(get_terraform_command()) > 0
+  }
+`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := Resolve(t.Context(), executionUnit(t, body))
+			require.NoError(t, err)
+			require.Equal(t, []string{"always"}, hookNames(result.Execution.AfterHooks))
+			require.Nil(t, result.Execution.Apply)
+		})
+	}
+}
+
+func TestDiscoveryDefersInheritedExecutionValues(t *testing.T) {
+	request := effectUnit(t, `before_hook "parent" {
+ commands = ["plan"]
+ execute = ["echo", `+effectCommand(t, "inherited")+`]
+}`)
+	parent := filepath.Join(request.BasePath, "parent.hcl")
+	require.NoError(t, os.Rename(request.Path, parent))
+	require.NoError(t, os.WriteFile(request.Path, []byte("include \"parent\" { path = \"./parent.hcl\" }"), 0o644))
+	request.Phase = "discover"
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(request.BasePath, "effects"))
+	request.Phase = ""
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"echo", "inherited"}, result.Execution.BeforeHooks[0].Execute)
+	require.FileExists(t, filepath.Join(request.BasePath, "effects"))
+}
+
+func TestPreparationValidatesDynamicHookSettings(t *testing.T) {
+	request := executionUnit(t, `error_hook "dynamic" {
+ commands = ["plan"]
+ execute = ["echo"]
+ on_errors = [get_env("HOOK_PATTERN")]
+}`)
+	request.Environment["HOOK_PATTERN"] = "["
+	request.Phase = "discover"
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	request.Phase = ""
+	_, err = Resolve(t.Context(), request)
+	require.ErrorContains(t, err, "Invalid `on_errors`")
+}
+
+func TestObservesCommandAssumesUnreadableFilesDo(t *testing.T) {
+	require.True(t, observesCommand(afero.NewMemMapFs(), []string{"missing.hcl"}))
+}
+
+func hookNames(hooks []model.Hook) []string {
+	var names []string
+	for i := range hooks {
+		names = append(names, hooks[i].Name)
+	}
+	return names
+}
+
+// The apply-time evaluation of a saved plan sees the same feature overrides as the plan, and its
+// hooks are prepared for the host the same way: a lifecycle hook runs in the unit directory.
+func TestApplyTimeExecutionUsesFeatureOverridesAndFinalizesHooks(t *testing.T) {
+	root := t.TempDir()
+	module := filepath.Join(root, "module")
+	require.NoError(t, os.MkdirAll(module, 0o755))
+	source, err := json.Marshal(filepath.ToSlash(module))
+	require.NoError(t, err)
+	path := filepath.Join(root, "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(path, []byte(`feature "notify" {
+  default = false
+}
+terraform {
+  source = `+string(source)+`
+  after_hook "notify" {
+    commands = ["apply"]
+    execute  = ["tool", "notify"]
+    if       = feature.notify.value && get_terraform_command() == "apply"
+  }
+  before_hook "fetch" {
+    commands = ["init-from-module"]
+    execute  = ["tool", "fetch"]
+    if       = get_terraform_command() == "apply"
+  }
+}
+`), 0o644))
+	request := model.Request{Path: path, BasePath: root, Command: "plan", Tofu: "must-not-execute", Environment: map[string]string{}}
+
+	planned, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, planned.Execution)
+	require.NotNil(t, planned.Execution.Apply)
+	require.Empty(t, planned.Execution.Apply.AfterHooks, "the feature defaults to off for apply too")
+	require.Equal(t, []string{"fetch"}, hookNames(planned.Execution.Apply.BeforeHooks))
+	unitDir, err := logicalPath(root)
+	require.NoError(t, err)
+	require.Equal(t, unitDir, planned.Execution.Apply.BeforeHooks[0].WorkingDirectory, "apply-time lifecycle hooks are finalized")
+
+	request.Features = map[string]string{"notify": "true"}
+	overridden, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, overridden.Execution.Apply)
+	require.Equal(t, []string{"notify"}, hookNames(overridden.Execution.Apply.AfterHooks), "feature overrides reach the apply-time evaluation")
+}
+
+// A parent hook that a unit replaces by name never runs, so its invalid execute list does not
+// block the unit. The same parent hook is still rejected when nothing replaces it.
+func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
+	for _, test := range []struct {
+		name, child, want string
+	}{
+		{"overridden by name", `before_hook "lint" {
+ commands = ["plan"]
+ execute = ["./wrapper.sh"]
+}`, ""},
+		{"inherited unchanged", "", "has no command to run"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, test.child)
+			parent := filepath.Join(request.BasePath, "parent.hcl")
+			require.NoError(t, os.WriteFile(parent, []byte(`terraform {
+ before_hook "lint" {
+  commands = ["plan"]
+  execute = [""]
+ }
+}
+`), 0o644))
+			body, err := os.ReadFile(request.Path)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(request.Path, append([]byte("include \"parent\" { path = \"./parent.hcl\" }\n"), body...), 0o644))
+			request.Phase = "discover"
+			_, err = Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, test.want)
+		})
+	}
 }

@@ -123,12 +123,19 @@ func (backend *releaseBackend) Test(ctx context.Context, directory string) error
 	return conformance.Present(report, err, conformance.FormatText)
 }
 
-func (backend *releaseBackend) Pack(_ context.Context, directory, layout string) error {
+func (backend *releaseBackend) Pack(ctx context.Context, directory, layout string) error {
 	opts, err := packOptions(backend.values)
 	if err != nil {
 		return err
 	}
-	return pluginoci.Pack(directory, layout, backend.manager.Installer.Descriptors, opts...)
+	if err := pluginoci.Pack(directory, layout, backend.manager.Installer.Descriptors, opts...); err != nil {
+		return err
+	}
+	destination := backend.values.GetString(publishDestinationFlag)
+	if backend.values.GetBool(releaseCheckFlag) && destination != "" {
+		return pluginoci.CheckPublication(ctx, backend.manager.Installer.Registry, layout, destination)
+	}
+	return nil
 }
 
 const (

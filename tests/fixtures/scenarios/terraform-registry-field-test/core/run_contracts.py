@@ -5,7 +5,7 @@ import sys
 
 import yaml
 
-from run import Case
+from run import Case, exit_status
 from run_extra import simple
 
 
@@ -17,6 +17,13 @@ def generation(c):
     main = c.project / "components/terraform/marker/main.tf"
     main.write_text(main.read_text().replace('backend "local" {}', ''))
     c.command("generate-varfile", ["terraform", "generate", "varfile", "producer", "-s", "dev", "-f", str(c.root / "vars.json")], [0])
+    varfile = c.root / "vars.json"
+    try:
+        variables = json.loads(varfile.read_text())
+    except (OSError, ValueError) as error:
+        variables = {}
+        c.check("generated varfile readable JSON", False, str(error))
+    c.check("generated varfile contains stack variables", variables.get("name") == "dev-producer-v1" and variables.get("stage") == "dev", variables)
     c.command("generate-backend", ["terraform", "generate", "backend", "producer", "-s", "dev"], [0])
     c.command("plan", ["terraform", "plan", "producer", "-s", "dev", "-detailed-exitcode"], [2])
     plan = c.project / "components/terraform/marker/dev-producer.planfile"
@@ -38,7 +45,10 @@ def generation(c):
     c.command("deny-saved-destructive-apply", ["terraform", "apply", "producer", "-s", "dev", "--from-plan"], [77],
               env={"ATMOS_POLICY_DIR": str(c.project / "policy")})
     c.check("policy rejects saved destructive plan without state mutation", before == c.state_snapshot())
-    c.command("skip-planfile", ["terraform", "plan", "producer", "-s", "dev", "--skip-planfile"], [0])
+    result, _, _ = c.command("skip-planfile", ["terraform", "plan", "producer", "-s", "dev", "--skip-planfile"], [0])
+    plans = [entry["argv"] for entry in result["trace"] if entry["argv"] and entry["argv"][0] == "plan"]
+    c.check("skip-planfile omits plan output argument", bool(plans) and all(
+        arg != "-out" and not arg.startswith("-out=") for argv in plans for arg in argv), plans)
     c.save()
 
 
@@ -59,6 +69,15 @@ def failure(c):
     for mode in ("fail-fast", "keep-going"):
         c.command(mode, ["terraform", "plan", "--all", "-s", "dev", "--failure-mode=" + mode,
                          "--max-concurrency=1", "--execution-summary-file=" + str(c.root / (mode + ".json"))], [1])
+        try:
+            summary = json.loads((c.root / (mode + ".json")).read_text())
+            statuses = {entry["component"]: entry["status"] for entry in summary["results"]}
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            statuses = {}
+            c.check(mode + " summary readable", False, str(error))
+        c.check(mode + " bad fails", statuses.get("bad") == "failed", statuses)
+        expected = "skipped" if mode == "fail-fast" else "succeeded"
+        c.check(mode + " producer status", statuses.get("producer") == expected, statuses)
     c.save()
 
 
@@ -71,7 +90,11 @@ def shared_callers(c):
     config = yaml.safe_load((c.project / "atmos.yaml").read_text())
     config["components"]["helmfile"] = {"base_path": "components/helmfile", "use_eks": False}
     stub = c.root / "packer-controlled"
-    stub.write_text("#!" + sys.executable + "\nimport json,os,sys\nprint(json.dumps({'argv':sys.argv[1:],'cwd':os.getcwd()}))\n")
+    stub.write_text("#!" + sys.executable + "\nimport json,os,sys\n"
+                    "args=sys.argv[1:]\n"
+                    "if '-var-file' in args:\n"
+                    "    open(os.environ['PACKER_VARFILE_CAPTURE'],'w').write(open(args[args.index('-var-file')+1]).read())\n"
+                    "print(json.dumps({'argv':args,'cwd':os.getcwd()}))\n")
     stub.chmod(0o755)
     config["components"]["packer"] = {"base_path": "components/packer", "command": str(stub)}
     (c.project / "atmos.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
@@ -85,8 +108,17 @@ def shared_callers(c):
     packer = c.project / "components/packer/smoke"
     packer.mkdir(parents=True)
     (packer / "main.pkr.hcl").write_text("variable \"field_marker\" { type = string }\n")
-    c.command("helmfile-template", ["helmfile", "template", "smoke", "-s", "dev"], [0])
-    c.command("packer-controlled-validate", ["packer", "validate", "smoke", "-s", "dev"], [0])
+    _, stdout, _ = c.command("helmfile-template", ["helmfile", "template", "smoke", "-s", "dev"], [0])
+    c.check("helmfile renders scope marker", "helmfile-scope" in stdout, stdout)
+    capture = c.root / "packer-varfile.json"
+    c.command("packer-controlled-validate", ["packer", "validate", "smoke", "-s", "dev"], [0],
+              env={"PACKER_VARFILE_CAPTURE": str(capture)})
+    try:
+        packer_vars = json.loads(capture.read_text())
+    except (OSError, ValueError) as error:
+        packer_vars = {}
+        c.check("packer varfile readable JSON", False, str(error))
+    c.check("packer receives scope marker", packer_vars.get("field_marker") == "packer-scope", packer_vars)
     c.save()
 
 
@@ -113,9 +145,13 @@ def stored_plan(c):
 if __name__ == "__main__":
     root, baseline, candidate = sys.argv[1:]
     root = Path(root)
+    cases = []
     for engine in ("terraform", "tofu"):
         for revision, binary in (("baseline", baseline), ("candidate", candidate)):
             for name, operation in (("generation", generation), ("failure", failure), ("stored-plan", stored_plan)):
-                operation(Case(root / f"{engine}-{revision}-{name}", revision, engine, binary))
+                cases.append(Case(root / f"{engine}-{revision}-{name}", revision, engine, binary))
+                operation(cases[-1])
     for revision, binary in (("baseline", baseline), ("candidate", candidate)):
-        shared_callers(Case(root / f"{revision}-shared", revision, "terraform", binary))
+        cases.append(Case(root / f"{revision}-shared", revision, "terraform", binary))
+        shared_callers(cases[-1])
+    sys.exit(exit_status(cases))

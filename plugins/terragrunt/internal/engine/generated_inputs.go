@@ -33,6 +33,7 @@ func unitLockFile(result *model.Resolution) error {
 	}
 	result.Generated[lockFileName] = string(content)
 	result.GeneratedPolicies[lockFileName] = "overwrite"
+	result.UnitFileCopies[lockFileName] = true
 	return nil
 }
 

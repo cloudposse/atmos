@@ -1,15 +1,11 @@
 package exec
 
 import (
+	"encoding/json"
 	"fmt"
-	"path/filepath"
-	"slices"
-	"strings"
-	"sync/atomic"
-
-	"github.com/bmatcuk/doublestar/v4"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,128 +30,71 @@ func rebaseConfigurationDiscovery(config *schema.AtmosConfiguration) error {
 // configurationWatchIndex applies provider-declared cache exclusions only to its
 // file watches. It never changes YAML dependencies or the shared Git change set.
 func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[string]any, original *changedFilesIndex) (*changedFilesIndex, error) {
-	patterns, err := watchExcludePatterns(settings)
-	if err != nil || len(patterns) == 0 {
-		return original, err
-	}
-	key := config.BasePathAbsolute + "\x00" + strings.Join(patterns, "\x00")
-	original.mu.Lock()
-	defer original.mu.Unlock()
-	if cached, ok := original.filtered[key]; ok {
-		return cached, nil
-	}
-	files, err := filterWatchedFiles(config.BasePathAbsolute, original.allFiles, patterns)
+	patterns, err := configuration.WatchExcludes(settings)
 	if err != nil {
 		return nil, err
 	}
-	view := newChangedFilesIndex(config, files, config.BasePathAbsolute)
-	if original.filtered == nil {
-		original.filtered = make(map[string]*changedFilesIndex)
+	if len(patterns) == 0 {
+		return original, nil
 	}
-	original.filtered[key] = view
-	return view, nil
-}
-
-// watchExcludePatterns reads the glob patterns a configuration provider excludes from its file watches.
-func watchExcludePatterns(settings map[string]any) ([]string, error) {
-	provider, _ := settings["configuration"].(map[string]any)
-	excludes, _ := provider["watch_excludes"].([]any)
-	patterns := make([]string, 0, len(excludes))
-	for _, value := range excludes {
-		pattern, ok := value.(string)
-		if !ok || !doublestar.ValidatePattern(pattern) {
-			return nil, errUtils.ErrPluginInvalidConfig
+	keyBytes, err := json.Marshal(append([]string{config.BasePathAbsolute}, patterns...))
+	if err != nil {
+		return nil, err
+	}
+	key := string(keyBytes)
+	if filtered := original.cachedWatchIndex(key); filtered != nil {
+		return filtered, nil
+	}
+	result, err, _ := original.watchBuilds.Do(key, func() (any, error) {
+		// Another caller may have stored the view after our first lookup.
+		if filtered := original.cachedWatchIndex(key); filtered != nil {
+			return filtered, nil
 		}
-		patterns = append(patterns, pattern)
-	}
-	return patterns, nil
-}
-
-// filterWatchedFiles drops every file whose path relative to the project root matches an exclusion pattern.
-func filterWatchedFiles(root string, all, patterns []string) ([]string, error) {
-	files := make([]string, 0, len(all))
-	for _, path := range all {
-		relative, err := filepath.Rel(root, path)
+		files, err := configuration.UnexcludedWatchFiles(config.BasePathAbsolute, original.getAllFiles(), patterns)
 		if err != nil {
 			return nil, err
 		}
-		excluded := false
-		for _, pattern := range patterns {
-			matched, _ := doublestar.Match(pattern, filepath.ToSlash(relative))
-			excluded = excluded || matched
+		filtered := newChangedFilesIndex(config, files, config.BasePathAbsolute)
+		original.watchMu.Lock()
+		defer original.watchMu.Unlock()
+		if original.watchIndexes == nil {
+			original.watchIndexes = make(map[string]*changedFilesIndex)
 		}
-		if !excluded {
-			files = append(files, path)
-		}
+		original.watchIndexes[key] = filtered
+		return filtered, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return files, nil
+	return result.(*changedFilesIndex), nil
 }
 
-// configurationWatchPaths resolves provider-owned watches against the project
-// root without putting checkout-specific absolute paths into stack comparisons.
-// Existing YAML dependency path semantics remain unchanged. It reports whether
-// the dependencies belong to a provider-discovered component.
-func configurationWatchPaths(config *schema.AtmosConfiguration, settings map[string]any, deps []schema.ComponentDependency) bool {
-	if _, provider := settings["configuration"]; !provider {
-		return false
-	}
-	for i := range deps {
-		if !filepath.IsAbs(deps[i].Path) {
-			deps[i].Path = filepath.Join(config.BasePathAbsolute, deps[i].Path)
-		}
-	}
-	return true
+// cachedWatchIndex reads a completed view without waiting for other views to build.
+func (index *changedFilesIndex) cachedWatchIndex(key string) *changedFilesIndex {
+	index.watchMu.Lock()
+	defer index.watchMu.Unlock()
+	return index.watchIndexes[key]
 }
 
 // configurationMatchInputs returns the change set and dependencies to match.
-// Provider watches are rooted at BasePathAbsolute, and base-path resolution
-// can spell that root differently from the repository root the changed files
-// are joined to: through a symlinked temp dir on macOS (/var vs /private/var)
-// or as an 8.3 short name on Windows (RUNNER~1 vs runneradmin). Two spellings
-// of one directory never match, so provider watches compare both sides with
-// symlinks and short names resolved. YAML dependencies keep exact matching.
+// The configuration package owns provider dependency normalization; exec only
+// supplies the shared resolver and the cached resolved change set.
 func configurationMatchInputs(filesIndex *changedFilesIndex, deps []schema.ComponentDependency, provider bool) (*changedFilesIndex, []schema.ComponentDependency) {
 	if !provider {
 		return filesIndex, deps
 	}
-	resolved := slices.Clone(deps)
-	for i := range resolved {
-		resolved[i].Path = evalSymlinksBestEffort(resolved[i].Path)
-	}
-	return resolvedChangedFiles(filesIndex), resolved
+	return resolvedChangedFiles(filesIndex), configuration.MatchDependencies(deps, provider, evalSymlinksBestEffort)
 }
-
-// configuredDependencyPath reports a matched dependency in its configured spelling.
-func configuredDependencyPath(deps, matched []schema.ComponentDependency, path string) string {
-	for i := range matched {
-		if matched[i].Path == path {
-			return deps[i].Path
-		}
-	}
-	return path
-}
-
-// resolvedChangedFilesView pairs a change-set index with its resolved copy.
-type resolvedChangedFilesView struct {
-	source, resolved *changedFilesIndex
-}
-
-// lastResolvedChangedFiles holds the view for the most recent index, so a run
-// resolves its change set once rather than once per provider component. The
-// index is immutable after construction, so pointer identity is a safe key.
-var lastResolvedChangedFiles atomic.Pointer[resolvedChangedFilesView]
 
 // resolvedChangedFiles returns the change set with symlinks and short names resolved.
 func resolvedChangedFiles(index *changedFilesIndex) *changedFilesIndex {
-	if view := lastResolvedChangedFiles.Load(); view != nil && view.source == index {
-		return view.resolved
-	}
-	files := index.getAllFiles()
-	resolved := make([]string, len(files))
-	for i, file := range files {
-		resolved[i] = evalSymlinksBestEffort(file)
-	}
-	view := &resolvedChangedFilesView{source: index, resolved: &changedFilesIndex{allFiles: resolved}}
-	lastResolvedChangedFiles.Store(view)
-	return view.resolved
+	index.resolvedOnce.Do(func() {
+		files := index.getAllFiles()
+		resolved := make([]string, len(files))
+		for i, file := range files {
+			resolved[i] = evalSymlinksBestEffort(file)
+		}
+		index.resolved = &changedFilesIndex{allFiles: resolved}
+	})
+	return index.resolved
 }

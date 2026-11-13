@@ -36,12 +36,20 @@ type ComponentProviderOption struct {
 	Value any
 	// Sensitive values are masked and never logged.
 	Sensitive bool
+	// FromCLI distinguishes an explicit flag from an environment-derived value.
+	FromCLI bool
 }
 
 // ComponentConfigurationRuntime is an invocation-owned host service. It is not a wire contract.
 type ComponentConfigurationRuntime interface {
 	Discover(context.Context) (map[string]map[string]any, error)
 	Prepare(context.Context, *ConfigAndStacksInfo) (*PreparedComponentConfiguration, error)
+}
+
+// ComponentConfigurationIAMProbe is implemented by providers whose configuration
+// needs role credentials while it is being evaluated.
+type ComponentConfigurationIAMProbe interface {
+	ProbeIAM(context.Context, *ConfigAndStacksInfo) (*ComponentIAM, error)
 }
 
 // ComponentConfigurationFailureRuntime reports components that a provider discovered but could not
@@ -57,17 +65,25 @@ type ComponentConfigurationRevisionRuntime interface {
 	ForRevision(root string) (ComponentConfigurationRuntime, error)
 }
 
+// ComponentConfigurationValidationRuntime supplies a manifest-reading view that can
+// resolve additional imports without changing discovery or preparation inventory.
+type ComponentConfigurationValidationRuntime interface {
+	ForValidation() ComponentConfigurationRuntime
+}
+
 // PreparedComponentConfiguration contains evaluated inputs and literal artifacts.
 type PreparedComponentConfiguration struct {
-	Sources          []ComponentConfigurationSource
-	Engine           string
-	Source           string
-	Inputs           map[string]any
-	BackendType      string
-	Backend          map[string]any
-	Workspace        string
-	Files            []ComponentConfigurationFile
-	BackendGenerated bool
+	Sources []ComponentConfigurationSource
+	Engine  string
+	Source  string
+	Inputs  map[string]any
+	// SensitiveInputKeys identifies prepared inputs whose values must stay out of generated varfiles.
+	SensitiveInputKeys map[string]bool
+	BackendType        string
+	Backend            map[string]any
+	Workspace          string
+	Files              []ComponentConfigurationFile
+	BackendGenerated   bool
 	// Execution is data the host runs; it is nil when the provider adds no hooks or arguments.
 	Execution *ComponentExecution
 	// TerraformBinary is the executable the unit selects, verified against the one it was discovered with.
@@ -78,6 +94,14 @@ type PreparedComponentConfiguration struct {
 	FeatureFlags map[string]string
 	// IAM is a role the host assumes for the component's commands; it is nil when the provider asks for none.
 	IAM *ComponentIAM
+	// SourceAuthorization is invocation-only registry auth for a same-origin archive.
+	SourceAuthorization *SourceAuthorization `json:"-"`
+}
+
+// SourceAuthorization is never serialized with a source URL or saved plan.
+type SourceAuthorization struct {
+	Origin string
+	Header string
 }
 
 // ComponentIAM is an AWS role a configuration provider asks the host to assume. The host assumes it
@@ -107,6 +131,21 @@ type ComponentConfigurationFile struct {
 	Content   []byte
 	IfExists  string
 	Sensitive bool
+	// UnitFileCopy identifies a literal adjacent unit-file copy, not explicit generation.
+	UnitFileCopy bool
+}
+
+// ConfigurationOwned reports whether a configuration provider owns a component's settings.
+// Discovery records ownership as a map; an explicit false or null leaves an ordinary component.
+func ConfigurationOwned(settings map[string]any) bool {
+	switch value := settings["configuration"].(type) {
+	case nil:
+		return false
+	case bool:
+		return value
+	default:
+		return true
+	}
 }
 
 // HasComponentDiscovery reports an explicit opt-in without consulting plugins or the filesystem.

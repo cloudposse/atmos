@@ -26,7 +26,8 @@ func preparationSession(t *testing.T) (*Session, *MockProvider, *schema.ConfigAn
 	t.Helper()
 	provider := NewMockProvider(gomock.NewController(t))
 	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
-	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil).MaxTimes(1)
+	// The session discovers lazily, and Prepare rediscovers to revalidate dependencies.
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil).AnyTimes()
 	session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
 		return map[string]Provider{"terragrunt": provider}, nil
 	})
@@ -49,6 +50,7 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 			Files: []*pluginv1.ComponentGeneratedFile{
 				{Path: "backend.tf.json", Content: []byte("{}"), IfExists: "overwrite", Sensitive: true},
 				{Path: "provider.tf", Content: []byte("p"), IfExists: "skip"},
+				{Path: ".terraform.lock.hcl", Content: []byte("pins"), IfExists: "overwrite", UnitFileCopy: true},
 			},
 			Sources: []*pluginv1.ComponentSource{
 				{Path: "root.hcl", Kind: pluginv1.ComponentSource_FILE},
@@ -63,6 +65,7 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 	require.Equal(t, []schema.ComponentConfigurationFile{
 		{Path: "backend.tf.json", Content: []byte("{}"), IfExists: "overwrite", Sensitive: true},
 		{Path: "provider.tf", Content: []byte("p"), IfExists: "skip"},
+		{Path: ".terraform.lock.hcl", Content: []byte("pins"), IfExists: "overwrite", UnitFileCopy: true},
 	}, prepared.Files)
 	require.Equal(t, []schema.ComponentConfigurationSource{{Path: "root.hcl"}, {Path: "modules", Directory: true}}, prepared.Sources)
 
@@ -71,16 +74,49 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 	require.Equal(t, "-var=a=1", sent.Operation.TerraformArguments[0], "the request owns a copy of the arguments")
 }
 
+func TestPreparedConfigurationPreservesSensitiveEmptyInputKeys(t *testing.T) {
+	inputs, err := adapter.EncodeObject(map[string]any{"password": "", "region": "us-east-1"})
+	require.NoError(t, err)
+	inputs.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "password"}}}}}
+	prepared, err := preparedConfiguration(&pluginv1.PrepareComponentResponse{
+		Inputs: inputs, State: &pluginv1.ComponentStateIdentity{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"password": true}, prepared.SensitiveInputKeys)
+	require.Equal(t, "", prepared.Inputs["password"])
+}
+
 func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {
-	session, provider, info := preparationSession(t)
+	session, _, info := preparationSession(t)
 	info.Command = "terraform"
-	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{}}, nil)
 
 	_, err := session.Prepare(t.Context(), info)
 
 	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
 	require.ErrorContains(t, err, `command "terraform" selects the terraform engine`)
 	require.ErrorContains(t, err, "discovered for opentofu")
+}
+
+func TestPrepareRejectsDependenciesChangedSinceDiscovery(t *testing.T) {
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	network, app := unit(t, "network"), unit(t, "app")
+	moved := unit(t, "app")
+	moved.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+	gomock.InOrder(
+		provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil),
+		provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, moved}}, nil),
+	)
+	session, err := New(t.Context(), enabledConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "apply", ComponentSettingsSection: map[string]any{"configuration": true}}
+
+	prepared, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "preparation changed discovered dependency paths")
+	require.Nil(t, prepared, "Prepare must not run when dependencies changed")
 }
 
 func TestPrepareFailsClosed(t *testing.T) {
@@ -94,9 +130,9 @@ func TestPrepareFailsClosed(t *testing.T) {
 		{"provider failure", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
 			p.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(nil, failure)
 		}, failure},
-		{"engine changed by a command override", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
+		{"provider returns an unexpected engine", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
 			p.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{}}, nil)
-		}, errUtils.ErrConfigurationOverrideUnsupported},
+		}, errUtils.ErrPluginProtocol},
 		{"saved plan", func(_ *MockProvider, info *schema.ConfigAndStacksInfo) { info.UseTerraformPlan = true }, errUtils.ErrPluginUnsupportedExtension},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -105,6 +141,33 @@ func TestPrepareFailsClosed(t *testing.T) {
 			prepared, err := session.Prepare(t.Context(), info)
 			require.ErrorIs(t, err, test.want)
 			require.Nil(t, prepared)
+		})
+	}
+}
+
+func TestPrepareAcceptsTheEngineOfTheSelectedCommand(t *testing.T) {
+	for _, test := range []struct {
+		name, command, engine string
+		want                  error
+	}{
+		{"command override selects OpenTofu", "/opt/bin/tofu", "opentofu", nil},
+		{"versioned OpenTofu binary", "/opt/bin/TOFU-1.8", "opentofu", nil},
+		{"command override selects Terraform", "/opt/bin/terraform", "terraform", nil},
+		{"provider disagrees with the command", "/opt/bin/terraform", "opentofu", errUtils.ErrPluginProtocol},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session, provider, info := preparationSession(t)
+			info.Command, info.ComponentCommand = test.command, test.command
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+				require.Equal(t, test.command, request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
+				return &pluginv1.PrepareComponentResponse{Engine: test.engine, State: &pluginv1.ComponentStateIdentity{}}, nil
+			})
+			_, err := session.Prepare(t.Context(), info)
+			if test.want == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, test.want)
 		})
 	}
 }
@@ -222,8 +285,13 @@ func TestTerraformBinaryMustMatchDiscovery(t *testing.T) {
 	require.NoError(t, err)
 	discovered := &pluginv1.DiscoveredComponent{Configuration: configuration}
 
-	require.NoError(t, checkTerraformBinary(info, discovered, ""), "a unit without terraform_binary has nothing to compare")
 	require.NoError(t, checkTerraformBinary(info, discovered, "tofu"))
+	plain, err := adapter.EncodeObject(map[string]any{})
+	require.NoError(t, err)
+	require.NoError(t, checkTerraformBinary(info, &pluginv1.DiscoveredComponent{Configuration: plain}, ""), "a unit without terraform_binary has nothing to compare")
+	removed := checkTerraformBinary(info, discovered, "")
+	require.ErrorIs(t, removed, errUtils.ErrComponentBinaryChanged, "removing terraform_binary after discovery is a change")
+	require.ErrorContains(t, removed, `discovered with "tofu"`)
 	err = checkTerraformBinary(info, discovered, "terraform")
 	require.ErrorIs(t, err, errUtils.ErrComponentBinaryChanged)
 	require.ErrorContains(t, err, `now selects "terraform"`)
@@ -283,7 +351,7 @@ func TestExplicitOptionsAndModeReachDiscoveryAndPreparation(t *testing.T) {
 			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
 				check(request.Operation)
 				return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil
-			})
+			}).MinTimes(1)
 			if wantMode != "executable" {
 				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
 					check(request.Operation)
@@ -322,10 +390,11 @@ func TestPlanIdentityIncludesTheEffectiveOptions(t *testing.T) {
 	identity := func(value string) string {
 		config := enabledConfig(t)
 		config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {"level": {Value: value}}}
-		mock := NewMockProvider(gomock.NewController(t))
+		mock := NewMockIdentifiedProvider(gomock.NewController(t))
 		mock.EXPECT().ComponentType().Return("terraform").AnyTimes()
 		mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil)
-		provider := &identifiedProvider{Provider: mock, identity: func(context.Context) (string, error) { return "v1", nil }}
+		mock.EXPECT().Identity(gomock.Any()).Return("v1", nil).AnyTimes()
+		provider := Provider(mock)
 		session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
 			return map[string]Provider{"terragrunt": provider}, nil
 		})
@@ -337,6 +406,15 @@ func TestPlanIdentityIncludesTheEffectiveOptions(t *testing.T) {
 	}
 	require.Equal(t, identity("debug"), identity("debug"))
 	require.NotEqual(t, identity("debug"), identity("info"), "applying a plan reviewed with other options must be refused")
+}
+
+type stateProviderFixture struct {
+	Provider
+	resolve func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error)
+}
+
+func (p *stateProviderFixture) ResolveState(ctx context.Context, req *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+	return p.resolve(ctx, req)
 }
 
 func TestPrepareRefusesAnExecutableModeUnit(t *testing.T) {
@@ -365,18 +443,16 @@ func TestSettingsValidationAcceptsBothModes(t *testing.T) {
 	require.ErrorIs(t, validateSettings("terragrunt", &schema.ComponentConfiguration{Mode: "cli"}), errUtils.ErrPluginInvalidConfig)
 }
 
-// captureAtmosLogs sends the Atmos logger to a buffer at the given level for one test.
-func captureAtmosLogs(t *testing.T, level charm.Level) *bytes.Buffer {
+// captureAtmosLogs sends the Atmos logger to a buffer at debug level for one test.
+func captureAtmosLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var output bytes.Buffer
 	previous := log.GetLevel()
 	log.SetOutput(&output)
-	log.SetLevel(level)
-	adapter.ResetShownMessages()
+	log.SetLevel(charm.DebugLevel)
 	t.Cleanup(func() {
 		log.SetOutput(os.Stderr)
 		log.SetLevel(previous)
-		adapter.ResetShownMessages()
 	})
 	return &output
 }
@@ -394,7 +470,7 @@ func TestPrepareAsksForTheAtmosLogLevelAndRendersEngineLogsScoped(t *testing.T) 
 			},
 		}, nil
 	})
-	output := captureAtmosLogs(t, charm.DebugLevel)
+	output := captureAtmosLogs(t)
 
 	_, err := session.Prepare(t.Context(), info)
 
@@ -418,7 +494,7 @@ func TestPrepareMasksSensitiveInputsInTheLogsOfTheSameResponse(t *testing.T) {
 		Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{BackendType: "local"},
 		Logs: []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "run_cmd output: prep-log-secret-9f3c", Fields: map[string]string{"stdout": "prep-log-secret-9f3c"}}},
 	}, nil)
-	output := captureAtmosLogs(t, charm.DebugLevel)
+	output := captureAtmosLogs(t)
 
 	_, err = session.Prepare(t.Context(), info)
 
@@ -430,17 +506,31 @@ func TestPrepareMasksSensitiveInputsInTheLogsOfTheSameResponse(t *testing.T) {
 func TestPrepareNamesAnUnknownInput(t *testing.T) {
 	session, provider, info := preparationSession(t)
 	inputs := &pluginv1.ComponentValue{TypeJson: []byte(`["object",{"zone":"string"}]`), Msgpack: []byte{0x81, 0xa4, 'z', 'o', 'n', 'e', 0xd4, 0x00, 0x00}}
-	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{}}, nil)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{}, Logs: []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "unregistered-secret"}}}, nil)
+	output := captureAtmosLogs(t)
 
 	_, err := session.Prepare(t.Context(), info)
 
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 	require.Contains(t, err.Error()+strings.Join(errUtils.AllDetails(err), "\n"), "`zone`")
+	require.NotContains(t, output.String(), "unregistered-secret")
+}
+
+func TestPrepareSuppressesLogsForMalformedInputs(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{
+		Inputs: &pluginv1.ComponentValue{TypeJson: []byte("invalid")},
+		Logs:   []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "unregistered-secret"}},
+	}, nil)
+	output := captureAtmosLogs(t)
+	_, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.NotContains(t, output.String(), "unregistered-secret")
 }
 
 func TestDiscoveryAndStateRenderEngineLogs(t *testing.T) {
 	// The request is built when the session starts, so the level must be set before it.
-	output := captureAtmosLogs(t, charm.DebugLevel)
+	output := captureAtmosLogs(t)
 	config := enabledConfig(t)
 	mock := NewMockProvider(gomock.NewController(t))
 	mock.EXPECT().ComponentType().Return("terraform")

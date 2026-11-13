@@ -121,7 +121,7 @@ func TestQualityReportEventWithoutPRSelectsNone(t *testing.T) {
 }
 
 func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
-	for _, scenario := range []string{"missing", "running", "recover", "reported", "closed"} {
+	for _, scenario := range []string{"missing", "running", "recover", "shared head", "reported", "closed"} {
 		t.Run(scenario, func(t *testing.T) {
 			run := githubtest.Run()
 			run.Event = "pull_request"
@@ -136,6 +136,7 @@ func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
 			getter := qualityPublishGetter(t, "create", &pr, &run, &reads)
 			fake := &githubtest.FakeAPI{T: t}
 			fake.Get = func(path string, response any) error {
+				require.NotContains(t, path, "pulls/43", "benchmark recovery must not refresh a sibling PR")
 				switch {
 				case strings.Contains(path, "actions/workflows/"):
 					runs := []githubapi.Run{run}
@@ -147,6 +148,11 @@ func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
 					}
 					return githubtest.Respond(map[string]any{"workflow_runs": runs}, response)
 				case strings.Contains(path, "/commits/") && strings.Contains(path, "/pulls?"):
+					if scenario == "shared head" {
+						sibling := pr
+						sibling.Number = 43
+						return githubtest.Respond([]githubapi.PR{sibling, pr}, response)
+					}
 					return githubtest.Respond([]githubapi.PR{pr}, response)
 				case strings.Contains(path, "/comments?") && scenario == "reported":
 					c := githubapi.Comment{ID: 17, Body: qualityMarker + qualityHeadMarker(pr.Head.SHA) + "<!-- atmos-benchmark-run:10:2 -->"}
@@ -159,6 +165,7 @@ func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
 			}
 			var body string
 			fake.Write = func(_ string, path string, r io.Reader) error {
+				require.NotContains(t, path, "issues/43", "only the selected PR may be written")
 				if strings.Contains(path, "comments") {
 					data, err := io.ReadAll(r)
 					require.NoError(t, err)
@@ -173,7 +180,7 @@ func TestQualityReconcileRecoversFailedBenchmark(t *testing.T) {
 				return
 			}
 			require.Contains(t, body, "Quality Gate")
-			if scenario == "recover" {
+			if scenario == "recover" || scenario == "shared head" {
 				require.Contains(t, body, "benchmark execution failure")
 			} else if scenario != "reported" {
 				require.Contains(t, body, "pending")

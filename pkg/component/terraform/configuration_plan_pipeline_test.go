@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,27 +15,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// reviewedPlanRuntime is a configuration provider that can prepare, bind plans, and resolve state.
-type reviewedPlanRuntime struct {
-	*MockComponentConfigurationRuntime
-	state *schema.ComponentConfigurationState
-}
-
-func (reviewedPlanRuntime) PlanIdentity(context.Context, *schema.ConfigAndStacksInfo, []schema.ComponentConfigurationSource) (string, error) {
-	return "provider-source-options", nil
-}
-
-func (r reviewedPlanRuntime) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-	return r.state, nil
-}
-
 // reviewedPlanProject is an isolated workdir-enabled component whose module can change after review.
 type reviewedPlanProject struct {
 	root, module, workdir, state string
 	// explicitWorkdir pins the workdir with metadata.working_directory. Units use the default location.
 	explicitWorkdir bool
 	config          *schema.AtmosConfiguration
-	provider        *MockComponentConfigurationRuntime
+	provider        *MockReviewedPlanRuntime
 }
 
 func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
@@ -45,9 +32,12 @@ func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
 	require.NoError(t, os.WriteFile(filepath.Join(project.module, "main.tf"), []byte("# reviewed module"), 0o644))
 	project.config = &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
 	project.config.Components.Terraform.BasePath = "components"
-	project.provider = NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	// The provider is a generated runtime that can prepare, bind plans, and resolve state.
+	project.provider = NewMockReviewedPlanRuntime(gomock.NewController(t))
 	state := &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": project.state}, Workspace: "default"}
-	project.config.ComponentConfigurations = reviewedPlanRuntime{MockComponentConfigurationRuntime: project.provider, state: state}
+	project.provider.EXPECT().PlanIdentity(gomock.Any(), gomock.Any(), gomock.Any()).Return("provider-source-options", nil).AnyTimes()
+	project.provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).Return(state, nil).AnyTimes()
+	project.config.ComponentConfigurations = project.provider
 	return project
 }
 
@@ -88,8 +78,9 @@ func (p *reviewedPlanProject) review(t *testing.T) string {
 	return planPath
 }
 
-// reviewInDefaultWorkdir is review for a unit: the workdir is wherever provisioning places it.
-func (p *reviewedPlanProject) reviewInDefaultWorkdir(t *testing.T) string {
+// reviewInDefaultWorkdir is review for a unit: the workdir is wherever provisioning places it. The plan
+// is written at the optional path elements below the workdir, or directly in it.
+func (p *reviewedPlanProject) reviewInDefaultWorkdir(t *testing.T, below ...string) string {
 	t.Helper()
 	p.explicitWorkdir = false
 	info := p.info(t, "plan")
@@ -97,7 +88,8 @@ func (p *reviewedPlanProject) reviewInDefaultWorkdir(t *testing.T) string {
 	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, p.config, info, false)
 	require.NoError(t, err)
 	p.workdir = execution.workingDir
-	planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
+	planPath := filepath.Join(append(append([]string{execution.workingDir}, below...), "reviewed.planfile")...)
+	require.NoError(t, os.MkdirAll(filepath.Dir(planPath), 0o755))
 	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
 	require.NoError(t, recordConfigurationPlan(t.Context(), p.config, info, execution, []string{"-out=" + planPath}))
 	return planPath
@@ -129,6 +121,80 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 	require.Equal(t, "# reviewed module", string(retained))
 	require.Equal(t, planPath, apply.PlanFile)
 	require.True(t, apply.UseTerraformPlan)
+
+	// Run the prepared invocation through the command pipeline and inspect the
+	// actual subprocess arguments, rather than only the restored metadata.
+	argsFile := filepath.Join(project.root, "apply-args")
+	apply.SkipInit = true
+	apply.ComponentBackendType = "http" // Avoid a separate workspace subprocess.
+	apply.ComponentEnvList = append(apply.ComponentEnvList, "_ATMOS_TEST_ARGS_FILE="+argsFile)
+	require.NoError(t, testExecutor(t).executeCommandPipeline(project.config, apply, execution))
+	args, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	require.Contains(t, strings.Split(string(args), "\n"), planPath)
+}
+
+// Terragrunt evaluates the configuration again for apply, so a hook enabled only for apply is
+// absent from the plan-time preparation. Applying the reviewed plan runs the apply-time hooks
+// recorded with it, and not the plan-time ones.
+func TestApplyOfReviewedPlanRunsApplyTimeHooks(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	hook := func(name string) schema.ComponentHook {
+		return schema.ComponentHook{Name: name, Commands: []string{"apply"}, Execute: []string{exe, name}}
+	}
+	project := newReviewedPlanProject(t)
+	reviewed := project.prepared()
+	reviewed.Execution = &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{hook("plan-time")},
+		Apply:      &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("notify"), hook("always")}},
+	}
+	info := project.info(t, "plan")
+	project.provider.EXPECT().Prepare(gomock.Any(), info).Return(reviewed, nil)
+	planned, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+	require.NoError(t, err)
+	planPath := filepath.Join(planned.workingDir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, info, planned, []string{"-out=" + planPath}))
+
+	apply := project.reviewedApply(t, planPath)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("notify"), hook("always")}}, apply.ComponentExecution)
+
+	// Terraform and the hooks are all the test binary, which records every invocation.
+	log := filepath.Join(t.TempDir(), "hooks.jsonl")
+	apply.SkipInit = true
+	apply.ComponentBackendType = "http" // Avoid a separate workspace subprocess.
+	apply.ComponentEnvList = append(apply.ComponentEnvList, testEnvHookChild+"=1", testEnvHookLog+"="+log)
+	require.NoError(t, testExecutor(t).executeCommandPipeline(project.config, apply, execution))
+	var ran []string
+	for _, record := range readHookLog(t, log) {
+		ran = append(ran, record.Arguments[0])
+	}
+	require.Equal(t, []string{"apply", "notify", "always"}, ran)
+}
+
+// Plan runs with the provider's module source, so its directory follows source target rules,
+// including an explicit working_directory. A new apply process whose discovered section carries
+// no source must locate the same retained directory without provisioning anything.
+func TestApplyOfReviewedPlanFindsRetainedWorkdirWithoutDiscoveredSource(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	plan := project.info(t, "plan")
+	delete(plan.ComponentSection, "source")
+	project.provider.EXPECT().Prepare(gomock.Any(), plan).Return(project.prepared(), nil)
+	planned, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, plan, false)
+	require.NoError(t, err)
+	require.Equal(t, project.workdir, planned.workingDir)
+	planPath := filepath.Join(planned.workingDir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, plan, planned, []string{"-out=" + planPath}))
+
+	apply := project.reviewedApply(t, planPath)
+	delete(apply.ComponentSection, "source")
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err)
+	require.Equal(t, project.workdir, execution.componentPath)
 }
 
 func TestApplyOfReviewedPlanRejectsChangedWorkdir(t *testing.T) {
@@ -211,6 +277,7 @@ func (p *reviewedPlanProject) freshRunner(t *testing.T, planPath string, restore
 	require.NoError(t, os.RemoveAll(p.workdir))
 	require.NoError(t, os.MkdirAll(p.workdir, 0o755))
 	for name, data := range artifacts {
+		require.NoError(t, os.MkdirAll(filepath.Dir(name), 0o755))
 		require.NoError(t, os.WriteFile(name, data, 0o600))
 	}
 }
@@ -247,6 +314,23 @@ func TestApplyOfRestoredPlanRebuildsWorkdirOnAFreshRunner(t *testing.T) {
 	require.FileExists(t, planPath+configurationPlanSuffix)
 	require.Empty(t, execution.preparedConfiguration.Inputs, "the plan file carries the inputs")
 	require.True(t, apply.UseTerraformPlan)
+	require.Equal(t, planPath, apply.PlanFile)
+}
+
+// A plan written to a subdirectory of the workdir is restored there; its directory holds only the plan and
+// its record, so a fresh runner rebuilds the workdir around it.
+func TestApplyOfRestoredPlanInAWorkdirSubdirectoryRebuildsOnAFreshRunner(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewInDefaultWorkdir(t, "plans")
+	project.freshRunner(t, planPath)
+
+	apply, execution, err := project.freshApply(t, planPath, project.prepared())
+	require.NoError(t, err)
+
+	require.Equal(t, project.workdir, execution.componentPath)
+	plan, err := os.ReadFile(planPath)
+	require.NoError(t, err)
+	require.Equal(t, "reviewed plan", string(plan), "the restored plan is kept in its subdirectory")
 	require.Equal(t, planPath, apply.PlanFile)
 }
 
@@ -418,6 +502,34 @@ func TestReviewedRebuildAcceptsOnlyTheRestoredArtifacts(t *testing.T) {
 	require.False(t, only)
 }
 
+// A plan in a subdirectory of the workdir is part of the restored set, and so are the directories on the way
+// to it, but only while they hold nothing else.
+func TestReviewedRebuildAcceptsARestoredPlanInASubdirectory(t *testing.T) {
+	workdir := filepath.Join(t.TempDir(), "work")
+	plans := filepath.Join(workdir, "plans")
+	planPath := filepath.Join(plans, "reviewed.planfile")
+	rebuild := &reviewedRebuild{plan: &configurationPlan{}, planPath: planPath, workdir: workdir}
+	require.NoError(t, os.MkdirAll(plans, 0o755))
+	for _, path := range []string{planPath, planPath + configurationPlanSuffix, filepath.Join(workdir, terraformLockFile)} {
+		require.NoError(t, os.WriteFile(path, []byte("artifact"), 0o600))
+	}
+
+	only, err := rebuild.holdsOnlyTransport()
+	require.NoError(t, err)
+	require.True(t, only)
+
+	require.NoError(t, os.WriteFile(filepath.Join(plans, "other.planfile"), nil, 0o600))
+	only, err = rebuild.holdsOnlyTransport()
+	require.NoError(t, err)
+	require.False(t, only, "the plan's directory holds another file")
+	require.NoError(t, os.Remove(filepath.Join(plans, "other.planfile")))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, "modules"), 0o755))
+	only, err = rebuild.holdsOnlyTransport()
+	require.NoError(t, err)
+	require.False(t, only, "a directory that leads to no artifact is not part of the restored set")
+}
+
 func TestReviewedRebuildStagesAndReturnsTheArtifacts(t *testing.T) {
 	workdir := filepath.Join(t.TempDir(), "work")
 	rebuild := &reviewedRebuild{plan: &configurationPlan{}, planPath: filepath.Join(workdir, "reviewed.planfile"), workdir: workdir}
@@ -446,6 +558,28 @@ func TestReviewedRebuildStagesAndReturnsTheArtifacts(t *testing.T) {
 	holding, err := filepath.Glob(filepath.Join(filepath.Dir(workdir), ".atmos-restore-*"))
 	require.NoError(t, err)
 	require.Empty(t, holding, "the holding directory is removed")
+}
+
+func TestReviewedRebuildRestoreRetriesAfterPartialMove(t *testing.T) {
+	workdir := filepath.Join(t.TempDir(), "work")
+	rebuild := &reviewedRebuild{plan: &configurationPlan{}, planPath: filepath.Join(workdir, "reviewed.planfile"), workdir: workdir}
+	require.NoError(t, os.MkdirAll(workdir, 0o755))
+	for _, name := range []string{"reviewed.planfile", terraformLockFile} {
+		require.NoError(t, os.WriteFile(filepath.Join(workdir, name), []byte(name), 0o600))
+	}
+	restore, err := rebuild.stage()
+	require.NoError(t, err)
+	holding, err := filepath.Glob(filepath.Join(filepath.Dir(workdir), ".atmos-restore-*"))
+	require.NoError(t, err)
+	require.Len(t, holding, 1)
+	require.NoError(t, os.MkdirAll(workdir, 0o755))
+	require.NoError(t, os.Rename(filepath.Join(holding[0], "reviewed.planfile"), filepath.Join(workdir, "reviewed.planfile")))
+	require.NoError(t, restore(), "already restored plan must be skipped while the lock is returned")
+	for _, name := range []string{"reviewed.planfile", terraformLockFile} {
+		content, err := os.ReadFile(filepath.Join(workdir, name))
+		require.NoError(t, err)
+		require.Equal(t, name, string(content))
+	}
 }
 
 func TestNewReviewedRebuildRequiresAnOldEnoughRecord(t *testing.T) {

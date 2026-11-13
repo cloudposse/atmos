@@ -43,11 +43,37 @@ func TestDiscoveryFixtures(t *testing.T) {
 			request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, IncludePaths: []string{test.scope}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "list"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}}
 			response, err := p.Discover(t.Context(), request)
 			require.NoError(t, err)
+			expected := map[string]map[string]pluginv1.ComponentDependency_Kind{}
+			if test.name == "advanced" {
+				expected = map[string]map[string]pluginv1.ComponentDependency_Kind{
+					"app":      {"network": pluginv1.ComponentDependency_ORDER, "database": pluginv1.ComponentDependency_OUTPUT, "cache": pluginv1.ComponentDependency_OUTPUT},
+					"cache":    {"network": pluginv1.ComponentDependency_OUTPUT},
+					"database": {"network": pluginv1.ComponentDependency_OUTPUT},
+				}
+			} else {
+				expected = map[string]map[string]pluginv1.ComponentDependency_Kind{
+					"dev/app":  {"dev/network": pluginv1.ComponentDependency_OUTPUT},
+					"prod/app": {"prod/network": pluginv1.ComponentDependency_OUTPUT},
+				}
+			}
 			names := []string{}
 			for _, instance := range response.Components {
 				names = append(names, instance.Address.Component)
 				require.Equal(t, "terraform", instance.Address.ComponentType)
 				require.NotEmpty(t, instance.Sources)
+				dependencies := make(map[string]pluginv1.ComponentDependency_Kind)
+				for _, dependency := range instance.Dependencies {
+					require.NotNil(t, dependency.Target)
+					require.Equal(t, instance.Address.Stack, dependency.Target.Stack)
+					require.Equal(t, "terraform", dependency.Target.ComponentType)
+					require.NotContains(t, dependencies, dependency.Target.Component)
+					dependencies[dependency.Target.Component] = dependency.Kind
+				}
+				require.Len(t, dependencies, len(expected[instance.Address.Component]))
+				for target, kind := range expected[instance.Address.Component] {
+					require.Contains(t, dependencies, target)
+					require.Equal(t, kind, dependencies[target])
+				}
 			}
 			require.Equal(t, test.names, names)
 			require.NoError(t, filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
@@ -87,5 +113,6 @@ func TestExplicitStackStateAndPreparation(t *testing.T) {
 	require.Len(t, prepared.Files, 1)
 	require.Equal(t, "backend.tf", prepared.Files[0].Path)
 	require.Contains(t, string(prepared.Files[0].Content), `backend "local"`)
+	require.True(t, prepared.Files[0].Sensitive, "the host keeps generated backend bytes out of saved-plan records")
 	require.NotNil(t, prepared.Inputs)
 }

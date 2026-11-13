@@ -26,6 +26,8 @@ const (
 	maxMessage    = 16 << 20
 	pluginName    = "atmos"
 	brokerService = "atmos.api.v1"
+	// A first launch can include OS assessment of a newly installed binary under load.
+	defaultStartTimeout = 45 * time.Second
 )
 
 var handshake = plugin.HandshakeConfig{ProtocolVersion: 1, MagicCookieKey: "ATMOS_PLUGIN_MAGIC_COOKIE", MagicCookieValue: "atmos-native-plugin-v1"}
@@ -34,11 +36,12 @@ var handshake = plugin.HandshakeConfig{ProtocolVersion: 1, MagicCookieKey: "ATMO
 type (
 	Option  func(*options)
 	options struct {
-		directory   string
-		environment []string
-		api         *bridge.Server
-		expected    *pluginv1.DescribeResponse
-		callTimeout time.Duration
+		directory    string
+		environment  []string
+		api          *bridge.Server
+		expected     *pluginv1.DescribeResponse
+		callTimeout  time.Duration
+		startTimeout time.Duration
 	}
 )
 
@@ -58,6 +61,17 @@ func WithEnvironment(environment []string) Option {
 //
 //nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
 func WithAPI(server *bridge.Server) Option { return func(o *options) { o.api = server } }
+
+// WithStartTimeout bounds the plugin handshake and initial configuration RPCs.
+//
+//nolint:lintroller // Factory option; exempt under repository tracking policy.
+func WithStartTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		if timeout > 0 {
+			o.startTimeout = timeout
+		}
+	}
+}
 
 // Handle owns a native process and its versioned service clients.
 type Handle struct {
@@ -88,7 +102,7 @@ func Start(ctx context.Context, executable string, opts ...Option) (*Handle, err
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	settings := options{api: bridge.New()}
+	settings := options{api: bridge.New(), startTimeout: defaultStartTimeout}
 	for _, apply := range opts {
 		apply(&settings)
 	}
@@ -98,7 +112,7 @@ func Start(ctx context.Context, executable string, opts ...Option) (*Handle, err
 	command := exec.CommandContext(stopped.ctx, executable)
 	configureProcess(command)
 	command.Dir, command.Env = settings.directory, settings.environment
-	client := newClient(command)
+	client := newClient(command, settings.startTimeout)
 	// The process-level signal handler exits without unwinding, so it runs this first.
 	forget := signals.RegisterExitCleanup(func() {
 		client.Kill()
@@ -115,7 +129,7 @@ func Start(ctx context.Context, executable string, opts ...Option) (*Handle, err
 	}
 	handle.process, handle.api, handle.command = client, settings.api, command
 	handle.interrupt, handle.forget, handle.callTimeout = stopped, forget, settings.callTimeout
-	startup, cancel := context.WithTimeout(stopped.ctx, 15*time.Second)
+	startup, cancel := context.WithTimeout(stopped.ctx, settings.startTimeout)
 	defer cancel()
 	if err := handle.describe(startup, settings.expected); err != nil {
 		handle.Close()
@@ -128,11 +142,11 @@ func Start(ctx context.Context, executable string, opts ...Option) (*Handle, err
 	return handle, nil
 }
 
-func newClient(command *exec.Cmd) *plugin.Client {
+func newClient(command *exec.Cmd, startTimeout time.Duration) *plugin.Client {
 	return plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: handshake, Plugins: map[string]plugin.Plugin{pluginName: &protocol{}},
 		Cmd: command, AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-		AutoMTLS: true, SkipHostEnv: true, StartTimeout: 15 * time.Second,
+		AutoMTLS: true, SkipHostEnv: true, StartTimeout: startTimeout,
 		Logger: hclog.NewNullLogger(), Stderr: io.Discard, SyncStderr: io.Discard, SyncStdout: io.Discard,
 		GRPCDialOptions: []grpc.DialOption{grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMessage), grpc.MaxCallSendMsgSize(maxMessage))},
 	})

@@ -164,7 +164,7 @@ func TestEnsureMilestoneRetriesAndConflicts(t *testing.T) {
 				posts++
 				var body map[string]string
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-				require.Equal(t, map[string]string{"title": "v1.234.0", "state": "open"}, body)
+				require.Equal(t, map[string]string{"title": "1.234.0", "state": "open"}, body)
 				if tc.postCode != 0 {
 					http.Error(w, "write failed", tc.postCode)
 					return
@@ -235,7 +235,7 @@ func TestEnsureMinorMilestones(t *testing.T) {
 			err := c.ensureMinorMilestones()
 			if mode == "create and reopen" {
 				require.NoError(t, err)
-				require.Equal(t, []string{"v1.236.0"}, posts)
+				require.Equal(t, []string{"1.236.0"}, posts)
 				require.Equal(t, []string{"/repos/cloudposse/atmos/milestones/1"}, patches)
 			} else {
 				require.Error(t, err)
@@ -286,7 +286,7 @@ func TestMilestonePolicyRejectsMissingTrainAndInvalidTarget(t *testing.T) {
 	require.ErrorContains(t, CheckMilestonePR(&pr, nil, "v1.233.0"), "no open versioned milestone")
 	changes, err := MinorMilestoneWindow("v1.233.1", []Milestone{{1, "Backlog", "open"}})
 	require.NoError(t, err)
-	require.Equal(t, []MilestoneChange{{0, "v1.234.0"}, {0, "v1.235.0"}, {0, "v1.236.0"}}, changes)
+	require.Equal(t, []MilestoneChange{{0, "1.234.0"}, {0, "1.235.0"}, {0, "1.236.0"}}, changes)
 }
 
 func TestMilestoneActionDispatch(t *testing.T) {
@@ -317,7 +317,7 @@ func TestMilestoneActionDispatch(t *testing.T) {
 						require.Equal(t, "create", operation)
 						var body map[string]string
 						require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-						require.Equal(t, map[string]string{"title": "v1.233.1", "state": "open"}, body)
+						require.Equal(t, map[string]string{"title": "1.233.1", "state": "open"}, body)
 						githubtest.JSON(t, w, map[string]int{"number": 4})
 						return
 					}

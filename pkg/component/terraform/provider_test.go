@@ -276,6 +276,26 @@ func TestOperationsGenerateArtifactsInOrder(t *testing.T) {
 	require.NoDirExists(t, filepath.Join(workingDir, ".terraform"), "generation must not initialize the tool")
 }
 
+func TestOperationsGenerateArtifactsStopsAfterCancellation(t *testing.T) {
+	t.Parallel()
+
+	host := NewMockOperationServices(gomock.NewController(t))
+	operations := NewOperations(host)
+	config, info := operationArtifactConfig()
+	workingDir := t.TempDir()
+	ctx, cancel := context.WithCancel(t.Context())
+	host.EXPECT().GenerateFilesForComponent(config, info, workingDir).DoAndReturn(func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string) error {
+		cancel()
+		return nil
+	})
+
+	err := operations.GenerateConfigFilesWithContext(ctx, config, info, workingDir)
+	require.ErrorIs(t, err, context.Canceled)
+	require.FileExists(t, filepath.Join(workingDir, "backend.tf.json"), "stages before cancellation still run")
+	require.NoFileExists(t, filepath.Join(workingDir, "providers_override.tf.json"))
+	require.NoFileExists(t, filepath.Join(workingDir, "terraform_override.tf.json"))
+}
+
 func TestOperationsArtifactFailureStopsLaterStages(t *testing.T) {
 	t.Parallel()
 

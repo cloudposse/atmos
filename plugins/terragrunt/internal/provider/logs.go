@@ -1,15 +1,20 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
+	"github.com/zclconf/go-cty/cty"
+	ctyjson "github.com/zclconf/go-cty/cty/json"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 	"github.com/cloudposse/atmos/sdk/api"
+	"github.com/cloudposse/atmos/sdk/component"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
@@ -25,8 +30,11 @@ type callLogs struct {
 
 // withLogs makes the evaluation of one call report the Terragrunt logger's events. The caller must call
 // entries before it returns, so the events delivered live are shown before the result.
-func (p *Provider) withLogs(ctx context.Context, invocation *pluginv1.Invocation, root string) (context.Context, *callLogs) {
+func (p *Provider) withLogs(ctx context.Context, invocation *pluginv1.Invocation, root string, values ...*pluginv1.ComponentValue) (context.Context, *callLogs) {
 	sink := engine.NewLogSink(invocation.GetLogLevel(), root)
+	for _, value := range values {
+		redactSensitive(sink, value)
+	}
 	logs := &callLogs{sink: sink}
 	if p.api != nil && sink.Enabled() {
 		logs.stream = p.api.OpenLogs(ctx, invocation.GetId())
@@ -35,13 +43,61 @@ func (p *Provider) withLogs(ctx context.Context, invocation *pluginv1.Invocation
 	return engine.WithLogSink(ctx, sink), logs
 }
 
+// redactSensitive registers the sensitive parts of a request value with the sink. A value that does not
+// decode registers nothing: the call rejects it before evaluating anything that could log.
+func redactSensitive(sink *engine.LogSink, encoded *pluginv1.ComponentValue) {
+	if encoded == nil || len(encoded.GetSensitivePaths()) == 0 {
+		return
+	}
+	value, err := component.Decode(encoded)
+	if err != nil {
+		return
+	}
+	_ = cty.Walk(value, func(_ cty.Path, v cty.Value) (bool, error) {
+		if !v.HasMark(component.Sensitive) {
+			return true, nil
+		}
+		if plain, err := plainValue(v); err == nil {
+			sink.RedactValue(plain)
+		}
+		return false, nil
+	})
+}
+
+// plainValue converts a value to the plain form of JSON decoding, without its marks. Numbers stay
+// json.Number, so a sensitive integer above 2^53 keeps its exact digits when its text is registered.
+func plainValue(value cty.Value) (any, error) {
+	unmarked, _ := value.UnmarkDeep()
+	if !unmarked.IsWhollyKnown() {
+		return nil, component.ErrInvalidValue
+	}
+	data, err := ctyjson.Marshal(unmarked, unmarked.Type())
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var plain any
+	if err := decoder.Decode(&plain); err != nil {
+		return nil, err
+	}
+	return plain, nil
+}
+
 // entries waits for the events delivered live to be shown, for a bounded time, stops delivery, and returns the
 // events Atmos has not shown, in order, in their wire form. It is safe to call more than once.
 func (l *callLogs) entries() []*pluginv1.LogEntry {
 	collected := l.sink.Entries()
 	entries := make([]*pluginv1.LogEntry, 0, len(collected))
 	for i := range collected {
-		entries = append(entries, logEntry(&collected[i]))
+		converted := logEntry(&collected[i])
+		if l.stream != nil {
+			// Evaluation has finished, so every discovered secret has been registered or the
+			// sink has withheld the call. Only now may detailed Terragrunt events be delivered.
+			l.stream.Send(converted)
+		} else {
+			entries = append(entries, converted)
+		}
 	}
 	// The stream is empty of anything already shown; what it returns could not be delivered.
 	entries = append(entries, l.stream.Close()...)

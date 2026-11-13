@@ -148,7 +148,9 @@ func TestGeneratedFilesArePrivateToTheOwner(t *testing.T) {
 func TestUnitLockFileIsCopiedOnlyWhenItChanges(t *testing.T) {
 	root := t.TempDir()
 	lock := func(content string) []schema.ComponentConfigurationFile {
-		return []schema.ComponentConfigurationFile{generated(lockFileName, content, "overwrite")}
+		file := generated(lockFileName, content, "overwrite")
+		file.UnitFileCopy = true
+		return []schema.ComponentConfigurationFile{file}
 	}
 	require.NoError(t, WriteFiles(root, lock("# pinned v1\n")))
 	require.Equal(t, "# pinned v1\n", read(t, root, lockFileName))
@@ -189,9 +191,6 @@ func TestEquivalentPathsKeepTheGeneratedFile(t *testing.T) {
 // A stale generated file that cannot be removed is reported and stays recorded, so a later run
 // retries it once permissions are repaired, while the files written in the same run stay owned.
 func TestStaleFileRemovalFailureIsReportedAndRetried(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory permissions do not prevent removal on Windows")
-	}
 	root := t.TempDir()
 	content := "variable \"stale\" {}\n"
 	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{
@@ -201,6 +200,9 @@ func TestStaleFileRemovalFailureIsReportedAndRetried(t *testing.T) {
 	child := filepath.Join(root, "child")
 	require.NoError(t, os.Chmod(child, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(child, 0o755) })
+	// A process that can bypass the restriction, such as root with CAP_DAC_OVERRIDE, would remove
+	// the stale file, so the failure under test cannot occur.
+	requireEffectiveDirectoryPermissions(t, child)
 
 	err := WriteFiles(root, []schema.ComponentConfigurationFile{generated("keep.tf", content, "overwrite")})
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
@@ -231,4 +233,92 @@ func TestBatchFailureKeepsTheRecordsOfFilesItAlreadyWrote(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(root, "guarded.tf")))
 	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{first, second}))
 	require.Equal(t, "token = \"b\"\n", read(t, root, "secret.auto.tfvars"))
+}
+
+// An explicit generate block must keep enforcing its policy after init changes the lock.
+func TestExplicitLockFilePoliciesAfterTerraformUpdates(t *testing.T) {
+	for _, policy := range []string{"overwrite", "skip", "error"} {
+		t.Run(policy, func(t *testing.T) {
+			root := t.TempDir()
+			files := []schema.ComponentConfigurationFile{generated(lockFileName, "# generated pins\n", policy)}
+			require.NoError(t, WriteFiles(root, files))
+			require.NoError(t, os.WriteFile(filepath.Join(root, lockFileName), []byte("# upgraded by init\n"), 0o600))
+			err := WriteFiles(root, files)
+			if policy == "error" {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			} else {
+				require.NoError(t, err)
+			}
+			want := "# upgraded by init\n"
+			if policy == "overwrite" {
+				want = "# generated pins\n"
+			}
+			require.Equal(t, want, read(t, root, lockFileName))
+		})
+	}
+}
+
+func TestExplicitLockGenerationReplacesAdjacentCopy(t *testing.T) {
+	root := t.TempDir()
+	file := generated(lockFileName, "# pinned\n", "overwrite")
+	file.UnitFileCopy = true
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
+	require.NoError(t, os.WriteFile(filepath.Join(root, lockFileName), []byte("# upgraded by init\n"), 0o600))
+	// The explicit block has identical bytes to the old copy; provenance alone changes.
+	file.UnitFileCopy = false
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
+	require.Equal(t, "# pinned\n", read(t, root, lockFileName))
+}
+
+// A manifest that cannot be written is reported with the configuration sentinel and keeps its
+// filesystem cause; the generated file written before it stays in place.
+func TestManifestWriteFailureCarriesSentinel(t *testing.T) {
+	root := t.TempDir()
+	// A regular file where the bookkeeping directory belongs makes the manifest write fail.
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".atmos"), []byte("blocker\n"), 0o600))
+
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{generated("main.tf", "locals {}\n", "overwrite")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.Contains(t, err.Error(), manifestName)
+	var pathErr *os.PathError
+	require.ErrorAs(t, err, &pathErr, "the filesystem cause is preserved")
+	require.Equal(t, "locals {}\n", read(t, root, "main.tf"))
+}
+
+// requireEffectiveDirectoryPermissions skips a test when the process can still create files in a
+// read-only directory, as root with CAP_DAC_OVERRIDE can, or on Windows.
+func requireEffectiveDirectoryPermissions(t *testing.T, directory string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not prevent changes on Windows")
+	}
+	probe := filepath.Join(directory, ".permission-probe")
+	if err := os.WriteFile(probe, nil, 0o600); err == nil {
+		_ = os.Remove(probe)
+		t.Skip("the process bypasses directory permissions")
+	}
+}
+
+// A replacement that cannot be written leaves the previous file and its recorded digest in place,
+// so the retry still recognizes the file as this host's under an ownership-checking policy.
+func TestFailedReplacementKeepsTheRecordedFile(t *testing.T) {
+	root := t.TempDir()
+	original := generated("child/backend.tf", "terraform {}\n", "overwrite_terragrunt")
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{original}))
+	child := filepath.Join(root, "child")
+	require.NoError(t, os.Chmod(child, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(child, 0o755) })
+	requireEffectiveDirectoryPermissions(t, child)
+
+	replacement := generated("child/backend.tf", "terraform { backend \"s3\" {} }\n", "overwrite_terragrunt")
+	require.ErrorIs(t, WriteFiles(root, []schema.ComponentConfigurationFile{replacement}), errUtils.ErrPluginInvalidConfig)
+	require.Equal(t, "terraform {}\n", read(t, root, "child/backend.tf"), "the previous bytes stay intact")
+	entries, err := os.ReadDir(child)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "no temporary file is left behind")
+	require.Equal(t, "backend.tf", entries[0].Name())
+
+	require.NoError(t, os.Chmod(child, 0o755))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{replacement}))
+	require.Equal(t, "terraform { backend \"s3\" {} }\n", read(t, root, "child/backend.tf"))
 }
