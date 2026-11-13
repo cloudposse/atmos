@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
@@ -352,16 +355,90 @@ func TestLogStreamCloseIsIdempotentAndNilSafe(t *testing.T) {
 
 func TestLogStreamOptionsIgnoreInvalidValues(t *testing.T) {
 	t.Parallel()
-	stream := (*Client)(nil).OpenLogs(t.Context(), "id", WithLogQueue(0), WithLogBatch(-1), WithLogFlush(-time.Second))
+	stream := (*Client)(nil).OpenLogs(t.Context(), "id", WithLogQueue(0), WithLogBatch(-1), WithLogFlush(-time.Second), WithLogBytes(0))
 	defer stream.Close()
-	if stream.capacity != DefaultLogQueue || stream.batch != DefaultLogBatch || stream.flush != DefaultLogFlush {
-		t.Fatalf("invalid options changed defaults: %d %d %s", stream.capacity, stream.batch, stream.flush)
+	if stream.capacity != DefaultLogQueue || stream.batch != DefaultLogBatch || stream.flush != DefaultLogFlush || stream.bytes != DefaultLogBytes {
+		t.Fatalf("invalid options changed defaults: %d %d %s %d", stream.capacity, stream.batch, stream.flush, stream.bytes)
 	}
 	limited := (*Client)(nil).OpenLogs(t.Context(), "id", WithLogQueue(1))
 	limited.Send(entry("a"))
 	limited.Send(entry("b"))
 	if got := messages(limited.Close()); !equal(got, []string{"a", "1 log events were not shown"}) {
 		t.Fatalf("unavailable stream is not bounded: %v", got)
+	}
+}
+
+// responseSize is the encoded size of entries as a repeated field of a message, as a response carries them.
+func responseSize(entries []*pluginv1.LogEntry) int {
+	return proto.Size(&pluginv1.LogRequest{Entries: entries})
+}
+
+func TestLogStreamBoundsReturnedEntriesByEncodedSize(t *testing.T) {
+	t.Parallel()
+	payload := strings.Repeat("x", 1000)
+	single := encodedLogSize(entry(payload))
+	// Room for exactly three entries next to the omission warning.
+	budget := omissionReserve + 3*single
+	stream := (*Client)(nil).OpenLogs(t.Context(), "id", WithLogBytes(budget))
+	for i := range 5 {
+		stream.Send(entry(fmt.Sprintf("%d%s", i, payload[1:])))
+	}
+	got := stream.Close()
+	if len(got) != 4 {
+		t.Fatalf("returned %d entries, want 3 and a warning", len(got))
+	}
+	if got[0].GetMessage()[0] != '0' || got[2].GetMessage()[0] != '2' {
+		t.Fatalf("returned entries out of order: %q .. %q", got[0].GetMessage()[:1], got[2].GetMessage()[:1])
+	}
+	if last := got[3].GetMessage(); last != "2 log events were not shown" || got[3].GetLevel() != pluginv1.LogLevel_LOG_LEVEL_WARN {
+		t.Fatalf("warning = %v %q", got[3].GetLevel(), last)
+	}
+	if size := responseSize(got); size > budget {
+		t.Fatalf("returned %d bytes, budget %d", size, budget)
+	}
+}
+
+func TestLogStreamOmitsAnOversizedEntryButKeepsLaterOnes(t *testing.T) {
+	t.Parallel()
+	budget := 4096
+	stream := (*Client)(nil).OpenLogs(t.Context(), "id", WithLogBytes(budget))
+	stream.Send(entry("before"))
+	stream.Send(&pluginv1.LogEntry{Message: "huge", Fields: map[string]string{"blob": strings.Repeat("é", budget)}})
+	stream.Send(entry("after"))
+	got := stream.Close()
+	if !equal(messages(got), []string{"before", "after", "1 log events were not shown"}) {
+		t.Fatalf("returned = %v", messages(got))
+	}
+	if size := responseSize(got); size > budget {
+		t.Fatalf("returned %d bytes, budget %d", size, budget)
+	}
+}
+
+func TestLogStreamDefaultByteBoundHoldsAFullQueueOfLargeEntries(t *testing.T) {
+	t.Parallel()
+	payload := strings.Repeat("x", 4096)
+	stream := (*Client)(nil).OpenLogs(t.Context(), "id")
+	for range DefaultLogQueue {
+		stream.Send(entry(payload))
+	}
+	got := stream.Close()
+	kept := len(got) - 1
+	want := (DefaultLogBytes - omissionReserve) / encodedLogSize(entry(payload))
+	if kept != want {
+		t.Fatalf("kept %d entries, want %d", kept, want)
+	}
+	if last := got[kept].GetMessage(); last != fmt.Sprintf("%d log events were not shown", DefaultLogQueue-want) {
+		t.Fatalf("warning = %q", last)
+	}
+	if size := responseSize(got); size > DefaultLogBytes {
+		t.Fatalf("returned %d bytes, bound %d", size, DefaultLogBytes)
+	}
+}
+
+func TestOmissionReserveFitsTheLargestWarning(t *testing.T) {
+	t.Parallel()
+	if size := responseSize([]*pluginv1.LogEntry{omission(math.MaxInt)}); size > omissionReserve {
+		t.Fatalf("warning takes %d bytes, reserve %d", size, omissionReserve)
 	}
 }
 

@@ -3,11 +3,14 @@ package api
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
@@ -22,7 +25,21 @@ const (
 	// DefaultLogFlush is how long Close waits for Atmos to render the entries still queued. Zero waits until
 	// every entry is delivered or the call is cancelled, so no entry is lost to a slow terminal.
 	DefaultLogFlush = time.Duration(0)
+	// DefaultLogBytes bounds the encoded size of the entries Close returns, including the omission warning, so
+	// that they stay well under the 16 MiB plugin message limit together with the rest of the response.
+	DefaultLogBytes = 1 << 20
 )
+
+// omissionFormat is the message of the entry that reports how many entries were not shown.
+const omissionFormat = "%d log events were not shown"
+
+// logTagBytes is the largest encoded tag of a log entry field in a response; two bytes hold field numbers up
+// to 2047.
+const logTagBytes = 2
+
+// omissionReserve is the encoded size of the largest possible omission warning, which the byte bound always
+// leaves room for.
+var omissionReserve = encodedLogSize(omission(math.MaxInt))
 
 // LogOption configures a LogStream.
 type LogOption func(*LogStream)
@@ -51,6 +68,18 @@ func WithLogBatch(entries int) LogOption {
 	}
 }
 
+// WithLogBytes sets the encoded size, in bytes, that the entries Close returns may take in a response,
+// including the omission warning. Entries that do not fit are counted as omitted. Values below one are ignored.
+//
+//nolint:lintroller // Pure SDK helper; the standalone SDK cannot import host perf tracking.
+func WithLogBytes(size int) LogOption {
+	return func(s *LogStream) {
+		if size > 0 {
+			s.bytes = size
+		}
+	}
+}
+
 // WithLogFlush caps how long Close waits for queued entries to reach Atmos; entries cut off by the cap are
 // counted as omitted. The default is no cap. Values below zero are ignored.
 //
@@ -69,8 +98,9 @@ func WithLogFlush(wait time.Duration) LogOption {
 // the speed of the terminal. Send never fails the call, and it stops waiting when the call is cancelled.
 //
 // Entries that Atmos did not take, because the log service is unavailable, are retained up to the queue
-// capacity for Close to return in the response; further entries are counted as omitted. The default capacity
-// is 1,024 entries and WithLogQueue changes it. Entries delivered live are
+// capacity and the response byte bound for Close to return in the response; further entries are counted as
+// omitted. The default capacity is 1,024 entries and WithLogQueue changes it; the default byte bound is 1 MiB
+// of encoded entries and WithLogBytes changes it. Entries delivered live are
 // never returned, so nothing is shown twice. An entry whose delivery was cut off in flight, by cancellation or
 // an optional flush cap or an ambiguous transport failure, is counted as omitted rather than returned: it
 // may already be on screen.
@@ -79,6 +109,7 @@ type LogStream struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	capacity int
+	bytes    int
 	batch    int
 	flush    time.Duration
 	wake     chan struct{}
@@ -89,6 +120,8 @@ type LogStream struct {
 	mu          sync.Mutex
 	queue       []*pluginv1.LogEntry
 	undelivered []*pluginv1.LogEntry
+	// The encoded size of undelivered as a repeated field of a response.
+	retained    int
 	omitted     int
 	unavailable bool
 	closing     bool
@@ -97,12 +130,12 @@ type LogStream struct {
 }
 
 // OpenLogs starts delivering log entries for the invocation. It never fails: when the Atmos API is not
-// configured or the invocation is unknown, Close returns up to the queue capacity (1,024 by default),
-// followed by an omission warning if more entries were sent. The caller must call Close before returning.
+// configured or the invocation is unknown, Close returns up to the queue capacity (1,024 by default) and the
+// byte bound (1 MiB by default), followed by an omission warning if more entries were sent. The caller must call Close before returning.
 //
 //nolint:lintroller // Pure SDK helper; the standalone SDK cannot import host perf tracking.
 func (c *Client) OpenLogs(ctx context.Context, invocationID string, options ...LogOption) *LogStream {
-	stream := &LogStream{capacity: DefaultLogQueue, batch: DefaultLogBatch, flush: DefaultLogFlush, wake: make(chan struct{}, 1), done: make(chan struct{})}
+	stream := &LogStream{capacity: DefaultLogQueue, bytes: DefaultLogBytes, batch: DefaultLogBatch, flush: DefaultLogFlush, wake: make(chan struct{}, 1), done: make(chan struct{})}
 	for _, apply := range options {
 		apply(stream)
 	}
@@ -164,14 +197,27 @@ func (s *LogStream) wakeSenders() {
 	s.space.Broadcast()
 }
 
-// keepLocked remembers an undelivered entry for the response, up to the queue bound, which keeps the response
-// within the transport's message size. The caller holds the lock.
+// keepLocked remembers an undelivered entry for the response, up to the queue bound and the byte bound, which
+// keeps the response within the transport's message size. An entry that does not fit in the bytes left is
+// counted as omitted, and room for the omission warning is always kept. The caller holds the lock.
 func (s *LogStream) keepLocked(entry *pluginv1.LogEntry) {
-	if len(s.undelivered) >= s.capacity {
+	size := encodedLogSize(entry)
+	if len(s.undelivered) >= s.capacity || s.retained+size > s.bytes-omissionReserve {
 		s.omitted++
 		return
 	}
 	s.undelivered = append(s.undelivered, entry)
+	s.retained += size
+}
+
+// encodedLogSize is the size of an entry as one element of a repeated log field in a response.
+func encodedLogSize(entry *pluginv1.LogEntry) int {
+	return logTagBytes + protowire.SizeBytes(proto.Size(entry))
+}
+
+// omission is the entry that reports how many entries were not shown.
+func omission(count int) *pluginv1.LogEntry {
+	return &pluginv1.LogEntry{Level: pluginv1.LogLevel_LOG_LEVEL_WARN, Message: fmt.Sprintf(omissionFormat, count)}
 }
 
 // Close waits for queued entries to reach Atmos, for at most the flush cap when one is set, stops the stream, and returns
@@ -205,7 +251,7 @@ func (s *LogStream) Close() []*pluginv1.LogEntry {
 	s.queue = nil
 	s.result = s.undelivered
 	if s.omitted > 0 {
-		s.result = append(s.result, &pluginv1.LogEntry{Level: pluginv1.LogLevel_LOG_LEVEL_WARN, Message: fmt.Sprintf("%d log events were not shown", s.omitted)})
+		s.result = append(s.result, omission(s.omitted))
 	}
 	s.closed = true
 	return append([]*pluginv1.LogEntry(nil), s.result...)
