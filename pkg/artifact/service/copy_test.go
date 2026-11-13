@@ -11,6 +11,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -273,6 +274,62 @@ func TestCopy_UsesNativeTransferWhenCompatible(t *testing.T) {
 	_, err = e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, native.copies, "an incompatible pair falls back to staging")
+}
+
+func TestCopy_RepeatedNativeGraphCopyWithoutRecordIsUnchanged(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(map[bool]string{false: "without force", true: "with force"}[force], func(t *testing.T) {
+			e := copyEnv(t, artifact.PackagingNone, artifact.PackagingNone)
+			e.publish("src", e.source("hello"))
+			source := delegatingRepository(t, e.repos["src"], repoHooks{inspect: func(ctx context.Context, pinned artifact.PinnedReference) (*artifact.Inspection, error) {
+				inspection, err := e.repos["src"].Inspect(ctx, pinned)
+				if err != nil {
+					return nil, err
+				}
+				return withoutRecord(inspection), nil
+			}})
+			pinned, err := e.repos["src"].Resolve(context.Background(), exampleRef)
+			require.NoError(t, err)
+			var copied atomic.Int32
+			destination := delegatingRepository(t, e.repos["dst"], repoHooks{
+				resolve: func(context.Context, artifact.Ref) (artifact.PinnedReference, error) {
+					if copied.Load() == 0 {
+						return artifact.PinnedReference{}, errUtils.ErrArtifactNotFound
+					}
+					return pinned, nil
+				},
+				inspect: func(ctx context.Context, p artifact.PinnedReference) (*artifact.Inspection, error) {
+					inspection, err := e.repos["src"].Inspect(ctx, p)
+					if err != nil {
+						return nil, err
+					}
+					return withoutRecord(inspection), nil
+				},
+			})
+			copier := artifact.NewMockCopier(gomock.NewController(t))
+			copier.EXPECT().CanCopyFrom(gomock.Any()).Return(true).AnyTimes()
+			copier.EXPECT().CopyFrom(gomock.Any(), gomock.Any(), pinned, gomock.Any()).DoAndReturn(
+				func(ctx context.Context, _ artifact.Repository, p artifact.PinnedReference, _ artifact.CopyFromOptions) (*artifact.PublishResult, error) {
+					copied.Add(1)
+					inspection, err := e.repos["src"].Inspect(ctx, p)
+					if err != nil {
+						return nil, err
+					}
+					return &artifact.PublishResult{Outcome: artifact.OutcomeCreated, Pinned: p, Representation: inspection.Representation, Location: "native://copy"}, nil
+				},
+			).Times(1)
+			e.static.Repositories["src"] = source
+			e.static.Repositories["dst"] = &nativeDestination{Repository: destination, Copier: copier}
+
+			first, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
+			require.NoError(t, err)
+			assert.Equal(t, artifact.OutcomeCreated, first.Outcome)
+
+			again, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst", Force: force})
+			require.NoError(t, err)
+			assert.Equal(t, artifact.OutcomeUnchanged, again.Outcome, "the destination already points at the source root")
+		})
+	}
 }
 
 func diagnosticCodes(result *artifact.OperationResult) []string {
