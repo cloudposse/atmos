@@ -17,6 +17,8 @@ Use Gitea Actions to plan infrastructure changes on pull requests, deploy after 
 
 Gitea Actions runs GitHub-Actions-compatible workflows from `.gitea/workflows/`. Atmos selects its Gitea provider whenever `GITEA_ACTIONS=true`, even though Gitea's runner also sets `GITHUB_ACTIONS=true`.
 
+In Gitea 1.26, the first existing directory in [`WORKFLOW_DIRS`](https://docs.gitea.com/1.26/administration/config-cheat-sheet/) is used for Actions workflows. The default order puts `.gitea/workflows` before `.github/workflows`, so adding `.gitea/workflows` can make existing workflows in `.github/workflows` undiscoverable to Gitea. Migrate or consolidate the workflows Gitea should run into the selected directory.
+
 Start with [Setup and Authentication](/integrations/gitea-actions/setup) to create the token Atmos uses, then [Plan on Pull Request](/integrations/gitea-actions/plan-on-pull-request) and [Apply on Merge](/integrations/gitea-actions/apply-on-merge). For larger projects, use [affected-component matrices](/integrations/gitea-actions/deploy-affected) to limit work to changed infrastructure.
 
 ## What Differs from GitHub Actions
