@@ -22,21 +22,27 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/gruntwork-io/terragrunt/internal/awshelper"
+	"github.com/gruntwork-io/terragrunt/internal/iam"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
+
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_roundtripper_test.go -package=atmosbridge net/http RoundTripper
 
 const testAccount = "123456789012"
 
 // stsServer answers the two STS actions Terragrunt issues and records who signed each request.
 type stsServer struct {
 	*httptest.Server
-	mu      sync.Mutex
-	signers []string
-	actions []string
-	hosts   []string
+	mu       sync.Mutex
+	signers  []string
+	actions  []string
+	hosts    []string
+	requests []*http.Request
+	bodies   [][]byte
 }
 
 var credentialPattern = regexp.MustCompile(`Credential=([^/]+)/`)
@@ -56,6 +62,7 @@ func newSTSServer(t *testing.T) *stsServer {
 		}
 		server.mu.Lock()
 		server.signers, server.actions, server.hosts = append(server.signers, signer), append(server.actions, action), append(server.hosts, r.Host)
+		server.requests, server.bodies = append(server.requests, r.Clone(r.Context())), append(server.bodies, body)
 		server.mu.Unlock()
 		w.Header().Set("Content-Type", "text/xml")
 		if action == "AssumeRole" {
@@ -141,6 +148,31 @@ func TestAWSIgnoresProcessProfileWhenInvocationSelectsAnother(t *testing.T) {
 	signers, _ := server.seen()
 	assert.Equal(t, []string{"AKIASELECTED"}, signers, "ambient process credentials never outrank the selected identity")
 	assert.Equal(t, "process-profile", os.Getenv("AWS_PROFILE"))
+}
+
+// Shared files without a profile select their default profile; static keys and a web identity token file
+// in the plugin process environment never outrank them.
+func TestAWSIgnoresProcessCredentialsWhenInvocationSuppliesOnlyFiles(t *testing.T) {
+	server := newSTSServer(t)
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("AWS_DEFAULT_PROFILE", "")
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAAMBIENT")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient")
+	t.Setenv("AWS_WEB_IDENTITY_TOKEN_FILE", filepath.Join(t.TempDir(), "ambient-token"))
+	t.Setenv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/ambient")
+	credentials, configFile := writeProfile(t, "default", "AKIAFILES")
+	env := map[string]string{
+		"AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile,
+		"AWS_ENDPOINT_URL": server.URL, "AWS_EC2_METADATA_DISABLED": "true",
+	}
+
+	_, err := accountID(t, AWS(t.Context(), Environment(env, io.Discard, io.Discard)))
+
+	require.NoError(t, err)
+	signers, actions := server.seen()
+	assert.Equal(t, []string{"AKIAFILES"}, signers, "the invocation's files sign the call, not the process keys")
+	assert.Equal(t, []string{"GetCallerIdentity"}, actions, "the process web identity role is never assumed")
+	assert.Equal(t, "AKIAAMBIENT", os.Getenv("AWS_ACCESS_KEY_ID"), "the plugin process environment is unchanged")
 }
 
 func TestAWSKeepsStaticKeysAndRoutesEndpointOnly(t *testing.T) {
@@ -235,10 +267,6 @@ func TestAWSTransportRoutesByService(t *testing.T) {
 	assert.Contains(t, hits["other"][0], "/untouched")
 }
 
-type captureTransport func(*http.Request) (*http.Response, error)
-
-func (f captureTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
-
 func TestAWSTransportSignsEndpointPathPrefix(t *testing.T) {
 	credentials := aws.Credentials{AccessKeyID: "AKIATEST", SecretAccessKey: "secret"}
 	req, err := http.NewRequest(http.MethodPost, "https://sts.us-east-1.amazonaws.com/action?version=1", strings.NewReader("Action=GetCallerIdentity"))
@@ -249,13 +277,15 @@ func TestAWSTransportSignsEndpointPathPrefix(t *testing.T) {
 	require.NoError(t, v4.NewSigner().SignHTTP(t.Context(), credentials, req, hash, "sts", "us-east-1", stamp))
 	oldSignature := req.Header.Get("Authorization")
 	var sent *http.Request
+	next := NewMockRoundTripper(gomock.NewController(t))
+	next.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
+		sent = r
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	}).Times(1)
 	transport := &awsTransport{
 		credentials: credentials,
 		endpoints:   map[string]*url.URL{"sts": {Scheme: "https", Host: "proxy.example", Path: "/aws/sts"}},
-		next: captureTransport(func(r *http.Request) (*http.Response, error) {
-			sent = r
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
-		}),
+		next:        next,
 	}
 	_, err = transport.RoundTrip(req)
 	require.NoError(t, err)
@@ -267,6 +297,45 @@ func TestAWSTransportSignsEndpointPathPrefix(t *testing.T) {
 	sent.Header.Del("Authorization")
 	require.NoError(t, v4.NewSigner().SignHTTP(t.Context(), credentials, sent, hash, "sts", "us-east-1", stamp))
 	require.Equal(t, actualSignature, sent.Header.Get("Authorization"), "the signature covers the final path")
+}
+
+// A profile that assumes a role from a source profile signs its STS call with the source credentials, which
+// the transport never holds. Behind an endpoint path prefix, the call still succeeds and its signature covers
+// the final path.
+func TestAWSResolvesSourceProfileRoleChainBehindEndpointPathPrefix(t *testing.T) {
+	server := newSTSServer(t)
+	dir := t.TempDir()
+	credentials, configFile := filepath.Join(dir, "credentials"), filepath.Join(dir, "config")
+	require.NoError(t, os.WriteFile(credentials, []byte("[base]\naws_access_key_id = AKIABASE\naws_secret_access_key = base-secret\n"), 0o600))
+	require.NoError(t, os.WriteFile(configFile, []byte("[profile chained]\nrole_arn = arn:aws:iam::123456789012:role/chained\nsource_profile = base\n"), 0o600))
+	env := map[string]string{
+		"AWS_PROFILE": "chained", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile,
+		"AWS_ENDPOINT_URL_STS": server.URL + "/prefix", "AWS_EC2_METADATA_DISABLED": "true",
+	}
+
+	_, err := accountID(t, AWS(t.Context(), Environment(env, io.Discard, io.Discard)))
+
+	require.NoError(t, err)
+	signers, actions := server.seen()
+	assert.Equal(t, []string{"AssumeRole", "GetCallerIdentity"}, actions)
+	assert.Equal(t, []string{"AKIABASE", "ASIAASSUMED"}, signers)
+	server.mu.Lock()
+	assumed, body := server.requests[0], server.bodies[0]
+	server.mu.Unlock()
+	assert.Equal(t, "/prefix/", assumed.URL.Path, "the prefix is applied once")
+	signed := assumed.Header.Get("Authorization")
+	replay, err := http.NewRequest(http.MethodPost, "https://"+assumed.Host+assumed.URL.RequestURI(), strings.NewReader(string(body)))
+	require.NoError(t, err)
+	replay.Header = assumed.Header.Clone()
+	// The Go client adds Accept-Encoding after signing; the signature never covers it.
+	replay.Header.Del("Accept-Encoding")
+	replay.Header.Del("Authorization")
+	stamp, err := time.Parse("20060102T150405Z", assumed.Header.Get("X-Amz-Date"))
+	require.NoError(t, err)
+	digest := sha256.Sum256(body)
+	source := aws.Credentials{AccessKeyID: "AKIABASE", SecretAccessKey: "base-secret"}
+	require.NoError(t, v4.NewSigner().SignHTTP(t.Context(), source, replay, hex.EncodeToString(digest[:]), "sts", "us-east-1", stamp))
+	assert.Equal(t, signed, replay.Header.Get("Authorization"), "the source credentials signed the final path")
 }
 
 func TestAWSTransportFailureOnlyAffectsAWSHosts(t *testing.T) {
@@ -366,4 +435,33 @@ func TestAWSWebIdentityRoleFromInvocationTokenFile(t *testing.T) {
 	mu.Unlock()
 	assert.Contains(t, action, "AssumeRoleWithWebIdentity")
 	assert.Contains(t, action, "RoleSessionName=atmos-web")
+}
+
+// An assumed role session is reused only for the same assumption: a different or rotated web identity token,
+// duration, or base secret assumes the role again, and no raw secret enters the key.
+func TestAWSRoleCacheKeyTracksEveryAssumptionInput(t *testing.T) {
+	env := map[string]string{"AWS_PROFILE": "base", envAccessKeyID: "AKIABASE", envSecretKey: "base-secret", envSessionToken: "base-session"}
+	role := testRole("arn:aws:iam::123456789012:role/deploy", "token-one")
+	key := roleCacheKey(env, role)
+
+	assert.Equal(t, key, roleCacheKey(maps.Clone(env), role))
+	assert.NotContains(t, key, "token-one")
+	assert.NotEqual(t, key, roleCacheKey(env, testRole(role.RoleARN, "token-two")), "another token is validated again")
+	longer := role
+	longer.AssumeRoleDuration = 7200
+	assert.NotEqual(t, key, roleCacheKey(env, longer))
+	rotated := maps.Clone(env)
+	rotated[envSecretKey] = "rotated-secret"
+	assert.NotEqual(t, key, roleCacheKey(rotated, role))
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(tokenFile, []byte("jwt-one"), 0o600))
+	fromFile := testRole(role.RoleARN, tokenFile)
+	before := roleCacheKey(env, fromFile)
+	require.NoError(t, os.WriteFile(tokenFile, []byte("jwt-rotated"), 0o600))
+	assert.NotEqual(t, before, roleCacheKey(env, fromFile), "rewriting the token file invalidates the session")
+}
+
+func testRole(arn, token string) iam.RoleOptions {
+	return iam.RoleOptions{RoleARN: arn, AssumeRoleSessionName: "atmos", WebIdentityToken: token}
 }

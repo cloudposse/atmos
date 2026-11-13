@@ -24,6 +24,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/gruntwork-io/terragrunt/internal/awshelper"
 	"github.com/gruntwork-io/terragrunt/internal/iam"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
@@ -89,8 +91,7 @@ func AWS(ctx context.Context, v *venv.Venv) *venv.Venv {
 		transport.apply(env, &credentials, err)
 	}
 	if role := roleOptions(env); role.RoleARN != "" && transport.failure == nil {
-		key := awsCacheKey(env) + "|" + role.RoleARN + "|" + role.AssumeRoleSessionName + "|" + env[envAccessKeyID]
-		credentials, err := cachedCredentials(key, func() (aws.Credentials, error) { return assumeInvocationRole(ctx, v.WithEnv(env), transport, role) })
+		credentials, err := cachedCredentials(roleCacheKey(env, role), func() (aws.Credentials, error) { return assumeInvocationRole(ctx, v.WithEnv(env), transport, role) })
 		transport.apply(env, &credentials, err)
 	}
 	if !transport.active() {
@@ -191,6 +192,26 @@ func awsCacheKey(env map[string]string) string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
+// roleCacheKey identifies an assumed role session by every input of the assumption: the selection, the
+// role settings, the credentials that assume it, and the web identity token, which may be the token itself
+// or a file holding it. Secrets enter only as a digest, and a token file also by its size and time, so a
+// rotated token is validated again instead of reusing the session of the previous one.
+func roleCacheKey(env map[string]string, role iam.RoleOptions) string {
+	hash := sha256.New()
+	fmt.Fprintf(hash, "selection=%s\nrole=%s\nsession=%s\nduration=%d\naccess=%s\n",
+		awsCacheKey(env), role.RoleARN, role.AssumeRoleSessionName, role.AssumeRoleDuration, env[envAccessKeyID])
+	for _, secret := range []string{env[envSecretKey], env[envSessionToken], role.WebIdentityToken} {
+		digest := sha256.Sum256([]byte(secret))
+		fmt.Fprintf(hash, "secret=%x\n", digest)
+	}
+	if role.WebIdentityToken != "" {
+		if info, err := os.Stat(role.WebIdentityToken); err == nil {
+			fmt.Fprintf(hash, "token=%d:%d\n", info.Size(), info.ModTime().UnixNano())
+		}
+	}
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
 // resolveAWSCredentials loads the invocation's selection with explicit SDK options. An explicit profile
 // outranks the static keys of the plugin process, which the SDK would otherwise prefer.
 func resolveAWSCredentials(ctx context.Context, env map[string]string, transport *awsTransport) (aws.Credentials, error) {
@@ -200,7 +221,7 @@ func resolveAWSCredentials(ctx context.Context, env map[string]string, transport
 	if err != nil {
 		return aws.Credentials{}, fmt.Errorf("loading the AWS configuration selected by the invocation environment: %w", err)
 	}
-	if env["AWS_PROFILE"] == "" && env["AWS_DEFAULT_PROFILE"] == "" && env["AWS_WEB_IDENTITY_TOKEN_FILE"] != "" && env["AWS_ROLE_ARN"] != "" {
+	if selectsWebIdentityRole(env) {
 		provider := stscreds.NewWebIdentityRoleProvider(sts.NewFromConfig(cfg), env["AWS_ROLE_ARN"], stscreds.IdentityTokenFile(env["AWS_WEB_IDENTITY_TOKEN_FILE"]), func(o *stscreds.WebIdentityRoleOptions) {
 			o.RoleSessionName = env["AWS_ROLE_SESSION_NAME"]
 		})
@@ -235,20 +256,32 @@ func loadOptions(env map[string]string, transport *awsTransport) []func(*config.
 	options := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
 		config.WithHTTPClient(&http.Client{Transport: transport, Timeout: awsResolveTimeout}),
-	}
-	if profile := cmpFirst(env["AWS_PROFILE"], env["AWS_DEFAULT_PROFILE"]); profile != "" {
-		options = append(options, config.WithSharedConfigProfile(profile))
-	}
-	if file := env["AWS_SHARED_CREDENTIALS_FILE"]; file != "" {
-		options = append(options, config.WithSharedCredentialsFiles([]string{file}))
-	}
-	if file := env["AWS_CONFIG_FILE"]; file != "" {
-		options = append(options, config.WithSharedConfigFiles([]string{file}))
+		// A role chain signs its STS calls with source credentials the transport does not hold, so the
+		// endpoint path prefix is applied before the SDK signs them instead of re-signing in the transport.
+		config.WithAPIOptions([]func(*middleware.Stack) error{transport.prefixBeforeSigning}),
 	}
 	if strings.EqualFold(env["AWS_EC2_METADATA_DISABLED"], "true") {
 		options = append(options, config.WithEC2IMDSClientEnableState(imds.ClientDisabled))
 	}
-	return options
+	// A web identity role selected by the invocation replaces the credential chain after loading.
+	if selectsWebIdentityRole(env) {
+		return options
+	}
+	// LoadDefaultConfig also reads the plugin process environment, and its static keys, web identity token
+	// file, profile, and shared file locations outrank the shared files unless a profile and the files are
+	// set explicitly. So both are: the invocation's selection, or the SDK defaults it would use when the
+	// invocation leaves one out. Credentials then come only from the invocation's shared files.
+	return append(
+		options,
+		config.WithSharedConfigProfile(profileName(env)),
+		config.WithSharedCredentialsFiles([]string{cmpFirst(env["AWS_SHARED_CREDENTIALS_FILE"], config.DefaultSharedCredentialsFilename())}),
+		config.WithSharedConfigFiles([]string{cmpFirst(env["AWS_CONFIG_FILE"], config.DefaultSharedConfigFilename())}),
+	)
+}
+
+// selectsWebIdentityRole reports whether the invocation selects a web identity role instead of a profile.
+func selectsWebIdentityRole(env map[string]string) bool {
+	return env["AWS_PROFILE"] == "" && env["AWS_DEFAULT_PROFILE"] == "" && env["AWS_WEB_IDENTITY_TOKEN_FILE"] != "" && env["AWS_ROLE_ARN"] != ""
 }
 
 func cmpFirst(values ...string) string {
@@ -308,14 +341,40 @@ func (t *awsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	clone := req.Clone(req.Context())
 	clone.Host = req.URL.Host
 	clone.URL.Scheme, clone.URL.Host = target.Scheme, target.Host
-	if target.Path != "" && target.Path != "/" {
-		clone.URL.Path = strings.TrimRight(target.Path, "/") + "/" + strings.TrimLeft(req.URL.Path, "/")
-		clone.URL.RawPath = ""
+	if hasPathPrefix(target) && req.Context().Value(prefixedKey{}) == nil {
+		clone.URL.Path, clone.URL.RawPath = prefixedPath(target, req.URL.Path), ""
 		if err := t.signPrefixedRequest(clone); err != nil {
 			return nil, err
 		}
 	}
 	return next.RoundTrip(clone)
+}
+
+// prefixedKey marks a request whose endpoint path prefix was applied before signing.
+type prefixedKey struct{}
+
+// prefixBeforeSigning adds a step, run just before the SDK signs a request, that applies the endpoint path
+// prefix of an overridden AWS host. The signature then covers the final path whatever credentials sign it,
+// and the transport only changes the host.
+func (t *awsTransport) prefixBeforeSigning(stack *middleware.Stack) error {
+	step := middleware.FinalizeMiddlewareFunc("AtmosEndpointPathPrefix", func(ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+		if req, ok := in.Request.(*smithyhttp.Request); ok && isAWSHost(req.URL.Hostname()) {
+			if target := t.endpointFor(req.URL.Hostname()); hasPathPrefix(target) {
+				req.URL.Path, req.URL.RawPath = prefixedPath(target, req.URL.Path), ""
+				ctx = context.WithValue(ctx, prefixedKey{}, true)
+			}
+		}
+		return next.HandleFinalize(ctx, in)
+	})
+	return stack.Finalize.Insert(step, "Signing", middleware.Before)
+}
+
+func hasPathPrefix(target *url.URL) bool {
+	return target != nil && target.Path != "" && target.Path != "/"
+}
+
+func prefixedPath(target *url.URL, path string) string {
+	return strings.TrimRight(target.Path, "/") + "/" + strings.TrimLeft(path, "/")
 }
 
 // signPrefixedRequest updates a SigV4 signature after the path changes. The upstream SDK
