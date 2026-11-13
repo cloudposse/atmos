@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -88,7 +87,7 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 		return nil, err
 	}
 	r.mu.Unlock()
-	if err := r.checkSignerFormats(signer); err != nil {
+	if err := r.caps.CheckSignerFormats(r.opts.Alias, signer); err != nil {
 		return nil, err
 	}
 	payload, err := signer.Sign(ctx, subject)
@@ -110,25 +109,6 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 	defer r.mu.Unlock()
 	r.evidence[subject.Digest] = append(r.evidence[subject.Digest], artifact.EvidenceBlob{Evidence: evidence, Data: payload.Data})
 	return []artifact.SignatureEvidence{evidence}, nil
-}
-
-// checkSignerFormats refuses a signer before it is invoked when none of its formats can be stored.
-func (r *Repository) checkSignerFormats(signer artifact.Signer) error {
-	formats := signer.Formats()
-	for _, format := range formats {
-		if r.caps.HasEvidenceFormat(format) {
-			return nil
-		}
-	}
-	return artifact.NewUnsupportedCapability(r.opts.Alias, "sign", "evidence/"+joinFormats(formats), "the repository cannot store this evidence format")
-}
-
-func joinFormats(formats []artifact.EvidenceFormat) string {
-	names := make([]string, 0, len(formats))
-	for _, format := range formats {
-		names = append(names, string(format))
-	}
-	return strings.Join(names, ",")
 }
 
 // checkSubject requires the subject to be a stored record; callers hold r.mu.
