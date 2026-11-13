@@ -42,3 +42,22 @@ func TestLogsRedactSensitiveRequestValues(t *testing.T) {
 	require.Len(t, detail.Logs, 1)
 	require.Equal(t, "<MASKED> <MASKED> visible not-sensitive", detail.Logs[0].GetMessage())
 }
+
+// A sensitive integer above 2^53 is registered by its exact digits, not a rounded float.
+func TestLogsRedactLargeSensitiveIntegersExactly(t *testing.T) {
+	large, err := cty.ParseNumberVal("9007199254740993")
+	require.NoError(t, err)
+	configuration, err := component.Encode(cty.ObjectVal(map[string]cty.Value{
+		"vars": cty.ObjectVal(map[string]cty.Value{"id": large.Mark(component.Sensitive)}),
+	}))
+	require.NoError(t, err)
+
+	_, sink := withLogs(t.Context(), &pluginv1.Invocation{LogLevel: "debug"}, "", configuration)
+	logger := log.New(log.WithOutput(io.Discard), log.WithHooks(sink.Hook()))
+	require.NoError(t, logger.SetLevel(sink.TerragruntLevel()))
+	logger.Debug("account 9007199254740993")
+
+	entries := logEntries(sink)
+	require.Len(t, entries, 1)
+	require.Equal(t, "account <MASKED>", entries[0].GetMessage())
+}

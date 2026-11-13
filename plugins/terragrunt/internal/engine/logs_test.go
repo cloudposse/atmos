@@ -204,6 +204,23 @@ func TestLogSinkRedactsAValueSplitByTheLengthBound(t *testing.T) {
 	assert.Equal(t, "ends with SECRET", entries[2].Message, "uncut text is redacted only where the whole value occurs")
 }
 
+// A shorter value that is also the beginning of a value the length bound cut must not hide the rest of that
+// beginning: replacing the short value first would leave "DEF" visible.
+func TestLogSinkRedactsACutValueThatOverlapsAShorterOne(t *testing.T) {
+	sink := NewLogSink("debug", "")
+	l := logger(t, sink)
+	l.Debug(strings.Repeat("x", maxLogMessage-6) + "ABCDEFuvwxyz")
+	l.Debug("ABC then ABCDEFuvwxyz then ABCABC")
+	sink.RedactValue("ABCDEFuvwxyz")
+	sink.RedactValue("ABC")
+
+	entries := sink.Entries()
+	require.Len(t, entries, 2)
+	assert.Equal(t, strings.Repeat("x", maxLogMessage-6)+"<MASKED>...", entries[0].Message)
+	assert.NotContains(t, entries[0].Message, "DEF")
+	assert.Equal(t, "<MASKED> then <MASKED> then <MASKED><MASKED>", entries[1].Message, "whole values still mask one by one")
+}
+
 // Evaluation registers the inputs the unit declares sensitive, so events collected before or during the
 // evaluation never carry their values, while other inputs stay readable.
 func TestResolveRedactsSensitiveInputsFromLogs(t *testing.T) {
@@ -286,7 +303,7 @@ func TestResolveWithholdsLogsWhenSensitiveValuesAreUnknown(t *testing.T) {
 }
 
 // A sensitive value declared where its text cannot be read back, such as in a block other than locals or in
-// an included file's locals, withholds the events even when the evaluation succeeds.
+// an included file's locals or inputs, withholds the events even when the evaluation succeeds.
 func TestUnredactedSensitivityCountsOnlyUnknownValues(t *testing.T) {
 	fsys := afero.NewMemMapFs()
 	write := func(name, content string) string {
@@ -301,7 +318,10 @@ func TestUnredactedSensitivityCountsOnlyUnknownValues(t *testing.T) {
 	broken := write("broken.hcl", "locals {\n")
 	missing := filepath.Join(string(filepath.Separator), "repo", "missing.hcl")
 
-	assert.False(t, unredactedSensitivity(fsys, []string{unit, plainRoot, missing}, unit, true), "inputs and the unit's own locals are redacted")
+	assert.False(t, unredactedSensitivity(fsys, []string{unit, missing}, unit, true), "the unit's own inputs and locals are redacted")
+	// A child can override an included input, so only the merged value is registered; the included value
+	// may already have been logged while the included file was parsed.
+	assert.True(t, unredactedSensitivity(fsys, []string{unit, plainRoot}, unit, true), "an included file's inputs are unknown")
 	assert.True(t, unredactedSensitivity(fsys, []string{unit}, unit, false), "nothing is known before resolution")
 	assert.True(t, unredactedSensitivity(fsys, []string{unit, root}, unit, true), "an included file's locals are unknown")
 	assert.True(t, unredactedSensitivity(fsys, []string{backend}, backend, true), "other blocks are unknown")

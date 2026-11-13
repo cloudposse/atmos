@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -49,7 +50,8 @@ func redactSensitive(sink *engine.LogSink, encoded *pluginv1.ComponentValue) {
 	})
 }
 
-// plainValue converts a value to the plain form of JSON decoding, without its marks.
+// plainValue converts a value to the plain form of JSON decoding, without its marks. Numbers stay
+// json.Number, so a sensitive integer above 2^53 keeps its exact digits when its text is registered.
 func plainValue(value cty.Value) (any, error) {
 	unmarked, _ := value.UnmarkDeep()
 	if !unmarked.IsWhollyKnown() {
@@ -59,8 +61,10 @@ func plainValue(value cty.Value) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
 	var plain any
-	if err := json.Unmarshal(data, &plain); err != nil {
+	if err := decoder.Decode(&plain); err != nil {
 		return nil, err
 	}
 	return plain, nil

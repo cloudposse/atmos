@@ -25,8 +25,9 @@ func sensitiveLocals(fsys afero.Fs, unit string, locals map[string]any) [][]stri
 
 // unredactedSensitivity reports whether any of the files calls sensitive(...) where the sink cannot learn
 // the value. When the unit was resolved, the values of its inputs and of its own locals are known and
-// registered, so only calls elsewhere count: a locals block of an included file, or another attribute or
-// block. When it was not resolved, every call counts. A file that cannot be read is skipped, since
+// registered, so only calls elsewhere count: the locals or inputs of an included file, or another attribute
+// or block. An included file's inputs count because a child can override them, so only the merged value is
+// registered while the included value may already have been logged when Terragrunt parsed that file. When it was not resolved, every call counts. A file that cannot be read is skipped, since
 // Terragrunt could not evaluate it either, and one that cannot be parsed counts, since nothing is known
 // about it.
 func unredactedSensitivity(fsys afero.Fs, files []string, unit string, resolved bool) bool {
@@ -42,7 +43,7 @@ func unredactedSensitivity(fsys afero.Fs, files []string, unit string, resolved 
 			return true
 		}
 		for name, attribute := range body.Attributes {
-			if resolved && name == inputsName {
+			if resolved && name == inputsName && file == unit {
 				continue
 			}
 			if callsSensitive(attribute.Expr) {

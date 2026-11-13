@@ -287,21 +287,50 @@ func (r *logRecord) redacted(secrets []string) model.LogEntry {
 
 // redact replaces each occurrence of a registered value in text. When the text was cut to the length bound,
 // a value the cut split leaves its beginning just before the ellipsis, so that beginning is replaced too.
+// Every match is found in the original text before anything is replaced, so replacing a short value cannot
+// hide the beginning of a longer one that overlaps it.
 func redact(text string, secrets []string, cut bool) string {
 	if len(secrets) == 0 || text == "" {
 		return text
 	}
+	body, suffix := text, ""
+	if cut {
+		if trimmed, ok := strings.CutSuffix(text, ellipsis); ok {
+			body, suffix = trimmed, ellipsis
+		}
+	}
+	spans := secretSpans(body, secrets)
+	if suffix != "" {
+		if longest := longestCutPrefix(body, secrets); longest > 0 {
+			spans = append(spans, [2]int{len(body) - longest, len(body)})
+		}
+	}
+	if len(spans) == 0 {
+		return text
+	}
+	return maskSpans(body, spans) + suffix
+}
+
+// secretSpans returns the byte ranges of every occurrence of every value in text, overlapping ones included.
+func secretSpans(text string, secrets []string) [][2]int {
+	var spans [][2]int
 	for _, secret := range secrets {
-		text = strings.ReplaceAll(text, secret, maskReplacement)
+		for offset := 0; offset < len(text); {
+			index := strings.Index(text[offset:], secret)
+			if index < 0 {
+				break
+			}
+			begin := offset + index
+			spans = append(spans, [2]int{begin, begin + len(secret)})
+			offset = begin + 1
+		}
 	}
-	if !cut {
-		return text
-	}
-	body, ok := strings.CutSuffix(text, ellipsis)
-	if !ok {
-		return text
-	}
-	// The longest beginning of any value wins, so no part of a longer one stays visible.
+	return spans
+}
+
+// longestCutPrefix returns the length of the longest beginning of any value that ends the text, so that no
+// part of a longer value stays visible.
+func longestCutPrefix(body string, secrets []string) int {
 	longest := 0
 	for _, secret := range secrets {
 		for end := min(len(secret)-1, len(body)); end > longest; end-- {
@@ -311,10 +340,31 @@ func redact(text string, secrets []string, cut bool) string {
 			}
 		}
 	}
-	if longest == 0 {
-		return text
+	return longest
+}
+
+// maskSpans replaces each group of overlapping ranges with one mask. Ranges that only touch stay separate,
+// as successive replacements would have left them.
+func maskSpans(text string, spans [][2]int) string {
+	slices.SortFunc(spans, func(a, b [2]int) int {
+		if a[0] != b[0] {
+			return a[0] - b[0]
+		}
+		return b[1] - a[1]
+	})
+	var out strings.Builder
+	position := 0
+	for i := 0; i < len(spans); {
+		begin, end := spans[i][0], spans[i][1]
+		for i++; i < len(spans) && spans[i][0] < end; i++ {
+			end = max(end, spans[i][1])
+		}
+		out.WriteString(text[position:begin])
+		out.WriteString(maskReplacement)
+		position = end
 	}
-	return body[:len(body)-longest] + maskReplacement + ellipsis
+	out.WriteString(text[position:])
+	return out.String()
 }
 
 // relative makes a unit directory project relative, leaving a path outside the project unchanged.
