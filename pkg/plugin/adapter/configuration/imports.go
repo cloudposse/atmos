@@ -2,7 +2,9 @@ package configuration
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,8 +62,18 @@ func (s *Session) importComponents(ctx context.Context, uri string, validation b
 // resolveCachedImport serializes import evaluation and orders executable imports
 // before discovery starts. Validation reads share results without changing inventory.
 func (s *Session) resolveCachedImport(ctx context.Context, template *pluginv1.DiscoverComponentsRequest, key string, validation bool) ([]*pluginv1.DiscoveredComponent, error) {
-	s.importMu.Lock()
-	defer s.importMu.Unlock()
+	if err := s.importMu.lockContext(ctx, s.ctx); err != nil {
+		return nil, err
+	}
+	defer s.importMu.unlock()
+	// Another import may have run while this one waited; a caller that gave up meanwhile gets its
+	// cancellation, not that import's cached result.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := s.ctx.Err(); err != nil {
+		return nil, err
+	}
 	instances, resolved := s.importResults[key]
 	if validation && !resolved {
 		instances, resolved = s.validationImports[key]
@@ -127,7 +139,12 @@ func (s *Session) importKey(ctx context.Context, scheme, provider, path string) 
 	}
 	clean := filepath.ToSlash(filepath.Clean(path))
 	key := provider + "://" + clean
-	if _, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(clean))); err != nil {
+	_, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(clean)))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		// Only a missing path is reported as missing; other failures keep their cause.
+		return "", fmt.Errorf("%w: import %q: cannot read %s: %w", errUtils.ErrPluginInvalidConfig, scheme+"://"+clean, clean, err)
+	}
+	if err != nil {
 		return "", errUtils.Build(fmt.Errorf("%w: import %q: %s does not exist in the project", errUtils.ErrPluginInvalidConfig, scheme+"://"+clean, clean)).
 			WithHint("Provider imports name a file or directory relative to the Atmos base path (`base_path` in `atmos.yaml`), not to the importing stack file").
 			Err()

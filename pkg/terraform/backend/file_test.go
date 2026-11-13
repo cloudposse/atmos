@@ -108,3 +108,39 @@ func TestHostBackendOwnership(t *testing.T) {
 		})
 	}
 }
+
+// A provider-owned backend whose ownership receipt cannot be written fails with the backend
+// generation error and keeps the filesystem cause.
+func TestGenerateFileWrapsReceiptFailures(t *testing.T) {
+	dir := t.TempDir()
+	// A file where the receipt directory belongs makes the receipt impossible to create.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".atmos"), nil, 0o600))
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand: "plan", ComponentBackendType: "local", ComponentBackendSection: map[string]any{"path": "state.tfstate"},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{"provider": "terragrunt"}},
+	}
+	err := GenerateFile(config, info, dir)
+	require.ErrorIs(t, err, errUtils.ErrBackendFileGeneration)
+	require.ErrorContains(t, err, "backend.tf.json")
+	var pathErr *os.PathError
+	require.ErrorAs(t, err, &pathErr, "the filesystem cause is preserved")
+}
+
+// Filesystem failures while relinquishing the host backend are classified with repository
+// sentinels and keep their causes; a missing receipt is still not an error.
+func TestRemoveHostBackendWrapsFilesystemFailures(t *testing.T) {
+	err := RemoveHostBackend(filepath.Join(t.TempDir(), "absent"))
+	require.ErrorIs(t, err, errUtils.ErrOpenFile)
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	require.NoError(t, RemoveHostBackend(t.TempDir()), "no receipt means nothing to remove")
+
+	dir := t.TempDir()
+	// A directory where the receipt file belongs cannot be read as a receipt.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".atmos", "host-backend.sha256"), 0o700))
+	err = RemoveHostBackend(dir)
+	require.ErrorIs(t, err, errUtils.ErrReadFile)
+	require.ErrorContains(t, err, "host-backend.sha256")
+}

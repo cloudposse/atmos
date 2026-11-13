@@ -737,15 +737,37 @@ func TestCheckFeatureOverridesLeavesParseErrorsToTheEvaluator(t *testing.T) {
 	require.Error(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "maybe"}, declared))
 }
 
+// effectChildEnv makes the test binary act as a cross-platform effect command (see TestMain).
+const effectChildEnv = "ATMOS_TERRAGRUNT_EFFECT_CHILD"
+
+// effectCommand returns a run_cmd call that appends text to ./effects and prints it, using the
+// test binary itself instead of a platform shell.
+func effectCommand(t *testing.T, text string) string {
+	t.Helper()
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	quoted, err := json.Marshal(executable)
+	require.NoError(t, err)
+	return "run_cmd(" + string(quoted) + ", \"" + text + "\")"
+}
+
+// effectUnit is executionUnit with the effect child enabled for run_cmd.
+func effectUnit(t *testing.T, body string) model.Request {
+	t.Helper()
+	request := executionUnit(t, body)
+	request.Environment[effectChildEnv] = "1"
+	return request
+}
+
 func TestDiscoveryDefersExecutionValues(t *testing.T) {
-	request := executionUnit(t, `
+	request := effectUnit(t, `
  before_hook "dynamic" {
    commands = ["plan"]
-   execute = ["echo", dependency.base.outputs.value, run_cmd("/bin/sh", "-c", "echo hook >> effects; printf hook")]
+   execute = ["echo", dependency.base.outputs.value, `+effectCommand(t, "hook")+`]
  }
  extra_arguments "dynamic" {
    commands = ["plan"]
-   arguments = [dependency.base.outputs.value, run_cmd("/bin/sh", "-c", "echo args >> effects; printf args")]
+   arguments = [dependency.base.outputs.value, `+effectCommand(t, "args")+`]
  }
  `)
 	body, err := os.ReadFile(request.Path)
@@ -913,9 +935,9 @@ func TestPlanPreparationOmitsApplyWhenCommandIsNotObserved(t *testing.T) {
 }
 
 func TestDiscoveryDefersInheritedExecutionValues(t *testing.T) {
-	request := executionUnit(t, `before_hook "parent" {
+	request := effectUnit(t, `before_hook "parent" {
  commands = ["plan"]
- execute = ["echo", run_cmd("/bin/sh", "-c", "echo evaluated >> effects; printf inherited")]
+ execute = ["echo", `+effectCommand(t, "inherited")+`]
 }`)
 	parent := filepath.Join(request.BasePath, "parent.hcl")
 	require.NoError(t, os.Rename(request.Path, parent))
@@ -1001,4 +1023,40 @@ terraform {
 	require.NoError(t, err)
 	require.NotNil(t, overridden.Execution.Apply)
 	require.Equal(t, []string{"notify"}, hookNames(overridden.Execution.Apply.AfterHooks), "feature overrides reach the apply-time evaluation")
+}
+
+// A parent hook that a unit replaces by name never runs, so its invalid execute list does not
+// block the unit. The same parent hook is still rejected when nothing replaces it.
+func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
+	for _, test := range []struct {
+		name, child, want string
+	}{
+		{"overridden by name", `before_hook "lint" {
+ commands = ["plan"]
+ execute = ["./wrapper.sh"]
+}`, ""},
+		{"inherited unchanged", "", "has no command to run"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, test.child)
+			parent := filepath.Join(request.BasePath, "parent.hcl")
+			require.NoError(t, os.WriteFile(parent, []byte(`terraform {
+ before_hook "lint" {
+  commands = ["plan"]
+  execute = [""]
+ }
+}
+`), 0o644))
+			body, err := os.ReadFile(request.Path)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(request.Path, append([]byte("include \"parent\" { path = \"./parent.hcl\" }\n"), body...), 0o644))
+			request.Phase = "discover"
+			_, err = Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, test.want)
+		})
+	}
 }

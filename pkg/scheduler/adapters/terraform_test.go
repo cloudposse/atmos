@@ -3776,7 +3776,7 @@ func TestExecuteTerraformExclusionPrecedesValidationAndPreflight(t *testing.T) {
 	runtime := &failureRuntime{failures: map[string]error{"dev/app": errors.New("excluded failure")}}
 	var executed []string
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
-		AtmosConfig: &schema.AtmosConfiguration{ComponentConfigurations: runtime},
+		AtmosConfig: &schema.AtmosConfiguration{ComponentConfigurations: runtime.mock(t)},
 		Info:        &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"}, Stacks: stacks,
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
 			executed = append(executed, execution.Info.Component)

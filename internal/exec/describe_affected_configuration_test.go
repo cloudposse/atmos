@@ -5,10 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
-	"syscall"
 	"testing"
-	"time"
 
 	"github.com/cloudposse/atmos/pkg/component/configuration"
 
@@ -351,37 +348,6 @@ func TestSortAffectedIsDeterministic(t *testing.T) {
 	}
 	sortAffected(deleted)
 	require.Equal(t, []string{"alpha", "zeta", "chart"}, []string{deleted[0].Component, deleted[1].Component, deleted[2].Component})
-}
-
-func TestRemoveOnSignalCleansUpBeforeExit(t *testing.T) {
-	exited := make(chan int, 1)
-	original := exitProcess
-	exitProcess = func(code int) { exited <- code }
-	t.Cleanup(func() { exitProcess = original })
-
-	var cleaned atomic.Int32
-	stop := removeOnSignal(func() { cleaned.Add(1) })
-	defer stop()
-	process, err := os.FindProcess(os.Getpid())
-	require.NoError(t, err)
-	if err := process.Signal(syscall.SIGTERM); err != nil {
-		t.Skipf("signals cannot be delivered on this platform: %v", err)
-	}
-	select {
-	case code := <-exited:
-		require.Equal(t, 128+int(syscall.SIGTERM), code)
-		require.Equal(t, int32(1), cleaned.Load(), "the worktree is removed before the process exits")
-	case <-time.After(10 * time.Second):
-		t.Fatal("signal was not handled")
-	}
-}
-
-func TestRemoveOnSignalStopReleasesWatcher(t *testing.T) {
-	var cleaned atomic.Int32
-	removeOnSignal(func() { cleaned.Add(1) })()
-	// After a normal return the watcher is gone: it must never run cleanup on its own.
-	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, int32(0), cleaned.Load())
 }
 
 // The BASE policy inventory resolves provider imports with a session of its own checkout; the

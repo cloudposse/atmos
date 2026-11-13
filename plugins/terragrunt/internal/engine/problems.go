@@ -10,6 +10,7 @@ import (
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2"
+	"github.com/spf13/afero"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
@@ -140,6 +141,25 @@ func mustRel(root, path string) string {
 		return rel
 	}
 	return path
+}
+
+// localSourceProblem checks that a local module source is an existing directory. A missing path or
+// a file is reported as such; any other failure, such as a permission error, is reported as an
+// unreadable source and keeps its cause.
+func localSourceProblem(filesystem afero.Fs, path, source, resolved string) *model.Problem {
+	info, err := filesystem.Stat(resolved)
+	switch {
+	case errors.Is(err, os.ErrNotExist), err == nil && !info.IsDir():
+		return sourceDirectoryProblem(path, source)
+	case err != nil:
+		return &model.Problem{
+			Code: model.CodeInvalidSource, Summary: "The module `source` directory cannot be read",
+			Detail: "Checking the local `terraform.source` directory failed with a filesystem error other than a missing path.",
+			Hints:  []string{"Check the permissions of the module directory and its parent directories."},
+			File:   path, Key: "terraform.source", Safe: true, Err: err,
+		}
+	}
+	return nil
 }
 
 // dependencyProblem keeps evaluated target paths out of safe details; the cause remains available

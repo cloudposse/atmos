@@ -58,7 +58,7 @@ func RemoveHostBackend(directory string) error {
 	defer perf.Track(nil, "backend.RemoveHostBackend")()
 	root, err := os.OpenRoot(directory)
 	if err != nil {
-		return err
+		return hostBackendError(errUtils.ErrOpenFile, "open working directory", err)
 	}
 	defer root.Close()
 	receipt, err := root.ReadFile(hostBackendReceipt)
@@ -66,20 +66,36 @@ func RemoveHostBackend(directory string) error {
 		return nil
 	}
 	if err != nil {
-		return err
+		return hostBackendError(errUtils.ErrReadFile, "read "+hostBackendReceipt, err)
 	}
 	digest, err := backendDigest(root)
 	if errors.Is(err, os.ErrNotExist) {
-		return root.Remove(hostBackendReceipt)
+		return removeHostBackendFile(root, hostBackendReceipt)
 	}
 	if err != nil {
-		return err
+		if errors.Is(err, errUtils.ErrPluginInvalidConfig) {
+			return err
+		}
+		return hostBackendError(errUtils.ErrReadFile, "read "+hostBackendName, err)
 	}
 	if digest != string(receipt) {
 		return fmt.Errorf("%w: refusing to remove modified host backend %s", errUtils.ErrPluginInvalidConfig, hostBackendName)
 	}
-	if err := root.Remove(hostBackendName); err != nil {
+	if err := removeHostBackendFile(root, hostBackendName); err != nil {
 		return err
 	}
-	return root.Remove(hostBackendReceipt)
+	return removeHostBackendFile(root, hostBackendReceipt)
+}
+
+// removeHostBackendFile removes one host-owned file and classifies a failure.
+func removeHostBackendFile(root *os.Root, name string) error {
+	if err := root.Remove(name); err != nil {
+		return hostBackendError(errUtils.ErrFileOperation, "remove "+name, err)
+	}
+	return nil
+}
+
+// hostBackendError wraps a filesystem failure with a repository sentinel and keeps its cause.
+func hostBackendError(sentinel error, action string, err error) error {
+	return fmt.Errorf("%w: host backend: %s: %w", sentinel, action, err)
 }
