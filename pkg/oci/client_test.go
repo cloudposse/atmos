@@ -19,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/random"
+	"github.com/google/go-containerregistry/pkg/v1/stream"
 	"github.com/google/go-containerregistry/pkg/v1/validate"
 	"github.com/stretchr/testify/require"
 
@@ -291,4 +292,32 @@ func TestExportIndexRejectsRegistryFailureAndOrdinaryImage(t *testing.T) {
 		}
 		require.NoDirExists(t, destination, "failed export must not publish a local layout")
 	}
+}
+
+func TestWriteImageUploadsAStreamingLayer(t *testing.T) {
+	client, ref, _ := credentialRegistry(t, "stream-test")
+	payload := strings.Repeat("streamed layer content ", 4096)
+	streamed := stream.NewLayer(io.NopCloser(strings.NewReader(payload)))
+	image, err := mutate.AppendLayers(empty.Image, streamed)
+	require.NoError(t, err)
+
+	require.NoError(t, client.WriteImage(t.Context(), ref, image))
+
+	pulled, err := client.Get(t.Context(), ref)
+	require.NoError(t, err)
+	img, err := pulled.Image()
+	require.NoError(t, err)
+	layers, err := img.Layers()
+	require.NoError(t, err)
+	require.Len(t, layers, 1)
+	reader, err := layers[0].Compressed()
+	require.NoError(t, err)
+	defer reader.Close()
+	stored, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	want, err := streamed.Digest()
+	require.NoError(t, err)
+	got, _, err := v1.SHA256(strings.NewReader(string(stored)))
+	require.NoError(t, err)
+	require.Equal(t, want, got, "the uploaded layer is the streamed content")
 }

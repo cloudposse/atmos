@@ -4,16 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/partial"
 	"github.com/google/go-containerregistry/pkg/v1/random"
+	"github.com/google/go-containerregistry/pkg/v1/stream"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -211,4 +217,65 @@ func TestReferrersPresentRequiresEveryReferrerAtTheDestination(t *testing.T) {
 	assert.False(t, referrersPresent(ctx, src, dst, root), "the root alone does not complete an extended copy")
 	require.NoError(t, dst.Push(ctx, signature, bytes.NewReader(sigRaw)))
 	assert.True(t, referrersPresent(ctx, src, dst, root))
+}
+
+func TestLayoutConcurrentTagsKeepResolverAndIndexInStep(t *testing.T) {
+	const writers = 16
+	dir := t.TempDir()
+	layout, err := OpenLayout(t.Context(), dir)
+	require.NoError(t, err)
+	descriptors := make([]ocispec.Descriptor, writers)
+	for i := range descriptors {
+		descriptors[i] = pushManifest(t, layout, fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","size":2},"layers":[],"annotations":{"n":"%d"}}`, i))
+	}
+
+	var wg sync.WaitGroup
+	for i := range descriptors {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.NoError(t, layout.Tag(t.Context(), descriptors[i], "release"))
+		}()
+	}
+	wg.Wait()
+
+	resolved, err := layout.Resolve(t.Context(), "release")
+	require.NoError(t, err)
+	reopened, err := OpenLayout(t.Context(), dir)
+	require.NoError(t, err)
+	persisted, err := reopened.Resolve(t.Context(), "release")
+	require.NoError(t, err)
+	assert.Equal(t, resolved.Digest, persisted.Digest, "the persisted index names the same manifest the resolver returns")
+	assert.Equal(t, []string{"release"}, reopened.References())
+}
+
+func TestLegacyGraphSpoolsStreamingLayersAndCleansUp(t *testing.T) {
+	payload := "streamed layer content"
+	image, err := mutate.AppendLayers(empty.Image, stream.NewLayer(io.NopCloser(strings.NewReader(payload))))
+	require.NoError(t, err)
+
+	graph, err := legacyImageGraph(t.Context(), image)
+	require.NoError(t, err)
+	manifest, err := image.Manifest()
+	require.NoError(t, err)
+	require.Len(t, manifest.Layers, 1)
+	layer := ocispec.Descriptor{Digest: digest.Digest(manifest.Layers[0].Digest.String())}
+	var reads [][]byte
+	for range 2 {
+		reader, err := graph.Fetch(t.Context(), layer)
+		require.NoError(t, err)
+		content, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		require.NoError(t, reader.Close())
+		reads = append(reads, content)
+	}
+	assert.NotEmpty(t, reads[0], "the spooled layer holds the streamed bytes")
+	assert.Equal(t, reads[0], reads[1], "a streamed layer can be read again after it was spooled")
+	assert.Equal(t, layer.Digest, digest.FromBytes(reads[0]), "the spooled bytes match the manifest digest")
+
+	spoolDir := graph.spoolDir
+	require.DirExists(t, spoolDir)
+	graph.close()
+	assert.NoDirExists(t, spoolDir)
+	graph.close()
 }

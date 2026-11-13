@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
@@ -229,7 +230,38 @@ func reconcile(ctx context.Context, cause error, want ocispec.Descriptor, dst De
 	if err != nil || have.Digest != want.Digest {
 		return ocispec.Descriptor{}, failure
 	}
+	// An attachment is complete only once it is registered under its subject; the manifest alone
+	// existing at the destination is not enough, so the original failure stands.
+	if !attachmentRegistered(ctx, dst.Store, want) {
+		return ocispec.Descriptor{}, failure
+	}
 	return want, nil
+}
+
+// attachmentRegistered reports whether the manifest or index at desc is complete at the store: a
+// manifest without a subject always is, and one with a subject must be listed among the subject's
+// referrers. Any lookup failure, or a store that cannot list referrers, counts as not registered so
+// a failed write is never reported as a success on weaker evidence.
+func attachmentRegistered(ctx context.Context, store Store, desc ocispec.Descriptor) bool {
+	if desc.MediaType != ocispec.MediaTypeImageManifest && desc.MediaType != ocispec.MediaTypeImageIndex {
+		return true
+	}
+	subject, err := readSubject(ctx, store, &desc)
+	if err != nil {
+		return false
+	}
+	if subject == nil {
+		return true
+	}
+	graph, ok := store.(GraphStore)
+	if !ok {
+		return false
+	}
+	referrers, err := graph.Predecessors(ctx, *subject)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(referrers, func(found ocispec.Descriptor) bool { return found.Digest == desc.Digest })
 }
 
 func classifyCopyError(err error) error {
@@ -300,7 +332,7 @@ func (g guardedStore) Push(ctx context.Context, expected ocispec.Descriptor, con
 	// The write may have landed even though it was reported as failed. Look at the
 	// destination before deciding; never write again.
 	if ambiguousWrite(ctx, err) {
-		if exists, existsErr := g.Store.Exists(ctx, expected); existsErr == nil && exists {
+		if exists, existsErr := g.Store.Exists(ctx, expected); existsErr == nil && exists && attachmentRegistered(ctx, g.Store, expected) {
 			return nil
 		}
 	}
@@ -317,7 +349,7 @@ func (g guardedStore) PushReference(ctx context.Context, expected ocispec.Descri
 	if err == nil || errors.Is(err, errdef.ErrAlreadyExists) || !ambiguousWrite(ctx, err) {
 		return err
 	}
-	if resolved, resolveErr := g.Resolve(ctx, reference); resolveErr == nil && resolved.Digest == expected.Digest {
+	if resolved, resolveErr := g.Resolve(ctx, reference); resolveErr == nil && resolved.Digest == expected.Digest && attachmentRegistered(ctx, g.Store, expected) {
 		return nil
 	}
 	return err

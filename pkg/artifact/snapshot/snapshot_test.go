@@ -208,6 +208,18 @@ func TestCapture_DetectsChangeDuringCapture(t *testing.T) {
 			require.NoError(t, os.WriteFile(path, []byte("ORIGINAL"), 0o644))
 			require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
 		}},
+		{"replaced by another file with identical state", func(t *testing.T, src string) {
+			if runtime.GOOS == "windows" {
+				t.Skip("replacing an open path is not portable on Windows")
+			}
+			path := filepath.Join(src, "a.txt")
+			info, err := os.Stat(path)
+			require.NoError(t, err)
+			replacement := filepath.Join(src, "replacement.tmp")
+			require.NoError(t, os.WriteFile(replacement, []byte("original"), 0o644))
+			require.NoError(t, os.Chtimes(replacement, info.ModTime(), info.ModTime()))
+			require.NoError(t, os.Rename(replacement, path))
+		}},
 		{"file added", func(t *testing.T, src string) {
 			fixtures.WriteFile(t, src, "new.txt", "new", 0o644)
 		}},
@@ -326,4 +338,38 @@ func TestSnapshot_OpenUnknownPath(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 	_, ok := snap.Lookup("missing")
 	assert.False(t, ok)
+}
+
+func TestSnapshot_OpenWrapsStagedFileFailure(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "a.txt", "a", 0o644)
+	snap, err := snapshot.Capture(context.Background(), src, snapshot.WithStagingRoot(t.TempDir()))
+	require.NoError(t, err)
+	defer snap.Close()
+	staged, ok := snap.StagedPath("a.txt")
+	require.True(t, ok)
+	require.NoError(t, os.Remove(staged))
+
+	_, err = snap.Open("a.txt")
+
+	require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestSnapshot_CloseWrapsRemovalFailure(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("directory permissions do not block removal here")
+	}
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "a.txt", "a", 0o644)
+	snap, err := snapshot.Capture(context.Background(), src, snapshot.WithStagingRoot(t.TempDir()))
+	require.NoError(t, err)
+	root := snap.Root
+	require.NoError(t, os.Chmod(root, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(root, 0o700) })
+
+	err = snap.Close()
+
+	require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+	require.ErrorIs(t, err, os.ErrPermission)
 }

@@ -170,6 +170,11 @@ func (l *Layout) recordAttachment(ctx context.Context, desc ocispec.Descriptor) 
 func (l *Layout) recordRoot(desc ocispec.Descriptor) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.recordRootLocked(desc)
+}
+
+// recordRootLocked is recordRoot for a caller that already holds l.mu.
+func (l *Layout) recordRootLocked(desc ocispec.Descriptor) error {
 	for i := range l.index {
 		if l.index[i].Digest == desc.Digest {
 			return nil
@@ -199,16 +204,18 @@ func (l *Layout) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]o
 func (l *Layout) Tag(ctx context.Context, desc ocispec.Descriptor, reference string) error {
 	defer perf.Track(nil, "oci.Layout.Tag")()
 
+	// The mutex covers the resolver update and the index commit so concurrent updates to the same
+	// reference are ordered: the last resolver write is also the last index write.
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if err := l.store.Tag(ctx, desc, reference); err != nil {
 		return layoutError(err)
 	}
 	if reference == desc.Digest.String() {
 		// A digest reference is never named, but the root must still be listed or reopening the
 		// layout loses its media type and children.
-		return l.recordRoot(desc)
+		return l.recordRootLocked(desc)
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	// Copy the descriptor and its annotations so root metadata (artifact type, platform, other
 	// annotations) survives reopening without mutating the caller's descriptor.
 	named := desc

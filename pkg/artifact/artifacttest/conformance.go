@@ -11,6 +11,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -363,7 +364,7 @@ func (c *conformance) signVerify(t *testing.T) {
 	caps := repo.Capabilities()
 	if c.h.Signer == nil {
 		require.Empty(t, caps.EvidenceFormats, "a repository that stores evidence needs a Signer in the harness")
-		_, err := repo.Sign(context.Background(), subject, &unsupportedSigner{}, artifact.SignOptions{})
+		_, err := repo.Sign(context.Background(), subject, unsupportedSigner(t), artifact.SignOptions{})
 		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
 		return
 	}
@@ -399,19 +400,13 @@ func (c *conformance) signVerify(t *testing.T) {
 	}
 }
 
-// unsupportedSigner is a signer for a format no repository under test advertises.
-type unsupportedSigner struct{}
-
-func (*unsupportedSigner) Formats() []artifact.EvidenceFormat {
-	defer perf.Track(nil, "artifacttest.unsupportedSigner.Formats")()
-
-	return []artifact.EvidenceFormat{"unsupported"}
-}
-
-func (*unsupportedSigner) Sign(context.Context, artifact.SignatureSubject) (*artifact.EvidencePayload, error) {
-	defer perf.Track(nil, "artifacttest.unsupportedSigner.Sign")()
-
-	return &artifact.EvidencePayload{Format: "unsupported", Data: []byte("x")}, nil
+// unsupportedSigner returns a generated signer for a format no repository under test advertises.
+// Sign has no expectation, so the mock fails the test if a repository ever invokes it.
+func unsupportedSigner(t *testing.T) artifact.Signer {
+	t.Helper()
+	signer := artifact.NewMockSigner(gomock.NewController(t))
+	signer.EXPECT().Formats().Return([]artifact.EvidenceFormat{"unsupported"}).AnyTimes()
+	return signer
 }
 
 func (c *conformance) lock(t *testing.T) {
