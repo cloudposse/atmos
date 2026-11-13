@@ -80,6 +80,24 @@ func TestCancellingContextKillsPluginProcess(t *testing.T) {
 	requireGone(t, pids)
 }
 
+func TestOwnedCleanupDoesNotSubscribeToPrematurePluginInterruption(t *testing.T) {
+	previous := notifySignals
+	notifySignals = func(chan<- os.Signal, ...os.Signal) { t.Fatal("owned cleanup must retain signal custody") }
+	t.Cleanup(func() { notifySignals = previous })
+	ctx, cancel := signals.OwnedCleanupContext(t.Context(), time.Minute)
+	defer cancel()
+	handle, directory := startFake(t, ctx, fakeplugin.ModeHang)
+	pids, result := runHanging(t, handle, directory, ctx)
+	cancel()
+	select {
+	case err := <-result:
+		require.Error(t, err)
+	case <-time.After(eventually):
+		t.Fatal("bounded owned context must still stop the plugin")
+	}
+	requireGone(t, pids)
+}
+
 func TestCloseKillsPluginAndItsChildren(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows has no process group to signal.")

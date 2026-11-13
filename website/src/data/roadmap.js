@@ -844,9 +844,10 @@ export const roadmapConfig = {
       tagline: 'Provably safe secrets protection',
       description:
         'Provably safe secrets management requires comprehensive output coverage—if even one channel bypasses the masking layer, secrets can leak. This initiative ensures all output routes through masking with support for custom patterns, configurable replacement strings, and secure credential handling.',
-      progress: 100,
-      status: 'shipped',
+      progress: 91,
+      status: 'in-progress',
       milestones: [
+        { label: 'Operation-scoped Vault and OpenBao store identities', status: 'in-progress', quarter: 'q4-2026', pr: 3668, changelog: 'operation-scoped-vault-identities', docs: '/cli/configuration/secrets#track-1--secret-stores-secret-true', description: 'Opt-in options.identity_lifetime: operation acquires a fresh target identity for each store operation and logs it out before returning, while preserving existing target, provider, and ancestor sessions. Cleanup failures suppress results.', benefits: 'Bound a temporary reader token to one lookup without replacing reusable authentication sessions.' },
         { label: 'Built-in secret pattern library (120+ patterns)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/mask', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Automatic detection and masking of 120+ secret patterns from the Gitleaks library including AWS keys, tokens, and passwords.', benefits: 'Secrets are protected automatically without configuration. Safe to share terminal output or stream logs.' },
         { label: 'Custom masking patterns from atmos.yaml', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'User-defined regex patterns and literal values loaded from atmos.yaml configuration for environment-specific secret formats.', benefits: 'Define patterns for internal tokens, custom API keys, and organization-specific secrets. Mask values beyond built-in patterns.' },
         { label: 'Configurable replacement string', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'Customize the masked output replacement string from the default <MASKED> to any value.', benefits: 'Use [REDACTED], <secret>, or any string that fits your logging and compliance requirements.' },
