@@ -56,7 +56,7 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 		}
 	}()
 	localLock, isLocalLock := options.Lock.(*fileLock)
-	if isLocalLock && localLock.Resource() != prepared.Record.Name+":"+prepared.Record.Version {
+	if isLocalLock && !r.coversReference(localLock, prepared.Record.Name+":"+prepared.Record.Version) {
 		return nil, fmt.Errorf("%w: supplied lock does not cover reference %s:%s", errUtils.ErrArtifactConflict, prepared.Record.Name, prepared.Record.Version)
 	}
 	if !isLocalLock {

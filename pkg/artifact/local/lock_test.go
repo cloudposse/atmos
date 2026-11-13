@@ -458,3 +458,52 @@ func TestDelegatedMutationsAlsoTakeLocalReferenceLock(t *testing.T) {
 		})
 	}
 }
+
+// A lock taken on a delegate local repository carries the target's namespaced resource.
+func TestDelegatedLocalLockCoversTheSameReference(t *testing.T) {
+	target := newRepo(t, signedSpec(dirSpec()))
+	delegate := newRepo(t, dirSpec())
+	reference := testName + ":" + testVersion
+	delegated := func(resource string) artifact.LockHandle {
+		held, err := delegate.Lock(context.Background(), lockRequest(resource))
+		require.NoError(t, err)
+		return held
+	}
+	// Each handle is released right after use: the delegate would otherwise block the next one.
+	release := func(held artifact.LockHandle) { require.NoError(t, held.Release(context.Background())) }
+	namespaced := target.LockNamespace() + "/" + reference
+
+	held := delegated(namespaced)
+	_, err := target.Publish(context.Background(), prepare(t, target, &prepareSpec{}), artifact.PublishOptions{Lock: held})
+	require.NoError(t, err)
+	release(held)
+	pinned := resolve(t, target, defaultRef())
+
+	held = delegated(namespaced)
+	_, err = target.WriteEvidence(context.Background(), &pinned, nil, held)
+	require.NoError(t, err)
+	_, err = target.Sign(context.Background(), recordSubject(t, target), newSigner(), artifact.SignOptions{Lock: held})
+	require.NoError(t, err)
+	release(held)
+
+	t.Run("a lock for another reference in the same collection is rejected", func(t *testing.T) {
+		other := delegated(target.LockNamespace() + "/other:1.0.0")
+		defer release(other)
+		_, err := target.Delete(context.Background(), pinned, artifact.DeleteOptions{Lock: other})
+		require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+	})
+	t.Run("a lock for another collection is rejected", func(t *testing.T) {
+		foreign := delegated(delegate.LockNamespace() + "/" + reference)
+		defer release(foreign)
+		_, err := target.Delete(context.Background(), pinned, artifact.DeleteOptions{Lock: foreign})
+		require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+		_, err = target.WriteEvidence(context.Background(), &pinned, nil, foreign)
+		require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+	})
+	t.Run("the delegated lock deletes the reference", func(t *testing.T) {
+		held := delegated(namespaced)
+		defer release(held)
+		_, err := target.Delete(context.Background(), pinned, artifact.DeleteOptions{Lock: held})
+		require.NoError(t, err)
+	})
+}
