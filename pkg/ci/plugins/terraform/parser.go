@@ -495,7 +495,7 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 
 	// A plan that only imports or moves resources adds, changes and destroys
 	// nothing, yet applying it still rewrites state, so it is not a no-op.
-	if !result.HasChanges {
+	if !hasResourceChanges(data.ResourceCounts) {
 		if summary := buildStateOnlySummary(data.ResourceCounts.Import, len(data.MovedResources)); summary != "" {
 			result.HasChanges = true
 			data.ChangedResult = summary

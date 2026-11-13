@@ -54,7 +54,7 @@
 <details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
 {{- else if .HasResourceChanges }}
 <details><summary><a id="result-{{$target}}" />Plan: {{.Resources.Create}} to add, {{.Resources.Change}} to change, {{.Resources.Destroy}} to destroy.</summary>
-{{- else if .HasOutputChanges }}
+{{- else if and .HasOutputChanges (not .HasStateChanges) }}
 <details><summary><a id="result-{{$target}}" />Output values will change. No infrastructure changes.</summary>
 {{- else if .ChangedResult }}
 <details><summary><a id="result-{{$target}}" />{{.ChangedResult}}</summary>
