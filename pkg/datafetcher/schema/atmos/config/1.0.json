@@ -4803,17 +4803,18 @@
     "ContainerPort": {
       "properties": {
         "host": {
-          "anyOf": [
+          "oneOf": [
             {
               "type": "integer"
             },
             {
-              "type": "null"
+              "type": "string"
             },
             {
-              "$ref": "#/$defs/yamlFunction"
+              "type": "null"
             }
-          ]
+          ],
+          "description": "Host is a port number or an IP:port string (IPv6 addresses require brackets)."
         },
         "container": {
           "anyOf": [

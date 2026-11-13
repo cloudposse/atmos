@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	ctr "github.com/cloudposse/atmos/pkg/container"
@@ -66,7 +67,7 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 
 	section := map[string]any{
 		"image": "localhost:5001/api:abc",
-		"run":   map[string]any{"command": "./api", "ports": []any{map[string]any{"host": 8080, "container": 8080}}},
+		"run":   map[string]any{"command": "./api", "ports": []any{map[string]any{"host": "127.0.0.1:8080", "container": 8080}}},
 	}
 	withStubs(t, section, []string{"PORT=8080"}, rt)
 
@@ -77,6 +78,7 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 				assert.Equal(t, "atmos-dev-container-api", c.Name)
 				assert.Equal(t, []string{"./api"}, c.Command)
 				require.Len(t, c.Ports, 1)
+				assert.Equal(t, "127.0.0.1", c.Ports[0].Bind)
 				assert.Equal(t, 8080, c.Ports[0].HostPort)
 				assert.Equal(t, 8080, c.Ports[0].ContainerPort)
 				assert.Equal(t, "8080", c.Env["PORT"])
@@ -662,6 +664,25 @@ func TestMounts_EmptyComponentPathLeavesSourcesUnanchored(t *testing.T) {
 
 	require.Len(t, mounts, 1)
 	assert.Equal(t, "app/public", mounts[0].Source)
+}
+
+func TestExecute_RejectsInvalidHostBeforeRuntime(t *testing.T) {
+	for _, operation := range []struct {
+		name string
+		run  func(context.Context, *schema.ConfigAndStacksInfo) error
+	}{{"up", ExecuteUp}, {"run", ExecuteRun}} {
+		t.Run(operation.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			rt := NewMockRuntime(ctrl)
+			withStubs(t, map[string]any{
+				"image": "api:dev",
+				"run":   map[string]any{"command": "echo ok", "ports": []any{map[string]any{"host": "localhost:8080", "container": 8080}}},
+			}, nil, rt)
+			err := operation.run(context.Background(), infoFor("api"))
+			require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+			require.ErrorContains(t, err, "ports[0].host")
+		})
+	}
 }
 
 // Runtime arguments must survive both component execution paths. In particular,

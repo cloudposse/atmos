@@ -27,8 +27,9 @@ type Resolver struct {
 
 // Verify that Resolver implements store.AuthContextResolver.
 var (
-	_ store.AuthContextResolver            = (*Resolver)(nil)
-	_ store.EnvironmentAuthContextResolver = (*Resolver)(nil)
+	_ store.AuthContextResolver                  = (*Resolver)(nil)
+	_ store.EnvironmentAuthContextResolver       = (*Resolver)(nil)
+	_ store.ScopedEnvironmentAuthContextResolver = (*Resolver)(nil)
 )
 
 // NewResolver creates a new Resolver that uses the provided AuthManager to resolve
@@ -122,4 +123,24 @@ func (r *Resolver) ResolveEnvironmentAuthContext(ctx context.Context, identityNa
 	}
 
 	return (&resolvedContext{auth: authCtx}).ResolveEnvironmentAuthContext(ctx, identityName)
+}
+
+// WithEnvironmentAuthContext owns an isolated identity for exactly one store
+// operation. An older/custom manager without this capability fails closed.
+func (r *Resolver) WithEnvironmentAuthContext(ctx context.Context, identityName string, operation func(context.Context, *store.EnvironmentAuthConfig) error) error {
+	defer perf.Track(nil, "authbridge.WithEnvironmentAuthContext")()
+	manager, ok := r.authManager.(types.ScopedAuthManager)
+	if !ok || operation == nil {
+		return store.ErrAuthContextNotAvailable
+	}
+	return manager.WithIsolatedIdentity(ctx, identityName, func(ctx context.Context, auth *schema.AuthContext) error {
+		if auth == nil || len(auth.Environment) == 0 {
+			return store.ErrAuthContextNotAvailable
+		}
+		resolved, err := (&resolvedContext{auth: auth}).ResolveEnvironmentAuthContext(ctx, identityName)
+		if err != nil {
+			return err
+		}
+		return operation(ctx, resolved)
+	})
 }
