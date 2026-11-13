@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // BenchmarkConfigurationWatchCacheHitDuringBuild measures cached lookup latency

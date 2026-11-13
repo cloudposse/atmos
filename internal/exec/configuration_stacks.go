@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentconfiguration "github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -44,7 +45,8 @@ func mergeConfigurationStacks(config *schema.AtmosConfiguration, stacks map[stri
 // their origin. Global backends remain allowed; the provider replaces them during preparation.
 func checkConfigurationBackendOverrides(opts *ComponentProcessorOptions, result *ComponentProcessorResult, settings map[string]any) error {
 	defer perf.Track(nil, "exec.checkConfigurationBackendOverrides")()
-	if _, owned := settings["configuration"]; !owned {
+	// Only a provider owns the backend; a bare `configuration` key, such as an empty map, does not.
+	if !componentconfiguration.OwnsComponent(map[string]any{"settings": settings}) {
 		return nil
 	}
 	for _, layer := range []struct {

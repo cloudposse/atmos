@@ -494,3 +494,14 @@ func TestConfigurationImportProvenance(t *testing.T) {
 		})
 	}
 }
+
+// Only a provider owns the backend; an empty `settings.configuration` map leaves ordinary components alone.
+func TestBackendRestrictionRequiresProviderOwnership(t *testing.T) {
+	opts := &ComponentProcessorOptions{Component: "app", StackName: "dev"}
+	result := &ComponentProcessorResult{ComponentBackendType: "s3", ComponentBackendSection: map[string]any{"bucket": "other"}}
+	require.NoError(t, checkConfigurationBackendOverrides(opts, result, map[string]any{"configuration": map[string]any{}}))
+	require.NoError(t, checkConfigurationBackendOverrides(opts, result, map[string]any{}))
+	err := checkConfigurationBackendOverrides(opts, result, map[string]any{"configuration": map[string]any{"provider": "terragrunt"}})
+	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
+	require.ErrorContains(t, err, "backend_type")
+}
