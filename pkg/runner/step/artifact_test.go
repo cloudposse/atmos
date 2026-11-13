@@ -19,7 +19,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/artifact/artifacttest"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/artifact/report"
-	"github.com/cloudposse/atmos/pkg/artifact/service"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -582,18 +581,11 @@ func TestArtifactHandler_RetryRetainsResolvedInputs(t *testing.T) {
 	assert.Equal(t, requests[0].Execution.OperationID, requests[1].Execution.OperationID)
 }
 
-type nilDetailedService struct {
-	artifact.Service
-	err error
-}
-
-func (s nilDetailedService) PublishDetailed(context.Context, artifact.PublishRequest) (*service.PublishOutcome, error) {
-	return nil, s.err
-}
-
 func TestRecorderNormalizesNilDetailedOutcome(t *testing.T) {
 	failure := errors.New("failed")
-	recorder := artifacttest.NewRecorder(nilDetailedService{err: failure})
+	svc := invoke.NewMockDetailedService(gomock.NewController(t))
+	svc.EXPECT().PublishDetailed(gomock.Any(), gomock.Any()).Return(nil, failure)
+	recorder := artifacttest.NewRecorder(svc)
 	outcome, err := recorder.PublishDetailed(context.Background(), artifact.PublishRequest{})
 	require.ErrorIs(t, err, failure)
 	require.NotNil(t, outcome)
