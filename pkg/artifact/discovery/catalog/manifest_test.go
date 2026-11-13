@@ -255,3 +255,19 @@ func TestParseInventory(t *testing.T) {
 	_, _, err = catalog.ParseInventory([]byte(strings.Repeat(" ", int(artifact.MaxRecordSize)+1)))
 	require.ErrorIs(t, err, errUtils.ErrArtifactTooLarge)
 }
+
+func TestParseNeverEchoesAnInvalidEntrySource(t *testing.T) {
+	for _, source := range []string{
+		"oci://user:secret@ghcr.io/acme/atmos/app",
+		"oci://ghcr.io/acme/atmos/app?token=secret",
+		"oci://ghcr.io/acme/atmos/app#secret",
+		"oci://ghcr.io/acme/atmos/app@sha256:" + strings.Repeat("a", 64),
+	} {
+		f := file(entry("app", "1.0.0"))
+		f.Spec.Entries[0].Source = source
+		_, err := catalog.Parse(marshal(t, f))
+		require.ErrorIs(t, err, errUtils.ErrArtifactCatalogInvalid, source)
+		assert.NotContains(t, err.Error(), "secret", "credentials are never echoed")
+		assert.NotContains(t, err.Error(), source, "the raw source is never echoed")
+	}
+}

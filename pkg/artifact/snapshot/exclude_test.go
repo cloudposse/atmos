@@ -80,7 +80,9 @@ func TestCapture_ExcludedFileAndLimit(t *testing.T) {
 func TestCapture_RejectsLinkToExcludedDirectory(t *testing.T) {
 	dir := t.TempDir()
 	fixtures.WriteFile(t, dir, "cache/a", "a", 0o644)
-	require.NoError(t, os.Symlink("cache/a", filepath.Join(dir, "link")))
+	if !fixtures.Symlink(t, dir, "link", "cache/a") {
+		t.Skip("symlinks are unavailable on this platform")
+	}
 	_, err := snapshot.Capture(context.Background(), dir, snapshot.WithExcluder(byName))
 	require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
 }
