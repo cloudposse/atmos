@@ -503,6 +503,65 @@ func TestCopyReconcilesAmbiguousFailuresAgainstTheDestination(t *testing.T) {
 	}
 }
 
+func TestCopyReconcilesAnAttachmentOnlyOnceItIsRegisteredUnderItsSubject(t *testing.T) {
+	ctx := t.Context()
+	source, err := oci.OpenLayout(ctx, filepath.Join(t.TempDir(), "source"))
+	require.NoError(t, err)
+	config := oci.Descriptor(ocispec.MediaTypeEmptyJSON, []byte("{}"))
+	require.NoError(t, source.Push(ctx, config, strings.NewReader("{}")))
+	subject := oci.Descriptor(ocispec.MediaTypeImageManifest, []byte("subject manifest"))
+	raw, err := json.Marshal(ocispec.Manifest{
+		MediaType:    ocispec.MediaTypeImageManifest,
+		ArtifactType: "application/vnd.example.signature",
+		Config:       config,
+		Layers:       []ocispec.Descriptor{},
+		Subject:      &subject,
+	})
+	require.NoError(t, err)
+	attachment := oci.Descriptor(ocispec.MediaTypeImageManifest, raw)
+	require.NoError(t, source.Push(ctx, attachment, strings.NewReader(string(raw))))
+	require.NoError(t, source.Tag(ctx, attachment, "sig"))
+
+	for _, tc := range []struct {
+		name      string
+		referrers []ocispec.Descriptor
+		wantErr   bool
+	}{
+		{"registered under the subject", []ocispec.Descriptor{attachment}, false},
+		{"manifest exists but is not registered", nil, true},
+		{"only another attachment is registered", []ocispec.Descriptor{oci.Descriptor(ocispec.MediaTypeImageManifest, []byte("other"))}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			destination := oci.NewMockRepositoryStore(gomock.NewController(t))
+			destination.EXPECT().Exists(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+			destination.EXPECT().Push(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, _ ocispec.Descriptor, content io.Reader) error {
+					_, err := io.Copy(io.Discard, content)
+					return err
+				},
+			).AnyTimes()
+			destination.EXPECT().PushReference(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("connection reset by peer")).AnyTimes()
+			destination.EXPECT().Resolve(gomock.Any(), "1.0.0").Return(attachment, nil).AnyTimes()
+			destination.EXPECT().Fetch(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, ocispec.Descriptor) (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader(string(raw))), nil
+				},
+			).AnyTimes()
+			destination.EXPECT().Predecessors(gomock.Any(), subject).Return(tc.referrers, nil).AnyTimes()
+
+			got, err := oci.Copy(ctx, oci.Source{Store: source, Reference: "sig"}, oci.Destination{Store: destination, Reference: "1.0.0"}, oci.WithoutSubjectTraversal())
+
+			if tc.wantErr {
+				require.Error(t, err)
+				require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, attachment.Digest, got.Digest)
+		})
+	}
+}
+
 func errcodeResponse(status int) error {
 	return &errcode.ErrorResponse{Method: http.MethodPut, StatusCode: status}
 }
