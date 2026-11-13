@@ -208,6 +208,11 @@ func (s *Store) commit(root *os.Root, key, target string, pending *staged, noAtt
 	if !s.plainFiles {
 		return s.commitManaged(root, key, pending, noAttrs, rootRenameReplace)
 	}
+	return commitPlain(root, key, target, pending, noAttrs)
+}
+
+// commitPlain installs a staged object in a plain-files store: attributes first, then the object.
+func commitPlain(root *os.Root, key, target string, pending *staged, noAttrs bool) error {
 	switch {
 	case pending.attrsTemp != "":
 		if err := rootRenameReplace(root, pending.attrsTemp, attrsPath(target)); err != nil {

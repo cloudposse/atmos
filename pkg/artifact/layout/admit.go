@@ -92,17 +92,13 @@ func Admit(in *AdmitInput) (Admission, error) {
 		return AdmitCreate, nil
 	}
 	if in.Current.State == StatePending {
-		if in.Current.IntentDigest == in.IncomingIntent {
-			var expected digest.Digest
-			if in.ExpectedPrior != nil {
-				expected = in.ExpectedPrior.ResolvedDigest
-			}
-			if expected != in.Current.PriorRecordDigest {
-				return "", fmt.Errorf("%w: pending publication expected prior %s, caller expected %s", errUtils.ErrArtifactConflict, in.Current.PriorRecordDigest, expected)
-			}
-		}
 		return admitPending(in)
 	}
+	return admitCompleted(in)
+}
+
+// admitCompleted decides publication over a completed reference.
+func admitCompleted(in *AdmitInput) (Admission, error) {
 	if err := checkExpectedPrior(in.Current, in.ExpectedPrior); err != nil {
 		return "", err
 	}
@@ -115,10 +111,19 @@ func Admit(in *AdmitInput) (Admission, error) {
 	return AdmitReplace, nil
 }
 
+// admitPending decides publication over a pending reference: only the same intent, expecting the
+// same prior, may resume it.
 func admitPending(in *AdmitInput) (Admission, error) {
 	if in.Current.IntentDigest != in.IncomingIntent {
 		return "", fmt.Errorf("%w: %s:%s is pending for operation %s with a different intent; recover or repair it with the same intent before publishing",
 			errUtils.ErrArtifactPublicationUnavailable, in.Current.Name, in.Current.Version, in.Current.OperationID)
+	}
+	var expected digest.Digest
+	if in.ExpectedPrior != nil {
+		expected = in.ExpectedPrior.ResolvedDigest
+	}
+	if expected != in.Current.PriorRecordDigest {
+		return "", fmt.Errorf("%w: pending publication expected prior %s, caller expected %s", errUtils.ErrArtifactConflict, in.Current.PriorRecordDigest, expected)
 	}
 	if in.Current.PriorRecordDigest != "" {
 		return AdmitResumeReplace, nil
