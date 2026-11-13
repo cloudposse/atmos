@@ -9,6 +9,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -196,27 +197,19 @@ func TestSignature_SubjectBinding(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
 	})
 	t.Run("format the repository cannot verify", func(t *testing.T) {
-		_, err := repo.Sign(context.Background(), subject, &foreignSigner{}, artifact.SignOptions{})
+		// Sign has no expectation: an unusable signer must be refused before it runs.
+		foreign := artifact.NewMockSigner(gomock.NewController(t))
+		foreign.EXPECT().Formats().Return([]artifact.EvidenceFormat{"other"}).AnyTimes()
+		_, err := repo.Sign(context.Background(), subject, foreign, artifact.SignOptions{})
 		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
 	})
 	t.Run("signer produces nothing", func(t *testing.T) {
-		_, err := repo.Sign(context.Background(), subject, &nilSigner{}, artifact.SignOptions{})
+		empty := artifact.NewMockSigner(gomock.NewController(t))
+		empty.EXPECT().Formats().Return([]artifact.EvidenceFormat{artifact.EvidenceSigstoreBundle}).AnyTimes()
+		empty.EXPECT().Sign(gomock.Any(), gomock.Any()).Return(nil, nil)
+		_, err := repo.Sign(context.Background(), subject, empty, artifact.SignOptions{})
 		require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
 	})
-}
-
-type foreignSigner struct{}
-
-func (*foreignSigner) Formats() []artifact.EvidenceFormat { return []artifact.EvidenceFormat{"other"} }
-
-func (*foreignSigner) Sign(context.Context, artifact.SignatureSubject) (*artifact.EvidencePayload, error) {
-	return &artifact.EvidencePayload{Format: "other", MediaType: "x", Data: []byte("x")}, nil
-}
-
-type nilSigner struct{ foreignSigner }
-
-func (*nilSigner) Sign(context.Context, artifact.SignatureSubject) (*artifact.EvidencePayload, error) {
-	return nil, nil
 }
 
 func TestSignature_WithoutVerifierIsACapabilityError(t *testing.T) {
