@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentconfiguration "github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
@@ -148,7 +149,10 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 	if err := s.failureFor(info.Stack, info.ComponentFromArg); err != nil {
 		return nil, err
 	}
-	instance := s.instanceFor(info)
+	instance, err := s.instanceFor(info)
+	if err != nil {
+		return nil, err
+	}
 	if instance == nil {
 		return nil, errUtils.Build(errUtils.ErrPluginInvalidConfig).
 			WithExplanation("The component is not provided by any enabled configuration provider.").
@@ -179,22 +183,26 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 
 // instanceFor finds the unit behind a component. A discovered unit is addressed by its derived
 // stack; an imported unit lives in whichever stack imported it, so it is found by its source file
-// and addressed as the stack and component the user selected.
-func (s *Session) instanceFor(info *schema.ConfigAndStacksInfo) *pluginv1.DiscoveredComponent {
-	if instance := s.instances[[3]string{info.Stack, "terraform", info.ComponentFromArg}]; instance != nil {
-		return instance
-	}
+// and addressed as the stack and component the user selected. When a discovered unit and an
+// imported unit claim the same stack and component, neither is chosen: the conflict is reported.
+func (s *Session) instanceFor(info *schema.ConfigAndStacksInfo) (*pluginv1.DiscoveredComponent, error) {
 	configuration, _ := info.ComponentSettingsSection["configuration"].(map[string]any)
 	source, _ := configuration["source"].(string)
-	s.importMu.Lock()
+	s.importMu.lock()
 	imported := s.imported[source]
-	s.importMu.Unlock()
+	s.importMu.unlock()
+	if discovered := s.instances[[3]string{info.Stack, "terraform", info.ComponentFromArg}]; discovered != nil {
+		if imported != nil && imported.Source != discovered.Source {
+			return nil, componentconfiguration.ImportConflict(info.ComponentFromArg, discovered.Source, imported.Source, "stack "+info.Stack+": one discovered, one imported")
+		}
+		return discovered, nil
+	}
 	if imported == nil {
-		return nil
+		return nil, nil
 	}
 	instance := proto.Clone(imported).(*pluginv1.DiscoveredComponent)
 	instance.Address = &pluginv1.ComponentAddress{Stack: info.Stack, Component: info.ComponentFromArg, ComponentType: terraformType}
-	return instance
+	return instance, nil
 }
 
 // Reevaluate the inventory without preparation effects before any dependency
@@ -254,8 +262,8 @@ func (s *Session) preparationBaseline(instance *pluginv1.DiscoveredComponent) *p
 
 // importBaseline finds the cached import that resolved an imported unit.
 func (s *Session) importBaseline(instance *pluginv1.DiscoveredComponent) *preparationEvidence {
-	s.importMu.Lock()
-	defer s.importMu.Unlock()
+	s.importMu.lock()
+	defer s.importMu.unlock()
 	reported := s.imported[instance.Source]
 	if reported == nil {
 		return nil

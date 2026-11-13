@@ -47,7 +47,7 @@ type Session struct {
 	instances       map[[3]string]*pluginv1.DiscoveredComponent
 	failures        map[failedKey]*failedUnit
 	err             error
-	importMu        sync.Mutex
+	importMu        importLock
 	importProviders map[string]*pluginv1.DiscoverComponentsRequest
 	// importResults caches each resolved import by URI; imported indexes the same units by
 	// source so Prepare can find a unit under whichever stack imported it.
@@ -189,9 +189,9 @@ func (s *Session) ensure(ctx context.Context) error {
 		return err
 	}
 	s.once.Do(func() {
-		s.importMu.Lock()
+		s.importMu.lock()
 		s.started = true
-		s.importMu.Unlock()
+		s.importMu.unlock()
 		go func() {
 			defer close(s.done)
 			// Shared discovery is owned by the session: one caller giving up must not
@@ -235,4 +235,39 @@ func discoveryRequest(config *schema.AtmosConfiguration, settings *schema.Compon
 	env := environment()
 	env["ATMOS_TERRAFORM_BINARY"] = config.Components.Terraform.Command
 	return &pluginv1.DiscoverComponentsRequest{Provider: name, RootDirectory: root, IncludePaths: includes, ExcludePaths: slices.Clone(settings.Discovery.ExcludedPaths), ProviderConfiguration: value, Operation: &pluginv1.ComponentOperation{Command: command, Mode: "native"}, Invocation: &pluginv1.Invocation{Environment: env}}, nil
+}
+
+// importLock serializes import evaluation and the session's import records. A waiter for an
+// import can give up when its context ends, instead of waiting for another import to finish.
+// The zero value is unlocked.
+type importLock struct {
+	once    sync.Once
+	channel chan struct{}
+}
+
+func (l *importLock) slot() chan struct{} {
+	l.once.Do(func() { l.channel = make(chan struct{}, 1) })
+	return l.channel
+}
+
+// lock waits for the lock.
+func (l *importLock) lock() {
+	l.slot() <- struct{}{}
+}
+
+// unlock releases the lock.
+func (l *importLock) unlock() {
+	<-l.slot()
+}
+
+// lockContext waits for the lock until either context ends, and reports why it gave up.
+func (l *importLock) lockContext(ctx, session context.Context) error {
+	select {
+	case l.slot() <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-session.Done():
+		return session.Err()
+	}
 }
