@@ -24,6 +24,22 @@ const maxManifestBytes = 8 << 20
 
 var packageName = regexp.MustCompile(`^[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$`)
 
+// hostContractVersions lists contracts whose host version is newer than 1.
+// Version 2 of component.preparation adds terraform_arguments, backend_generated,
+// and execution metadata. An earlier host cannot honor those fields, so the
+// version change makes that host reject the plugin before preparation.
+var hostContractVersions = map[string]uint32{"component.preparation": 2}
+
+// HostContractVersion returns the single version of a contract this host speaks.
+//
+//nolint:lintroller // Pure lookup; no I/O.
+func HostContractVersion(contract string) uint32 {
+	if version, ok := hostContractVersions[contract]; ok {
+		return version
+	}
+	return 1
+}
+
 // Config is a versioned Atmos manifest; loading it never executes plugin code.
 type Config = manifest.Manifest[Spec]
 
@@ -146,8 +162,8 @@ func checkCompatibility(compatibility Compatibility) error {
 	if err := supportsV1(compatibility.Protocol); err != nil {
 		return err
 	}
-	for _, expression := range compatibility.Contracts {
-		if err := supportsV1(expression); err != nil {
+	for contract, expression := range compatibility.Contracts {
+		if err := supports(expression, HostContractVersion(contract)); err != nil {
 			return err
 		}
 	}
@@ -165,8 +181,12 @@ func checkCompatibility(compatibility Compatibility) error {
 }
 
 func supportsV1(expression string) error {
+	return supports(expression, 1)
+}
+
+func supports(expression string, major uint32) error {
 	constraint, err := semver.NewConstraint(expression)
-	if err != nil || expression == "" || !constraint.Check(semver.MustParse("1.0.0")) {
+	if err != nil || expression == "" || !constraint.Check(semver.New(uint64(major), 0, 0, "", "")) {
 		return errUtils.ErrPluginUnsupportedExtension
 	}
 	return nil

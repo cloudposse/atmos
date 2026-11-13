@@ -184,6 +184,8 @@ service Commands {
 // implement an executor or replace the built-in Terraform component provider.
 // Negotiate each service through Info using component.discovery,
 // component.validation, component.preparation, and component.state respectively.
+// component.preparation is version 2: it adds terraform_arguments,
+// backend_generated, and execution. A version-1 host must reject the plugin.
 
 // ComponentValue uses cty's JSON type encoding and MessagePack value encoding.
 // Unlike protobuf.Struct, it preserves exact numbers, nulls, unknowns, and
