@@ -19,7 +19,7 @@ import (
 // provision.workdir.enabled: true before running terraform init.
 //
 // The test asserts that the workdir is created by the auto-provision step.
-// terraform output may return empty results if no state exists — that is
+// Terraform output may return empty results if no state exists — that is
 // expected and acceptable; the key assertion is that auto-provision fired.
 //
 // Regression test for https://github.com/cloudposse/atmos/issues/2167.
