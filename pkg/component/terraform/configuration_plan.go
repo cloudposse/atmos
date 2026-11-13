@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	ciplanfile "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -456,11 +457,11 @@ func fileDigest(path string) (string, error) {
 }
 
 func writePlanBinding(path string, data []byte) error {
-	file, err := os.CreateTemp(filepath.Dir(path), ".atmos-plan-*")
+	file, temporary, err := configuration.CreateSensitiveTemp(filepath.Dir(path))
 	if err != nil {
 		return planIOError(err)
 	}
-	defer os.Remove(file.Name())
+	defer os.Remove(temporary)
 	if _, err := file.Write(data); err != nil {
 		file.Close()
 		return planIOError(err)
@@ -468,7 +469,7 @@ func writePlanBinding(path string, data []byte) error {
 	if err := file.Close(); err != nil {
 		return planIOError(err)
 	}
-	if err := os.Rename(file.Name(), path); err != nil {
+	if err := os.Rename(temporary, path); err != nil {
 		return planIOError(err)
 	}
 	return nil

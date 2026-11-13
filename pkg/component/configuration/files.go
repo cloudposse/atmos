@@ -15,10 +15,34 @@ import (
 )
 
 const (
-	fileMode      = 0o644
-	secretMode    = 0o600
-	directoryMode = 0o755
+	fileMode              = 0o644
+	secretMode            = 0o600
+	directoryMode         = 0o755
+	sensitiveTempAttempts = 10
 )
+
+// CreateSensitiveTemp creates a private file in directory for data that will be
+// renamed into place. The file is restricted before the caller writes to it.
+func CreateSensitiveTemp(directory string) (*os.File, string, error) {
+	defer perf.Track(nil, "configuration.CreateSensitiveTemp")()
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return nil, "", err
+	}
+	defer root.Close()
+	for range sensitiveTempAttempts {
+		name := ".atmos-plan-" + rand.Text()
+		file, err := createSensitiveTempFile(root, name)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return nil, "", err
+		}
+		return file, filepath.Join(directory, name), nil
+	}
+	return nil, "", os.ErrExist
+}
 
 // WriteFiles materializes evaluated bytes under the provisioned module, without templating.
 //

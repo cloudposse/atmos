@@ -14,6 +14,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func createSensitiveTempFile(root *os.Root, name string) (*os.File, error) {
+	return openSensitiveGeneratedFile(root, name, false)
+}
+
 func openGeneratedFile(root *os.Root, file schema.ComponentConfigurationFile, exists bool) (*os.File, error) {
 	if !file.Sensitive {
 		flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
