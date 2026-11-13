@@ -100,6 +100,11 @@ func decidePublish(ref artifact.Ref, state *tagState, incoming *incomingRoot, op
 		return "", fmt.Errorf("%w: %s is %s but the caller expected %s", errUtils.ErrArtifactConflict, ref, state.desc.Digest, options.ExpectedPrior.ResolvedDigest)
 	}
 	if state.desc.Digest == incoming.digest {
+		// Unchanged still honors the compare-and-swap guard, matching the layout contract: a caller
+		// that expected the tag to be absent gets a conflict, not a silent success.
+		if options.ExpectedPrior == nil {
+			return "", fmt.Errorf("%w: %s already exists (%s) but the caller expected it not to", errUtils.ErrArtifactConflict, ref, state.desc.Digest)
+		}
 		return artifact.OutcomeUnchanged, nil
 	}
 	if state.loaded.class == classPlugin {
