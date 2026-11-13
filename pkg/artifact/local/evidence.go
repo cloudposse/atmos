@@ -45,18 +45,14 @@ func (t *tree) loadEvidence(subject digest.Digest) ([]loadedEvidence, []artifact
 	for {
 		entries, readErr := file.ReadDir(maxMalformedEvidence)
 		for _, entry := range entries {
-			stem, ok := strings.CutSuffix(entry.Name(), ".json")
-			if entry.IsDir() || !ok {
-				ignored++
-			} else {
-				locator := dir + "/" + entry.Name()
-				item, problem := t.readEvidenceFile(locator, stem)
-				if problem == nil {
-					loaded = append(loaded, loadedEvidence{evidence: item, locator: locator})
-					continue
-				}
-				ignored++
-				diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "malformed-evidence", Message: fmt.Sprintf("%s was ignored: %v", locator, problem)})
+			item, diag, ok := t.evidenceEntry(dir, entry)
+			if ok {
+				loaded = append(loaded, item)
+				continue
+			}
+			ignored++
+			if diag != nil {
+				diags = append(diags, *diag)
 			}
 			if ignored > maxMalformedEvidence {
 				diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "evidence-truncated", Message: "too many invalid evidence entries; remaining entries were not read"})
@@ -70,6 +66,21 @@ func (t *tree) loadEvidence(subject digest.Digest) ([]loadedEvidence, []artifact
 			return nil, diags, fmt.Errorf("read evidence directory: %w", readErr)
 		}
 	}
+}
+
+// evidenceEntry reads one directory entry of an evidence directory. It reports ok for valid
+// evidence; otherwise the entry is ignored, with a diagnostic when it looked like evidence.
+func (t *tree) evidenceEntry(dir string, entry fs.DirEntry) (loadedEvidence, *artifact.Diagnostic, bool) {
+	stem, ok := strings.CutSuffix(entry.Name(), ".json")
+	if entry.IsDir() || !ok {
+		return loadedEvidence{}, nil, false
+	}
+	locator := dir + "/" + entry.Name()
+	item, problem := t.readEvidenceFile(locator, stem)
+	if problem != nil {
+		return loadedEvidence{}, &artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "malformed-evidence", Message: fmt.Sprintf("%s was ignored: %v", locator, problem)}, false
+	}
+	return loadedEvidence{evidence: item, locator: locator}, nil, true
 }
 
 func (t *tree) readEvidenceFile(locator, hexDigest string) (*layout.Evidence, error) {

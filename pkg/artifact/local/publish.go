@@ -364,22 +364,34 @@ func (r *Repository) retire(t *tree, job *publishJob, plan *publishPlan) {
 		r.removePayload(t, plan.abandoned)
 	}
 	if plan.prior != nil {
-		if plan.prior.Location != "" && layout.FoldPath(plan.prior.Location) != layout.FoldPath(job.location) {
-			if r.kind == artifact.RepositoryKindLocalDir {
-				if record, _, err := t.loadRecord(plan.prior.RecordDigest); err == nil {
-					_, _ = r.store.remove(t, &view{record: record, rep: &layout.Representation{Location: plan.prior.Location}})
-					t.removeEmptyParents(plan.prior.Location)
-				}
-			} else {
-				r.removePayload(t, plan.prior.Location)
-			}
-		}
-		if plan.prior.RecordDigest != "" && plan.prior.RecordDigest != job.recordDigest {
-			_ = t.removeAll(layout.RecordPath(plan.prior.RecordDigest))
-			_ = t.removeAll(layout.SignatureDir(artifact.SubjectRecord, plan.prior.RecordDigest))
-		}
+		r.retirePrior(t, job, plan.prior)
 	}
 	_ = t.removeAll(layout.OperationPath(job.opID))
+}
+
+// retirePrior removes what the replaced reference left behind: its payload at a location the new
+// publication no longer uses, and its record and evidence when the record changed.
+func (r *Repository) retirePrior(t *tree, job *publishJob, prior *layout.Prior) {
+	if prior.Location != "" && layout.FoldPath(prior.Location) != layout.FoldPath(job.location) {
+		r.retirePriorPayload(t, prior)
+	}
+	if prior.RecordDigest != "" && prior.RecordDigest != job.recordDigest {
+		_ = t.removeAll(layout.RecordPath(prior.RecordDigest))
+		_ = t.removeAll(layout.SignatureDir(artifact.SubjectRecord, prior.RecordDigest))
+	}
+}
+
+// retirePriorPayload removes the replaced payload. A local directory repository removes only the
+// files its record owns, so unrelated files at that location survive.
+func (r *Repository) retirePriorPayload(t *tree, prior *layout.Prior) {
+	if r.kind != artifact.RepositoryKindLocalDir {
+		r.removePayload(t, prior.Location)
+		return
+	}
+	if record, _, err := t.loadRecord(prior.RecordDigest); err == nil {
+		_, _ = r.store.remove(t, &view{record: record, rep: &layout.Representation{Location: prior.Location}})
+		t.removeEmptyParents(prior.Location)
+	}
 }
 
 // removePayload deletes the payload paths this repository owns at a location it no longer uses.

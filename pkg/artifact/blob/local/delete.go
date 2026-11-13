@@ -34,9 +34,15 @@ func (s *Store) Delete(ctx context.Context, key string, opts blob.DeleteOptions)
 		return wrapIO(blob.OpDelete, key, err)
 	}
 	defer root.Close()
+	return deleteFromRoot(root, key, opts.IfMatch)
+}
+
+// deleteFromRoot removes the object and its attributes after an optional ETag check, then prunes
+// directories the removal left empty.
+func deleteFromRoot(root *os.Root, key, ifMatch string) error {
 	target := filepath.FromSlash(key)
-	if opts.IfMatch != "" {
-		if err := checkDeleteETag(root, key, target, opts.IfMatch); err != nil {
+	if ifMatch != "" {
+		if err := checkDeleteETag(root, key, target, ifMatch); err != nil {
 			return err
 		}
 	}
