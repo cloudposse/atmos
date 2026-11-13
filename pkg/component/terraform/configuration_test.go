@@ -40,7 +40,32 @@ func TestPrepareConfiguration(t *testing.T) {
 	require.Equal(t, map[string]any{"uri": expected.Source}, info.ComponentSection["source"])
 	require.Equal(t, expected.Backend, info.ComponentBackendSection)
 	require.Equal(t, "default", info.TerraformWorkspace)
+	require.False(t, config.Components.Terraform.AutoGenerateBackendFile, "preparation leaves the shared project default unchanged")
+	require.True(t, schema.GenerateBackendFile(config, info))
+}
+
+func TestPreparedBackendChoiceDoesNotLeakBetweenInvocations(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{SubCommand: "plan", ComponentSection: map[string]any{}, ComponentBackendType: "local", ComponentBackendSection: map[string]any{}}
+	}
+	providerOwned := newInfo()
+	applyPreparedConfiguration(config, providerOwned, &schema.PreparedComponentConfiguration{BackendGenerated: true, BackendType: "local", Backend: map[string]any{}})
+	hostOwned := newInfo()
+	applyPreparedConfiguration(config, hostOwned, &schema.PreparedComponentConfiguration{BackendGenerated: false, BackendType: "local", Backend: map[string]any{}})
 	require.True(t, config.Components.Terraform.AutoGenerateBackendFile)
+	require.False(t, schema.GenerateBackendFile(config, providerOwned))
+	require.True(t, schema.GenerateBackendFile(config, hostOwned))
+
+	providerDir := t.TempDir()
+	hostDir := t.TempDir()
+	require.NoError(t, GenerateBackendConfig(config, providerOwned, providerDir))
+	require.NoFileExists(t, filepath.Join(providerDir, "backend.tf.json"))
+	require.NoError(t, GenerateBackendConfig(config, hostOwned, hostDir))
+	require.FileExists(t, filepath.Join(hostDir, "backend.tf.json"))
+	require.NoError(t, GenerateBackendConfig(config, providerOwned, providerDir))
+	require.NoFileExists(t, filepath.Join(providerDir, "backend.tf.json"))
 }
 
 func TestPrepareConfigurationNeverForcesSourceRefresh(t *testing.T) {
@@ -89,12 +114,15 @@ func TestPrepareConfigurationGuards(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.AutoGenerateBackendFile = true
 			if test.runtime {
 				config.ComponentConfigurations = NewMockComponentConfigurationRuntime(gomock.NewController(t))
 			}
 			result, err := prepareConfiguration(t.Context(), config, &test.info)
 			require.ErrorIs(t, err, test.want)
 			require.Nil(t, result)
+			require.Nil(t, test.info.BackendFileGeneration)
+			require.True(t, config.Components.Terraform.AutoGenerateBackendFile)
 		})
 	}
 }

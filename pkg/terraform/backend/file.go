@@ -17,7 +17,7 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	defer perf.Track(atmosConfig, "backend.GenerateFile")()
 
 	// Terraform tests use their own state and do not need a generated backend.
-	if info.SubCommand == "test" || !atmosConfig.Components.Terraform.AutoGenerateBackendFile {
+	if info.SubCommand == "test" || !schema.GenerateBackendFile(atmosConfig, info) {
 		return nil
 	}
 	// Auto-generate backend file.

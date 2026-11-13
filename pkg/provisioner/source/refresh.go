@@ -116,7 +116,7 @@ const generatedBackendFile = "backend.tf.json"
 // Installing it would replace the generated backend, and the next generation would overwrite the
 // source's copy, so neither owner's version could be trusted.
 func rejectGeneratedBackendCollision(config *schema.AtmosConfiguration, stage, target string, componentConfig map[string]any) error {
-	if config == nil || !config.Components.Terraform.AutoGenerateBackendFile {
+	if config == nil || !schema.GenerateBackendFileForSection(config, componentConfig) {
 		return nil
 	}
 	for _, root := range moduleRoots(target, componentConfig) {

@@ -89,7 +89,7 @@ func resolveSelectedExecutable(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
+func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
 	// The stack's env section wins over provider environment in the metadata this invocation runs,
 	// including the apply-time metadata of a restored saved plan.
@@ -110,7 +110,7 @@ func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.
 	info.ComponentSection["source"] = source
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
-	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
+	info.SetBackendFileGeneration(!prepared.BackendGenerated)
 	warnOnCacheLocalState(info, prepared)
 }
 

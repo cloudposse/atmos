@@ -58,6 +58,9 @@ func TestLocalSubdirProtectsGeneratedBackend(t *testing.T) {
 	config.Components.Terraform.AutoGenerateBackendFile = true
 	section := map[string]any{"metadata": map[string]any{"source_subdir": "modules/app"}}
 	require.ErrorIs(t, rejectGeneratedBackendCollision(config, stage, target, section), errUtils.ErrSourceCopyFailed)
+	info := &schema.ConfigAndStacksInfo{ComponentSection: section}
+	info.SetBackendFileGeneration(false)
+	require.NoError(t, rejectGeneratedBackendCollision(config, stage, target, section))
 }
 
 func TestLocalSubdirRefreshPreservesModuleState(t *testing.T) {
