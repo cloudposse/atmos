@@ -44,23 +44,9 @@ func validateRepositoryRef(repository string, ref artifact.Ref) error {
 }
 
 func (s *Service) runDelete(ctx context.Context, op *operation, request *artifact.DeleteRequest, info *RepositoryInfo, repo artifact.Repository) error {
-	resource := lockTarget{alias: request.Repository, repo: repo, info: info, resource: request.Ref.String()}
-	subjectResource := lockTarget{alias: request.Repository, repo: repo, info: info, resource: subjectLockResource(request.Ref.Name)}
-	targets := []lockTarget{resource, subjectResource}
-	canonical := resource.resource
-	if request.Ref.IsDigest() {
-		prePinned, err := repo.Resolve(ctx, request.Ref)
-		if err != nil {
-			return err
-		}
-		preInspection, err := repo.Inspect(ctx, prePinned)
-		if err != nil {
-			return err
-		}
-		if preInspection.Record != nil {
-			canonical = preInspection.Record.Name + ":" + preInspection.Record.Version
-			targets = append(targets, lockTarget{alias: request.Repository, repo: repo, info: info, resource: canonical})
-		}
+	targets, canonical, err := deleteLockTargets(ctx, request, info, repo)
+	if err != nil {
+		return err
 	}
 	locks, err := s.acquireLocks(ctx, op, opDelete, targets)
 	if err != nil {
@@ -91,6 +77,32 @@ func (s *Service) runDelete(ctx context.Context, op *operation, request *artifac
 		op.info("affected-reference", fmt.Sprintf("the deletion also affected %s", affected))
 	}
 	return nil
+}
+
+// deleteLockTargets returns the locks a delete takes and the canonical reference it deletes. A
+// digest reference is inspected before locking so the canonical name:version reference is also
+// locked; it is resolved again under the locks.
+func deleteLockTargets(ctx context.Context, request *artifact.DeleteRequest, info *RepositoryInfo, repo artifact.Repository) ([]lockTarget, string, error) {
+	resource := lockTarget{alias: request.Repository, repo: repo, info: info, resource: request.Ref.String()}
+	subject := lockTarget{alias: request.Repository, repo: repo, info: info, resource: subjectLockResource(request.Ref.Name)}
+	targets := []lockTarget{resource, subject}
+	canonical := resource.resource
+	if !request.Ref.IsDigest() {
+		return targets, canonical, nil
+	}
+	prePinned, err := repo.Resolve(ctx, request.Ref)
+	if err != nil {
+		return nil, "", err
+	}
+	preInspection, err := repo.Inspect(ctx, prePinned)
+	if err != nil {
+		return nil, "", err
+	}
+	if preInspection.Record != nil {
+		canonical = preInspection.Record.Name + ":" + preInspection.Record.Version
+		targets = append(targets, lockTarget{alias: request.Repository, repo: repo, info: info, resource: canonical})
+	}
+	return targets, canonical, nil
 }
 
 // Pin implements [artifact.Service]. A pin is immutable reference data for consumer lockfiles; it
