@@ -1,5 +1,7 @@
 package step
 
+//go:generate go run go.uber.org/mock/mockgen -typed -destination mock_ci_reporter_test.go -package step github.com/cloudposse/atmos/pkg/ci Reporter
+
 import (
 	"context"
 	"errors"
@@ -22,10 +24,11 @@ import (
 	star "github.com/cloudposse/atmos/pkg/script/starlark"
 )
 
-// summaryRecorder is a ci.Reporter that records what the report session writes. It embeds the
-// interface so any unexpected call fails loudly.
+// summaryRecorder captures what the report session writes through a generated ci.Reporter mock. The
+// mock's Summary and Output callbacks record the assertions' state, and any other reporter call fails
+// loudly as an unexpected call.
 type summaryRecorder struct {
-	ci.Reporter
+	reporter *MockReporter
 
 	mu        sync.Mutex
 	summaries []string
@@ -33,27 +36,31 @@ type summaryRecorder struct {
 	builds    int
 }
 
-func (r *summaryRecorder) Summary(markdown string) (ci.Receipt, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.summaries = append(r.summaries, markdown)
-	return ci.Receipt{}, nil
-}
-
-func (r *summaryRecorder) Output(key, value string) (ci.Receipt, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.outputs == nil {
-		r.outputs = map[string]string{}
-	}
-	r.outputs[key] = value
-	return ci.Receipt{}, nil
+func newSummaryRecorder(t *testing.T) *summaryRecorder {
+	t.Helper()
+	r := &summaryRecorder{reporter: NewMockReporter(gomock.NewController(t))}
+	r.reporter.EXPECT().Summary(gomock.Any()).DoAndReturn(func(markdown string) (ci.Receipt, error) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.summaries = append(r.summaries, markdown)
+		return ci.Receipt{}, nil
+	}).AnyTimes()
+	r.reporter.EXPECT().Output(gomock.Any(), gomock.Any()).DoAndReturn(func(key, value string) (ci.Receipt, error) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.outputs == nil {
+			r.outputs = map[string]string{}
+		}
+		r.outputs[key] = value
+		return ci.Receipt{}, nil
+	}).AnyTimes()
+	return r
 }
 
 func (r *summaryRecorder) option() report.Option {
 	return report.WithReporter(func(*schema.AtmosConfiguration) ci.Reporter {
 		r.builds++
-		return r
+		return r.reporter
 	})
 }
 
@@ -90,7 +97,7 @@ func refsOf(markdown string) []string {
 func TestArtifactReport_SequentialStepsProduceOneOrderedReport(t *testing.T) {
 	env := newArtifactEnv(t)
 	expectPublishes(env)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 
 	for _, version := range []string{"1.0.0", "2.0.0", "3.0.0"} {
@@ -108,7 +115,7 @@ func TestArtifactReport_SequentialStepsProduceOneOrderedReport(t *testing.T) {
 
 func TestArtifactReport_RetriesReportTheFinalAttemptOnce(t *testing.T) {
 	env := newArtifactEnv(t)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 
 	calls := 0
@@ -138,7 +145,7 @@ func TestArtifactReport_RetriesReportTheFinalAttemptOnce(t *testing.T) {
 func TestArtifactReport_ParallelBranchesFollowTheSchedule(t *testing.T) {
 	env := newArtifactEnv(t)
 	expectPublishes(env)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 
 	_, err := env.run(publishStep("before", "0.0.0"))
@@ -184,7 +191,7 @@ func TestArtifactReport_ParallelBranchesFollowTheSchedule(t *testing.T) {
 func TestArtifactReport_NestedBranchesNestUnderTheirGroup(t *testing.T) {
 	env := newArtifactEnv(t)
 	expectPublishes(env)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 
 	group := env.vars.ScheduleGroup()
@@ -208,7 +215,7 @@ func TestArtifactReport_NestedBranchesNestUnderTheirGroup(t *testing.T) {
 
 func TestArtifactReport_FailureAndCancellationAreReportedByTheDeferredFlush(t *testing.T) {
 	env := newArtifactEnv(t)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	env.service.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil, errors.New("registry unavailable")).Times(2)
 
 	execute := func() {
@@ -243,7 +250,7 @@ func TestArtifactReport_DisabledReportingInstallsNothing(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			env := newArtifactEnv(t)
 			expectPublishes(env)
-			recorder := &summaryRecorder{}
+			recorder := newSummaryRecorder(t)
 			env.vars.SetArtifactCollector(nil)
 			flush := env.vars.UseArtifactReport(config, recorder.option())
 			_, err := env.run(publishStep("publish", "1.0.0"))
@@ -261,7 +268,7 @@ func ptrTo[T any](value T) *T { return &value }
 func TestArtifactReport_NestedBoundaryReusesTheOwnersSession(t *testing.T) {
 	env := newArtifactEnv(t)
 	expectPublishes(env)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	outer := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 	inner := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 
@@ -278,7 +285,7 @@ func TestArtifactReport_NestedBoundaryReusesTheOwnersSession(t *testing.T) {
 func TestArtifactReport_ConcurrentRecordingIsRaceFree(t *testing.T) {
 	env := newArtifactEnv(t)
 	expectPublishes(env)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 	var wg sync.WaitGroup
 	group := env.vars.ScheduleGroup()
@@ -307,7 +314,7 @@ func TestArtifactReport_FlushArtifactReportWritesTheInstalledSession(t *testing.
 	t.Run("writes once before a process replacement and the deferred flush adds nothing", func(t *testing.T) {
 		env := newArtifactEnv(t)
 		expectPublishes(env)
-		recorder := &summaryRecorder{}
+		recorder := newSummaryRecorder(t)
 		flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 		_, err := env.run(publishStep("publish", "1.0.0"))
 		require.NoError(t, err)
@@ -324,7 +331,7 @@ func TestArtifactReport_FlushArtifactReportWritesTheInstalledSession(t *testing.
 	t.Run("covers a session that a nested boundary reuses", func(t *testing.T) {
 		env := newArtifactEnv(t)
 		expectPublishes(env)
-		recorder := &summaryRecorder{}
+		recorder := newSummaryRecorder(t)
 		_ = env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 		nested := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 		_, err := env.run(publishStep("publish", "1.0.0"))
@@ -339,7 +346,7 @@ func TestArtifactReport_FlushArtifactReportWritesTheInstalledSession(t *testing.
 	t.Run("does nothing when no report session is installed", func(t *testing.T) {
 		env := newArtifactEnv(t)
 		expectPublishes(env)
-		recorder := &summaryRecorder{}
+		recorder := newSummaryRecorder(t)
 		_, err := env.run(publishStep("publish", "1.0.0"))
 		require.NoError(t, err)
 
@@ -352,7 +359,7 @@ func TestArtifactReport_FlushArtifactReportWritesTheInstalledSession(t *testing.
 func TestArtifactReport_ConsecutiveGroupsKeepTheirScheduledOrder(t *testing.T) {
 	env := newArtifactEnv(t)
 	expectPublishes(env)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 
 	// Two groups start with no artifact operation between them; the second group's branches finish first.
@@ -374,7 +381,7 @@ func TestArtifactReport_ConsecutiveGroupsKeepTheirScheduledOrder(t *testing.T) {
 
 func TestArtifactReport_IdenticalStepsInSeparateBranchesAreSeparateOperations(t *testing.T) {
 	env := newArtifactEnv(t)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 
 	// Both branches are inside the same operation at once: the service holds each call until the
@@ -412,7 +419,7 @@ func TestArtifactReport_IdenticalStepsInSeparateBranchesAreSeparateOperations(t 
 
 func TestArtifactReport_RetriesInOneBranchStayOneOperation(t *testing.T) {
 	env := newArtifactEnv(t)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 	calls := 0
 	env.service.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, r artifact.PublishRequest) (*artifact.OperationResult, error) {
@@ -443,7 +450,7 @@ func TestArtifactReport_RetriesInOneBranchStayOneOperation(t *testing.T) {
 func TestArtifactReport_ExecStepWritesTheReportBeforeReplacingTheProcess(t *testing.T) {
 	env := newArtifactEnv(t)
 	expectPublishes(env)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 	_, err := env.run(publishStep("publish", "1.0.0"))
 	require.NoError(t, err)
@@ -463,7 +470,7 @@ func TestArtifactReport_ExecStepWritesTheReportBeforeReplacingTheProcess(t *test
 func TestArtifactReport_StarlarkParallelFollowsSchedule(t *testing.T) {
 	env := newArtifactEnv(t)
 	expectPublishes(env)
-	recorder := &summaryRecorder{}
+	recorder := newSummaryRecorder(t)
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 	_, err := star.New().Execute(t.Context(), script.Spec{Source: `
 def publish(version):
