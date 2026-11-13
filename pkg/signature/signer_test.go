@@ -30,7 +30,7 @@ func TestSignBlobAcceptsOnlyEvidenceBoundToTheSignedBytes(t *testing.T) {
 		{"malformed bundle", []byte("not json"), nil, errUtils.ErrSignatureInvalid},
 		{"empty bundle", nil, nil, errUtils.ErrSignatureInvalid},
 		{"oversized bundle", make([]byte, MaxBundleSize+1), nil, errUtils.ErrSignatureInvalid},
-		{"signer failure", nil, failure, failure},
+		{"signer failure", nil, failure, errUtils.ErrSignatureSigningFailed},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			signer := NewMockBlobSigner(gomock.NewController(t))
@@ -38,6 +38,9 @@ func TestSignBlobAcceptsOnlyEvidenceBoundToTheSignedBytes(t *testing.T) {
 			got, err := SignBlob(t.Context(), signer, artifact)
 			if tc.want != nil {
 				require.ErrorIs(t, err, tc.want)
+				if tc.err != nil {
+					require.ErrorIs(t, err, tc.err)
+				}
 				assert.Nil(t, got)
 				return
 			}
