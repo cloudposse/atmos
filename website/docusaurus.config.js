@@ -815,6 +815,8 @@ const config = {
         }),
 
     customFields: {
+        // Point local/preview builds at the companion newsletter service when needed.
+        newsletterEmbedOrigin: process.env.ATMOS_NEWSLETTER_EMBED_ORIGIN || 'https://cloudposse.com',
         latestRelease: 'v0.0.0', // initial placeholder
         buildYear: getBuildDate().getUTCFullYear(),
         // Render downloads from the same revision as the deployed site, including PR casts.
