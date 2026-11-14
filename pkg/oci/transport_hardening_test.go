@@ -300,10 +300,19 @@ func TestLegacyCopyNeverUploadsNonDistributableLayers(t *testing.T) {
 	defer graph.close()
 	layout, err := OpenLayout(t.Context(), t.TempDir())
 	require.NoError(t, err)
+	// ORAS invokes the observer from several goroutines, so the recorded set needs a lock.
+	var transferredMu sync.Mutex
 	transferred := map[digest.Digest]bool{}
 	root, err := Copy(t.Context(), Source{Store: graph, Reference: legacyRoot}, Destination{Store: layout, Reference: "latest"},
-		WithoutSubjectTraversal(), WithCopyObserver(func(desc ocispec.Descriptor) { transferred[desc.Digest] = true }))
+		WithoutSubjectTraversal(), WithCopyObserver(func(desc ocispec.Descriptor) {
+			transferredMu.Lock()
+			defer transferredMu.Unlock()
+			transferred[desc.Digest] = true
+		}))
 	require.NoError(t, err)
+
+	transferredMu.Lock()
+	defer transferredMu.Unlock()
 
 	assert.True(t, transferred[digest.Digest(distributableHash.String())], "distributable layers are transferred")
 	assert.False(t, transferred[digest.Digest(foreignHash.String())], "foreign layers are not uploaded, matching the legacy writer")
