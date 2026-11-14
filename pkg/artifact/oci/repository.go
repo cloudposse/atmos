@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	atmosoci "github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -204,7 +205,7 @@ func (r *Repository) loadCachedRoot(ctx context.Context, st store, name string, 
 }
 
 // readRecord fetches the Record config blob of an Atmos package with a bounded, verified read.
-func (r *Repository) readRecord(ctx context.Context, st store, name string, loaded *root) (*artifact.Record, error) {
+func (r *Repository) readRecord(ctx context.Context, st atmosoci.Fetcher, name string, loaded *root) (*artifact.Record, error) {
 	config := loaded.manifest.Config
 	if raw, ok := r.cached(name, config); ok {
 		return artifact.DecodeRecord(raw)

@@ -171,7 +171,26 @@ func (r *Repository) ImportLayout(ctx context.Context, directory string, ref art
 	if err != nil {
 		return nil, err
 	}
+	// The Record binds a package to its own name and version. Checking it before the transfer
+	// keeps a mismatched import from publishing a tag that every later read would reject.
+	if err := r.requireImportIdentity(ctx, src, loaded, ref); err != nil {
+		return nil, err
+	}
 	return r.transfer(ctx, src, loaded, ref, artifact.PublishOptions{ExpectedPrior: options.ExpectedPrior, Force: options.Force, Lock: options.Lock})
+}
+
+// requireImportIdentity rejects an import of an Atmos package whose Record names another
+// reference than the one it would be published under. A foreign graph carries no Record and is
+// published under the requested reference as it is.
+func (r *Repository) requireImportIdentity(ctx context.Context, src atmosoci.Fetcher, loaded *root, ref artifact.Ref) error {
+	if loaded.class != classAtmos {
+		return nil
+	}
+	record, err := r.readRecord(ctx, src, ref.Name, loaded)
+	if err != nil {
+		return err
+	}
+	return requireSubjectOf(record, ref)
 }
 
 // ExportLayout exports the pinned graph, with every referrer, to a standard OCI image layout

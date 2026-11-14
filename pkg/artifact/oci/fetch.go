@@ -25,7 +25,7 @@ const errFormatDigestCause = "%w: %s: %w"
 // fetchBounded reads one small blob with the declared size and digest verified; a larger or
 // tampered blob never reaches the caller. Oversize content is reported as too large, everything
 // else that fails verification as an integrity failure.
-func fetchBounded(ctx context.Context, st store, desc ocispec.Descriptor, limit int64) ([]byte, error) {
+func fetchBounded(ctx context.Context, st atmosoci.Fetcher, desc ocispec.Descriptor, limit int64) ([]byte, error) {
 	if desc.Size > limit || desc.Size < 0 {
 		return nil, fmt.Errorf("%w: %s declares %d bytes; the limit is %d", errUtils.ErrArtifactTooLarge, desc.Digest, desc.Size, limit)
 	}
