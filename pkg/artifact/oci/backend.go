@@ -239,10 +239,20 @@ func (r *Repository) guardLayout(ctx context.Context) (func(), error) {
 	}
 }
 
-// exists reports whether the layout has been created.
-func (b *layoutBackend) exists() bool {
+// exists reports whether the layout has been created. Only a missing index means absence: any
+// other failure to inspect it (a permission error, a path component that is not a directory)
+// describes an inaccessible layout and is returned so callers do not mistake it for an empty or
+// absent repository.
+func (b *layoutBackend) exists() (bool, error) {
 	info, err := os.Stat(filepath.Join(b.root, ocispec.ImageIndexFile))
-	return err == nil && info.Mode().IsRegular()
+	switch {
+	case err == nil:
+		return info.Mode().IsRegular(), nil
+	case errors.Is(err, os.ErrNotExist):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 // open returns a fresh handle on the layout so a long-lived Repository never serves a stale
@@ -252,8 +262,14 @@ func (b *layoutBackend) open(ctx context.Context, _ string, write bool) (store, 
 }
 
 func (b *layoutBackend) layout(ctx context.Context, write bool) (*atmosoci.Layout, error) {
-	if !write && !b.exists() {
-		return nil, fmt.Errorf("%w: the OCI layout %q does not exist", errUtils.ErrArtifactNotFound, b.root)
+	if !write {
+		present, err := b.exists()
+		if err != nil {
+			return nil, fmt.Errorf("%w: inspect layout %q: %w", errUtils.ErrArtifactDownloadFailed, b.root, err)
+		}
+		if !present {
+			return nil, fmt.Errorf("%w: the OCI layout %q does not exist", errUtils.ErrArtifactNotFound, b.root)
+		}
 	}
 	opened, err := atmosoci.OpenLayout(ctx, b.root)
 	if err != nil {
@@ -265,7 +281,11 @@ func (b *layoutBackend) layout(ctx context.Context, write bool) (*atmosoci.Layou
 // references returns every named root as name and version, skipping references that are not
 // artifact references (for example a layout shared with other tools).
 func (b *layoutBackend) references(ctx context.Context) ([]artifact.Ref, error) {
-	if !b.exists() {
+	present, err := b.exists()
+	if err != nil {
+		return nil, fmt.Errorf("%w: inspect layout %q: %w", errUtils.ErrArtifactListFailed, b.root, err)
+	}
+	if !present {
 		return nil, nil
 	}
 	opened, err := b.layout(ctx, false)
