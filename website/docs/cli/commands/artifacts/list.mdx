@@ -117,7 +117,7 @@ When nothing matches, stderr reports `No artifacts found.`, or says that no repo
     <dd>`text` is not a collection format. Use `table`, `json`, `yaml`, `csv`, or `tsv`.</dd>
 </dl>
 
-Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the envelope is still written to stdout with an empty `artifacts` array and an `error` field.
+Every failure exits with a nonzero status. For failures reached while the command runs, `--format=json` or `--format=yaml` still writes the envelope to stdout with an empty `artifacts` array and an `error` field. Argument and flag parsing failures, such as an unknown flag or an extra argument, are rejected before the command runs and do not produce a structured envelope.
 
 ## Related
 

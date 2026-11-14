@@ -459,6 +459,66 @@ func TestDelegatedMutationsAlsoTakeLocalReferenceLock(t *testing.T) {
 	}
 }
 
+// A real local delegate holds its lock file under its own root, so a matching namespace must not
+// stand in for the target's lock: direct writers of the target still contend for it.
+func TestDelegatedLocalHandleStillContendsForTargetLock(t *testing.T) {
+	target := newRepo(t, signedSpec(dirSpec()))
+	delegate := newRepo(t, dirSpec())
+	publish(t, target, &prepareSpec{}, artifact.PublishOptions{})
+	pinned := resolve(t, target, defaultRef())
+	subject := recordSubject(t, target)
+	reference := testName + ":" + testVersion
+
+	delegated, err := delegate.Lock(context.Background(), lockRequest(target.LockNamespace()+"/"+reference))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = delegated.Release(context.Background()) })
+	direct, err := target.Lock(context.Background(), lockRequest(reference))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = direct.Release(context.Background()) })
+
+	delegatedFile, ok := delegated.(*fileLock)
+	require.True(t, ok)
+	directFile, ok := direct.(*fileLock)
+	require.True(t, ok)
+	require.NotEqual(t, directFile.path, delegatedFile.path, "the delegate must hold a different physical lock")
+	require.True(t, target.coversReference(delegatedFile, reference))
+	require.False(t, target.holdsTargetLock(delegatedFile, reference))
+	require.True(t, target.holdsTargetLock(directFile, reference))
+
+	for _, operation := range []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{"publish", func(ctx context.Context) error {
+			_, err := target.Publish(ctx, prepare(t, target, &prepareSpec{}), artifact.PublishOptions{Lock: delegated})
+			return err
+		}},
+		{"sign", func(ctx context.Context) error {
+			_, err := target.Sign(ctx, subject, newSigner(), artifact.SignOptions{Lock: delegated})
+			return err
+		}},
+		{"delete", func(ctx context.Context) error {
+			_, err := target.Delete(ctx, pinned, artifact.DeleteOptions{Lock: delegated})
+			return err
+		}},
+		{"write evidence", func(ctx context.Context) error {
+			_, err := target.WriteEvidence(ctx, &pinned, nil, delegated)
+			return err
+		}},
+	} {
+		t.Run(operation.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			require.ErrorIs(t, operation.run(ctx), context.DeadlineExceeded)
+		})
+	}
+
+	t.Run("a handle on the target lock file is reused without self-deadlock", func(t *testing.T) {
+		_, err := target.Delete(context.Background(), pinned, artifact.DeleteOptions{Lock: direct})
+		require.NoError(t, err)
+	})
+}
+
 // A lock taken on a delegate local repository carries the target's namespaced resource.
 func TestDelegatedLocalLockCoversTheSameReference(t *testing.T) {
 	target := newRepo(t, signedSpec(dirSpec()))

@@ -378,7 +378,7 @@ func (r *Repository) writeEvidenceLocked(t *tree, pinned *artifact.PinnedReferen
 	return stored, nil
 }
 
-// lockEvidenceReference reuses a matching caller lock or acquires the reference lock.
+// lockEvidenceReference reuses a caller lock that holds this repository's own reference lock or acquires it.
 func (r *Repository) lockEvidenceReference(ctx context.Context, t *tree, pinned *artifact.PinnedReference, lock artifact.LockHandle) (*fileLock, error) {
 	record, _, err := t.loadRecord(pinned.RecordDigest)
 	if err != nil {
@@ -389,7 +389,11 @@ func (r *Repository) lockEvidenceReference(ctx context.Context, t *tree, pinned 
 		if !r.coversReference(localLock, resource) {
 			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, resource)
 		}
-		return nil, nil
+		// Reuse the handle only when it holds this repository's own lock file; a delegate's file
+		// does not exclude direct writers of this repository.
+		if r.holdsTargetLock(localLock, resource) {
+			return nil, nil
+		}
 	}
 	return r.acquire(ctx, resource, r.settings.owner, "")
 }

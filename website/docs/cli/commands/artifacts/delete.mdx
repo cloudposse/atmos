@@ -85,7 +85,7 @@ Stdout carries `outcome` (`deleted`), `ref`, `location`, the digests describing 
     <dd>The repository cannot delete, or cannot provide the required lock scope.</dd>
 </dl>
 
-Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+Every failure exits with a nonzero status. For failures reached while the command runs, `--format=json` or `--format=yaml` still writes the result to stdout with `outcome: failed` and an `error` field. Argument and flag parsing failures, such as a missing reference or an unknown flag, are rejected before the command runs and do not produce a structured result.
 
 ## Related
 

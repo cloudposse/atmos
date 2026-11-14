@@ -171,6 +171,21 @@ func TestConsumption_RequiredVerificationRunsBeforeMaterializationAndForceDoesNo
 	require.NoError(t, err)
 }
 
+func TestConsumption_RequireSignatureWithoutTrustConstraintsIsRejected(t *testing.T) {
+	e := newEnv(t, envConfig{options: []service.Option{service.WithSigner(releaseSigner)}})
+	published := e.publish("dst", e.source("hello"))
+	_, err := e.svc.Sign(context.Background(), artifact.SignRequest{Repository: "dst", Ref: artifact.Ref{Name: "tools/example", Digest: published.Operation.RecordDigest}})
+	require.NoError(t, err)
+	e.setInfo("dst", func(info *service.RepositoryInfo) { info.Policy = artifact.VerificationPolicy{RequireSignature: true} })
+	verifies := e.repos["dst"].Calls("Verify")
+
+	dest := out(t)
+	_, err = e.svc.Pull(context.Background(), artifact.PullRequest{Repository: "dst", Ref: exampleRef, Destination: dest})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid, "a signature from any signer must not satisfy a policy that trusts no one")
+	assert.Equal(t, verifies, e.repos["dst"].Calls("Verify"), "the repository is never asked to verify")
+	assert.True(t, missing(dest), "nothing was materialized")
+}
+
 func TestInspect_ReportsVerificationWhenPolicyConstrainsIt(t *testing.T) {
 	e := newEnv(t, envConfig{options: []service.Option{service.WithSigner(releaseSigner)}})
 	published := e.publish("dst", e.source("hello"))

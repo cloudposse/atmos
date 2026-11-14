@@ -154,5 +154,8 @@ func gate(ctx context.Context, alias string, repo artifact.Repository, inspectio
 	if err != nil {
 		return nil, err
 	}
+	if merged.RequireSignature && !merged.HasTrustConstraints() {
+		return &artifact.VerificationResult{Subject: subject, Status: artifact.VerificationUnchecked}, fmt.Errorf("%w: repository %q has no trusted identities or keys configured, so nothing can be verified; configure artifacts.verification", errUtils.ErrArtifactConfigInvalid, alias)
+	}
 	return verifySubject(ctx, alias, repo, subject, merged)
 }

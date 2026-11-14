@@ -164,7 +164,13 @@ func readDirNames(dir string) ([]string, error) {
 // path yet resolve outside it. A dangling link is checked through its longest existing ancestor
 // plus the missing remainder, so it cannot escape once the missing path is created.
 func (c *capturer) checkLinkContainment() error {
-	realRoot, err := filepath.EvalSymlinks(c.root)
+	// linkpath.Resolve reports absolute paths, so the root must be absolute too: EvalSymlinks keeps
+	// a relative source relative, which would reject every contained link.
+	absRoot, err := filepath.Abs(c.root)
+	if err != nil {
+		return fmt.Errorf("%w: resolve source: %w", errUtils.ErrArtifactPackagingInvalid, err)
+	}
+	realRoot, err := filepath.EvalSymlinks(absRoot)
 	if err != nil {
 		return fmt.Errorf("%w: resolve source: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
