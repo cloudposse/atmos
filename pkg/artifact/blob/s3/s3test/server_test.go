@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -344,12 +345,28 @@ func TestDecodeAWSChunked(t *testing.T) {
 	got, err := decodeAWSChunked(raw)
 	require.NoError(t, err)
 	assert.Equal(t, "hello world", string(got))
-	_, err = decodeAWSChunked([]byte("zz\r\n"))
-	require.Error(t, err)
-	_, err = decodeAWSChunked([]byte("5\r\nhelloXX0\r\n"))
-	require.ErrorIs(t, err, errUtils.ErrBlobInvalidChunkTerminator)
-	_, err = decodeAWSChunked([]byte("5\r\nhel"))
-	require.Error(t, err)
+
+	malformed := []struct {
+		name  string
+		raw   string
+		want  error
+		cause error
+	}{
+		{name: "missing header newline", raw: "5", want: errUtils.ErrBlobInvalidChunk, cause: io.EOF},
+		{name: "non-hex chunk size", raw: "zz\r\n", want: errUtils.ErrBlobInvalidChunk, cause: strconv.ErrSyntax},
+		{name: "chunk cut short", raw: "5\r\nhel", want: errUtils.ErrBlobInvalidChunk, cause: io.EOF},
+		{name: "terminator missing", raw: "5\r\nhello", want: errUtils.ErrBlobInvalidChunk, cause: io.EOF},
+		{name: "wrong terminator", raw: "5\r\nhelloXX0\r\n", want: errUtils.ErrBlobInvalidChunkTerminator},
+	}
+	for _, tc := range malformed {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := decodeAWSChunked([]byte(tc.raw))
+			require.ErrorIs(t, err, tc.want)
+			if tc.cause != nil {
+				require.ErrorIs(t, err, tc.cause, "the decoder keeps the underlying cause visible")
+			}
+		})
+	}
 }
 
 func TestDiscardBodiesKeepsSizesAndETags(t *testing.T) {
@@ -400,4 +417,25 @@ func TestRangeEndMaxIntDoesNotOverflow(t *testing.T) {
 	got, ok := parseRange("bytes=0-9223372036854775807", 10)
 	require.True(t, ok)
 	assert.Equal(t, int64(10), got.end)
+}
+
+func TestAttributesWrapTagFailuresWithSharedSentinels(t *testing.T) {
+	tests := []struct {
+		name    string
+		tagging string
+		want    error
+	}{
+		{name: "malformed query", tagging: "a=%zz", want: errUtils.ErrBlobInvalid},
+		{name: "too many tags", tagging: "a=1&b=2&c=3&d=4&e=5&f=6&g=7&h=8&i=9&j=10&k=11", want: errUtils.ErrBlobTooManyTags},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, "http://example.invalid/k", strings.NewReader("x"))
+			require.NoError(t, err)
+			req.Header.Set("X-Amz-Tagging", tc.tagging)
+
+			_, err = attributes(req)
+			require.ErrorIs(t, err, tc.want)
+		})
+	}
 }

@@ -20,6 +20,11 @@ type Store struct {
 	mu  sync.Mutex
 	api API
 
+	// probeSlot admits one conditional-write probe at a time. A buffered channel instead of a mutex
+	// lets a waiting operation give up when its context ends.
+	probeSlot chan struct{}
+
+	// probeMu guards the cached verdict below.
 	probeMu    sync.Mutex
 	probed     bool
 	probeError error
@@ -36,7 +41,7 @@ func New(bucket string, opts ...Option) (*Store, error) {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return &Store{cfg: cfg, api: cfg.api}, nil
+	return &Store{cfg: cfg, api: cfg.api, probeSlot: make(chan struct{}, 1)}, nil
 }
 
 // NewFromClient returns a Store over an existing client.

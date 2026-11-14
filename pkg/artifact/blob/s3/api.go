@@ -7,6 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+//go:generate go run go.uber.org/mock/mockgen -package s3 -destination mock_api_test.go github.com/cloudposse/atmos/pkg/artifact/blob/s3 API
+
 // API is the subset of the S3 client the store uses. *s3.Client satisfies it; tests may supply a
 // recording or faulting implementation.
 type API interface {

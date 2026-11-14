@@ -24,7 +24,7 @@ func (s *Store) putFallback(ctx context.Context, plan *putPlan, first, carry []b
 		_ = file.Close()
 		_ = os.Remove(file.Name())
 	}()
-	size, err := io.Copy(file, &fallbackReader{ctx: ctx, reader: io.MultiReader(bytes.NewReader(first), bytes.NewReader(carry), body)})
+	size, err := io.Copy(file, &ctxReader{ctx: ctx, reader: io.MultiReader(bytes.NewReader(first), bytes.NewReader(carry), body)})
 	if err != nil {
 		return nil, blob.NewError(blob.KindOther, blob.OpPut, plan.key, fmt.Errorf("spool upload: %w", err))
 	}
@@ -43,13 +43,14 @@ func (s *Store) putFallback(ctx context.Context, plan *putPlan, first, carry []b
 	return &blob.ObjectInfo{Key: plan.key, Size: size, ETag: aws.ToString(out.ETag)}, nil
 }
 
-type fallbackReader struct {
+// ctxReader fails reads once its context is done, so a canceled operation stops consuming its body.
+type ctxReader struct {
 	ctx    context.Context
 	reader io.Reader
 }
 
-func (r *fallbackReader) Read(p []byte) (int, error) {
-	defer perf.Track(nil, "s3.fallbackReader.Read")()
+func (r *ctxReader) Read(p []byte) (int, error) {
+	defer perf.Track(nil, "s3.ctxReader.Read")()
 
 	if err := r.ctx.Err(); err != nil {
 		return 0, err

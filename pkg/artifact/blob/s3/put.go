@@ -43,6 +43,12 @@ func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.P
 	if err != nil {
 		return nil, err
 	}
+	// A canceled context must stop the put before it consumes any of the body: a source such as an
+	// idle pipe would otherwise block here before an SDK call could observe the cancellation.
+	if err := ctx.Err(); err != nil {
+		return nil, blob.NewError(blob.KindOther, blob.OpPut, key, err)
+	}
+	body = &ctxReader{ctx: ctx, reader: body}
 	first, carry, err := readFirstPart(body, plan.partSize, opts.Size)
 	if err != nil {
 		return nil, blob.NewError(blob.KindOther, blob.OpPut, key, fmt.Errorf("read body: %w", err))

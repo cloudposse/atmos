@@ -2168,6 +2168,17 @@ var (
 	// local I/O errors or an SDK failure with no mapped meaning. The underlying cause stays in the chain.
 	ErrBlobOperationFailed = errors.New("blob operation failed")
 
+	// ErrBlobTaggingDenied is returned by tests that simulate a version-specific object tagging denial.
+	ErrBlobTaggingDenied = errors.New("blob tagging denied")
+
+	// ErrBlobInvalidChunk is returned by the S3 test endpoint when an aws-chunked request body cannot
+	// be decoded: an unreadable or non-hex chunk size, or a chunk cut short.
+	ErrBlobInvalidChunk = errors.New("invalid aws-chunked body")
+
+	// ErrBlobTooManyTags is returned by the S3 test endpoint when a request carries more object tags
+	// than S3 allows.
+	ErrBlobTooManyTags = errors.New("object tags cannot be greater than 10")
+
 	// ErrBlobInvalidChunkTerminator is returned by the S3 test endpoint when an aws-chunked request
 	// body has a chunk that is not followed by the required CRLF terminator.
 	ErrBlobInvalidChunkTerminator = errors.New("invalid aws-chunked chunk terminator")

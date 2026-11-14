@@ -76,8 +76,8 @@ func (r *partResult) add(number int32, etag *string) {
 
 // uploadParts reads the body part by part and uploads them through a bounded pool. A free-list of
 // buffers caps memory at one buffer per worker.
-func (m *multipart) uploadParts(ctx context.Context, first, carry []byte, body io.Reader) ([]types.CompletedPart, int64, error) {
-	ctx, cancel := context.WithCancel(ctx)
+func (m *multipart) uploadParts(parent context.Context, first, carry []byte, body io.Reader) ([]types.CompletedPart, int64, error) {
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	group, gctx := errgroup.WithContext(ctx)
 
@@ -104,16 +104,26 @@ func (m *multipart) uploadParts(ctx context.Context, first, carry []byte, body i
 		cancel()
 	}
 	waitErr := group.Wait()
-	if produceErr != nil {
-		return nil, 0, produceErr
-	}
-	if waitErr != nil {
-		return nil, 0, waitErr
+	if err := mergeUploadErrors(parent, produceErr, waitErr); err != nil {
+		return nil, 0, err
 	}
 	sort.Slice(result.parts, func(i, j int) bool {
 		return aws.ToInt32(result.parts[i].PartNumber) < aws.ToInt32(result.parts[j].PartNumber)
 	})
 	return result.parts, total, nil
+}
+
+// mergeUploadErrors picks the error that explains a failed upload. When a worker fails, the group
+// cancels the producer's context, so the producer reports a bare cancellation that hides the
+// worker's service error. That cancellation is not the caller's own when parent is still live.
+func mergeUploadErrors(parent context.Context, produceErr, waitErr error) error {
+	if produceErr != nil && waitErr != nil && errors.Is(produceErr, context.Canceled) && parent.Err() == nil {
+		return waitErr
+	}
+	if produceErr != nil {
+		return produceErr
+	}
+	return waitErr
 }
 
 // partFeed hands parts to the worker pool. Its free list holds one buffer slot per worker.

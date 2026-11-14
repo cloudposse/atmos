@@ -2,12 +2,13 @@ package s3test
 
 import (
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // Number parsing parameters and the S3 tag limit.
@@ -23,9 +24,6 @@ type objectAttrs struct {
 	metadata    map[string]string
 	tags        map[string]string
 }
-
-// errTooManyTags reports a tag set above the S3 limit.
-var errTooManyTags = errors.New("object tags cannot be greater than 10")
 
 // attributes extracts content type, user metadata, and tags from request headers.
 func attributes(r *http.Request) (objectAttrs, error) {
@@ -45,10 +43,10 @@ func attributes(r *http.Request) (objectAttrs, error) {
 	}
 	parsed, err := url.ParseQuery(raw)
 	if err != nil {
-		return objectAttrs{}, err
+		return objectAttrs{}, fmt.Errorf("%w: parse object tags: %w", errUtils.ErrBlobInvalid, err)
 	}
 	if len(parsed) > maxTagCount {
-		return objectAttrs{}, errTooManyTags
+		return objectAttrs{}, errUtils.ErrBlobTooManyTags
 	}
 	attrs.tags = make(map[string]string, len(parsed))
 	for key, values := range parsed {

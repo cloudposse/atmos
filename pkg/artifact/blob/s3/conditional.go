@@ -54,10 +54,18 @@ func unsupportedConditionalFrom(key string, probeErr error) error {
 func (s *Store) ProbeConditionalWrites(ctx context.Context) error {
 	defer perf.Track(nil, "blob.s3.ProbeConditionalWrites")()
 
-	s.probeMu.Lock()
-	defer s.probeMu.Unlock()
-	if s.probed {
-		return s.probeError
+	if verdict, cached := s.cachedProbe(); cached {
+		return verdict
+	}
+	select {
+	case s.probeSlot <- struct{}{}:
+		defer func() { <-s.probeSlot }()
+	case <-ctx.Done():
+		return blob.NewError(blob.KindOther, probeOperation, "", ctx.Err())
+	}
+	// Another operation may have finished the probe while this one waited for the slot.
+	if verdict, cached := s.cachedProbe(); cached {
+		return verdict
 	}
 	api, err := s.client(ctx)
 	if err != nil {
@@ -70,9 +78,18 @@ func (s *Store) ProbeConditionalWrites(ctx context.Context) error {
 		return errors.Join(verdict, cleanupErr)
 	}
 	if verdict == nil || blob.IsConditionalUnsupported(verdict) {
+		s.probeMu.Lock()
 		s.probed, s.probeError = true, verdict
+		s.probeMu.Unlock()
 	}
 	return verdict
+}
+
+// cachedProbe returns the cached probe verdict, when a definite one exists.
+func (s *Store) cachedProbe() (verdict error, cached bool) {
+	s.probeMu.Lock()
+	defer s.probeMu.Unlock()
+	return s.probeError, s.probed
 }
 
 // runProbe performs the double create and removes the probe object. The verdict is the probe
