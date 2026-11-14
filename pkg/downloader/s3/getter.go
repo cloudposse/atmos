@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 	"github.com/hashicorp/go-getter"
@@ -32,6 +33,8 @@ type sourceAWSAuthKey struct{}
 
 type sourceAWSAuthResolverKey struct{}
 
+type sourceAWSSessionKey struct{}
+
 // WithAuthResolver defers authentication until an S3 source actually needs downloading.
 func WithAuthResolver(ctx context.Context, resolver func(context.Context) (*schema.AWSAuthContext, error)) context.Context {
 	defer perf.Track(nil, "s3.WithAuthResolver")()
@@ -46,6 +49,23 @@ func WithAuthContext(ctx context.Context, auth *schema.AWSAuthContext) context.C
 	}
 	snapshot := *auth
 	return context.WithValue(ctx, sourceAWSAuthKey{}, &snapshot)
+}
+
+// WithSession scopes an assumed-role session (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and
+// AWS_SESSION_TOKEN) to source downloads. It replaces the credentials of the auth context, which
+// only still selects the region and endpoint, because the role was assumed on top of them.
+func WithSession(ctx context.Context, session map[string]string) context.Context {
+	defer perf.Track(nil, "s3.WithSession")()
+	if session["AWS_ACCESS_KEY_ID"] == "" {
+		return ctx
+	}
+	value := aws.Credentials{
+		AccessKeyID:     session["AWS_ACCESS_KEY_ID"],
+		SecretAccessKey: session["AWS_SECRET_ACCESS_KEY"],
+		SessionToken:    session["AWS_SESSION_TOKEN"],
+		Source:          "AtmosComponentIAMRole",
+	}
+	return context.WithValue(ctx, sourceAWSSessionKey{}, value)
 }
 
 type sourceClient interface {
@@ -82,6 +102,9 @@ func (g *Getter) buildClient(ctx context.Context, loc *sourceLocation) (sourceCl
 	config, err := identity.LoadConfigWithAuth(ctx, loc.region, "", 0, g.auth)
 	if err != nil {
 		return nil, err
+	}
+	if session, ok := ctx.Value(sourceAWSSessionKey{}).(aws.Credentials); ok {
+		config.Credentials = credentials.StaticCredentialsProvider{Value: session}
 	}
 	endpoint := loc.endpoint
 	if g.auth != nil && g.auth.EndpointURL != "" {

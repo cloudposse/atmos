@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
@@ -33,6 +35,39 @@ func localPath(base, path string) string {
 func plainLocalSource(source string) bool {
 	path := strings.TrimPrefix(source, filepath.VolumeName(source))
 	return !strings.ContainsAny(path, "?:") && !strings.Contains(filepath.ToSlash(path), "//")
+}
+
+// localModuleSubdir separates Terragrunt's local root//module spelling without
+// cleaning away the delimiter. A subdirectory may descend within the root,
+// but must never select a parent or an absolute path.
+func localModuleSubdir(source string) (root, subdir string, ok bool) {
+	volume := filepath.VolumeName(source)
+	rest := source[len(volume):]
+	if strings.ContainsAny(rest, "?:") {
+		return "", "", false
+	}
+	index := strings.Index(filepath.ToSlash(rest), "//")
+	if index <= 0 {
+		return "", "", false
+	}
+	root, subdir = volume+rest[:index], rest[index+2:]
+	first := strings.SplitN(strings.TrimPrefix(root, "./"), "/", 2)[0]
+	if strings.Contains(first, ".") && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) {
+		return "", "", false
+	}
+	return root, subdir, true
+}
+
+func safeModuleSubdir(subdir string) bool {
+	if subdir == "" || filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`) {
+		return false
+	}
+	for _, part := range strings.Split(filepath.ToSlash(subdir), "/") {
+		if part == "" || part == ".." || part == "." {
+			return false
+		}
+	}
+	return true
 }
 
 func checkVersions(ctx context.Context, request model.Request, terraform, terragrunt string) error {
@@ -99,11 +134,10 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 	return nil
 }
 
-// validateRemoteSource preserves the getter URI for Atmos's source provisioner.
-// Registry sources need Terragrunt version selection and are not interchangeable
-// with direct archive or Git sources.
+// validateRemoteSource preserves the getter URI for Atmos's source provisioner. A `tfr://` registry
+// source is resolved to one of these URIs when the unit is prepared.
 func validateRemoteSource(source string) error {
-	for _, prefix := range []string{"git::https://", "git::http://", "git::ssh://", "git::file://", "https://", "http://"} {
+	for _, prefix := range []string{"git::https://", "git::http://", "git::ssh://", "git::file://", "https://", "http://", registryScheme} {
 		if strings.HasPrefix(source, prefix) {
 			return nil
 		}
@@ -111,10 +145,75 @@ func validateRemoteSource(source string) error {
 	scheme, _, found := strings.Cut(source, "://")
 	return &model.Problem{
 		Code: model.CodeInvalidSource, Summary: "Unsupported module source transport",
-		Detail: fmt.Sprintf("The module source scheme %q is not supported. Registry sources such as `tfr://` need Terragrunt's version selection and are not interchangeable with Git or archive sources.", scheme),
-		Hints:  []string{"Use a local path, a `git::https://`, `git::ssh://`, or `https://` source, or a Git source pinned with `?ref=`."},
+		Detail: fmt.Sprintf("The module source scheme %q is not supported.", scheme),
+		Hints:  []string{"Use a local path, a `git::https://`, `git::ssh://`, or `https://` source, a `tfr://` registry source, or a Git source pinned with `?ref=`."},
 		Key:    "terraform.source", Safe: found, Err: ErrUnsupportedExecution,
 	}
+}
+
+// decimalBase is the base of the IAM session duration, a count of seconds.
+const decimalBase = 10
+
+// Warning code for IAM settings that have no effect.
+const warningIAMTokenWithoutRole = "iam_web_identity_token_without_role"
+
+// iamEnvironment names the variables that Terragrunt reads its IAM options from, newest name first.
+// Like its --iam-assume-role flags, they take precedence over the same settings in the unit.
+var iamEnvironment = map[string][]string{
+	"role":     {"TG_IAM_ASSUME_ROLE", "TERRAGRUNT_IAM_ROLE"},
+	"duration": {"TG_IAM_ASSUME_ROLE_DURATION", "TERRAGRUNT_IAM_ASSUME_ROLE_DURATION"},
+	"session":  {"TG_IAM_ASSUME_ROLE_SESSION_NAME", "TERRAGRUNT_IAM_ASSUME_ROLE_SESSION_NAME"},
+	"token":    {"TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN", "TERRAGRUNT_IAM_WEB_IDENTITY_TOKEN", "TERRAGRUNT_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN"},
+}
+
+// iamSettings returns the role the unit asks for, or nil. Terragrunt assumes it only when a role ARN is
+// present, so a token alone is reported and ignored. The host assumes the role, not the plugin.
+func iamSettings(cfg *config.TerragruntConfig, request *model.Request, path string) (*model.IAM, []model.Warning, error) {
+	pick := func(key, configured string) string {
+		for _, name := range iamEnvironment[key] {
+			if value := request.Environment[name]; value != "" {
+				return value
+			}
+		}
+		return configured
+	}
+	var configuredDuration int64
+	if cfg.IamAssumeRoleDuration != nil {
+		configuredDuration = *cfg.IamAssumeRoleDuration
+	}
+	iam := &model.IAM{
+		Role: pick("role", cfg.IamRole), SessionName: pick("session", cfg.IamAssumeRoleSessionName),
+		DurationSeconds: configuredDuration, WebIdentityToken: pick("token", cfg.IamWebIdentityToken),
+	}
+	if configured := pick("duration", ""); configured != "" {
+		seconds, err := strconv.ParseInt(configured, decimalBase, 64)
+		if err != nil || seconds < 0 {
+			return nil, nil, setting(model.CodeEvaluationError, "iam_assume_role_duration", path, "Invalid IAM session duration",
+				"The IAM session duration from the environment is not a number of seconds.", "Set `TG_IAM_ASSUME_ROLE_DURATION` to a number of seconds, for example `3600`.")
+		}
+		iam.DurationSeconds = seconds
+	}
+	if iam.Role != "" {
+		iam.WebIdentityToken = unitTokenFile(iam.WebIdentityToken, filepath.Dir(path))
+		return iam, nil, nil
+	}
+	if iam.WebIdentityToken == "" {
+		return nil, nil, nil
+	}
+	return nil, []model.Warning{{Code: warningIAMTokenWithoutRole, Path: mustRel(request.BasePath, path), Message: "`iam_web_identity_token` has no effect without `iam_role`, so no role is assumed. Terragrunt behaves the same way."}}, nil
+}
+
+// unitTokenFile anchors a relative web identity token file at the unit directory, so the host finds it
+// whatever directory Atmos runs from. Absolute paths and token values that name no file are unchanged.
+func unitTokenFile(token, unitDir string) string {
+	if token == "" || filepath.IsAbs(token) {
+		return token
+	}
+	candidate := filepath.Join(unitDir, token)
+	if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+		return candidate
+	}
+	return token
 }
 
 // effectivePolicyArguments follows host ordering: extra arguments precede user arguments.

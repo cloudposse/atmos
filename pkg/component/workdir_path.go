@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -85,6 +86,82 @@ func ResolveWorkdirSubpath(metadataSubpath, workdirRoot string) (string, error) 
 	return workdirRoot, nil
 }
 
+// ResolveConfiguredSubpath selects the explicit module under a copied local
+// source root. Unlike the legacy metadata.component hint, an explicit source
+// subdirectory must exist and cannot silently fall back to the root. Use it for paths that are
+// resolved after the source is provisioned; callers that run before it use ResolvePendingSubpath.
+func ResolveConfiguredSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string) (string, error) {
+	defer perf.Track(nil, "component.ResolveConfiguredSubpath")()
+
+	selected, _, err := resolveConfiguredSubpath(info, workdirRoot, false)
+	return selected, err
+}
+
+// ResolvePendingSubpath is ResolveConfiguredSubpath for callers that run before the source is
+// provisioned, when an explicit source subdirectory may not exist yet. It returns the path the module
+// will have and whether it exists now; every other failure, including an invalid subdirectory, is still
+// an error.
+func ResolvePendingSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string) (string, bool, error) {
+	defer perf.Track(nil, "component.ResolvePendingSubpath")()
+
+	return resolveConfiguredSubpath(info, workdirRoot, true)
+}
+
+func resolveConfiguredSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string, allowMissing bool) (string, bool, error) {
+	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
+	subdir, _ := metadata["source_subdir"].(string)
+	if subdir == "" {
+		selected, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
+		return selected, err == nil, err
+	}
+	if err := validateSourceSubdir(subdir); err != nil {
+		return "", false, err
+	}
+	selected := filepath.Join(workdirRoot, filepath.FromSlash(subdir))
+	selectedInfo, err := os.Stat(selected)
+	if allowMissing && errors.Is(err, os.ErrNotExist) {
+		return selected, false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("%w: inspect source subdirectory: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	if !selectedInfo.IsDir() {
+		return "", false, fmt.Errorf("%w: source subdirectory is not a directory", errUtils.ErrWorkdirProvision)
+	}
+	if err := checkSourceSubdirBoundary(workdirRoot, selected); err != nil {
+		return "", false, err
+	}
+	return selected, true, nil
+}
+
+func validateSourceSubdir(subdir string) error {
+	if filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`) {
+		return fmt.Errorf("%w: invalid source subdirectory", errUtils.ErrWorkdirProvision)
+	}
+	for _, part := range strings.Split(filepath.ToSlash(subdir), "/") {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("%w: invalid source subdirectory", errUtils.ErrWorkdirProvision)
+		}
+	}
+	return nil
+}
+
+func checkSourceSubdirBoundary(workdirRoot, selected string) error {
+	root, err := filepath.EvalSymlinks(workdirRoot)
+	if err != nil {
+		return fmt.Errorf("%w: resolve source root: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	module, err := filepath.EvalSymlinks(selected)
+	if err != nil {
+		return fmt.Errorf("%w: resolve source module: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	rel, err := filepath.Rel(root, module)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%w: source subdirectory escapes its root", errUtils.ErrWorkdirProvision)
+	}
+	return nil
+}
+
 // ApplyWorkdirSubpathToSection resolves provWorkdir.WorkdirPathKey in
 // info.ComponentSection against info.BaseComponentPath (joining the subpath
 // only when it exists on disk; see ResolveWorkdirSubpath) and returns the
@@ -110,7 +187,7 @@ func ApplyWorkdirSubpathToSection(info *schema.ConfigAndStacksInfo) (string, err
 	if _, applied := info.ComponentSection[workdirSubpathAppliedKey].(subpathAppliedMarker); applied {
 		return workdirPath, nil
 	}
-	resolved, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirPath)
+	resolved, err := ResolveConfiguredSubpath(info, workdirPath)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +231,7 @@ func BuildAndResolveWorkdirPath(
 		}
 		workdirRoot = target.Dir
 	}
-	resolved, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
+	resolved, err := ResolveConfiguredSubpath(info, workdirRoot)
 	if err != nil {
 		return "", false, err
 	}
@@ -306,6 +383,31 @@ func DryRunDefersMissingPath(info *schema.ConfigAndStacksInfo) bool {
 	return info != nil && info.DryRun && provSource.HasSource(info.ComponentSection)
 }
 
+// applyDryRunWorkdirSubpath resolves the workdir subpath of a dry run, which never provisions the
+// source, so an explicit source subdirectory that does not exist yet resolves to the path it will have.
+// The section is then left untouched, so a later resolution after provisioning starts from the root.
+//
+// Locating a retained workdir is not a dry run and keeps the strict resolution.
+func applyDryRunWorkdirSubpath(info *schema.ConfigAndStacksInfo) (string, error) {
+	workdirPath, _ := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if !info.DryRun || workdirPath == "" {
+		return ApplyWorkdirSubpathToSection(info)
+	}
+	if _, applied := info.ComponentSection[workdirSubpathAppliedKey].(subpathAppliedMarker); applied {
+		return workdirPath, nil
+	}
+	selected, present, err := ResolvePendingSubpath(info, workdirPath)
+	if err != nil {
+		return "", err
+	}
+	if !present {
+		return selected, nil
+	}
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = selected
+	info.ComponentSection[workdirSubpathAppliedKey] = subpathAppliedMarker{}
+	return selected, nil
+}
+
 // resolveDryRunComponentPath validates placement without downloading source or copying a workdir.
 // The existence result describes the current filesystem, not a simulated successful provision.
 // A sourced component's directory follows source target rules, which honor an explicit
@@ -325,7 +427,7 @@ func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *sc
 	if isWorkdir {
 		info.ComponentSection[provWorkdir.WorkdirPathKey] = fallback
 	}
-	path, err := ApplyWorkdirSubpathToSection(info)
+	path, err := applyDryRunWorkdirSubpath(info)
 	if err != nil {
 		return "", false, err
 	}

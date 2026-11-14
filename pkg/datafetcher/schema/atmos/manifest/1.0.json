@@ -2714,6 +2714,10 @@
                 }
               ]
             },
+            "source_subdir": {
+              "type": "string",
+              "description": "Module subdirectory within the copied source root. Sibling modules remain available in the workdir."
+            },
             "terraform_workspace": {
               "type": "string",
               "description": "Terraform workspace"

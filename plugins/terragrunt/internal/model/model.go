@@ -16,6 +16,8 @@ type Request struct {
 	Arguments      []string          `json:"arguments"`
 	Tofu           string            `json:"tofu"`
 	Environment    map[string]string `json:"environment"`
+	// Features are explicit feature flag overrides (name to raw value), applied to every unit.
+	Features map[string]string `json:"features,omitempty"`
 }
 
 type Resolution struct {
@@ -35,11 +37,15 @@ type Resolution struct {
 	StackConfigs       map[string]string `json:"stack_configs,omitempty"`
 	Inputs             map[string]any    `json:"inputs"`
 	Source             string            `json:"source"`
-	BackendGenerated   bool              `json:"backend_generated,omitempty"`
-	BackendType        string            `json:"backend_type"`
-	Backend            map[string]any    `json:"backend"`
-	Generated          map[string]string `json:"generated"`
-	GeneratedPolicies  map[string]string `json:"generated_policies,omitempty"`
+	// RegistryAuth is an invocation-only bearer header for a same-origin archive.
+	// It must never enter saved configuration or source provenance.
+	RegistryAuth            *RegistryAuth     `json:"-"`
+	RegistryResolutionNanos uint64            `json:"registry_resolution_nanos,omitempty"`
+	BackendGenerated        bool              `json:"backend_generated,omitempty"`
+	BackendType             string            `json:"backend_type"`
+	Backend                 map[string]any    `json:"backend"`
+	Generated               map[string]string `json:"generated"`
+	GeneratedPolicies       map[string]string `json:"generated_policies,omitempty"`
 	// UnitFileCopies identifies literal files copied from beside the unit.
 	UnitFileCopies map[string]bool `json:"unit_file_copies,omitempty"`
 	// SensitiveGenerated names generated files whose contents can hold
@@ -51,7 +57,82 @@ type Resolution struct {
 	Failures []UnitFailure `json:"failures,omitempty"`
 	// Warnings are non-fatal facts about the scan that the user should see.
 	Warnings []Warning `json:"warnings,omitempty"`
+	// TerraformBinary is the unit's terraform_binary: a name for the toolchain or PATH, or an absolute path.
+	TerraformBinary string `json:"terraform_binary,omitempty"`
+	// Errors holds the retry and ignore policies of the unit's errors block.
+	Errors *Errors `json:"errors,omitempty"`
+	// Exclude is the evaluated exclude block, set only when the block's condition holds.
+	Exclude *Exclude `json:"exclude,omitempty"`
+	// FeatureFlags maps each declared feature to its effective value rendered as a string.
+	FeatureFlags map[string]string `json:"feature_flags,omitempty"`
+	// IAM is the role the host assumes for the unit's commands; nil when the unit names none.
+	IAM *IAM `json:"iam,omitempty"`
+	// RunIgnored is set when an ignore policy matched a failure that left the source unresolved. The unit
+	// keeps the source it was written with, and the host ends its run without executing it.
+	RunIgnored *IgnoredRun `json:"run_ignored,omitempty"`
 }
+
+type RegistryAuth struct {
+	Origin        string
+	Authorization string
+}
+
+// IAM is the evaluated iam_role setting and its companions. The plugin never assumes the role: the host
+// does, on top of the credentials of the invocation.
+type IAM struct {
+	Role            string `json:"role"`
+	SessionName     string `json:"session_name,omitempty"`
+	DurationSeconds int64  `json:"duration_seconds,omitempty"`
+	// WebIdentityToken is a token, or the path of a file that holds one. It is a secret.
+	WebIdentityToken string `json:"-"`
+}
+
+// Errors is the evaluated errors block, in declaration order.
+type Errors struct {
+	Retry  []RetryPolicy  `json:"retry,omitempty"`
+	Ignore []IgnorePolicy `json:"ignore,omitempty"`
+}
+
+// RetryPolicy retries a failed command whose output matches a pattern. A pattern that starts with
+// "!" vetoes the policy when it matches.
+type RetryPolicy struct {
+	Name             string   `json:"name"`
+	Patterns         []string `json:"patterns"`
+	MaxAttempts      int      `json:"max_attempts"`
+	SleepIntervalSec int      `json:"sleep_interval_sec"`
+}
+
+// IgnoredRun names the ignore policy that ended a unit's run before it could execute.
+type IgnoredRun struct {
+	Policy  string `json:"policy"`
+	Message string `json:"message,omitempty"`
+}
+
+// IgnorePolicy turns a failed command whose output matches a pattern into a success.
+type IgnorePolicy struct {
+	Name     string         `json:"name"`
+	Patterns []string       `json:"patterns"`
+	Message  string         `json:"message,omitempty"`
+	Signals  map[string]any `json:"signals,omitempty"`
+}
+
+// Exclude is an exclude block whose condition holds.
+type Exclude struct {
+	Actions             []string `json:"actions"`
+	ExcludeDependencies bool     `json:"exclude_dependencies,omitempty"`
+	// NoRun is nil when the block does not set it, which keeps Terragrunt's exact-action default.
+	NoRun *bool `json:"no_run,omitempty"`
+}
+
+// Hook lifecycle commands that name Terragrunt's own stages rather than a Terraform command.
+const (
+	// LifecycleReadConfig runs after the unit's configuration is read (after_hook only).
+	LifecycleReadConfig = "terragrunt-read-config"
+	// LifecycleReadConfigAlias is the documented spelling of LifecycleReadConfig.
+	LifecycleReadConfigAlias = "read-config"
+	// LifecycleInitFromModule runs around the source download.
+	LifecycleInitFromModule = "init-from-module"
+)
 
 // UnitFailure is a unit that discovery could not evaluate. Stack and Name are the Atmos
 // coordinates the unit would have had; Err is a Problem or a plain error.

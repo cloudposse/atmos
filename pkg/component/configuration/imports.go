@@ -9,6 +9,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -79,24 +80,52 @@ func WatchExcludes(settings map[string]any) ([]string, error) {
 	return patterns, nil
 }
 
-// UnexcludedWatchFiles returns the files under root that match none of the patterns.
+// UnexcludedWatchFiles returns the files that match none of the project-relative patterns.
+//
+// The project root and a changed file can spell one directory differently, for example through a
+// symlinked temporary directory, so a path that appears outside the root is compared again with
+// symlinks resolved on both sides. A file that is still outside the project, including one on
+// another volume, cannot match a project-relative exclusion and stays watched rather than letting
+// a pattern such as `**` swallow a `../` path. Comparing a relative root with an absolute file is
+// rejected, because it would silently match nothing.
 func UnexcludedWatchFiles(root string, all []string, patterns []string) ([]string, error) {
 	defer perf.Track(nil, "configuration.UnexcludedWatchFiles")()
 
 	files := make([]string, 0, len(all))
+	resolvedRoot := ""
 	for _, path := range all {
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return nil, fmt.Errorf("%w: watch path %q is not under %q: %w", errUtils.ErrPluginInvalidConfig, path, root, err)
+		if filepath.IsAbs(root) != filepath.IsAbs(path) {
+			return nil, fmt.Errorf("%w: watch path %q is not under %q", errUtils.ErrPluginInvalidConfig, path, root)
 		}
-		excluded := false
-		for _, pattern := range patterns {
-			matched, _ := doublestar.Match(pattern, filepath.ToSlash(relative))
-			excluded = excluded || matched
+		relative, inside := projectRelative(root, path)
+		if !inside {
+			if resolvedRoot == "" {
+				resolvedRoot = filesystem.EvalSymlinksBestEffort(root)
+			}
+			relative, inside = projectRelative(resolvedRoot, filesystem.EvalSymlinksBestEffort(path))
 		}
-		if !excluded {
+		if !inside || !matchesAny(patterns, relative) {
 			files = append(files, path)
 		}
 	}
 	return files, nil
+}
+
+// projectRelative returns path relative to root, and whether it lies inside root. A path that
+// cannot be made relative, such as one on another volume, is outside.
+func projectRelative(root, path string) (string, bool) {
+	relative, err := filepath.Rel(root, path)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return relative, true
+}
+
+func matchesAny(patterns []string, relative string) bool {
+	for _, pattern := range patterns {
+		if matched, _ := doublestar.Match(pattern, filepath.ToSlash(relative)); matched {
+			return true
+		}
+	}
+	return false
 }

@@ -19,30 +19,6 @@ import (
 // or using the network.
 const readOnlyDenial = "read-only discovery cannot"
 
-// unsupportedSettingHints maps each setting the native adaptation rejects to its remedy.
-var unsupportedSettingHints = map[string]string{
-	"terraform_binary":       "Select the executable with `components.terraform.command` in atmos.yaml, for example `tofu`, and remove `terraform_binary` from the unit.",
-	"errors":                 "Remove the `errors` block. Retry failing steps with a workflow step `retry:` setting instead.",
-	"exclude":                "Remove the `exclude` block and leave the unit out with `discovery.excluded_paths` in atmos.yaml.",
-	"iam_role":               "Remove the IAM setting and authenticate with an Atmos identity, for example `atmos terraform plan --identity <name>`.",
-	"iam_web_identity_token": "Remove `iam_web_identity_token` and authenticate with an Atmos identity, for example `atmos terraform plan --identity <name>`.",
-	"feature":                "Remove the `feature` blocks and pass the values as Atmos stack variables instead.",
-}
-
-// unsupportedSetting reports a Terragrunt setting the native adaptation does not implement.
-func unsupportedSetting(key, file string) *model.Problem {
-	hint := unsupportedSettingHints[key]
-	problem := &model.Problem{
-		Code: model.CodeUnsupportedSetting, Summary: fmt.Sprintf("Unsupported Terragrunt setting `%s`", key),
-		Detail: fmt.Sprintf("The native Terragrunt adaptation does not implement `%s`, so this unit cannot be planned or applied.", key),
-		File:   file, Key: key, Safe: true, Err: ErrUnsupportedExecution,
-	}
-	if hint != "" {
-		problem.Hints = []string{hint}
-	}
-	return problem
-}
-
 // problemFor classifies an evaluation error. A Problem passes through with its file filled in.
 // An HCL diagnostic becomes a syntax or evaluation problem at the diagnostic's position.
 func problemFor(err error, file string) error {
@@ -111,20 +87,6 @@ func setting(code, key, file, summary, detail string, hints ...string) *model.Pr
 // checks everything a partial or full parse decodes, in a fixed order, so the first rejection is
 // stable. Hook and extra_arguments semantics are checked by executionFromConfig.
 func rejectUnsupported(cfg *config.TerragruntConfig, path string) error {
-	switch {
-	case cfg.TerraformBinary != "":
-		return unsupportedSetting("terraform_binary", path)
-	case cfg.Errors != nil:
-		return unsupportedSetting("errors", path)
-	case cfg.Exclude != nil:
-		return unsupportedSetting("exclude", path)
-	case len(cfg.FeatureFlags) > 0:
-		return unsupportedSetting("feature", path)
-	case cfg.IamRole != "":
-		return unsupportedSetting("iam_role", path)
-	case cfg.IamWebIdentityToken != "":
-		return unsupportedSetting("iam_web_identity_token", path)
-	}
 	if cfg.Terraform != nil {
 		if _, err := executionFromConfig(cfg.Terraform); err != nil {
 			return hookProblem(err, path)
@@ -198,6 +160,53 @@ func localSourceProblem(filesystem afero.Fs, path, source, resolved string) *mod
 		}
 	}
 	return nil
+}
+
+// resolveLocalModuleSource validates both the repository root and selected
+// module while retaining // in the source identity passed to the provisioner.
+func resolveLocalModuleSource(filesystem afero.Fs, unit, source string) (resolved, root string, handled bool, problem *model.Problem) {
+	base, subdir, hasSubdir := localModuleSubdir(source)
+	if !hasSubdir && !plainLocalSource(source) {
+		return "", "", false, nil
+	}
+	if hasSubdir && !safeModuleSubdir(subdir) {
+		return "", "", true, &model.Problem{
+			Code: model.CodeInvalidSource, Summary: "The local module subdirectory is invalid",
+			Detail: "A local `terraform.source` subdirectory must stay inside its source root.",
+			Hints:  []string{"Use `root//modules/name` without parent (`..`) or absolute subdirectory segments."},
+			File:   unit, Key: "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
+		}
+	}
+	if !hasSubdir {
+		base = source
+	}
+	root = localPath(filepath.Dir(unit), base)
+	module := root
+	if hasSubdir {
+		module = filepath.Join(root, filepath.FromSlash(subdir))
+	}
+	if problem := localSourceProblem(filesystem, unit, source, root); problem != nil {
+		return "", "", true, problem
+	}
+	if problem := localSourceProblem(filesystem, unit, source, module); problem != nil {
+		return "", "", true, problem
+	}
+	if hasSubdir {
+		canonicalRoot, rootErr := canonicalPath(root)
+		canonicalModule, moduleErr := canonicalPath(module)
+		if rootErr == nil && moduleErr == nil && !within(canonicalModule, canonicalRoot) {
+			return "", "", true, &model.Problem{
+				Code: model.CodeInvalidSource, Summary: "The local module subdirectory escapes its source root",
+				Detail: "The selected module resolves outside the local source root.",
+				Hints:  []string{"Select a module directory inside the source root."},
+				File:   unit, Key: "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
+			}
+		}
+	}
+	if hasSubdir {
+		return root + "//" + filepath.ToSlash(filepath.FromSlash(subdir)), root, true, nil
+	}
+	return root, root, true, nil
 }
 
 // dependencyProblem keeps evaluated target paths out of safe details; the cause remains available

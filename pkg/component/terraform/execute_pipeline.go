@@ -58,9 +58,12 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
+	if err = e.beginPreparedConfiguration(ctx, atmosConfig, info, prepared); err != nil {
+		return nil, err
+	}
 	// A restored plugin plan was validated when it was created. Its binding omits
 	// variable values, so validating the reconstructed component would test empty vars.
-	restoredConfigurationPlan := prepared != nil && isRestoredConfigurationPlan(info)
+	restoredConfigurationPlan := isRestoredConfigurationPlan(info, prepared)
 
 	componentPath, err := e.resolveConfiguredComponentPath(ctx, writers, atmosConfig, info, prepared)
 	if err != nil {
@@ -93,6 +96,29 @@ func (e *Executor) prepareComponentExecution(
 	}, nil
 }
 
+// beginPreparedConfiguration stops an excluded component, or one whose preparation an ignore policy
+// ended, before anything runs, then warns about
+// overlapping retries, clears stale signal files and runs the provider's read-configuration hooks.
+func (e *Executor) beginPreparedConfiguration(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	prepared *schema.PreparedComponentConfiguration,
+) error {
+	if excludedFromOperation(info, prepared) {
+		skipExcluded(info)
+		return errUtils.ErrComponentExcluded
+	}
+	if prepared != nil && prepared.IgnoredRun != nil {
+		return endIgnoredRun(info, prepared.IgnoredRun)
+	}
+	warnOverlappingRetry(info, prepared)
+	if err := clearStaleSignals(atmosConfig, info); err != nil {
+		return err
+	}
+	return e.runReadConfigHooks(ctx, atmosConfig, info, prepared)
+}
+
 // terraformTestVarfileName returns the test var file name, or "" when the component has no test vars.
 func terraformTestVarfileName(info *schema.ConfigAndStacksInfo) string {
 	if !hasTerraformTestVars(info) {
@@ -102,8 +128,8 @@ func terraformTestVarfileName(info *schema.ConfigAndStacksInfo) string {
 }
 
 // isRestoredConfigurationPlan reports whether the invocation applies a provider-owned saved plan.
-func isRestoredConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
-	return ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+func isRestoredConfigurationPlan(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) bool {
+	return prepared != nil && ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
 }
 
 // installToolchainForCommand installs the toolchain dependencies and resolves the command against them.
@@ -319,6 +345,17 @@ func (e *Executor) executeCommandPipeline(
 	return nil
 }
 
+// runPreparedPipeline translates an ignored preparatory failure into the
+// successful end of this unit invocation, after the pipeline has stopped.
+func (e *Executor) runPreparedPipeline(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, opts ...component.ExecutionOption) error {
+	err := e.executeCommandPipeline(atmosConfig, info, execCtx, opts...)
+	if onlyRunIgnored(err) {
+		cleanupTerraformFiles(atmosConfig, info)
+		return nil
+	}
+	return err
+}
+
 // runMainCommandPhase runs the main plan/apply/destroy/… subcommand under its own CI phase
 // group, capturing scoped exec-metadata output (FR-006f), and — on failure — gives smart init
 // exactly one chance to recover via recoverFromInitRequired before propagating the error.
@@ -349,7 +386,8 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	defer restore()
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
 	var effectiveArgs []string
-	captureCtx := context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs)
+	var ignored bool
+	captureCtx := context.WithValue(context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs), mainCommandIgnoredKey{}, &ignored)
 	captureArgs := component.WithProcessContext(captureCtx)
 	// A component with provider-supplied hooks recovers inside its main-command lifecycle, so
 	// the retry runs between the same before and after hooks instead of repeating them.
@@ -376,6 +414,10 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	}
 	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		return mainErr
+	}
+	// An ignored failure produced no plan to bind, so the run ends without recording one.
+	if ignored {
+		return nil
 	}
 	// Policy plans run against a private artifact that is removed after the guard
 	// publishes it to the original output path. The effective arguments were

@@ -1,9 +1,15 @@
 package configuration
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
+	ctyjson "github.com/zclconf/go-cty/cty/json"
+	"github.com/zclconf/go-cty/cty/msgpack"
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -102,6 +108,88 @@ func TestPreparedConfigurationRejectsUnrunnableHooks(t *testing.T) {
 	}
 }
 
+// sensitiveString encodes a string the way a provider sends a secret: the whole value is sensitive.
+func sensitiveString(t *testing.T, text string) *pluginv1.ComponentValue {
+	t.Helper()
+	typeJSON, err := ctyjson.MarshalType(cty.String)
+	require.NoError(t, err)
+	payload, err := msgpack.Marshal(cty.StringVal(text), cty.String)
+	require.NoError(t, err)
+	return &pluginv1.ComponentValue{TypeJson: typeJSON, Msgpack: payload, SensitivePaths: []*pluginv1.ComponentValuePath{{}}}
+}
+
+func TestPreparedConfigurationCarriesIAM(t *testing.T) {
+	response := executionResponse(t, nil)
+	response.Iam = &pluginv1.ComponentIam{Role: "arn:aws:iam::1:role/x", SessionName: "s", DurationSeconds: 900}
+	got, err := preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", SessionName: "s", DurationSeconds: 900}, got.IAM)
+
+	response.Iam = nil
+	got, err = preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Nil(t, got.IAM)
+
+	response.Iam = &pluginv1.ComponentIam{}
+	got, err = preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Nil(t, got.IAM, "an IAM message without a role asks for nothing")
+}
+
+func TestPreparedRegistryAuthorizationRequiresSameOriginAndSensitivity(t *testing.T) {
+	response := executionResponse(t, nil)
+	response.ModuleSource = "https://registry.example/module.tar.gz//subdir"
+	response.ModuleSourceAuthOrigin = "https://registry.example"
+	response.ModuleSourceAuthorization = sensitiveString(t, "Bearer registry-secret")
+	prepared, err := preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Equal(t, &schema.SourceAuthorization{Origin: "https://registry.example", Header: "Bearer registry-secret"}, prepared.SourceAuthorization)
+
+	response.ModuleSourceAuthOrigin = "https://other.example"
+	_, err = preparedConfiguration(roundTrip(t, response))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	response.ModuleSourceAuthOrigin = "https://registry.example"
+	response.ModuleSourceAuthorization.SensitivePaths = nil
+	_, err = preparedConfiguration(roundTrip(t, response))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
+func TestPreparedIAMDistinguishesTokenFilesFromLiteralTokens(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(file, []byte("file-token\n"), 0o600))
+
+	fromFile, err := preparedIAM(&pluginv1.ComponentIam{Role: "r", WebIdentityToken: sensitiveString(t, file)})
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentIAM{Role: "r", WebIdentityTokenFile: file}, fromFile)
+
+	literal, err := preparedIAM(&pluginv1.ComponentIam{Role: "r", WebIdentityToken: sensitiveString(t, "literal-token")})
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentIAM{Role: "r", WebIdentityToken: "literal-token", WebIdentityTokenLiteral: true}, literal)
+
+	// A literal token never reaches a serialized record.
+	record, err := json.Marshal(literal)
+	require.NoError(t, err)
+	require.NotContains(t, string(record), "literal-token")
+
+	// A directory is not a token file.
+	directory, err := preparedIAM(&pluginv1.ComponentIam{Role: "r", WebIdentityToken: sensitiveString(t, t.TempDir())})
+	require.NoError(t, err)
+	require.Empty(t, directory.WebIdentityTokenFile)
+
+	_, err = preparedIAM(&pluginv1.ComponentIam{Role: "r", WebIdentityToken: &pluginv1.ComponentValue{TypeJson: []byte("{")}})
+	require.Error(t, err)
+}
+
+func TestDecodeStringRejectsNonStrings(t *testing.T) {
+	text, err := adapter.DecodeString(nil)
+	require.NoError(t, err)
+	require.Empty(t, text)
+	number, err := adapter.EncodeObject(map[string]any{"a": 1})
+	require.NoError(t, err)
+	_, err = adapter.DecodeString(number)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
 // A plan preparation carries the apply-time evaluation separately. An empty one is kept,
 // because it means apply runs nothing rather than falling back to the plan-time hooks.
 func TestPreparedConfigurationCarriesApplyTimeExecution(t *testing.T) {
@@ -131,4 +219,31 @@ func TestPreparedConfigurationCarriesApplyTimeExecution(t *testing.T) {
 	})))
 	require.NoError(t, err)
 	require.Same(t, got.Execution, got.Execution.ForSavedPlanApply())
+}
+
+// The unit's errors block is not command specific, so a saved plan applied with the
+// apply-time metadata keeps the retry and ignore policies of the reviewed preparation.
+func TestPreparedApplyTimeExecutionKeepsErrorPolicies(t *testing.T) {
+	response := executionResponse(t, &pluginv1.ComponentExecutionConfiguration{
+		Apply: &pluginv1.ComponentExecutionConfiguration{
+			AfterHooks: []*pluginv1.ComponentHook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}},
+		},
+	})
+	response.Errors = &pluginv1.ComponentErrorsConfiguration{
+		Retry: []*pluginv1.ComponentRetryPolicy{{Name: "net", RetryableErrors: []string{"timeout"}, MaxAttempts: 3, SleepIntervalSeconds: 1}},
+	}
+	got, err := preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.NotNil(t, got.Execution.Errors)
+	applied := got.Execution.ForSavedPlanApply()
+	require.Same(t, got.Execution.Apply, applied)
+	require.Equal(t, got.Execution.Errors, applied.Errors)
+	require.Equal(t, "net", applied.Errors.Retry[0].Name)
+
+	// Without errors policies, the apply-time metadata has none either.
+	response.Errors = nil
+	got, err = preparedConfiguration(roundTrip(t, response))
+	require.NoError(t, err)
+	require.Nil(t, got.Execution.Errors)
+	require.Nil(t, got.Execution.ForSavedPlanApply().Errors)
 }

@@ -36,6 +36,12 @@ type ComponentConfigurationRuntime interface {
 	Prepare(context.Context, *ConfigAndStacksInfo) (*PreparedComponentConfiguration, error)
 }
 
+// ComponentConfigurationIAMProbe is implemented by providers whose configuration
+// needs role credentials while it is being evaluated.
+type ComponentConfigurationIAMProbe interface {
+	ProbeIAM(context.Context, *ConfigAndStacksInfo) (*ComponentIAM, error)
+}
+
 // ComponentConfigurationFailureRuntime reports components that a provider discovered but could not
 // evaluate. Bulk commands use it to reject every selected broken component before they run any
 // infrastructure command. A nil error means the component is healthy or unknown to the provider.
@@ -68,8 +74,56 @@ type PreparedComponentConfiguration struct {
 	BackendGenerated bool
 	// Execution is data the host runs; it is nil when the provider adds no hooks or arguments.
 	Execution *ComponentExecution
+	// TerraformBinary is the executable the unit selects, verified against the one it was discovered with.
+	TerraformBinary string
+	// Exclusion is set when the provider says this operation must not run the unit.
+	Exclusion *ComponentExclusion
+	// IgnoredRun is set when an ignore policy matched a failure that left the unit without a resolved
+	// source, such as a registry resolution failure. The host ends the run without executing the unit.
+	IgnoredRun *ComponentIgnoredRun
+	// FeatureFlags are the evaluated feature values of the unit, rendered as strings.
+	FeatureFlags map[string]string
+	// IAM is a role the host assumes for the component's commands; it is nil when the provider asks for none.
+	IAM *ComponentIAM
+	// SourceAuthorization is invocation-only registry auth for a same-origin archive.
+	SourceAuthorization *SourceAuthorization `json:"-"`
 	// SensitiveInputKeys projects provider sensitivity paths onto whole input variables.
 	SensitiveInputKeys map[string]bool
+}
+
+// SourceAuthorization is never serialized with a source URL or saved plan.
+type SourceAuthorization struct {
+	Origin string
+	Header string
+}
+
+// ComponentIAM is an AWS role a configuration provider asks the host to assume. The host assumes it
+// on top of the invocation's credentials and exports the resulting session to the component's commands.
+type ComponentIAM struct {
+	Role            string
+	SessionName     string
+	DurationSeconds uint32
+	// WebIdentityTokenFile holds the token. Saved-plan bindings keep only this path.
+	WebIdentityTokenFile string
+	// WebIdentityToken is a literal token. It is a secret and is never serialized.
+	WebIdentityToken string `json:"-"`
+	// WebIdentityTokenLiteral records that the token was a literal value, so a restored record that
+	// has lost it can say why instead of assuming the role without a token.
+	WebIdentityTokenLiteral bool
+}
+
+// ComponentExclusion records that a unit's exclude block prevents the operation from running.
+type ComponentExclusion struct {
+	// Actions lists the commands the exclusion applies to.
+	Actions []string
+}
+
+// ComponentIgnoredRun names the ignore policy that ended preparation of a unit.
+type ComponentIgnoredRun struct {
+	// Policy is the name of the matching ignore policy.
+	Policy string
+	// Message is the message of the matching ignore policy.
+	Message string
 }
 
 // ComponentConfigurationFile must bypass template rendering.

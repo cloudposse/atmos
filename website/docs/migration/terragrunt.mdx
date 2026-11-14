@@ -1052,17 +1052,33 @@ Atmos follows the same rules as Terragrunt v1.2.1, whose symlink support is an o
 - A unit without a stable `remote_state` path keeps local state under `.terragrunt-cache`, which moves with the checkout path and disappears when the cache is deleted. Atmos keeps that location so existing state stays addressable, and warns when it applies.
 - `!terraform.output` and `!terraform.state` can read a Terragrunt unit like any other component.
 
+### Executables, errors, exclusions, and features
+
+- `terraform_binary` in a unit selects the executable for that unit. Atmos resolves a name such as `tofu` through the toolchain and uses a path as given, resolved from the unit directory when relative. A stack-level `command` overrides it, and it overrides `components.terraform.command`. The executable must be Terraform or OpenTofu and cannot switch the unit between the two engines.
+- A unit's `errors` block applies to its `init` and main Terraform commands and to fetching its source. Ignore policies are checked before retry policies, and the first matching policy decides. `max_attempts` includes the first attempt. An ignored failure succeeds and writes its `signals` to `error-signals.json` in the module directory. When both `settings.retry` and an `errors` retry policy apply, `settings.retry` retries first and the policy retries what is left, so a failure can be attempted more often than either setting alone.
+- A unit whose `exclude` block lists the running command (`all` and `all_except_output` included) is skipped in `--all`, `--affected`, and `--stack` runs and reported by name. `exclude_dependencies = true` also skips its direct dependencies. With `no_run` unset, a direct run is skipped only for an exact action. `no_run = true` also honors `all` and `all_except_output`, and `no_run = false` never skips a direct run.
+- Set `components.terraform.terragrunt.features` to override `feature` blocks for every unit. `TG_FEATURE=name=value,name2=value2` overrides those values per name. An override that no unit declares prints a warning naming it.
+- `terragrunt-read-config` (also `read-config`) after-hooks run after every command prepares the unit, in the unit directory. `init-from-module` hooks run around fetching the module source, only when it is fetched or refreshed.
+- A hook that executes `tflint` runs `tflint --init` and then `tflint` with the unit's `.tflint.hcl`, inputs, and variable files. `TF_VAR_` variables from `env_vars` reach TFLint through the environment, so `terraform.tfvars` takes precedence over them, as it does for Terraform. Install `tflint` through the toolchain or `PATH`.
+
+### Identity, state encryption, and registry sources
+
+- `iam_role`, `iam_assume_role_duration`, `iam_assume_role_session_name`, and `iam_web_identity_token` are supported. Atmos assumes the role in process through STS, on top of the credentials in use: the default Atmos identity or the ambient credential chain. It downloads an `s3::` source with the temporary session, exports the session to Terraform, hooks, and workspace commands, and never writes it to a file or a saved plan. `iam_web_identity_token` is a token or the path of a file that contains one. Use a file if you apply saved plans, because a literal token is never stored with a plan.
+- If you select an identity with `--identity` or `ATMOS_IDENTITY`, that identity decides who the component runs as, and `iam_role` is not assumed. `TG_IAM_ASSUME_ROLE`, `TG_IAM_ASSUME_ROLE_DURATION`, `TG_IAM_ASSUME_ROLE_SESSION_NAME`, and `TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN` override the unit's settings, as they do in Terragrunt. `run_cmd` and `get_env` evaluate with the invocation's own environment, before the role is assumed, as in Terragrunt.
+- `remote_state.encryption` is written to the file that `remote_state.generate` creates, as an OpenTofu `encryption` block, so it requires OpenTofu. Any OpenTofu key provider works, for example `pbkdf2`, `aws_kms`, or `gcp_kms`. Without `generate` it has no effect, as in Terragrunt, and Atmos warns. `remote_state.disable_init` is accepted: Terragrunt uses it only to skip creating backend resources, Atmos never creates them, and OpenTofu initializes the backend as usual.
+- `tfr://` module sources are resolved when a unit is prepared, using the Terraform module registry protocol. `?version=` pins an exact version, the `terraform { version }` constraint selects among published versions, and with neither the latest stable release is used. Private registries authenticate with `TF_TOKEN_<host>`, a `credentials` block in the CLI configuration, or `TG_TF_REGISTRY_TOKEN`. A `//subdir` selects a directory inside the module.
+
+### What it does not support yet
+
 ### What it does not support yet
 
 Unsupported settings fail before any infrastructure command runs, with an error that names the unit, the file with line and column, and the setting. A broken unit does not affect other units or YAML components: it stays listed, and only commands that target it fail. `apply`, `plan`, and `destroy` with `--all` validate every selected unit first and report "no infrastructure command was run". Evaluation errors can contain secrets, so Atmos shows the location and a hint but not the evaluator's text; run with `ATMOS_LOGS_LEVEL=Debug` to log the full message with secrets masked. Atmos does not fall back to the Terragrunt executable. Currently rejected:
 
-- `terraform_binary`, `errors`, `exclude`, feature flags, and the `iam_role` and web-identity settings.
-- `remote_state` with `disable_init` or encryption. Atmos does not create backend resources.
-- Inline modules without `terraform.source`, and registry module sources.
-- Hooks for the `read-config`, `terragrunt-read-config`, and `init-from-module` lifecycles, and hooks that run a built-in integration such as `tflint`.
+- Inline modules without `terraform.source`.
 - Output dependencies in a non-default workspace during discovery.
+- Stack-level overrides of a unit's `backend`, `backend_type`, `metadata.component`, or `source.uri`, because they would change state identity. Edit the unit's `remote_state` instead.
 
-Discovery runs without side effects, so a unit whose `locals` call `run_cmd` cannot be discovered. When a unit uses one of these features, keep it on Terragrunt for now or convert it with the steps below.
+Terragrunt's built-in default retry list for transient errors, the `--no-auto-retry` flag, and `errors` handling around `read-config` hooks are not implemented; use `settings.retry` or an `errors` block. Discovery runs without side effects, so a unit whose `locals` call `run_cmd` cannot be discovered.
 
 ## Migration Steps
 

@@ -158,6 +158,34 @@ func Track(atmosConfig *schema.AtmosConfiguration, name string) func() {
 	return trackWithGoroutineLocalStack(name, start)
 }
 
+// ObserveExternal records a child duration measured in another process. It
+// counts as child time of the active host span so the heatmap does not count
+// plugin work twice.
+func ObserveExternal(name string, duration time.Duration) {
+	if !isTrackingEnabled() || duration <= 0 {
+		return
+	}
+	if parent := activeFrame(); parent != nil {
+		parent.childTime.Add(int64(duration))
+	}
+	recordMetrics(name, duration, duration)
+}
+
+// activeFrame returns the innermost tracked span of the calling goroutine, or nil when it has none.
+func activeFrame() *StackFrame {
+	gid := getGoroutineID()
+	if gid == 0 {
+		return nil
+	}
+	if useSimpleStack.Load() && simpleOwnerGID.Load() == gid {
+		return simpleStack.peek()
+	}
+	if value, ok := callStacks.Load(gid); ok {
+		return value.(*CallStack).peek()
+	}
+	return nil
+}
+
 // trackWithSimpleStack uses the global simple stack for single-goroutine scenarios.
 // If a different goroutine is detected, it automatically falls back to goroutine-local tracking
 // and disables simple mode globally to avoid future expensive checks.
