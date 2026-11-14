@@ -178,7 +178,6 @@ func TestTableHandlerValidation(t *testing.T) {
 	}
 }
 
-//nolint:dupl // Similar test patterns for different handlers.
 func TestPagerHandlerValidation(t *testing.T) {
 	handler, ok := Get("pager")
 	require.True(t, ok)

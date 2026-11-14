@@ -13,15 +13,16 @@ import (
 )
 
 const (
-	labelOCIBase        = "org.opencontainers.image."
-	labelOCIDescription = labelOCIBase + "description"
-	labelOCILicenses    = labelOCIBase + "licenses"
-	labelOCIRevision    = labelOCIBase + "revision"
-	labelOCISource      = labelOCIBase + "source"
-	labelOCITitle       = labelOCIBase + "title"
-	labelOCIVersion     = labelOCIBase + "version"
-	markdownBacktick    = "`"
-	markdownLineBreak   = "\n"
+	imageSummaryNotAvailable = "n/a"
+	labelOCIBase             = "org.opencontainers.image."
+	labelOCIDescription      = labelOCIBase + "description"
+	labelOCILicenses         = labelOCIBase + "licenses"
+	labelOCIRevision         = labelOCIBase + "revision"
+	labelOCISource           = labelOCIBase + "source"
+	labelOCITitle            = labelOCIBase + "title"
+	labelOCIVersion          = labelOCIBase + "version"
+	markdownBacktick         = "`"
+	markdownLineBreak        = "\n"
 
 	// The component type and command select the ci.templates.container.image override.
 	imageSummaryComponentType = "container"
@@ -111,8 +112,8 @@ func BuildImageSummaryData(info *ImageInfo, opts ImageSummaryOptions) *ImageSumm
 		Source:        markdownCell(linkOrText(labels[labelOCISource])),
 		Entrypoint:    markdownCell(codeOrNA(strings.Join(info.Entrypoint, " "))),
 		Command:       markdownCell(codeOrNA(strings.Join(info.Cmd, " "))),
-		StopSignal:    markdownCell(codeOrNA(firstNonEmpty(info.StopSignal, "n/a"))),
-		StorageDriver: markdownCell(codeOrNA(firstNonEmpty(info.StorageDriver, "n/a"))),
+		StopSignal:    markdownCell(codeOrNA(firstNonEmpty(info.StopSignal, imageSummaryNotAvailable))),
+		StorageDriver: markdownCell(codeOrNA(firstNonEmpty(info.StorageDriver, imageSummaryNotAvailable))),
 		ExposedPorts:  markdownCell(codeOrNA(joinOrNA(info.ExposedPorts))),
 		Env:           envRows(info.Env),
 		Labels:        labelRows(labels),
@@ -188,7 +189,7 @@ func summaryDigest(info *ImageInfo, pushedDigest string) string {
 	if digest := digestFromRepoDigest(firstString(info.RepoDigests)); digest != "" {
 		return digest
 	}
-	return "n/a"
+	return imageSummaryNotAvailable
 }
 
 func envRows(env []string) []ImageSummaryRow {
@@ -256,14 +257,14 @@ func digestFromRepoDigest(value string) string {
 
 func joinOrNA(values []string) string {
 	if len(values) == 0 {
-		return "n/a"
+		return imageSummaryNotAvailable
 	}
 	return strings.Join(values, ", ")
 }
 
 func codeOrNA(value string) string {
 	if value == "" {
-		value = "n/a"
+		value = imageSummaryNotAvailable
 	}
 	return markdownBacktick + markdownCodeText(value) + markdownBacktick
 }

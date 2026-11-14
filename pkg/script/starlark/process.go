@@ -100,11 +100,18 @@ type processCall struct {
 	allowPlanChanges bool
 	policy           api.ExecutionPolicy
 	// atmos marks a nested Atmos invocation: its exit code for a policy denial is recognized and
-	// reported, and label names the command in failures.
+	// reported, and label names the command in failures and progress output.
 	atmos bool
 	label string
 	// dataHint overrides the hint shown when result.data is read from non-JSON stdout.
 	dataHint string
+}
+
+func (c *processCall) displayLabel() string {
+	if c.label != "" {
+		return c.label
+	}
+	return strings.Join(c.argv, " ")
 }
 
 func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starlark.Value, error) {
@@ -121,7 +128,7 @@ func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starla
 	var result script.ProcessOutput
 	var err error
 	if s.useViewport(thread, call) {
-		err = s.spec.Viewport(strings.Join(call.argv, " "), func(stdout, stderr io.Writer) error {
+		err = s.spec.Viewport(call.displayLabel(), func(stdout, stderr io.Writer) error {
 			process.Stdout, process.Stderr = stdout, stderr
 			var runErr error
 			result, runErr = script.RunProcess(threadContext(thread), s.engine.runner, process)

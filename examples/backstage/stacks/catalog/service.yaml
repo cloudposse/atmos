@@ -1,0 +1,7 @@
+components:
+  terraform:
+    service:
+      vars:
+        service_name: payments
+        replicas: 1
+        owner: platform-team

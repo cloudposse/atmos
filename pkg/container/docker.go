@@ -71,7 +71,7 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 
 	cmd := d.command(ctx, args...)
 	applyCommandEnv(cmd, bakeCommandEnv(d.env, config))
-	output, err := cmd.CombinedOutput()
+	output, err := runBuildCommand(ctx, cmd, config.Output)
 	if err != nil {
 		return fmt.Errorf("%w: docker build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}

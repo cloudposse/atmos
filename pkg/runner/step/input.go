@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -77,11 +76,7 @@ func (h *InputHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		input = input.EchoMode(huh.EchoModePassword)
 	}
 
-	keyMap := huh.NewDefaultKeyMap()
-	keyMap.Quit = key.NewBinding(
-		key.WithKeys("ctrl+c", "esc"),
-		key.WithHelp("ctrl+c/esc", "quit"),
-	)
+	keyMap := interactiveKeyMap()
 
 	form := huh.NewForm(
 		huh.NewGroup(input),
@@ -95,7 +90,7 @@ func (h *InputHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	}
 
 	// Use default if no value was entered.
-	if value == "" && defaultVal != "" {
+	if value == "" {
 		value = defaultVal
 	}
 

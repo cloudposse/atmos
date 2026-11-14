@@ -1,0 +1,63 @@
+vars:
+  stage: local
+
+components:
+  container:
+    backstage:
+      metadata:
+        component: .
+      image: atmos-backstage:local
+      build:
+        context: .
+        dockerfile: Dockerfile
+        tags:
+          - atmos-backstage:local
+      run:
+        # Keep guest access local to this machine.
+        ports:
+          - host: "127.0.0.1:3000"
+            container: 3000
+          - host: "127.0.0.1:7007"
+            container: 7007
+        run_args:
+          - --init
+        healthcheck:
+          test: [CMD, node, /demo/scripts/healthcheck.mjs]
+          interval: 10s
+          timeout: 5s
+          retries: 30
+          start_period: 60s
+    backstage-runner:
+      metadata:
+        component: .
+      image: atmos-backstage-runner:local
+      build:
+        context: .
+        dockerfile: runner/Dockerfile
+        tags: [atmos-backstage-runner:local]
+      run:
+        mounts:
+          - source: .atmos/ci/runner
+            target: /runner-data
+          - source: .atmos/ci/state
+            target: /state
+        run_args: [--init]
+  emulator:
+    backstage-git:
+      driver: gitea
+      ephemeral: true
+      container:
+        ports:
+          - host: "127.0.0.1:3001"
+            container: 3000
+        env:
+          GITEA__server__ROOT_URL: http://localhost:3001/
+    backstage-aws:
+      driver: floci/aws
+      region: us-east-1
+      ephemeral: true
+      container:
+        image: mirror.gcr.io/floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2
+        ports:
+          - host: "127.0.0.1:4567"
+            container: 4566

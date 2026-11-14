@@ -1,0 +1,105 @@
+---
+slug: backstage-service-catalog
+title: "Provision Infrastructure from Backstage with Atmos"
+authors: [osterman]
+tags: [feature, dx]
+cast: "/casts/examples/backstage/service-catalog.cast"
+castTitle: "Backstage service catalog with Atmos and Gitea"
+---
+
+Backstage can give developers a self-service way to request infrastructure, with Atmos handling
+configuration and provisioning behind the portal. The new [Backstage example](/examples/backstage)
+is a local demonstration of what that integration could look like—a starting point for teams
+building their own internal developer portal.
+
+Try the flow from a service request to a reviewed Git change and Terraform provisioning, then
+adapt the templates and automation to your platform. Backstage, Gitea with a live Actions runner,
+and an AWS emulator all run locally, so you can explore the example without a cloud account.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+## From a Service Request to a Running Workflow
+
+Choose **Create service → Request a service with an S3 bucket** in Backstage and enter a name
+such as `orders`. The example takes that request through a complete workflow:
+
+1. **Generate the configuration.** Atmos scaffold creates a stack for the shared `bucket`
+   Terraform component, plus Backstage catalog definitions for the service and its S3 resource.
+2. **Open a pull request.** Atmos publishes the generated files to Git, and the Backstage adapter
+   opens a PR in the local Gitea repository.
+3. **Review the plan.** A real Gitea Actions runner validates and plans the infrastructure change.
+4. **Provision after merge.** The deploy job checks out the merged event’s commit, plans and
+   applies the stack, and registers the catalog definitions with Backstage.
+5. **Explore the service.** The catalog shows its owner, a link to its Atmos configuration, and
+   its dependency on the provisioned bucket.
+
+The bucket is created in the local AWS emulator. This example provisions supporting infrastructure;
+it does not deploy an application. The catalog reads its definitions from Git, but it is not a
+live monitor of Terraform state or infrastructure drift.
+
+## Atmos Handles the Automation
+
+Backstage provides the request form and catalog. Atmos provides stack inheritance, scaffolding,
+Git file publication, Terraform execution, and the local container lifecycle.
+
+Reusable Starlark modules are loaded with `module.load(...)`. They use native Atmos APIs for
+containers, emulators, Git, and Terraform. The Gitea jobs use `atmos git clone --ref` to check out
+the exact event SHA, so a newer commit on a moving branch cannot silently replace the requested
+revision. Gitea PR creation is handled by the adapter; it is not a native Gitea Git-target capability.
+
+The example also includes a read-only **Inspect an Atmos stack** template, a TechDocs handbook,
+links to Gitea Actions and PRs, and Geist-inspired light and dark themes. The
+example uses Backstage’s new frontend system, with frontend modules for the
+theme, navigation, CI/CD content, and TechDocs addon.
+
+## Try It Locally
+
+Install Docker, Git, Go, and Terraform. From a checkout of the Atmos repository, build the CLI
+so the demo and runner use the features included with the example:
+
+```shell
+go build -o build/atmos .
+export PATH="$PWD/build:$PATH"
+cd examples/backstage
+atmos portal up
+atmos portal status
+```
+
+The first build takes several minutes and needs internet access to download dependencies.
+Allow at least 4 GB of Docker memory and several GB of disk space. Ports 3000, 3001, 7007, and
+4567 must be available; published ports bind to `127.0.0.1`.
+
+Once Backstage is healthy, open **http://localhost:3000** and enter as a guest. Gitea runs at
+**http://localhost:3001**, with the demo login `atmos` / `atmos`.
+
+This is a disposable local development example, with guest access and throwaway credentials.
+See the [example guide](/examples/backstage) for the request walkthrough, configuration, and
+reset behavior. `atmos portal down` resets the demo, including its ephemeral Git and AWS services.
+
+## Test the Whole Flow
+
+The example includes native Atmos tests for the dashboard, catalog, TechDocs, stack inheritance,
+and input validation:
+
+```shell
+atmos portal test
+```
+
+To exercise provisioning as well:
+
+```shell
+atmos portal test --provision
+```
+
+The opt-in test creates and merges its own PR, waits for the Gitea jobs, checks the actual S3
+endpoint, and verifies the service-to-resource relationship in the catalog. It leaves the test
+service and bucket available for inspection.
+
+Watch the terminal recording of those checks and the end-to-end workflow:
+
+<CastEmbed src="/casts/examples/backstage/service-catalog.cast" title="Backstage service catalog with Atmos and Gitea" chrome controls scrubber />
+
+For native CI reporting capabilities beyond the example’s job checks, see
+[Native Atmos CI Support for Gitea Actions](/changelog/gitea-actions-ci-provider).

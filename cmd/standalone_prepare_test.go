@@ -250,7 +250,7 @@ func TestStandaloneScriptRunsWithRelativeTracebackAndFileNameStep(t *testing.T) 
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 	t.Chdir(root)
-	path := writeStandaloneScript(t, root, "boom.star", "def inner():\n    fail(\"boom\")\ninner()\n")
+	path := writeStandaloneScript(t, root, "boom.star", "def inner():\n    return 1 // 0\ninner()\n")
 	command := &cobra.Command{}
 	command.SetContext(context.Background())
 	var runErr error

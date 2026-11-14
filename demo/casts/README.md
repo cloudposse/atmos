@@ -90,3 +90,18 @@ Use a trailing name such as `kubernetes` to record just one. These commands buil
 Atmos with `casts setup landing` and copy only `demo/landing/fixtures/`; they do
 not provision the example fixtures used by the broader `casts setup`. See
 [the landing demo guide](../landing/README.md).
+
+## Backstage service catalog
+
+Start `examples/backstage` with `atmos portal up`, then run from this directory:
+
+```sh
+atmos casts generate examples backstage service-catalog
+atmos casts validate examples backstage service-catalog
+```
+
+This opt-in cast reuses the live demo, runs the native test suite, and creates
+and merges one service PR through Gitea Actions. It leaves the portal and service
+running for inspection. It is excluded from bulk generation because it uses the
+live demo's shared ports and state. Its read-only validator is included in
+`casts validate examples`.

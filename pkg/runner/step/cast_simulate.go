@@ -179,11 +179,11 @@ func castTypedCharDelay(line string, chars []rune, index int, baseDelay time.Dur
 func deterministicCastJitterUnit(line string, index int) float64 {
 	hash := castJitterHashOffset
 	for _, char := range line {
-		hash ^= uint64(char)
+		hash ^= castRuneHashValue(char)
 		hash *= castJitterHashPrime
 	}
 	for _, char := range strconv.Itoa(index) {
-		hash ^= uint64(char)
+		hash ^= castRuneHashValue(char)
 		hash *= castJitterHashPrime
 	}
 	return float64(hash%castJitterScale) / float64(castJitterScaleMax)
@@ -374,4 +374,12 @@ func sleepCastInput(ctx context.Context, delay time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+// castRuneHashValue preserves rune hashing while checking the signed conversion.
+func castRuneHashValue(char rune) uint64 {
+	if char < 0 {
+		return 0
+	}
+	return uint64(char)
 }

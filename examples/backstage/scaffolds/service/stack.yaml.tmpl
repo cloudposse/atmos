@@ -1,0 +1,8 @@
+name: dev-{{ .Config.service_name }}
+vars:
+  stage: dev
+components:
+  terraform:
+    bucket:
+      vars:
+        service_name: "{{ .Config.service_name }}"

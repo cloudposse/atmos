@@ -1,0 +1,11 @@
+import:
+  - catalog/service
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    service:
+      vars:
+        replicas: 4

@@ -71,7 +71,7 @@ func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	args := buildBuildArgs(config)
 
 	cmd := p.command(ctx, args...)
-	output, err := cmd.CombinedOutput()
+	output, err := runBuildCommand(ctx, cmd, config.Output)
 	if err != nil {
 		return fmt.Errorf("%w: podman build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
 	}

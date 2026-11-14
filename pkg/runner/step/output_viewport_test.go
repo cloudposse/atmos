@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,6 +20,35 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/signals"
 )
+
+func TestOutputViewportElapsedTimeAlignment(t *testing.T) {
+	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	m := &outputViewportModel{
+		tail: &viewportTail{}, title: "atmos container build " + strings.Repeat("界", 20),
+		width: 60, height: 8, padding: 1, spinner: spinner.New(), startedAt: start,
+	}
+	m.Update(viewportRefreshMsg{at: start.Add(65*time.Second + 900*time.Millisecond)})
+	assert.Equal(t, 65*time.Second+900*time.Millisecond, m.elapsed)
+	for _, width := range []int{60, 20, 7, 2} {
+		m.Update(tea.WindowSizeMsg{Width: width, Height: 8})
+		lines := strings.Split(m.View(), "\n")
+		status := ansi.Strip(lines[len(lines)-1])
+		assert.Equal(t, width-1, ansi.StringWidth(status), "the status must fit without wrapping")
+		if width >= 7 {
+			assert.True(t, strings.HasSuffix(status, "1m5s "), "%q", status)
+		}
+	}
+}
+
+func TestOutputViewportElapsedStartsAtZero(t *testing.T) {
+	m := &outputViewportModel{spinner: spinner.New(), title: "Build", startedAt: time.Now()}
+	assert.True(t, strings.HasSuffix(m.statusLine(30), "0s"))
+	m.Update(viewportRefreshMsg{at: m.startedAt.Add(-time.Second)})
+	assert.Zero(t, m.elapsed)
+	m.Update(viewportRefreshMsg{at: m.startedAt.Add(time.Hour + 2*time.Minute + 3*time.Second)})
+	assert.True(t, strings.HasSuffix(m.statusLine(30), "1h2m3s"))
+	assert.NotContains(t, m.statusLine(30), "\x1b[", "the timer stays plain when color is disabled")
+}
 
 func TestOutputViewportTailAndResize(t *testing.T) {
 	tail := &viewportTail{}

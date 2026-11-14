@@ -238,11 +238,7 @@ func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if err := spinner.ExecWithSpinner(
-		fmt.Sprintf("Building %s", r.component),
-		fmt.Sprintf("%s built", r.component),
-		func() error { return runtime.Build(ctx, buildConfig) },
-	); err != nil {
+	if err := buildWithProgress(ctx, runtime, buildConfig, r.component); err != nil {
 		return fmt.Errorf("%w: build %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
 	}
 	imagesummary.Inspect(ctx, runtime, &r.atmosConfig, firstNonEmpty(buildConfig.Tags), "")
@@ -439,16 +435,16 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	if err := spinner.ExecWithSpinnerDynamic(
-		fmt.Sprintf("Starting %s", r.component),
+		fmt.Sprintf("Starting `%s`", r.component),
 		func() (string, error) {
 			named, upErr := ctr.UpWithRuntime(ctx, runtime, namedConfig)
 			if upErr != nil {
 				return "", upErr
 			}
 			if named.AlreadyRunning {
-				return fmt.Sprintf("%s is already running (%s)", r.component, named.Name()), nil
+				return fmt.Sprintf("`%s` is already running (`%s`)", r.component, named.Name()), nil
 			}
-			return fmt.Sprintf("%s is up (%s)", r.component, named.Name()), nil
+			return fmt.Sprintf("`%s` is up (`%s`)", r.component, named.Name()), nil
 		},
 	); err != nil {
 		return fmt.Errorf("%w: up %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
@@ -514,11 +510,7 @@ func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image, 
 	if buildConfig == nil {
 		return nil
 	}
-	if err := spinner.ExecWithSpinner(
-		fmt.Sprintf("Building %s for %s", image, r.component),
-		fmt.Sprintf("Built %s for %s", image, r.component),
-		func() error { return runtime.Build(ctx, buildConfig) },
-	); err != nil {
+	if err := buildWithProgress(ctx, runtime, buildConfig, r.component); err != nil {
 		return fmt.Errorf("%w: build %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
 	}
 	return nil
