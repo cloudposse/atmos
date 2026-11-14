@@ -282,3 +282,40 @@ func TestBaseCredentialsFromAProfileWebIdentityUseTheInvocationSTSEndpoint(t *te
 	defer processSTS.mu.Unlock()
 	assert.Empty(t, processSTS.forms, "the process STS endpoint receives nothing")
 }
+
+func TestBaseCredentialsFromAStaticSourceProfileChainUseTheInvocationSTSEndpoint(t *testing.T) {
+	poisonProcessEnvironment(t)
+	processSTS := newSTSRecorder(t)
+	t.Setenv("AWS_ENDPOINT_URL_STS", processSTS.server.URL)
+	sts := newSTSRecorder(t)
+	home := homeWithProfiles(t,
+		"[base]\naws_access_key_id = AKIACHAINBASE\naws_secret_access_key = s\n",
+		"[profile chain]\nrole_arn = arn:aws:iam::1:role/chain\nsource_profile = base\nregion = us-east-2\n")
+
+	key, region, err := resolveBase(t, "HOME="+home, "USERPROFILE="+home, "AWS_PROFILE=chain", "AWS_ENDPOINT_URL_STS="+sts.server.URL)
+	require.NoError(t, err)
+	assert.Equal(t, assumedKey, key)
+	assert.Equal(t, "us-east-2", region)
+	form, _ := sts.last(t)
+	assert.Equal(t, "arn:aws:iam::1:role/chain", form.Get("RoleArn"), "the profile role assumption reaches the invocation STS endpoint")
+	processSTS.mu.Lock()
+	defer processSTS.mu.Unlock()
+	assert.Empty(t, processSTS.forms, "the process STS endpoint receives nothing")
+}
+
+func TestBaseCredentialsHonorAWSDefaultProfile(t *testing.T) {
+	poisonProcessEnvironment(t)
+	home := homeWithProfiles(t,
+		"[default]\naws_access_key_id = AKIAPLAINDEFAULT\naws_secret_access_key = s\n[production]\naws_access_key_id = AKIAPRODUCTION\naws_secret_access_key = s\n", "")
+
+	key, _, err := resolveBase(t, append(invocationHome(home), "AWS_DEFAULT_PROFILE=production")...)
+	require.NoError(t, err)
+	assert.Equal(t, "AKIAPRODUCTION", key, "AWS_DEFAULT_PROFILE selects the profile when AWS_PROFILE is unset")
+
+	key, _, err = resolveBase(t, append(invocationHome(home), "AWS_DEFAULT_PROFILE=production", "AWS_PROFILE=default")...)
+	require.NoError(t, err)
+	assert.Equal(t, "AKIAPLAINDEFAULT", key, "AWS_PROFILE takes precedence over AWS_DEFAULT_PROFILE")
+
+	_, _, err = resolveBase(t, append(invocationHome(home), "AWS_DEFAULT_PROFILE=missing")...)
+	require.Error(t, err, "a missing profile named by AWS_DEFAULT_PROFILE is an error, not a fallback")
+}

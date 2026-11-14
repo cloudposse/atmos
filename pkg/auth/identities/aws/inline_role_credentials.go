@@ -95,7 +95,7 @@ func baseCredentialsProvider(ctx context.Context, env map[string]string, region 
 	region = cmp.Or(region, profile.Region)
 	chain := profileChain(profile)
 	if root := chain[len(chain)-1]; !profileSourceNeedsEnvironment(root) {
-		provider, err := sdkProfileCredentials(ctx, env, profile.Profile, region)
+		provider, err := sdkProfileCredentials(ctx, env, profile.Profile, region, profileSourceUsesSTSOnly(root))
 		return provider, profile.Region, err
 	}
 	provider, err := envProfileCredentials(env, chain, region)
@@ -120,7 +120,8 @@ func envWebIdentityCredentials(env map[string]string, region, tokenFile string) 
 // loadInvocationProfile reads the profile that the environment selects from the files that it names. A
 // missing default profile is not an error and returns nil, as in the SDK; a missing named profile is.
 func loadInvocationProfile(ctx context.Context, env map[string]string) (*config.SharedConfig, error) {
-	name := cmp.Or(env["AWS_PROFILE"], defaultProfileName)
+	selected := cmp.Or(env["AWS_PROFILE"], env["AWS_DEFAULT_PROFILE"])
+	name := cmp.Or(selected, defaultProfileName)
 	configFile, credentialsFile := invocationSharedFiles(env)
 	profile, err := config.LoadSharedConfigProfile(ctx, name, func(o *config.LoadSharedConfigOptions) {
 		o.ConfigFiles = []string{configFile}
@@ -130,7 +131,7 @@ func loadInvocationProfile(ctx context.Context, env map[string]string) (*config.
 	switch {
 	case err == nil:
 		return &profile, nil
-	case errors.As(err, &notExist) && env["AWS_PROFILE"] == "":
+	case errors.As(err, &notExist) && selected == "":
 		return nil, nil
 	default:
 		return nil, err
@@ -182,9 +183,16 @@ func profileSourceNeedsEnvironment(root *config.SharedConfig) bool {
 	}
 }
 
+// profileSourceUsesSTSOnly reports whether the SDK builds only STS clients from the configuration that
+// resolves a profile chain with this root, so that the STS endpoint can be the configuration's endpoint.
+func profileSourceUsesSTSOnly(root *config.SharedConfig) bool {
+	return root.SSOSessionName == "" && root.SSORegion == "" && root.SSOAccountID == "" && root.SSOStartURL == "" &&
+		root.SSORoleName == "" && root.LoginSession == ""
+}
+
 // sdkProfileCredentials lets the SDK resolve a profile whose source the shared files describe. The profile,
 // files, and region are explicit, so the SDK does not consult the process environment to choose them.
-func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, region string) (aws.CredentialsProvider, error) {
+func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, region string, stsOnly bool) (aws.CredentialsProvider, error) {
 	configFile, credentialsFile := invocationSharedFiles(env)
 	options := []func(*config.LoadOptions) error{
 		config.WithSharedConfigProfile(profile),
@@ -196,6 +204,13 @@ func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, 
 	}
 	if region != "" {
 		options = append(options, config.WithRegion(region))
+	}
+	// The SDK builds the STS client of a role_arn and source_profile chain itself, so the invocation STS
+	// endpoint is set as the endpoint of the loaded configuration. Only STS clients are built from it when
+	// the chain starts from keys, a web identity, or a credential process; SSO and login chains also build
+	// clients of other services, which this endpoint must not reach.
+	if endpoint := invocationSTSEndpoint(env); endpoint != "" && stsOnly {
+		options = append(options, config.WithBaseEndpoint(endpoint))
 	}
 	cfg, err := config.LoadDefaultConfig(ctx, options...)
 	if err != nil {
@@ -347,8 +362,18 @@ func instanceCredentials(env map[string]string) aws.CredentialsProvider {
 // invocationSTSClient builds an STS client from the environment's region and STS endpoint only.
 func invocationSTSClient(env map[string]string, region string, credentials aws.CredentialsProvider) *sts.Client {
 	options := sts.Options{Region: region, Credentials: credentials}
-	if endpoint := cmp.Or(env["AWS_ENDPOINT_URL_STS"], env["AWS_ENDPOINT_URL"]); endpoint != "" {
+	applyInvocationSTSEndpoint(env, &options)
+	return sts.New(options)
+}
+
+// applyInvocationSTSEndpoint sets the STS endpoint that the invocation environment names, if any.
+func applyInvocationSTSEndpoint(env map[string]string, options *sts.Options) {
+	if endpoint := invocationSTSEndpoint(env); endpoint != "" {
 		options.BaseEndpoint = aws.String(endpoint)
 	}
-	return sts.New(options)
+}
+
+// invocationSTSEndpoint returns the STS endpoint that the invocation environment names, or "".
+func invocationSTSEndpoint(env map[string]string) string {
+	return cmp.Or(env["AWS_ENDPOINT_URL_STS"], env["AWS_ENDPOINT_URL"])
 }
