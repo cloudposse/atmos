@@ -14,6 +14,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/errdef"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -108,6 +109,58 @@ func TestAttachments_OversizedReferrerIsMalformedEvidence(t *testing.T) {
 			assert.Equal(t, artifact.SeverityWarning, set.diagnostics[0].Severity)
 			assert.Contains(t, set.diagnostics[0].Message, tt.wantProblem)
 			assert.Contains(t, set.diagnostics[0].Message, oversized.Digest.String())
+		})
+	}
+}
+
+// A referrer whose manifest bytes fail digest verification, or whose manifest blob is gone, is
+// malformed evidence like an oversized one: it is reported and cannot block a valid signature
+// carried by another referrer.
+func TestAttachments_IntegrityFailedReferrerIsMalformedEvidence(t *testing.T) {
+	root := ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: digest.FromString("root"), Size: 100}
+	valid, validRaw := bundleReferrer(t, root)
+	bundleType := bundleMediaTypePrefix + "v0.3+json"
+	corrupt := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageManifest, ArtifactType: bundleType,
+		Digest: digest.FromString("corrupt"), Size: int64(len("tampered bytes")),
+	}
+	missing := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageManifest, ArtifactType: bundleType,
+		Digest: digest.FromString("missing"), Size: 10,
+	}
+	tests := []struct {
+		name      string
+		referrers []ocispec.Descriptor
+		bad       ocispec.Descriptor
+		wantValid []digest.Digest
+		wantText  string
+	}{
+		{name: "corrupt referrer beside a valid one", referrers: []ocispec.Descriptor{corrupt, valid}, bad: corrupt, wantValid: []digest.Digest{valid.Digest}, wantText: "integrity"},
+		{name: "only a corrupt referrer", referrers: []ocispec.Descriptor{corrupt}, bad: corrupt, wantText: "integrity"},
+		{name: "missing referrer blob beside a valid one", referrers: []ocispec.Descriptor{missing, valid}, bad: missing, wantValid: []digest.Digest{valid.Digest}, wantText: "integrity"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := &referrerStore{
+				referrers: tt.referrers,
+				content: map[digest.Digest][]byte{
+					valid.Digest:   validRaw,
+					corrupt.Digest: []byte("tampered bytes"),
+				},
+				fetchErr: errdef.ErrNotFound,
+			}
+			set, err := (&Repository{cache: map[string][]byte{}}).attachments(context.Background(), st, "team/app", root)
+			require.NoError(t, err)
+			var got []digest.Digest
+			for _, item := range set.valid {
+				got = append(got, item.manifestDesc.Digest)
+			}
+			assert.Equal(t, tt.wantValid, got)
+			require.Len(t, set.diagnostics, 1)
+			assert.Equal(t, "malformed-evidence", set.diagnostics[0].Code)
+			assert.Equal(t, artifact.SeverityWarning, set.diagnostics[0].Severity)
+			assert.Contains(t, set.diagnostics[0].Message, tt.wantText)
+			assert.Contains(t, set.diagnostics[0].Message, tt.bad.Digest.String())
 		})
 	}
 }

@@ -94,6 +94,11 @@ func (r *Repository) readAttachment(ctx context.Context, st store, name string, 
 		if errors.Is(err, errUtils.ErrArtifactTooLarge) {
 			return nil, fmt.Sprintf("referrer %s is too large to inspect: %v", desc.Digest, err), nil
 		}
+		// A referrer manifest that fails digest verification, or whose blob is gone, is unusable
+		// evidence in the same way; only transport failures stay fatal.
+		if errors.Is(err, errUtils.ErrArtifactIntegrityFailed) {
+			return nil, fmt.Sprintf("referrer %s failed integrity verification: %v", desc.Digest, err), nil
+		}
 		return nil, "", fmt.Errorf("%w: read referrer %s: %w", errUtils.ErrArtifactDownloadFailed, desc.Digest, err)
 	}
 	var manifest ocispec.Manifest
