@@ -51,6 +51,11 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 		if name == ".terragrunt-module-manifest" {
 			return nil
 		}
+		// The lock file beside the unit is handed to the host as a unit file copy with its own
+		// ownership rules, so the overlay leaves it out rather than rejecting it.
+		if filepath.ToSlash(name) == util.TerraformLockFile {
+			return nil
+		}
 		if err := checkOverlayFile(name); err != nil {
 			return err
 		}

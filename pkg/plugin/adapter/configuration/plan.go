@@ -169,7 +169,7 @@ func digestSource(ctx context.Context, root, path string, result map[string]stri
 	}
 	relative, err := filepath.Rel(root, real)
 	if err != nil || !filepath.IsLocal(relative) {
-		return fmt.Errorf("%w: source leaves project root", errUtils.ErrPluginInvalidConfig)
+		return sourceOutsideRoot(root, path, real)
 	}
 	data, err := os.ReadFile(real)
 	if err != nil {
@@ -181,5 +181,102 @@ func digestSource(ctx context.Context, root, path string, result map[string]stri
 		return err
 	}
 	result[filepath.ToSlash(relative)] = hex.EncodeToString(sum[:])
+	return nil
+}
+
+// sourceOutsideRoot names the watched file and where its symlink leads. Atmos fingerprints a
+// plan's inputs to bind the saved plan to them, and it only reads files inside the project.
+func sourceOutsideRoot(root, path, real string) error {
+	shown, err := filepath.Rel(root, path)
+	if err != nil {
+		shown = path
+	}
+	return errUtils.Build(fmt.Errorf("%w: source %s leaves the project root (it resolves to %s)", errUtils.ErrPluginInvalidConfig, filepath.ToSlash(shown), real)).
+		WithContext("source", filepath.ToSlash(shown)).
+		WithContext("resolves_to", real).
+		WithHint("Replace the symlink with a copy of the file, or point it at a file inside the project").
+		Err()
+}
+
+// checkSourcesInRoot fails before any infrastructure command runs when a watched file, or a
+// symlink inside a watched directory, resolves outside the project root. It only inspects
+// symlinks, so it costs a directory walk and no file reads.
+func checkSourcesInRoot(ctx context.Context, root string, sources []schema.ComponentConfigurationSource) error {
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	for _, source := range sources {
+		if !filepath.IsLocal(source.Path) {
+			return errUtils.ErrPluginInvalidConfig
+		}
+		top := filepath.Join(root, filepath.FromSlash(source.Path))
+		if err := checkSourcePath(root, top); err != nil {
+			return err
+		}
+		if err := checkSourceTree(ctx, root, top); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkSourcePath rejects a watched path whose own location leaves the project root through a
+// symlinked parent directory, such as `shared/inputs.hcl` when `shared` links outside. A missing
+// path is left for the first read to report; any other resolution failure, such as a permission
+// error, is reported now, as fingerprinting would report it later.
+func checkSourcePath(root, top string) error {
+	real, err := filepath.EvalSymlinks(top)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return sourceReadError(err)
+	}
+	if relative, err := filepath.Rel(root, real); err != nil || !filepath.IsLocal(relative) {
+		return sourceOutsideRoot(root, top, real)
+	}
+	return nil
+}
+
+// checkSourceTree walks one watched source and rejects links that leave the project root.
+func checkSourceTree(ctx context.Context, root, top string) error {
+	err := filepath.WalkDir(top, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if path != top && excludedPlanSource(entry.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		return checkSourceLink(root, path, entry)
+	})
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// checkSourceLink rejects a symlink entry that resolves outside the project root. A broken
+// link is left for the first read to report; other resolution failures are reported now.
+func checkSourceLink(root, path string, entry fs.DirEntry) error {
+	if entry.Type()&fs.ModeSymlink == 0 || excludedPlanSource(entry.Name()) {
+		return nil
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return sourceReadError(err)
+	}
+	if relative, err := filepath.Rel(root, real); err != nil || !filepath.IsLocal(relative) {
+		return sourceOutsideRoot(root, path, real)
+	}
 	return nil
 }

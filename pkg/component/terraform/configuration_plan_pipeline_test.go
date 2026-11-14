@@ -91,7 +91,7 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 
 	require.Equal(t, project.workdir, execution.componentPath, "a reviewed plan runs in the retained directory")
 	require.Equal(t, execution.workingDir, execution.componentPath)
-	require.Equal(t, map[string]any{"value": "reviewed"}, execution.preparedConfiguration.Inputs)
+	require.Empty(t, execution.preparedConfiguration.Inputs, "the record stores no inputs; the plan file carries them")
 	retained, err := os.ReadFile(filepath.Join(project.workdir, "main.tf"))
 	require.NoError(t, err)
 	require.Equal(t, "# reviewed module", string(retained))
@@ -108,6 +108,39 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 	args, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
 	require.Contains(t, strings.Split(string(args), "\n"), planPath)
+}
+
+func TestSavedPlanApplySkipsSecondComponentValidation(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	executor := testExecutor(t)
+	validations := 0
+	executor.services.ValidateComponent = func(_ *schema.AtmosConfiguration, _ string, section map[string]any, _, _ string, _ []string, _ int) (bool, error) {
+		validations++
+		vars, _ := section["vars"].(map[string]any)
+		return vars["value"] == "reviewed", nil
+	}
+	planPath := project.review(t)
+	require.Equal(t, 1, validations, "plan creation validates the component with its values")
+
+	apply := project.reviewedApply(t, planPath)
+	_, err := executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err, "a verified saved plan must not be rejected for its intentionally empty vars")
+	require.Equal(t, 1, validations, "saved-plan apply must not revalidate the redacted component")
+}
+
+func TestDirectPluginApplyStillValidatesComponent(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	apply := project.info(t, "apply")
+	project.provider.EXPECT().Prepare(gomock.Any(), apply).Return(project.prepared(), nil)
+	executor := testExecutor(t)
+	validations := 0
+	executor.services.ValidateComponent = func(_ *schema.AtmosConfiguration, _ string, _ map[string]any, _, _ string, _ []string, _ int) (bool, error) {
+		validations++
+		return false, nil
+	}
+	_, err := executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponent)
+	require.Equal(t, 1, validations, "a direct apply has no reviewed plan to replace validation")
 }
 
 // Terragrunt evaluates the configuration again for apply, so a hook enabled only for apply is
@@ -191,7 +224,9 @@ func TestPrepareConfigurationRestoresReviewedPlanWithoutPreparing(t *testing.T) 
 
 	prepared, err := prepareConfiguration(t.Context(), project.config, apply)
 	require.NoError(t, err)
-	require.Equal(t, map[string]any{"value": "reviewed"}, apply.ComponentVarsSection)
+	// The record keeps no inputs: the plan file carries the values Terraform applies.
+	require.Empty(t, apply.ComponentVarsSection)
+	require.NotNil(t, apply.ComponentVarsSection)
 	require.Equal(t, prepared.Inputs, apply.ComponentSection["vars"])
 
 	// A tampered plan is rejected before any of the reviewed state is applied to the invocation.

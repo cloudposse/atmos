@@ -3,9 +3,11 @@ package configuration
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -313,4 +315,78 @@ func TestExcludedPlanSource(t *testing.T) {
 	} {
 		require.Equal(t, excluded, excludedPlanSource(name), name)
 	}
+}
+
+func TestSourceThatLeavesTheProjectIsNamedBeforeAnythingRuns(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "app"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "app", "main.tf"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "victim.tf"), []byte("x"), 0o644))
+	sources := []schema.ComponentConfigurationSource{{Path: "modules/app", Directory: true}, {Path: "absent", Directory: true}}
+	require.NoError(t, checkSourcesInRoot(t.Context(), root, sources))
+	if err := os.Symlink(filepath.Join(outside, "victim.tf"), filepath.Join(root, "modules", "app", "link.tf")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	err := checkSourcesInRoot(t.Context(), root, sources)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "modules/app/link.tf")
+	require.ErrorContains(t, err, "leaves the project root")
+	// The plan fingerprint reports the same file instead of an anonymous failure.
+	_, err = sourceDigests(t.Context(), root, sources)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "modules/app/link.tf")
+	// A symlink inside the project is fine, and ignored artifacts are not inspected.
+	require.NoError(t, os.Remove(filepath.Join(root, "modules", "app", "link.tf")))
+	require.NoError(t, os.Symlink(filepath.Join(root, "modules", "app", "main.tf"), filepath.Join(root, "modules", "app", "inside.tf")))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "app", ".terraform"), 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(outside, "victim.tf"), filepath.Join(root, "modules", "app", ".terraform", "provider")))
+	require.NoError(t, checkSourcesInRoot(t.Context(), root, sources))
+}
+
+// A watched file reached through a symlinked parent directory that leaves the project is rejected
+// before anything runs, although the file itself is not a symlink.
+func TestWatchedFileUnderASymlinkedParentThatLeavesTheProjectIsRejected(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "inputs.hcl"), []byte("x"), 0o644))
+	if err := os.Symlink(outside, filepath.Join(root, "shared")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	err := checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "shared/inputs.hcl"}})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "shared/inputs.hcl")
+	require.ErrorContains(t, err, "leaves the project root")
+}
+
+// A watched link whose target cannot be resolved for a reason other than absence is reported
+// during preparation, as fingerprinting would report it, while a dangling link is still allowed.
+func TestSourceLinkResolutionFailuresAreReported(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not block path resolution on Windows")
+	}
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	locked := filepath.Join(root, "locked")
+	require.NoError(t, os.MkdirAll(filepath.Join(locked, "inner"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(locked, "inner", "inputs.hcl"), nil, 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "watched"), 0o755))
+	if err := os.Symlink(filepath.Join(locked, "inner", "inputs.hcl"), filepath.Join(root, "watched", "inputs.hcl")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	require.NoError(t, os.Symlink(filepath.Join(root, "absent.hcl"), filepath.Join(root, "watched", "dangling.hcl")))
+	require.NoError(t, os.Symlink(filepath.Join(locked, "inner", "inputs.hcl"), filepath.Join(root, "direct.hcl")))
+	require.NoError(t, os.Chmod(locked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if _, err := filepath.EvalSymlinks(filepath.Join(root, "direct.hcl")); err == nil {
+		t.Skip("the process bypasses directory permissions")
+	}
+
+	for _, source := range []string{"watched", "direct.hcl"} {
+		err := checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: source}})
+		require.ErrorIs(t, err, errUtils.ErrReadFile, source)
+		require.ErrorIs(t, err, fs.ErrPermission, source)
+	}
+	require.NoError(t, os.Chmod(locked, 0o755))
+	require.NoError(t, checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "watched"}}), "a dangling link is left for the first read")
 }

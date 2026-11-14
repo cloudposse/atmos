@@ -124,8 +124,14 @@ func TestPathPackageWarnsOncePerAliasPerInvocation(t *testing.T) {
 	assert.Contains(t, plain, "lock, signature and version checks are bypassed")
 	assert.Contains(t, plain, local)
 
-	// A later invocation (a new configuration) warns again.
+	// A copied configuration within the same process does not warn again.
 	next := *atmos
+	selection := &config.Selections{Packages: map[string]config.Selection{"fixture": {Path: local, Local: true}}}
+	announceLocal(&next, selection)
+	assert.Equal(t, 1, strings.Count(ansi.Strip(output.String()), "runs from local path"))
+
+	// A later invocation is a new process, which starts with nothing announced.
+	resetAnnouncedLocal()
 	announceLocal(&next, &config.Selections{Packages: map[string]config.Selection{"fixture": {Path: local, Local: true}, "released": {Path: "elsewhere"}}})
 	plain = ansi.Strip(output.String())
 	assert.Equal(t, 2, strings.Count(plain, "runs from local path"))
@@ -179,4 +185,15 @@ func TestSelectedPackagesLimitsLocalSelectionToTheRequestedAlias(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, state.Packages, 1)
 	require.True(t, state.Packages["other"].Local)
+}
+
+func TestMissingProviderNamesTheProviderAndHowToSupplyIt(t *testing.T) {
+	err := missingProviderError([]ComponentReference{{Provider: "terragrunt", Capability: "component.discovery"}, {Provider: "terragrunt", Capability: "component.preparation"}})
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	details := strings.Join(errUtils.AllDetails(err), "\n")
+	assert.Contains(t, details, "components.terraform.terragrunt.enabled")
+	assert.Equal(t, 1, strings.Count(details, "terragrunt` configuration provider"), "a provider is named once however many capabilities were requested")
+	hints := strings.Join(errUtils.AllHints(err), "\n")
+	assert.Contains(t, hints, "plugins.packages")
+	assert.Contains(t, hints, "ATMOS_PROFILE")
 }

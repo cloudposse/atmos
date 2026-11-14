@@ -1,7 +1,6 @@
 package source
 
 import (
-	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -148,7 +147,11 @@ func publishSource(ctx context.Context, stage, target string, config map[string]
 	if err := rejectActiveStateLock(target); err != nil {
 		return err
 	}
-	changes, incoming, err := sourceChanges(stage, target, next, previous, runtimePaths(target, config))
+	protected := runtimePaths(target, config)
+	if err := rejectLegacyResources(target, next, protected, hostGeneratedFiles(target, moduleRoots(target, config))); err != nil {
+		return err
+	}
+	changes, incoming, err := sourceChanges(stage, target, next, previous, protected)
 	if err != nil {
 		return err
 	}
@@ -165,6 +168,88 @@ func publishSource(ctx context.Context, stage, target string, config map[string]
 	}
 	publication := sourcePublication{stage: stage, target: target, backup: backup, rename: rename}
 	return publication.publish(ctx, changes, incoming)
+}
+
+// Without a receipt, neither metadata nor a source stamp proves ownership of a
+// removed file. Refuse to bless stale configuration; let the caller reconcile it.
+// Every Terraform configuration file absent from the incoming source counts, except
+// runtime files and the files Atmos itself writes into the workdir on every run.
+func rejectLegacyResources(target string, next sourceFiles, protected, generated map[string]bool) error {
+	if _, err := os.Lstat(filepath.Join(target, sourceFilesManifest)); !os.IsNotExist(err) {
+		return err
+	}
+	incoming := make(map[string]bool, len(next.Files))
+	for _, name := range next.Files {
+		incoming[name] = true
+	}
+	err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(target, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if protectedRuntimePath(path, relative, protected) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !staleLegacyFile(entry, relative, incoming, generated) {
+			return nil
+		}
+		return fmt.Errorf("%w: legacy workdir %s has no source ownership receipt and contains %s absent from the incoming source; inspect this file and move it outside the workdir or remove it if obsolete, then retry", errUtils.ErrSourceCopyFailed, target, relative)
+	})
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// hostWorkdirFiles are Terraform files Atmos generates in a component workdir on every run.
+var hostWorkdirFiles = map[string]bool{"backend.tf.json": true, "providers_override.tf.json": true}
+
+// generatedFilesManifest lists, per module root, the files a configuration provider generated.
+const generatedFilesManifest = ".atmos/generated-files.json"
+
+// staleLegacyFile reports a Terraform configuration file that the incoming source no longer has
+// and that Atmos did not write into the workdir itself.
+func staleLegacyFile(entry fs.DirEntry, relative string, incoming, generated map[string]bool) bool {
+	if entry.IsDir() || !terraformConfigurationFile(entry.Name()) {
+		return false
+	}
+	return !incoming[relative] && !generated[relative] && !hostWorkdirFiles[entry.Name()]
+}
+
+func terraformConfigurationFile(name string) bool {
+	return strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".tf.json")
+}
+
+// hostGeneratedFiles returns the target-relative paths of files recorded as generated in each
+// module root. An unreadable manifest records nothing, so its files are inspected like any other.
+func hostGeneratedFiles(target string, roots []string) map[string]bool {
+	generated := map[string]bool{}
+	for _, root := range roots {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(generatedFilesManifest)))
+		if err != nil {
+			continue
+		}
+		var recorded struct {
+			Files map[string]string `json:"files"`
+		}
+		if json.Unmarshal(data, &recorded) != nil {
+			continue
+		}
+		for name := range recorded.Files {
+			relative, err := filepath.Rel(target, filepath.Join(root, filepath.FromSlash(name)))
+			if err == nil && filepath.IsLocal(relative) {
+				generated[filepath.ToSlash(relative)] = true
+			}
+		}
+	}
+	return generated
 }
 
 func readSourceInventory(target string) (sourceFiles, error) {
@@ -430,96 +515,4 @@ func underProtectedRoot(path string, protected map[string]bool) bool {
 		}
 	}
 	return false
-}
-
-// checkSourceDestination rejects a destination that traverses a symlink and, for an incoming file,
-// one whose type differs from the source path.
-func checkSourceDestination(target, name string, install bool) error {
-	if err := rejectSourceSymlinkAncestors(target, name); err != nil {
-		return err
-	}
-	if !install {
-		return nil
-	}
-	return rejectSourceTypeChange(target, name)
-}
-
-// rejectSourceTypeChange fails before publication when an incoming file would replace a nonempty
-// directory, or would need a directory where a file exists. Refresh replaces files in place and cannot
-// change a path's type transactionally, so the error names the path and how to recover. An empty
-// directory is still replaced by publication, as before.
-func rejectSourceTypeChange(target, name string) error {
-	const recovery = "; refresh cannot change a path between a file and a directory in place. Move only that path out of the component directory (keep anything it holds that you still need), then refresh again; do not delete the whole directory, which would also remove local state, `.terraform` and saved plans"
-	local := filepath.FromSlash(name)
-	if entries, err := os.ReadDir(filepath.Join(target, local)); err == nil && len(entries) > 0 {
-		return fmt.Errorf("%w: source file %s conflicts with a nonempty directory in the target%s",
-			errUtils.ErrSourceCopyFailed, name, recovery)
-	}
-	for dir := filepath.Dir(local); dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
-		if info, err := os.Lstat(filepath.Join(target, dir)); err == nil && info.Mode().IsRegular() {
-			return fmt.Errorf("%w: source path %s needs a directory where the target has the file %s%s",
-				errUtils.ErrSourceCopyFailed, name, filepath.ToSlash(dir), recovery)
-		}
-	}
-	return nil
-}
-
-func isTerraformPlan(path string) bool {
-	archive, err := zip.OpenReader(path)
-	if err != nil {
-		return false
-	}
-	defer archive.Close()
-	for _, file := range archive.File {
-		if file.Name == "tfplan" {
-			return true
-		}
-	}
-	return false
-}
-
-// sourceChange distinguishes files owned by the source from runtime artifacts.
-type sourceChangeFlags struct{ install, owned bool }
-
-func sourceChange(stage, target, name string, flags sourceChangeFlags, protected map[string]bool) (bool, error) {
-	install, owned := flags.install, flags.owned
-	if err := checkSourceDestination(target, name, install); err != nil {
-		return false, err
-	}
-	path := filepath.Join(target, filepath.FromSlash(name))
-	runtime, err := runtimeOwned(path, name, protected)
-	if err != nil {
-		return false, fmt.Errorf("%w: inspect runtime artifact %s: %w", errUtils.ErrSourceCopyFailed, name, err)
-	}
-	if runtime {
-		return false, validateRuntimeSource(stage, path, name, flags, protected)
-	}
-	if !install {
-		_, err := os.Lstat(path)
-		return !os.IsNotExist(err), nil
-	}
-	if !owned {
-		if err := validateUnownedIncoming(stage, target, name); err != nil {
-			return false, err
-		}
-	}
-	return true, nil
-}
-
-// identicalSourceFile permits unchanged source fixtures without replacing runtime-modified contents.
-func identicalSourceFile(stage, path, name string) bool {
-	old, oldErr := os.ReadFile(path)
-	fresh, freshErr := os.ReadFile(filepath.Join(stage, filepath.FromSlash(name)))
-	return oldErr == nil && freshErr == nil && string(old) == string(fresh)
-}
-
-// validateRuntimeSource allows only preserved locks and unchanged source-owned fixtures.
-func validateRuntimeSource(stage, path, name string, flags sourceChangeFlags, protected map[string]bool) error {
-	if !flags.install || strings.HasSuffix(strings.ToLower(filepath.Base(name)), ".terraform.lock.hcl") {
-		return nil
-	}
-	if flags.owned && !protectedRuntimePath(path, name, protected) && identicalSourceFile(stage, path, name) {
-		return nil
-	}
-	return fmt.Errorf("%w: downloaded source collides with runtime artifact %s", errUtils.ErrSourceCopyFailed, name)
 }

@@ -156,6 +156,7 @@ func TestMainCommandMissingRequiredVarFileFailsBeforeAnyProcess(t *testing.T) {
 func TestHooksRunWithTheInvocationEnvironmentAndDirectory(t *testing.T) {
 	dir := t.TempDir()
 	absolute := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
 	shell := &fakeShell{}
 	e := hookExecutor(shell)
 	ctx := context.WithValue(t.Context(), hookContextKey{}, "marker")
@@ -505,6 +506,192 @@ func TestPreflightRequiredVarFiles(t *testing.T) {
 	require.NoError(t, preflightRequiredVarFiles(savedPlan, dir), "saved plans never take variable files")
 	workspace := hookInfo("workspace", missing)
 	require.NoError(t, preflightRequiredVarFiles(workspace, dir), "workspace management runs no main command")
+}
+
+// exitCodeError mimics the error a Terraform subprocess returns with a given status.
+func exitCodeError(code int) error { return errUtils.ExitCodeError{Code: code} }
+
+func detailedExitCodeInfo() *schema.ConfigAndStacksInfo {
+	return hookInfo("plan", &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{execHook("after", "plan")},
+		ErrorHooks: []schema.ComponentHook{{Name: "alert", Commands: []string{"plan"}, Execute: []string{"hook-alert"}, OnErrors: []string{".*"}}},
+	})
+}
+
+// Exit status 2 of plan -detailed-exitcode means "changes present": hooks must see success,
+// and the caller must still receive status 2.
+func TestDetailedExitCodeChangesAreNotAHookFailure(t *testing.T) {
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if call.command == "terraform" {
+			return exitCodeError(2)
+		}
+		return nil
+	}}
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, detailedExitCodeInfo(), []string{"plan", "-detailed-exitcode"}, t.TempDir())
+
+	require.Error(t, err)
+	require.Equal(t, 2, errUtils.GetExitCode(err), "the status must still reach the caller")
+	require.Equal(t, []string{"terraform plan", "hook-after arg"}, shell.names(), "the after hook runs and the error hook does not")
+}
+
+func TestDetailedExitCodeIsOnlyToleratedWhereTerraformDefinesIt(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		code int
+	}{
+		{"status 2 without the flag is a failure", []string{"plan"}, 2},
+		{"status 1 with the flag is a failure", []string{"plan", "-detailed-exitcode"}, 1},
+		{"double dash flag", []string{"plan", "--detailed-exitcode"}, 2},
+		{"explicit true value", []string{"plan", "-detailed-exitcode=true"}, 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			shell := &fakeShell{run: func(call *shellCall) error {
+				if call.command == "terraform" {
+					return exitCodeError(test.code)
+				}
+				return nil
+			}}
+			err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, detailedExitCodeInfo(), test.args, t.TempDir())
+			require.Equal(t, test.code, errUtils.GetExitCode(err))
+			tolerated := test.code == 2 && len(test.args) > 1
+			if tolerated {
+				require.Equal(t, []string{"terraform plan", "hook-after arg"}, shell.names())
+				return
+			}
+			require.Equal(t, []string{"terraform plan", "hook-alert"}, shell.names(), "a real failure runs the error hook and skips the after hook")
+		})
+	}
+}
+
+func TestHookWorkingDirectoryErrorsNameTheDirectory(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "absent")
+	for name, test := range map[string]struct {
+		directory string
+		contains  []string
+	}{
+		"absolute": {missing, []string{missing}},
+		"relative": {"scripts", []string{filepath.Join(dir, "scripts"), "get_terragrunt_dir()"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			shell := &fakeShell{}
+			info := hookInfo("plan", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{
+				{Name: "bad", Commands: []string{"plan"}, Execute: []string{"hook-bad"}, WorkingDirectory: test.directory},
+			}})
+			err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan"}, dir)
+			require.ErrorIs(t, err, errUtils.ErrComponentHookWorkingDirectory)
+			require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+			for _, want := range test.contains {
+				require.Contains(t, err.Error(), want)
+			}
+			require.Empty(t, shell.calls, "the program must not be started in a missing directory")
+		})
+	}
+}
+
+func TestHookUnitLabel(t *testing.T) {
+	require.Empty(t, hookUnitLabel(&schema.ConfigAndStacksInfo{}))
+	require.Equal(t, " (network in live/dev)", hookUnitLabel(&schema.ConfigAndStacksInfo{ComponentFromArg: "network", Stack: "live/dev"}))
+}
+
+// A hook listing "state" matches every state subcommand, as in Terragrunt.
+func TestHooksMatchTheTerraformCommandNotItsSubcommand(t *testing.T) {
+	shell := &fakeShell{}
+	info := hookInfo("state list", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{execHook("state-hook", "state")}})
+	require.NoError(t, hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"state", "list"}, t.TempDir()))
+	require.Equal(t, []string{"hook-state-hook arg", "terraform state"}, shell.names())
+}
+
+// The flag can come from TF_CLI_ARGS_plan or TF_CLI_ARGS, and a command-line setting takes precedence.
+func TestDetailedExitCodeEnabledFollowsTerraformPrecedence(t *testing.T) {
+	t.Setenv("TF_CLI_ARGS_plan", "")
+	t.Setenv("TF_CLI_ARGS", "")
+	for _, test := range []struct {
+		name string
+		args []string
+		env  []string
+		want bool
+	}{
+		{"absent", []string{"plan"}, nil, false},
+		{"bare flag", []string{"plan", "-detailed-exitcode"}, nil, true},
+		{"explicit true", []string{"plan", "-detailed-exitcode=true"}, nil, true},
+		{"explicit false", []string{"plan", "-detailed-exitcode=false"}, nil, false},
+		{"command environment", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-input=false -detailed-exitcode"}, true},
+		{"global environment", []string{"plan"}, []string{"TF_CLI_ARGS=-detailed-exitcode"}, true},
+		{"global wins over command environment", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS=-detailed-exitcode=false"}, false},
+		{"command line disables environment", []string{"plan", "-detailed-exitcode=false"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode"}, false},
+		{"command line enables over environment", []string{"plan", "-detailed-exitcode"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode=false"}, true},
+		{"other command environment", []string{"plan"}, []string{"TF_CLI_ARGS_apply=-detailed-exitcode"}, false},
+		{"later component value wins", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS_plan="}, false},
+		{"single-quoted environment value", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-input=false -detailed-exitcode='true'"}, true},
+		{"double-quoted global value", []string{"plan"}, []string{`TF_CLI_ARGS=-detailed-exitcode="true"`}, true},
+		{"quoted false disables", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS=-detailed-exitcode='false'"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, detailedExitCodeEnabled("plan", test.args, test.env))
+		})
+	}
+	t.Setenv("TF_CLI_ARGS_plan", "-detailed-exitcode")
+	require.True(t, detailedExitCodeEnabled("plan", []string{"plan"}, nil), "the inherited process environment applies")
+}
+
+func TestMainCommandLegacyRetryDetailedPlan(t *testing.T) {
+	t.Setenv("TF_CLI_ARGS", "")
+	t.Setenv("TF_CLI_ARGS_plan", "")
+	for _, test := range []struct {
+		name       string
+		args       []string
+		env        []string
+		extra      schema.ComponentExtraArguments
+		processEnv []string
+		code       int
+		success    bool
+	}{
+		{name: "command flag", args: []string{"plan", "-detailed-exitcode"}, code: 2, success: true},
+		{name: "extra arguments", args: []string{"plan"}, extra: schema.ComponentExtraArguments{Arguments: []string{"-detailed-exitcode"}}, code: 2, success: true},
+		{name: "extra environment", args: []string{"plan"}, extra: schema.ComponentExtraArguments{Environment: map[string]string{"TF_CLI_ARGS_plan": "-detailed-exitcode"}}, code: 2, success: true},
+		{name: "component environment", args: []string{"plan"}, env: []string{"TF_CLI_ARGS=-detailed-exitcode"}, code: 2, success: true},
+		{name: "process environment", args: []string{"plan"}, processEnv: []string{"TF_CLI_ARGS_plan=-detailed-exitcode"}, code: 2, success: true},
+		{name: "flag disabled", args: []string{"plan", "-detailed-exitcode=false"}, env: []string{"TF_CLI_ARGS_plan=-detailed-exitcode"}, code: 2},
+		{name: "flag absent", args: []string{"plan"}, code: 2},
+		{name: "real failure", args: []string{"plan", "-detailed-exitcode"}, code: 1},
+		{name: "apply failure", args: []string{"apply"}, env: []string{"TF_CLI_ARGS=-detailed-exitcode"}, code: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			info := detailedExitCodeInfo()
+			info.SubCommand = test.args[0]
+			info.ComponentEnvList = test.env
+			test.extra.Commands = []string{info.SubCommand}
+			info.ComponentExecution.ExtraArguments = []schema.ComponentExtraArguments{test.extra}
+			info.ComponentExecution.AfterHooks[0].Commands = []string{info.SubCommand}
+			info.ComponentExecution.ErrorHooks[0].Commands = []string{info.SubCommand}
+			info.ComponentRetrySection = &schema.RetryConfig{MaxAttempts: intPtr(2), Conditions: []string{"/.*/"}}
+			attempts := 0
+			shell := &fakeShell{run: func(call *shellCall) error {
+				if call.command == "terraform" {
+					attempts++
+					_, writeErr := io.WriteString(call.options.StdoutCapture, "plan output\n")
+					require.NoError(t, writeErr)
+					return exitCodeError(test.code)
+				}
+				return nil
+			}}
+			var opts []component.ExecutionOption
+			if test.processEnv != nil {
+				opts = append(opts, component.WithEnvironment(test.processEnv))
+			}
+			err := hookExecutor(shell).runMainShellCommand(&schema.AtmosConfiguration{}, info, test.args, t.TempDir(), opts)
+			require.Equal(t, test.code, errUtils.GetExitCode(err))
+			if test.success {
+				require.Equal(t, 1, attempts)
+				require.Equal(t, []string{"terraform plan", "hook-after arg"}, shell.names())
+			} else {
+				require.Equal(t, 2, attempts)
+				require.Equal(t, "hook-alert", shell.names()[len(shell.names())-1])
+			}
+		})
+	}
 }
 
 // TestPolicyPlanUsesProviderOutputArguments verifies that a plan policy selects and binds

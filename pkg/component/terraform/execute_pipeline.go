@@ -13,7 +13,6 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
-	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
@@ -59,48 +58,27 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
+	// A restored plugin plan was validated when it was created. Its binding omits
+	// variable values, so validating the reconstructed component would test empty vars.
+	restoredConfigurationPlan := prepared != nil && isRestoredConfigurationPlan(info)
 
-	var componentPath string
-	if prepared != nil && usesConfigurationPlan(info) {
-		// A reviewed plan uses the retained workdir; provisioning could replace its modules.
-		componentPath = ConstructTerraformComponentWorkingDir(atmosConfig, info)
-	} else {
-		componentPath, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if prepared != nil && !info.DryRun {
-		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
-			return nil, err
-		}
-		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
-			return nil, err
-		}
-	}
-
-	if err = checkComponentRestrictions(info); err != nil {
+	componentPath, err := e.resolveConfiguredComponentPath(ctx, writers, atmosConfig, info, prepared)
+	if err != nil {
 		return nil, err
 	}
 
 	if shouldProcess && tenv == nil {
-		tenv, err = resolveAndInstallToolchainDeps(atmosConfig, info)
-		if err != nil {
+		if tenv, err = installToolchainForCommand(atmosConfig, info); err != nil {
 			return nil, err
 		}
-		info.Command = tenv.Resolve(info.Command)
 	}
 
 	varFile := ConstructTerraformComponentVarfileName(info)
-	testVarFile := ""
-	if hasTerraformTestVars(info) {
-		testVarFile = ConstructTerraformComponentTestVarfileName(info)
-	}
+	testVarFile := terraformTestVarfileName(info)
 	planFile := ConstructTerraformComponentPlanfileName(info)
 	workingDir := ConstructTerraformComponentWorkingDir(atmosConfig, info)
 
-	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv); err != nil {
+	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv, restoredConfigurationPlan); err != nil {
 		return nil, err
 	}
 
@@ -115,6 +93,64 @@ func (e *Executor) prepareComponentExecution(
 	}, nil
 }
 
+// terraformTestVarfileName returns the test var file name, or "" when the component has no test vars.
+func terraformTestVarfileName(info *schema.ConfigAndStacksInfo) string {
+	if !hasTerraformTestVars(info) {
+		return ""
+	}
+	return ConstructTerraformComponentTestVarfileName(info)
+}
+
+// isRestoredConfigurationPlan reports whether the invocation applies a provider-owned saved plan.
+func isRestoredConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
+	return ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+}
+
+// installToolchainForCommand installs the toolchain dependencies and resolves the command against them.
+func installToolchainForCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*dependencies.ToolchainEnvironment, error) {
+	tenv, err := resolveAndInstallToolchainDeps(atmosConfig, info)
+	if err != nil {
+		return nil, err
+	}
+	info.Command = tenv.Resolve(info.Command)
+	return tenv, nil
+}
+
+// resolveConfiguredComponentPath resolves the component directory and, for a provider-owned
+// component, writes its prepared files there.
+func (e *Executor) resolveConfiguredComponentPath(
+	ctx context.Context,
+	writers provisioner.OutputWriters,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	prepared *schema.PreparedComponentConfiguration,
+) (string, error) {
+	var componentPath string
+	if prepared != nil && usesConfigurationPlan(info) {
+		// A reviewed plan uses the retained workdir; provisioning could replace its modules.
+		componentPath = ConstructTerraformComponentWorkingDir(atmosConfig, info)
+	} else {
+		var err error
+		componentPath, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if prepared != nil && !info.DryRun {
+		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
+			return "", err
+		}
+		if err := writePreparedConfiguration(componentPath, prepared); err != nil {
+			return "", fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
+		}
+	}
+	if err := checkComponentRestrictions(info); err != nil {
+		return "", err
+	}
+	return componentPath, nil
+}
+
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
 // env var warnings, and env var assembly. Extracted from prepareComponentExecution
 // to keep cyclomatic complexity within bounds.
@@ -123,6 +159,7 @@ func (e *Executor) runPreExecutionSteps(
 	info *schema.ConfigAndStacksInfo,
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
+	restoredConfigurationPlan bool,
 ) error {
 	// `(computed)` is an inspection-only degradation marker. Never permit it to
 	// reach Terraform via a generated tfvars file or TF_VAR_ environment value.
@@ -139,21 +176,16 @@ func (e *Executor) runPreExecutionSteps(
 		return err
 	}
 
-	if err := e.validateTerraformComponent(atmosConfig, info); err != nil {
-		return err
+	if !restoredConfigurationPlan {
+		if err := e.validateTerraformComponent(atmosConfig, info); err != nil {
+			return err
+		}
 	}
 
 	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
-		if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
-			// The error is returned and rendered once by the command boundary, so it is only logged
-			// at debug level here to avoid printing the same failure twice.
-			log.Debug("Error executing 'atmos auth terraform pre-hook'",
-				logFieldComponent, info.ComponentFromArg, "error", err)
-			// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
-			// Authentication setup failures must not silently produce unauthenticated terraform commands.
+		if err := runAuthPreHook(atmosConfig, info); err != nil {
 			return err
 		}
-		disableTerraformPluginCacheForExecution(atmosConfig, info)
 	}
 
 	// Generate backend and provider-override files. When AutoGenerateFiles=true,
@@ -166,6 +198,12 @@ func (e *Executor) runPreExecutionSteps(
 
 	warnOnConflictingEnvVars()
 
+	return finishPreExecutionEnvironment(atmosConfig, info, tenv)
+}
+
+// finishPreExecutionEnvironment assembles the environment: provider-owned components check their
+// workspace and append secrets, every other component gets the full environment assembly.
+func finishPreExecutionEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) error {
 	if schema.ConfigurationOwned(info.ComponentSettingsSection) && !info.DryRun {
 		if err := checkConfigurationWorkspace(info); err != nil {
 			return err
@@ -174,6 +212,21 @@ func (e *Executor) runPreExecutionSteps(
 		return appendTerraformSecretEnv(info)
 	}
 	return assembleComponentEnvVars(atmosConfig, info, tenv)
+}
+
+// runAuthPreHook runs the auth pre-hook and disables the Terraform plugin cache for this execution.
+func runAuthPreHook(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
+		// The error is returned and rendered once by the command boundary, so it is only logged
+		// at debug level here to avoid printing the same failure twice.
+		log.Debug("Error executing 'atmos auth terraform pre-hook'",
+			logFieldComponent, info.ComponentFromArg, "error", err)
+		// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
+		// Authentication setup failures must not silently produce unauthenticated terraform commands.
+		return err
+	}
+	disableTerraformPluginCacheForExecution(atmosConfig, info)
+	return nil
 }
 
 // executeCommandPipeline runs the full terraform command pipeline after the component
@@ -191,30 +244,45 @@ func terraformPhaseLabel(info *schema.ConfigAndStacksInfo, phase string) string 
 	return strings.TrimSpace(tool + " " + phase)
 }
 
+// runGroupedInitPhase runs the init pre-step, when needed, and returns the possibly updated component path.
+func (e *Executor) runGroupedInitPhase(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	opts ...component.ExecutionOption,
+) (string, error) {
+	if !shouldRunTerraformInit(atmosConfig, info) {
+		return componentPath, nil
+	}
+	// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
+	// into its own collapsible group. A no-op unless ci.groups.mode is "auto"
+	// and this is the outermost Atmos invocation (a terraform run nested inside
+	// a workflow step stays flat inside the step's group).
+	err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
+		var phaseErr error
+		componentPath, phaseErr = e.executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
+		return phaseErr
+	})
+	if err != nil {
+		return componentPath, errUtils.AsPrerequisiteError(err)
+	}
+	return componentPath, nil
+}
+
 func (e *Executor) executeCommandPipeline(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	execCtx *componentExecContext,
 	opts ...component.ExecutionOption,
 ) error {
-	componentPath := execCtx.componentPath
 	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
 	}
 
-	if shouldRunTerraformInit(atmosConfig, info) {
-		// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
-		// into its own collapsible group. A no-op unless ci.groups.mode is "auto"
-		// and this is the outermost Atmos invocation (a terraform run nested inside
-		// a workflow step stays flat inside the step's group).
-		err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
-			var phaseErr error
-			componentPath, phaseErr = e.executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
-			return phaseErr
-		})
-		if err != nil {
-			return errUtils.AsPrerequisiteError(err)
-		}
+	componentPath, err := e.runGroupedInitPhase(atmosConfig, info, execCtx, execCtx.componentPath, opts...)
+	if err != nil {
+		return err
 	}
 
 	handleDeploySubcommand(atmosConfig, info)
@@ -299,13 +367,14 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
-	if mainErr != nil && !lifecycleOwnsRecovery(info) {
+	// A completed -detailed-exitcode plan reports changes with status 2 after writing the plan, so
+	// it is neither recovered nor returned before the reviewed plan is recorded. A component with
+	// provider-supplied hooks already recovered inside its lifecycle.
+	if mainErr != nil && !completedPlanWithChanges(mainErr) && !lifecycleOwnsRecovery(info) {
 		mainErr = e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
 			mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, append(slices.Clone(opts), captureArgs)...)
 	}
-	// An explicit -detailed-exitcode plan reports changes with status 2 after writing the
-	// plan, so the reviewed plan is recorded before that status is returned.
-	if mainErr != nil && !isExplicitDetailedPlanChanges(info, effectiveArgs, mainErr) {
+	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		return mainErr
 	}
 	// Policy plans run against a private artifact that is removed after the guard
@@ -320,9 +389,11 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	return mainErr
 }
 
-// isExplicitDetailedPlanChanges reports plan's "changes present" status from -detailed-exitcode.
-func isExplicitDetailedPlanChanges(info *schema.ConfigAndStacksInfo, args []string, err error) bool {
-	return info.SubCommand == subcommandPlan && slices.Contains(args, detailedExitCodeFlag) && resolveExitCode(err) == detailedExitCodeChangesDetected
+// completedPlanWithChanges accepts only the completed phase itself, not a joined
+// or wrapped failure that also contains a status-two result.
+func completedPlanWithChanges(err error) bool {
+	var changes *successfulPlanChanges
+	return errors.As(err, &changes) && err == changes //nolint:err113,errorlint // Identity is required: errors.Is would also accept joined failures.
 }
 
 // recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command

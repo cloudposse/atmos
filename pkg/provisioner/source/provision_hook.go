@@ -153,6 +153,7 @@ func AutoProvisionSource(
 			return err
 		}
 		// No provisioning needed - touch LastAccessed and return.
+		logProvisionMessage(ctx, writers, out, floatingRefNotice(sourceSpec, componentType, component, stack))
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
 				// Non-critical error - log and continue.
@@ -164,19 +165,18 @@ func AutoProvisionSource(
 	}
 
 	// Log reason for re-provisioning.
-	if reason != "" {
-		if !workdir.OutputSuppressed(ctx) {
-			ui.Info(reason)
-		} else if writers.Stderr != nil {
-			out.Info(reason)
-		}
-	}
+	logProvisionMessage(ctx, writers, out, reason)
 
 	if authContext != nil {
 		ctx = downloader.WithAWSAuthContext(ctx, authContext.AWS)
 	}
 
 	hadSource := isNonEmptyDir(targetDir)
+	// Take the stamp before copying so an edit made during the copy is seen on the next run.
+	stamp := ""
+	if isWorkdir {
+		stamp = localSourceStamp(sourceSpec)
+	}
 	// Vendor the source to target directory.
 	var receipt downloader.ResolvedArtifact
 	options := []VendorSourceOption{WithArtifactReceipt(&receipt)}
@@ -195,6 +195,7 @@ func AutoProvisionSource(
 		}
 	}
 	if isWorkdir {
+		recordSourceStamp(targetDir, stamp, out)
 		setProvisionedWorkdir(componentConfig, targetDir)
 		// Only first materialization has no backend cache. Refresh preserves .terraform;
 		// normal init fingerprinting decides whether its actual inputs changed.
@@ -382,6 +383,7 @@ func determineSourceTargetDirectory(
 //   - URI has changed from what's in metadata.
 //   - No metadata exists (fresh workdir).
 //   - A remote source TTL expires (workdir or a shared directory with provenance).
+//   - A local directory source was edited since the workdir recorded its stamp.
 //
 // Returns (false, "") if the cached source can be reused.
 func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource, isWorkdir bool) (bool, string) {
@@ -407,6 +409,11 @@ func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSourc
 		return changed, reason
 	}
 
+	// An edited local directory source refreshes the workdir without waiting for a TTL.
+	if changed, reason = localSourceChanged(metadata, sourceSpec); changed {
+		return changed, reason
+	}
+
 	// Check TTL-based cache expiration.
 	if sourceSpec.TTL != "" {
 		expired, ttlReason := isSourceCacheExpired(sourceSpec.TTL, metadata.UpdatedAt)
@@ -416,6 +423,19 @@ func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSourc
 	}
 
 	return false, ""
+}
+
+// logProvisionMessage prints a one-line provisioning status unless output is suppressed
+// and no dedicated writer exists.
+func logProvisionMessage(ctx context.Context, writers provisioner.OutputWriters, out *ui.Output, message string) {
+	if message == "" {
+		return
+	}
+	if !workdir.OutputSuppressed(ctx) {
+		ui.Info(message)
+	} else if writers.Stderr != nil {
+		out.Info(message)
+	}
 }
 
 // isNonEmptyDir checks if the path exists, is a directory, and contains at least one entry
@@ -462,7 +482,7 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 	if previous == "" {
 		previous = metadata.SourceURI
 	}
-	if sourceSpec.Uri != previous {
+	if sourceSpec.Uri != previous && !sameLocalSource(sourceSpec.Uri, previous) {
 		return true, fmt.Sprintf("Source URI changed (%s → %s)", downloader.RedactSource(previous), downloader.RedactSource(sourceSpec.Uri))
 	}
 
@@ -599,6 +619,9 @@ func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *sche
 		UpdatedAt:     now,
 		LastAccessed:  now,
 		ContentHash:   "", // Content hash is computed separately for local sources.
+		// An explicit pull records the stamp too, so later edits to a local source still refresh
+		// the workdir. Automatic provisioning replaces it with the stamp taken before copying.
+		SourceStamp: localSourceStamp(sourceSpec),
 	}
 	// Use the fetch receipt captured before Git metadata is stripped. Compatibility
 	// callers without one get an honest content digest, never the enclosing repo HEAD.

@@ -5,11 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/gohcl"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/spf13/afero"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -187,7 +192,8 @@ func errorHooksFromConfig(source []config.ErrorHook) ([]model.Hook, error) {
 		}
 		for _, pattern := range converted.OnErrors {
 			if _, err := regexp.Compile(pattern); err != nil {
-				return nil, fmt.Errorf("%w: error_hook %q on_errors is not a valid regular expression", ErrUnsupportedExecution, converted.Name)
+				return nil, setting(model.CodeUnsupportedHook, fmt.Sprintf("error_hook %q", converted.Name), "", fmt.Sprintf("Invalid `on_errors` pattern in error_hook %q", converted.Name),
+					"An `on_errors` entry is not a valid regular expression.", "Fix the pattern; Atmos matches `on_errors` entries as Go regular expressions.")
 			}
 		}
 		result = append(result, converted)
@@ -198,14 +204,161 @@ func errorHooksFromConfig(source []config.ErrorHook) ([]model.Hook, error) {
 func validateHook(kind string, hook *model.Hook) error {
 	for _, command := range hook.Commands {
 		if reason, unsupported := unsupportedLifecycles[command]; unsupported {
-			return fmt.Errorf("%w: %s %q lists the %q lifecycle command, which %s; it is not implemented", ErrUnsupportedExecution, kind, hook.Name, command, reason)
+			return setting(model.CodeUnsupportedHook, fmt.Sprintf("%s %q", kind, hook.Name), "", fmt.Sprintf("Unsupported hook command `%s` in %s %q", command, kind, hook.Name),
+				fmt.Sprintf("The `%s` lifecycle command %s, which Atmos does not implement, so the hook would never run.", command, reason),
+				"Remove the lifecycle command from `commands`. Hooks can name Terraform commands such as `plan`, `apply`, and `init`.")
 		}
 	}
 	if len(hook.Execute) == 0 || hook.Execute[0] == "" {
-		return fmt.Errorf("%w: %s %q must set a non-empty execute list", ErrUnsupportedExecution, kind, hook.Name)
+		return setting(model.CodeUnsupportedHook, fmt.Sprintf("%s %q", kind, hook.Name), "", fmt.Sprintf("%s %q has no command to run", kind, hook.Name),
+			"The hook sets no `execute` list or its first entry is empty.", "Set `execute = [\"program\", \"argument\"]` on the hook.")
 	}
 	if _, builtin := builtinHookExecutables[hook.Execute[0]]; builtin {
-		return fmt.Errorf("%w: %s %q runs the built-in %q integration, which is not implemented", ErrUnsupportedExecution, kind, hook.Name, hook.Execute[0])
+		return setting(model.CodeUnsupportedHook, fmt.Sprintf("%s %q", kind, hook.Name), "", fmt.Sprintf("Unsupported built-in `%s` hook in %s %q", hook.Execute[0], kind, hook.Name),
+			fmt.Sprintf("Terragrunt intercepts a hook that executes `%s` and runs its own integration, which Atmos does not implement.", hook.Execute[0]),
+			"Run the tool through a wrapper script, for example `execute = [\"./run-tflint.sh\"]`, or run it as a separate workflow step before the Terraform command.")
+	}
+	return nil
+}
+
+// checkExecutionSyntax validates declaration shapes and literal hook restrictions without
+// a Terragrunt evaluation context. Dynamic values (including dependency outputs and
+// run_cmd) are validated by executionFromConfig during preparation.
+func checkExecutionSyntax(filesystem afero.Fs, cfg *config.TerragruntConfig, path string) error {
+	// Included files come first and the unit last, so a later same-named declaration replaces an
+	// earlier one, as Terragrunt merges hooks and extra_arguments by name.
+	var paths []string
+	for _, name := range slices.Sorted(maps.Keys(cfg.ProcessedIncludes)) {
+		include := cfg.ProcessedIncludes[name]
+		strategy, err := include.GetMergeStrategy()
+		if err != nil {
+			return err
+		}
+		if strategy == config.NoMerge {
+			continue
+		}
+		included := include.Path
+		if !filepath.IsAbs(included) {
+			included = filepath.Join(filepath.Dir(path), included)
+		}
+		paths = append(paths, included)
+	}
+	paths = append(paths, path)
+	effective, err := effectiveExecutionBlocks(filesystem, paths)
+	if err != nil {
+		return err
+	}
+	// A declaration that a later file replaces never runs, so only the effective ones are checked.
+	for _, declaration := range effective {
+		if err := checkExecutionBlock(declaration.block); err != nil {
+			return hookProblem(err, declaration.path)
+		}
+	}
+	return nil
+}
+
+// executionDeclaration is one execution block and the file that declares it.
+type executionDeclaration struct {
+	block *hcl.Block
+	path  string
+}
+
+// effectiveExecutionBlocks parses every file and keeps, for each block type and name, the last
+// declaration in file order. Unparseable files are still reported.
+func effectiveExecutionBlocks(filesystem afero.Fs, paths []string) ([]executionDeclaration, error) {
+	var order []string
+	effective := map[string]executionDeclaration{}
+	for _, path := range paths {
+		data, err := afero.ReadFile(filesystem, path)
+		if err != nil {
+			return nil, err
+		}
+		parser := hclparse.NewParser()
+		var file *hcl.File
+		var diagnostics hcl.Diagnostics
+		if strings.HasSuffix(path, ".json") {
+			file, diagnostics = parser.ParseJSON(data, path)
+		} else {
+			file, diagnostics = parser.ParseHCL(data, path)
+		}
+		if diagnostics.HasErrors() {
+			return nil, diagnostics
+		}
+		content, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}}})
+		if diagnostics.HasErrors() {
+			return nil, diagnostics
+		}
+		for _, terraform := range content.Blocks {
+			schema, _ := gohcl.ImpliedBodySchema(&config.TerraformConfig{})
+			declarations, diagnostics := terraform.Body.Content(schema)
+			if diagnostics.HasErrors() {
+				return nil, diagnostics
+			}
+			for _, block := range declarations.Blocks {
+				key := block.Type + "\x00" + strings.Join(block.Labels, "\x00")
+				if _, seen := effective[key]; !seen {
+					order = append(order, key)
+				}
+				effective[key] = executionDeclaration{block: block, path: path}
+			}
+		}
+	}
+	result := make([]executionDeclaration, 0, len(order))
+	for _, key := range order {
+		result = append(result, effective[key])
+	}
+	return result, nil
+}
+
+func checkExecutionBlock(block *hcl.Block) error {
+	var target any
+	switch block.Type {
+	case "extra_arguments":
+		target = &config.TerraformExtraArguments{}
+	case "before_hook", "after_hook":
+		target = &config.Hook{}
+	case "error_hook":
+		target = &config.ErrorHook{}
+	default:
+		return nil
+	}
+	schema, _ := gohcl.ImpliedBodySchema(target)
+	content, diagnostics := block.Body.Content(schema)
+	if diagnostics.HasErrors() {
+		return diagnostics
+	}
+	if block.Type == "extra_arguments" {
+		return nil
+	}
+	// A dynamic condition may disable the hook. Decide only during preparation.
+	if condition, ok := content.Attributes["if"]; ok {
+		var enabled bool
+		if diagnostics := gohcl.DecodeExpression(condition.Expr, nil, &enabled); diagnostics.HasErrors() || !enabled {
+			return nil
+		}
+	}
+	hook := model.Hook{Name: block.Labels[0], Execute: []string{"deferred"}}
+	if attribute, ok := content.Attributes["commands"]; ok {
+		var commands []string
+		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &commands); !diagnostics.HasErrors() {
+			hook.Commands = commands
+		}
+	}
+	if attribute, ok := content.Attributes["execute"]; ok {
+		var execute []string
+		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &execute); !diagnostics.HasErrors() {
+			hook.Execute = execute
+		}
+	}
+	if err := validateHook(block.Type, &hook); err != nil {
+		return err
+	}
+	if attribute, ok := content.Attributes["on_errors"]; ok {
+		var patterns []string
+		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &patterns); !diagnostics.HasErrors() {
+			_, err := errorHooksFromConfig([]config.ErrorHook{{Name: hook.Name, Commands: hook.Commands, Execute: hook.Execute, OnErrors: patterns}})
+			return err
+		}
 	}
 	return nil
 }

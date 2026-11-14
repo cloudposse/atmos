@@ -36,10 +36,23 @@ type ComponentConfigurationRuntime interface {
 	Prepare(context.Context, *ConfigAndStacksInfo) (*PreparedComponentConfiguration, error)
 }
 
+// ComponentConfigurationFailureRuntime reports components that a provider discovered but could not
+// evaluate. Bulk commands use it to reject every selected broken component before they run any
+// infrastructure command. A nil error means the component is healthy or unknown to the provider.
+type ComponentConfigurationFailureRuntime interface {
+	ComponentFailure(ctx context.Context, stack, component string) error
+}
+
 // ComponentConfigurationRevisionRuntime supplies isolated discovery for Git comparisons.
 // Providers without this capability must fail affected selection rather than reuse HEAD.
 type ComponentConfigurationRevisionRuntime interface {
 	ForRevision(root string) (ComponentConfigurationRuntime, error)
+}
+
+// ComponentConfigurationValidationRuntime supplies a manifest-reading view that can
+// resolve additional imports without changing discovery or preparation inventory.
+type ComponentConfigurationValidationRuntime interface {
+	ForValidation() ComponentConfigurationRuntime
 }
 
 // PreparedComponentConfiguration contains evaluated inputs and literal artifacts.
@@ -68,6 +81,8 @@ type ComponentConfigurationFile struct {
 	// Mode carries optional POSIX permission bits. Zero selects the host default.
 	// The writer clamps it, so a provider cannot request setuid or writable-by-others files.
 	Mode uint32
+	// UnitFileCopy identifies a literal adjacent unit-file copy, not explicit generation.
+	UnitFileCopy bool
 }
 
 // ConfigurationOwned reports whether a configuration provider owns a component's settings.

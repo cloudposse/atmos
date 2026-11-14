@@ -194,10 +194,119 @@ func TestValidateHookRequiresRunnableExecuteList(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			err := validateHook("before_hook", &model.Hook{Name: "h", Commands: []string{"plan"}, Execute: execute})
 			require.ErrorIs(t, err, ErrUnsupportedExecution)
-			require.ErrorContains(t, err, "non-empty execute list")
+			require.ErrorContains(t, err, "no command to run")
 		})
 	}
 	require.NoError(t, validateHook("before_hook", &model.Hook{Name: "h", Commands: []string{"plan"}, Execute: []string{"tool"}}))
+}
+
+// effectChildEnv makes the test binary act as a cross-platform effect command (see TestMain).
+const effectChildEnv = "ATMOS_TERRAGRUNT_EFFECT_CHILD"
+
+// effectCommand returns a run_cmd call that appends text to ./effects and prints it, using the
+// test binary itself instead of a platform shell.
+func effectCommand(t *testing.T, text string) string {
+	t.Helper()
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	quoted, err := json.Marshal(executable)
+	require.NoError(t, err)
+	return "run_cmd(" + string(quoted) + ", \"" + text + "\")"
+}
+
+// effectUnit is executionUnit with the effect child enabled for run_cmd.
+func effectUnit(t *testing.T, body string) model.Request {
+	t.Helper()
+	request := executionUnit(t, body)
+	request.Environment[effectChildEnv] = "1"
+	return request
+}
+
+func TestDiscoveryDefersExecutionValues(t *testing.T) {
+	request := effectUnit(t, `
+ before_hook "dynamic" {
+   commands = ["plan"]
+   execute = ["echo", dependency.base.outputs.value, `+effectCommand(t, "hook")+`]
+ }
+ extra_arguments "dynamic" {
+   commands = ["plan"]
+   arguments = [dependency.base.outputs.value, `+effectCommand(t, "args")+`]
+ }
+ `)
+	body, err := os.ReadFile(request.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(request.BasePath, "base"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "base", "terragrunt.hcl"), []byte("inputs = {}"), 0o644))
+	body = append(body, []byte(`
+ dependency "base" {
+   config_path = "./base"
+   skip_outputs = true
+   mock_outputs = { value = "from-dependency" }
+ }
+ `)...)
+	require.NoError(t, os.WriteFile(request.Path, body, 0o644))
+	request.Phase = "discover"
+	discovered, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Nil(t, discovered.Execution)
+	require.NoFileExists(t, filepath.Join(request.BasePath, "effects"))
+	request.Phase = ""
+	prepared, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"echo", "from-dependency", "hook"}, prepared.Execution.BeforeHooks[0].Execute)
+	require.Equal(t, []string{"from-dependency", "args"}, prepared.Execution.ExtraArguments[0].Arguments)
+	effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+	require.NoError(t, err)
+	require.Contains(t, string(effects), "hook")
+	require.Contains(t, string(effects), "args")
+}
+
+func TestDiscoveryValidatesExecutionSyntaxWithoutEffects(t *testing.T) {
+	for _, test := range []struct {
+		name, body, want string
+	}{
+		{"lifecycle", `before_hook "hook" {
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, "Unsupported hook command"},
+		{"builtin", `before_hook "hook" {
+ commands = [run_cmd("must-not-execute")]
+ execute = ["tflint"]
+}`, "Unsupported built-in"},
+		{"missing execute", `before_hook "hook" {
+ commands = ["plan"]
+}`, "execute"},
+		{"unknown argument setting", `extra_arguments "args" {
+ commands = ["plan"]
+ unexpected = run_cmd("must-not-execute")
+}`, "unexpected"},
+		{"invalid regex", `error_hook "hook" {
+ commands = ["plan"]
+ execute = [run_cmd("must-not-execute")]
+ on_errors = ["["]
+}`, "Invalid `on_errors`"},
+		{"disabled", `before_hook "hook" {
+ if = false
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, ""},
+		{"dynamic condition", `before_hook "hook" {
+ if = run_cmd("must-not-execute") == "enabled"
+ commands = ["read-config"]
+ execute = [run_cmd("must-not-execute")]
+}`, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, test.body)
+			request.Phase = "discover"
+			_, err := Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, test.want)
+			}
+		})
+	}
 }
 
 // A saved plan is applied from its plan-time preparation, but Terragrunt evaluates the
@@ -296,6 +405,39 @@ func TestPlanPreparationOmitsApplyWhenCommandIsNotObserved(t *testing.T) {
 	}
 }
 
+func TestDiscoveryDefersInheritedExecutionValues(t *testing.T) {
+	request := effectUnit(t, `before_hook "parent" {
+ commands = ["plan"]
+ execute = ["echo", `+effectCommand(t, "inherited")+`]
+}`)
+	parent := filepath.Join(request.BasePath, "parent.hcl")
+	require.NoError(t, os.Rename(request.Path, parent))
+	require.NoError(t, os.WriteFile(request.Path, []byte("include \"parent\" { path = \"./parent.hcl\" }"), 0o644))
+	request.Phase = "discover"
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(request.BasePath, "effects"))
+	request.Phase = ""
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"echo", "inherited"}, result.Execution.BeforeHooks[0].Execute)
+	require.FileExists(t, filepath.Join(request.BasePath, "effects"))
+}
+
+func TestPreparationValidatesDynamicHookSettings(t *testing.T) {
+	request := executionUnit(t, `before_hook "dynamic" {
+ commands = [get_env("HOOK_COMMAND")]
+ execute = ["echo"]
+}`)
+	request.Environment["HOOK_COMMAND"] = "read-config"
+	request.Phase = "discover"
+	_, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	request.Phase = ""
+	_, err = Resolve(t.Context(), request)
+	require.ErrorContains(t, err, "Unsupported hook command")
+}
+
 func TestObservesCommandAssumesUnreadableFilesDo(t *testing.T) {
 	require.True(t, observesCommand(afero.NewMemMapFs(), []string{"missing.hcl"}))
 }
@@ -306,6 +448,42 @@ func hookNames(hooks []model.Hook) []string {
 		names = append(names, hooks[i].Name)
 	}
 	return names
+}
+
+// A parent hook that a unit replaces by name never runs, so its unsupported built-in executable
+// does not block the unit. The same parent hook is still rejected when nothing replaces it.
+func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
+	for _, test := range []struct {
+		name, child, want string
+	}{
+		{"overridden by name", `before_hook "lint" {
+ commands = ["plan"]
+ execute = ["./wrapper.sh"]
+}`, ""},
+		{"inherited unchanged", "", "Unsupported built-in"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, test.child)
+			parent := filepath.Join(request.BasePath, "parent.hcl")
+			require.NoError(t, os.WriteFile(parent, []byte(`terraform {
+ before_hook "lint" {
+  commands = ["plan"]
+  execute = ["tflint"]
+ }
+}
+`), 0o644))
+			body, err := os.ReadFile(request.Path)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(request.Path, append([]byte("include \"parent\" { path = \"./parent.hcl\" }\n"), body...), 0o644))
+			request.Phase = "discover"
+			_, err = Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, test.want)
+		})
+	}
 }
 
 func TestPlanRejectsArgumentDependentSavedHooks(t *testing.T) {

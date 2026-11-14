@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+	"github.com/cloudposse/atmos/sdk/component"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
@@ -199,12 +201,45 @@ func TestPrepareOmitsExecutionWithoutHooks(t *testing.T) {
 // An unsupported hook must reach the user with its specific reason, unlike generic evaluator
 // failures whose payloads can hold secrets.
 func TestUnsupportedExecutionIsReportedSpecifically(t *testing.T) {
-	cause := fmt.Errorf("%w: before_hook %q lists the %q lifecycle command", engine.ErrUnsupportedExecution, "setup", "init-from-module")
+	cause := &model.Problem{Code: model.CodeUnsupportedHook, Summary: "Unsupported hook command `init-from-module` in before_hook \"setup\"", Key: "before_hook \"setup\"", Safe: true, Detail: "never runs", Hints: []string{"Remove it."}, File: "live/unit/terragrunt.hcl", Err: engine.ErrUnsupportedExecution}
 	p := New(func(context.Context, model.Request) (*model.Resolution, error) { return nil, cause })
-	_, err := p.Prepare(t.Context(), componentRequest(t))
+	request := componentRequest(t)
+	request.Address = &pluginv1.ComponentAddress{Stack: "live", Component: "app", ComponentType: "terraform"}
+	_, err := p.Prepare(t.Context(), request)
 	require.Equal(t, codes.Unimplemented, status.Code(err))
 	require.Contains(t, err.Error(), "init-from-module")
 	require.Contains(t, err.Error(), "setup")
+	detail, ok := component.FailureDetail(err)
+	require.True(t, ok)
+	require.Equal(t, "prepare", detail.Operation)
+	require.Equal(t, "live/unit/terragrunt.hcl", detail.Location.File)
+	require.True(t, detail.UserSafe)
+	require.Equal(t, []string{"Remove it."}, detail.Hints)
+	require.NotEmpty(t, detail.Unit)
+}
+
+func TestPreparationTransmitsUnitFileCopyProvenance(t *testing.T) {
+	for _, copied := range []bool{false, true} {
+		t.Run(map[bool]string{false: "explicit generation", true: "adjacent copy"}[copied], func(t *testing.T) {
+			request := componentRequest(t)
+			p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+				return &model.Resolution{
+					Generated:         map[string]string{".terraform.lock.hcl": "# pinned\n"},
+					GeneratedPolicies: map[string]string{".terraform.lock.hcl": "overwrite"},
+					UnitFileCopies:    map[string]bool{".terraform.lock.hcl": copied},
+				}, nil
+			})
+			result, err := p.Prepare(t.Context(), request)
+			require.NoError(t, err)
+			require.Len(t, result.Files, 1)
+			wire, err := proto.Marshal(result)
+			require.NoError(t, err)
+			decoded := &pluginv1.PrepareComponentResponse{}
+			require.NoError(t, proto.Unmarshal(wire, decoded))
+			require.Equal(t, copied, decoded.Files[0].UnitFileCopy)
+			require.Equal(t, "overwrite", result.Files[0].IfExists)
+		})
+	}
 }
 
 func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
@@ -244,36 +279,94 @@ func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
 	}
 }
 
+// A unit that fails discovery is reported as a diagnostic for that unit; neither evaluated
+// values nor the absolute project path reach the response.
 func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
-	for _, test := range []struct{ name, content, reason string }{
-		{"inline", "locals { password = \"secret-evaluated-value\" }", "MISSING_TERRAFORM_SOURCE"},
-		{"parse", "locals { password = \"secret-evaluated-value\"", "EVALUATION_FAILED"},
+	for _, test := range []struct{ name, content string }{
+		{"inline", "locals { password = \"secret-evaluated-value\" }"},
+		{"parse", "locals { password = \"secret-evaluated-value\""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := componentRequest(t)
 			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "terragrunt.hcl"), []byte(test.content), 0o600))
 			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "main.tf"), []byte("terraform {}"), 0o600))
-			_, err := New(nil).Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
+			response, err := New(nil).Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
 				RootDirectory: request.RootDirectory, Provider: request.Provider,
 				ProviderConfiguration: request.ProviderConfiguration, Operation: request.Operation, IncludePaths: []string{"**"},
 			})
-			require.Equal(t, codes.InvalidArgument, status.Code(err))
-			details := status.Convert(err).Details()
-			require.Len(t, details, 1)
-			info := details[0].(*errdetails.ErrorInfo)
-			require.Equal(t, "atmos.terragrunt.discovery.v1", info.Domain)
-			require.Equal(t, test.reason, info.Reason)
-			require.Equal(t, map[string]string{"file": "terragrunt.hcl"}, info.Metadata)
-			require.NotContains(t, status.Convert(err).Proto().String(), "secret-evaluated-value")
-			require.NotContains(t, status.Convert(err).Proto().String(), request.RootDirectory)
+			require.NoError(t, err)
+			require.Empty(t, response.GetComponents())
+			require.NotEmpty(t, response.GetDiagnostics(), "the failed unit is reported")
+			serialized := prototext.Format(response)
+			require.NotContains(t, serialized, "secret-evaluated-value")
+			require.NotContains(t, serialized, request.RootDirectory)
+		})
+	}
+}
+
+// Scheduling edges must be available from discovery, before preparation can read outputs.
+func TestDiscoveryOutputDependencyOrdering(t *testing.T) {
+	for _, test := range []struct {
+		name, blocks string
+		kinds        []pluginv1.ComponentDependency_Kind
+	}{
+		{"output only", `dependency "network" { config_path = "../network" }`, []pluginv1.ComponentDependency_Kind{pluginv1.ComponentDependency_OUTPUT}},
+		{"output and ordering", `dependency "network" { config_path = "../network" }
+dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDependency_Kind{pluginv1.ComponentDependency_OUTPUT}},
+		{"ordering only", `dependencies { paths = ["../network"] }`, []pluginv1.ComponentDependency_Kind{pluginv1.ComponentDependency_ORDER}},
+		{"skip outputs", `dependency "network" {
+ config_path = "../network"
+ skip_outputs = true
+}`, []pluginv1.ComponentDependency_Kind{pluginv1.ComponentDependency_ORDER}},
+		{"disabled", `dependency "network" {
+ config_path = "../network"
+ enabled = false
+}`, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			for _, dir := range []string{"module", "live/app", "live/network"} {
+				require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
+			}
+			config := "terraform { source = \"../../module\" }\n"
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live/network/terragrunt.hcl"), []byte(config), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live/app/terragrunt.hcl"), []byte(config+test.blocks+"\ninputs = { deferred = run_cmd(\"must-not-execute\") }\n"), 0o600))
+			opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true}})
+			require.NoError(t, err)
+			var phases []string
+			p := New(func(ctx context.Context, req model.Request) (*model.Resolution, error) {
+				phases = append(phases, req.Phase)
+				return engine.Resolve(ctx, req)
+			})
+			response, err := p.Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
+				RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts,
+				IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"},
+				Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}},
+			})
+			require.NoError(t, err)
+			require.Empty(t, response.Diagnostics)
+			require.Equal(t, []string{"inventory"}, phases)
+			require.Len(t, response.Components, 2)
+			app := response.Components[0]
+			network := response.Components[1]
+			require.Equal(t, "app", app.Address.Component)
+			require.Equal(t, "network", network.Address.Component)
+			require.Len(t, app.Dependencies, len(test.kinds))
+			for i, kind := range test.kinds {
+				require.Equal(t, kind, app.Dependencies[i].Kind)
+				require.Equal(t, network.Address, app.Dependencies[i].Target)
+			}
+			require.Empty(t, network.Dependencies)
+			require.NoDirExists(t, filepath.Join(root, "live/app/.terragrunt-cache"))
 		})
 	}
 }
 
 func TestRPCErrorPreservesDestroyProtection(t *testing.T) {
 	err := rpcError(fmt.Errorf("private evaluator context: %w", engine.ErrPreventDestroy))
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
-	require.Equal(t, engine.ErrPreventDestroy.Error(), status.Convert(err).Message())
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.NotContains(t, status.Convert(err).Message(), "private evaluator context")
 }
 
 func TestPreparationExportsOverlayModes(t *testing.T) {

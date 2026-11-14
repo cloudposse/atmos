@@ -40,9 +40,41 @@ type Resolution struct {
 	Backend            map[string]any    `json:"backend"`
 	Generated          map[string]string `json:"generated"`
 	GeneratedPolicies  map[string]string `json:"generated_policies,omitempty"`
+	// UnitFileCopies identifies literal files copied from beside the unit.
+	UnitFileCopies map[string]bool `json:"unit_file_copies,omitempty"`
+	// SensitiveGenerated names generated files whose contents can hold
+	// credentials. The host masks their bytes and keeps them out of saved-plan records.
+	SensitiveGenerated map[string]bool   `json:"sensitive_generated,omitempty"`
 	Units              map[string]string `json:"units,omitempty"`
 	Stacks             map[string]string `json:"stacks,omitempty"`
+	// Failures are units that could not be evaluated. A failing unit never hides healthy ones.
+	Failures []UnitFailure `json:"failures,omitempty"`
+	// Warnings are non-fatal facts about the scan that the user should see.
+	Warnings []Warning `json:"warnings,omitempty"`
 }
+
+// UnitFailure is a unit that discovery could not evaluate. Stack and Name are the Atmos
+// coordinates the unit would have had; Err is a Problem or a plain error.
+type UnitFailure struct {
+	Stack string
+	Name  string
+	Err   error
+}
+
+// Warning is a non-fatal discovery finding. Code is stable and machine readable; Path is
+// relative to the project root and uses forward slashes.
+type Warning struct {
+	Code    string `json:"code"`
+	Path    string `json:"path,omitempty"`
+	Message string `json:"message"`
+}
+
+// Warning codes reported by discovery.
+const (
+	WarningSymlinkedDirectory = "symlinked_directory_not_followed"
+	WarningPatternUnmatched   = "discovery_pattern_unmatched"
+	WarningUnitWithoutSource  = "unit_without_terraform_source"
+)
 
 // DiscoveredUnit carries source identity independently from its Atmos name.
 type DiscoveredUnit struct {
@@ -86,3 +118,47 @@ type Hook struct {
 	SuppressStdout   bool     `json:"suppress_stdout,omitempty"`
 	OnErrors         []string `json:"on_errors,omitempty"`
 }
+
+// Problem codes are stable identifiers shared with the host and with tests.
+const (
+	CodeUnsupportedSetting = "unsupported_setting"
+	CodeSyntaxError        = "syntax_error"
+	CodeEvaluationError    = "evaluation_failed"
+	CodeEffectDenied       = "effect_denied"
+	CodeDependency         = "dependency_error"
+	CodeInvalidSource      = "invalid_source"
+	CodeInvalidGenerate    = "invalid_generate_path"
+	CodeMissingSource      = "missing_terraform_source"
+	CodeUnsupportedHook    = "unsupported_hook"
+	CodeWorkspace          = "workspace_unsupported"
+	CodeInternal           = "plugin_error"
+)
+
+// Problem is a rejection the user can act on. Summary, Hints, File, Line, Column, and Key never
+// contain evaluated values and are always shown. Detail is shown only when Safe is true.
+type Problem struct {
+	Code    string
+	Summary string
+	Detail  string
+	Hints   []string
+	// File is an absolute path; the provider makes it project relative.
+	File         string
+	Line, Column int
+	// Key names the setting, block, or lifecycle that caused the problem.
+	Key  string
+	Safe bool
+	// Err is the underlying cause. It is never shown to the user.
+	Err error
+}
+
+// Error returns the headline and detail for local diagnostics and tests. The provider never sends it
+// to the host: it sends only the structured fields, honoring Safe.
+func (p *Problem) Error() string {
+	if p.Detail == "" {
+		return p.Summary
+	}
+	return p.Summary + ": " + p.Detail
+}
+
+// Unwrap exposes the cause for classification.
+func (p *Problem) Unwrap() error { return p.Err }

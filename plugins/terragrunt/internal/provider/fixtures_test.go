@@ -113,6 +113,7 @@ func TestExplicitStackStateAndPreparation(t *testing.T) {
 	require.Len(t, prepared.Files, 3)
 	require.Equal(t, "backend.tf", prepared.Files[0].Path)
 	require.Contains(t, string(prepared.Files[0].Content), `backend "local"`)
+	require.True(t, prepared.Files[0].Sensitive, "the host keeps generated backend bytes out of saved-plan records")
 	require.Equal(t, "terragrunt.hcl", prepared.Files[1].Path)
 	require.Equal(t, "terragrunt.values.hcl", prepared.Files[2].Path)
 	require.NotNil(t, prepared.Inputs)
@@ -171,4 +172,32 @@ func TestRemoteModuleSourceIsNotAFileWatch(t *testing.T) {
 	require.Equal(t, remote, configuration["source"])
 	require.Len(t, instance.Sources, 1)
 	require.Equal(t, "live/app/terragrunt.hcl", instance.Sources[0].Path)
+}
+
+func TestDerivedAddressNamesAnUnscopedUnit(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	for path, want := range map[string]*pluginv1.ComponentAddress{
+		filepath.Join(root, "live", "dev", "vpc", "terragrunt.hcl"): {Stack: "live/dev", Component: "vpc", ComponentType: "terraform"},
+		filepath.Join(root, "vpc", "terragrunt.hcl"):                {Stack: "default", Component: "vpc", ComponentType: "terraform"},
+		filepath.Join(root, "terragrunt.hcl"):                       {Stack: "default", Component: "root", ComponentType: "terraform"},
+	} {
+		got, err := derivedAddress(root, path)
+		require.NoError(t, err)
+		require.Equal(t, want.Stack, got.Stack)
+		require.Equal(t, want.Component, got.Component)
+		require.Equal(t, want.ComponentType, got.ComponentType)
+	}
+	_, err = derivedAddress(root, filepath.Join(filepath.Dir(root), "elsewhere", "terragrunt.hcl"))
+	require.ErrorIs(t, err, ErrUnsupported)
+}
+
+func TestWarningDiagnosticsNeverFailTheCommand(t *testing.T) {
+	diagnostics := warningDiagnostics([]model.Warning{{Code: model.WarningSymlinkedDirectory, Path: "live/linked", Message: "symlinked directory live/linked was not followed"}})
+	require.Len(t, diagnostics, 1)
+	require.Equal(t, pluginv1.Severity_SEVERITY_WARNING, diagnostics[0].Detail.Severity)
+	require.Equal(t, model.WarningSymlinkedDirectory, diagnostics[0].Detail.Code)
+	require.True(t, diagnostics[0].Detail.UserSafe)
+	require.Equal(t, "live/linked", diagnostics[0].Detail.Location.File)
+	require.Empty(t, warningDiagnostics(nil))
 }

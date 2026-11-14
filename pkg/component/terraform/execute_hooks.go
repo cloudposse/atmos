@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -20,7 +20,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -89,12 +88,13 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 			*captured = slices.Clone(phaseArgs)
 		}
 		run := func() error {
-			return ExecuteShellCommandWithRetry(
+			var changesPresent error
+			err := ExecuteShellCommandWithRetry(
 				atmosConfig,
 				phaseInfo,
 				info.SubCommand,
 				func(o ...component.ExecutionOption) error {
-					return e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
+					err := e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
 						componentPath:  componentPath,
 						args:           phaseArgs,
 						gatePhase:      info.SubCommand,
@@ -102,12 +102,24 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 						redirectStdErr: info.RedirectStdErr,
 						shellOpts:      o,
 					})
+					// Classify with the effective arguments and environment before legacy
+					// output matching can retry a plan that already succeeded.
+					if isDetailedExitCodeChanges(phase.command, phaseArgs, phaseInfo.ComponentEnvList, err, o...) {
+						changesPresent = err
+						return nil
+					}
+					return err
 				},
 				phaseOpts...,
 			)
+			if err != nil {
+				return err
+			}
+			return changesPresent
 		}
 		err := run()
-		if err == nil || !lifecycleOwnsRecovery(info) {
+		// A plan that reports changes completed; only a real failure is given to init recovery.
+		if err == nil || !lifecycleOwnsRecovery(info) || isDetailedExitCodeChanges(phase.command, phaseArgs, phaseInfo.ComponentEnvList, err, phaseOpts...) {
 			return err
 		}
 		if recovery, ok := ctx.Value(mainCommandRecoveryKey{}).(*mainCommandRecovery); ok {
@@ -144,7 +156,7 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		if err := validatePlanOutputFlags(phase.command, phase.args); err != nil {
 			return err
 		}
-		return action(info, phase.args, opts)
+		return successfulPlanResult(phase.command, phase.args, info.ComponentEnvList, action(info, phase.args, opts), opts...)
 	}
 
 	applied, err := execution.ApplyExtraArguments(config.ExtraArguments, &execution.ArgumentsRequest{
@@ -175,19 +187,35 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		defer capture.cleanup()
 	}
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts), capture: capture}
-	// A detailed plan exit code of 2 reports changes, not a failure: ordinary after hooks run and
-	// error hooks do not. The status itself is returned unchanged once the hooks have run.
-	var detailedResult error
+	// With -detailed-exitcode, exit status 2 reports a plan with changes. Hooks must not see that
+	// as a failure, but the status still has to reach the caller once the hooks are done.
+	var changesPresent error
 	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (execution.Output, error) {
-		output, err := runPhaseAction(&phaseInfo, applied.Args, opts, capture, action)
-		if isDetailedPlanChanges(phase, applied.Args, err) {
-			detailedResult = err
+		output, actionErr := runPhaseAction(&phaseInfo, applied.Args, opts, capture, action)
+		if isDetailedExitCodeChanges(phase.command, applied.Args, phaseInfo.ComponentEnvList, actionErr, opts...) {
+			changesPresent = actionErr
 			return output, nil
 		}
-		return output, err
+		return output, actionErr
 	})
-	if err == nil {
-		return detailedResult
+	if err != nil {
+		return err
+	}
+	return successfulPlanResult(phase.command, applied.Args, phaseInfo.ComponentEnvList, changesPresent, opts...)
+}
+
+// successfulPlanChanges distinguishes a completed plan (including its hooks) from a
+// failed command or hook that happens to return the same exit status.
+type successfulPlanChanges struct{ error }
+
+func (e *successfulPlanChanges) Unwrap() error {
+	defer perf.Track(nil, "terraform.successfulPlanChanges.Unwrap")()
+	return e.error
+}
+
+func successfulPlanResult(command string, args, env []string, err error, opts ...component.ExecutionOption) error {
+	if isDetailedExitCodeChanges(command, args, env, err, opts...) {
+		return &successfulPlanChanges{error: err}
 	}
 	return err
 }
@@ -205,9 +233,64 @@ func runPhaseAction(info *schema.ConfigAndStacksInfo, args []string, opts []comp
 	return file.finish(), err
 }
 
-// isDetailedPlanChanges reports whether err is plan's "-detailed-exitcode" status for changes present.
-func isDetailedPlanChanges(phase *executionPhase, args []string, err error) bool {
-	return err != nil && phase.command == "plan" && slices.Contains(args, "-detailed-exitcode") && resolveExitCode(err) == detailedExitCodeChangesDetected
+// detailedExitCodeChanges is the status `plan -detailed-exitcode` returns when changes are present.
+const detailedExitCodeChanges = 2
+
+// isDetailedExitCodeChanges reports whether err is exit status 2 of a command run with
+// -detailed-exitcode, which Terragrunt treats as success for hooks and the success of the unit.
+func isDetailedExitCodeChanges(command string, args, env []string, err error, opts ...component.ExecutionOption) bool {
+	if command != "plan" || err == nil || errUtils.GetExitCode(err) != detailedExitCodeChanges {
+		return false
+	}
+	return detailedExitCodeEnabled(command, args, env, opts...)
+}
+
+// detailedExitCodeEnabled reports whether -detailed-exitcode is in effect for the command.
+// Terraform inserts TF_CLI_ARGS_<command>, then TF_CLI_ARGS, before the command-line arguments,
+// and the last setting of a flag wins, so an explicit command-line setting takes precedence.
+// Terraform reads the variables as shell words, so quoted values are unquoted the same way.
+func detailedExitCodeEnabled(command string, args, env []string, opts ...component.ExecutionOption) bool {
+	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(command)
+	words := slices.Concat(
+		parseArgs(environmentValue(env, "TF_CLI_ARGS_"+suffix, opts...)),
+		parseArgs(environmentValue(env, "TF_CLI_ARGS", opts...)),
+		args,
+	)
+	enabled := false
+	for _, word := range words {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(word, "-"), "=")
+		if !strings.HasPrefix(word, "-") || name != "detailed-exitcode" {
+			continue
+		}
+		if !hasValue {
+			enabled = true
+			continue
+		}
+		if parsed, err := strconv.ParseBool(value); err == nil {
+			enabled = parsed
+		}
+	}
+	return enabled
+}
+
+// environmentValue returns the value of key the subprocess sees: the component environment is
+// appended to the selected process environment, so its last entry wins.
+func environmentValue(env []string, key string, opts ...component.ExecutionOption) string {
+	var options component.ExecutionOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	base := options.ProcessEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	merged := slices.Concat(base, env)
+	for i := len(merged) - 1; i >= 0; i-- {
+		if name, value, found := strings.Cut(merged[i], "="); found && name == key {
+			return value
+		}
+	}
+	return ""
 }
 
 // hookOptions carries over only what a hook shares with the command: cancellation, the process
@@ -249,7 +332,7 @@ type hookRunner struct {
 func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *schema.ComponentHook) (execution.Output, error) {
 	defer perf.Track(r.atmosConfig, "terraform.hookRunner.RunHook")()
 
-	ui.Info(fmt.Sprintf("Executing %s: %s", strings.ReplaceAll(string(kind), "_", " "), hook.Name))
+	ui.Info(fmt.Sprintf("Executing %s: %s%s", strings.ReplaceAll(string(kind), "_", " "), hook.Name, hookUnitLabel(r.info)))
 
 	var base component.ExecutionOptions
 	for _, opt := range r.opts {
@@ -281,23 +364,48 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 		hookEnvCommand+"="+r.phase.command,
 		hookEnvHookName+"="+hook.Name,
 	)
-	err := r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], hook.Execute[1:], r.workingDirectory(hook), env, false, "", opts...)
+	directory, err := r.workingDirectory(hook)
+	if err != nil {
+		return nil, err
+	}
+	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], hook.Execute[1:], directory, env, false, "", opts...)
 	if file == nil {
 		return nil, err
 	}
 	return file.finish(), err
 }
 
+// hookUnitLabel names the component and stack a hook runs for, so output of a bulk run can be attributed.
+func hookUnitLabel(info *schema.ConfigAndStacksInfo) string {
+	if info.ComponentFromArg == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (%s in %s)", info.ComponentFromArg, info.Stack)
+}
+
 // workingDirectory defaults to the provisioned module directory; relative paths resolve there.
-func (r *hookRunner) workingDirectory(hook *schema.ComponentHook) string {
+// A directory that does not exist is reported as such, instead of as a failure to start the program.
+func (r *hookRunner) workingDirectory(hook *schema.ComponentHook) (string, error) {
 	switch {
 	case hook.WorkingDirectory == "":
-		return r.phase.componentPath
+		return r.phase.componentPath, nil
 	case filepath.IsAbs(hook.WorkingDirectory):
-		return hook.WorkingDirectory
+		return hook.WorkingDirectory, requireDirectory(hook.WorkingDirectory, "")
 	default:
-		return filepath.Join(r.phase.componentPath, hook.WorkingDirectory)
+		resolved := filepath.Join(r.phase.componentPath, hook.WorkingDirectory)
+		return resolved, requireDirectory(resolved, hook.WorkingDirectory)
 	}
+}
+
+// requireDirectory fails with the missing directory's name; relative names also say where they resolved.
+func requireDirectory(directory, relative string) error {
+	if info, err := os.Stat(directory); err == nil && info.IsDir() {
+		return nil
+	}
+	if relative == "" {
+		return fmt.Errorf("%w: %s", errUtils.ErrComponentHookWorkingDirectory, directory)
+	}
+	return fmt.Errorf("%w: %s (working_dir %q resolves against the provisioned module directory, not the directory of terragrunt.hcl; use ${get_terragrunt_dir()}/%s for a directory beside it)", errUtils.ErrComponentHookWorkingDirectory, directory, relative, relative)
 }
 
 // expandPolicyPlanArguments gives a plan policy the effective plan invocation. The policy
@@ -458,93 +566,4 @@ func (c *captureFile) Open() (io.Reader, error) {
 // captureError marks a failure to record or read captured command output.
 func captureError(err error) error {
 	return fmt.Errorf("%w: %w", errUtils.ErrComponentOutputCapture, err)
-}
-
-// initFileFlags are the init options whose value can name a file Terraform reads during init.
-var initFileFlags = []string{"-backend-config", "-var-file"}
-
-// withProviderInitSettings adds the init settings that provider extra arguments contribute to smart
-// init's inputs: the effective init arguments and environment, and the contents of files those
-// arguments name. Without them, an edited init-only backend file would leave a stale initialization
-// trusted. Values only contribute to the fingerprint digest; they are never recorded or logged.
-// Settings that cannot be evaluated return nil inputs, so no recorded marker is trusted; the init
-// phase itself then reports the problem.
-func withProviderInitSettings(in *autoinit.Inputs, info *schema.ConfigAndStacksInfo, componentPath string) *autoinit.Inputs {
-	config := info.ComponentExecution
-	if in == nil || config.IsEmpty() {
-		return in
-	}
-	applied, err := execution.ApplyExtraArguments(config.ExtraArguments, &execution.ArgumentsRequest{
-		Command: subcommandInit, Args: []string{subcommandInit}, InsertAt: 1, WorkingDirectory: componentPath,
-	})
-	if err != nil {
-		return nil
-	}
-	in.EnvLookup = overlayEnvironment(applied.Environment, in.EnvLookup)
-	extra := maps.Clone(in.Extra)
-	if extra == nil {
-		extra = map[string]string{}
-	}
-	arguments := applied.Args[1:]
-	extra["provider-init-arguments"] = strings.Join(arguments, "\x00")
-	extra["provider-init-environment"] = strings.Join(applied.Environment, "\x00")
-	for _, path := range initFileArguments(arguments) {
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(componentPath, path)
-		}
-		// A missing or unreadable file is recorded as such, so creating it changes the digest.
-		digest, err := fileDigest(path)
-		if err != nil {
-			digest = "unreadable"
-		}
-		extra["provider-init-file:"+path] = digest
-	}
-	in.Extra = extra
-	return in
-}
-
-// overlayEnvironment looks up KEY=value entries first and then base. A nil base reports a key
-// absent, so the caller falls back to the process environment.
-func overlayEnvironment(entries []string, base func(string) (string, bool)) func(string) (string, bool) {
-	environment := map[string]string{}
-	for _, entry := range entries {
-		if key, value, ok := strings.Cut(entry, "="); ok {
-			environment[key] = value
-		}
-	}
-	return func(key string) (string, bool) {
-		if value, ok := environment[key]; ok {
-			return value, true
-		}
-		if base == nil {
-			return "", false
-		}
-		return base(key)
-	}
-}
-
-// initFileArguments returns the file paths named by -backend-config and -var-file options, in
-// both the "-flag=value" and "-flag value" forms. A -backend-config value holding "=" sets one
-// setting instead of naming a file; it is already part of the arguments.
-func initFileArguments(arguments []string) []string {
-	var paths []string
-	for i := 0; i < len(arguments); i++ {
-		name, value, inline := strings.Cut(strings.TrimPrefix(arguments[i], "-"), "=")
-		name = "-" + name
-		if !slices.Contains(initFileFlags, name) {
-			continue
-		}
-		if !inline {
-			if i+1 >= len(arguments) {
-				break
-			}
-			i++
-			value = arguments[i]
-		}
-		if name == "-backend-config" && strings.Contains(value, "=") {
-			continue
-		}
-		paths = append(paths, value)
-	}
-	return paths
 }

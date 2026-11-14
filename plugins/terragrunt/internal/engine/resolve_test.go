@@ -50,13 +50,13 @@ inputs = { large = 9007199254740993, nested = { nullable = null, enabled = false
 func TestNativeRejectsUnsupportedSemantics(t *testing.T) {
 	for _, test := range []struct{ name, extra, message string }{
 		{"binary override", `terraform_binary = "another-tool"`, "terraform_binary"},
-		{"IAM role", `iam_role = "unsupported"`, "IAM settings"},
+		{"IAM role", `iam_role = "unsupported"`, "iam_role"},
 		{"generation escape", `generate "x" {
  path = "../x.tf"
  if_exists = "overwrite"
  disable_signature = true
  contents = ""
-}`, "unsupported generated path"},
+}`, "escapes the working directory"},
 		{"version constraint", `terragrunt_version_constraint = "> 99.0.0"`, "rejects version"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -98,7 +98,11 @@ inputs = { value = local.value }
 `)
 	request.Phase = "discover"
 	_, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "read-only discovery cannot execute")
+	var problem *model.Problem
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, model.CodeEffectDenied, problem.Code)
+	require.False(t, problem.Safe)
+	require.NotEmpty(t, problem.Hints)
 }
 
 func TestVersionConstraintsUseSelectedExecutable(t *testing.T) {
@@ -157,7 +161,7 @@ generate "disabled" {
 	require.Error(t, err)
 	require.NoError(t, os.WriteFile(request.Path, []byte("inputs = {}"), 0o644))
 	_, err = Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "requires terraform.source")
+	require.ErrorContains(t, err, "terraform.source")
 	for _, source := range []string{"tfr://example.invalid/repo", "./absent"} {
 		encoded, err := json.Marshal(source)
 		require.NoError(t, err)
@@ -237,24 +241,26 @@ remote_state {
 }
 
 func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
-	t.Run("committed dependency lock file", func(t *testing.T) {
+	t.Run("lock file beside the unit is a unit file copy, not an overlay file", func(t *testing.T) {
 		request := nativeUnit(t, "")
 		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), ".terraform.lock.hcl"), []byte("# lock"), 0o644))
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.NotContains(t, result.Overlay, ".terraform.lock.hcl")
+		require.Equal(t, "# lock", result.Generated[".terraform.lock.hcl"])
+		require.True(t, result.UnitFileCopies[".terraform.lock.hcl"])
+	})
+	t.Run("nested dependency lock file", func(t *testing.T) {
+		request := nativeUnit(t, "")
+		nested := filepath.Join(filepath.Dir(request.Path), "sub")
+		require.NoError(t, os.MkdirAll(nested, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(nested, ".terraform.lock.hcl"), []byte("# lock"), 0o644))
 		_, err := Resolve(t.Context(), request)
 		require.ErrorIs(t, err, atmosbridge.ErrUnsupportedOverlay)
 		require.ErrorContains(t, err, ".terraform.lock.hcl")
 		request.Phase = "backend"
 		_, err = Resolve(t.Context(), request)
 		require.NoError(t, err, "backend reads never export the overlay")
-		request.Phase = ""
-		data, err := os.ReadFile(request.Path)
-		require.NoError(t, err)
-		excluded := strings.Replace(string(data), "terraform { source =", "terraform {\n exclude_from_copy = [\".terraform.lock.hcl\"]\n source =", 1)
-		excluded = strings.Replace(excluded, " }", "\n}", 1)
-		require.NoError(t, os.WriteFile(request.Path, []byte(excluded), 0o644))
-		result, err := Resolve(t.Context(), request)
-		require.NoError(t, err)
-		require.NotContains(t, result.Overlay, ".terraform.lock.hcl")
 	})
 	t.Run("executable file keeps its mode", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
