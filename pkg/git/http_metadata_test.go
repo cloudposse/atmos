@@ -2,6 +2,7 @@ package git
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -89,4 +90,76 @@ func TestHTTPMetadataRejectsInvalidCooldownsAndBoundsOverflow(t *testing.T) {
 	capture.header("X-RateLimit-Reset: broken")
 	require.Nil(t, capture.response.Remaining)
 	require.True(t, capture.response.ResetAt.IsZero())
+}
+
+func TestHTTPMetadataWriterSinkFailureStopsAtLineBoundary(t *testing.T) {
+	sinkErr := errors.New("sink rejected write")
+	capture := &httpMetadataWriter{sink: failingWriter{err: sinkErr}}
+	n, err := capture.Write([]byte("remote: first\nremote: second\n"))
+	require.ErrorIs(t, err, sinkErr)
+	// The write stops after the newline that triggered the failing flush.
+	require.Equal(t, len("remote: first\n"), n)
+	require.Empty(t, capture.line)
+}
+
+func TestHTTPMetadataWriterDiscardsUnprefixedTraceMarkers(t *testing.T) {
+	var output bytes.Buffer
+	capture := &httpMetadataWriter{sink: &output}
+	text := "=> Send header: Authorization: SECRET\n" +
+		"<= Recv header: Set-Cookie: SECRET\n" +
+		"== Info: PRIVATE\n" +
+		"remote: ordinary Git diagnostic\n"
+	_, err := capture.Write([]byte(text))
+	require.NoError(t, err)
+	require.Equal(t, "remote: ordinary Git diagnostic\n", output.String())
+	require.NotContains(t, output.String(), "SECRET")
+	require.NotContains(t, output.String(), "PRIVATE")
+}
+
+func TestHTTPMetadataHeaderEdgeCases(t *testing.T) {
+	t.Run("header without a colon leaves the response unchanged", func(t *testing.T) {
+		capture := &httpMetadataWriter{sink: &bytes.Buffer{}}
+		capture.header("HTTP/2 429")
+		capture.header("Retry-After: 7")
+		capture.header("malformed header line")
+		require.Equal(t, 429, capture.response.Status)
+		require.Equal(t, 7*time.Second, *capture.response.RetryAfter)
+	})
+
+	t.Run("status line without a code resets the response", func(t *testing.T) {
+		capture := &httpMetadataWriter{sink: &bytes.Buffer{}}
+		capture.header("HTTP/2 429")
+		capture.header("Retry-After: 7")
+		capture.header("HTTP/2")
+		require.Zero(t, capture.response.Status)
+		require.Nil(t, capture.response.RetryAfter)
+	})
+
+	t.Run("responseStatus", func(t *testing.T) {
+		for _, tt := range []struct {
+			line   string
+			status int
+			ok     bool
+		}{
+			{line: "HTTP/1.1 503 Service Unavailable", status: 503, ok: true},
+			{line: "HTTP/2", status: 0, ok: true},
+			{line: "HTTP/2 nope", status: 0, ok: true},
+			{line: "Retry-After: 5", status: 0, ok: false},
+		} {
+			status, ok := responseStatus(tt.line)
+			require.Equal(t, tt.status, status, tt.line)
+			require.Equal(t, tt.ok, ok, tt.line)
+		}
+	})
+}
+
+func TestHTTPMetadataEnvInheritsProcessEnvironmentWhenNil(t *testing.T) {
+	t.Setenv("ATMOS_TEST_HTTP_METADATA_KEEP", "ok")
+	t.Setenv("GIT_CURL_VERBOSE", "1")
+	t.Setenv("GIT_TRACE_CURL", "/secret-file")
+	env := httpMetadataEnv(nil)
+	require.Contains(t, env, "ATMOS_TEST_HTTP_METADATA_KEEP=ok")
+	require.Contains(t, env, "GIT_TRACE_CURL=1")
+	require.NotContains(t, env, "GIT_TRACE_CURL=/secret-file")
+	require.NotContains(t, env, "GIT_CURL_VERBOSE=1")
 }

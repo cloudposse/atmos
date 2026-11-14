@@ -91,3 +91,49 @@ func TestFirstArgSkipsFlags(t *testing.T) {
 	assert.Equal(t, "clone", firstArg([]string{"--depth", "clone"})) // flags skipped.
 	assert.Equal(t, "", firstArg(nil))
 }
+
+// helperExecutor routes every command to the test binary so no platform binary is needed.
+type helperExecutor struct{}
+
+func (helperExecutor) LookPath(file string) (string, error) { return file, nil }
+
+func (helperExecutor) CommandContext(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+	exe, err := os.Executable()
+	if err != nil {
+		exe = os.Args[0]
+	}
+	return exec.CommandContext(ctx, exe)
+}
+
+// failingWriter simulates a diagnostic sink that rejects writes.
+type failingWriter struct{ err error }
+
+func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
+
+func TestExecRunnerFlushesUnterminatedMetadataLine(t *testing.T) {
+	sinkErr := errors.New("sink rejected write")
+	env := func(exit string) []string {
+		return append(os.Environ(), helperStderrEnv+"=remote: no trailing newline", helperExitEnv+"="+exit)
+	}
+
+	t.Run("flush failure on a successful command is reported", func(t *testing.T) {
+		result, err := NewExecRunnerWithExecutor(helperExecutor{}).Run(t.Context(), "git", nil, &RunOptions{Env: env("0"), CaptureHTTPMetadata: true, Stderr: failingWriter{err: sinkErr}})
+		require.ErrorIs(t, err, sinkErr)
+		require.ErrorIs(t, err, errUtils.ErrGitCommandFailed)
+		require.NotNil(t, result.HTTP)
+	})
+
+	t.Run("flush failure does not mask a non-zero exit", func(t *testing.T) {
+		result, err := NewExecRunnerWithExecutor(helperExecutor{}).Run(t.Context(), "git", nil, &RunOptions{Env: env("3"), CaptureHTTPMetadata: true, Stderr: failingWriter{err: sinkErr}})
+		require.ErrorIs(t, err, errUtils.ErrGitCommandExited)
+		require.NotErrorIs(t, err, sinkErr)
+		require.Equal(t, 3, result.ExitCode)
+	})
+
+	t.Run("unterminated line is forwarded to a healthy sink", func(t *testing.T) {
+		var output bytes.Buffer
+		_, err := NewExecRunnerWithExecutor(helperExecutor{}).Run(t.Context(), "git", nil, &RunOptions{Env: env("0"), CaptureHTTPMetadata: true, Stderr: &output})
+		require.NoError(t, err)
+		require.Equal(t, "remote: no trailing newline\n", output.String())
+	})
+}

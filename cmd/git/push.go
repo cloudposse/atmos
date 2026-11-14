@@ -27,8 +27,10 @@ var pushCmd = &cobra.Command{
 (configured under git.repositories) or a filesystem path. Atmos never force-pushes.
 
 On non-fast-forward rejection, push will retry (pull --rebase, then re-push)
-up to push.retries times (default 3). Use --dry-run to report what would be
-pushed without pushing.
+using the push.retry policy, or up to push.retries times (default 3) when no
+push.retry is configured. Remote rate limits are waited out without rebasing.
+Pushes to a filesystem path ignore push.retry. Use --dry-run to report what
+would be pushed without pushing.
 
 Arguments after -- are passed verbatim to the underlying git push invocation:
   atmos git push flux-deploy -- --follow-tags`,

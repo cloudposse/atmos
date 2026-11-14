@@ -761,3 +761,23 @@ func TestWalkManagedDirConfinesReads(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrGitArtifactRead)
 	assert.Nil(t, files)
 }
+
+// An unopenable managed root must fail loudly rather than look like an empty tree.
+func TestWalkManagedDirRejectsUnopenableRoot(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(file, []byte("data"), 0o600))
+	tests := []struct {
+		name string
+		root string
+	}{
+		{name: "missing directory", root: filepath.Join(t.TempDir(), "absent")},
+		{name: "regular file", root: file},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files, err := walkManagedDir(tt.root)
+			require.ErrorIs(t, err, errUtils.ErrGitArtifactRead)
+			assert.Nil(t, files)
+		})
+	}
+}
