@@ -193,6 +193,7 @@ func TestDocumentsAreReadWithoutThePayload(t *testing.T) {
 
 			stream, err := repo.OpenDocument(context.Background(), pinned, artifact.DocumentChangelog)
 			require.NoError(t, err)
+			t.Cleanup(func() { _ = stream.Reader.Close() })
 			data, err := io.ReadAll(stream.Reader)
 			require.NoError(t, err)
 			require.NoError(t, stream.Reader.Close())

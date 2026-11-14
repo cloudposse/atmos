@@ -102,8 +102,7 @@ func lockRequest(resource string) artifact.LockRequest {
 
 func TestLock_HandleContract(t *testing.T) {
 	repo := newRepo(t, dirSpec())
-	handle, err := repo.Lock(context.Background(), lockRequest("team/app:1.0.0"))
-	require.NoError(t, err)
+	handle := holdLock(t, repo, lockRequest("team/app:1.0.0"))
 	assert.Equal(t, "team/app:1.0.0", handle.Resource())
 	assert.Equal(t, "test-owner", handle.Owner())
 	assert.Equal(t, artifact.LockScopeHost, handle.Scope())
@@ -117,8 +116,7 @@ func TestLock_HandleContract(t *testing.T) {
 	require.ErrorIs(t, handle.Release(context.Background()), errUtils.ErrArtifactConflict, "a handle cannot be released twice")
 	assert.FileExists(t, lockFile(repo, "team/app:1.0.0"))
 
-	other, err := repo.Lock(context.Background(), artifact.LockRequest{Resource: "x"})
-	require.NoError(t, err)
+	other := holdLock(t, repo, artifact.LockRequest{Resource: "x"})
 	assert.NotEmpty(t, other.Owner(), "an empty owner defaults to the repository owner")
 	require.NoError(t, other.Release(context.Background()))
 }
@@ -147,8 +145,7 @@ func TestLock_RejectsUnsupportedGuarantees(t *testing.T) {
 
 func TestLock_ReleaseChecksTheOwnershipToken(t *testing.T) {
 	repo := newRepo(t, dirSpec())
-	handle, err := repo.Lock(context.Background(), lockRequest("r"))
-	require.NoError(t, err)
+	handle := holdLock(t, repo, lockRequest("r"))
 	real, ok := handle.(*fileLock)
 	require.True(t, ok)
 
@@ -157,7 +154,7 @@ func TestLock_ReleaseChecksTheOwnershipToken(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	_, err = repo.Lock(ctx, lockRequest("r"))
+	_, err := repo.Lock(ctx, lockRequest("r"))
 	require.ErrorIs(t, err, context.DeadlineExceeded, "the real owner still holds the lock")
 	require.NoError(t, handle.Release(context.Background()))
 }
@@ -203,8 +200,7 @@ func TestLock_CompetingHandlesAreMutuallyExclusive(t *testing.T) {
 
 func TestLock_CanceledAcquisitionLeaksNothing(t *testing.T) {
 	repo := newRepo(t, dirSpec())
-	holder, err := repo.Lock(context.Background(), lockRequest("r"))
-	require.NoError(t, err)
+	holder := holdLock(t, repo, lockRequest("r"))
 
 	var wg sync.WaitGroup
 	for range 5 {
@@ -278,8 +274,7 @@ func TestTwoWritersToOneReference(t *testing.T) {
 // existing holder; with a caller-held lock it proceeds without deadlocking on itself.
 func TestPublishHonorsTheReferenceLock(t *testing.T) {
 	repo := newRepo(t, dirSpec())
-	holder, err := repo.Lock(context.Background(), lockRequest(testName+":"+testVersion))
-	require.NoError(t, err)
+	holder := holdLock(t, repo, lockRequest(testName+":"+testVersion))
 
 	prepared := prepare(t, repo, &prepareSpec{})
 	done := make(chan error, 1)
@@ -301,20 +296,17 @@ func TestPublishHonorsTheReferenceLock(t *testing.T) {
 	}
 
 	second := newRepo(t, dirSpec())
-	held, err := second.Lock(context.Background(), lockRequest("team/other:1.0.0"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = held.Release(context.Background()) })
-	_, err = second.Publish(context.Background(), prepare(t, second, &prepareSpec{name: "team/other"}), artifact.PublishOptions{Lock: held})
+	held := holdLock(t, second, lockRequest("team/other:1.0.0"))
+	_, err := second.Publish(context.Background(), prepare(t, second, &prepareSpec{name: "team/other"}), artifact.PublishOptions{Lock: held})
 	require.NoError(t, err, "a service-held lock is honored, not re-acquired")
 }
 
 func TestPublishCancellationWhileWaitingLeaksNothing(t *testing.T) {
 	repo := newRepo(t, dirSpec())
-	holder, err := repo.Lock(context.Background(), lockRequest(testName+":"+testVersion))
-	require.NoError(t, err)
+	holder := holdLock(t, repo, lockRequest(testName+":"+testVersion))
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, err = repo.Publish(ctx, prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{})
+	_, err := repo.Publish(ctx, prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.NoError(t, holder.Release(context.Background()))
 	_, err = repo.Resolve(context.Background(), defaultRef())
@@ -325,8 +317,7 @@ func TestPublishCancellationWhileWaitingLeaksNothing(t *testing.T) {
 func TestLock_ExcludesOtherProcesses(t *testing.T) {
 	repo := newRepo(t, dirSpec())
 	resource := "team/app:1.0.0"
-	handle, err := repo.Lock(context.Background(), lockRequest(resource))
-	require.NoError(t, err)
+	handle := holdLock(t, repo, lockRequest(resource))
 
 	assert.Equal(t, helperExitBusy, exitCode(t, helperCommand(t, "try", repo.root, resource)), "another process cannot take a held lock")
 	other := resource + "-other"
@@ -385,10 +376,8 @@ func lockFile(repo *Repository, resource string) string {
 
 func TestPublishRejectsLockForAnotherReference(t *testing.T) {
 	repo := newRepo(t, dirSpec())
-	held, err := repo.Lock(context.Background(), lockRequest("other:1.0.0"))
-	require.NoError(t, err)
-	defer held.Release(context.Background())
-	_, err = repo.Publish(context.Background(), prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: held})
+	held := holdLock(t, repo, lockRequest("other:1.0.0"))
+	_, err := repo.Publish(context.Background(), prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: held})
 	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
 }
 
@@ -396,11 +385,10 @@ func TestWriteEvidenceHonorsReferenceLock(t *testing.T) {
 	repo := newRepo(t, dirSpec())
 	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
 	pinned := resolve(t, repo, defaultRef())
-	held, err := repo.Lock(context.Background(), lockRequest(testName+":"+testVersion))
-	require.NoError(t, err)
+	held := holdLock(t, repo, lockRequest(testName+":"+testVersion))
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, err = repo.WriteEvidence(ctx, &pinned, nil, nil)
+	_, err := repo.WriteEvidence(ctx, &pinned, nil, nil)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	_, err = repo.WriteEvidence(context.Background(), &pinned, nil, held)
 	require.NoError(t, err)

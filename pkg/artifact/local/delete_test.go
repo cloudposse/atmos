@@ -137,6 +137,7 @@ func TestStoredLocationOutsideTheRootIsRejected(t *testing.T) {
 
 	tr, err := repo.openTree(false)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = tr.Close() })
 	rep, err := tr.loadRepresentation(key)
 	require.NoError(t, err)
 	require.NoError(t, tr.Close())

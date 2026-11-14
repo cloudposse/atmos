@@ -375,8 +375,7 @@ func TestSignature_SignStoresEvidenceUnderTheReferenceLock(t *testing.T) {
 	subject := recordSubject(t, repo)
 	resource := testName + ":" + testVersion
 
-	handle, err := repo.Lock(context.Background(), lockRequest(resource))
-	require.NoError(t, err)
+	handle := holdLock(t, repo, lockRequest(resource))
 
 	t.Run("another writer holds the lock, so storing waits and honors the deadline", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
