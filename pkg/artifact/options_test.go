@@ -270,6 +270,10 @@ func TestOCIRegistryOptionsValidate_NeverEchoesCredentials(t *testing.T) {
 		{name: "scheme and userinfo", registry: "https://user:" + secret + "@registry.example.com", wantErr: "https://REDACTED@registry.example.com"},
 		{name: "userinfo and path", registry: "https://user:" + secret + "@registry.example.com/acme/atmos", wantErr: "https://REDACTED@registry.example.com/acme/atmos"},
 		{name: "token without password", registry: secret + "@registry.example.com:5000", wantErr: "REDACTED@registry.example.com:5000"},
+		{name: "scheme-relative userinfo", registry: "//user:" + secret + "@registry.example.com", wantErr: "//REDACTED@registry.example.com"},
+		{name: "scheme-relative userinfo and path", registry: "//user:" + secret + "@registry.example.com/acme/atmos", wantErr: "//REDACTED@registry.example.com/acme/atmos"},
+		{name: "scheme-relative token without password", registry: "//" + secret + "@registry.example.com:5000", wantErr: "//REDACTED@registry.example.com:5000"},
+		{name: "scheme-relative without credentials stays visible", registry: "//registry.example.com", wantErr: "//registry.example.com"},
 		{name: "scheme without credentials stays visible", registry: "https://registry.example.com", wantErr: "https://registry.example.com"},
 	}
 	for _, tt := range tests {

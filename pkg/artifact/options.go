@@ -250,6 +250,9 @@ func redactRegistry(registry string) string {
 	prefix := ""
 	if scheme, after, found := strings.Cut(registry, "://"); found {
 		prefix, rest = scheme+"://", after
+	} else if after, found := strings.CutPrefix(registry, "//"); found {
+		// A scheme-relative value (//user:secret@host) carries its authority after the slashes.
+		prefix, rest = "//", after
 	}
 	authority, tail, _ := strings.Cut(rest, "/")
 	at := strings.LastIndex(authority, "@")
