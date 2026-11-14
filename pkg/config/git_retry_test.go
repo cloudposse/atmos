@@ -77,6 +77,28 @@ func TestGitPushRetryIncludedEmpty(t *testing.T) {
 	require.Equal(t, 1, v.GetInt("git.repositories.deploy.push.retry.max_attempts"))
 }
 
+func TestGitPushRetryEmptyInIncludedPush(t *testing.T) {
+	dir := t.TempDir()
+	createConfigFile(t, dir, "push.yaml", "retry: {}")
+	source := "git: {repositories: {deploy: {push: !include " + filepath.ToSlash(filepath.Join(dir, "push.yaml")) + "}}}"
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(source)))
+	require.NoError(t, preprocessAtmosYamlFunc([]byte(source), v))
+	require.Equal(t, 1, v.GetInt("git.repositories.deploy.push.retry.max_attempts"))
+}
+
+func TestGitPushRetryNonEmptyInIncludedPushIsUntouched(t *testing.T) {
+	dir := t.TempDir()
+	createConfigFile(t, dir, "push.yaml", "retry: {max_attempts: 4}")
+	source := "git: {repositories: {deploy: {push: !include " + filepath.ToSlash(filepath.Join(dir, "push.yaml")) + "}}}"
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(source)))
+	require.NoError(t, preprocessAtmosYamlFunc([]byte(source), v))
+	require.Equal(t, 4, v.GetInt("git.repositories.deploy.push.retry.max_attempts"))
+}
+
 func TestPreserveEmptyGitPushRetryResolvesAliases(t *testing.T) {
 	tests := []struct {
 		name         string

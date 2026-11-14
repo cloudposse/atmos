@@ -357,7 +357,7 @@ func storeIncludeValue(node *yaml.Node, v *viper.Viper, currentPath string, data
 	if err := preserveEmptyGitPushRetry(node, v, currentPath); err != nil {
 		return err
 	}
-	return nil
+	return preserveEmptyGitPushRetryInPush(node, v, currentPath)
 }
 
 // handleCwd evaluates a `!cwd` YAML tag and stores the current working directory string into Viper at the given path.

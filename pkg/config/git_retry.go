@@ -28,3 +28,23 @@ func preserveEmptyGitPushRetry(node *yaml.Node, v *viper.Viper, path string) err
 	}
 	return nil
 }
+
+// preserveEmptyGitPushRetryInPush applies the empty-policy normalization to a retry
+// mapping that arrived inside a `push` mapping, such as the result of `push: !include`.
+func preserveEmptyGitPushRetryInPush(node *yaml.Node, v *viper.Viper, path string) error {
+	if !strings.HasPrefix(path, "git.repositories.") || !strings.HasSuffix(path, ".push") {
+		return nil
+	}
+	if node != nil && node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == "retry" {
+			return preserveEmptyGitPushRetry(node.Content[i+1], v, path+".retry")
+		}
+	}
+	return nil
+}
