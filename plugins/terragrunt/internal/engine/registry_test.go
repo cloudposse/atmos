@@ -184,6 +184,16 @@ func TestIsOpenTofu(t *testing.T) {
 	assert.False(t, IsOpenTofu(""))
 }
 
+// The host and the provider treat any executable whose name contains "tofu", in any case, as OpenTofu.
+func TestIsOpenTofuUsesTheHostDetectionRule(t *testing.T) {
+	for _, binary := range []string{"opentofu", "tofu-wrapper", "TOFU.exe", `C:\tools\OpenTofu.EXE`, "/opt/bin/tofu1.8"} {
+		assert.True(t, IsOpenTofu(binary), binary)
+	}
+	for _, binary := range []string{"terraform", "/opt/tofu/bin/terraform", "terraform-wrapper.exe"} {
+		assert.False(t, IsOpenTofu(binary), binary, "only the executable name decides, not its directories")
+	}
+}
+
 func TestUnsupportedSourceTransportsStillFail(t *testing.T) {
 	for _, source := range []string{"s3::https://bucket/module.zip", "ftp://example.test/module"} {
 		_, err := Resolve(t.Context(), registryUnit(t, `source = "`+source+`"`))

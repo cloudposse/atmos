@@ -545,3 +545,16 @@ dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDepe
 		})
 	}
 }
+
+// The engine package and the provider classify executables with one rule.
+func TestEngineNameMatchesTheSharedOpenTofuRule(t *testing.T) {
+	for _, binary := range []string{"tofu", "opentofu", "tofu-wrapper", "TOFU.exe", "terraform", "", "/opt/tofu/bin/terraform"} {
+		want := "terraform"
+		if engine.IsOpenTofu(binary) {
+			want = "opentofu"
+		}
+		require.Equal(t, want, engineName(binary), binary)
+	}
+	require.Equal(t, "opentofu", engineName("TOFU.exe"))
+	require.Equal(t, "terraform", engineName("/opt/tofu/bin/terraform"))
+}
