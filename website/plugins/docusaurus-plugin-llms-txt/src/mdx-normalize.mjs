@@ -156,10 +156,15 @@ function dlHandler(node, transformChildList) {
       currentDt = transformChildList(child.children || []);
     } else if (child.name === 'dd') {
       const ddChildren = transformChildList(child.children || []);
-      const itemChildren = [
-        paragraph(currentDt && currentDt.length ? [strong(currentDt)] : [text('—')]),
-      ];
-      if (ddChildren.length) itemChildren.push(...ddChildren);
+      const label = currentDt && currentDt.length ? strong(currentDt) : text('—');
+      // JSX inline children are phrasing nodes, not separate list-item blocks.
+      // Keep them in one paragraph so inline code and punctuation stay together.
+      const inlineTypes = new Set(['text', 'inlineCode', 'emphasis', 'strong', 'link', 'delete', 'break']);
+      const inline = [];
+      while (ddChildren.length && inlineTypes.has(ddChildren[0].type)) inline.push(ddChildren.shift());
+      if (!inline.length && ddChildren[0]?.type === 'paragraph') inline.push(...ddChildren.shift().children);
+      if (inline[0]?.type === 'text') inline[0].value = inline[0].value.replace(/^\s+/, '');
+      const itemChildren = [paragraph([label, ...(inline.length ? [text(' — '), ...inline] : [])]), ...ddChildren];
       items.push(listItem(itemChildren));
       currentDt = null;
     }

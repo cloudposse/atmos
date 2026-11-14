@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/signals"
 )
 
+// main runs Atmos and coordinates signal-driven credential and process cleanup.
 func main() {
 	// Set up signal handling for graceful shutdown.
 	sigChan := make(chan os.Signal, 1)
@@ -26,19 +27,17 @@ func main() {
 			if !shouldExitOnSignal(sig) {
 				continue
 			}
+			signals.RequestExit(sig)
+			signals.WaitForCleanup()
 			// Run registered exit cleanups (e.g. restore the terminal from raw
 			// mode) - os.Exit below skips deferred functions.
 			signals.RunExitCleanups()
 			// Clean up resources before exit.
 			cmd.Cleanup()
 			errUtils.CloseSentry()
-			// Exit with correct POSIX exit code (128 + signal number).
-			// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
-			if s, ok := sig.(syscall.Signal); ok {
-				errUtils.OsExit(128 + int(s))
-			}
-			// Fallback to SIGINT exit code if signal type assertion fails.
-			errUtils.OsExit(130)
+			// Preserve the first retained POSIX signal code, even if different
+			// listeners observed concurrent signals in a different order.
+			errUtils.OsExit(signals.ResolveExitCode(1))
 		}
 	}()
 
@@ -47,7 +46,7 @@ func main() {
 
 	// Run the application and exit with the appropriate code.
 	// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
-	errUtils.OsExit(run())
+	errUtils.OsExit(signals.ResolveExitCode(run()))
 }
 
 // run executes the main application logic and returns an exit code.
@@ -64,7 +63,10 @@ func run() (exitCode int) {
 	defer panics.Recover(&exitCode)
 
 	// Ensure cleanup happens on normal exit.
-	defer cmd.Cleanup()
+	defer func() {
+		signals.WaitForCleanup()
+		cmd.Cleanup()
+	}()
 
 	// A generated toolchain proxy invokes this executable under a command name
 	// such as "ls". Dispatch it before generic flag handling so "ls --version"
@@ -151,8 +153,12 @@ func silentExitCode(err error) (int, bool) {
 
 // shouldExitOnSignal reports whether the process should exit in response to sig.
 // SIGINT is ignored while a foreground interactive/TTY step owns the terminal
-// (the child process handles Ctrl-C). SIGTERM always exits as an escape hatch.
+// (the child process handles Ctrl-C). A credential operation instead handles
+// both signals by cancellation and bounded cleanup before process exit.
 func shouldExitOnSignal(sig os.Signal) bool {
+	if signals.CleanupExitDeferred() || signals.ExitRequested() {
+		return true
+	}
 	return sig != os.Interrupt || !signals.InterruptExitSuspended()
 }
 

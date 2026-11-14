@@ -84,13 +84,14 @@ var (
 	ErrListSecrets  = errors.New("failed to list secrets")
 
 	// HashiCorp Vault specific errors.
-	ErrVaultAddressRequired = errors.New("address is required in hashicorp vault store configuration")
-	ErrVaultMountRequired   = errors.New("mount is required in hashicorp vault store configuration")
-	ErrVaultWrite           = errors.New("failed to write secret to vault")
-	ErrVaultRead            = errors.New("failed to read secret from vault")
-	ErrVaultDelete          = errors.New("failed to delete secret from vault")
-	ErrVaultList            = errors.New("failed to list secrets from vault")
-	ErrVaultEmptyData       = errors.New("vault returned empty data for secret")
+	ErrVaultIdentityLifetime = errors.New("invalid Vault identity_lifetime; expected session or operation")
+	ErrVaultAddressRequired  = errors.New("address is required in hashicorp vault store configuration")
+	ErrVaultMountRequired    = errors.New("mount is required in hashicorp vault store configuration")
+	ErrVaultWrite            = errors.New("failed to write secret to vault")
+	ErrVaultRead             = errors.New("failed to read secret from vault")
+	ErrVaultDelete           = errors.New("failed to delete secret from vault")
+	ErrVaultList             = errors.New("failed to list secrets from vault")
+	ErrVaultEmptyData        = errors.New("vault returned empty data for secret")
 
 	// 1Password specific errors.
 	ErrOnePasswordNoAuth            = errors.New("no 1Password credentials found: set OP_SERVICE_ACCOUNT_TOKEN (or options.token), or OP_CONNECT_HOST + OP_CONNECT_TOKEN (or options.connect_host/connect_token)")
