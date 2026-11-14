@@ -1232,6 +1232,17 @@
           ],
           "description": "Google Custom Search Engine ID"
         },
+        "google_base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Custom Search JSON API URL (default: https://www.googleapis.com/customsearch/v1)"
+        },
         "max_results": {
           "anyOf": [
             {

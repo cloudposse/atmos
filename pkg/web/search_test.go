@@ -6,12 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -41,12 +43,18 @@ func TestNewGoogleEngine(t *testing.T) {
 	apiKey := "test-api-key"
 	cseID := "test-cse-id"
 
-	engine := NewGoogleEngine(apiKey, cseID)
+	engine := NewGoogleEngine(apiKey, cseID, "")
 	assert.NotNil(t, engine)
 	assert.NotNil(t, engine.client)
 	assert.Equal(t, apiKey, engine.apiKey)
 	assert.Equal(t, cseID, engine.cseID)
+	assert.Equal(t, GoogleDefaultBaseURL, engine.baseURL)
 	assert.Equal(t, DefaultHTTPTimeout, engine.client.Timeout)
+}
+
+func TestNewGoogleEngine_CustomBaseURL(t *testing.T) {
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", "https://search.example.com/customsearch/v1")
+	assert.Equal(t, "https://search.example.com/customsearch/v1", engine.baseURL)
 }
 
 func TestNormalizeMaxResults(t *testing.T) {
@@ -161,13 +169,135 @@ func TestBuildGoogleAPIURL(t *testing.T) {
 	query := "test query"
 	maxResults := 10
 
-	url := buildGoogleAPIURL(apiKey, cseID, query, maxResults)
+	url, err := buildGoogleAPIURL("", apiKey, cseID, query, maxResults)
+	require.NoError(t, err)
 
-	assert.Contains(t, url, "https://www.googleapis.com/customsearch/v1")
+	assert.True(t, strings.HasPrefix(url, "https://www.googleapis.com/customsearch/v1?"))
 	assert.Contains(t, url, "key=test-api-key")
 	assert.Contains(t, url, "cx=test-cse-id")
 	assert.Contains(t, url, "q=test+query")
 	assert.Contains(t, url, "num=10")
+}
+
+func TestBuildGoogleAPIURL_CustomBaseURL(t *testing.T) {
+	url, err := buildGoogleAPIURL("https://search.example.com/customsearch/v1/", "test-api-key", "test-cse-id", "test query", 10)
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(url, "https://search.example.com/customsearch/v1?"))
+	assert.Contains(t, url, "key=test-api-key")
+	assert.Contains(t, url, "cx=test-cse-id")
+	assert.Contains(t, url, "q=test+query")
+	assert.Contains(t, url, "num=10")
+}
+
+func TestBuildGoogleAPIURL_KeepsExistingQuery(t *testing.T) {
+	apiURL, err := buildGoogleAPIURL("https://search.example.com/customsearch/v1?tenant=acme", "test-api-key", "test-cse-id", "test query", 10)
+	require.NoError(t, err)
+
+	parsed, err := url.Parse(apiURL)
+	require.NoError(t, err)
+	assert.Equal(t, "/customsearch/v1", parsed.Path)
+	assert.Equal(t, "acme", parsed.Query().Get("tenant"))
+	assert.Equal(t, "test-api-key", parsed.Query().Get("key"))
+	assert.Equal(t, "test-cse-id", parsed.Query().Get("cx"))
+	assert.Equal(t, "test query", parsed.Query().Get("q"))
+	assert.Equal(t, "10", parsed.Query().Get("num"))
+}
+
+func TestBuildGoogleAPIURL_RejectsFragment(t *testing.T) {
+	_, err := buildGoogleAPIURL("https://search.example.com/customsearch/v1#top", "test-api-key", "test-cse-id", "test query", 10)
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+}
+
+func TestGoogleEngine_Search_RejectsInsecureBaseURL(t *testing.T) {
+	mockTransport := new(MockRoundTripper)
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", "http://search.example.com/customsearch/v1")
+	engine.client = &http.Client{Transport: mockTransport}
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	assert.ErrorIs(t, err, errUtils.ErrAIInsecureBaseURL)
+	mockTransport.AssertNotCalled(t, "RoundTrip", mock.Anything)
+}
+
+func TestGoogleEngine_Search_AllowsLoopbackHTTP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "test-api-key", r.URL.Query().Get("key"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items": [{"title": "Result 1", "link": "https://example.com/1", "snippet": "Description 1"}]}`))
+	}))
+	defer server.Close()
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+
+	response, err := engine.Search(context.Background(), "test query", 5)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, response.Count)
+}
+
+// roundTripperFunc adapts a function to http.RoundTripper.
+type roundTripperFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestGoogleEngine_Search_RejectsInsecureRedirect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://search.example.com/customsearch/v1?"+r.URL.RawQuery, http.StatusFound)
+	}))
+	defer server.Close()
+
+	mockTransport := new(MockRoundTripper)
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+	// The first hop goes to the local server; any later hop would reach the mock.
+	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == strings.TrimPrefix(server.URL, "http://") {
+			return http.DefaultTransport.RoundTrip(req)
+		}
+		return mockTransport.RoundTrip(req)
+	})
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	assert.ErrorIs(t, err, errUtils.ErrAIInsecureBaseURL)
+	assert.NotContains(t, err.Error(), "test-api-key")
+	mockTransport.AssertNotCalled(t, "RoundTrip", mock.Anything)
+}
+
+func TestGoogleEngine_Search_MalformedRedirectKeepsKeyOutOfError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/%zz?"+r.URL.RawQuery)
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+	assert.NotContains(t, err.Error(), "test-api-key")
+}
+
+func TestGoogleEngine_Search_FollowsSecureRedirect(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "test-api-key", r.URL.Query().Get("key"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items": [{"title": "Result 1", "link": "https://example.com/1", "snippet": "Description 1"}]}`))
+	}))
+	defer target.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/customsearch/v1?"+r.URL.RawQuery, http.StatusFound)
+	}))
+	defer server.Close()
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+
+	response, err := engine.Search(context.Background(), "test query", 5)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, response.Count)
 }
 
 func TestConvertGoogleResults(t *testing.T) {
@@ -233,6 +363,23 @@ func TestNewSearchEngine_Google(t *testing.T) {
 	assert.True(t, ok, "Expected GoogleEngine type")
 	assert.Equal(t, "test-api-key", googleEngine.apiKey)
 	assert.Equal(t, "test-cse-id", googleEngine.cseID)
+	assert.Equal(t, GoogleDefaultBaseURL, googleEngine.baseURL)
+}
+
+func TestNewSearchEngine_GoogleBaseURL(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				GoogleAPIKey:  "test-api-key",
+				GoogleCSEID:   "test-cse-id",
+				GoogleBaseURL: "https://search.example.com/customsearch/v1",
+			},
+		},
+	}
+
+	googleEngine, ok := NewSearchEngine(atmosConfig).(*GoogleEngine)
+	assert.True(t, ok, "Expected GoogleEngine type")
+	assert.Equal(t, "https://search.example.com/customsearch/v1", googleEngine.baseURL)
 }
 
 func TestNewSearchEngine_DuckDuckGo_Default(t *testing.T) {
@@ -629,6 +776,32 @@ func TestGoogleEngine_Search_Success(t *testing.T) {
 	mockTransport.AssertExpectations(t)
 }
 
+func TestGoogleEngine_Search_CustomBaseURL(t *testing.T) {
+	mockTransport := new(MockRoundTripper)
+	mockResponse := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{"items": [{"title": "Result 1", "link": "https://example.com/1", "snippet": "Description 1"}]}`)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+	}
+	mockTransport.On("RoundTrip", mock.MatchedBy(func(req *http.Request) bool {
+		return req.URL.Host == "search.example.com" &&
+			req.URL.Path == "/customsearch/v1" &&
+			req.URL.Query().Get("key") == "test-api-key" &&
+			req.URL.Query().Get("cx") == "test-cse-id" &&
+			req.URL.Query().Get("q") == "test query"
+	})).Return(mockResponse, nil)
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", "https://search.example.com/customsearch/v1")
+	engine.client = &http.Client{Transport: mockTransport}
+
+	response, err := engine.Search(context.Background(), "test query", 5)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, response.Count)
+	assert.Equal(t, "https://example.com/1", response.Results[0].URL)
+	mockTransport.AssertExpectations(t)
+}
+
 func TestGoogleEngine_Search_HTTPError(t *testing.T) {
 	mockTransport := new(MockRoundTripper)
 	mockTransport.On("RoundTrip", mock.Anything).Return(nil, errors.New("network error"))
@@ -731,7 +904,7 @@ func TestGoogleEngine_Search_ContextCanceled(t *testing.T) {
 	}))
 	defer server.Close()
 
-	engine := NewGoogleEngine("test-api-key", "test-cse-id")
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately.
@@ -838,7 +1011,7 @@ func TestGoogleEngine_Search_Integration(t *testing.T) {
 	apiKey := "YOUR_GOOGLE_API_KEY"
 	cseID := "YOUR_GOOGLE_CSE_ID"
 
-	engine := NewGoogleEngine(apiKey, cseID)
+	engine := NewGoogleEngine(apiKey, cseID, "")
 	ctx := context.Background()
 
 	response, err := engine.Search(ctx, "golang", 5)
@@ -869,7 +1042,7 @@ func TestFetchAndParse_InvalidURL(t *testing.T) {
 
 // TestFetchGoogleResults_InvalidURL tests error handling in fetchGoogleResults.
 func TestFetchGoogleResults_InvalidURL(t *testing.T) {
-	engine := NewGoogleEngine("test-api-key", "test-cse-id")
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", "")
 
 	ctx := context.Background()
 	items, err := engine.fetchGoogleResults(ctx, "://invalid-url")
@@ -1138,7 +1311,8 @@ func TestBuildGoogleAPIURL_SpecialCharacters(t *testing.T) {
 	query := "test & special = chars"
 	maxResults := 10
 
-	url := buildGoogleAPIURL(apiKey, cseID, query, maxResults)
+	url, err := buildGoogleAPIURL("", apiKey, cseID, query, maxResults)
+	require.NoError(t, err)
 
 	assert.Contains(t, url, "test+%26+special+%3D+chars")
 	assert.Contains(t, url, "key=test-api-key")

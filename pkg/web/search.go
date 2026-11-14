@@ -3,16 +3,20 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -26,6 +30,8 @@ const (
 	DuckDuckGoMaxResults = 50
 	// GoogleMaxResults is the maximum number of results for Google CSE API.
 	GoogleMaxResults = 10
+	// GoogleDefaultBaseURL is the Google Custom Search JSON API URL used when no base URL is configured.
+	GoogleDefaultBaseURL = "https://www.googleapis.com/customsearch/v1"
 )
 
 // SearchResult represents a single search result.
@@ -173,21 +179,45 @@ func wrapSearchError(baseErr, err error) error {
 
 // GoogleEngine implements search using Google Custom Search API.
 type GoogleEngine struct {
-	client *http.Client
-	apiKey string
-	cseID  string
+	client  *http.Client
+	apiKey  string
+	cseID   string
+	baseURL string
 }
 
 // NewGoogleEngine creates a new Google Custom Search engine.
-func NewGoogleEngine(apiKey, cseID string) *GoogleEngine {
+// An empty baseURL uses GoogleDefaultBaseURL.
+func NewGoogleEngine(apiKey, cseID, baseURL string) *GoogleEngine {
 	defer perf.Track(nil, "web.NewGoogleEngine")()
+
+	if baseURL == "" {
+		baseURL = GoogleDefaultBaseURL
+	}
 
 	return &GoogleEngine{
 		client: &http.Client{
-			Timeout: DefaultHTTPTimeout,
+			Timeout:       DefaultHTTPTimeout,
+			CheckRedirect: googleCheckRedirect(apiKey != ""),
 		},
-		apiKey: apiKey,
-		cseID:  cseID,
+		apiKey:  apiKey,
+		cseID:   cseID,
+		baseURL: baseURL,
+	}
+}
+
+// googleMaxRedirects is the redirect limit of Go's default client policy.
+const googleMaxRedirects = 10
+
+// googleCheckRedirect applies the endpoint check to every redirect target, because a redirect keeps
+// the query string and the API key travels in it. The target is checked without its query so the
+// key never reaches an error message.
+func googleCheckRedirect(hasAPIKey bool) func(req *http.Request, via []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) >= googleMaxRedirects {
+			return fmt.Errorf("%w: stopped after %d redirects", errUtils.ErrWebSearchFailed, googleMaxRedirects)
+		}
+		target := url.URL{Scheme: req.URL.Scheme, Host: req.URL.Host, Path: req.URL.Path}
+		return base.ValidateProviderBaseURL(target.String(), hasAPIKey)
 	}
 }
 
@@ -197,8 +227,16 @@ func (e *GoogleEngine) Search(ctx context.Context, query string, maxResults int)
 
 	maxResults = normalizeMaxResults(maxResults, DefaultMaxResults, GoogleMaxResults)
 
+	// The API key travels in the query string, so refuse cleartext http to a non-loopback host.
+	if err := base.ValidateProviderBaseURL(e.baseURL, e.apiKey != ""); err != nil {
+		return nil, err
+	}
+
 	// Build API URL.
-	apiURL := buildGoogleAPIURL(e.apiKey, e.cseID, query, maxResults)
+	apiURL, err := buildGoogleAPIURL(e.baseURL, e.apiKey, e.cseID, query, maxResults)
+	if err != nil {
+		return nil, err
+	}
 
 	// Execute API request and parse response.
 	items, err := e.fetchGoogleResults(ctx, apiURL)
@@ -217,14 +255,55 @@ func (e *GoogleEngine) Search(ctx context.Context, query string, maxResults int)
 }
 
 // buildGoogleAPIURL constructs the Google Custom Search API URL.
-func buildGoogleAPIURL(apiKey, cseID, query string, maxResults int) string {
-	return fmt.Sprintf(
-		"https://www.googleapis.com/customsearch/v1?key=%s&cx=%s&q=%s&num=%d",
-		apiKey,
-		cseID,
-		url.QueryEscape(query),
-		maxResults,
-	)
+// Query parameters already present in baseURL are kept, and key, cx, q and num are set on top of them.
+func buildGoogleAPIURL(baseURL, apiKey, cseID, query string, maxResults int) (string, error) {
+	if baseURL == "" {
+		baseURL = GoogleDefaultBaseURL
+	}
+
+	if strings.Contains(baseURL, "#") {
+		return "", fmt.Errorf("%w: google_base_url must not contain a fragment", errUtils.ErrWebSearchFailed)
+	}
+
+	endpoint, err := url.Parse(baseURL)
+	if err != nil {
+		return "", wrapSearchError(errUtils.ErrWebSearchFailed, err)
+	}
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/")
+	endpoint.RawPath = strings.TrimRight(endpoint.RawPath, "/")
+
+	values := endpoint.Query()
+	values.Set("key", apiKey)
+	values.Set("cx", cseID)
+	values.Set("q", query)
+	values.Set("num", strconv.Itoa(maxResults))
+	endpoint.RawQuery = values.Encode()
+
+	return endpoint.String(), nil
+}
+
+// searchRequestError keeps the API key out of a failed request's error. A *url.Error prints the
+// request URL, and its cause can quote a malformed Location header, which can carry the query.
+// Only causes whose text holds no query are kept: the redirect check's own errors, a cancelled
+// or expired context, and network errors, which name only the host. Any other cause is reduced
+// to the failed operation.
+func searchRequestError(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return wrapSearchError(errUtils.ErrWebSearchFailed, err)
+	}
+	cause := urlErr.Err
+	var netErr *net.OpError
+	switch {
+	case errors.Is(cause, errUtils.ErrAIInsecureBaseURL), errors.Is(cause, errUtils.ErrWebSearchFailed):
+		return wrapSearchError(errUtils.ErrWebSearchFailed, cause)
+	case errors.Is(cause, context.Canceled), errors.Is(cause, context.DeadlineExceeded):
+		return fmt.Errorf("%w: %s request failed: %w", errUtils.ErrWebSearchFailed, urlErr.Op, cause)
+	case errors.As(cause, &netErr):
+		return wrapSearchError(errUtils.ErrWebSearchFailed, netErr)
+	default:
+		return fmt.Errorf("%w: %s request failed", errUtils.ErrWebSearchFailed, urlErr.Op)
+	}
 }
 
 // fetchGoogleResults performs the API request and returns the items.
@@ -238,7 +317,7 @@ func (e *GoogleEngine) fetchGoogleResults(ctx context.Context, apiURL string) ([
 	// Execute request (URL is constructed from configured search engine base URL, not user input).
 	resp, err := e.client.Do(req) //nolint:gosec // URL is built from trusted config, not user input.
 	if err != nil {
-		return nil, wrapSearchError(errUtils.ErrWebSearchFailed, err)
+		return nil, searchRequestError(err)
 	}
 	defer resp.Body.Close()
 
@@ -301,6 +380,7 @@ func NewSearchEngine(atmosConfig *schema.AtmosConfiguration) SearchEngine {
 		return NewGoogleEngine(
 			atmosConfig.AI.WebSearch.GoogleAPIKey,
 			atmosConfig.AI.WebSearch.GoogleCSEID,
+			atmosConfig.AI.WebSearch.GoogleBaseURL,
 		)
 	}
 
