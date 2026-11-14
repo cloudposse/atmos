@@ -4,6 +4,7 @@ package oci
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -87,6 +88,11 @@ func (r *Repository) readAttachment(ctx context.Context, st store, name string, 
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, "", ctx.Err()
+		}
+		// A referrer that declares more than the manifest bound is malformed evidence, like any
+		// other unusable referrer: it must not block a valid signature carried by another one.
+		if errors.Is(err, errUtils.ErrArtifactTooLarge) {
+			return nil, fmt.Sprintf("referrer %s is too large to inspect: %v", desc.Digest, err), nil
 		}
 		return nil, "", fmt.Errorf("%w: read referrer %s: %w", errUtils.ErrArtifactDownloadFailed, desc.Digest, err)
 	}
