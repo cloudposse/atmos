@@ -56,7 +56,8 @@ func TestDiscoverProfileLocations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			locations := discoverProfileLocations(&tt.atmosConfig)
+			locations, err := discoverProfileLocations(&tt.atmosConfig)
+			require.NoError(t, err)
 			assert.Len(t, locations, tt.expectedLocations)
 
 			for _, expectedType := range tt.expectedTypes {
@@ -85,7 +86,8 @@ func TestDiscoverProfileLocations_MultipleConfigDirs(t *testing.T) {
 		CliConfigPath: dirA + ";" + dirB + ";",
 	}
 
-	locations := discoverProfileLocations(&atmosConfig)
+	locations, err := discoverProfileLocations(&atmosConfig)
+	require.NoError(t, err)
 
 	var projectHidden, project []string
 	for _, loc := range locations {
@@ -224,7 +226,8 @@ func TestListAvailableProfiles(t *testing.T) {
 		{Path: hiddenProfilesDir, Type: "project-hidden", Precedence: 2},
 	}
 
-	profiles := listAvailableProfiles(locations)
+	profiles, err := listAvailableProfiles(locations)
+	require.NoError(t, err)
 
 	// Should find 3 unique profile names (developer, production, ci).
 	assert.Len(t, profiles, 3)

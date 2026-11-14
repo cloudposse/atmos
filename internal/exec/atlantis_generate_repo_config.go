@@ -406,7 +406,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 						return err
 					}
 				case stackNamePattern != "":
-					stackSlug, err = cfg.GetContextPrefix(stackConfigFileName, &context, stackNamePattern, stackConfigFileName)
+					stackSlug, err = cfg.GetContextPrefix(stackConfigFileName, context, stackNamePattern, stackConfigFileName)
 					if err != nil {
 						return err
 					}
@@ -430,7 +430,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 					var whenModified []string
 
 					for _, item := range projectTemplate.Autoplan.WhenModified {
-						processedItem := cfg.ReplaceContextTokens(&context, item)
+						processedItem := cfg.ReplaceContextTokens(context, item)
 						whenModified = append(whenModified, processedItem)
 					}
 
@@ -439,12 +439,12 @@ func ExecuteAtlantisGenerateRepoConfig(
 						WhenModified: whenModified,
 					}
 
-					atlantisProjectName := cfg.ReplaceContextTokens(&context, projectTemplate.Name)
+					atlantisProjectName := cfg.ReplaceContextTokens(context, projectTemplate.Name)
 
 					atlantisProject := schema.AtlantisProjectConfig{
 						Name:                      atlantisProjectName,
-						Workspace:                 cfg.ReplaceContextTokens(&context, projectTemplate.Workspace),
-						Dir:                       cfg.ReplaceContextTokens(&context, projectTemplate.Dir),
+						Workspace:                 cfg.ReplaceContextTokens(context, projectTemplate.Workspace),
+						Dir:                       cfg.ReplaceContextTokens(context, projectTemplate.Dir),
 						TerraformVersion:          projectTemplate.TerraformVersion,
 						DeleteSourceBranchOnMerge: projectTemplate.DeleteSourceBranchOnMerge,
 						Autoplan:                  atlantisProjectAutoplanConfig,

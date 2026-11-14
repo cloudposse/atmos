@@ -190,7 +190,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 				}
 			} else if atmosConfig.Components.Helmfile.ClusterNamePattern != "" {
 				log.Warn("cluster_name_pattern is deprecated, use cluster_name_template with Go template syntax instead")
-				clusterName = cfg.ReplaceContextTokens(&context, atmosConfig.Components.Helmfile.ClusterNamePattern)
+				clusterName = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
 			}
 		}
 		// `profile` can be overridden on the command line.
@@ -198,7 +198,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		// Note: helm_aws_profile_pattern is deprecated, use --identity flag instead.
 		if profile == "" && roleArn == "" && atmosConfig.Components.Helmfile.HelmAwsProfilePattern != "" {
 			log.Warn("helm_aws_profile_pattern is deprecated, use --identity flag instead")
-			profile = cfg.ReplaceContextTokens(&context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
+			profile = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
 		}
 		// `region` can be overridden on the command line
 		if region == "" {

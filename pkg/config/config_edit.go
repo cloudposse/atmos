@@ -144,7 +144,10 @@ func activeProfileFiles(atmosConfig *schema.AtmosConfiguration) []string {
 	if len(profiles) == 0 {
 		return nil
 	}
-	locations := discoverProfileLocations(atmosConfig)
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return nil
+	}
 	var files []string
 	for _, name := range profiles {
 		dir, _, derr := findProfileDirectory(name, locations)

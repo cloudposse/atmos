@@ -19,7 +19,7 @@ func refreshTerraformGeneratorContext(config *schema.AtmosConfiguration, info *s
 		stackName, err = ProcessTmpl(config, "terraform-generate-stack-name", config.Stacks.NameTemplate,
 			info.ComponentSection, config.Templates.Settings.IgnoreMissingTemplateValues)
 	} else {
-		stackName, err = cfg.GetContextPrefix(stackFileName, &context, GetStackNamePattern(config), stackFileName)
+		stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(config), stackFileName)
 	}
 	if err != nil {
 		return err

@@ -32,7 +32,7 @@ func InferValueType(dotPath string) (string, bool) {
 		if segment == "" {
 			return "", false
 		}
-		for t.Kind() == reflect.Pointer {
+		for t.Kind() == reflect.Ptr {
 			t = t.Elem()
 		}
 		field, ok := findFieldByTag(t, segment)
@@ -41,7 +41,7 @@ func InferValueType(dotPath string) (string, bool) {
 		}
 		t = field.Type
 	}
-	for t.Kind() == reflect.Pointer {
+	for t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 	return valueTypeForKind(t.Kind())

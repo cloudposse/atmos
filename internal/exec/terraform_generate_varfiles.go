@@ -181,7 +181,7 @@ func ExecuteTerraformGenerateVarfiles(
 						return err
 					}
 				} else {
-					stackName, err = cfg.GetContextPrefix(stackFileName, &context, GetStackNamePattern(atmosConfig), stackFileName)
+					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 					if err != nil {
 						return err
 					}
@@ -317,7 +317,7 @@ func ExecuteTerraformGenerateVarfiles(
 					slices.Contains(stacks, stackName) {
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
-					fileName := cfg.ReplaceContextTokens(&context, fileTemplate)
+					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
 					fileAbsolutePath, err := filepath.Abs(fileName)
 					if err != nil {
 						return err

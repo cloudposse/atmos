@@ -377,7 +377,7 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 
 			var err error
 			if tt.configVersionUse != "" {
-				err = checkConfig(&schema.AtmosConfiguration{
+				err = checkConfig(schema.AtmosConfiguration{
 					Version: schema.Version{
 						Use:        tt.configVersionUse,
 						Constraint: tt.constraint,
@@ -540,7 +540,7 @@ func TestCheckConfig_WithVersionConstraint(t *testing.T) {
 		},
 	}
 
-	err := checkConfig(&atmosConfig, false)
+	err := checkConfig(atmosConfig, false)
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrVersionConstraint))
 }
@@ -555,6 +555,6 @@ func TestCheckConfig_WithoutVersionConstraint(t *testing.T) {
 		// No version constraint.
 	}
 
-	err := checkConfig(&atmosConfig, false)
+	err := checkConfig(atmosConfig, false)
 	assert.NoError(t, err)
 }

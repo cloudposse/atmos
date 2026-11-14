@@ -72,7 +72,16 @@ func run() (exitCode int) {
 	// such as "ls". Dispatch it before generic flag handling so "ls --version"
 	// reaches the proxied tool rather than Atmos's --version handler.
 	if handled, err := cmd.TryRunToolchainProxy(os.Args); handled {
-		return proxyExitCode(err)
+		if err != nil {
+			if code, ok := silentExitCode(err); ok {
+				return code
+			}
+			errUtils.CaptureError(err)
+			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
+			return errUtils.GetExitCode(err)
+		}
+		return 0
 	}
 
 	// Handle --version flag at application entry point to avoid deep exit in command infrastructure.
@@ -81,7 +90,25 @@ func run() (exitCode int) {
 	// Note: Only intercept --version flag here. The "version" subcommand should go through
 	// normal Cobra flow to ensure PersistentPreRun executes (needed for proper logging setup).
 	if hasVersionFlag(os.Args) {
-		return runVersion()
+		// Check for conflicting flags: --version and --use-version cannot be used together.
+		if hasUseVersionFlag(os.Args) {
+			// Print error directly since config/formatters aren't initialized yet.
+			// Use MaskWriter for consistent masking (gracefully falls back if not initialized).
+			maskedStderr := ioLayer.MaskWriter(os.Stderr)
+			_, _ = maskedStderr.Write([]byte("\nError: --version and --use-version cannot be used together\n\n"))
+			_, _ = maskedStderr.Write([]byte("Hints:\n"))
+			_, _ = maskedStderr.Write([]byte("  - Use --version to display the current Atmos version\n"))
+			_, _ = maskedStderr.Write([]byte("  - Use --use-version to run a command with a specific Atmos version\n\n"))
+			return 1
+		}
+		err := cmd.ExecuteVersion()
+		if err != nil {
+			errUtils.CaptureError(err)
+			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
+			return errUtils.GetExitCode(err)
+		}
+		return 0 // Exit normally after printing version.
 	}
 
 	err := cmd.Execute()
@@ -110,43 +137,6 @@ func run() (exitCode int) {
 	}
 
 	return 0
-}
-
-// proxyExitCode reports proxy errors while preserving silent child exit codes.
-func proxyExitCode(err error) int {
-	if err != nil {
-		if code, ok := silentExitCode(err); ok {
-			return code
-		}
-		errUtils.CaptureError(err)
-		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
-		return errUtils.GetExitCode(err)
-	}
-	return 0
-}
-
-// runVersion handles the entry-point version flag before command initialization.
-func runVersion() int {
-	// Check for conflicting flags: --version and --use-version cannot be used together.
-	if hasUseVersionFlag(os.Args) {
-		// Print error directly since config/formatters aren't initialized yet.
-		// Use MaskWriter for consistent masking (gracefully falls back if not initialized).
-		maskedStderr := ioLayer.MaskWriter(os.Stderr)
-		_, _ = maskedStderr.Write([]byte("\nError: --version and --use-version cannot be used together\n\n"))
-		_, _ = maskedStderr.Write([]byte("Hints:\n"))
-		_, _ = maskedStderr.Write([]byte("  - Use --version to display the current Atmos version\n"))
-		_, _ = maskedStderr.Write([]byte("  - Use --use-version to run a command with a specific Atmos version\n\n"))
-		return 1
-	}
-	err := cmd.ExecuteVersion()
-	if err != nil {
-		errUtils.CaptureError(err)
-		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
-		return errUtils.GetExitCode(err)
-	}
-	return 0 // Exit normally after printing version.
 }
 
 // silentExitCode reports the exit code to use when err is a silent exit-code

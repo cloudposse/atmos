@@ -92,7 +92,7 @@ func TestDoctorNamingUpgradePreservesScopedTokenContext(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{}
-			before, err := stackexec.ProcessTmpl(config, "legacy-scoped-naming", cfg.ReplaceContextTokens(&legacy, tc.pattern), data, false)
+			before, err := stackexec.ProcessTmpl(config, "legacy-scoped-naming", cfg.ReplaceContextTokens(legacy, tc.pattern), data, false)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, before)
 			replacement, tokens, unsupported := naming.Upgrade(tc.pattern)

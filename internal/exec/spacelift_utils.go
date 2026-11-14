@@ -14,7 +14,7 @@ func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Co
 	defer perf.Track(nil, "exec.BuildSpaceliftStackName")()
 
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
-		return cfg.ReplaceContextTokens(&context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
+		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
 	} else if spaceliftStackName, ok := spaceliftSettings["stack_name"].(string); ok {
 		return spaceliftStackName, contextPrefix, nil
 	} else {
@@ -62,7 +62,7 @@ func ResolveSpaceliftContextPrefix(
 		}
 		return prefix, ensureLiteralStackIdentity(stackName, prefix, section)
 	case naming.NamePattern != "":
-		prefix, err := cfg.GetContextPrefix(stackName, context, naming.NamePattern, stackName)
+		prefix, err := cfg.GetContextPrefix(stackName, *context, naming.NamePattern, stackName)
 		if err != nil {
 			return "", err
 		}
@@ -170,7 +170,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 				return "", err
 			}
 		} else {
-			contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, &context, GetStackNamePattern(atmosConfig), configAndStacksInfo.Stack)
+			contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, context, GetStackNamePattern(atmosConfig), configAndStacksInfo.Stack)
 			if err != nil {
 				return "", err
 			}

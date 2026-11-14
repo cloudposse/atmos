@@ -36,9 +36,8 @@ test('every packaged policy validates', () => {
   }
 });
 
-test('no-network policy selects enforcement without granting external destinations', () => {
-  const content = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'allowlist.yaml'), 'utf8');
-  assert.equal(readPolicy(content, 'none'), 'github.com:9');
+test('explicit empty policy adds no endpoints beyond upstream implicit destinations', () => {
+  assert.equal(readPolicy('{"no-network":[]}', 'no-network'), '');
 });
 
 test('composes YAML groups without granting unselected endpoints', () => {

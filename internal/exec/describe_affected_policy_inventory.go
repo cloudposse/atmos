@@ -80,13 +80,13 @@ func affectedPolicyConfig(config *schema.AtmosConfiguration, root, checkout stri
 	if err != nil {
 		return nil, err
 	}
-	stackFiles, err := cfg.FindAllStackConfigsInPathsForStack(&copyConfig, "", include, exclude)
+	pathsFound, _, _, err := cfg.FindAllStackConfigsInPathsForStack(copyConfig, "", include, exclude)
 	if err != nil && !errors.Is(err, errUtils.ErrNoStackManifestsFound) {
 		return nil, err
 	}
 	// A successful scan with no manifests is a known empty inventory, not a
 	// missing-import fallback. Import and parsing failures remain fatal.
-	copyConfig.StackConfigFilesAbsolutePaths = stackFiles.AbsolutePaths
+	copyConfig.StackConfigFilesAbsolutePaths = pathsFound
 	return &copyConfig, nil
 }
 

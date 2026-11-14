@@ -47,15 +47,13 @@ func splitCliConfigPath(cliConfigPath string) []string {
 	return dirs
 }
 
-const profileDirectoryMode = 0o755
-
 // discoverProfileLocations returns all possible profile locations in precedence order.
 // Precedence (highest to lowest):
 // 1. Configurable (profiles.base_path in atmos.yaml).
 // 2. Project-local hidden (.atmos/profiles/).
 // 3. XDG user profiles ($XDG_CONFIG_HOME/atmos/profiles/).
 // 4. Project-local non-hidden (profiles/).
-func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) []ProfileLocation {
+func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]ProfileLocation, error) {
 	var locations []ProfileLocation
 
 	// CliConfigPath is usually a single directory, but connectPaths (load_config_args.go)
@@ -69,42 +67,6 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) []ProfileL
 		primaryDir = baseDirs[0]
 	}
 
-	if location, ok := configuredProfileLocation(atmosConfig, primaryDir); ok {
-		locations = append(locations, location)
-	}
-
-	// 2. Project-local hidden profiles -- one per contributor directory.
-	for _, baseDir := range baseDirs {
-		locations = append(locations, ProfileLocation{
-			Path:       filepath.Join(baseDir, ".atmos", "profiles"),
-			Type:       "project-hidden",
-			Precedence: 2,
-		})
-	}
-
-	// 3. XDG user profiles.
-	xdgPath, err := xdg.GetXDGConfigDir("profiles", profileDirectoryMode)
-	if err == nil && xdgPath != "" {
-		locations = append(locations, ProfileLocation{
-			Path:       xdgPath,
-			Type:       "xdg",
-			Precedence: 3,
-		})
-	}
-
-	// 4. Project-local non-hidden profiles (lowest precedence) -- one per contributor directory.
-	for _, baseDir := range baseDirs {
-		locations = append(locations, ProfileLocation{
-			Path:       filepath.Join(baseDir, "profiles"),
-			Type:       "project",
-			Precedence: 4,
-		})
-	}
-
-	return locations
-}
-
-func configuredProfileLocation(atmosConfig *schema.AtmosConfiguration, primaryDir string) (ProfileLocation, bool) {
 	// 1. Configurable base_path (highest precedence), resolved from whichever --config file
 	// actually declared profiles.base_path (ProfilesBasePathConfigDir), falling back to the
 	// primary directory for single-file/non-CLI-arg config sources where that isn't tracked.
@@ -123,14 +85,42 @@ func configuredProfileLocation(atmosConfig *schema.AtmosConfiguration, primaryDi
 			basePath = filepath.Join(resolveDir, basePath)
 		}
 
-		return ProfileLocation{
+		locations = append(locations, ProfileLocation{
 			Path:       basePath,
 			Type:       "configurable",
 			Precedence: 1,
-		}, true
+		})
 	}
 
-	return ProfileLocation{}, false
+	// 2. Project-local hidden profiles -- one per contributor directory.
+	for _, baseDir := range baseDirs {
+		locations = append(locations, ProfileLocation{
+			Path:       filepath.Join(baseDir, ".atmos", "profiles"),
+			Type:       "project-hidden",
+			Precedence: 2,
+		})
+	}
+
+	// 3. XDG user profiles.
+	xdgPath, err := xdg.GetXDGConfigDir("profiles", 0o755)
+	if err == nil && xdgPath != "" {
+		locations = append(locations, ProfileLocation{
+			Path:       xdgPath,
+			Type:       "xdg",
+			Precedence: 3,
+		})
+	}
+
+	// 4. Project-local non-hidden profiles (lowest precedence) -- one per contributor directory.
+	for _, baseDir := range baseDirs {
+		locations = append(locations, ProfileLocation{
+			Path:       filepath.Join(baseDir, "profiles"),
+			Type:       "project",
+			Precedence: 4,
+		})
+	}
+
+	return locations, nil
 }
 
 // findProfileDirectory searches for a profile across all locations.
@@ -173,7 +163,7 @@ func findProfileDirectory(profileName string, locations []ProfileLocation) (stri
 }
 
 // listAvailableProfiles returns all profiles found across all locations.
-func listAvailableProfiles(locations []ProfileLocation) map[string][]string {
+func listAvailableProfiles(locations []ProfileLocation) (map[string][]string, error) {
 	// Map: profile name -> list of locations where found.
 	profiles := make(map[string][]string)
 
@@ -197,7 +187,7 @@ func listAvailableProfiles(locations []ProfileLocation) map[string][]string {
 		}
 	}
 
-	return profiles
+	return profiles, nil
 }
 
 // loadProfileFiles loads all YAML files from a profile directory.
@@ -266,16 +256,64 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 	}
 
 	// Discover profile locations.
-	locations := discoverProfileLocations(atmosConfig)
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrProfileDiscovery).
+			WithExplanationf("Failed to discover profile locations: `%s`", err).
+			WithExplanation("The system could not determine where to look for profiles").
+			WithHint("Verify `profiles.base_path` in `atmos.yaml` exists and is accessible").
+			WithHint("Check `XDG_CONFIG_HOME` environment variable if using XDG locations").
+			WithHint("Run `atmos describe config` to view current configuration").
+			WithContext("base_path", atmosConfig.Profiles.BasePath).
+			WithContext("config_dir", atmosConfig.CliConfigPath).
+			WithExitCode(2).
+			Err()
+	}
 
 	// Load each profile in order (left-to-right).
 	for _, profileName := range profileNames {
 		// Find profile directory.
 		profileDir, locType, err := findProfileDirectory(profileName, locations)
 		if err != nil {
+			// Check if this is a profile not found error.
 			if errors.Is(err, errUtils.ErrProfileNotFound) {
-				return buildProfileNotFoundError(profileName, profileNames, locations, atmosConfig)
+				// Add list of available profiles to help user.
+				available, _ := listAvailableProfiles(locations)
+				var availableNames []string
+				for name := range available {
+					availableNames = append(availableNames, name)
+				}
+				sort.Strings(availableNames)
+
+				builder := errUtils.Build(errUtils.ErrProfileNotFound).
+					WithExplanationf("Profile `%s` does not exist in any configured location", profileName).
+					WithExplanationf("Available profiles are: `%s`", strings.Join(availableNames, ", "))
+
+				// Check if the profile name matches an auth identity name.
+				// This helps users who confuse ATMOS_PROFILE (configuration profiles)
+				// with ATMOS_IDENTITY (authentication identities).
+				// See: https://github.com/cloudposse/atmos/issues/2071
+				if isAuthIdentityName(profileName, atmosConfig) {
+					builder = builder.
+						WithHintf("`%s` is an auth identity, not a configuration profile", profileName).
+						WithHint("If you want to select an auth identity, use `ATMOS_IDENTITY` or `--identity` instead of `ATMOS_PROFILE`").
+						WithHintf("Example: `export ATMOS_IDENTITY=%s` or `atmos terraform plan --identity %s`", profileName, profileName)
+				} else {
+					builder = builder.
+						WithHint("Check the spelling of the profile name")
+				}
+
+				return builder.
+					WithHint("Run `atmos profile list` for detailed information about each profile").
+					WithHint("Verify the profile directory exists if you expect to see it").
+					WithContext("profile", profileName).
+					WithContext("requested_profiles", strings.Join(profileNames, ", ")).
+					WithContext("available_count", fmt.Sprintf("%d", len(availableNames))).
+					WithExitCode(2).
+					Err()
 			}
+
+			// For other errors, preserve original error chain.
 			return err
 		}
 
@@ -291,43 +329,6 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 	}
 
 	return nil
-}
-
-func buildProfileNotFoundError(profileName string, profileNames []string, locations []ProfileLocation, atmosConfig *schema.AtmosConfiguration) error {
-	// Add list of available profiles to help user.
-	available := listAvailableProfiles(locations)
-	var availableNames []string
-	for name := range available {
-		availableNames = append(availableNames, name)
-	}
-	sort.Strings(availableNames)
-
-	builder := errUtils.Build(errUtils.ErrProfileNotFound).
-		WithExplanationf("Profile `%s` does not exist in any configured location", profileName).
-		WithExplanationf("Available profiles are: `%s`", strings.Join(availableNames, ", "))
-
-	// Check if the profile name matches an auth identity name.
-	// This helps users who confuse ATMOS_PROFILE (configuration profiles)
-	// with ATMOS_IDENTITY (authentication identities).
-	// See: https://github.com/cloudposse/atmos/issues/2071
-	if isAuthIdentityName(profileName, atmosConfig) {
-		builder = builder.
-			WithHintf("`%s` is an auth identity, not a configuration profile", profileName).
-			WithHint("If you want to select an auth identity, use `ATMOS_IDENTITY` or `--identity` instead of `ATMOS_PROFILE`").
-			WithHintf("Example: `export ATMOS_IDENTITY=%s` or `atmos terraform plan --identity %s`", profileName, profileName)
-	} else {
-		builder = builder.
-			WithHint("Check the spelling of the profile name")
-	}
-
-	return builder.
-		WithHint("Run `atmos profile list` for detailed information about each profile").
-		WithHint("Verify the profile directory exists if you expect to see it").
-		WithContext("profile", profileName).
-		WithContext("requested_profiles", strings.Join(profileNames, ", ")).
-		WithContext("available_count", fmt.Sprintf("%d", len(availableNames))).
-		WithExitCode(2).
-		Err()
 }
 
 // isAuthIdentityName checks whether the given name matches an auth identity in the config.
@@ -396,7 +397,10 @@ func ProfileDefinesIdentity(atmosConfig *schema.AtmosConfiguration, profileName,
 		return false, nil
 	}
 
-	locations := discoverProfileLocations(atmosConfig)
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return false, err
+	}
 
 	profileDir, _, err := findProfileDirectory(profileName, locations)
 	if err != nil {
@@ -437,9 +441,15 @@ func ProfilesWithIdentity(atmosConfig *schema.AtmosConfiguration, identityName s
 		return nil, nil
 	}
 
-	locations := discoverProfileLocations(atmosConfig)
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return nil, err
+	}
 
-	available := listAvailableProfiles(locations)
+	available, err := listAvailableProfiles(locations)
+	if err != nil {
+		return nil, err
+	}
 
 	var matches []string
 	for profileName := range available {
@@ -476,7 +486,10 @@ func ProfileDefinesAuthConfig(atmosConfig *schema.AtmosConfiguration, profileNam
 		return false, nil
 	}
 
-	locations := discoverProfileLocations(atmosConfig)
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return false, err
+	}
 
 	profileDir, _, err := findProfileDirectory(profileName, locations)
 	if err != nil {
@@ -514,9 +527,15 @@ func ProfilesWithAuthConfig(atmosConfig *schema.AtmosConfiguration) ([]string, e
 		return nil, nil
 	}
 
-	locations := discoverProfileLocations(atmosConfig)
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return nil, err
+	}
 
-	available := listAvailableProfiles(locations)
+	available, err := listAvailableProfiles(locations)
+	if err != nil {
+		return nil, err
+	}
 
 	var matches []string
 	for profileName := range available {

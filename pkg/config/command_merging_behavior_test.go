@@ -154,12 +154,11 @@ commands:
 
 				// Capture command details for debugging on failure.
 				t.Cleanup(func() {
-					if !t.Failed() {
-						return
-					}
-					t.Log("\nActual commands:")
-					for _, cmd := range commands {
-						t.Logf("  - %s: %s", cmd.Name, cmd.Description)
+					if t.Failed() {
+						t.Log("\nActual commands:")
+						for _, cmd := range commands {
+							t.Logf("  - %s: %s", cmd.Name, cmd.Description)
+						}
 					}
 				})
 			},
@@ -276,23 +275,22 @@ commands:
 
 				// Verify complex nested structures are preserved.
 				t.Cleanup(func() {
-					if !t.Failed() {
-						return
-					}
-					for _, cmd := range commands {
-						t.Logf("\nCommand '%s' structure:", cmd.Name)
-						t.Logf("  Description: %s", cmd.Description)
-						if len(cmd.Steps) > 0 {
-							t.Logf("  Steps: %d", len(cmd.Steps))
-						}
-						if len(cmd.Env) > 0 {
-							t.Logf("  Env vars: %d", len(cmd.Env))
-						}
-						if len(cmd.Arguments) > 0 {
-							t.Logf("  Arguments: %d", len(cmd.Arguments))
-						}
-						if len(cmd.Flags) > 0 {
-							t.Logf("  Flags: %d", len(cmd.Flags))
+					if t.Failed() {
+						for _, cmd := range commands {
+							t.Logf("\nCommand '%s' structure:", cmd.Name)
+							t.Logf("  Description: %s", cmd.Description)
+							if len(cmd.Steps) > 0 {
+								t.Logf("  Steps: %d", len(cmd.Steps))
+							}
+							if len(cmd.Env) > 0 {
+								t.Logf("  Env vars: %d", len(cmd.Env))
+							}
+							if len(cmd.Arguments) > 0 {
+								t.Logf("  Arguments: %d", len(cmd.Arguments))
+							}
+							if len(cmd.Flags) > 0 {
+								t.Logf("  Flags: %d", len(cmd.Flags))
+							}
 						}
 					}
 				})

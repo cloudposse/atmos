@@ -410,8 +410,7 @@ jobs:
       - name: Run golangci-lint with lintroller plugin
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          # Match the custom binary, not the bootstrap CLI used to build it.
-          version: v2.13.2
+          version: 101ccaca0df22b2e36dd917ed5d0be423baa6298
           install-mode: none
           # The action's config verification downloads a remote JSON schema and
           # can fail transiently. The subsequent lint command still parses and

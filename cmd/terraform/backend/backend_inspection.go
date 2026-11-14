@@ -29,18 +29,18 @@ func describeStaticBackendStacks(atmosConfig *schema.AtmosConfiguration, stack s
 	staticConfig := *atmosConfig
 	staticConfig.Templates.Settings.Enabled = false
 	staticConfig.AuthManager = nil
-	stackFiles, err := cfg.FindAllStackConfigsInPathsForStack(&staticConfig, stack,
+	paths, relativePaths, physical, err := cfg.FindAllStackConfigsInPathsForStack(staticConfig, stack,
 		staticConfig.IncludeStackAbsolutePaths, staticConfig.ExcludeStackAbsolutePaths)
 	if err != nil {
 		return nil, err
 	}
-	if len(stackFiles.AbsolutePaths) == 0 {
+	if len(paths) == 0 {
 		return nil, fmt.Errorf("%w: %q", errUtils.ErrStackNotFound, stack)
 	}
-	staticConfig.StackConfigFilesAbsolutePaths = stackFiles.AbsolutePaths
-	staticConfig.StackConfigFilesRelativePaths = stackFiles.RelativePaths
+	staticConfig.StackConfigFilesAbsolutePaths = paths
+	staticConfig.StackConfigFilesRelativePaths = relativePaths
 	staticConfig.StackType = "Logical"
-	if stackFiles.Physical {
+	if physical {
 		staticConfig.StackType = "Directory"
 	}
 	return e.ExecuteDescribeStacksWithOptions(&staticConfig, stack, nil, nil, nil,

@@ -178,10 +178,6 @@ func applyPolymorphicOverrides(root *jsonschema.Schema) {
 		}))
 	}
 
-	applyDefinitionPropertyAlternatives(root)
-}
-
-func applyDefinitionPropertyAlternatives(root *jsonschema.Schema) {
 	// Definition properties whose decode hooks or weakly-typed decoding (see
 	// schema.Task.UnmarshalYAML, commandEnvMapDecodeHook, Terminal.IsPagerEnabled)
 	// accept more shapes than the Go field declares.

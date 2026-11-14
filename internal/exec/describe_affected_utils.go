@@ -199,8 +199,8 @@ func executeDescribeAffected(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	remoteStackFiles, err := cfg.FindAllStackConfigsInPathsForStack(
-		atmosConfig,
+	remoteStackConfigFilesAbsolutePaths, _, _, err := cfg.FindAllStackConfigsInPathsForStack(
+		*atmosConfig,
 		stack, // Apply the same stack filter if provided.
 		remoteIncludeStackAbsPaths,
 		remoteExcludeStackAbsPaths,
@@ -218,9 +218,9 @@ func executeDescribeAffected(
 			"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
 			"error", err,
 		)
-		remoteStackFiles.AbsolutePaths = []string{}
+		remoteStackConfigFilesAbsolutePaths = []string{}
 	}
-	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackFiles.AbsolutePaths
+	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths
 
 	remoteStacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,

@@ -123,22 +123,22 @@ func getHomeFromEnv() string {
 	if runtime.GOOS == "plan9" {
 		homeEnv = "home" // On Plan 9, env vars are lowercase
 	}
-	return os.Getenv(homeEnv) //nolint:forbidigo // OS home-directory convention; must not be overridden by application config.
+	return os.Getenv(homeEnv)
 }
 
 func dirWindows() (string, error) {
 	// First prefer the HOME environmental variable
-	if home := os.Getenv("HOME"); home != "" { //nolint:forbidigo // OS home-directory convention; must not be overridden by application config.
+	if home := os.Getenv("HOME"); home != "" {
 		return home, nil
 	}
 
 	// Prefer standard environment variable USERPROFILE
-	if home := os.Getenv("USERPROFILE"); home != "" { //nolint:forbidigo // OS home-directory convention; must not be overridden by application config.
+	if home := os.Getenv("USERPROFILE"); home != "" {
 		return home, nil
 	}
 
-	drive := os.Getenv("HOMEDRIVE") //nolint:forbidigo // OS home-directory convention; must not be overridden by application config.
-	path := os.Getenv("HOMEPATH")   //nolint:forbidigo // OS home-directory convention; must not be overridden by application config.
+	drive := os.Getenv("HOMEDRIVE")
+	path := os.Getenv("HOMEPATH")
 	home := drive + path
 	if drive == "" || path == "" {
 		return "", ErrHomeDrivePathBlank
@@ -163,7 +163,7 @@ func getDarwinHomeDir() (string, error) {
 
 func getUnixHomeDir() (string, error) {
 	var stdout bytes.Buffer
-	cmd := exec.Command("getent", "passwd", strconv.Itoa(os.Getuid())) //nolint:gosec // Fixed executable and database; argument is the numeric UID from the OS.
+	cmd := exec.Command("getent", "passwd", strconv.Itoa(os.Getuid()))
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
 		if !errors.Is(err, exec.ErrNotFound) {

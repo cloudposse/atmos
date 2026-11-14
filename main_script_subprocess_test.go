@@ -15,9 +15,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // Environment gates that let this test binary stand in for Atmos and for a child program.
@@ -51,24 +48,6 @@ func TestMain(m *testing.M) {
 	if os.Getenv(envRunMain) == "1" {
 		main()
 		return
-	}
-	// The test harness owns its inherited tools across fixture project changes.
-	// Otherwise nested run() calls remove the parent custom command's tool paths
-	// after ProvisionToolchain has already found Terraform and skipped installation.
-	if err := os.Unsetenv("_ATMOS_TOOLCHAIN_PATH"); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	// Root-package integration tests run in a different process from tests/,
-	// so they need their own bootstrap. Keep this after the helper-process gates
-	// and provision only Terraform, using the shared repository version pins.
-	logger := log.New()
-	logger.SetLevel(log.WarnLevel)
-	for _, tool := range testhelpers.DefaultTools() {
-		if tool.Binary == "terraform" {
-			testhelpers.ProvisionToolchain(logger, []testhelpers.Tool{tool})
-			break
-		}
 	}
 	os.Exit(m.Run())
 }

@@ -38,18 +38,11 @@ func recordArgumentRequirements(node *goyaml.Node, decoded map[string]interface{
 	}
 	for i, child := range argumentsNode.Content {
 		argument, ok := entryAt(decodedArguments, i)
-		if !ok {
+		if !ok || child.Kind != goyaml.MappingNode || mappingValueNode(child, commandKeyRequired) != nil {
 			continue
 		}
-		recordArgumentRequirement(child, argument)
-	}
-}
-
-func recordArgumentRequirement(child *goyaml.Node, argument map[string]interface{}) {
-	if child.Kind != goyaml.MappingNode || mappingValueNode(child, commandKeyRequired) != nil {
-		return
-	}
-	if defaultValue := argument[commandKeyDefault]; defaultValue == nil || defaultValue == "" {
-		argument[commandKeyRequired] = true
+		if defaultValue := argument[commandKeyDefault]; defaultValue == nil || defaultValue == "" {
+			argument[commandKeyRequired] = true
+		}
 	}
 }

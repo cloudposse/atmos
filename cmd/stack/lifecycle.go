@@ -292,11 +292,9 @@ func loadLifecycleConfig(cmd *cobra.Command) (schema.AtmosConfiguration, error) 
 	}
 	// Unlike single-component commands, an empty inventory is a successful
 	// selection, including when every stack was removed in the comparison.
-	stackFiles, err := cfg.FindAllStackConfigsInPathsForStack(
-		&config, "", config.IncludeStackAbsolutePaths, config.ExcludeStackAbsolutePaths,
+	config.StackConfigFilesAbsolutePaths, config.StackConfigFilesRelativePaths, _, err = cfg.FindAllStackConfigsInPathsForStack(
+		config, "", config.IncludeStackAbsolutePaths, config.ExcludeStackAbsolutePaths,
 	)
-	config.StackConfigFilesAbsolutePaths = stackFiles.AbsolutePaths
-	config.StackConfigFilesRelativePaths = stackFiles.RelativePaths
 	if err != nil && !errors.Is(err, errUtils.ErrNoStackManifestsFound) {
 		return config, err
 	}

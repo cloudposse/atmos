@@ -85,7 +85,31 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 	log.Debug("Loading stack files for auth defaults", "count", len(stackFiles))
 
 	// Collect all defaults with their source files for conflict detection.
-	allDefaults := collectStackAuthDefaults(atmosConfig, stackFiles)
+	type defaultSource struct {
+		identity string
+		file     string
+	}
+	var allDefaults []defaultSource
+
+	// Load each file for auth defaults.
+	// Uses the recursive import-following scanner so defaults declared in
+	// imported `_defaults.yaml` files are visible even when those files are
+	// listed in `excluded_paths` (the excluded-paths filter only prevents
+	// standalone processing, not import resolution). This fixes Issue #2293
+	// for multi-stack commands that cannot use the exec-layer merge path.
+	for _, filePath := range stackFiles {
+		// Each top-level stack file gets its own visited set so import cycles
+		// in one file tree don't poison another.
+		visited := make(map[string]bool)
+		fileDefaults, _ := loadAuthWithMetadataScope(filePath, atmosConfig.StacksBaseAbsolutePath, visited, stackimports.MetadataScope{Config: atmosConfig}, atmosConfig.Templates.Settings.Delimiters)
+
+		for identity, isDefault := range fileDefaults {
+			if isDefault {
+				allDefaults = append(allDefaults, defaultSource{identity: identity, file: filePath})
+				log.Debug("Found default identity in stack config", logKeyIdentity, identity, "file", filePath)
+			}
+		}
+	}
 
 	// If no defaults found, return empty.
 	if len(allDefaults) == 0 {
@@ -117,34 +141,6 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 	}
 
 	return defaults, nil
-}
-
-type defaultSource struct{ identity, file string }
-
-func collectStackAuthDefaults(atmosConfig *schema.AtmosConfiguration, stackFiles []string) []defaultSource {
-	var allDefaults []defaultSource
-
-	// Load each file for auth defaults.
-	// Uses the recursive import-following scanner so defaults declared in
-	// imported `_defaults.yaml` files are visible even when those files are
-	// listed in `excluded_paths` (the excluded-paths filter only prevents
-	// standalone processing, not import resolution). This fixes Issue #2293
-	// for multi-stack commands that cannot use the exec-layer merge path.
-	for _, filePath := range stackFiles {
-		// Each top-level stack file gets its own visited set so import cycles
-		// in one file tree don't poison another.
-		visited := make(map[string]bool)
-		fileDefaults, _ := loadAuthWithMetadataScope(filePath, atmosConfig.StacksBaseAbsolutePath, visited, stackimports.MetadataScope{Config: atmosConfig}, atmosConfig.Templates.Settings.Delimiters)
-
-		for identity, isDefault := range fileDefaults {
-			if isDefault {
-				allDefaults = append(allDefaults, defaultSource{identity: identity, file: filePath})
-				log.Debug("Found default identity in stack config", logKeyIdentity, identity, "file", filePath)
-			}
-		}
-	}
-
-	return allDefaults
 }
 
 // getAllStackFiles returns all stack config file paths matching the include patterns
@@ -265,7 +261,7 @@ func loadAuthWithMetadataScope(filePath, stacksBasePath string, visited map[stri
 		return nil, schema.StackImportMetadata{}
 	}
 	result := make(map[string]bool)
-	importedMetadata, err := mergeImportedAuthDefaults(parsed, result, scope, &authImportTraversal{file: absPath, basePath: stacksBasePath, visited: visited, delimiters: delimiters})
+	importedMetadata, err := mergeImportedAuthDefaults(parsed, absPath, stacksBasePath, visited, result, scope, delimiters)
 	if err != nil {
 		return nil, schema.StackImportMetadata{}
 	}
@@ -318,28 +314,39 @@ func readStackAuthFile(absPath string, delimiters []string) (stackAuthFileWithIm
 	return parsed, true
 }
 
-type authImportTraversal struct {
-	file, basePath string
-	visited        map[string]bool
-	delimiters     []string
-}
-
 // mergeImportedAuthDefaults walks each entry in an `import:` list, recursively
 // loads the imported files' auth defaults, and merges them into `result`.
 // Matches Atmos inheritance order: imported defaults are applied first, then
 // the current file overrides via applyCurrentFileAuthDefaults.
-func mergeImportedAuthDefaults(parsed stackAuthFileWithImports, result map[string]bool,
-	scope stackimports.MetadataScope, traversal *authImportTraversal,
+func mergeImportedAuthDefaults(
+	parsed stackAuthFileWithImports,
+	importingFile, stacksBasePath string,
+	visited map[string]bool,
+	result map[string]bool,
+	scope stackimports.MetadataScope,
+	delimiters []string,
 ) (schema.StackImportMetadata, error) {
 	var whenCtx *condition.Context
 	var importedMetadata schema.StackImportMetadata
 	for _, imp := range parsed.Import {
-		importObj, valid := decodeAuthImport(imp, traversal.file)
-		if !valid {
-			continue
+		var importObj schema.StackImport
+		if _, isString := imp.(string); !isString {
+			decoded, err := stackimports.DecodeObject(imp)
+			if err != nil {
+				// Invalid conditions cannot introduce auth defaults; normal loading reports the error.
+				log.Debug("Skipping invalid stack auth import", "file", importingFile, "error", err)
+				continue
+			}
+			importObj = decoded
 		}
-		if err := activateAuthImportScope(&whenCtx, &importObj, scope, importedMetadata, parsed.Metadata); err != nil {
-			return schema.StackImportMetadata{}, err
+		if whenCtx == nil && !importObj.When.IsZero() {
+			ctx := stackimports.WhenContext()
+			whenCtx = &ctx
+		}
+		if whenCtx != nil {
+			if err := scope.Activate(whenCtx, importedMetadata, parsed.Metadata); err != nil {
+				return schema.StackImportMetadata{}, err
+			}
 		}
 		if !stackimports.IsActive(&importObj, whenCtx) {
 			continue
@@ -348,48 +355,21 @@ func mergeImportedAuthDefaults(parsed stackAuthFileWithImports, result map[strin
 		if err != nil {
 			return schema.StackImportMetadata{}, err
 		}
-		importedFiles := resolveAuthImportPaths(imp, traversal.file, traversal.basePath)
+		importedFiles := resolveAuthImportPaths(imp, importingFile, stacksBasePath)
 		for _, impFile := range importedFiles {
-			defaults, metadata := loadAuthWithMetadataScope(impFile, traversal.basePath, traversal.visited, childScope, traversal.delimiters)
+			defaults, metadata := loadAuthWithMetadataScope(impFile, stacksBasePath, visited, childScope, delimiters)
 			importedMetadata, err = scope.Merge(importedMetadata, metadata)
 			if err != nil {
 				return schema.StackImportMetadata{}, err
 			}
-			mergeDefaultIdentities(result, defaults)
+			for name, isDefault := range defaults {
+				if isDefault {
+					result[name] = true
+				}
+			}
 		}
 	}
 	return importedMetadata, nil
-}
-
-func activateAuthImportScope(whenCtx **condition.Context, importObj *schema.StackImport, scope stackimports.MetadataScope, imported, current schema.StackImportMetadata) error {
-	if *whenCtx == nil && !importObj.When.IsZero() {
-		ctx := stackimports.WhenContext()
-		*whenCtx = &ctx
-	}
-	if *whenCtx != nil {
-		return scope.Activate(*whenCtx, imported, current)
-	}
-	return nil
-}
-
-func decodeAuthImport(imp any, importingFile string) (schema.StackImport, bool) {
-	if _, isString := imp.(string); isString {
-		return schema.StackImport{}, true
-	}
-	decoded, err := stackimports.DecodeObject(imp)
-	if err != nil {
-		log.Debug("Skipping invalid stack auth import", "file", importingFile, "error", err)
-		return schema.StackImport{}, false
-	}
-	return decoded, true
-}
-
-func mergeDefaultIdentities(result, defaults map[string]bool) {
-	for name, isDefault := range defaults {
-		if isDefault {
-			result[name] = true
-		}
-	}
 }
 
 // applyCurrentFileAuthDefaults applies the default flags declared in the
@@ -513,8 +493,7 @@ func hasAnyDefault(defaults map[string]bool) bool {
 // clearExistingDefaults removes the default flag from all identities in the auth config.
 // This is used when stack config has defaults, which take precedence over atmos.yaml.
 func clearExistingDefaults(authConfig *schema.AuthConfig) {
-	for identityName := range authConfig.Identities {
-		identity := authConfig.Identities[identityName]
+	for identityName, identity := range authConfig.Identities {
 		if identity.Default {
 			identity.Default = false
 			authConfig.Identities[identityName] = identity

@@ -123,7 +123,7 @@ func TestCheckConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := checkConfig(&tt.config, tt.isProcessStack)
+			err := checkConfig(tt.config, tt.isProcessStack)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -533,7 +533,7 @@ func TestGetContextPrefix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := GetContextPrefix(tt.stack, &tt.context, tt.stackNamePattern, tt.stackFile)
+			result, err := GetContextPrefix(tt.stack, tt.context, tt.stackNamePattern, tt.stackFile)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -623,7 +623,7 @@ func TestReplaceContextTokens(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := ReplaceContextTokens(&tt.context, tt.pattern)
+			result := ReplaceContextTokens(tt.context, tt.pattern)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -820,7 +820,7 @@ func TestSearchConfigFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := SearchConfigFile(tt.configPath, &atmosConfig)
+			result, err := SearchConfigFile(tt.configPath, atmosConfig)
 
 			if tt.expectError {
 				assert.Error(t, err)

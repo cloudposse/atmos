@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -21,7 +22,7 @@ func setAuthRealm(atmosConfig *schema.AtmosConfiguration) {
 		return
 	}
 
-	if envRealm := configEnvValue(authRealmEnvVar); envRealm != "" {
+	if envRealm := os.Getenv(authRealmEnvVar); envRealm != "" {
 		atmosConfig.Auth.Realm = envRealm
 		atmosConfig.Auth.RealmSource = "env"
 		return
