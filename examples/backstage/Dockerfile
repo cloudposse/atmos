@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim AS techdocs
 RUN pip install --no-cache-dir mkdocs-techdocs-core==1.7.1
 COPY catalog/techdocs /docs
@@ -22,10 +23,12 @@ RUN mkdir -p /app && chown node:node /app
 USER node
 WORKDIR /app
 ENV BACKSTAGE_APP_NAME=portal
-RUN npx --yes @backstage/create-app@${BACKSTAGE_CREATE_APP_VERSION} --skip-install
+RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000,sharing=locked \
+    npx --yes @backstage/create-app@${BACKSTAGE_CREATE_APP_VERSION} --skip-install
 WORKDIR /app/portal
 COPY backstage/configure.mjs /tmp/configure.mjs
-RUN node /tmp/configure.mjs && yarn install
+RUN --mount=type=cache,target=/home/node/.yarn/berry/cache,uid=1000,gid=1000,sharing=locked \
+    node /tmp/configure.mjs && yarn install
 COPY --chown=node:node backstage/atmos.ts packages/backend/src/atmos.ts
 COPY --chown=node:node backstage/request-service.ts packages/backend/src/request-service.ts
 COPY --chown=node:node backstage/app-config.yaml app-config.yaml

@@ -34,8 +34,16 @@ commands:
     description: Manage the local Backstage container with Atmos
     commands:
       - name: up
-        description: Start Git/AWS emulators and Backstage (first build takes several minutes)
+        description: Start Git/AWS emulators and Backstage from source or supplied prebuilt images
         flags:
+          - name: portal-image
+            type: string
+            default: ""
+            description: Prebuilt customized portal image by digest (requires runner-image)
+          - name: runner-image
+            type: string
+            default: ""
+            description: Matching prebuilt runner image by digest (requires portal-image)
           - name: open
             type: bool
             default: false
@@ -44,6 +52,8 @@ commands:
           - type: script
             interpreter: starlark
             script: |
+              images = module.load("scripts/modules/images.star")
+              images.prepare(ctx.flags["portal-image"], ctx.flags["runner-image"])
               atmos.validate("stacks")
               atmos.emulator("up", "backstage-git", flags = {"stack": "local"})
               atmos.emulator("up", "backstage-aws", flags = {"stack": "local"})
@@ -55,11 +65,13 @@ commands:
               height: 8
               padding: 1
             script: |
-              atmos.container("build", "backstage", flags = {"stack": "local"}, output = "viewport")
+              if not ctx.flags["portal-image"]:
+                  atmos.container("build", "backstage", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage", flags = {"stack": "local"})
-              runner = module.load("scripts/modules/runner.star")
-              runner.build_binary()
-              atmos.container("build", "backstage-runner", flags = {"stack": "local"}, output = "viewport")
+              if not ctx.flags["runner-image"]:
+                  runner = module.load("scripts/modules/runner.star")
+                  runner.build_binary()
+                  atmos.container("build", "backstage-runner", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage-runner", flags = {"stack": "local"})
               ui.info("TechDocs: `http://localhost:3000/catalog/default/component/payments/docs`")
               ui.info("Actions: `http://localhost:3001/atmos/deployments/actions`")

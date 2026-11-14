@@ -66,6 +66,44 @@ All published ports bind to `127.0.0.1`. Containers communicate over the native
 Atmos stack network. `portal up` seeds the Git repository only once; later starts
 do not overwrite reviewed infrastructure configuration.
 
+## Start with prebuilt images
+
+When your team has published images built from this customized example, supply
+both immutable image references to skip Backstage, Go, and runner builds:
+
+```shell
+atmos portal up \
+  --portal-image "$PORTAL_IMAGE" \
+  --runner-image "$RUNNER_IMAGE"
+```
+
+Set each variable to a full registry reference ending in `@sha256:<64 hex digits>`.
+Use a matching pair built from the same reviewed checkout, for your Docker host's
+architecture. The runner must include this checkout's Atmos binary and CI support.
+The generic upstream Backstage image does not contain the Atmos actions, custom
+frontend, templates, or documentation required by this example.
+
+Both images are pulled before their local aliases are updated. Authenticate with
+your registry using `docker login` beforehand if necessary. If containers already
+exist, stop them before switching images so `up` creates new containers:
+
+```shell
+atmos container down backstage-runner -s local
+atmos container down backstage -s local
+```
+
+This leaves the Git/AWS emulators and deployment repository intact. Run the same
+`portal up` command with the image arguments on subsequent starts. Omitting both
+arguments explicitly uses the source build path; supplying only one is rejected
+before starting emulators or seeding the repository.
+
+There is currently no published default image pair. Registry ownership, image
+publication, and a verified default digest pair must be established before this
+example can pull images by default. Source builds remain available with plain
+`atmos portal up`; BuildKit caches npm downloads and Yarn's global package cache
+between builds. Images still launch the development server, so prebuilt startup
+avoids image compilation but still waits for Backstage's server startup.
+
 ## Appearance
 
 The portal includes Geist Light and Geist Dark themes. Open **Settings → Appearance**
