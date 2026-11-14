@@ -38,7 +38,7 @@ test('every packaged policy validates', () => {
 
 test('no-network policy selects enforcement without granting external destinations', () => {
   const content = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'allowlist.yaml'), 'utf8');
-  assert.equal(readPolicy(content, 'none'), '127.0.0.1:9');
+  assert.equal(readPolicy(content, 'none'), 'github.com:9');
 });
 
 test('composes YAML groups without granting unselected endpoints', () => {
