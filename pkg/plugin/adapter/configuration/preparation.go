@@ -3,13 +3,11 @@ package configuration
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -106,9 +104,6 @@ func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAnd
 	result, err := selected.provider.Prepare(ctx, selected.request)
 	if err != nil {
 		return nil, err
-	}
-	if nanos := result.GetRegistryResolutionNanos(); nanos > 0 && nanos <= uint64(math.MaxInt64) {
-		perf.ObserveExternal("atmosbridge.ResolveRegistrySource", time.Duration(nanos))
 	}
 	// An error diagnostic fails the preparation; warnings are printed by the caller.
 	for _, diagnostic := range result.Diagnostics {

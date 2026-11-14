@@ -11,7 +11,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -80,30 +79,6 @@ func TestProbeIAMUsesStagedProviderMode(t *testing.T) {
 	iam, err := session.ProbeIAM(t.Context(), info)
 	require.NoError(t, err)
 	require.Equal(t, "arn:aws:iam::1:role/x", iam.Role)
-}
-
-func TestRegistryResolutionDurationReachesHostHeatmap(t *testing.T) {
-	perf.EnableTracking(true)
-	perf.ResetForTesting()
-	t.Cleanup(func() { perf.EnableTracking(false); perf.ResetForTesting() })
-	session, provider, info := preparationSession(t)
-	backend, err := adapter.EncodeObject(map[string]any{})
-	require.NoError(t, err)
-	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{
-		Engine: "opentofu", ModuleSource: "https://example.test/module.tar.gz", RegistryResolutionNanos: uint64(time.Millisecond),
-		State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default"},
-	}, nil)
-	_, err = session.Prepare(t.Context(), info)
-	require.NoError(t, err)
-	rows := perf.SnapshotTop("total", 100).Rows
-	var found bool
-	for _, row := range rows {
-		if row.Name == "atmosbridge.ResolveRegistrySource" {
-			require.Equal(t, time.Millisecond, row.SelfTime)
-			found = true
-		}
-	}
-	require.True(t, found)
 }
 
 func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {

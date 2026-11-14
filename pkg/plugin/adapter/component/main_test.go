@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
@@ -124,7 +125,11 @@ func (*componentFixture) Prepare(ctx context.Context, request *pluginv1.Componen
 		<-ctx.Done()
 		return nil, status.FromContextError(ctx.Err()).Err()
 	}
-	return &pluginv1.PrepareComponentResponse{Engine: "terraform", WorkingDirectory: request.RootDirectory, ModuleSource: "./module", Inputs: request.Configuration, State: fixtureState(request.RootDirectory), Files: []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", Content: []byte("$${literal}\n%{ literal }\n"), IfExists: "error"}}}, nil
+	response := &pluginv1.PrepareComponentResponse{Engine: "terraform", WorkingDirectory: request.RootDirectory, ModuleSource: "./module", Inputs: request.Configuration, State: fixtureState(request.RootDirectory), Files: []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", Content: []byte("$${literal}\n%{ literal }\n"), IfExists: "error"}}}
+	if request.GetOperation().GetCommand() == "registry-prepare" {
+		response.RegistryResolutionNanos = uint64(time.Hour)
+	}
+	return response, nil
 }
 
 func (*componentFixture) Resolve(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
