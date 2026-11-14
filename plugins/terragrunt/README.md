@@ -38,7 +38,7 @@ plugins:
       path: /absolute/path/to/this/plugins/terragrunt
 ```
 
-Run `atmos list instances`, `atmos describe stacks`, and `atmos terraform plan --all`. No per-unit YAML is required. Discovery uses an in-memory overlay for explicit stacks. It does not create `.terragrunt-stack` or read dependency state. Apply generates explicit stacks and evaluates each unit after its dependencies. Discovered units use Atmos workdirs to isolate generated files by stack and component. State retains its Terragrunt backend identity. Unit files travel as content only, so a unit directory that contains a committed `.terraform.lock.hcl` or an executable file is rejected until the file is listed in `exclude_from_copy`.
+Run `atmos list instances`, `atmos describe stacks`, and `atmos terraform plan --all`. No per-unit YAML is required. Discovery uses an in-memory overlay for explicit stacks. It does not create `.terragrunt-stack` or read dependency state. Apply generates explicit stacks and evaluates each unit after its dependencies. Discovered units use Atmos workdirs to isolate generated files by stack and component. State retains its Terragrunt backend identity. Unit files keep their execute bit, with setuid, setgid, and group or other write bits removed. A unit directory that contains a committed `.terraform.lock.hcl` is rejected until the file is listed in `exclude_from_copy`.
 
 Preparation receives Atmos's sanitized environment after authentication, the selected executable, toolchain PATH, and managed Terraform RC configuration. Child commands use the invocation PATH. Neither identity changes nor HCL evaluation replace the plugin process environment.
 

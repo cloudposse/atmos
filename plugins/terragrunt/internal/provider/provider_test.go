@@ -177,3 +177,24 @@ func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
 		})
 	}
 }
+
+func TestPreparationExportsOverlayModes(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+		return &model.Resolution{
+			Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: filepath.Join(request.RootDirectory, "cache"), Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{"path": "relative.tfstate"},
+			Overlay:      map[string][]byte{"bin/run.sh": []byte("#!/bin/sh\n"), "plain.tf": []byte("# plain"), "shadow.sh": []byte("old")},
+			OverlayModes: map[string]uint32{"bin/run.sh": 0o755, "shadow.sh": 0o755},
+			Generated:    map[string]string{"shadow.sh": "new"},
+		}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	modes := map[string]uint32{}
+	for _, file := range result.Files {
+		modes[file.Path] = file.Mode
+	}
+	require.Equal(t, map[string]uint32{"bin/run.sh": 0o755, "plain.tf": 0, "shadow.sh": 0}, modes)
+	require.Equal(t, "bin/run.sh", result.Files[0].Path)
+	require.Equal(t, "shadow.sh", result.Files[len(result.Files)-1].Path)
+}

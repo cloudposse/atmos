@@ -151,7 +151,12 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		files[name] = []byte(content)
 	}
 	for _, name := range slices.Sorted(maps.Keys(files)) {
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: "overwrite"})
+		// A generated file replaces an overlay file of the same name, so the overlay mode no longer applies.
+		mode := result.OverlayModes[name]
+		if _, generated := result.Generated[name]; generated {
+			mode = 0
+		}
+		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: "overwrite", Mode: mode})
 	}
 	return response, nil
 }

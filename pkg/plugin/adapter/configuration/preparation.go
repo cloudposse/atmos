@@ -198,7 +198,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 		if file.IfExists == "overwrite_terragrunt" {
 			return nil, errUtils.ErrPluginUnsupportedExtension
 		}
-		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive})
+		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive, Mode: file.Mode})
 	}
 	return prepared, nil
 }

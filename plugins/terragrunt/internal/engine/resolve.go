@@ -68,7 +68,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 		return nil, err
 	}
 	if request.Phase != "backend" {
-		result.Overlay, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
+		result.Overlay, result.OverlayModes, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
 		if err != nil {
 			return nil, err
 		}

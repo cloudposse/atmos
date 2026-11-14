@@ -246,7 +246,7 @@ remote_state {
 	require.Contains(t, result.WorkingDir, "custom-cache")
 }
 
-func TestOverlayRejectsFilesTheHostContractCannotCarry(t *testing.T) {
+func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 	t.Run("committed dependency lock file", func(t *testing.T) {
 		request := nativeUnit(t, "")
 		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), ".terraform.lock.hcl"), []byte("# lock"), 0o644))
@@ -266,20 +266,21 @@ func TestOverlayRejectsFilesTheHostContractCannotCarry(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, result.Overlay, ".terraform.lock.hcl")
 	})
-	t.Run("executable file", func(t *testing.T) {
+	t.Run("executable file keeps its mode", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("Windows has no executable permission bit.")
 		}
 		request := nativeUnit(t, "")
-		script := filepath.Join(filepath.Dir(request.Path), "probe.sh")
+		dir := filepath.Dir(request.Path)
+		script := filepath.Join(dir, "probe.sh")
 		require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755))
 		require.NoError(t, os.Chmod(script, 0o755))
-		_, err := Resolve(t.Context(), request)
-		require.ErrorIs(t, err, atmosbridge.ErrUnsupportedOverlay)
-		require.ErrorContains(t, err, "probe.sh")
-		require.NoError(t, os.Chmod(script, 0o644))
+		plain := filepath.Join(dir, "plain.tf")
+		require.NoError(t, os.WriteFile(plain, []byte("# plain"), 0o644))
 		result, err := Resolve(t.Context(), request)
 		require.NoError(t, err)
 		require.Contains(t, result.Overlay, "probe.sh")
+		require.Equal(t, uint32(0o755), result.OverlayModes["probe.sh"])
+		require.NotContains(t, result.OverlayModes, "plain.tf", "default modes are not exported")
 	})
 }
