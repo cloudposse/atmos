@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"context"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,9 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	pluginbootstrap "github.com/cloudposse/atmos/pkg/plugin/bootstrap"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -104,6 +108,32 @@ func init() {
 		internal.WithExample("examples/quick-start-simple", "Quick Start (Simple)"),
 		internal.WithExample("examples/quick-start-advanced", "Quick Start (Advanced)"),
 	)
+}
+
+// RegisterProviderFlags adds the options that enabled configuration providers declare in their
+// package metadata to the terraform subcommands they apply to. It reads static metadata only, so no
+// plugin starts, and it runs before Cobra parses the command line.
+func RegisterProviderFlags(config *schema.AtmosConfiguration, args []string) error {
+	defer perf.Track(config, "terraform.RegisterProviderFlags")()
+
+	err := pluginbootstrap.RegisterComponentFlags(context.Background(), config, terraformCmd)
+	if err != nil && !targetsTerraform(args) {
+		// A package that declares a bad option must not break commands that never run a unit.
+		log.Debug("Provider flag registration failed", "error", err)
+		return nil
+	}
+	return err
+}
+
+// targetsTerraform reports whether the command line selects `atmos terraform` or one of its subcommands.
+func targetsTerraform(args []string) bool {
+	target, _, _ := terraformCmd.Root().Find(args)
+	for command := target; command != nil; command = command.Parent() {
+		if command == terraformCmd {
+			return true
+		}
+	}
+	return false
 }
 
 // TerraformCommandProvider implements the CommandProvider interface.

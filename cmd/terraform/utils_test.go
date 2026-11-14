@@ -3,6 +3,7 @@ package terraform
 import (
 	"bytes"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1324,4 +1325,25 @@ func normalizeUIOutput(s string) string {
 		}
 	}
 	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+func TestRetainedWorkdirPlanfilePathLocatesTheWorkdirOfAFreshRunner(t *testing.T) {
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base, TerraformDirAbsolutePath: filepath.Join(base, "components", "terraform")}
+	config.Components.Terraform.BasePath = filepath.Join("components", "terraform")
+
+	unit := &schema.ConfigAndStacksInfo{
+		Stack: "live/dev", ComponentFromArg: "app", FinalComponent: "app",
+		ComponentSettingsSection: map[string]any{"configuration": true},
+		ComponentSection:         map[string]any{"provision": map[string]any{"workdir": map[string]any{"enabled": true}}},
+	}
+	path, ok := retainedWorkdirPlanfilePath(config, unit)
+	require.True(t, ok)
+	require.Contains(t, filepath.ToSlash(path), ".workdir/terraform/live/dev-app-")
+	require.NotContains(t, path, filepath.Join("components", "terraform"))
+	require.NoDirExists(t, filepath.Dir(path), "locating the workdir must not provision it")
+
+	ordinary := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc", FinalComponent: "vpc", ComponentSection: map[string]any{}}
+	_, ok = retainedWorkdirPlanfilePath(config, ordinary)
+	require.False(t, ok, "components without a workdir keep the canonical path")
 }

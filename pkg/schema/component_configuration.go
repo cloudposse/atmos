@@ -30,6 +30,16 @@ type ComponentDiscoveryConfig struct {
 	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
 }
 
+// ComponentProviderOption is a provider option the user set explicitly on the command line or in the
+// environment. Options the user did not set are absent, so a provider can tell them from false, zero, and empty.
+type ComponentProviderOption struct {
+	Value any
+	// Sensitive values are masked and never logged.
+	Sensitive bool
+	// FromCLI distinguishes an explicit flag from an environment-derived value.
+	FromCLI bool
+}
+
 // ComponentConfigurationRuntime is an invocation-owned host service. It is not a wire contract.
 type ComponentConfigurationRuntime interface {
 	Discover(context.Context) (map[string]map[string]any, error)
@@ -63,15 +73,17 @@ type ComponentConfigurationValidationRuntime interface {
 
 // PreparedComponentConfiguration contains evaluated inputs and literal artifacts.
 type PreparedComponentConfiguration struct {
-	Sources          []ComponentConfigurationSource
-	Engine           string
-	Source           string
-	Inputs           map[string]any
-	BackendType      string
-	Backend          map[string]any
-	Workspace        string
-	Files            []ComponentConfigurationFile
-	BackendGenerated bool
+	Sources []ComponentConfigurationSource
+	Engine  string
+	Source  string
+	Inputs  map[string]any
+	// SensitiveInputKeys identifies prepared inputs whose values must stay out of generated varfiles.
+	SensitiveInputKeys map[string]bool
+	BackendType        string
+	Backend            map[string]any
+	Workspace          string
+	Files              []ComponentConfigurationFile
+	BackendGenerated   bool
 	// Execution is data the host runs; it is nil when the provider adds no hooks or arguments.
 	Execution *ComponentExecution
 	// TerraformBinary is the executable the unit selects, verified against the one it was discovered with.
@@ -84,8 +96,6 @@ type PreparedComponentConfiguration struct {
 	IAM *ComponentIAM
 	// SourceAuthorization is invocation-only registry auth for a same-origin archive.
 	SourceAuthorization *SourceAuthorization `json:"-"`
-	// SensitiveInputKeys projects provider sensitivity paths onto whole input variables.
-	SensitiveInputKeys map[string]bool
 }
 
 // SourceAuthorization is never serialized with a source URL or saved plan.

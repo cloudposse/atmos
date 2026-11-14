@@ -59,7 +59,7 @@ func withProviderInitSettings(in *autoinit.Inputs, info *schema.ConfigAndStacksI
 func overlayEnvironment(entries []string, base func(string) (string, bool)) func(string) (string, bool) {
 	environment := map[string]string{}
 	for _, entry := range entries {
-		if key, value, ok := strings.Cut(entry, "="); ok {
+		if key, value, ok := strings.Cut(entry, envAssign); ok {
 			environment[key] = value
 		}
 	}
@@ -80,8 +80,8 @@ func overlayEnvironment(entries []string, base func(string) (string, bool)) func
 func initFileArguments(arguments []string) []string {
 	var paths []string
 	for i := 0; i < len(arguments); i++ {
-		name, value, inline := strings.Cut(strings.TrimPrefix(arguments[i], "-"), "=")
-		name = "-" + name
+		name, value, inline := strings.Cut(strings.TrimPrefix(arguments[i], hookFlagPrefix), envAssign)
+		name = hookFlagPrefix + name
 		if !slices.Contains(initFileFlags, name) {
 			continue
 		}
@@ -92,7 +92,7 @@ func initFileArguments(arguments []string) []string {
 			i++
 			value = arguments[i]
 		}
-		if name == "-backend-config" && strings.Contains(value, "=") {
+		if name == "-backend-config" && strings.Contains(value, envAssign) {
 			continue
 		}
 		paths = append(paths, value)

@@ -448,6 +448,18 @@ func TestNonSchemaSettingsErrorStillNamesTheSection(t *testing.T) {
 	assert.Contains(t, strings.Join(errUtils.AllDetails(err), "\n"), "components.terraform.terragrunt")
 }
 
+func TestPreparationIAMProbeResponse(t *testing.T) {
+	t.Parallel()
+	response := &pluginv1.PrepareComponentResponse{Iam: &pluginv1.ComponentIam{}}
+	require.NoError(t, checkPreparationResponse(response, "iam-probe"))
+	require.NoError(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{}, "iam-probe"))
+	require.ErrorIs(t, checkPreparationResponse(response, "native"), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkPreparationResponse(nil, "iam-probe"), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}, "iam-probe"), errUtils.ErrPluginInvalidConfig)
+	response.Files = []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", IfExists: "overwrite"}}
+	require.ErrorIs(t, checkPreparationResponse(response, "iam-probe"), errUtils.ErrPluginProtocol)
+}
+
 func TestRegistryResolutionDurationIsAttributedInsideTheProviderSpan(t *testing.T) {
 	perf.EnableTracking(true)
 	perf.UseSimpleTracking(true)

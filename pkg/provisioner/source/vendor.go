@@ -82,25 +82,9 @@ func vendorSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, s
 		return err
 	}
 
-	// Resolve version into URI if specified separately.
-	uri := resolveSourceURI(sourceSpec)
-	uri, err := resolveLocalSubdirURI(uri, vendorOpts.baseDir)
+	uri, err := normalizedSourceURI(sourceSpec, vendorOpts.baseDir)
 	if err != nil {
 		return err
-	}
-
-	// Normalize the URI for go-getter using the same logic as regular vendoring.
-	uri = vendor.NormalizeURI(uri)
-	if vendor.IsLocalPath(uri) && !filepath.IsAbs(uri) {
-		absURI, err := resolveLocalSourcePath(uri, vendorOpts.baseDir)
-		if err != nil {
-			return errUtils.Build(errUtils.ErrSourceInvalidSpec).
-				WithCause(err).
-				WithExplanation("Failed to resolve local source path").
-				WithContext("uri", uri).
-				Err()
-		}
-		uri = absURI
 	}
 
 	if localDir, ok, err := localDirectorySource(uri); err != nil {
@@ -212,21 +196,7 @@ func effectiveRetryConfig(sourceSpec *schema.VendorComponentSource) *schema.Retr
 // localDirectorySource recognizes existing local directories while leaving remote URIs to the downloader.
 func localDirectorySource(uri string) (string, bool, error) {
 	if root, subdir, ok := vendor.LocalRootSubdir(uri); ok {
-		if err := validateLocalSubdir(subdir); err != nil {
-			return "", false, err
-		}
-		if _, present, err := existingDirectory(filepath.Join(root, filepath.FromSlash(subdir))); err != nil || !present {
-			return "", false, errUtils.Build(errUtils.ErrSourceInvalidSpec).
-				WithCause(err).
-				WithExplanation("Local module subdirectory is not a directory").Err()
-		}
-		canonicalRoot, rootErr := filepath.EvalSymlinks(root)
-		canonicalModule, moduleErr := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(subdir)))
-		if rootErr != nil || moduleErr != nil || !localSubdirWithin(canonicalModule, canonicalRoot) {
-			return "", false, errUtils.Build(errUtils.ErrSourceInvalidSpec).
-				WithExplanation("Local module subdirectory escapes its source root").Err()
-		}
-		return existingDirectory(root)
+		return localSubdirectorySource(root, subdir)
 	}
 	switch {
 	case vendor.IsFileURI(uri):
@@ -591,4 +561,47 @@ func copyToTarget(srcDir, dstDir string, sourceSpec *schema.VendorComponentSourc
 		IncludedPaths: sourceSpec.IncludedPaths,
 		ExcludedPaths: sourceSpec.ExcludedPaths,
 	})
+}
+
+func normalizedSourceURI(sourceSpec *schema.VendorComponentSource, baseDir string) (string, error) {
+	// Resolve version into URI if specified separately.
+	uri := resolveSourceURI(sourceSpec)
+	uri, err := resolveLocalSubdirURI(uri, baseDir)
+	if err != nil {
+		return "", err
+	}
+
+	// Normalize the URI for go-getter using the same logic as regular vendoring.
+	uri = vendor.NormalizeURI(uri)
+	if vendor.IsLocalPath(uri) && !filepath.IsAbs(uri) {
+		absURI, err := resolveLocalSourcePath(uri, baseDir)
+		if err != nil {
+			return "", errUtils.Build(errUtils.ErrSourceInvalidSpec).
+				WithCause(err).
+				WithExplanation("Failed to resolve local source path").
+				WithContext("uri", uri).
+				Err()
+		}
+		uri = absURI
+	}
+
+	return uri, nil
+}
+
+func localSubdirectorySource(root, subdir string) (string, bool, error) {
+	if err := validateLocalSubdir(subdir); err != nil {
+		return "", false, err
+	}
+	if _, present, err := existingDirectory(filepath.Join(root, filepath.FromSlash(subdir))); err != nil || !present {
+		return "", false, errUtils.Build(errUtils.ErrSourceInvalidSpec).
+			WithCause(err).
+			WithExplanation("Local module subdirectory is not a directory").Err()
+	}
+	canonicalRoot, rootErr := filepath.EvalSymlinks(root)
+	canonicalModule, moduleErr := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(subdir)))
+	if rootErr != nil || moduleErr != nil || !localSubdirWithin(canonicalModule, canonicalRoot) {
+		return "", false, errUtils.Build(errUtils.ErrSourceInvalidSpec).
+			WithExplanation("Local module subdirectory escapes its source root").Err()
+	}
+	return existingDirectory(root)
 }

@@ -50,15 +50,21 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		return nil, err
 	}
 	ctx = config.WithCaches(ctx)
-	logger, err := evaluationLogger(request.LogLevel)
+	logger, err := evaluationLogger(ctx, request.LogLevel)
 	if err != nil {
 		return nil, err
 	}
-	environment, err := evaluationEnvironment(request, filesystem, path)
+	environment, err := evaluationEnvironment(ctx, request, filesystem, path)
 	if err != nil {
 		return nil, err
 	}
 	pctx := requestParsingContext(request, path)
+	redacted := false
+	defer func() {
+		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, append(pctx.FilesRead.Paths(), path), path, redacted) {
+			sink.Withhold()
+		}
+	}()
 	if request.Phase == "iam" {
 		return resolveIAM(ctx, logger, environment, pctx, request, path)
 	}
@@ -78,6 +84,13 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	if err != nil {
 		return nil, err
 	}
+	var sensitiveInputs [][]string
+	if request.Phase != "backend" {
+		sensitiveInputs = SensitiveInputs(environment.FS, append(pctx.FilesRead.Paths(), path), cfg.Inputs)
+		redactInputs(logSinkFrom(ctx), cfg.Inputs, sensitiveInputs)
+		redactInputs(logSinkFrom(ctx), cfg.Locals, sensitiveLocals(environment.FS, path, cfg.Locals))
+		redacted = true
+	}
 	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
 		return nil, err
 	}
@@ -90,6 +103,7 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		return nil, err
 	}
 	result.Execution = execution
+	result.SensitiveInputs = sensitiveInputs
 	result.Files = append(result.Files, applyFiles...)
 	if err := resolveBackend(cfg, result, &request); err != nil {
 		return nil, err
@@ -141,10 +155,15 @@ func requestPath(path string) (string, error) {
 	return logicalPath(path)
 }
 
-func evaluationLogger(level string) (log.Logger, error) {
+func evaluationLogger(ctx context.Context, level string) (log.Logger, error) {
 	formatter := format.NewFormatter(format.NewKeyValueFormatPlaceholders())
 	formatter.SetDisabledColors(true)
-	logger := log.New(log.WithOutput(io.Discard), log.WithFormatter(formatter))
+	options := []log.Option{log.WithOutput(io.Discard), log.WithFormatter(formatter)}
+	if sink := logSinkFrom(ctx); sink != nil {
+		options = append(options, log.WithHooks(sink.Hook()))
+		level = sink.TerragruntLevel()
+	}
+	logger := log.New(options...)
 	if level != "" {
 		if err := logger.SetLevel(level); err != nil {
 			return nil, err
@@ -164,7 +183,7 @@ func generating(request model.Request) bool {
 // evaluationEnvironment uses the local maintained facade, which exposes the
 // pinned upstream virtual environment and scoped stack generation without
 // modifying upstream source.
-func evaluationEnvironment(request model.Request, filesystem afero.Fs, path string) (*atmosbridge.Venv, error) {
+func evaluationEnvironment(ctx context.Context, request model.Request, filesystem afero.Fs, path string) (*atmosbridge.Venv, error) {
 	environment := atmosbridge.Environment(request.Environment, io.Discard, io.Discard)
 	if filesystem != nil {
 		environment = environment.WithFS(filesystem)
@@ -174,6 +193,8 @@ func evaluationEnvironment(request model.Request, filesystem afero.Fs, path stri
 	}
 	if discovering(request) || request.Phase == "backend" || generating(request) {
 		environment = atmosbridge.Discovery(environment, generating(request))
+	} else {
+		environment = atmosbridge.AWS(ctx, environment)
 	}
 	return environment, nil
 }
@@ -270,7 +291,15 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 	}
 	finalizeExecution(execution, path)
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
-		return config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
+		parsed, err := config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
+		if err != nil {
+			return nil, err
+		}
+		// Apply-time values can differ from the ones planned, so register them before any event is returned.
+		sink := logSinkFrom(ctx)
+		redactInputs(sink, parsed.Inputs, SensitiveInputs(environment.FS, append(apply.FilesRead.Paths(), path), parsed.Inputs))
+		redactInputs(sink, parsed.Locals, sensitiveLocals(environment.FS, path, parsed.Locals))
+		return parsed, nil
 	}
 	return applyTimeExecution(request, path, execution, environment.FS, pctx.FilesRead.Paths(), reparse)
 }

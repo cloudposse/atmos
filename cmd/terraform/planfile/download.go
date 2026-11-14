@@ -179,8 +179,7 @@ func resolveDownloadPlanfilePath(cmd *cobra.Command, opts *DownloadOptions, atmo
 		return "", fmt.Errorf("%w: failed to resolve component path: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
 
-	planfilePath := exec.ConstructTerraformComponentPlanfilePath(atmosConfig, &info)
-	return planfilePath, nil
+	return canonicalPlanfilePath(atmosConfig, &info)
 }
 
 // printDownloadSuccess prints the success message for a download.

@@ -269,7 +269,7 @@ func isDetailedExitCodeChanges(command string, args, env []string, err error, op
 // and the last setting of a flag wins, so an explicit command-line setting takes precedence.
 // Terraform reads the variables as shell words, so quoted values are unquoted the same way.
 func detailedExitCodeEnabled(command string, args, env []string, opts ...component.ExecutionOption) bool {
-	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(command)
+	suffix := strings.NewReplacer(hookFlagPrefix, "_", " ", "_").Replace(command)
 	words := slices.Concat(
 		parseArgs(environmentValue(env, "TF_CLI_ARGS_"+suffix, opts...)),
 		parseArgs(environmentValue(env, "TF_CLI_ARGS", opts...)),
@@ -277,8 +277,8 @@ func detailedExitCodeEnabled(command string, args, env []string, opts ...compone
 	)
 	enabled := false
 	for _, word := range words {
-		name, value, hasValue := strings.Cut(strings.TrimLeft(word, "-"), "=")
-		if !strings.HasPrefix(word, "-") || name != "detailed-exitcode" {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(word, hookFlagPrefix), envAssign)
+		if !strings.HasPrefix(word, hookFlagPrefix) || name != "detailed-exitcode" {
 			continue
 		}
 		if !hasValue {
@@ -305,7 +305,7 @@ func environmentValue(env []string, key string, opts ...component.ExecutionOptio
 	}
 	merged := slices.Concat(base, env)
 	for i := len(merged) - 1; i >= 0; i-- {
-		if name, value, found := strings.Cut(merged[i], "="); found && name == key {
+		if name, value, found := strings.Cut(merged[i], envAssign); found && name == key {
 			return value
 		}
 	}
@@ -355,17 +355,7 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 
 	ui.Info(fmt.Sprintf("Executing %s: %s%s", strings.ReplaceAll(string(kind), "_", " "), hook.Name, hookUnitLabel(r.info)))
 
-	var base component.ExecutionOptions
-	for _, opt := range r.opts {
-		opt(&base)
-	}
-	stdout := process.OSStreams().Stderr
-	if base.Streams != nil && base.Streams.Stderr != nil {
-		stdout = base.Streams.Stderr
-	}
-	if hook.SuppressStdout {
-		stdout = io.Discard
-	}
+	stdout := r.hookStdout(hook)
 
 	captured := io.Discard
 	var file *captureFile
@@ -385,9 +375,9 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 	)
 	env := append(
 		slices.Clone(r.info.ComponentEnvList),
-		hookEnvTerraformPath+"="+r.info.Command,
-		hookEnvCommand+"="+r.phase.command,
-		hookEnvHookName+"="+hook.Name,
+		hookEnvTerraformPath+envAssign+r.info.Command,
+		hookEnvCommand+envAssign+r.phase.command,
+		hookEnvHookName+envAssign+hook.Name,
 	)
 	directory, err := r.workingDirectory(hook)
 	if err != nil {
@@ -512,3 +502,22 @@ func extraArgumentsPosition(info *schema.ConfigAndStacksInfo, args []string) int
 	}
 	return position
 }
+
+// hookStdout returns where a hook writes its output: the run's stderr stream, or nowhere when the hook suppresses stdout.
+func (r *hookRunner) hookStdout(hook *schema.ComponentHook) io.Writer {
+	var base component.ExecutionOptions
+	for _, opt := range r.opts {
+		opt(&base)
+	}
+	stdout := process.OSStreams().Stderr
+	if base.Streams != nil && base.Streams.Stderr != nil {
+		stdout = base.Streams.Stderr
+	}
+	if hook.SuppressStdout {
+		stdout = io.Discard
+	}
+
+	return stdout
+}
+
+const hookFlagPrefix = "-"

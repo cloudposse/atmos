@@ -1,16 +1,21 @@
 package configuration
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
-	"path/filepath"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
+	charm "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -69,16 +74,16 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 	require.Equal(t, "-var=a=1", sent.Operation.TerraformArguments[0], "the request owns a copy of the arguments")
 }
 
-func TestProbeIAMUsesStagedProviderMode(t *testing.T) {
-	session, provider, info := preparationSession(t)
-	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
-		require.Equal(t, "iam-probe", request.Operation.Mode)
-		require.True(t, request.Effects.Secrets)
-		return &pluginv1.PrepareComponentResponse{Iam: &pluginv1.ComponentIam{Role: "arn:aws:iam::1:role/x"}}, nil
-	})
-	iam, err := session.ProbeIAM(t.Context(), info)
+func TestPreparedConfigurationPreservesSensitiveEmptyInputKeys(t *testing.T) {
+	inputs, err := adapter.EncodeObject(map[string]any{"password": "", "region": "us-east-1"})
 	require.NoError(t, err)
-	require.Equal(t, "arn:aws:iam::1:role/x", iam.Role)
+	inputs.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "password"}}}}}
+	prepared, err := preparedConfiguration(&pluginv1.PrepareComponentResponse{
+		Inputs: inputs, State: &pluginv1.ComponentStateIdentity{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"password": true}, prepared.SensitiveInputKeys)
+	require.Equal(t, "", prepared.Inputs["password"])
 }
 
 func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {
@@ -300,49 +305,261 @@ func TestPrepareRejectsAnExecutableChangeSinceDiscovery(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrComponentBinaryChanged)
 }
 
-func TestSessionResolvesStateWithoutPreparation(t *testing.T) {
+// Compile-time sentinels for the schema fields the option tests depend on.
+var (
+	_ = schema.ComponentProviderOption{Value: "", Sensitive: true}
+	_ = schema.AtmosConfiguration{ComponentProviderOptions: nil}
+	_ = schema.ConfigAndStacksInfo{ComponentProviderOptions: nil}
+)
+
+func optionsConfig(t *testing.T, mode string) *schema.AtmosConfiguration {
+	t.Helper()
+	config := enabledConfig(t)
+	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
+	settings.Mode = mode
+	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
+	config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+		"quiet":    {Value: false},
+		"retries":  {Value: 0},
+		"feature":  {Value: map[string]any{"alpha": "true"}},
+		"password": {Value: "s3cret", Sensitive: true},
+	}}
+	return config
+}
+
+func TestExplicitOptionsAndModeReachDiscoveryAndPreparation(t *testing.T) {
+	for _, mode := range []string{"", "native", "executable"} {
+		t.Run("mode "+mode, func(t *testing.T) {
+			wantMode := mode
+			if wantMode == "" {
+				wantMode = "native"
+			}
+			check := func(operation *pluginv1.ComponentOperation) {
+				require.Equal(t, wantMode, operation.Mode)
+				require.Len(t, operation.Options, 4)
+				quiet, err := adapter.DecodeValue(operation.Options["quiet"])
+				require.NoError(t, err)
+				require.Equal(t, false, quiet, "an explicit false is sent, not dropped")
+				retries, err := adapter.DecodeValue(operation.Options["retries"])
+				require.NoError(t, err)
+				require.Equal(t, json.Number("0"), retries, "an explicit zero is sent, not dropped")
+				require.Empty(t, operation.Options["quiet"].SensitivePaths)
+				require.Len(t, operation.Options["password"].SensitivePaths, 1, "a sensitive option is marked at its root")
+			}
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+				check(request.Operation)
+				return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil
+			}).MinTimes(1)
+			if wantMode != "executable" {
+				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+					check(request.Operation)
+					return &pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil
+				})
+			}
+			session, err := New(t.Context(), optionsConfig(t, mode), "plan", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}}
+			if wantMode == "executable" {
+				// The host never prepares an executable-mode unit; only discovery needs the plugin.
+				_, err = session.Discover(t.Context())
+				require.NoError(t, err)
+				return
+			}
+			_, err = session.Prepare(t.Context(), info)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestOptionsAreAbsentWhenNoneWereSet(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		require.Empty(t, request.Operation.Options)
+		require.Equal(t, "native", request.Operation.Mode)
+		return &pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil
+	})
+	_, err := session.Prepare(t.Context(), info)
+	require.NoError(t, err)
+}
+
+func TestPlanIdentityIncludesTheEffectiveOptions(t *testing.T) {
+	identity := func(value string) string {
+		config := enabledConfig(t)
+		config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {"level": {Value: value}}}
+		mock := NewMockIdentifiedProvider(gomock.NewController(t))
+		mock.EXPECT().ComponentType().Return("terraform").AnyTimes()
+		mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil)
+		mock.EXPECT().Identity(gomock.Any()).Return("v1", nil).AnyTimes()
+		provider := Provider(mock)
+		session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
+			return map[string]Provider{"terragrunt": provider}, nil
+		})
+		require.NoError(t, err)
+		info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}}
+		sum, err := session.PlanIdentity(t.Context(), info, nil)
+		require.NoError(t, err)
+		return sum
+	}
+	require.Equal(t, identity("debug"), identity("debug"))
+	require.NotEqual(t, identity("debug"), identity("info"), "applying a plan reviewed with other options must be refused")
+}
+
+type stateProviderFixture struct {
+	Provider
+	resolve func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error)
+}
+
+func (p *stateProviderFixture) ResolveState(ctx context.Context, req *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+	return p.resolve(ctx, req)
+}
+
+func TestPrepareRefusesAnExecutableModeUnit(t *testing.T) {
+	session, _, info := preparationSession(t)
+	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"engine": "terragrunt"}}
+	_, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrExecutableModeUnsupported)
+}
+
+func TestExecutableDiscoveryEngineIsListed(t *testing.T) {
+	instance := unit(t, "app")
+	instance.Engine = "terragrunt"
+	config, err := instanceConfig(instance, false)
+	require.NoError(t, err)
+	require.Equal(t, "terragrunt", config["settings"].(map[string]any)["configuration"].(map[string]any)["engine"])
+
+	instance.Engine = "pulumi"
+	_, err = instanceConfig(instance, false)
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+}
+
+func TestSettingsValidationAcceptsBothModes(t *testing.T) {
+	for _, mode := range []string{"", "native", "executable"} {
+		require.NoError(t, validateSettings("terragrunt", &schema.ComponentConfiguration{Mode: mode}), mode)
+	}
+	require.ErrorIs(t, validateSettings("terragrunt", &schema.ComponentConfiguration{Mode: "cli"}), errUtils.ErrPluginInvalidConfig)
+}
+
+// captureAtmosLogs sends the Atmos logger to a buffer at debug level for one test.
+func captureAtmosLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var output bytes.Buffer
+	previous := log.GetLevel()
+	log.SetOutput(&output)
+	log.SetLevel(charm.DebugLevel)
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(previous)
+	})
+	return &output
+}
+
+func TestPrepareAsksForTheAtmosLogLevelAndRendersEngineLogsScoped(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	var sent *pluginv1.ComponentRequest
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		sent = request
+		return &pluginv1.PrepareComponentResponse{
+			Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{BackendType: "local"},
+			Logs: []*pluginv1.LogEntry{
+				{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "reading include", Fields: map[string]string{"file": "root.hcl"}},
+				{Level: pluginv1.LogLevel_LOG_LEVEL_TRACE, Message: "very detailed"},
+			},
+		}, nil
+	})
+	output := captureAtmosLogs(t)
+
+	_, err := session.Prepare(t.Context(), info)
+
+	require.NoError(t, err)
+	require.Equal(t, "debug", sent.Invocation.LogLevel, "the plugin is told the Atmos log level")
+	require.Contains(t, output.String(), "reading include")
+	require.Contains(t, output.String(), "component=app")
+	require.Contains(t, output.String(), "stack=live")
+	require.Contains(t, output.String(), "file=root.hcl")
+	require.NotContains(t, output.String(), "very detailed", "the Atmos level still decides what is visible")
+}
+
+// A debug event can quote a sensitive input, for example the output of sensitive(run_cmd(...)). The input
+// is registered for masking before the events of the same response are rendered.
+func TestPrepareMasksSensitiveInputsInTheLogsOfTheSameResponse(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	inputs, err := adapter.EncodeObject(map[string]any{"token": "prep-log-secret-9f3c"})
+	require.NoError(t, err)
+	inputs.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{
+		Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{BackendType: "local"},
+		Logs: []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "run_cmd output: prep-log-secret-9f3c", Fields: map[string]string{"stdout": "prep-log-secret-9f3c"}}},
+	}, nil)
+	output := captureAtmosLogs(t)
+
+	_, err = session.Prepare(t.Context(), info)
+
+	require.NoError(t, err)
+	require.Contains(t, output.String(), "run_cmd output")
+	require.NotContains(t, output.String(), "prep-log-secret-9f3c")
+}
+
+func TestPrepareNamesAnUnknownInput(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	inputs := &pluginv1.ComponentValue{TypeJson: []byte(`["object",{"zone":"string"}]`), Msgpack: []byte{0x81, 0xa4, 'z', 'o', 'n', 'e', 0xd4, 0x00, 0x00}}
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{}, Logs: []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "unregistered-secret"}}}, nil)
+	output := captureAtmosLogs(t)
+
+	_, err := session.Prepare(t.Context(), info)
+
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.Contains(t, err.Error()+strings.Join(errUtils.AllDetails(err), "\n"), "`zone`")
+	require.NotContains(t, output.String(), "unregistered-secret")
+}
+
+func TestPrepareSuppressesLogsForMalformedInputs(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{
+		Inputs: &pluginv1.ComponentValue{TypeJson: []byte("invalid")},
+		Logs:   []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "unregistered-secret"}},
+	}, nil)
+	output := captureAtmosLogs(t)
+	_, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.NotContains(t, output.String(), "unregistered-secret")
+}
+
+func TestDiscoveryAndStateRenderEngineLogs(t *testing.T) {
+	// The request is built when the session starts, so the level must be set before it.
+	output := captureAtmosLogs(t)
 	config := enabledConfig(t)
 	mock := NewMockProvider(gomock.NewController(t))
 	mock.EXPECT().ComponentType().Return("terraform")
-	mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "network")}}, nil)
-	backend, err := adapter.EncodeObject(map[string]any{"path": "state.tfstate"})
-	require.NoError(t, err)
-	mock.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
-		require.Nil(t, req.Effects)
-		require.Equal(t, "output", req.Operation.Command)
-		require.Equal(t, "selected", req.Invocation.Environment["IDENTITY"])
-		require.Equal(t, "stage", req.Invocation.Environment["TF_WORKSPACE"])
-		return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "stage", WorkingDirectory: config.BasePathAbsolute}}, nil
+	var sent *pluginv1.DiscoverComponentsRequest
+	mock.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		sent = request
+		return &pluginv1.DiscoverComponentsResponse{
+			Components: []*pluginv1.DiscoveredComponent{unit(t, "network")},
+			Logs:       []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "scanning live"}},
+		}, nil
 	})
+	provider := &stateProviderFixture{Provider: mock, resolve: func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		return &pluginv1.ResolveComponentStateResponse{
+			State: &pluginv1.ComponentStateIdentity{BackendType: "local"},
+			Logs:  []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "resolving backend"}},
+		}, nil
+	}}
 	session, err := New(t.Context(), config, "describe", func(context.Context, []string) (map[string]Provider, error) {
-		return map[string]Provider{"terragrunt": mock}, nil
+		return map[string]Provider{"terragrunt": provider}, nil
 	})
 	require.NoError(t, err)
-	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", SubCommand: "output", TerraformWorkspace: "stage", ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"IDENTITY=selected"}}
-	state, err := session.ResolveState(t.Context(), info)
+
+	_, err = session.Discover(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, filepath.Join(config.BasePathAbsolute, "state.tfstate"), state.Backend["path"])
-	require.Equal(t, "stage", state.Workspace)
-	mock.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
-		return nil, context.Canceled
-	})
-	_, err = session.ResolveState(t.Context(), info)
-	require.ErrorIs(t, err, context.Canceled)
-	mock.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
-		return &pluginv1.ResolveComponentStateResponse{}, nil
-	})
-	_, err = session.ResolveState(t.Context(), info)
-	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
-	mock.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
-		return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{Backend: &pluginv1.ComponentValue{}}}, nil
-	})
-	_, err = session.ResolveState(t.Context(), info)
-	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
-	info.ComponentFromArg = "absent"
-	_, err = session.ResolveState(t.Context(), info)
-	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	info.ComponentSettingsSection = nil
-	state, err = session.ResolveState(t.Context(), info)
+	_, err = session.ResolveState(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", SubCommand: "output", ComponentSettingsSection: map[string]any{"configuration": true}})
 	require.NoError(t, err)
-	require.Nil(t, state)
+
+	require.Equal(t, "debug", sent.Invocation.LogLevel)
+	require.Contains(t, output.String(), "scanning live")
+	require.Contains(t, output.String(), "resolving backend")
+	require.Contains(t, output.String(), "component=network")
 }

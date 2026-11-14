@@ -60,6 +60,8 @@ in the protected release job.
   <dt><code>--verify-public</code></dt>
   <dd>After upload and any requested signing, verify anonymous access to the published digest and complete
   OCI graph. Disabled by default. Does not change registry visibility; a failed check leaves the upload intact.</dd>
+  <dt><code>--source</code></dt>
+  <dd>Repository URL recorded as the <code>org.opencontainers.image.source</code> annotation so registries such as GHCR link the package to its repository. Defaults to <code>metadata.repository</code> in <code>plugin.yaml</code>; pass <code>github-actions</code> to derive it from <code>GITHUB_SERVER_URL</code> and <code>GITHUB_REPOSITORY</code>. See <a href="/cli/commands/plugin/pack"><code>plugin pack</code></a>.</dd>
   <dt><code>--format</code></dt>
   <dd>Publication output format: table (default), json, yaml, csv, or tsv.</dd>
 </dl>

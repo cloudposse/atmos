@@ -46,7 +46,7 @@ func validateCommand() *cobra.Command {
 }
 
 func packCommand() *cobra.Command {
-	parser := newOutputParser(flags.WithStringFlag(packOutputFlag, "o", "", "Destination OCI layout directory"))
+	parser := newOutputParser(append(sourceFlags(), flags.WithStringFlag(packOutputFlag, "o", "", "Destination OCI layout directory"))...)
 	command := &cobra.Command{Use: "pack [directory] --output <layout>", Short: "Pack precompiled plugins into a multi-platform OCI layout", Args: cobra.MaximumNArgs(1)}
 	registerOutputFlags(command, parser)
 	_ = command.MarkFlagRequired(packOutputFlag)
@@ -68,7 +68,11 @@ func packCommand() *cobra.Command {
 			return err
 		}
 		output := values.GetString(packOutputFlag)
-		if err := pluginoci.Pack(directory, output, registry, pluginoci.WithExecutableFormatCheck()); err != nil {
+		opts, err := packOptions(values)
+		if err != nil {
+			return err
+		}
+		if err := pluginoci.Pack(directory, output, registry, opts...); err != nil {
 			return err
 		}
 		files, err := pluginoci.LayoutFiles(output)

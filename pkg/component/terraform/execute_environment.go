@@ -129,9 +129,9 @@ func toolchainPathEnv(info *schema.ConfigAndStacksInfo, tenv *dependencies.Toolc
 	if tenv.PATH() == "" {
 		return tenv.EnvVars()
 	}
-	selected, ok := lastEnvListValue(info.ComponentEnvList, envPath)
+	selected, ok := lastEnvListValue(info.ComponentEnvList)
 	if !ok {
-		selected, ok = lastEnvListValue(info.SanitizedEnv, envPath)
+		selected, ok = lastEnvListValue(info.SanitizedEnv)
 	}
 	if !ok {
 		return tenv.EnvVars()
@@ -139,11 +139,11 @@ func toolchainPathEnv(info *schema.ConfigAndStacksInfo, tenv *dependencies.Toolc
 	return []string{envPath + envAssign + tenv.PrependToPath(selected)}
 }
 
-// lastEnvListValue returns the value of the last KEY=value entry for key; later entries win.
-func lastEnvListValue(list []string, key string) (string, bool) {
+// lastEnvListValue returns the value of the last PATH=value entry; later entries win.
+func lastEnvListValue(list []string) (string, bool) {
 	value, found := "", false
 	for _, entry := range list {
-		if k, v, ok := strings.Cut(entry, envAssign); ok && k == key {
+		if k, v, ok := strings.Cut(entry, envAssign); ok && k == envPath {
 			value, found = v, true
 		}
 	}

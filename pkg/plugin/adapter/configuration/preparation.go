@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	componentconfiguration "github.com/cloudposse/atmos/pkg/component/configuration"
+	"github.com/cloudposse/atmos/pkg/component/terragruntexec"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
@@ -30,6 +31,10 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err := rejectSavedPlan(info); err != nil {
 		return nil, err
 	}
+	// Executable mode never reaches native preparation: the two modes must not mix silently.
+	if terragruntexec.Owns(info) {
+		return nil, fmt.Errorf("%w: component %q in stack %q runs through the terragrunt executable, so the provider does not prepare it", errUtils.ErrExecutableModeUnsupported, info.ComponentFromArg, info.Stack)
+	}
 	selected, err := s.componentRequest(ctx, info)
 	if err != nil {
 		return nil, err
@@ -45,7 +50,7 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err = checkTerraformBinary(info, selected.instance, prepared.TerraformBinary); err != nil {
 		return nil, err
 	}
-	warnDiagnostics(result.Diagnostics)
+	warnDiagnostics(result.Diagnostics, &s.warnings)
 	if err := checkSourcesInRoot(ctx, s.root, prepared.Sources); err != nil {
 		return nil, err
 	}
@@ -80,7 +85,7 @@ func (s *Session) ProbeIAM(ctx context.Context, info *schema.ConfigAndStacksInfo
 
 // rejectSavedPlan refuses a saved plan, which a plugin-provided configuration cannot bind to yet.
 func rejectSavedPlan(info *schema.ConfigAndStacksInfo) error {
-	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
+	if info.UseTerraformPlan || info.PlanFile != "" {
 		return fmt.Errorf("%w: plugin saved-plan binding is not implemented", errUtils.ErrPluginUnsupportedExtension)
 	}
 	return nil
@@ -88,14 +93,10 @@ func rejectSavedPlan(info *schema.ConfigAndStacksInfo) error {
 
 // runProviderPrepare asks the owning provider to reevaluate the selected unit with every effect
 // granted, after checking module ownership and engine selection. Only an explicit --command
-// flag may switch the engine discovered from the global configuration. The dependencies the
-// scheduler ordered are rechecked first, so no provider effect runs when they changed.
+// flag may switch the engine discovered from the global configuration.
 func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
-	if err := checkSourceOverride(info, selected.instance); err != nil {
+	if err := checkProviderSelection(info, selected.instance); err != nil {
 		return nil, err
-	}
-	if engine := expectedEngine(info, selected.instance); engine != selected.instance.Engine && info.ComponentCommand == "" {
-		return nil, engineMismatch(info, selected.instance.Engine, engine)
 	}
 	if err := s.checkPreparationDependencies(ctx, selected.instance, selected.request.Invocation.Environment, info.SubCommand); err != nil {
 		return nil, err
@@ -105,20 +106,57 @@ func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAnd
 	if err != nil {
 		return nil, err
 	}
-	// An error diagnostic fails the preparation; warnings are printed by the caller.
-	for _, diagnostic := range result.Diagnostics {
-		if err = adapter.DiagnosticError(diagnostic); err != nil {
-			return nil, err
-		}
+	// The log events of the same response can quote a sensitive input, for example the output of
+	// sensitive(run_cmd(...)) at debug level, so the inputs are registered for masking first.
+	// Reject malformed or unknown inputs before rendering any response content: until
+	// they decode successfully, their sensitive values cannot be registered safely.
+	if err := s.renderPreparationLogs(info, selected, result); err != nil {
+		return nil, err
 	}
-	// The provider prepares for the binary it is given, so any other engine is a protocol violation.
-	if result.Engine != expectedEngine(info, selected.instance) {
-		return nil, errUtils.ErrPluginProtocol
+	if err := validatePreparationResponse(info, selected.instance, result); err != nil {
+		return nil, err
 	}
 	if result.State != nil {
 		s.prepared.Store(addressKey(selected.instance.Address), proto.Clone(result.State))
 	}
 	return result, nil
+}
+
+func validatePreparationResponse(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent, result *pluginv1.PrepareComponentResponse) error {
+	// An error diagnostic fails the preparation; warnings are printed by the caller.
+	for _, diagnostic := range result.Diagnostics {
+		if err := adapter.DiagnosticError(diagnostic); err != nil {
+			return err
+		}
+	}
+	// The provider prepares for the binary it is given, so any other engine is a protocol violation.
+	if result.Engine != expectedEngine(info, instance) {
+		return errUtils.ErrPluginProtocol
+	}
+	return nil
+}
+
+func checkProviderSelection(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent) error {
+	if err := checkSourceOverride(info, instance); err != nil {
+		return err
+	}
+	if engine := expectedEngine(info, instance); engine != instance.Engine && info.ComponentCommand == "" {
+		return engineMismatch(info, instance.Engine, engine)
+	}
+	return nil
+}
+
+func (s *Session) renderPreparationLogs(info *schema.ConfigAndStacksInfo, selected *selectedComponent, result *pluginv1.PrepareComponentResponse) error {
+	if _, err := adapter.DecodeInputs(result.GetInputs()); err != nil {
+		return err
+	}
+	adapter.RenderLogs(logScope(selected.request, info, &s.warnings), result.GetLogs())
+	return nil
+}
+
+// logScope names the component and stack a plugin's log events belong to.
+func logScope(request *pluginv1.ComponentRequest, info *schema.ConfigAndStacksInfo, warnings *adapter.WarningDeduper) adapter.LogScope {
+	return adapter.LogScope{Provider: request.GetProvider(), Component: info.ComponentFromArg, Stack: info.Stack, Warnings: warnings}
 }
 
 // checkSourceOverride rejects a stack that points the component at another module. The module
@@ -218,11 +256,12 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 	env := preparationEnvironment(info)
 	env["ATMOS_TERRAFORM_BINARY"] = info.Command
 	env["TF_WORKSPACE"] = info.TerraformWorkspace
+	mode, options := s.providerOperation(instance.Provider)
 	request := &pluginv1.ComponentRequest{
 		Provider: instance.Provider, Address: instance.Address, Source: instance.Source, RootDirectory: s.root,
 		Configuration: instance.Configuration, ProviderConfiguration: s.providerSettings(instance.Provider),
-		Invocation: &pluginv1.Invocation{Environment: env},
-		Operation:  &pluginv1.ComponentOperation{Command: info.SubCommand, Mode: "native", TerraformArguments: slices.Clone(info.AdditionalArgsAndFlags)},
+		Invocation: &pluginv1.Invocation{Environment: env, LogLevel: adapter.HostLogLevel()},
+		Operation:  &pluginv1.ComponentOperation{Command: info.SubCommand, Mode: mode, Options: options, TerraformArguments: slices.Clone(info.AdditionalArgsAndFlags)},
 	}
 	return &selectedComponent{request: request, provider: provider, instance: instance}, nil
 }
@@ -261,7 +300,8 @@ func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pl
 	}
 	request := proto.Clone(baseline.request).(*pluginv1.DiscoverComponentsRequest)
 	request.Invocation = &pluginv1.Invocation{Environment: env}
-	request.Operation = &pluginv1.ComponentOperation{Command: command, Mode: "native"}
+	request.Operation = proto.Clone(baseline.request.Operation).(*pluginv1.ComponentOperation)
+	request.Operation.Command = command
 	response, err := s.registry[instance.Provider].Discover(ctx, request)
 	if err != nil {
 		return err
@@ -419,7 +459,7 @@ func sameDependencies(before, after []*pluginv1.ComponentDependency) bool {
 }
 
 func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.PreparedComponentConfiguration, error) {
-	inputs, sensitiveKeys, err := adapter.DecodeObjectWithSensitiveKeys(result.Inputs)
+	inputs, err := adapter.DecodeInputs(result.Inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +470,8 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	if result.State.BackendType == "local" {
 		resolveLocalBackend(backend, result.State.WorkingDirectory)
 	}
-	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, SensitiveInputKeys: sensitiveKeys, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
+	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
+	prepared.SensitiveInputKeys = sensitiveInputKeys(result.Inputs, inputs)
 	if prepared.SourceAuthorization, err = preparedSourceAuthorization(result); err != nil {
 		return nil, err
 	}
@@ -453,6 +494,25 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	}
 
 	return prepared, nil
+}
+
+// sensitiveInputKeys preserves declared sensitivity independently of the decoded value.
+// A sensitive empty string cannot be found later by value-based secret detection.
+func sensitiveInputKeys(value *pluginv1.ComponentValue, inputs map[string]any) map[string]bool {
+	if value == nil || len(value.SensitivePaths) == 0 {
+		return nil
+	}
+	keys := make(map[string]bool)
+	for _, path := range value.SensitivePaths {
+		if path == nil || len(path.Steps) == 0 || path.Steps[0].GetAttribute() == "" {
+			for key := range inputs {
+				keys[key] = true
+			}
+			continue
+		}
+		keys[path.Steps[0].GetAttribute()] = true
+	}
+	return keys
 }
 
 func preparedSourceAuthorization(result *pluginv1.PrepareComponentResponse) (*schema.SourceAuthorization, error) {
@@ -521,14 +581,4 @@ func preparationEnvironment(info *schema.ConfigAndStacksInfo) map[string]string 
 		}
 	}
 	return env
-}
-
-func (s *Session) providerSettings(name string) *pluginv1.ComponentValue {
-	var settings *pluginv1.ComponentValue
-	for _, request := range s.importProviders {
-		if request.Provider == name {
-			settings = request.ProviderConfiguration
-		}
-	}
-	return settings
 }

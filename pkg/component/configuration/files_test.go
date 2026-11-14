@@ -78,6 +78,49 @@ func TestWriteFilesRegistersSensitiveContentItKeeps(t *testing.T) {
 	require.Equal(t, "key=<MASKED>", atmosio.MaskString("key="+secret))
 }
 
+func TestSensitiveGeneratedFileRestrictsBeforeTruncating(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "secret.tf")
+	previous := []byte("preserve until restricted")
+	require.NoError(t, os.WriteFile(path, previous, 0o644))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	output, err := openGeneratedFile(root, schema.ComponentConfigurationFile{
+		Path: "secret.tf", IfExists: "overwrite", Sensitive: true,
+	}, true)
+	require.NoError(t, err)
+	defer output.Close()
+	info, err := output.Stat()
+	require.NoError(t, err)
+	require.EqualValues(t, len(previous), info.Size())
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(secretMode), info.Mode().Perm())
+	}
+}
+
+func TestSensitiveGeneratedFileExistingPolicies(t *testing.T) {
+	for _, policy := range []string{"skip", "error"} {
+		t.Run(policy, func(t *testing.T) {
+			directory := t.TempDir()
+			path := filepath.Join(directory, "secret.tf")
+			previous := []byte("preserve existing content")
+			require.NoError(t, os.WriteFile(path, previous, 0o644))
+			err := WriteFiles(directory, []schema.ComponentConfigurationFile{{
+				Path: "secret.tf", IfExists: policy, Sensitive: true, Content: []byte("replacement"),
+			}})
+			if policy == "skip" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			}
+			content, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, previous, content)
+		})
+	}
+}
+
 // A module file that already matches a skip block stays the module's: removing the block later
 // must not delete it as a stale generated file.
 func TestSkipKeepsOwnershipOfAnIdenticalModuleFile(t *testing.T) {
@@ -151,6 +194,105 @@ func TestErrorPolicyDoesNotClaimAnIdenticalModuleFile(t *testing.T) {
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, content, got, "removing the block keeps the module's file")
+}
+
+func TestWriteFilesClassifiesOwnershipFailure(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "parent"), []byte("file"), 0o600))
+	err := WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "parent/child.tf", IfExists: "overwrite"}})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "generated file parent/child.tf")
+	var cause *os.PathError
+	require.ErrorAs(t, err, &cause)
+	require.ErrorIs(t, err, cause.Err)
+}
+
+func TestWriteFilesClassifiesRemovalFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not prevent deletion on Windows")
+	}
+	directory := t.TempDir()
+	parent := filepath.Join(directory, "parent")
+	require.NoError(t, os.Mkdir(parent, 0o700))
+	path := filepath.Join(parent, "generated.tf")
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+	require.NoError(t, os.Chmod(parent, 0o500))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(parent, 0o700)) })
+	// Privileged processes can bypass directory permissions.
+	probe := filepath.Join(parent, "probe")
+	if err := os.WriteFile(probe, nil, 0o600); err == nil {
+		t.Skip("process can bypass directory permissions")
+	}
+	err := WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "parent/generated.tf", IfExists: "remove"}})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrPermission)
+	require.ErrorContains(t, err, "generated file parent/generated.tf")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "original", string(content))
+}
+
+func TestSensitiveGeneratedFileClassifiesHandleFailures(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.tf")
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+	output, err := os.Open(path)
+	require.NoError(t, err)
+	require.NoError(t, output.Close())
+	err = writeSensitiveGeneratedFile(output, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrClosed)
+	require.ErrorContains(t, err, "generated file secret.tf")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "original", string(content))
+}
+
+// A failed replacement of a sensitive file must leave the existing destination untouched and
+// remove the temporary file it staged.
+func TestReplaceSensitiveFilePreservesDestinationOnFailure(t *testing.T) {
+	directory := t.TempDir()
+	// The destination is a non-empty directory, so the final rename cannot succeed.
+	blocked := filepath.Join(directory, "secret.tf")
+	require.NoError(t, os.MkdirAll(blocked, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(blocked, "keep"), []byte("original"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	err = replaceSensitiveWindowsFile(root, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement"), Sensitive: true}, true)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	content, err := os.ReadFile(filepath.Join(blocked, "keep"))
+	require.NoError(t, err)
+	require.Equal(t, "original", string(content))
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+}
+
+func TestReplaceSensitiveFileReplacesExistingBytes(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "secret.tf")
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	require.NoError(t, replaceSensitiveWindowsFile(root, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement"), Sensitive: true}, true))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", string(content))
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+}
+
+func TestCreateSensitiveTempClassifiesFailures(t *testing.T) {
+	_, _, err := CreateSensitiveTemp(filepath.Join(t.TempDir(), "missing"))
+	require.ErrorIs(t, err, errUtils.ErrFileOperation)
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	file, name, err := CreateSensitiveTemp(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	require.FileExists(t, name)
 }
 
 func TestWriteFilesAppliesClampedMode(t *testing.T) {

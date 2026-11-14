@@ -11,6 +11,10 @@ import (
 // than typed on the command line.
 const annotationValueFromEnv = "atmos_value_from_env"
 
+// SensitiveMetadataAnnotation marks a flag whose value must be redacted from
+// execution records even when display masking is disabled.
+const SensitiveMetadataAnnotation = "atmos_sensitive_metadata"
+
 // MarkFlagValueFromEnv records that the flag's current value came from the named environment
 // variable. Callers use it after copying an environment value onto a flag that the command line
 // did not set, so later validation can tell an explicit `--flag` apart from an ambient

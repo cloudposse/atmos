@@ -8,11 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -32,12 +35,23 @@ const (
 	// ConfigMediaType identifies a plugin platform image's static configuration.
 	ConfigMediaType types.MediaType = "application/vnd.atmos.plugin.config.v1+json"
 	// BundleMediaType identifies a bounded, uncompressed package archive.
-	BundleMediaType    types.MediaType = "application/vnd.atmos.plugin.bundle.v1+tar"
-	annotationName                     = "dev.atmos.plugin.name"
-	annotationVersion                  = "dev.atmos.plugin.version"
-	annotationManifest                 = "dev.atmos.plugin.manifest.digest"
-	manifestLabel                      = "dev.atmos.plugin.manifest"
-	maxBundleSize                      = 256 << 20
+	BundleMediaType types.MediaType = "application/vnd.atmos.plugin.bundle.v1+tar"
+)
+
+const (
+	annotationName         = "dev.atmos.plugin.name"
+	annotationVersion      = "dev.atmos.plugin.version"
+	annotationManifest     = "dev.atmos.plugin.manifest.digest"
+	annotationSource       = "org.opencontainers.image.source"
+	annotationTitle        = "org.opencontainers.image.title"
+	annotationDescription  = "org.opencontainers.image.description"
+	annotationImageVersion = "org.opencontainers.image.version"
+	maxSourceLength        = 512
+	// Bound on a free-text annotation, which is copied into the index and every platform descriptor, so
+	// a long description cannot push the index past the metadata limit inspection and publishing enforce.
+	maxAnnotationText = 1024
+	manifestLabel     = "dev.atmos.plugin.manifest"
+	maxBundleSize     = 256 << 20
 )
 
 // Option adjusts how packing and publishing verify a release.
@@ -45,6 +59,62 @@ type Option func(*options)
 
 type options struct {
 	checkExecutableFormat bool
+	source                string
+}
+
+// WithSource sets the org.opencontainers.image.source annotation, the metadata
+// registries such as GHCR use to link a package to its repository. It overrides
+// the repository declared in the plugin manifest. The value must be a plain
+// https URL: credentials, query strings, and fragments are rejected so a
+// release never publishes anything private.
+func WithSource(source string) Option {
+	defer perf.Track(nil, "pluginoci.WithSource")()
+
+	return func(o *options) { o.source = source }
+}
+
+// GitHubActionsSource derives the repository URL from the GitHub Actions
+// environment (GITHUB_SERVER_URL, defaulting to https://github.com, and
+// GITHUB_REPOSITORY). It returns an empty string outside GitHub Actions or for
+// a value that is not a safe https URL. Callers opt in explicitly; packing
+// itself never reads the environment.
+func GitHubActionsSource(getenv func(string) string) string {
+	defer perf.Track(nil, "pluginoci.GitHubActionsSource")()
+
+	slug := getenv("GITHUB_REPOSITORY")
+	if strings.Count(slug, "/") != 1 || strings.HasPrefix(slug, "/") || strings.HasSuffix(slug, "/") {
+		return ""
+	}
+	server := strings.TrimRight(getenv("GITHUB_SERVER_URL"), "/")
+	if server == "" {
+		server = "https://github.com"
+	}
+	source, ok := publishableSource(server + "/" + slug)
+	if !ok {
+		return ""
+	}
+	return source
+}
+
+// publishableSource reports whether a repository reference is safe to publish as the
+// image source: an https URL with a host and without credentials, query, or fragment.
+func publishableSource(raw string) (string, bool) {
+	if raw == "" || len(raw) > maxSourceLength || strings.ContainsFunc(raw, unicode.IsSpace) {
+		return "", false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || !plainHTTPSURL(parsed) {
+		return "", false
+	}
+	return raw, true
+}
+
+// plainHTTPSURL reports whether a parsed URL is https with a host and carries nothing but a location.
+func plainHTTPSURL(parsed *url.URL) bool {
+	if parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return false
+	}
+	return parsed.RawQuery == "" && !parsed.ForceQuery && parsed.Fragment == ""
 }
 
 // WithExecutableFormatCheck requires every platform executable to be a native
@@ -114,6 +184,13 @@ func BuildIndex(directory string, descriptors *extension.Registry, opts ...Optio
 		return nil, err
 	}
 	annotations := releaseAnnotations(definition, files["plugin.yaml"])
+	if configured.source != "" {
+		source, ok := publishableSource(configured.source)
+		if !ok {
+			return nil, fmt.Errorf("%w: the package source must be an https URL without credentials, query, or fragment", errUtils.ErrPluginInvalidConfig)
+		}
+		annotations[annotationSource] = source
+	}
 	platforms := make([]string, 0, len(definition.Spec.Platforms))
 	for platform := range definition.Spec.Platforms {
 		platforms = append(platforms, platform)
@@ -125,7 +202,7 @@ func BuildIndex(directory string, descriptors *extension.Registry, opts ...Optio
 		if err != nil {
 			return nil, err
 		}
-		img, err := platformImage(directory, definition, parsed, files, configured)
+		img, err := platformImage(&releaseBuild{directory: directory, definition: definition, files: files, annotations: annotations, options: configured}, parsed)
 		if err != nil {
 			return nil, err
 		}
@@ -152,12 +229,51 @@ func parsePlatform(value string) (*v1.Platform, error) {
 	return &v1.Platform{OS: target.OS, Architecture: target.Architecture, Variant: target.Variant}, nil
 }
 
+// releaseAnnotations derives every annotation from the verified manifest bytes, so a
+// release can be re-checked from the manifest alone. The OCI image annotations let
+// registries show the package title and link it to its repository.
 func releaseAnnotations(definition *manifest.Config, raw []byte) map[string]string {
 	digest := sha256.Sum256(raw)
-	return map[string]string{annotationName: definition.Metadata.Name, annotationVersion: definition.Metadata.Version, annotationManifest: "sha256:" + hex.EncodeToString(digest[:])}
+	annotations := map[string]string{
+		annotationName: definition.Metadata.Name, annotationVersion: definition.Metadata.Version, annotationManifest: "sha256:" + hex.EncodeToString(digest[:]),
+		annotationTitle: definition.Metadata.Name, annotationImageVersion: definition.Metadata.Version,
+	}
+	if definition.Metadata.DisplayName != "" {
+		annotations[annotationTitle] = boundedText(definition.Metadata.DisplayName)
+	}
+	if definition.Metadata.Description != "" {
+		annotations[annotationDescription] = boundedText(definition.Metadata.Description)
+	}
+	if source, ok := publishableSource(definition.Metadata.Repository); ok {
+		annotations[annotationSource] = source
+	}
+	return annotations
 }
 
-func platformImage(directory string, definition *manifest.Config, parsed *v1.Platform, files map[string][]byte, configured *options) (v1.Image, error) {
+// boundedText shortens a free-text annotation to maxAnnotationText bytes at a character boundary. The
+// complete text stays in the packaged manifest, which the manifest digest annotation verifies.
+func boundedText(text string) string {
+	if len(text) <= maxAnnotationText {
+		return text
+	}
+	cut := maxAnnotationText
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
+}
+
+// releaseBuild carries the inputs shared by every platform image of one release.
+type releaseBuild struct {
+	directory   string
+	definition  *manifest.Config
+	files       map[string][]byte
+	annotations map[string]string
+	options     *options
+}
+
+func platformImage(build *releaseBuild, parsed *v1.Platform) (v1.Image, error) {
+	directory, definition, files, configured := build.directory, build.definition, build.files, build.options
 	selection := definition.Spec.Platforms[parsed.String()]
 	executable, err := readPackageFile(directory, selection.Executable, maxBundleSize)
 	if err != nil {
@@ -191,7 +307,7 @@ func platformImage(directory string, definition *manifest.Config, parsed *v1.Pla
 		return nil, err
 	}
 	img = mutate.ConfigMediaType(mutate.MediaType(img, types.OCIManifestSchema1), ConfigMediaType)
-	return mutate.Annotations(img, releaseAnnotations(definition, files["plugin.yaml"])).(v1.Image), nil
+	return mutate.Annotations(img, build.annotations).(v1.Image), nil
 }
 
 func checkPackedExecutable(name string, executable []byte, platform *v1.Platform) error {

@@ -33,6 +33,8 @@ type componentExecContext struct {
 	workingDir            string
 	tenv                  *dependencies.ToolchainEnvironment
 	planPolicy            *planfile.Guard
+	// rebuild is set when the working directory was re-provisioned for a restored plan; it is verified before any command runs.
+	rebuild *reviewedRebuild
 }
 
 // prepareComponentExecution consolidates all per-component setup into one call:
@@ -46,6 +48,54 @@ func (e *Executor) prepareComponentExecution(
 	info *schema.ConfigAndStacksInfo,
 	shouldProcess bool,
 ) (*componentExecContext, error) {
+	execCtx, err := e.prepareConfigurationPhase(ctx, atmosConfig, info, shouldProcess)
+	if err != nil {
+		return nil, err
+	}
+
+	// A restored plugin plan was validated when it was created. Its binding omits
+	// variable values, so validating the reconstructed component would test empty vars.
+	restoredConfigurationPlan := isRestoredConfigurationPlan(info, execCtx.preparedConfiguration)
+
+	execCtx.componentPath, err = e.prepareComponentDirectory(ctx, writers, atmosConfig, info, execCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = checkComponentRestrictions(info); err != nil {
+		return nil, err
+	}
+
+	if execCtx.tenv, err = resolveExecutionToolchain(atmosConfig, info, execCtx.tenv, shouldProcess); err != nil {
+		return nil, err
+	}
+	execCtx.nameFiles(atmosConfig, info)
+
+	if err = e.runPreExecutionSteps(atmosConfig, info, execCtx.workingDir, execCtx.tenv, restoredConfigurationPlan); err != nil {
+		return nil, err
+	}
+	// Execution has now written its own files, so the directory is complete and must equal the reviewed one.
+	if execCtx.rebuild != nil {
+		if err = e.installReviewedModules(atmosConfig, info, execCtx.rebuild, execCtx.workingDir); err != nil {
+			return nil, err
+		}
+		if err = execCtx.rebuild.verify(execCtx.workingDir); err != nil {
+			return nil, err
+		}
+	}
+
+	return execCtx, nil
+}
+
+// prepareConfigurationPhase checks the Terraform configuration, evaluates the configuration provider,
+// skips excluded components, and runs the read-config hooks. The returned context carries the prepared
+// configuration, the toolchain environment the provider needed, and the reviewed-plan rebuild when one is pending.
+func (e *Executor) prepareConfigurationPhase(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	shouldProcess bool,
+) (*componentExecContext, error) {
 	if err := checkTerraformConfig(*atmosConfig); err != nil {
 		return nil, err
 	}
@@ -54,46 +104,78 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
-	prepared, err := prepareConfiguration(ctx, atmosConfig, info)
+	prepared, rebuild, err := prepareConfigurationForExecution(ctx, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}
 	if err = e.beginPreparedConfiguration(ctx, atmosConfig, info, prepared); err != nil {
 		return nil, err
 	}
-	// A restored plugin plan was validated when it was created. Its binding omits
-	// variable values, so validating the reconstructed component would test empty vars.
-	restoredConfigurationPlan := isRestoredConfigurationPlan(info, prepared)
+	return &componentExecContext{preparedConfiguration: prepared, tenv: tenv, rebuild: rebuild}, nil
+}
 
-	componentPath, err := e.resolveConfiguredComponentPath(ctx, writers, atmosConfig, info, prepared)
+// resolveExecutionToolchain installs the toolchain dependencies when none were resolved while the
+// configuration was prepared, and points the command at the resolved executable.
+func resolveExecutionToolchain(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	tenv *dependencies.ToolchainEnvironment,
+	shouldProcess bool,
+) (*dependencies.ToolchainEnvironment, error) {
+	if !shouldProcess || tenv != nil {
+		return tenv, nil
+	}
+	tenv, err := resolveAndInstallToolchainDeps(atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}
+	info.Command = tenv.Resolve(info.Command)
+	return tenv, nil
+}
 
-	if shouldProcess && tenv == nil {
-		if tenv, err = installToolchainForCommand(atmosConfig, info); err != nil {
-			return nil, err
+// prepareComponentDirectory resolves the directory the component runs in, provisioning or rebuilding it
+// when needed, and writes the files the configuration provider generated into it.
+func (e *Executor) prepareComponentDirectory(
+	ctx context.Context,
+	writers provisioner.OutputWriters,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+) (string, error) {
+	prepared, rebuild := execCtx.preparedConfiguration, execCtx.rebuild
+	var componentPath string
+	var err error
+	switch {
+	case rebuild != nil:
+		// The plan was restored without its workdir: provision it again and prove it equals the reviewed one.
+		componentPath, err = e.rebuildReviewedWorkdir(ctx, writers, atmosConfig, info, rebuild)
+	case prepared != nil && usesConfigurationPlan(info):
+		// A reviewed plan uses the retained workdir; provisioning could replace its modules.
+		componentPath = ConstructTerraformComponentWorkingDir(atmosConfig, info)
+	default:
+		componentPath, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	if prepared != nil && !info.DryRun {
+		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
+			return "", err
+		}
+		if err := writePreparedConfiguration(componentPath, prepared); err != nil {
+			return "", fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
 		}
 	}
+	return componentPath, nil
+}
 
-	varFile := ConstructTerraformComponentVarfileName(info)
-	testVarFile := terraformTestVarfileName(info)
-	planFile := ConstructTerraformComponentPlanfileName(info)
-	workingDir := ConstructTerraformComponentWorkingDir(atmosConfig, info)
-
-	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv, restoredConfigurationPlan); err != nil {
-		return nil, err
-	}
-
-	return &componentExecContext{
-		preparedConfiguration: prepared,
-		componentPath:         componentPath,
-		varFile:               varFile,
-		testVarFile:           testVarFile,
-		planFile:              planFile,
-		workingDir:            workingDir,
-		tenv:                  tenv,
-	}, nil
+// nameFiles sets the variable, test variable, and plan files and the working directory of a component.
+func (c *componentExecContext) nameFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	c.testVarFile = terraformTestVarfileName(info)
+	c.varFile = ConstructTerraformComponentVarfileName(info)
+	c.planFile = ConstructTerraformComponentPlanfileName(info)
+	c.workingDir = ConstructTerraformComponentWorkingDir(atmosConfig, info)
 }
 
 // beginPreparedConfiguration stops an excluded component before anything runs, then warns about
@@ -128,51 +210,6 @@ func isRestoredConfigurationPlan(info *schema.ConfigAndStacksInfo, prepared *sch
 	return prepared != nil && ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
 }
 
-// installToolchainForCommand installs the toolchain dependencies and resolves the command against them.
-func installToolchainForCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*dependencies.ToolchainEnvironment, error) {
-	tenv, err := resolveAndInstallToolchainDeps(atmosConfig, info)
-	if err != nil {
-		return nil, err
-	}
-	info.Command = tenv.Resolve(info.Command)
-	return tenv, nil
-}
-
-// resolveConfiguredComponentPath resolves the component directory and, for a provider-owned
-// component, writes its prepared files there.
-func (e *Executor) resolveConfiguredComponentPath(
-	ctx context.Context,
-	writers provisioner.OutputWriters,
-	atmosConfig *schema.AtmosConfiguration,
-	info *schema.ConfigAndStacksInfo,
-	prepared *schema.PreparedComponentConfiguration,
-) (string, error) {
-	var componentPath string
-	if prepared != nil && usesConfigurationPlan(info) {
-		// A reviewed plan uses the retained workdir; provisioning could replace its modules.
-		componentPath = ConstructTerraformComponentWorkingDir(atmosConfig, info)
-	} else {
-		var err error
-		componentPath, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	if prepared != nil && !info.DryRun {
-		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
-			return "", err
-		}
-		if err := writePreparedConfiguration(componentPath, prepared); err != nil {
-			return "", fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
-		}
-	}
-	if err := checkComponentRestrictions(info); err != nil {
-		return "", err
-	}
-	return componentPath, nil
-}
-
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
 // env var warnings, and env var assembly. Extracted from prepareComponentExecution
 // to keep cyclomatic complexity within bounds.
@@ -204,10 +241,8 @@ func (e *Executor) runPreExecutionSteps(
 		}
 	}
 
-	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
-		if err := runAuthPreHook(atmosConfig, info); err != nil {
-			return err
-		}
+	if err := prepareExecutionAuthentication(atmosConfig, info); err != nil {
+		return err
 	}
 
 	// Generate backend and provider-override files. When AutoGenerateFiles=true,
@@ -234,21 +269,6 @@ func finishPreExecutionEnvironment(atmosConfig *schema.AtmosConfiguration, info 
 		return appendTerraformSecretEnv(info)
 	}
 	return assembleComponentEnvVars(atmosConfig, info, tenv)
-}
-
-// runAuthPreHook runs the auth pre-hook and disables the Terraform plugin cache for this execution.
-func runAuthPreHook(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
-		// The error is returned and rendered once by the command boundary, so it is only logged
-		// at debug level here to avoid printing the same failure twice.
-		log.Debug("Error executing 'atmos auth terraform pre-hook'",
-			logFieldComponent, info.ComponentFromArg, "error", err)
-		// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
-		// Authentication setup failures must not silently produce unauthenticated terraform commands.
-		return err
-	}
-	disableTerraformPluginCacheForExecution(atmosConfig, info)
-	return nil
 }
 
 // executeCommandPipeline runs the full terraform command pipeline after the component
@@ -298,9 +318,7 @@ func (e *Executor) executeCommandPipeline(
 	execCtx *componentExecContext,
 	opts ...component.ExecutionOption,
 ) error {
-	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
-		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
-	}
+	warnConfigurationPreview(info)
 
 	componentPath, err := e.runGroupedInitPhase(atmosConfig, info, execCtx, execCtx.componentPath, opts...)
 	if err != nil {
@@ -597,4 +615,27 @@ func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile st
 		return
 	}
 	info.AdditionalArgsAndFlags = append([]string{varFileFlag, testVarFile}, info.AdditionalArgsAndFlags...)
+}
+
+func prepareExecutionAuthentication(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
+		if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
+			// The error is returned and rendered once by the command boundary, so it is only logged
+			// at debug level here to avoid printing the same failure twice.
+			log.Debug("Error executing 'atmos auth terraform pre-hook'",
+				logFieldComponent, info.ComponentFromArg, "error", err)
+			// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
+			// Authentication setup failures must not silently produce unauthenticated terraform commands.
+			return err
+		}
+		disableTerraformPluginCacheForExecution(atmosConfig, info)
+	}
+
+	return nil
+}
+
+func warnConfigurationPreview(info *schema.ConfigAndStacksInfo) {
+	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
+		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
+	}
 }

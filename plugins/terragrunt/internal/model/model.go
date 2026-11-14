@@ -1,6 +1,8 @@
 // Package model contains evaluator data, independent of the plugin transport.
 package model
 
+import "time"
+
 type Request struct {
 	IncludedPaths  []string          `json:"included_paths,omitempty"`
 	ExcludedPaths  []string          `json:"excluded_paths,omitempty"`
@@ -36,9 +38,10 @@ type Resolution struct {
 	UnitConfigs        map[string]string `json:"unit_configs,omitempty"`
 	StackConfigs       map[string]string `json:"stack_configs,omitempty"`
 	Inputs             map[string]any    `json:"inputs"`
-	Source             string            `json:"source"`
+	// SensitiveInputs are the paths (object keys from the top) of the inputs the unit declares sensitive.
+	SensitiveInputs [][]string `json:"sensitive_inputs,omitempty"`
+	Source          string     `json:"source"`
 	// RegistryAuth is an invocation-only bearer header for a same-origin archive.
-	// It must never enter saved configuration or source provenance.
 	RegistryAuth            *RegistryAuth     `json:"-"`
 	RegistryResolutionNanos uint64            `json:"registry_resolution_nanos,omitempty"`
 	BackendGenerated        bool              `json:"backend_generated,omitempty"`
@@ -191,6 +194,17 @@ type Hook struct {
 	OnErrors         []string `json:"on_errors,omitempty"`
 }
 
+// LogEntry is one event of the Terragrunt logger, kept for the host to render. The message and fields
+// never carry evaluated values by design; the host masks them as well.
+type LogEntry struct {
+	Time    time.Time
+	Fields  map[string]string
+	Level   string
+	Message string
+	// Unit is the unit the event is about, relative to the project root, when the logger reports one.
+	Unit string
+}
+
 // Problem codes are stable identifiers shared with the host and with tests.
 const (
 	CodeUnsupportedSetting = "unsupported_setting"
@@ -225,6 +239,8 @@ type Problem struct {
 
 // Error returns the headline and detail for local diagnostics and tests. The provider never sends it
 // to the host: it sends only the structured fields, honoring Safe.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func (p *Problem) Error() string {
 	if p.Detail == "" {
 		return p.Summary
@@ -233,4 +249,6 @@ func (p *Problem) Error() string {
 }
 
 // Unwrap exposes the cause for classification.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func (p *Problem) Unwrap() error { return p.Err }

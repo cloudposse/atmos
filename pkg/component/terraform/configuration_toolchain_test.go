@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +30,9 @@ import (
 // arguments, and environment of every Terraform subprocess without any Unix-only binary.
 const testEnvToolchainProbe = "_ATMOS_TEST_TOOLCHAIN_PROBE"
 
+// testEnvProbeExit makes a toolchain probe exit with that code after it recorded a command other than --version.
+const testEnvProbeExit = "_ATMOS_TEST_PROBE_EXIT"
+
 // toolchainProbe is one recorded subprocess invocation.
 type toolchainProbe struct {
 	Executable string   `json:"executable"`
@@ -39,6 +44,10 @@ type toolchainProbe struct {
 	Token      string   `json:"token"`
 	Ambient    string   `json:"ambient"`
 	Identity   string   `json:"identity"`
+	// Terragrunt executable mode: the TG_* variables Atmos sets for the unit.
+	NonInteractive string `json:"non_interactive"`
+	TFPath         string `json:"tf_path"`
+	WebIdentity    string `json:"web_identity"`
 }
 
 func runToolchainProbeForTest(path string) int {
@@ -48,6 +57,7 @@ func runToolchainProbeForTest(path string) int {
 		Executable: executable, Directory: directory, Arguments: os.Args[1:], Path: os.Getenv("PATH"),
 		Profile: os.Getenv("AWS_PROFILE"), Custom: os.Getenv("CUSTOM_VALUE"), Token: os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"),
 		Ambient: os.Getenv("ATMOS_TOOLCHAIN_AMBIENT_ONLY"), Identity: os.Getenv("ATMOS_IDENTITY"),
+		NonInteractive: os.Getenv("TG_NON_INTERACTIVE"), TFPath: os.Getenv("TG_TF_PATH"), WebIdentity: os.Getenv("TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN"),
 	}
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -56,6 +66,14 @@ func runToolchainProbeForTest(path string) int {
 	defer file.Close()
 	if err := json.NewEncoder(file).Encode(probe); err != nil {
 		return 1
+	}
+	// Acting as terragrunt, the probe reports a version and can be told to fail the command.
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Println("terragrunt version v1.2.1")
+		return 0
+	}
+	if code, err := strconv.Atoi(os.Getenv(testEnvProbeExit)); err == nil {
+		return code
 	}
 	return 0
 }
@@ -542,4 +560,100 @@ func TestConfigurationToolchainPreservesIdentityPath(t *testing.T) {
 		require.True(t, ok, name)
 		require.Less(t, indexOf(entries, filepath.Dir(harness.tools["tofu@1.0.0"])), indexOf(entries, identityBin), name)
 	}
+}
+
+// unitHarness prepares a toolchain harness whose pinned terragrunt is the test binary, plus the unit
+// directory executable mode runs in.
+func unitHarness(t *testing.T) (*toolchainHarness, *schema.ConfigAndStacksInfo, string) {
+	t.Helper()
+	harness := newToolchainHarness(t, "1.0.0")
+	harness.config.Toolchain.Aliases["terragrunt"] = "gruntwork-io/terragrunt"
+	pinned := installToolchainFixture(t, harness.config.Toolchain.InstallPath, "gruntwork-io", "terragrunt", "1.2.1", "terragrunt")
+	unit := filepath.Join(harness.config.BasePathAbsolute, "live", "dev", "app")
+	require.NoError(t, os.MkdirAll(unit, 0o755))
+	probe := filepath.Join(t.TempDir(), "probe.jsonl")
+	info := harness.info(t, &toolchainScenario{identity: "development", tofuVersion: "1.0.0", toolVersion: "1.0.0"}, probe)
+	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"engine": "terragrunt", "provider": "terragrunt", "source": "live/dev/app/terragrunt.hcl"}}
+	info.AdditionalArgsAndFlags = []string{"-no-color"}
+	tools, _ := info.ComponentSection["dependencies"].(map[string]any)["tools"].(map[string]any)
+	tools["terragrunt"] = "1.2.1"
+	return harness, info, pinned
+}
+
+// unitRun is how ExecuteTerraform reaches executable mode for a component without test fixtures.
+var unitRun = terragruntUnitRun{shouldProcess: true, runHooks: true}
+
+// Executable mode runs the pinned terragrunt in the unit directory, with the identity and toolchain Atmos
+// resolved, and never touches native preparation.
+func TestExecuteTerragruntUnitRunsThePinnedExecutableInTheUnit(t *testing.T) {
+	harness, info, pinned := unitHarness(t)
+	probePath := info.ComponentEnvSection[testEnvToolchainProbe].(string)
+	info.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+		"feature":                            {Value: map[string]any{"alpha": "true"}},
+		"iam_assume_role_web_identity_token": {Value: "token-value", Sensitive: true},
+	}}
+	harness.config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{
+		"terragrunt": {Enabled: true, Mode: "executable", Options: map[string]any{"features": map[string]any{"beta": "from-config"}}},
+	}
+
+	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun))
+
+	probes := readToolchainProbes(t, probePath)
+	require.Len(t, probes, 2, "one version probe and one unit command")
+	require.Equal(t, []string{"--version"}, probes[0].Arguments)
+	run := probes[1]
+	unit := filepath.Join(harness.config.BasePathAbsolute, "live", "dev", "app")
+	require.Equal(t, physical(t, pinned), physical(t, run.Executable), "the toolchain-pinned terragrunt runs, not the ambient PATH")
+	require.Equal(t, physical(t, unit), physical(t, run.Directory))
+	require.Equal(t, []string{"--working-dir", unit, "run", "--feature", "alpha=true", "--feature", "beta=from-config", "--", "plan", "-no-color"}, run.Arguments)
+	require.Equal(t, "true", run.NonInteractive)
+	require.Equal(t, harness.tools["tofu@1.0.0"], run.TFPath, "terragrunt runs the engine Atmos selected")
+	require.Equal(t, "development", run.Profile, "the Atmos identity reaches the unit")
+	require.Equal(t, "token-value", run.WebIdentity)
+	for _, argument := range run.Arguments {
+		require.NotContains(t, argument, "token-value", "a sensitive option never appears in argv")
+	}
+	require.Equal(t, []string{"authenticate", "toolchain"}, harness.events, "native preparation never starts")
+}
+
+func TestExecuteTerragruntUnitPropagatesTheUnitExitCode(t *testing.T) {
+	harness, info, _ := unitHarness(t)
+	info.ComponentEnvSection[testEnvProbeExit] = "3"
+	err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun)
+	var exit errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exit)
+	require.Equal(t, 3, exit.Code)
+}
+
+func TestExecuteTerragruntUnitRejectsWhatItCannotHonorBeforeRunning(t *testing.T) {
+	harness, info, _ := unitHarness(t)
+	probePath := info.ComponentEnvSection[testEnvToolchainProbe].(string)
+	info.ComponentVarsSection = map[string]any{"region": "us-east-1"}
+	require.ErrorIs(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun), errUtils.ErrExecutableModeUnsupported)
+	require.Empty(t, readToolchainProbes(t, probePath), "nothing ran")
+}
+
+func TestExecuteTerragruntUnitExplainsAMissingExecutable(t *testing.T) {
+	harness, info, _ := unitHarness(t)
+	delete(info.ComponentSection["dependencies"].(map[string]any)["tools"].(map[string]any), "terragrunt")
+	err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun)
+	require.ErrorIs(t, err, errUtils.ErrExecutableNotFound)
+}
+
+func TestExecuteTerragruntUnitDryRunRunsNothing(t *testing.T) {
+	harness, info, _ := unitHarness(t)
+	probePath := info.ComponentEnvSection[testEnvToolchainProbe].(string)
+	info.DryRun = true
+	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun))
+	require.Empty(t, readToolchainProbes(t, probePath))
+}
+
+func TestProviderSectionFollowsTheProviderName(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{
+		"tg":    {Enabled: true, Provider: "terragrunt"},
+		"other": {Enabled: false, Provider: "terragrunt"},
+	}
+	require.Equal(t, "tg", providerSection(config, "terragrunt"))
+	require.Equal(t, "unknown", providerSection(config, "unknown"))
 }

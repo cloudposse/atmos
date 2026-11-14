@@ -114,6 +114,8 @@ type ConfigMetadata struct {
 type AtmosConfiguration struct {
 	// ComponentConfigurations belongs to this invocation and is never serialized.
 	ComponentConfigurations ComponentConfigurationRuntime `yaml:"-" json:"-" mapstructure:"-"`
+	// ComponentProviderOptions are the provider options the user set for this invocation, by provider section.
+	ComponentProviderOptions map[string]map[string]ComponentProviderOption `yaml:"-" json:"-" mapstructure:"-"`
 
 	Scaffold *ScaffoldConfiguration `yaml:"scaffold,omitempty" json:"scaffold,omitempty" mapstructure:"scaffold"`
 	// ScaffoldConfigLoaded distinguishes an empty effective catalog from a
@@ -1786,6 +1788,19 @@ type Components struct {
 //
 // Returns the configuration and true if found, nil and false otherwise.
 func (c *Components) GetComponentConfig(componentType string) (any, bool) {
+	if config, ok := c.builtinComponentConfig(componentType); ok {
+		return config, true
+	}
+
+	// Check plugin types.
+	if config, ok := c.Plugins[componentType]; ok {
+		return config, true
+	}
+	return nil, false
+}
+
+// builtinComponentConfig returns the type-safe configuration for built-in component types.
+func (c *Components) builtinComponentConfig(componentType string) (any, bool) {
 	switch componentType {
 	case "terraform":
 		return c.Terraform, true
@@ -1804,10 +1819,6 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 	case "aws/cloudformation":
 		return c.CloudFormation, true
 	default:
-		// Check plugin types.
-		if config, ok := c.Plugins[componentType]; ok {
-			return config, true
-		}
 		return nil, false
 	}
 }
@@ -2090,7 +2101,6 @@ type GCPAuthContext struct {
 	// ServiceAccountEmail is the service account being used (when impersonating).
 	ServiceAccountEmail string `json:"service_account_email,omitempty" yaml:"service_account_email,omitempty" mapstructure:"service_account_email"`
 	// AccessToken is the OAuth2 access token.
-	//nolint:gosec // This runtime context intentionally carries a token for SDK authentication.
 	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty" mapstructure:"access_token"`
 	// TokenExpiry is when the token expires.
 	TokenExpiry time.Time `json:"token_expiry,omitempty" yaml:"token_expiry,omitempty" mapstructure:"token_expiry"`
@@ -2158,6 +2168,8 @@ type ConfigAndStacksInfo struct {
 	// before auth credentials are registered) to keep the varfile-write and env-assembly
 	// steps consistent.
 	TerraformSecretVarKeys map[string]bool
+	// PreparedSensitiveInputKeys preserves plugin sensitivity even for empty input values.
+	PreparedSensitiveInputKeys map[string]bool
 	// ConfigurationSensitiveInputKeys retains provider-declared sensitivity independently of masking.
 	ConfigurationSensitiveInputKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
@@ -2320,11 +2332,14 @@ type ConfigAndStacksInfo struct {
 	Identity                   string
 	// RequestedIdentity preserves the CLI/environment choice before authentication
 	// stores an auto-selected identity. Nil means Identity has not been rewritten.
-	RequestedIdentity   *string
-	ClusterName         string // EKS cluster name from --cluster-name flag.
-	NeedsPathResolution bool   // True if ComponentFromArg is a path that needs resolution.
-	UIEnabled           bool   // Enable streaming UI mode for terraform commands.
-	UIFlagExplicitlySet bool   // Whether --ui flag was explicitly set (vs. config/default).
+	RequestedIdentity *string
+	// ComponentProviderOptions are the configuration provider options set on the command line or in
+	// the environment, by provider section. Unset options are absent.
+	ComponentProviderOptions map[string]map[string]ComponentProviderOption
+	ClusterName              string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution      bool   // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled                bool   // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet      bool   // Whether --ui flag was explicitly set (vs. config/default).
 
 	// NodeHooks fires lifecycle hooks around each component in bulk Terraform
 	// and single-component Helmfile runs. Single-component Terraform commands

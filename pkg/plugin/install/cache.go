@@ -100,6 +100,29 @@ func (c *Cache) Installed(entry *pluginlock.Entry, platform string) (string, err
 	return payload, nil
 }
 
+// DiscoveryDirectory locates installed metadata without reading or hashing the payload.
+// Call Installed before activating anything from this directory.
+func (c *Cache) DiscoveryDirectory(entry *pluginlock.Entry, platform string) (string, error) {
+	defer perf.Track(nil, "install.Cache.DiscoveryDirectory")()
+
+	if _, err := c.location(entry.IndexDigest, platform); err != nil {
+		return "", err
+	}
+	selected, err := pluginplatform.Select(entry.Platforms, platform)
+	if err != nil {
+		return "", err
+	}
+	directory, err := c.location(entry.IndexDigest, selected)
+	if err != nil {
+		return "", err
+	}
+	payload := filepath.Join(directory, payloadDirectory)
+	if _, err := os.Stat(payload); err != nil {
+		return "", errors.Join(errUtils.ErrPluginNotInstalled, err)
+	}
+	return payload, nil
+}
+
 // Store stages the chosen platform, validates extensions, then atomically promotes it.
 // A partial download never replaces a usable installation.
 func (c *Cache) Store(ctx context.Context, release *pluginoci.Release, platform string, descriptors *extension.Registry) (string, error) {
