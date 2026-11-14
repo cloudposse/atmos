@@ -460,8 +460,20 @@ func TestProviderIAMProbeAcceptsRoleOnlyResponse(t *testing.T) {
 
 func TestIAMProbeRejectsModulePreparation(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, checkIAMProbe(&pluginv1.PrepareComponentResponse{}))
-	require.ErrorIs(t, checkIAMProbe(nil), errUtils.ErrPluginProtocol)
-	require.ErrorIs(t, checkIAMProbe(&pluginv1.PrepareComponentResponse{ModuleSource: "./module"}), errUtils.ErrPluginProtocol)
-	require.ErrorIs(t, checkIAMProbe(&pluginv1.PrepareComponentResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}), errUtils.ErrPluginInvalidConfig)
+	require.NoError(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{}, "iam-probe"))
+	require.ErrorIs(t, checkPreparationResponse(nil, "iam-probe"), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{ModuleSource: "./module"}, "iam-probe"), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}, "iam-probe"), errUtils.ErrPluginInvalidConfig)
+}
+
+func TestPreparationIAMProbeResponse(t *testing.T) {
+	t.Parallel()
+	response := &pluginv1.PrepareComponentResponse{Iam: &pluginv1.ComponentIam{}}
+	require.NoError(t, checkPreparationResponse(response, "iam-probe"))
+	require.NoError(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{}, "iam-probe"))
+	require.ErrorIs(t, checkPreparationResponse(response, "native"), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkPreparationResponse(nil, "iam-probe"), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}, "iam-probe"), errUtils.ErrPluginInvalidConfig)
+	response.Files = []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", IfExists: "overwrite"}}
+	require.ErrorIs(t, checkPreparationResponse(response, "iam-probe"), errUtils.ErrPluginProtocol)
 }
