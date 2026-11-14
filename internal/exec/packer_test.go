@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -996,4 +997,101 @@ func TestExecutePackerCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) 
 	counterBytes, readErr := os.ReadFile(counterFile)
 	require.NoError(t, readErr)
 	assert.Len(t, counterBytes, 1, "non-matching error must fail fast on the first attempt")
+}
+
+// writeColdSourceProject creates a project whose single component of the given type declares a JIT
+// source that has not been provisioned, so its component directory does not exist.
+func writeColdSourceProject(t *testing.T, componentType, component string) {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`base_path: .
+components:
+  `+componentType+`:
+    base_path: components/`+componentType+`
+stacks:
+  base_path: stacks
+  included_paths: ['*.yaml']
+  name_template: '{{ .vars.stage }}'
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars: {stage: dev}
+components:
+  `+componentType+`:
+    `+component+`:
+`+coldSourceComponentBody()), 0o600))
+	t.Chdir(root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Setenv("ATMOS_BASE_PATH", root)
+}
+
+func coldSourceComponentBody() string {
+	return `      source:
+        uri: github.com/cloudposse/atmos-test-nonexistent//modules/cold
+        version: v0.0.0
+      vars: {name: cold}
+`
+}
+
+// A dry run never downloads source, so a cold source component must not be rejected as missing.
+func TestExecutePacker_DryRunAcceptsColdSourceComponent(t *testing.T) {
+	writeColdSourceProject(t, "packer", "cold")
+	info := schema.ConfigAndStacksInfo{
+		Stack: "dev", ComponentType: "packer", ComponentFromArg: "cold", SubCommand: "validate",
+		ProcessTemplates: true, ProcessFunctions: true, DryRun: true,
+	}
+	require.NoError(t, ExecutePacker(&info, &PackerFlags{}))
+	_, err := os.Stat(filepath.Join("components", "packer", "cold"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+// A dry run still rejects a missing component that has no source.
+func TestExecutePacker_DryRunStillRejectsMissingLocalComponent(t *testing.T) {
+	writeColdSourceProject(t, "packer", "local")
+	root, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars: {stage: dev}
+components:
+  packer:
+    local:
+      vars: {name: local}
+`), 0o600))
+	info := schema.ConfigAndStacksInfo{
+		Stack: "dev", ComponentType: "packer", ComponentFromArg: "local", SubCommand: "validate",
+		ProcessTemplates: true, ProcessFunctions: true, DryRun: true,
+	}
+	assert.ErrorIs(t, ExecutePacker(&info, &PackerFlags{}), errUtils.ErrInvalidComponent)
+}
+
+func TestExecutePacker_ProvisionsColdSourceComponent(t *testing.T) {
+	writeColdSourceProject(t, "packer", "cold")
+	root, err := os.Getwd()
+	require.NoError(t, err)
+	source := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(source, "template.pkr.hcl"), []byte("packer {}\n"), 0o600))
+	sourceURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(source)}).String()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`vars: {stage: dev}
+components:
+  packer:
+    cold:
+      source:
+        uri: '`+sourceURL+`'
+      vars: {name: cold}
+`), 0o600))
+
+	original := executePackerShellCommand
+	t.Cleanup(func() { executePackerShellCommand = original })
+	var capturedDir string
+	executePackerShellCommand = func(_ schema.AtmosConfiguration, _ string, _ []string, dir string, _ []string, _ bool, _ string, _ ...ShellCommandOption) error {
+		capturedDir = dir
+		return nil
+	}
+	info := schema.ConfigAndStacksInfo{
+		Stack: "dev", ComponentType: "packer", ComponentFromArg: "cold", SubCommand: "validate",
+		ProcessTemplates: true, ProcessFunctions: true,
+	}
+	require.NoError(t, ExecutePacker(&info, &PackerFlags{}))
+	require.Equal(t, filepath.Join(root, "components", "packer", "cold"), capturedDir)
+	content, err := os.ReadFile(filepath.Join(capturedDir, "template.pkr.hcl"))
+	require.NoError(t, err)
+	require.Equal(t, "packer {}\n", string(content))
 }

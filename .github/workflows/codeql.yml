@@ -175,7 +175,8 @@ jobs:
       # GO-2026-6597 (containerd/v2 < 2.3.6) landed — which exceeds the public
       # runner's 16GB RAM and gets the runner OOM-killed (seen as `Killed`,
       # exit 143 "shutdown signal", or "The operation was canceled"). Swap
-      # absorbs the overflow; request 30 GiB for the full scan.
+      # absorbs the overflow. 20G still let loaded runners thrash past the step
+      # timeout, so add 30G.
       - name: Add swap space
         uses: ./.github/actions/swap-space
         with:
@@ -200,7 +201,7 @@ jobs:
           # tried earlier and rejected: it barely reduced peak memory
           # (govulncheck's SSA construction parallelizes via goroutines, which
           # -p doesn't govern) while nearly tripling run time.
-          GOMEMLIMIT: "32GiB"
+          GOMEMLIMIT: "42GiB"
         # The target also removes exact duplicate stacks from the report: the
         # SARIF schema requires them to be unique and the upload rejects the
         # report otherwise. See internal/ci/vulncheck.

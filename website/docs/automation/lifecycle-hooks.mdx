@@ -135,7 +135,10 @@ and the supported step settings.
 
 Use before-events for checks that must pass before an operation starts.
 After-hooks run on success by default; set `when: failure` for failure handling
-or `when: always` for either outcome.
+or `when: always` for either outcome. Terraform/OpenTofu plans that return detailed
+exit code `2` (changes detected) are successful operations: success hooks run once,
+failure hooks do not run, and the command retains exit code `2`. A required
+after-hook failure still fails the command.
 
 `when` tests the parent operation's outcome. `on_failure` controls what happens
 if the hook itself fails. Set `on_failure: fail` for a required check: a failed

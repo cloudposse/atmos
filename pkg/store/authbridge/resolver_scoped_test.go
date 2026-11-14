@@ -40,7 +40,8 @@ func TestScopedResolverKeepsIdentityOwnership(t *testing.T) {
 					err := operation(ctx, tt.auth)
 					events = append(events, "released")
 					return errors.Join(err, tt.cleanupError)
-				})
+				},
+			)
 			resolver := NewResolver(manager, &schema.ConfigAndStacksInfo{})
 			err := resolver.WithEnvironmentAuthContext(t.Context(), "reader", func(ctx context.Context, auth *store.EnvironmentAuthConfig) error {
 				events = append(events, "operation")

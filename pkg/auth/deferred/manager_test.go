@@ -173,7 +173,8 @@ func TestManagerDelegatesScopedIdentityOwnership(t *testing.T) {
 			err := operation(ctx, &schema.AuthContext{Environment: map[string]string{"VAULT_TOKEN": "synthetic-reader"}})
 			events = append(events, "released")
 			return err
-		})
+		},
+	)
 	err := manager.WithIsolatedIdentity(t.Context(), "reader", func(ctx context.Context, auth *schema.AuthContext) error {
 		events = append(events, "operation")
 		require.Same(t, t.Context(), ctx)

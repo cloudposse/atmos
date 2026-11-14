@@ -579,6 +579,29 @@ func TestBuildAndResolveWorkdirPath_PathTraversalPropagates(t *testing.T) {
 
 // ProvisionAndResolveComponentPath ──────────────────────────────────────────.
 
+func TestProvisionAndResolveComponentPathDryRunDoesNotCreateSourceOrWorkdir(t *testing.T) {
+	for _, source := range []bool{false, true} {
+		t.Run(map[bool]string{false: "local", true: "source"}[source], func(t *testing.T) {
+			base := t.TempDir()
+			section := map[string]any{
+				"component": "vpc", "atmos_component": "vpc", "atmos_stack": "dev",
+				"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+			}
+			if source {
+				section["source"] = map[string]any{"uri": "./does-not-exist"}
+			}
+			info := &schema.ConfigAndStacksInfo{DryRun: true, FinalComponent: "vpc", Stack: "dev", ComponentSection: section}
+			path, exists, err := ProvisionAndResolveComponentPath(context.Background(), provisioner.OutputWriters{}, &schema.AtmosConfiguration{BasePath: base}, info, cfg.TerraformComponentType, filepath.Join(base, "components", "vpc"))
+			require.NoError(t, err)
+			assert.False(t, exists)
+			assert.NotEmpty(t, path)
+			entries, err := os.ReadDir(base)
+			require.NoError(t, err)
+			assert.Empty(t, entries, "dry-run must not download source or create an empty workdir")
+		})
+	}
+}
+
 // TestProvisionAndResolveComponentPath_NoSourceReturnsFallback verifies the
 // short-circuit when no source is configured: the orchestrator must skip
 // AutoProvisionSource entirely and report whether the fallback exists.
@@ -895,6 +918,25 @@ func TestWrapWorkdirProvisionError(t *testing.T) {
 			}
 			require.ErrorIs(t, got, tt.err)
 			assert.Contains(t, got.Error(), tt.wantContains)
+		})
+	}
+}
+
+func TestDryRunDefersMissingPath(t *testing.T) {
+	source := map[string]any{"source": map[string]any{"uri": "github.com/acme/mod"}}
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+		want bool
+	}{
+		{"dry run with a source component", &schema.ConfigAndStacksInfo{DryRun: true, ComponentSection: source}, true},
+		{"dry run without a source", &schema.ConfigAndStacksInfo{DryRun: true, ComponentSection: map[string]any{}}, false},
+		{"real run with a source component", &schema.ConfigAndStacksInfo{ComponentSection: source}, false},
+		{"nil info", nil, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, DryRunDefersMissingPath(test.info))
 		})
 	}
 }
