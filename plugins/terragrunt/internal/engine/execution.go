@@ -80,7 +80,11 @@ func applyTimeExecution(request model.Request, path string, planned *model.Execu
 	if err := rejectArgumentDependentExecution(filesystem, append(slices.Clone(read), path)); err != nil {
 		return nil, nil, err
 	}
-	apply := parsingContext(path, request.Tofu, "apply", nil)
+	// Apply is evaluated with the request's own download directory, so the working directory
+	// matches the plan-time evaluation.
+	applyRequest := request
+	applyRequest.Command, applyRequest.Arguments = "apply", nil
+	apply := requestParsingContext(applyRequest, path)
 	// Dependency mock eligibility belongs to the plan being prepared; hook expressions see apply.
 	apply.OriginalTerraformCommand = request.Command
 	cfg, err := parse(apply)

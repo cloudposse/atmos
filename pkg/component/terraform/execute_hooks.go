@@ -238,8 +238,9 @@ const detailedExitCodeChanges = 2
 
 // isDetailedExitCodeChanges reports whether err is exit status 2 of a command run with
 // -detailed-exitcode, which Terragrunt treats as success for hooks and the success of the unit.
+// A failed hook is never that status, even when the hook itself exited with 2.
 func isDetailedExitCodeChanges(command string, args, env []string, err error, opts ...component.ExecutionOption) bool {
-	if command != "plan" || err == nil || errUtils.GetExitCode(err) != detailedExitCodeChanges {
+	if command != "plan" || err == nil || errors.Is(err, errUtils.ErrComponentHookFailed) || errUtils.GetExitCode(err) != detailedExitCodeChanges {
 		return false
 	}
 	return detailedExitCodeEnabled(command, args, env, opts...)
