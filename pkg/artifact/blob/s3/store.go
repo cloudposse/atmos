@@ -24,10 +24,11 @@ type Store struct {
 	// lets a waiting operation give up when its context ends.
 	probeSlot chan struct{}
 
-	// probeMu guards the cached verdict below.
-	probeMu    sync.Mutex
-	probed     bool
-	probeError error
+	// probeMu guards the cached verdict below, which is bound to the endpoint it probed.
+	probeMu        sync.Mutex
+	probed         bool
+	probedEndpoint string
+	probeError     error
 }
 
 // New returns a Store for bucket. No network or credential work happens until the first operation.

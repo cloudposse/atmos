@@ -21,14 +21,14 @@ func (s *Store) Delete(ctx context.Context, key string, opts blob.DeleteOptions)
 		return err
 	}
 	conditional := opts.IfMatch != ""
-	if conditional {
-		if err := s.ensureConditional(ctx, key, blob.IfMatch(opts.IfMatch)); err != nil {
-			return err
-		}
-	}
 	api, err := s.client(ctx)
 	if err != nil {
 		return err
+	}
+	if conditional {
+		if err := s.ensureConditional(ctx, api, key, blob.IfMatch(opts.IfMatch)); err != nil {
+			return err
+		}
 	}
 	in := &s3.DeleteObjectInput{Bucket: aws.String(s.cfg.bucket), Key: aws.String(s.objectKey(key)), IfMatch: optionalString(opts.IfMatch)}
 	if _, err := api.DeleteObject(ctx, in, retryOptions(conditional)...); err != nil {

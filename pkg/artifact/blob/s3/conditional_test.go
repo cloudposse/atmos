@@ -15,6 +15,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/artifact/blob"
 	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 func putIfAbsent(s *Store, key, body string) (*blob.ObjectInfo, error) {
@@ -380,4 +381,56 @@ func TestProbeRejectsIgnoredIfMatch(t *testing.T) {
 			assert.Empty(t, fake.Keys())
 		})
 	}
+}
+
+// A probe verdict belongs to the endpoint it probed. A named identity is re-resolved on every
+// operation, so its endpoint can change during the life of the store; a verdict from the old
+// endpoint must never vouch for the new one.
+func TestProbeVerdictIsBoundToTheEndpointItProbed(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	enforcing := newFake(t)
+	ignoring := newFake(t, s3test.WithConditionalBehavior(s3test.ConditionalIgnore))
+	ignoring.Seed("lock", []byte("owner-a"), nil)
+
+	resolver := &fakeResolver{result: &store.AWSAuthConfig{Region: "us-east-1", EndpointURL: enforcing.Endpoint()}}
+	s, err := New(enforcing.Bucket(), WithIdentity("deploy", resolver), WithConditionalMode(ConditionalProbe))
+	require.NoError(t, err)
+
+	_, err = putIfAbsent(s, "first", "a")
+	require.NoError(t, err, "the enforcing endpoint passes its probe")
+	probes := len(enforcing.RequestsFor(s3test.OpPutObject))
+	_, err = putIfAbsent(s, "second", "a")
+	require.NoError(t, err)
+	assert.Len(t, enforcing.RequestsFor(s3test.OpPutObject), probes+1, "an unchanged endpoint keeps its cached verdict: no second probe")
+
+	resolver.result = &store.AWSAuthConfig{Region: "us-east-1", EndpointURL: ignoring.Endpoint()}
+	_, err = putIfAbsent(s, "lock", "owner-b")
+	require.Error(t, err)
+	assert.True(t, blob.IsConditionalUnsupported(err), "the new endpoint is probed, not trusted: %v", err)
+	object, ok := ignoring.Object("lock")
+	require.True(t, ok)
+	assert.Equal(t, []byte("owner-a"), object.Data, "the existing object on the ignoring endpoint was never overwritten")
+
+	before := len(ignoring.Requests())
+	_, err = putIfAbsent(s, "lock", "owner-c")
+	assert.True(t, blob.IsConditionalUnsupported(err))
+	assert.Len(t, ignoring.Requests(), before, "a definite verdict for the new endpoint is cached for it")
+
+	// Switching back is a different endpoint again; the earlier verdict for it does not apply blindly.
+	resolver.result = &store.AWSAuthConfig{Region: "us-east-1", EndpointURL: enforcing.Endpoint()}
+	_, err = putIfAbsent(s, "third", "a")
+	require.NoError(t, err)
+}
+
+// A transient probe failure is never cached, whatever the endpoint.
+func TestProbeTransientFailureIsNotCachedAcrossEndpoints(t *testing.T) {
+	fake := newFake(t)
+	fake.Inject(s3test.Fault{Op: s3test.OpPutObject, Status: http.StatusServiceUnavailable, Code: "SlowDown", Times: 1})
+	s := newTestStore(t, fake, WithConditionalMode(ConditionalProbe))
+	err := s.ProbeConditionalWrites(context.Background())
+	require.Error(t, err)
+	assert.False(t, blob.IsConditionalUnsupported(err))
+	require.NoError(t, s.ProbeConditionalWrites(context.Background()), "the transient failure was not cached")
 }
