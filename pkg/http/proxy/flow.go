@@ -18,6 +18,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, route *Route) {
 		s.servePassthrough(w, r, route)
 		return
 	}
+	// Cache keys derive from request paths; reject any that could escape the cache root
+	// before they reach the store.
+	if err := ValidateKey(route.Key); err != nil {
+		log.Debug("Registry cache rejected cache key", "key", route.Key, "error", err)
+		http.Error(w, "invalid cache key", http.StatusBadRequest)
+		return
+	}
 	s.serveCacheable(w, r, route)
 }
 
