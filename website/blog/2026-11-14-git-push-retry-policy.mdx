@@ -40,8 +40,10 @@ git:
           initial_delay: 250ms
           max_delay: 5s
           random_jitter: 0.5
-          max_elapsed_time: 30s
+          max_elapsed_time: 10m
 ```
+
+The elapsed-time budget has to be long enough for the server's cooldown. When a server gives no hint, Atmos waits at least a minute, so a budget shorter than that, including the 30-second default, makes a throttled push fail immediately instead of waiting.
 
 Without a `push.retry` block, the existing `push.retries` count keeps working exactly as before. An explicit `retry: {}` means a single attempt, which is useful when you would rather fail fast than wait.
 
