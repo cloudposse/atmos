@@ -379,7 +379,11 @@ type listGate struct {
 	peak     atomic.Int32
 	entered  chan struct{}
 	release  chan struct{}
+	freeing  sync.Once
 }
+
+// open lets every blocked listing continue. It is safe to call any number of times.
+func (g *listGate) open() { g.freeing.Do(func() { close(g.release) }) }
 
 // gatedList returns a generated repository that blocks every List on the gate before delegating.
 func gatedList(t *testing.T, base *artifacttest.Repository, gate *listGate) artifact.Repository {
@@ -403,6 +407,7 @@ func TestList_ConcurrencyIsInjectable(t *testing.T) {
 		seedList(t, e, alias, map[string]string{"app/x:1": alias}, nil)
 	}
 	gate := &listGate{entered: make(chan struct{}, 3), release: make(chan struct{})}
+	t.Cleanup(gate.open) // A failed assertion must not leave a listing blocked on the gate.
 	for _, alias := range []string{"a", "b", "c"} {
 		e.static.Repositories[alias] = gatedList(t, e.repos[alias], gate)
 	}
@@ -422,15 +427,19 @@ func TestList_ConcurrencyIsInjectable(t *testing.T) {
 	select {
 	case <-gate.entered:
 	case <-time.After(2 * time.Second):
-		close(gate.release)
 		t.Fatal("listing did not start")
 	}
 	select {
 	case <-gate.entered:
 	case <-time.After(200 * time.Millisecond):
 	}
-	close(gate.release)
-	outcome := <-done
+	gate.open()
+	var outcome listOutcome
+	select {
+	case outcome = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the listing did not finish after the gate opened")
+	}
 	require.NoError(t, outcome.err)
 	assert.Equal(t, 3, outcome.count)
 	assert.Equal(t, int32(1), gate.peak.Load())

@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -28,6 +30,7 @@ type gatedSigner struct {
 	started chan struct{}
 	release chan struct{}
 	once    sync.Once
+	freeing sync.Once
 }
 
 func newGatedSigner() *gatedSigner {
@@ -37,6 +40,9 @@ func newGatedSigner() *gatedSigner {
 		release:    make(chan struct{}),
 	}
 }
+
+// free lets the signer finish. It is safe to call any number of times.
+func (g *gatedSigner) free() { g.freeing.Do(func() { close(g.release) }) }
 
 func (g *gatedSigner) Sign(ctx context.Context, subject artifact.SignatureSubject) (*artifact.EvidencePayload, error) {
 	g.once.Do(func() { close(g.started) })
@@ -76,6 +82,52 @@ func newLocalSignEnv(t *testing.T, name string, signer artifact.Signer) *localSi
 
 func (e *localSignEnv) sign(ctx context.Context) (*artifact.SignResult, error) {
 	return e.svc.Sign(ctx, artifact.SignRequest{Repository: "dst", Ref: e.digestRef})
+}
+
+// signerEntryTimeout bounds how long a test waits for the signer to start or an operation to finish.
+const signerEntryTimeout = 10 * time.Second
+
+// awaitSignerEntry waits until the signer has started. When signing ends first, for example because
+// the service refused it before calling the signer, it returns that real result instead of waiting
+// for a signer that will never run. A signer that never starts within the timeout is an error too.
+func awaitSignerEntry(started <-chan struct{}, signed <-chan error, timeout time.Duration) error {
+	select {
+	case <-started:
+		return nil
+	case err := <-signed:
+		if err == nil {
+			return errSignedWithoutTheSigner
+		}
+		return fmt.Errorf("signing ended before the signer started: %w", err)
+	case <-time.After(timeout):
+		return errSignerNeverStarted
+	}
+}
+
+var (
+	errSignedWithoutTheSigner = errors.New("signing finished without calling the signer")
+	errSignerNeverStarted     = errors.New("the signer did not start in time")
+)
+
+// startSigning signs through the service in the background and waits for the signer to be working.
+// Its context is cancelled and the signer freed when the test ends, so a failed assertion cannot
+// leave the signing goroutine holding the reference locks.
+func startSigning(t *testing.T, e *localSignEnv, signer *gatedSigner) <-chan error {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		signer.free()
+	})
+	signed := make(chan error, 1)
+	go func() {
+		_, err := e.sign(ctx)
+		signed <- err
+	}()
+	if err := awaitSignerEntry(signer.started, signed, signerEntryTimeout); err != nil {
+		t.Fatal(err)
+	}
+	return signed
 }
 
 // Signing through the service must work against a real local repository: the lock the service
@@ -126,13 +178,7 @@ func TestSign_ThroughTheServiceExcludesAConcurrentDelete(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			signer := newGatedSigner()
 			e := newLocalSignEnv(t, name, signer)
-
-			signed := make(chan error, 1)
-			go func() {
-				_, err := e.sign(context.Background())
-				signed <- err
-			}()
-			<-signer.started
+			signed := startSigning(t, e, signer)
 
 			deleted := make(chan error, 1)
 			go func() {
@@ -146,7 +192,7 @@ func TestSign_ThroughTheServiceExcludesAConcurrentDelete(t *testing.T) {
 			case <-time.After(200 * time.Millisecond):
 			}
 
-			close(signer.release)
+			signer.free()
 			require.NoError(t, waitFor(t, signed), "signing completes once the signer returns")
 			require.NoError(t, waitFor(t, deleted), "the delete runs after the signature is stored")
 
@@ -161,13 +207,7 @@ func TestSign_ThroughTheServiceExcludesAConcurrentDelete(t *testing.T) {
 func TestSign_ThroughTheServiceExcludesADirectRepositoryDelete(t *testing.T) {
 	signer := newGatedSigner()
 	e := newLocalSignEnv(t, "tools/example", signer)
-
-	signed := make(chan error, 1)
-	go func() {
-		_, err := e.sign(context.Background())
-		signed <- err
-	}()
-	<-signer.started
+	signed := startSigning(t, e, signer)
 
 	pinned, err := e.repo.Resolve(context.Background(), artifact.Ref{Name: "tools/example", Version: "1.0.0"})
 	require.NoError(t, err)
@@ -182,7 +222,7 @@ func TestSign_ThroughTheServiceExcludesADirectRepositoryDelete(t *testing.T) {
 		t.Fatalf("a direct delete finished while the signer was still working: %v", err)
 	case <-time.After(200 * time.Millisecond):
 	}
-	close(signer.release)
+	signer.free()
 	require.NoError(t, waitFor(t, signed))
 	require.NoError(t, waitFor(t, deleted))
 }
@@ -192,8 +232,63 @@ func waitFor(t *testing.T, ch <-chan error) error {
 	select {
 	case err := <-ch:
 		return err
-	case <-time.After(10 * time.Second):
+	case <-time.After(signerEntryTimeout):
 		t.Fatal("timed out waiting for the operation to finish")
 		return nil
 	}
+}
+
+// A signing that ends before it reaches the signer must surface its own error. Waiting only on the
+// signer's start would hang forever, because the signer is never called.
+func TestAwaitSignerEntry(t *testing.T) {
+	boom := errors.New("boom")
+	closed := make(chan struct{})
+	close(closed)
+
+	tests := []struct {
+		name    string
+		started <-chan struct{}
+		signed  func() <-chan error
+		wantErr error
+	}{
+		{name: "signer started", started: closed, signed: func() <-chan error { return make(chan error) }},
+		{name: "signing failed first", started: make(chan struct{}), signed: func() <-chan error {
+			ch := make(chan error, 1)
+			ch <- boom
+			return ch
+		}, wantErr: boom},
+		{name: "signing returned without the signer", started: make(chan struct{}), signed: func() <-chan error {
+			ch := make(chan error, 1)
+			ch <- nil
+			return ch
+		}, wantErr: errSignedWithoutTheSigner},
+		{name: "nothing happens", started: make(chan struct{}), signed: func() <-chan error { return make(chan error) }, wantErr: errSignerNeverStarted},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := awaitSignerEntry(tt.started, tt.signed(), 50*time.Millisecond)
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tt.wantErr)
+		})
+	}
+}
+
+// Signing through the service with a context that is already cancelled fails before the signer
+// runs. The test helper must report that failure rather than wait for the signer to start.
+func TestStartSigning_ReportsAnEarlyServiceError(t *testing.T) {
+	signer := newGatedSigner()
+	e := newLocalSignEnv(t, "tools/example", signer)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	signed := make(chan error, 1)
+	go func() {
+		_, err := e.sign(ctx)
+		signed <- err
+	}()
+	err := awaitSignerEntry(signer.started, signed, signerEntryTimeout)
+	require.ErrorIs(t, err, context.Canceled, "the real service error is reported")
 }
