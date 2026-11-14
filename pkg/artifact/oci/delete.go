@@ -50,13 +50,29 @@ func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference
 		return nil, err
 	}
 	if pinned.Ref.IsDigest() {
-		return r.deleteDigest(ctx, loaded, name, holders)
+		return r.deleteDigest(ctx, st, loaded, name, holders)
 	}
-	return r.deleteTag(ctx, loaded, pinned.Ref, holders)
+	return r.deleteTag(ctx, st, loaded, pinned.Ref, holders)
+}
+
+// recheckHolders rescans the tags of a manifest immediately before a manifest-scoped removal, which
+// also removes every tag of the manifest. OCI registries have no conditional delete and no lock
+// that other clients honor, so this narrows the window in which a tag added after the first scan
+// is removed unreported, but cannot close it. A reference-scoped backend removes only the named
+// reference and keeps the first scan.
+func (r *Repository) recheckHolders(ctx context.Context, st store, name string, target digest.Digest, holders []artifact.Ref) ([]artifact.Ref, error) {
+	if r.be.deleteScope() == artifact.DeleteReference {
+		return holders, nil
+	}
+	return r.referencesTo(ctx, st, name, target)
 }
 
 // deleteTag removes one tag, refusing when that would also remove a sibling reference.
-func (r *Repository) deleteTag(ctx context.Context, loaded *root, ref artifact.Ref, holders []artifact.Ref) (*artifact.DeleteResult, error) {
+func (r *Repository) deleteTag(ctx context.Context, st store, loaded *root, ref artifact.Ref, holders []artifact.Ref) (*artifact.DeleteResult, error) {
+	holders, err := r.recheckHolders(ctx, st, ref.Name, loaded.desc.Digest, holders)
+	if err != nil {
+		return nil, err
+	}
 	var siblings []artifact.Ref
 	named := false
 	for _, holder := range holders {
@@ -80,7 +96,7 @@ func (r *Repository) deleteTag(ctx context.Context, loaded *root, ref artifact.R
 }
 
 // deleteDigest removes the manifest and every reference to it, reporting each affected one.
-func (r *Repository) deleteDigest(ctx context.Context, loaded *root, name string, holders []artifact.Ref) (*artifact.DeleteResult, error) {
+func (r *Repository) deleteDigest(ctx context.Context, st store, loaded *root, name string, holders []artifact.Ref) (*artifact.DeleteResult, error) {
 	result := &artifact.DeleteResult{Digest: loaded.desc.Digest}
 	if r.be.deleteScope() == artifact.DeleteReference {
 		if len(holders) == 0 {
@@ -94,6 +110,10 @@ func (r *Repository) deleteDigest(ctx context.Context, loaded *root, name string
 			result.Affected = append(result.Affected, holder)
 		}
 		return result, nil
+	}
+	holders, err := r.recheckHolders(ctx, st, name, loaded.desc.Digest, holders)
+	if err != nil {
+		return nil, err
 	}
 	if err := r.be.remove(ctx, name, "", loaded.desc); err != nil {
 		return nil, err

@@ -3,6 +3,7 @@ package oci
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -133,4 +134,67 @@ func TestRegistryRejectsReferenceScope(t *testing.T) {
 	_, err := repo.Delete(context.Background(), first.Pinned, artifact.DeleteOptions{Scope: artifact.DeleteReference})
 	require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
 	assert.True(t, resolves(repo, appName, appVersion))
+}
+
+// scanHookBackend runs a hook right after the backend lists the versions of a name, which is the
+// moment a concurrent client can add a tag between the sibling scan and the removal.
+type scanHookBackend struct {
+	backend
+	mu    sync.Mutex
+	scans int
+	after func(scan int)
+}
+
+func (b *scanHookBackend) versions(ctx context.Context, name string) ([]string, error) {
+	versions, err := b.backend.versions(ctx, name)
+	b.mu.Lock()
+	b.scans++
+	scan, hook := b.scans, b.after
+	b.mu.Unlock()
+	if hook != nil {
+		hook(scan)
+	}
+	return versions, err
+}
+
+// A tag another client adds after the first sibling scan must still stop a manifest-scoped tag
+// delete: the siblings are checked again immediately before the manifest is removed.
+func TestRegistryTagDeleteRechecksSiblingsRightBeforeRemoving(t *testing.T) {
+	repo := newRegistryRepo(t, newRegistry(t, nil))
+	first := publish(t, repo, publishSpec{content: "shared manifest"})
+	pinned := mustResolve(t, repo, appVersion)
+
+	hooked := &scanHookBackend{backend: repo.be}
+	repo.be = hooked
+	hooked.after = func(scan int) {
+		if scan == 1 {
+			alias(t, repo, first.Pinned, "stable")
+		}
+	}
+
+	_, err := repo.Delete(context.Background(), pinned, artifact.DeleteOptions{ExpectedCurrent: &pinned, Scope: artifact.DeleteManifest})
+	require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability, "a tag added after the first scan is found by the second")
+	assert.Contains(t, err.Error(), "stable")
+	assert.True(t, resolves(repo, appName, appVersion), "nothing was removed")
+	assert.True(t, resolves(repo, appName, "stable"), "the tag added concurrently survives")
+}
+
+// A digest delete reports the references that exist when the manifest is removed, not the ones the
+// first scan happened to see.
+func TestRegistryDigestDeleteReportsTagsAddedAfterTheFirstScan(t *testing.T) {
+	repo := newRegistryRepo(t, newRegistry(t, nil))
+	first := publish(t, repo, publishSpec{content: "shared manifest"})
+	hooked := &scanHookBackend{backend: repo.be}
+	repo.be = hooked
+	hooked.after = func(scan int) {
+		if scan == 1 {
+			alias(t, repo, first.Pinned, "stable")
+		}
+	}
+
+	byDigest := artifact.PinnedReference{Ref: artifact.Ref{Name: appName, Digest: first.Pinned.ResolvedDigest}, ResolvedDigest: first.Pinned.ResolvedDigest}
+	result, err := repo.Delete(context.Background(), byDigest, artifact.DeleteOptions{Scope: artifact.DeleteManifest})
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []artifact.Ref{{Name: appName, Version: appVersion}, {Name: appName, Version: "stable"}}, result.Affected, "the tag added after the first scan is reported")
+	assert.False(t, resolves(repo, appName, "stable"))
 }
