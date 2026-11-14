@@ -142,8 +142,7 @@ steps.parallel(tasks = [steps.task(name = "a", function = boom, args = ["a"]), s
 	assert.Contains(t, message, `task "a": broken a`)
 	assert.Contains(t, message, `task "b": broken b`)
 	joined := strings.Join(cockroach.GetAllDetails(err), "\n")
-	assert.Contains(t, joined, `Traceback for task "a"`)
-	assert.Contains(t, joined, `Traceback for task "b"`)
+	assert.NotContains(t, joined, "Traceback")
 }
 
 func TestSingleFailedTaskMessage(t *testing.T) {

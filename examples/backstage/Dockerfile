@@ -26,6 +26,9 @@ ENV BACKSTAGE_APP_NAME=portal
 RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000,sharing=locked \
     npx --yes @backstage/create-app@${BACKSTAGE_CREATE_APP_VERSION} --skip-install
 WORKDIR /app/portal
+# Create Yarn's parent directory as node before BuildKit mounts the cache child.
+# Yarn also writes sibling directories such as berry/index during linking.
+RUN mkdir -p /home/node/.yarn/berry
 COPY backstage/configure.mjs /tmp/configure.mjs
 RUN --mount=type=cache,target=/home/node/.yarn/berry/cache,uid=1000,gid=1000,sharing=locked \
     node /tmp/configure.mjs && yarn install

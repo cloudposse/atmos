@@ -31,7 +31,13 @@ def seed():
             "path": [".gitignore", "atmos.yaml", "catalog", "components", "stacks", ".gitea", "ci"],
         })
     atmos.git("push", "deployments")
+    warn_disabled_ci(repo)
     ui.success("Git repository ready: `http://localhost:3001/atmos/deployments`")
+
+def warn_disabled_ci(repo):
+    config = yaml.decode(fs.read_file(repo + "/atmos.yaml"))
+    if not config.get("ci", {}).get("enabled", False):
+        ui.warning("Native Atmos CI is disabled in the existing deployments repository. portal up preserves previously seeded configuration. Update its atmos.yaml using seed/atmos.yaml as a reference; rebuilding containers does not update that repository.")
 
 def publish_request(name):
     name = service_name(name)

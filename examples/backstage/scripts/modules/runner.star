@@ -7,7 +7,9 @@ def build_binary():
         fail("Unsupported runner architecture: " + architecture)
     destination = fs.resolve(".atmos/bin/atmos")
     exec.run(["mkdir", "-p", ".atmos/bin"])
-    exec.run(["go", "build", "-ldflags=-s -w", "-o", destination, "."],
-             working_directory = "../..",
-             env = {"GOOS": "linux", "GOARCH": targets[architecture], "CGO_ENABLED": "0"})
-    ui.success("Built runner Atmos from this checkout (linux/" + targets[architecture] + ")")
+    steps.spin(
+        title = "Building runner Atmos from this checkout (linux/" + targets[architecture] + ")",
+        command = 'go build -ldflags="-s -w" -o "$ATMOS_RUNNER_BINARY" .',
+        working_directory = fs.resolve("../.."),
+        env = {"GOOS": "linux", "GOARCH": targets[architecture], "CGO_ENABLED": "0", "ATMOS_RUNNER_BINARY": destination},
+    )

@@ -72,6 +72,10 @@ def register(name):
     target = "http://local-backstage-git:3000/atmos/deployments/raw/branch/main/catalog/" + name + ".yaml"
     steps.http(url = base + "/catalog/locations", method = "POST", headers = headers,
                body = json.encode({"type": "url", "target": target}), expect = {"status": [201, 409]}, output = "none")
+    ui.info("Waiting for Backstage to ingest " + name)
+    steps.http(url = base + "/catalog/entities/by-name/component/default/" + name, headers = headers,
+               expect = {"status": [200]}, retry = {"max_attempts": 60, "initial_delay": "2s", "backoff_strategy": "constant"},
+               timeout = "5s", output = "none")
     steps.http(url = base + "/catalog/refresh", method = "POST", headers = headers,
-               body = json.encode({"entityRef": "component:default/" + name}), expect = {"status": [204, 404]}, output = "none")
+               body = json.encode({"entityRef": "component:default/" + name}), expect = {"status": [204]}, output = "none")
     ui.success("Registered " + name + " in Backstage")
