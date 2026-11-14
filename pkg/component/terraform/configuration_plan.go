@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -351,7 +353,7 @@ func verifyConfigurationPlanState(ctx context.Context, config *schema.AtmosConfi
 	if err != nil {
 		return err
 	}
-	if state == nil || state.BackendType != plan.Prepared.BackendType || state.Workspace != plan.Prepared.Workspace || !reflect.DeepEqual(state.Backend, plan.Prepared.Backend) {
+	if state == nil || state.BackendType != plan.Prepared.BackendType || state.Workspace != plan.Prepared.Workspace || !equalBackendConfiguration(state.Backend, plan.Prepared.Backend) {
 		return fmt.Errorf("%w: reviewed backend identity changed", errUtils.ErrPlanVerificationFailed)
 	}
 	return nil
@@ -463,4 +465,44 @@ func recordWorkdirFile(root, path string, entry fs.DirEntry, files map[string]st
 	}
 	files[filepath.ToSlash(relative)] = digest
 	return nil
+}
+
+// equalBackendConfiguration compares JSON backend values without losing numeric precision.
+func equalBackendConfiguration(left, right map[string]any) bool {
+	a, errA := normalizedBackend(left)
+	b, errB := normalizedBackend(right)
+	return errA == nil && errB == nil && reflect.DeepEqual(a, b)
+}
+
+func normalizedBackend(value map[string]any) (any, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return nil, err
+	}
+	return normalizeBackendNumbers(decoded), nil
+}
+
+func normalizeBackendNumbers(value any) any {
+	switch typed := value.(type) {
+	case json.Number:
+		number, ok := new(big.Rat).SetString(string(typed))
+		if ok {
+			return number
+		}
+	case map[string]any:
+		for key, child := range typed {
+			typed[key] = normalizeBackendNumbers(child)
+		}
+	case []any:
+		for index, child := range typed {
+			typed[index] = normalizeBackendNumbers(child)
+		}
+	}
+	return value
 }

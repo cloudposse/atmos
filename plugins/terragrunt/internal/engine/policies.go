@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
@@ -87,7 +88,7 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 		return fmt.Errorf("native adaptation of terraform_binary is not implemented")
 	}
 	// Hooks and extra arguments are adapted as execution data by unitExecution.
-	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, effectivePolicyArguments(request, cfg)) {
 		return ErrPreventDestroy
 	}
 	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
@@ -106,4 +107,15 @@ func validateRemoteSource(source string) error {
 		}
 	}
 	return fmt.Errorf("native adapter does not support this module source transport")
+}
+
+// effectivePolicyArguments follows host ordering: extra arguments precede user arguments.
+func effectivePolicyArguments(request model.Request, cfg *config.TerragruntConfig) []string {
+	var args []string
+	for _, extra := range cfg.Terraform.ExtraArgs {
+		if slices.Contains(extra.Commands, request.Command) && extra.Arguments != nil {
+			args = append(args, (*extra.Arguments)...)
+		}
+	}
+	return append(args, request.Arguments...)
 }

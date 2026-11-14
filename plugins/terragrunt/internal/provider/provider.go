@@ -169,6 +169,9 @@ func rpcError(err error) error {
 	if errors.Is(err, engine.ErrUnsupportedExecution) {
 		return status.Error(codes.Unimplemented, err.Error())
 	}
+	if errors.Is(err, engine.ErrPreventDestroy) {
+		return status.Error(codes.FailedPrecondition, engine.ErrPreventDestroy.Error())
+	}
 	result := status.New(codes.InvalidArgument, "Terragrunt evaluation failed")
 	var diagnostic *engine.DiscoveryError
 	if errors.As(err, &diagnostic) {

@@ -269,3 +269,9 @@ func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
 		})
 	}
 }
+
+func TestRPCErrorPreservesDestroyProtection(t *testing.T) {
+	err := rpcError(fmt.Errorf("private evaluator context: %w", engine.ErrPreventDestroy))
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, engine.ErrPreventDestroy.Error(), status.Convert(err).Message())
+}

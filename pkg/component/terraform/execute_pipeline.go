@@ -305,7 +305,7 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	}
 	// An explicit -detailed-exitcode plan reports changes with status 2 after writing the
 	// plan, so the reviewed plan is recorded before that status is returned.
-	if mainErr != nil && !isExplicitDetailedPlanChanges(info, allArgsAndFlags, mainErr) {
+	if mainErr != nil && !isExplicitDetailedPlanChanges(info, effectiveArgs, mainErr) {
 		return mainErr
 	}
 	// Policy plans run against a private artifact that is removed after the guard
