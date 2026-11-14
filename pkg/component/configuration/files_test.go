@@ -143,6 +143,9 @@ func TestSkipKeepsOwnershipOfAnIdenticalModuleFile(t *testing.T) {
 }
 
 func TestEnsureModeWrapsPermissionFailures(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ensureMode leaves permissions alone on Windows, which keeps its ACLs")
+	}
 	root, err := os.OpenRoot(t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
