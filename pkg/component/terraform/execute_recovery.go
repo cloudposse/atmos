@@ -88,6 +88,7 @@ func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executi
 		// the whole unit run there, so the command that follows must not run against a missing init.
 		return errUtils.ErrComponentRunIgnored
 	case ignored:
+		markMainCommandIgnored(component.ContextFromOptions(opts...))
 		return nil
 	}
 	return changes

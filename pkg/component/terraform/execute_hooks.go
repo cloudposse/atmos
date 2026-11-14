@@ -52,6 +52,17 @@ type executionPhase struct {
 // mainCommandArgsKey carries the effective main command arguments to plan binding.
 type mainCommandArgsKey struct{}
 
+// mainCommandIgnoredKey carries a flag that the errors policy sets when it ignores a failure of the
+// main command, so the caller can tell that run from one that succeeded.
+type mainCommandIgnoredKey struct{}
+
+// markMainCommandIgnored records that the errors policy ignored the main command's failure.
+func markMainCommandIgnored(ctx context.Context) {
+	if ignored, ok := ctx.Value(mainCommandIgnoredKey{}).(*bool); ok {
+		*ignored = true
+	}
+}
+
 // mainCommandRecoveryKey carries smart init's recovery into the main command's hook lifecycle.
 type mainCommandRecoveryKey struct{}
 

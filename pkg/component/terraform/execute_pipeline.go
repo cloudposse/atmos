@@ -302,7 +302,8 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	defer restore()
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
 	var effectiveArgs []string
-	captureCtx := context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs)
+	var ignored bool
+	captureCtx := context.WithValue(context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs), mainCommandIgnoredKey{}, &ignored)
 	captureArgs := component.WithProcessContext(captureCtx)
 	// A component with provider-supplied hooks recovers inside its main-command lifecycle, so
 	// the retry runs between the same before and after hooks instead of repeating them.
@@ -329,6 +330,10 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	}
 	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		return mainErr
+	}
+	// An ignored failure produced no plan to bind, so the run ends without recording one.
+	if ignored {
+		return nil
 	}
 	// Policy plans run against a private artifact that is removed after the guard
 	// publishes it to the original output path. The effective arguments were
