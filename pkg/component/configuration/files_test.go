@@ -103,13 +103,16 @@ func TestEnsureModeWrapsPermissionFailures(t *testing.T) {
 	root, err := os.OpenRoot(t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
-	err = ensureMode(root, "missing.tf")
+	err = ensureMode(root, schema.ComponentConfigurationFile{Path: "missing.tf", Sensitive: true})
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.ErrorIs(t, err, os.ErrNotExist, "the filesystem cause is preserved")
 	require.ErrorContains(t, err, "missing.tf")
 	// A file that exists is tightened without error.
 	require.NoError(t, root.WriteFile("present.tf", nil, 0o644))
-	require.NoError(t, ensureMode(root, "present.tf"))
+	require.NoError(t, ensureMode(root, schema.ComponentConfigurationFile{Path: "present.tf", Sensitive: true}))
+	info, err := root.Stat("present.tf")
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
 func TestWatchPaths(t *testing.T) {
@@ -148,4 +151,52 @@ func TestErrorPolicyDoesNotClaimAnIdenticalModuleFile(t *testing.T) {
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, content, got, "removing the block keeps the module's file")
+}
+
+func TestWriteFilesAppliesClampedMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ignores POSIX permission bits.")
+	}
+	tests := []struct {
+		name      string
+		mode      uint32
+		sensitive bool
+		want      os.FileMode
+	}{
+		{name: "absent mode keeps the default", mode: 0, want: 0o644},
+		{name: "executable keeps the execute bit", mode: 0o755, want: 0o755},
+		{name: "owner-only executable", mode: 0o700, want: 0o700},
+		{name: "group and other write are stripped", mode: 0o777, want: 0o755},
+		{name: "setuid setgid sticky are stripped", mode: 0o7755, want: 0o755},
+		{name: "owner read-write is guaranteed", mode: 0o111, want: 0o711},
+		{name: "sensitive stays private", mode: 0o755, sensitive: true, want: 0o700},
+		{name: "sensitive without mode", mode: 0, sensitive: true, want: 0o600},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			file := schema.ComponentConfigurationFile{Path: filepath.Join("bin", "helper.sh"), Content: []byte("#!/bin/sh\n"), IfExists: "overwrite", Mode: tt.mode, Sensitive: tt.sensitive}
+			require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
+			stat, err := os.Stat(filepath.Join(root, file.Path))
+			require.NoError(t, err)
+			require.Equal(t, tt.want, stat.Mode())
+		})
+	}
+	t.Run("overwrite updates the mode of an existing file", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "run.sh")
+		require.NoError(t, os.WriteFile(path, []byte("old"), 0o644))
+		require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "run.sh", Content: []byte("new"), IfExists: "overwrite", Mode: 0o755}}))
+		stat, err := os.Stat(path)
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o755), stat.Mode())
+	})
+}
+
+func TestWriteFilesRejectsModesBeyondPermissionBits(t *testing.T) {
+	root := t.TempDir()
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "a.sh", IfExists: "error", Mode: 1 << 31}})
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	_, statErr := os.Stat(filepath.Join(root, "a.sh"))
+	require.True(t, os.IsNotExist(statErr))
 }

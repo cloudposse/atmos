@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,10 @@ import (
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
+
+// ErrVersionRejected reports a terraform or terragrunt version that violates a
+// declared version constraint.
+var ErrVersionRejected = errors.New("version constraint rejected")
 
 func localPath(base, path string) string {
 	if filepath.IsAbs(path) {
@@ -44,7 +49,7 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 			return err
 		}
 		if !rules.Check(v) {
-			return fmt.Errorf("%s %q rejects version %s", name, constraint, actual)
+			return fmt.Errorf("%w: %s %q rejects version %s", ErrVersionRejected, name, constraint, actual)
 		}
 		return nil
 	}

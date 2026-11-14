@@ -117,16 +117,25 @@ func TestOverwriteTerragruntOwnsUnsignedFilesItWrote(t *testing.T) {
 	require.Equal(t, "token = \"b\"\n", read(t, fresh, "secret.auto.tfvars"))
 }
 
+// sensitiveFiles are generated files the provider marks sensitive, which the host keeps private.
+func sensitiveFiles() []schema.ComponentConfigurationFile {
+	files := []schema.ComponentConfigurationFile{
+		generated("backend.tf", "terraform { backend \"s3\" { secret_key = \"k\" } }\n", "overwrite"),
+		generated("provider.tf", "provider {}\n", "overwrite"),
+	}
+	for i := range files {
+		files[i].Sensitive = true
+	}
+	return files
+}
+
 func TestGeneratedFilesArePrivateToTheOwner(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX permissions")
 	}
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "backend.tf"), []byte("old"), 0o644))
-	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{
-		generated("backend.tf", "terraform { backend \"s3\" { secret_key = \"k\" } }\n", "overwrite"),
-		generated("provider.tf", "provider {}\n", "overwrite"),
-	}))
+	require.NoError(t, WriteFiles(root, sensitiveFiles()))
 	for _, name := range []string{"backend.tf", "provider.tf"} {
 		info, err := os.Stat(filepath.Join(root, name))
 		require.NoError(t, err)
@@ -134,10 +143,7 @@ func TestGeneratedFilesArePrivateToTheOwner(t *testing.T) {
 	}
 	// An unchanged file written by an older run with a wider mode is tightened too.
 	require.NoError(t, os.Chmod(filepath.Join(root, "provider.tf"), 0o644))
-	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{
-		generated("backend.tf", "terraform { backend \"s3\" { secret_key = \"k\" } }\n", "overwrite"),
-		generated("provider.tf", "provider {}\n", "overwrite"),
-	}))
+	require.NoError(t, WriteFiles(root, sensitiveFiles()))
 	info, err := os.Stat(filepath.Join(root, "provider.tf"))
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())

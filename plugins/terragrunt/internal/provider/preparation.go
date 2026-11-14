@@ -160,7 +160,12 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		if policy == "" {
 			policy = "overwrite"
 		}
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name]})
+		// A generated file replaces an overlay file of the same name, so the overlay mode no longer applies.
+		mode := result.OverlayModes[name]
+		if _, generated := result.Generated[name]; generated {
+			mode = 0
+		}
+		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name], Mode: mode})
 	}
 	return response, nil
 }
