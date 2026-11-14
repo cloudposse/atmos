@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Push commits from a repository configured under [`git.repositories`](/cli/configuration/git), or from any local path, to its remote. Atmos **never force-pushes**. When a push is rejected because the remote moved (another job or human pushed first), Atmos automatically retries: `pull --rebase`, then re-push, bounded by the shared `push.retry` policy (four total attempts by default).
+Push commits from a repository configured under [`git.repositories`](/cli/configuration/git), or from any local path, to its remote. Atmos **never force-pushes**. When a push is rejected because the remote moved (another job or human pushed first), Atmos automatically retries: `pull --rebase`, then re-push, with four total attempts by default. Custom `push.retry` policies apply only when pushing by a configured repository name. A local path uses legacy defaults even when it points to a configured repository; use the repository name to apply its policy.
 </Intro>
 
 <CastPlayer title="atmos git push --help" src="/casts/screengrabs/atmos-git-push--help.cast" static chrome />
@@ -85,7 +85,7 @@ push:
     max_elapsed_time: 30s
 ```
 
-`max_attempts` includes the initial attempt. `max_elapsed_time` bounds the entire operation, including running Git commands. The delay cap applies before jitter. An explicit policy uses shared retry semantics without inheriting omitted fields from the defaults; `retry: {}` or `max_attempts: 1` makes one attempt. Legacy `push.retries` remains supported when `push.retry` is absent. Optional `conditions` narrow the rejected-push messages eligible for retry; they never enable retries for authentication failures or unrelated errors.
+`max_attempts` includes the initial attempt. `max_elapsed_time` bounds the entire operation, including running Git commands. The delay cap applies before jitter. An explicit policy uses shared retry semantics without inheriting omitted fields from the defaults; `retry: {}` or `max_attempts: 1` makes one attempt. Legacy `push.retries` remains supported when `push.retry` is absent. Legacy and path-based pushes use a 30-second retry-scheduling budget without imposing a deadline on running Git commands; the caller’s context still applies. Optional `conditions` narrow the rejected-push messages eligible for retry; they never enable retries for authentication failures or unrelated errors.
 
 ## Remote Rate Limits
 
@@ -93,7 +93,7 @@ Push and its recovery fetch recognize HTTP `429`, HTTP `403` with rate-limit res
 
 Atmos honors `Retry-After` (seconds or an HTTP date) and `X-RateLimit-Reset` when `X-RateLimit-Remaining` is zero. Without a usable hint, it waits at least one minute. Repeated throttling increases that minimum exponentially. Configured `random_jitter` adds only positive jitter to this cooldown, so publishers spread out without retrying before the server permits it.
 
-Server cooldowns take precedence over `max_delay`; `max_attempts` and `max_elapsed_time` remain hard limits. If the cooldown cannot fit in the remaining elapsed-time budget, Atmos returns a rate-limit error immediately instead of retrying early. The default 30-second budget cannot accommodate a one-minute cooldown; the example above allows a longer window. `conditions` restrict rejected-ref recovery, not recognized rate-limit recovery.
+Server cooldowns take precedence over `max_delay`; `max_attempts` and `max_elapsed_time` remain hard limits. If the cooldown cannot fit in the remaining elapsed-time budget, Atmos returns a rate-limit error immediately instead of retrying early. The default 30-second budget cannot accommodate a one-minute cooldown; the first example in Usage, with `max_elapsed_time: 10m`, allows a longer window. `conditions` restrict rejected-ref recovery, not recognized rate-limit recovery.
 
 Each invocation reacts independently. There is no shared lock, concurrency group, or global rate counter across source repositories. This reduces retry pressure after throttling but does not guarantee an aggregate write rate or prevent the initial burst. Git transport limits are distinct from REST/GraphQL API budgets; Atmos does not poll GitHub APIs to predict them. See [GitHub's rate-limit recovery guidance](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit).
 
