@@ -241,6 +241,25 @@ func TestResolveRedactsSensitiveInputsFromLogs(t *testing.T) {
 	}
 }
 
+// A sensitive value that only exists when the unit is evaluated for apply is registered by the
+// apply-time reparse, so events collected before it are masked as well.
+func TestResolveRedactsApplyTimeSensitiveInputsFromLogs(t *testing.T) {
+	request := nativeUnit(t, "inputs = { token = sensitive(get_terraform_command() == \"apply\" ? \"apply-secret\" : \"plan-secret\"), name = \"visible\" }\n")
+	sink := NewLogSink("trace", request.BasePath)
+	logger(t, sink).Debug("before apply-secret plan-secret visible")
+
+	_, err := Resolve(WithLogSink(t.Context(), sink), request)
+
+	require.NoError(t, err)
+	entries := sink.Entries()
+	require.NotEmpty(t, entries)
+	assert.Equal(t, "before <MASKED> <MASKED> visible", entries[0].Message)
+	for _, entry := range entries {
+		assert.NotContains(t, entry.Message, "apply-secret")
+		assert.NotContains(t, entry.Message, "plan-secret")
+	}
+}
+
 // A withheld sink returns only a notice of how many events it withheld.
 func TestLogSinkWithholdReturnsOnlyANotice(t *testing.T) {
 	sink := NewLogSink("debug", "")

@@ -281,7 +281,15 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 		return nil, nil, err
 	}
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
-		return config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
+		parsed, err := config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
+		if err != nil {
+			return nil, err
+		}
+		// Apply-time values can differ from the ones planned, so register them before any event is returned.
+		sink := logSinkFrom(ctx)
+		redactInputs(sink, parsed.Inputs, SensitiveInputs(environment.FS, append(apply.FilesRead.Paths(), path), parsed.Inputs))
+		redactInputs(sink, parsed.Locals, sensitiveLocals(environment.FS, path, parsed.Locals))
+		return parsed, nil
 	}
 	return applyTimeExecution(request, path, execution, environment.FS, pctx.FilesRead.Paths(), reparse)
 }
