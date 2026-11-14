@@ -393,6 +393,15 @@ message PrepareComponentResponse {
   string module_source_auth_origin = 20;
   // Time spent resolving a tfr:// source, including its bounded retries.
   uint64 registry_resolution_nanos = 21;
+  // True when an errors-block ignore policy matched a failure the plugin hit while preparing the unit,
+  // for example a registry resolution failure, so no source could be resolved. The host ends the unit's
+  // run successfully without executing it, as it does for an ignored source fetch. The remaining fields
+  // describe the unit as written.
+  bool run_ignored = 23;
+  // Name of the ignore policy that matched. Set with run_ignored.
+  string ignored_policy = 24;
+  // Message of the ignore policy that matched. Set with run_ignored.
+  string ignored_message = 25;
 }
 
 // ComponentErrorsConfiguration mirrors the Terragrunt errors block. Reserved; not implemented.

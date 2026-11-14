@@ -67,6 +67,9 @@ type Resolution struct {
 	FeatureFlags map[string]string `json:"feature_flags,omitempty"`
 	// IAM is the role the host assumes for the unit's commands; nil when the unit names none.
 	IAM *IAM `json:"iam,omitempty"`
+	// RunIgnored is set when an ignore policy matched a failure that left the source unresolved. The unit
+	// keeps the source it was written with, and the host ends its run without executing it.
+	RunIgnored *IgnoredRun `json:"run_ignored,omitempty"`
 }
 
 type RegistryAuth struct {
@@ -97,6 +100,12 @@ type RetryPolicy struct {
 	Patterns         []string `json:"patterns"`
 	MaxAttempts      int      `json:"max_attempts"`
 	SleepIntervalSec int      `json:"sleep_interval_sec"`
+}
+
+// IgnoredRun names the ignore policy that ended a unit's run before it could execute.
+type IgnoredRun struct {
+	Policy  string `json:"policy"`
+	Message string `json:"message,omitempty"`
 }
 
 // IgnorePolicy turns a failed command whose output matches a pattern into a success.

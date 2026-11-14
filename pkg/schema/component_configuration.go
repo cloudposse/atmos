@@ -78,6 +78,9 @@ type PreparedComponentConfiguration struct {
 	TerraformBinary string
 	// Exclusion is set when the provider says this operation must not run the unit.
 	Exclusion *ComponentExclusion
+	// IgnoredRun is set when an ignore policy matched a failure that left the unit without a resolved
+	// source, such as a registry resolution failure. The host ends the run without executing the unit.
+	IgnoredRun *ComponentIgnoredRun
 	// FeatureFlags are the evaluated feature values of the unit, rendered as strings.
 	FeatureFlags map[string]string
 	// IAM is a role the host assumes for the component's commands; it is nil when the provider asks for none.
@@ -113,6 +116,14 @@ type ComponentIAM struct {
 type ComponentExclusion struct {
 	// Actions lists the commands the exclusion applies to.
 	Actions []string
+}
+
+// ComponentIgnoredRun names the ignore policy that ended preparation of a unit.
+type ComponentIgnoredRun struct {
+	// Policy is the name of the matching ignore policy.
+	Policy string
+	// Message is the message of the matching ignore policy.
+	Message string
 }
 
 // ComponentConfigurationFile must bypass template rendering.

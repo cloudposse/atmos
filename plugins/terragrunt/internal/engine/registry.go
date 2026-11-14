@@ -38,7 +38,7 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	}
 	var auth *model.RegistryAuth
 	started := time.Now()
-	resolved, err := retryRegistryResolution(ctx, result.Errors, func() (string, error) {
+	resolved, ignored, err := retryRegistryResolution(ctx, result.Errors, func() (string, error) {
 		resolution, err := atmosbridge.ResolveRegistrySourceWithAuth(ctx, logger, atmosbridge.RegistryRequest{
 			Client: registryClient, Source: result.Source, Constraint: constraint, Environment: request.Environment, OpenTofu: IsOpenTofu(request.Tofu),
 		})
@@ -47,6 +47,12 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 		}
 		return resolution.Source, err
 	})
+	if ignored != nil {
+		// No source was resolved, so the unit keeps the source it was written with and the host ends its
+		// run without executing it, as it does for an ignored source fetch.
+		result.RunIgnored = &model.IgnoredRun{Policy: ignored.Name, Message: ignored.Message}
+		return nil
+	}
 	if err != nil {
 		return registryProblem(result.Source, err)
 	}
@@ -60,13 +66,18 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	return nil
 }
 
-// retryRegistryResolution applies the unit's source-fetch retry patterns to
-// registry discovery and version lookup, which happen before the host fetch.
-func retryRegistryResolution(ctx context.Context, policies *model.Errors, resolve func() (string, error)) (string, error) {
+// retryRegistryResolution applies the unit's source-fetch policies to registry discovery and version
+// lookup, which happen before the host fetch. As for a source fetch, ignore policies are read before
+// retry policies: a failure an ignore policy matches is not retried, and the matching policy is
+// returned with the failure so the caller can end the unit's run.
+func retryRegistryResolution(ctx context.Context, policies *model.Errors, resolve func() (string, error)) (string, *model.IgnorePolicy, error) {
 	for attempt := 1; ; attempt++ {
 		resolved, err := resolve()
 		if err == nil || policies == nil || ctx.Err() != nil {
-			return resolved, err
+			return resolved, nil, err
+		}
+		if ignore := matchingRegistryIgnore(policies.Ignore, err.Error()); ignore != nil {
+			return "", ignore, err
 		}
 		var retry *model.RetryPolicy
 		for i := range policies.Retry {
@@ -76,16 +87,31 @@ func retryRegistryResolution(ctx context.Context, policies *model.Errors, resolv
 			}
 		}
 		if retry == nil || attempt >= retry.MaxAttempts {
-			return "", err
+			return "", nil, err
 		}
 		timer := time.NewTimer(time.Duration(retry.SleepIntervalSec) * time.Second)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return "", ctx.Err()
+			return "", nil, ctx.Err()
 		case <-timer.C:
 		}
 	}
+}
+
+// registryErrorNoise matches everything that is not part of a readable error message. The host cleans
+// the text of a failed source fetch the same way before matching, so one pattern behaves alike in both.
+var registryErrorNoise = regexp.MustCompile(`[^a-zA-Z0-9./'"():=\- ]+`)
+
+// matchingRegistryIgnore returns the first ignore policy, in declaration order, that matches the failure.
+func matchingRegistryIgnore(policies []model.IgnorePolicy, message string) *model.IgnorePolicy {
+	text := strings.Join(strings.Fields(registryErrorNoise.ReplaceAllString(message, " ")), " ")
+	for i := range policies {
+		if registryErrorMatches(text, policies[i].Patterns) {
+			return &policies[i]
+		}
+	}
+	return nil
 }
 
 func registryErrorMatches(message string, patterns []string) bool {

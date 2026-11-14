@@ -42,8 +42,9 @@ func finishIAM(ctx context.Context, info *schema.ConfigAndStacksInfo, prepared *
 		}
 		return nil
 	}
-	// An operation the provider excludes never runs, so it must not need the unit's role.
-	if excludedFromOperation(info, prepared) {
+	// An operation the provider excludes, or ends because a failure was ignored, never runs, so it must
+	// not need the unit's role.
+	if excludedFromOperation(info, prepared) || prepared.IgnoredRun != nil {
 		return nil
 	}
 	return applyIAMRole(ctx, info, prepared.IAM)

@@ -366,6 +366,32 @@ func TestPrepareReturnsParityData(t *testing.T) {
 	require.Equal(t, "prepare", result.Diagnostics[0].Detail.Operation)
 }
 
+// An ignored registry resolution failure crosses the boundary as a successful preparation that names the
+// policy, and an ordinary preparation leaves the fields unset so the host runs the unit.
+func TestPrepareReturnsAnIgnoredRun(t *testing.T) {
+	request := componentRequest(t)
+	for name, ignored := range map[string]*model.IgnoredRun{
+		"ignored":     {Policy: "registry", Message: "registry is down"},
+		"not ignored": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+				return &model.Resolution{Inputs: map[string]any{}, Backend: map[string]any{}, WorkingDir: req.BasePath, RunIgnored: ignored}, nil
+			})
+			result, err := p.Prepare(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, ignored != nil, result.GetRunIgnored())
+			if ignored == nil {
+				require.Empty(t, result.GetIgnoredPolicy())
+				require.Empty(t, result.GetIgnoredMessage())
+				return
+			}
+			require.Equal(t, "registry", result.GetIgnoredPolicy())
+			require.Equal(t, "registry is down", result.GetIgnoredMessage())
+		})
+	}
+}
+
 func TestPrepareOmitsExclusionWhenTheRunIsNotPrevented(t *testing.T) {
 	request := componentRequest(t)
 	no := false

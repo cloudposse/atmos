@@ -249,6 +249,28 @@ func TestPrepareTranslatesErrorsExclusionAndFeatures(t *testing.T) {
 	require.Equal(t, map[string]string{"flag": "true"}, prepared.FeatureFlags)
 }
 
+func TestPrepareTranslatesAnIgnoredRun(t *testing.T) {
+	for name, test := range map[string]struct {
+		response *pluginv1.PrepareComponentResponse
+		want     *schema.ComponentIgnoredRun
+	}{
+		"ignored":           {&pluginv1.PrepareComponentResponse{RunIgnored: true, IgnoredPolicy: "registry", IgnoredMessage: "down"}, &schema.ComponentIgnoredRun{Policy: "registry", Message: "down"}},
+		"ignored, no text":  {&pluginv1.PrepareComponentResponse{RunIgnored: true}, &schema.ComponentIgnoredRun{}},
+		"text without flag": {&pluginv1.PrepareComponentResponse{IgnoredPolicy: "registry", IgnoredMessage: "down"}, nil},
+		"not ignored":       {&pluginv1.PrepareComponentResponse{}, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			session, provider, info := preparationSession(t)
+			response := test.response
+			response.Engine, response.State = "opentofu", &pluginv1.ComponentStateIdentity{}
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(response, nil)
+			prepared, err := session.Prepare(t.Context(), info)
+			require.NoError(t, err)
+			require.Equal(t, test.want, prepared.IgnoredRun)
+		})
+	}
+}
+
 func TestPreparedErrorsRejectsPoliciesTheHostCannotHonor(t *testing.T) {
 	empty, err := preparedErrors(&pluginv1.ComponentErrorsConfiguration{})
 	require.NoError(t, err)

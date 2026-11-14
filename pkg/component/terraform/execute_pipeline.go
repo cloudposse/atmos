@@ -96,7 +96,8 @@ func (e *Executor) prepareComponentExecution(
 	}, nil
 }
 
-// beginPreparedConfiguration stops an excluded component before anything runs, then warns about
+// beginPreparedConfiguration stops an excluded component, or one whose preparation an ignore policy
+// ended, before anything runs, then warns about
 // overlapping retries, clears stale signal files and runs the provider's read-configuration hooks.
 func (e *Executor) beginPreparedConfiguration(
 	ctx context.Context,
@@ -107,6 +108,9 @@ func (e *Executor) beginPreparedConfiguration(
 	if excludedFromOperation(info, prepared) {
 		skipExcluded(info)
 		return errUtils.ErrComponentExcluded
+	}
+	if prepared != nil && prepared.IgnoredRun != nil {
+		return endIgnoredRun(info, prepared.IgnoredRun)
 	}
 	warnOverlappingRetry(info, prepared)
 	if err := clearStaleSignals(atmosConfig, info); err != nil {

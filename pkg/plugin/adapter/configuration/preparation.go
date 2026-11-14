@@ -439,6 +439,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 		return nil, err
 	}
 	prepared.Execution = execution
+	prepared.IgnoredRun = preparedIgnoredRun(result)
 	if prepared.IAM, err = preparedIAM(result.Iam); err != nil {
 		return nil, err
 	}

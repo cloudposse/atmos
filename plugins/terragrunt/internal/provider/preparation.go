@@ -162,6 +162,9 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		return nil, err
 	}
 	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution), RegistryResolutionNanos: result.RegistryResolutionNanos}
+	if result.RunIgnored != nil {
+		response.RunIgnored, response.IgnoredPolicy, response.IgnoredMessage = true, result.RunIgnored.Policy, result.RunIgnored.Message
+	}
 	if err := parityResponse(response, req, result); err != nil {
 		return nil, rpcError(err)
 	}

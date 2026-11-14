@@ -3401,8 +3401,17 @@ type PrepareComponentResponse struct {
 	ModuleSourceAuthOrigin    string          `protobuf:"bytes,20,opt,name=module_source_auth_origin,json=moduleSourceAuthOrigin,proto3" json:"module_source_auth_origin,omitempty"`
 	// Time spent resolving a tfr:// source, including its bounded retries.
 	RegistryResolutionNanos uint64 `protobuf:"varint,21,opt,name=registry_resolution_nanos,json=registryResolutionNanos,proto3" json:"registry_resolution_nanos,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// True when an errors-block ignore policy matched a failure the plugin hit while preparing the unit,
+	// for example a registry resolution failure, so no source could be resolved. The host ends the unit's
+	// run successfully without executing it, as it does for an ignored source fetch. The remaining fields
+	// describe the unit as written.
+	RunIgnored bool `protobuf:"varint,23,opt,name=run_ignored,json=runIgnored,proto3" json:"run_ignored,omitempty"`
+	// Name of the ignore policy that matched. Set with run_ignored.
+	IgnoredPolicy string `protobuf:"bytes,24,opt,name=ignored_policy,json=ignoredPolicy,proto3" json:"ignored_policy,omitempty"`
+	// Message of the ignore policy that matched. Set with run_ignored.
+	IgnoredMessage string `protobuf:"bytes,25,opt,name=ignored_message,json=ignoredMessage,proto3" json:"ignored_message,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PrepareComponentResponse) Reset() {
@@ -3580,6 +3589,27 @@ func (x *PrepareComponentResponse) GetRegistryResolutionNanos() uint64 {
 		return x.RegistryResolutionNanos
 	}
 	return 0
+}
+
+func (x *PrepareComponentResponse) GetRunIgnored() bool {
+	if x != nil {
+		return x.RunIgnored
+	}
+	return false
+}
+
+func (x *PrepareComponentResponse) GetIgnoredPolicy() string {
+	if x != nil {
+		return x.IgnoredPolicy
+	}
+	return ""
+}
+
+func (x *PrepareComponentResponse) GetIgnoredMessage() string {
+	if x != nil {
+		return x.IgnoredMessage
+	}
+	return ""
 }
 
 // ComponentErrorsConfiguration mirrors the Terragrunt errors block. Reserved; not implemented.
@@ -4250,7 +4280,7 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\frun_on_error\x18\x05 \x01(\bR\n" +
 	"runOnError\x12'\n" +
 	"\x0fsuppress_stdout\x18\x06 \x01(\bR\x0esuppressStdout\x12\x1b\n" +
-	"\ton_errors\x18\a \x03(\tR\bonErrors\"\xdd\v\n" +
+	"\ton_errors\x18\a \x03(\tR\bonErrors\"\xce\f\n" +
 	"\x18PrepareComponentResponse\x12\x16\n" +
 	"\x06engine\x18\x01 \x01(\tR\x06engine\x12+\n" +
 	"\x11working_directory\x18\x02 \x01(\tR\x10workingDirectory\x12#\n" +
@@ -4275,7 +4305,11 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\rfeature_flags\x18\x12 \x03(\v2;.atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntryR\ffeatureFlags\x12_\n" +
 	"\x1bmodule_source_authorization\x18\x13 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x19moduleSourceAuthorization\x129\n" +
 	"\x19module_source_auth_origin\x18\x14 \x01(\tR\x16moduleSourceAuthOrigin\x12:\n" +
-	"\x19registry_resolution_nanos\x18\x15 \x01(\x04R\x17registryResolutionNanos\x1a`\n" +
+	"\x19registry_resolution_nanos\x18\x15 \x01(\x04R\x17registryResolutionNanos\x12\x1f\n" +
+	"\vrun_ignored\x18\x17 \x01(\bR\n" +
+	"runIgnored\x12%\n" +
+	"\x0eignored_policy\x18\x18 \x01(\tR\rignoredPolicy\x12'\n" +
+	"\x0fignored_message\x18\x19 \x01(\tR\x0eignoredMessage\x1a`\n" +
 	"\x11InputOriginsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.SourceLocationR\x05value:\x028\x01\x1a?\n" +

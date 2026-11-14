@@ -137,6 +137,14 @@ func skipExcluded(info *schema.ConfigAndStacksInfo) {
 	ui.Infof("Skipping `%s` for `%s` in `%s`: its Terragrunt `exclude` block sets `no_run`.", info.SubCommand, info.ComponentFromArg, info.Stack)
 }
 
+// endIgnoredRun ends the unit's run successfully after an ignore policy matched a failure that left it
+// without a resolved source. It announces the decision as an ignored source fetch does, and leaves no
+// signals file because no source directory exists to hold it.
+func endIgnoredRun(info *schema.ConfigAndStacksInfo, ignored *schema.ComponentIgnoredRun) error {
+	(&recoveryReporter{info: info}).Ignored(ignored.Policy, ignored.Message)
+	return errUtils.ErrComponentRunIgnored
+}
+
 // runReadConfigHooks runs the unit's read-config after hooks once its configuration is read. They
 // run on every command that prepares the unit, in the unit's configuration directory, before any
 // source is fetched. Hooks written for `read-config` and `terragrunt-read-config` both run.

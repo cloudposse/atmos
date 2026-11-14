@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -768,6 +769,56 @@ func (s warningTestStreams) Output() io.Writer    { return io.Discard }
 func (s warningTestStreams) Error() io.Writer     { return s.stderr }
 func (s warningTestStreams) RawOutput() io.Writer { return io.Discard }
 func (s warningTestStreams) RawError() io.Writer  { return s.stderr }
+
+// A provider that reports an ignored failure, such as a registry resolution failure with no resolved
+// source, ends the unit's run successfully with the message of an ignored source fetch. Nothing runs:
+// no source is provisioned, no read-config hook starts, and no terraform command is executed.
+func TestPrepareComponentExecutionEndsAnIgnoredRunWithoutExecuting(t *testing.T) {
+	var output bytes.Buffer
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(warningTestStreams{stderr: &output}))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.ReinitFormatter)
+
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
+	config.Components.Terraform.BasePath = "components"
+	provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	config.ComponentConfigurations = provider
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": "tfr://registry.example/acme/vpc/aws"}}}
+	hooks := &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{{Name: "read", Commands: []string{"terragrunt-read-config"}, Execute: []string{"must-not-run"}}}}
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
+		Engine: "terraform", Source: "tfr://registry.example/acme/vpc/aws", Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}, Workspace: "default", Execution: hooks,
+		Files:      []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("# generated"), IfExists: "overwrite"}},
+		IgnoredRun: &schema.ComponentIgnoredRun{Policy: "registry_down", Message: "registry is down"},
+	}, nil)
+	shell := &fakeShell{}
+	executor := NewExecutor(Services{ExecuteShellCommand: shell.execute})
+
+	_, err = executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, info, false)
+
+	require.ErrorIs(t, err, errUtils.ErrComponentRunIgnored)
+	require.True(t, endedWithoutFailure(err), "an ignored run ends the invocation successfully")
+	require.Empty(t, shell.names(), "nothing may execute")
+	require.NoDirExists(t, filepath.Join(root, ".workdir"), "an ignored run must not provision a source")
+	require.NoFileExists(t, filepath.Join(root, "components", "terraform", "app", "generated.tf"), "an ignored run writes no generated files")
+	require.Contains(t, output.String(), "Ignoring an error in app in dev because it matches policy registry_down: registry is down")
+}
+
+func TestEndIgnoredRunReportsLikeAnIgnoredFetch(t *testing.T) {
+	var output bytes.Buffer
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(warningTestStreams{stderr: &output}))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.ReinitFormatter)
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app"}
+
+	require.ErrorIs(t, endIgnoredRun(info, &schema.ComponentIgnoredRun{Policy: "quiet"}), errUtils.ErrComponentRunIgnored)
+	require.Contains(t, output.String(), "Ignoring an error in app in dev because it matches policy quiet\n")
+	require.NotContains(t, output.String(), "quiet:", "no message means no trailing colon")
+}
 
 func TestWarnOverlappingRetryOnlyForBothMechanisms(t *testing.T) {
 	retry := &schema.PreparedComponentConfiguration{Execution: &schema.ComponentExecution{Errors: &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "n"}}}}}
