@@ -247,6 +247,20 @@ func TestShouldUseColorInCI(t *testing.T) {
 	assert.True(t, shouldUseColor(), "CI output supports ANSI color without a TTY")
 }
 
+func TestShouldUseColorDumbTerminalInCI(t *testing.T) {
+	t.Setenv("CI", "true")
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("FORCE_COLOR", "")
+
+	assert.False(t, shouldUseColor(), "TERM=dumb must disable automatic CI color")
+
+	t.Setenv("TERM", "xterm-256color")
+	assert.True(t, shouldUseColor(), "CI color stays enabled for a capable terminal")
+}
+
 func TestFormatInCIUsesColorUnlessDisabled(t *testing.T) {
 	t.Setenv("CI", "true")
 	t.Setenv("NO_COLOR", "")

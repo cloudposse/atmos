@@ -132,6 +132,8 @@ func shouldUseColor() bool {
 		EnvCLIColorForce: env.GetString("CLICOLOR_FORCE") != "" || env.GetString("FORCE_COLOR") != "",
 		//nolint:forbidigo // CI is the standard environment signal used by terminal color detection.
 		EnvCI: os.Getenv("CI") != "",
+		//nolint:forbidigo // TERM is the standard environment signal used by terminal color detection.
+		EnvTerm: os.Getenv("TERM"),
 	}
 
 	// Add atmos.yaml settings if available.
