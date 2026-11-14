@@ -77,10 +77,8 @@ func (r *Repository) retire(ctx context.Context, job *publishJob, plan *publishP
 	if err != nil {
 		return
 	}
-	if plan.abandoned != nil {
-		if err := r.removePayload(cleanup, plan.abandoned, keep); err != nil {
-			return
-		}
+	if err := r.removePayloads(cleanup, plan.abandoned, keep); err != nil {
+		return
 	}
 	if plan.prior != nil {
 		if err := r.retirePrior(cleanup, plan.prior, job, keep); err != nil {
@@ -108,6 +106,16 @@ func (r *Repository) retirePrior(ctx context.Context, prior *layout.Prior, job *
 		return err
 	}
 	return r.deleteObject(ctx, layout.RecordPath(prior.RecordDigest))
+}
+
+// removePayloads deletes the objects of every listed payload that the new publication does not reuse.
+func (r *Repository) removePayloads(ctx context.Context, payloads []ownedPayload, keep []string) error {
+	for index := range payloads {
+		if err := r.removePayload(ctx, &payloads[index], keep); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // removePayload deletes the objects of a payload that the new publication does not reuse.

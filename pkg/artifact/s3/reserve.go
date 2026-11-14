@@ -48,7 +48,7 @@ func (r *Repository) reserve(ctx context.Context, job *publishJob, plan *publish
 		SchemaVersion: layout.SchemaVersion, RepositoryKind: artifact.RepositoryKindS3, OperationID: job.opID,
 		Name: job.record.Name, Version: job.record.Version, IntentDigest: job.prepared.IntentDigest,
 		RecordDigest: job.recordDigest, CapturedAt: job.record.CreatedAt, Packaging: job.prepared.Packaging,
-		Location: job.location, Prior: plan.prior, Payload: job.payload, Documents: job.documents, Owner: r.settings.owner,
+		Location: job.location, Prior: plan.prior, Abandoned: retiredPayloads(plan.abandoned), Payload: job.payload, Documents: job.documents, Owner: r.settings.owner,
 	}
 	if plan.expected != nil {
 		journal.ExpectedPrior = plan.expected.ResolvedDigest

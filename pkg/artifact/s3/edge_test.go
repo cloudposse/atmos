@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +61,51 @@ func TestResumedPublicationRetiresAnAbandonedLocation(t *testing.T) {
 				assert.False(t, ok, "the abandoned object %s was retired, not orphaned", key)
 			}
 			assertIntact(t, retry, defaultRef())
+			assert.Empty(t, managedKeys(fake, "", layout.ManagedRoot+"/operations"))
+		})
+	}
+}
+
+// An abandoned payload outlives the retry that discovered it: the journal that replaces the old one
+// carries it until a retry actually removes it, however many attempts stop first.
+func TestResumedPublicationCarriesAbandonedPayloadsAcrossRetries(t *testing.T) {
+	tests := []struct {
+		name      string
+		crashed   *rspec
+		retry     *rspec
+		abandoned []string
+		// stoppedRetries is how many retries stop before they can retire anything.
+		stoppedRetries int
+	}{
+		{name: "tgz to zip, one stopped retry", crashed: archiveSpec(artifact.PackagingTgz), retry: archiveSpec(artifact.PackagingZip), abandoned: []string{"team/app/1.0.0.tgz", "team/app/1.0.0.tgz.metadata.json"}, stoppedRetries: 1},
+		{name: "tgz to zip, two stopped retries", crashed: archiveSpec(artifact.PackagingTgz), retry: archiveSpec(artifact.PackagingZip), abandoned: []string{"team/app/1.0.0.tgz", "team/app/1.0.0.tgz.metadata.json"}, stoppedRetries: 2},
+		{name: "archive to files, one stopped retry", crashed: archiveSpec(artifact.PackagingTgz), retry: noneSpec(), abandoned: []string{"team/app/1.0.0.tgz", "team/app/1.0.0.tgz.metadata.json"}, stoppedRetries: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := s3test.NewServer(t)
+			crashed := newRepo(t, tt.crashed.with(func(s *rspec) { s.fake = fake }).withOpts(withFaults(crashAt(faultAfterMetadata))))
+			_, err := crashed.Publish(context.Background(), prepare(t, crashed, &prepareSpec{opID: "op-first"}), artifact.PublishOptions{})
+			require.ErrorIs(t, err, errCrash)
+
+			for attempt := 0; attempt < tt.stoppedRetries; attempt++ {
+				stopped := newRepo(t, tt.retry.with(func(s *rspec) { s.fake = fake }).withOpts(withFaults(crashAt(faultBeforePayload))))
+				_, err = stopped.Publish(context.Background(), prepare(t, stopped, &prepareSpec{opID: fmt.Sprintf("op-stopped-%d", attempt)}), artifact.PublishOptions{})
+				require.ErrorIs(t, err, errCrash)
+				for _, key := range tt.abandoned {
+					_, ok := fake.Object(key)
+					require.True(t, ok, "%s is still awaiting retirement after stopped retry %d", key, attempt)
+				}
+			}
+
+			final := newRepo(t, tt.retry.with(func(s *rspec) { s.fake = fake }))
+			_, err = final.Publish(context.Background(), prepare(t, final, &prepareSpec{opID: "op-final"}), artifact.PublishOptions{})
+			require.NoError(t, err)
+			for _, key := range tt.abandoned {
+				_, ok := fake.Object(key)
+				assert.False(t, ok, "the abandoned object %s was retired by the completing retry, not orphaned", key)
+			}
+			assertIntact(t, final, defaultRef())
 			assert.Empty(t, managedKeys(fake, "", layout.ManagedRoot+"/operations"))
 		})
 	}

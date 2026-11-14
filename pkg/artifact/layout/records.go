@@ -331,6 +331,24 @@ type Prior struct {
 	Packaging artifact.Packaging `json:"packaging,omitempty"`
 }
 
+// Retired names a payload an earlier attempt of the same reference abandoned: written, never
+// completed, and replaced by a later attempt under a different location or packaging. The journal
+// that replaces the old one carries it until a retry has removed the objects, so a stopped retry
+// never loses the recovery metadata of the payload it superseded.
+type Retired struct {
+	// Packaging is the packaging of the abandoned payload, which decides its object keys.
+	Packaging artifact.Packaging `json:"packaging,omitempty"`
+
+	// Location is where the abandoned payload was written.
+	Location string `json:"location"`
+
+	// Files are the per-file payload paths below Location. Archive packaging leaves it empty.
+	Files []string `json:"files,omitempty"`
+
+	// Docs are the distribution document file names written beside the payload.
+	Docs []string `json:"docs,omitempty"`
+}
+
 // Operation is the publication journal: an implementation recovery record, not a public catalog.
 // It is written before any payload path changes and records everything a same-intent retry needs
 // to resume or repair the publication: the captured time, the intent, the prior reference, the
@@ -372,6 +390,9 @@ type Operation struct {
 	// Prior describes the state being replaced, if any.
 	Prior *Prior `json:"prior,omitempty"`
 
+	// Abandoned lists payloads of superseded attempts that still await removal.
+	Abandoned []Retired `json:"abandoned,omitempty"`
+
 	// Payload and Documents are the prepared representation checksums.
 	Payload   []ocispec.Descriptor `json:"payload"`
 	Documents []ocispec.Descriptor `json:"documents"`
@@ -409,7 +430,19 @@ func (o *Operation) validateState() error {
 	if o.Payload == nil || o.Documents == nil {
 		return invalid(kindOperation, "payload and documents lists are required (use empty lists)")
 	}
-	return validatePrior(o.Prior)
+	if err := validatePrior(o.Prior); err != nil {
+		return err
+	}
+	return validateAbandoned(o.Abandoned)
+}
+
+func validateAbandoned(abandoned []Retired) error {
+	for index := range abandoned {
+		if _, err := CleanLocation(abandoned[index].Location); err != nil {
+			return invalid(kindOperation, "abandoned location %q is not a valid relative location", abandoned[index].Location)
+		}
+	}
+	return nil
 }
 
 func validatePrior(prior *Prior) error {

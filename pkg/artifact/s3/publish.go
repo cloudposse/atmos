@@ -26,7 +26,7 @@ type publishPlan struct {
 	current   *refState
 	prior     *layout.Prior
 	owned     []ownedPayload
-	abandoned *ownedPayload
+	abandoned []ownedPayload
 	oldOp     *layout.Operation
 	expected  *artifact.PinnedReference
 	scope     artifact.LockScope
@@ -163,17 +163,29 @@ func (r *Repository) unchanged(ctx context.Context, job *publishJob, plan *publi
 	if err != nil {
 		return nil, err
 	}
-	if journal != nil && journal.Prior != nil {
-		keep, err := setOfRecord(record).keys(rep.Packaging, rep.Location)
-		if err != nil {
-			return nil, err
-		}
-		if err := r.retirePrior(ctx, journal.Prior, job, keep); err != nil {
-			return nil, err
-		}
+	if err := r.retireJournaled(ctx, job, journal, record, rep); err != nil {
+		return nil, err
 	}
 	r.tidyOperation(ctx, current.OperationID)
 	return r.result(record, current.RecordDigest, rep, layout.AdmitUnchanged.Outcome(), plan.scope), nil
+}
+
+// retireJournaled removes what a completed operation's journal still lists for removal: the
+// replaced Record and its payload, and the payloads of abandoned attempts.
+func (r *Repository) retireJournaled(ctx context.Context, job *publishJob, journal *layout.Operation, record *artifact.Record, rep *layout.Representation) error {
+	if journal == nil || (journal.Prior == nil && len(journal.Abandoned) == 0) {
+		return nil
+	}
+	keep, err := setOfRecord(record).keys(rep.Packaging, rep.Location)
+	if err != nil {
+		return err
+	}
+	if journal.Prior != nil {
+		if err := r.retirePrior(ctx, journal.Prior, job, keep); err != nil {
+			return err
+		}
+	}
+	return r.removePayloads(ctx, carriedPayloads(journal), keep)
 }
 
 // tidyOperation removes the journal of a finished operation. It is best-effort: a leftover is
@@ -198,15 +210,18 @@ func (r *Repository) resolveLocation(ctx context.Context, job *publishJob, plan 
 	if err := r.loadPendingState(ctx, plan, rep); err != nil {
 		return err
 	}
+	// Payloads that earlier attempts abandoned stay pending until a retry removes them, whichever
+	// location this attempt uses.
+	plan.abandoned = carriedPayloads(plan.oldOp)
 	if plan.admission.Resuming() && plan.oldOp != nil && plan.oldOp.IntentDigest == job.prepared.IntentDigest && plan.oldOp.Packaging == job.prepared.Packaging {
 		job.location = plan.oldOp.Location
 		return nil
 	}
 	if plan.oldOp != nil {
-		plan.abandoned = &ownedPayload{
+		plan.abandoned = appendPayload(plan.abandoned, &ownedPayload{
 			packaging: plan.oldOp.Packaging, location: plan.oldOp.Location,
 			set: setOfDescriptors(plan.oldOp.Payload, plan.oldOp.Documents),
-		}
+		})
 	}
 	job.location, err = layout.RenderLocation(r.keyPattern, &layout.PatternInput{
 		Name: job.record.Name, Version: job.record.Version, Kind: job.record.Kind, CreatedAt: job.record.CreatedAt.Time(),
@@ -228,6 +243,7 @@ func (r *Repository) loadPendingState(ctx context.Context, plan *publishPlan, re
 		plan.oldOp = oldOp
 	}
 	plan.prior = priorState(plan, rep)
+	plan.owned = append(plan.owned, carriedPayloads(plan.oldOp)...)
 	if plan.oldOp != nil {
 		plan.owned = append(plan.owned, ownedPayload{packaging: plan.oldOp.Packaging, location: plan.oldOp.Location})
 		if prior := plan.oldOp.Prior; prior != nil && prior.Location != "" {
@@ -263,4 +279,42 @@ func priorFrom(recordDigest digest.Digest, rep *layout.Representation) *layout.P
 		prior.Location, prior.Packaging = rep.Location, rep.Packaging
 	}
 	return prior
+}
+
+// carriedPayloads returns the abandoned payloads a journal still carries.
+func carriedPayloads(op *layout.Operation) []ownedPayload {
+	if op == nil {
+		return nil
+	}
+	carried := make([]ownedPayload, 0, len(op.Abandoned))
+	for index := range op.Abandoned {
+		retired := &op.Abandoned[index]
+		carried = append(carried, ownedPayload{
+			packaging: retired.Packaging, location: retired.Location,
+			set: objectSet{files: retired.Files, docs: retired.Docs},
+		})
+	}
+	return carried
+}
+
+// appendPayload adds a payload unless one at the same location and packaging is already listed.
+func appendPayload(payloads []ownedPayload, payload *ownedPayload) []ownedPayload {
+	for index := range payloads {
+		if payloads[index].packaging == payload.packaging && payloads[index].location == payload.location {
+			return payloads
+		}
+	}
+	return append(payloads, *payload)
+}
+
+// retiredPayloads converts abandoned payloads to their journal form.
+func retiredPayloads(payloads []ownedPayload) []layout.Retired {
+	var retired []layout.Retired
+	for index := range payloads {
+		retired = append(retired, layout.Retired{
+			Packaging: payloads[index].packaging, Location: payloads[index].location,
+			Files: payloads[index].set.files, Docs: payloads[index].set.docs,
+		})
+	}
+	return retired
 }
