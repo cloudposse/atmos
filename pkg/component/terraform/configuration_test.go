@@ -32,21 +32,20 @@ func TestPrepareConfiguration(t *testing.T) {
 	require.Same(t, expected, result)
 	require.True(t, filepath.IsAbs(info.Command))
 	require.Equal(t, expected.Inputs, info.ComponentVarsSection)
-	// A local module is refreshed on every run; see TestPrepareConfigurationRefreshesOnlyLocalModules.
-	require.Equal(t, map[string]any{"uri": expected.Source, "ttl": "0s"}, info.ComponentSection["source"])
+	// Local module edits are detected by the source provisioner, so no TTL forces a refresh.
+	require.Equal(t, map[string]any{"uri": expected.Source}, info.ComponentSection["source"])
 	require.Equal(t, expected.Backend, info.ComponentBackendSection)
 	require.Equal(t, "default", info.TerraformWorkspace)
 	require.True(t, config.Components.Terraform.AutoGenerateBackendFile)
 }
 
-func TestPrepareConfigurationRefreshesOnlyLocalModules(t *testing.T) {
+func TestPrepareConfigurationNeverForcesSourceRefresh(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		source string
-		ttl    any
 	}{
-		{name: "relative path", source: "./modules/unit", ttl: "0s"},
-		{name: "absolute path", source: filepath.Join(t.TempDir(), "module"), ttl: "0s"},
+		{name: "relative path", source: "./modules/unit"},
+		{name: "absolute path", source: filepath.Join(t.TempDir(), "module")},
 		{name: "git", source: "git::https://example.invalid/modules.git//unit?ref=v1"},
 		{name: "archive", source: "https://example.invalid/unit.zip"},
 	} {
@@ -64,7 +63,7 @@ func TestPrepareConfigurationRefreshesOnlyLocalModules(t *testing.T) {
 			source, ok := info.ComponentSection["source"].(map[string]any)
 			require.True(t, ok)
 			require.Equal(t, test.source, source["uri"])
-			require.Equal(t, test.ttl, source["ttl"])
+			require.NotContains(t, source, "ttl", "a TTL of zero would re-copy the module and discard saved plans on every run")
 		})
 	}
 }
@@ -133,6 +132,29 @@ func TestConfigurationIdentityIsStableAndSeparatesFields(t *testing.T) {
 	require.NotEqual(t, configurationIdentity("ab", "c"), configurationIdentity("a", "bc"))
 }
 
+func TestCacheLocalStatePath(t *testing.T) {
+	cache := filepath.Join("live", "dev", "unit", ".terragrunt-cache", "abc", "def", "terraform.tfstate")
+	for _, test := range []struct {
+		name     string
+		prepared schema.PreparedComponentConfiguration
+		want     bool
+	}{
+		{"default local state inside the cache", schema.PreparedComponentConfiguration{BackendType: "local", Backend: map[string]any{"path": cache}}, true},
+		{"stable local path", schema.PreparedComponentConfiguration{BackendType: "local", Backend: map[string]any{"path": filepath.Join("live", "dev", "unit", "state", "terraform.tfstate")}}, false},
+		{"similar name is not the cache", schema.PreparedComponentConfiguration{BackendType: "local", Backend: map[string]any{"path": filepath.Join("a", "x.terragrunt-cache", "terraform.tfstate")}}, false},
+		{"remote backend", schema.PreparedComponentConfiguration{BackendType: "s3", Backend: map[string]any{"path": cache}}, false},
+		{"no backend settings", schema.PreparedComponentConfiguration{BackendType: "local"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path, found := cacheLocalStatePath(&test.prepared)
+			require.Equal(t, test.want, found)
+			if found {
+				require.Equal(t, cache, path)
+			}
+		})
+	}
+}
+
 func TestCheckConfigurationWorkspace(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -153,6 +175,22 @@ func TestCheckConfigurationWorkspace(t *testing.T) {
 			require.ErrorIs(t, checkConfigurationWorkspace(info), test.want)
 		})
 	}
+}
+
+// Warning about cache-local state must never change where the state lives or fail the command.
+func TestPrepareConfigurationKeepsCacheLocalStateLocation(t *testing.T) {
+	runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+	cache := filepath.Join(t.TempDir(), ".terragrunt-cache", "a", "b", "terraform.tfstate")
+	runtime.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", BackendType: "local", Backend: map[string]any{"path": cache}}, nil)
+
+	_, err = prepareConfiguration(t.Context(), config, info)
+
+	require.NoError(t, err)
+	require.Equal(t, cache, info.ComponentBackendSection["path"])
 }
 
 func TestRejectRuntimeArtifacts(t *testing.T) {
@@ -219,4 +257,24 @@ func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
 	result, err := executor.GetTerraformState(config, "!terraform.state", "live", "network", "vpc_id", true, nil, nil)
 	require.ErrorIs(t, err, failure, "the provider's failure is returned as is, not retried against a guessed backend")
 	require.Nil(t, result)
+}
+
+func TestConfigurationCommandPrecedence(t *testing.T) {
+	for _, tc := range []struct{ name, global, stack, flag, want string }{
+		{"default", "", "", "", "terraform"},
+		{"global", "tofu", "", "", "tofu"},
+		{"component", "tofu", "terraform", "", "terraform"},
+		{"inherited command", "tofu", "/inherited/terraform", "", "/inherited/terraform"},
+		{"override command", "tofu", "/overrides/terraform", "", "/overrides/terraform"},
+		{"explicit flag wins over global and stack", "tofu", "/stack/tofu", "/cli/terraform", "/cli/terraform"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.Command = tc.global
+			info := &schema.ConfigAndStacksInfo{Command: tc.stack, ComponentCommand: tc.flag}
+			resolveTerraformCommand(config, info)
+			require.Equal(t, tc.want, info.Command)
+			require.Equal(t, tc.flag, info.ComponentCommand, "explicit flag provenance survives resolution")
+		})
+	}
 }

@@ -26,7 +26,10 @@ func validFilePolicy(policy string) bool {
 
 // checkFileOwnership never follows a final symlink when deciding ownership.
 // The os.Root handle additionally confines all ancestor traversal to the provisioned directory.
-func checkFileOwnership(root *os.Root, file schema.ComponentConfigurationFile) (bool, error) {
+//
+// The recorded digest is what this host wrote for the path in an earlier run. A file that still
+// has those bytes is owned even without a signature, which covers generate blocks that disable it.
+func checkFileOwnership(root *os.Root, file schema.ComponentConfigurationFile, recorded string) (bool, error) {
 	remove := file.IfExists == "remove" || file.IfExists == "remove_terragrunt"
 	stat, err := root.Lstat(file.Path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -41,10 +44,18 @@ func checkFileOwnership(root *os.Root, file schema.ComponentConfigurationFile) (
 	if file.IfExists != "overwrite_terragrunt" && file.IfExists != "remove_terragrunt" {
 		return remove, nil
 	}
-	if err := verifyTerragruntSignature(root, file.Path); err != nil {
+	if err := verifyOwnership(root, file.Path, recorded); err != nil {
 		return false, err
 	}
 	return remove, nil
+}
+
+// verifyOwnership accepts the bytes this host recorded, or else the Terragrunt signature.
+func verifyOwnership(root *os.Root, path, recorded string) error {
+	if digest, ok := fileDigest(root, path); ok && recorded != "" && digest == recorded {
+		return nil
+	}
+	return verifyTerragruntSignature(root, path)
 }
 
 // verifyTerragruntSignature requires the first line of the generated file to carry the Terragrunt signature.

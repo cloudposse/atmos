@@ -21,6 +21,19 @@ func TestMain(m *testing.M) {
 		_, _ = os.Stdout.WriteString(os.Getenv("ATMOS_TERRAGRUNT_VERSION_CHILD"))
 		os.Exit(0)
 	}
+	// The effect child records its argument in ./effects and prints it, so tests can observe when
+	// run_cmd executes without depending on a platform shell.
+	if os.Getenv(effectChildEnv) == "1" && len(os.Args) > 1 {
+		text := os.Args[len(os.Args)-1]
+		file, err := os.OpenFile("effects", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			os.Exit(1)
+		}
+		_, _ = file.WriteString(text + "\n")
+		_ = file.Close()
+		_, _ = os.Stdout.WriteString(text)
+		os.Exit(0)
+	}
 	if os.Getenv("ATMOS_TERRAGRUNT_ENV_CHILD") == "1" {
 		cwd, _ := os.Getwd()
 		_ = json.NewEncoder(os.Stdout).Encode(map[string]string{"cwd": cwd, "profile": os.Getenv("AWS_PROFILE"), "token": os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"), "custom": os.Getenv("CUSTOM_VALUE"), "path": os.Getenv("PATH")})

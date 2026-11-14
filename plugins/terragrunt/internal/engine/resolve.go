@@ -4,9 +4,7 @@ package engine
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -28,7 +26,16 @@ func Resolve(ctx context.Context, request model.Request) (*model.Resolution, err
 // ErrPreventDestroy rejects a destroy operation on a unit that sets prevent_destroy.
 var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
 
+// resolve evaluates one request and describes any rejection as a model.Problem the user can act on.
 func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
+	result, err := resolveUnit(ctx, request, filesystem)
+	if err != nil {
+		return nil, problemFor(err, request.Path)
+	}
+	return result, nil
+}
+
+func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
@@ -63,7 +70,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnitPolicies(ctx, request, cfg); err != nil {
+	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
 		return nil, err
 	}
 	execution, applyFiles, err := unitExecution(ctx, logger, environment, pctx, request, cfg, path)
@@ -110,12 +117,13 @@ func backendGenerationOverlay(ctx context.Context, request model.Request, filesy
 
 // requestPath uses one physical path identity for parsing and CLI execution. On
 // macOS, mixing /var and /private/var breaks upstream diamond dependency reads.
+// Like upstream Terragrunt, a symlinked terragrunt.hcl stays a unit where the link lives.
 func requestPath(path string) (string, error) {
 	path, err := filepath.Abs(strings.TrimPrefix(path, "terragrunt://"))
 	if err != nil {
 		return "", err
 	}
-	return canonicalPath(path)
+	return logicalPath(path)
 }
 
 func evaluationLogger(level string) (log.Logger, error) {
@@ -215,7 +223,11 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 
 func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*config.TerragruntConfig, error) {
 	if request.Phase == "backend" {
-		return config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
+		cfg, err := config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
+		if err != nil {
+			return nil, err
+		}
+		return cfg, checkBackendGeneration(environment.FS, append(pctx.FilesRead.Paths(), path))
 	}
 	return config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
 }
@@ -226,8 +238,8 @@ func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *conf
 	result := &model.Resolution{Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(path), result.Source)
-		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
-			return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
+		if problem := localSourceProblem(environment.FS, path, *cfg.Terraform.Source, result.Source); problem != nil {
+			return nil, problem
 		}
 		result.Folders = []string{result.Source}
 	} else if err := validateRemoteSource(result.Source); err != nil {

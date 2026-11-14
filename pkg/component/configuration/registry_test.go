@@ -9,6 +9,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -53,46 +54,55 @@ func TestFactoryRegistrationAndOptIn(t *testing.T) {
 	require.NoError(t, Attach(t.Context(), config, "list"))
 }
 
-type importRuntime struct {
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_import_runtime_test.go -package=$GOPACKAGE -mock_names=importingRuntime=MockImportingRuntime
+
+// importingRuntime is a configuration runtime that also resolves provider imports.
+type importingRuntime interface {
 	schema.ComponentConfigurationRuntime
-	imports []string
-	err     error
+	schema.ComponentConfigurationImportRuntime
 }
 
-func (r *importRuntime) RegisterImport(_ context.Context, uri string) (bool, error) {
-	r.imports = append(r.imports, uri)
-	return true, r.err
-}
+// The generated mock implements the contract that ImportComponents asserts.
+var _ importingRuntime = (*MockImportingRuntime)(nil)
 
 func TestConfigurationImportRouting(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	for _, uri := range []string{"ordinary", "https://example.com/config.yaml"} {
-		handled, err := RegisterImport(config, uri, &schema.StackImport{})
+		_, handled, err := ImportComponents(config, uri, &schema.StackImport{}, false)
 		require.NoError(t, err)
 		require.False(t, handled)
 	}
-	handled, err := RegisterImport(nil, "terragrunt://live", &schema.StackImport{})
+	_, handled, err := ImportComponents(nil, "terragrunt://live", &schema.StackImport{}, false)
 	require.NoError(t, err)
 	require.False(t, handled)
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {}}
-	_, err = RegisterImport(config, "terragrunt://live", &schema.StackImport{})
+	_, _, err = ImportComponents(config, "terragrunt://live", &schema.StackImport{}, false)
 	require.ErrorContains(t, err, "disabled")
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = schema.ComponentConfiguration{Enabled: true}
-	_, err = RegisterImport(config, "terragrunt://live", &schema.StackImport{})
+	_, _, err = ImportComponents(config, "terragrunt://live", &schema.StackImport{}, false)
 	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
-	runtime := &importRuntime{}
+	// Every expectation is explicit: an unexpected ImportComponents call, such as one from a
+	// static load or a rejected import declaration, fails the test.
+	runtime := NewMockImportingRuntime(gomock.NewController(t))
 	config.ComponentConfigurations = runtime
 	for _, declaration := range []schema.StackImport{{Context: map[string]any{"stage": "dev"}}, {SkipIfMissing: true}, {TTL: "1h"}, {NestedImports: "local"}} {
-		_, err := RegisterImport(config, "terragrunt://live", &declaration)
+		_, _, err := ImportComponents(config, "terragrunt://live", &declaration, false)
 		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	}
-	handled, err = RegisterImport(config, "terragrunt://live", &schema.StackImport{})
+	_, handled, err = ImportComponents(config, "terragrunt://live", &schema.StackImport{}, true)
+	require.True(t, handled)
+	require.ErrorIs(t, err, errUtils.ErrInvalidImport, "static loads must not enter the provider runtime")
+	registration := errors.New("registration failed")
+	gomock.InOrder(
+		runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(map[string]any{"app": map[string]any{}}, true, nil),
+		runtime.EXPECT().ImportComponents(gomock.Any(), "terragrunt://live").Return(map[string]any{"app": map[string]any{}}, true, registration),
+	)
+	fragment, handled, err := ImportComponents(config, "terragrunt://live", &schema.StackImport{}, false)
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
-	runtime.err = errors.New("registration failed")
-	_, err = RegisterImport(config, "terragrunt://live", &schema.StackImport{})
-	require.ErrorIs(t, err, runtime.err)
+	require.Equal(t, map[string]any{"components": map[string]any{"terraform": map[string]any{"app": map[string]any{}}}}, fragment)
+	_, _, err = ImportComponents(config, "terragrunt://live", &schema.StackImport{}, false)
+	require.ErrorIs(t, err, registration)
 }
 
 func TestWatchExcludes(t *testing.T) {
@@ -109,6 +119,26 @@ func TestWatchExcludes(t *testing.T) {
 	}
 	_, err = UnexcludedWatchFiles("relative", files, patterns)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+}
+
+func TestApplyUnitOverridesCopiesEachUnit(t *testing.T) {
+	unit := map[string]any{"vars": map[string]any{"a": 1}}
+	terraform := map[string]any{"app": unit, "invalid": "not a section"}
+	fragments := []map[string]any{{"components": map[string]any{"terraform": terraform}}, {}}
+
+	ApplyUnitOverrides(fragments, nil)
+	require.Equal(t, map[string]any{"vars": map[string]any{"a": 1}}, terraform["app"], "empty overrides must leave units untouched")
+
+	overrides := map[string]any{"vars": map[string]any{"region": "us-west-2"}}
+	ApplyUnitOverrides(fragments, overrides)
+	app := terraform["app"].(map[string]any)
+	require.Equal(t, overrides, app["overrides"])
+	require.Equal(t, map[string]any{"a": 1}, app["vars"])
+	require.NotContains(t, unit, "overrides", "the provider's unit must not be changed")
+	require.Equal(t, "not a section", terraform["invalid"])
+
+	unit["vars"] = "changed later"
+	require.Equal(t, map[string]any{"a": 1}, app["vars"], "replacing a source section must not reach the attached unit")
 }
 
 func TestMatchDependencies(t *testing.T) {
@@ -185,4 +215,22 @@ func TestCompileManifestSchemaWrapsFailures(t *testing.T) {
 	compiled, err := CompileManifestSchema(writeManifestSchema(t, testManifestSchema))
 	require.NoError(t, err)
 	require.NotNil(t, compiled)
+}
+
+// Only a provider owns the backend; an empty `settings.configuration` map leaves ordinary components
+// alone. Each component-level layer, inherited or the component's own, is checked.
+func TestBackendOverridesRequireProviderOwnership(t *testing.T) {
+	s3 := BackendLayer{Type: "s3", Settings: map[string]any{"bucket": "other"}}
+	owned := map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}
+	require.NoError(t, CheckBackendOverrides("app", "dev", map[string]any{"configuration": map[string]any{}}, s3))
+	require.NoError(t, CheckBackendOverrides("app", "dev", map[string]any{}, s3))
+	require.NoError(t, CheckBackendOverrides("app", "dev", owned, BackendLayer{Type: "local"}, BackendLayer{}))
+
+	err := CheckBackendOverrides("app", "dev", owned, BackendLayer{}, s3)
+	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
+	require.ErrorContains(t, err, "backend_type")
+	require.ErrorContains(t, err, `component "app" in stack "dev"`)
+
+	inherited := BackendLayer{Type: "local", Settings: map[string]any{"local": map[string]any{"path": "inherited.tfstate"}}}
+	require.ErrorContains(t, CheckBackendOverrides("app", "dev", owned, inherited), "backend.local")
 }

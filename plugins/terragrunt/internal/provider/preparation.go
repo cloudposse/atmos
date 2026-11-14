@@ -50,6 +50,11 @@ func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.Compo
 // Prepare resolves current inputs after dependencies and returns literal files.
 // Terraform execution remains owned by Atmos.
 func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+	response, err := p.prepare(ctx, request)
+	return response, scoped(err, "prepare", request.GetRootDirectory(), request.GetAddress())
+}
+
+func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
 	req, err := p.componentRequest(ctx, request)
 	if err != nil {
 		return nil, rpcError(err)
@@ -148,7 +153,7 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		if policy == "" {
 			policy = "overwrite"
 		}
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy})
+		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name]})
 	}
 	return response, nil
 }
@@ -175,6 +180,11 @@ func stateIdentity(req model.Request, result *model.Resolution) (*pluginv1.Compo
 
 // Resolve reads backend identity in an overlay, independently of dependency outputs.
 func (p *Provider) Resolve(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+	response, err := p.resolveState(ctx, request)
+	return response, scoped(err, "resolve state", request.GetRootDirectory(), request.GetAddress())
+}
+
+func (p *Provider) resolveState(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
 	req, err := p.componentRequest(ctx, request)
 	if err != nil {
 		return nil, rpcError(err)

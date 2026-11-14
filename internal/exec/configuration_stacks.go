@@ -2,13 +2,13 @@ package exec
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -32,7 +32,11 @@ func mergeConfigurationStacks(config *schema.AtmosConfiguration, stacks map[stri
 		for file, value := range stacks {
 			existing, _ := value.(map[string]any)
 			if file == name || existing["name"] == name {
-				return fmt.Errorf("%w: stack %s", errUtils.ErrDuplicatePluginExtension, name)
+				return errUtils.Build(errUtils.ErrDuplicatePluginExtension).
+					WithExplanationf("A discovered stack is named `%s`, which is already a stack defined in the stack manifests.", name).
+					WithContext("stack", name).
+					WithHintf("Rename the stack manifest `%s`, or move the discovered units to a different directory so their derived stack name differs.", name).
+					Err()
 			}
 		}
 		processed, deferred, err := ProcessStackConfig(config, config.StacksBaseAbsolutePath, config.TerraformDirAbsolutePath, config.HelmfileDirAbsolutePath, config.PackerDirAbsolutePath, config.AnsibleDirAbsolutePath, filepath.Join(config.StacksBaseAbsolutePath, name+".yaml"), definition, false, true, "", map[string]map[string][]string{}, map[string]map[string]any{}, false)
@@ -42,6 +46,19 @@ func mergeConfigurationStacks(config *schema.AtmosConfiguration, stacks map[stri
 		stacks[name], raw[name], contexts[name] = processed, definition, deferred
 	}
 	return nil
+}
+
+// checkConfigurationBackendOverrides passes the component's own backend layers to the
+// configuration package before normalization discards their origin. Global backends remain
+// allowed; the provider replaces them during preparation.
+func checkConfigurationBackendOverrides(opts *ComponentProcessorOptions, result *ComponentProcessorResult, settings map[string]any) error {
+	defer perf.Track(nil, "exec.checkConfigurationBackendOverrides")()
+
+	return configuration.CheckBackendOverrides(
+		opts.Component, opts.StackName, settings,
+		configuration.BackendLayer{Type: result.BaseComponentBackendType, Settings: result.BaseComponentBackendSection},
+		configuration.BackendLayer{Type: result.ComponentBackendType, Settings: result.ComponentBackendSection},
+	)
 }
 
 // validateDiscoveredManifests adapts the configuration package's manifest validation

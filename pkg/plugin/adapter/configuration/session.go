@@ -3,6 +3,7 @@ package configuration
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -44,11 +45,26 @@ type Session struct {
 	registry        map[string]Provider
 	definitions     map[string]map[string]any
 	instances       map[[3]string]*pluginv1.DiscoveredComponent
+	failures        map[failedKey]*failedUnit
 	err             error
-	importMu        sync.Mutex
+	importMu        importLock
 	importProviders map[string]*pluginv1.DiscoverComponentsRequest
-	imports         map[string]bool
-	started         bool
+	// importResults caches each resolved import by URI; imported indexes the same units by
+	// source so Prepare can find a unit under whichever stack imported it.
+	importResults map[string][]*pluginv1.DiscoveredComponent
+	// validationImports caches extra manifest reads without registering executable units.
+	validationImports map[string][]*pluginv1.DiscoveredComponent
+	imported          map[string]*pluginv1.DiscoveredComponent
+	started           bool
+	loadMu            sync.Mutex
+	// configErr holds a settings problem found while reading configuration. Reading never fails on it,
+	// so `atmos config set` can always repair the file; the first use of the provider reports it.
+	configErr error
+	// settingsErrs holds the settings problem of each enabled section that could not be registered,
+	// by section name, so an explicit import of that scheme reports it instead of falling through.
+	settingsErrs map[string]error
+	// options holds the provider-owned keys of each enabled section, by section name.
+	options map[string]map[string]any
 	// prepared records the state identity each instance was prepared with, so a
 	// dependent's output reads can be checked against it within this invocation.
 	prepared sync.Map
@@ -65,32 +81,57 @@ func New(ctx context.Context, config *schema.AtmosConfiguration, command string,
 	if !filepath.IsAbs(root) || loader == nil {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	s := &Session{ctx: ctx, root: root, command: command, loader: loader, done: make(chan struct{}), importProviders: make(map[string]*pluginv1.DiscoverComponentsRequest), imports: make(map[string]bool)}
+	s := &Session{ctx: ctx, root: root, command: command, loader: loader, done: make(chan struct{}), importProviders: make(map[string]*pluginv1.DiscoverComponentsRequest), importResults: make(map[string][]*pluginv1.DiscoveredComponent), imported: make(map[string]*pluginv1.DiscoveredComponent), options: make(map[string]map[string]any)}
 	seen := make(map[string]bool)
 	for _, name := range slices.Sorted(maps.Keys(config.Components.Terraform.ConfigurationProviders)) {
 		settings := config.Components.Terraform.ConfigurationProviders[name]
 		if !settings.Enabled {
 			continue
 		}
-
-		scheme := name
-		if settings.Provider != "" {
-			name = settings.Provider
-		}
-		if seen[name] {
-			return nil, errUtils.ErrDuplicatePluginExtension
-		}
-		seen[name] = true
-		request, err := discoveryRequest(config, &settings, name, root, command)
-		if err != nil {
-			return nil, err
-		}
-		s.importProviders[scheme] = proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
-		if settings.Discovery.Enabled {
-			s.requests = append(s.requests, request)
-		}
+		s.addProvider(config, name, &settings, seen)
 	}
 	return s, nil
+}
+
+// addProvider records one enabled `components.terraform` section. A section that repeats a provider or
+// cannot be read is remembered in configErr, so reading configuration never fails on it.
+func (s *Session) addProvider(config *schema.AtmosConfiguration, scheme string, settings *schema.ComponentConfiguration, seen map[string]bool) {
+	name := scheme
+	if settings.Provider != "" {
+		name = settings.Provider
+	}
+	if seen[name] {
+		s.rejectSection(scheme, errUtils.Build(errUtils.ErrDuplicatePluginExtension).
+			WithExplanationf("More than one section under `components.terraform` enables the configuration provider `%s`.", name).
+			WithContext("config_key", settingsKey(scheme)).
+			WithHint("Keep one enabled section per provider, or point the other section at a different provider with `provider:`.").Err())
+		return
+	}
+	seen[name] = true
+	if err := validateSettings(scheme, settings); err != nil {
+		s.rejectSection(scheme, err)
+		return
+	}
+	request, err := discoveryRequest(config, settings, name, s.root, s.command)
+	if err != nil {
+		s.rejectSection(scheme, invalidSetting(settingsKey(scheme), "The settings cannot be read", "Remove keys under the section that repeat a built-in setting such as `enabled`, `provider`, `mode`, or `discovery`."))
+		return
+	}
+	s.options[scheme] = settings.Options
+	s.importProviders[scheme] = proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
+	if settings.Discovery.Enabled {
+		s.requests = append(s.requests, request)
+	}
+}
+
+// rejectSection remembers a section's settings problem for the first use of the provider, and for
+// an explicit import of its scheme.
+func (s *Session) rejectSection(scheme string, err error) {
+	s.configErr = errors.Join(s.configErr, err)
+	if s.settingsErrs == nil {
+		s.settingsErrs = make(map[string]error)
+	}
+	s.settingsErrs[scheme] = err
 }
 
 // Discover returns isolated definitions and shares only immutable evaluator results within this invocation.
@@ -111,6 +152,35 @@ func (s *Session) Discover(ctx context.Context) (map[string]map[string]any, erro
 	return result, nil
 }
 
+// providers loads every enabled provider once per session, so imports resolved while the
+// stack manifests are read and the later discovery share one plugin activation.
+func (s *Session) providers(ctx context.Context) (map[string]Provider, error) {
+	s.loadMu.Lock()
+	defer s.loadMu.Unlock()
+	if s.configErr != nil {
+		return nil, s.configErr
+	}
+	if s.registry != nil {
+		return s.registry, nil
+	}
+	names := make([]string, 0, len(s.importProviders))
+	for _, request := range s.importProviders {
+		if !slices.Contains(names, request.Provider) {
+			names = append(names, request.Provider)
+		}
+	}
+	slices.Sort(names)
+	registry, err := s.loader(ctx, names)
+	if err != nil {
+		return nil, err
+	}
+	if registry == nil {
+		registry = map[string]Provider{}
+	}
+	s.registry = registry
+	return registry, nil
+}
+
 func (s *Session) ensure(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -119,9 +189,9 @@ func (s *Session) ensure(ctx context.Context) error {
 		return err
 	}
 	s.once.Do(func() {
-		s.importMu.Lock()
+		s.importMu.lock()
 		s.started = true
-		s.importMu.Unlock()
+		s.importMu.unlock()
 		go func() {
 			defer close(s.done)
 			// Shared discovery is owned by the session: one caller giving up must not
@@ -151,26 +221,53 @@ func environment() map[string]string {
 }
 
 func discoveryRequest(config *schema.AtmosConfiguration, settings *schema.ComponentConfiguration, name, root, command string) (*pluginv1.DiscoverComponentsRequest, error) {
-	if settings.Mode != "" && settings.Mode != "native" {
-		return nil, errUtils.ErrPluginUnsupportedExtension
-	}
-	if settings.Discovery.Enabled && len(settings.Discovery.IncludedPaths) == 0 {
-		return nil, errUtils.ErrPluginInvalidConfig
-	}
-	for _, pattern := range append(slices.Clone(settings.Discovery.IncludedPaths), settings.Discovery.ExcludedPaths...) {
-		if !filepath.IsLocal(pattern) {
-			return nil, errUtils.ErrPluginInvalidConfig
-		}
-	}
 	value, err := adapter.EncodeObject(settings)
 	if err != nil {
 		return nil, err
 	}
 	includes := slices.Clone(settings.Discovery.IncludedPaths)
-	if !settings.Discovery.Enabled {
+	switch {
+	case !settings.Discovery.Enabled:
 		includes = nil
+	case len(includes) == 0:
+		includes = slices.Clone(defaultIncludedPaths)
 	}
 	env := environment()
 	env["ATMOS_TERRAFORM_BINARY"] = config.Components.Terraform.Command
 	return &pluginv1.DiscoverComponentsRequest{Provider: name, RootDirectory: root, IncludePaths: includes, ExcludePaths: slices.Clone(settings.Discovery.ExcludedPaths), ProviderConfiguration: value, Operation: &pluginv1.ComponentOperation{Command: command, Mode: "native"}, Invocation: &pluginv1.Invocation{Environment: env}}, nil
+}
+
+// importLock serializes import evaluation and the session's import records. A waiter for an
+// import can give up when its context ends, instead of waiting for another import to finish.
+// The zero value is unlocked.
+type importLock struct {
+	once    sync.Once
+	channel chan struct{}
+}
+
+func (l *importLock) slot() chan struct{} {
+	l.once.Do(func() { l.channel = make(chan struct{}, 1) })
+	return l.channel
+}
+
+// lock waits for the lock.
+func (l *importLock) lock() {
+	l.slot() <- struct{}{}
+}
+
+// unlock releases the lock.
+func (l *importLock) unlock() {
+	<-l.slot()
+}
+
+// lockContext waits for the lock until either context ends, and reports why it gave up.
+func (l *importLock) lockContext(ctx, session context.Context) error {
+	select {
+	case l.slot() <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-session.Done():
+		return session.Err()
+	}
 }

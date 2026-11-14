@@ -5,15 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	ctyjson "github.com/zclconf/go-cty/cty/json"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -82,15 +80,15 @@ func settings(value *pluginv1.ComponentValue) error {
 	if err := decode(value, &config); err != nil {
 		return err
 	}
-	for key := range config {
+	for _, key := range slices.Sorted(maps.Keys(config)) {
 		switch key {
 		case "enabled", "provider", "mode", "discovery":
 		default:
-			return ErrUnsupported
+			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, and `discovery`. Check the spelling.")
 		}
 	}
 	if mode, _ := config["mode"].(string); mode != "" && mode != "native" {
-		return ErrUnsupported
+		return settingProblem("mode", "Unsupported value for `components.terraform.terragrunt.mode`", "The only supported mode is `native`. Remove `mode` or set `mode: native`.")
 	}
 	return nil
 }
@@ -154,40 +152,10 @@ func sources(root string, resolved *model.Resolution) ([]*pluginv1.ComponentSour
 	return result, nil
 }
 
-func rpcError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return status.Error(codes.Canceled, "Terragrunt evaluation canceled")
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return status.Error(codes.DeadlineExceeded, "Terragrunt evaluation timed out")
-	}
-	// HCL diagnostics can contain secrets. Do not copy evaluator payloads into RPC errors.
-	if errors.Is(err, ErrUnsupported) {
-		return status.Error(codes.Unimplemented, ErrUnsupported.Error())
-	}
-	// Unsupported hook semantics name only hook identifiers and commands, so the reason is safe to show.
-	if errors.Is(err, engine.ErrUnsupportedExecution) {
-		return status.Error(codes.Unimplemented, err.Error())
-	}
-	result := status.New(codes.InvalidArgument, "Terragrunt evaluation failed")
-	var diagnostic *engine.DiscoveryError
-	if errors.As(err, &diagnostic) {
-		// Never serialize the wrapped evaluator error or any evaluated HCL values.
-		detailed, detailErr := result.WithDetails(&errdetails.ErrorInfo{
-			Domain: "atmos.terragrunt.discovery.v1", Reason: diagnostic.Category,
-			Metadata: map[string]string{"file": diagnostic.File},
-		})
-		if detailErr == nil {
-			return detailed.Err()
-		}
-	}
-	return result.Err()
-}
-
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
 func (p *Provider) Validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
 	if err := validate(ctx, request); err != nil {
-		return nil, rpcError(err)
+		return nil, scoped(rpcError(err), "validate", request.GetRootDirectory(), request.GetAddress())
 	}
 	return &pluginv1.ValidateResponse{}, nil
 }

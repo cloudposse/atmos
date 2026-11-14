@@ -636,6 +636,11 @@ func buildLocalMetadata(params *localMetadataParams) *WorkdirMetadata {
 		if !params.changed {
 			metadata.UpdatedAt = params.existingMetadata.UpdatedAt
 		}
+		// A stamp recorded for this same local source stays valid; dropping it would force a
+		// needless refresh on the next run. A stamp of another source is not carried over.
+		if params.existingMetadata.Source == params.componentPath {
+			metadata.SourceStamp = params.existingMetadata.SourceStamp
+		}
 	}
 
 	return metadata

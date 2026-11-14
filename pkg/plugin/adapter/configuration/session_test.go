@@ -94,8 +94,7 @@ func TestSessionRejectsInvalidScope(t *testing.T) {
 		change func(*schema.ComponentConfiguration)
 		want   error
 	}{
-		{"mode", func(c *schema.ComponentConfiguration) { c.Mode = "cli" }, errUtils.ErrPluginUnsupportedExtension},
-		{"empty", func(c *schema.ComponentConfiguration) { c.Discovery.IncludedPaths = nil }, errUtils.ErrPluginInvalidConfig},
+		{"mode", func(c *schema.ComponentConfiguration) { c.Mode = "cli" }, errUtils.ErrPluginInvalidConfig},
 		{"escape", func(c *schema.ComponentConfiguration) { c.Discovery.IncludedPaths = []string{"../**"} }, errUtils.ErrPluginInvalidConfig},
 		{"options", func(c *schema.ComponentConfiguration) { c.Options = map[string]any{"enabled": false} }, errUtils.ErrPluginInvalidConfig},
 	} {
@@ -104,11 +103,15 @@ func TestSessionRejectsInvalidScope(t *testing.T) {
 			settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
 			test.change(&settings)
 			config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
-			_, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) {
+			// Reading configuration never fails on plugin settings, so `atmos config set` can repair them.
+			session, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) {
 				t.Fatal("must not load")
 				return nil, nil
 			})
+			require.NoError(t, err)
+			_, err = session.Discover(t.Context())
 			require.ErrorIs(t, err, test.want)
+			require.NotEmpty(t, errUtils.AllHints(err), "the error must say how to fix the setting")
 		})
 	}
 	config := enabledConfig(t)
@@ -117,8 +120,30 @@ func TestSessionRejectsInvalidScope(t *testing.T) {
 	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
 	settings.Provider = "terragrunt"
 	config.Components.Terraform.ConfigurationProviders["duplicate"] = settings
-	_, err = New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+	session, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+	require.NoError(t, err)
+	_, err = session.Discover(t.Context())
 	require.ErrorIs(t, err, errUtils.ErrDuplicatePluginExtension)
+}
+
+// Enabling discovery without included_paths scopes it to the whole project instead of failing.
+func TestDiscoveryWithoutIncludedPathsDefaultsToTheProject(t *testing.T) {
+	config := enabledConfig(t)
+	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
+	settings.Discovery.IncludedPaths = nil
+	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform")
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		require.Equal(t, []string{"**"}, request.IncludePaths)
+		return &pluginv1.DiscoverComponentsResponse{}, nil
+	})
+	session, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	_, err = session.Discover(t.Context())
+	require.NoError(t, err)
 }
 
 func TestSessionCancellationAndFailure(t *testing.T) {
@@ -197,9 +222,6 @@ func TestSessionRejectsConflictingDiscovery(t *testing.T) {
 		{name: "unsafe stack", change: func(c *pluginv1.DiscoveredComponent) { c.Address.Stack = "../outside" }, want: errUtils.ErrPluginProtocol},
 		{name: "unsupported engine", change: func(c *pluginv1.DiscoveredComponent) { c.Engine = "terragrunt" }, want: errUtils.ErrPluginUnsupportedExtension},
 		{name: "invalid values", change: func(c *pluginv1.DiscoveredComponent) { c.Configuration = &pluginv1.ComponentValue{} }, want: errUtils.ErrPluginProtocol},
-		{name: "out of scope dependency", change: func(c *pluginv1.DiscoveredComponent) {
-			c.Dependencies = []*pluginv1.ComponentDependency{{Target: &pluginv1.ComponentAddress{Stack: "other", Component: "network", ComponentType: "terraform"}}}
-		}, want: errUtils.ErrPluginInvalidConfig},
 		{name: "duplicate", duplicate: true, want: errUtils.ErrDuplicatePluginExtension},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -386,36 +408,44 @@ func TestRevisionDiscoveryIsolated(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestRevisionDropsImportOnlyScopeButKeepsImportProviders(t *testing.T) {
+func TestRevisionKeepsImportProvidersButNotImportedUnits(t *testing.T) {
 	config := enabledConfig(t)
 	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
 	settings.Discovery.Enabled = false
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
-	head, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+	directories(t, config.BasePathAbsolute, "live")
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil
+	}).Times(2)
+	head, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
 	require.NoError(t, err)
-	handled, err := head.RegisterImport(t.Context(), "terragrunt://live")
+	components, handled, err := head.ImportComponents(t.Context(), "terragrunt://live")
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Len(t, head.requests, 1, "HEAD imports create a pending import-only request")
+	require.Contains(t, components, "app")
 
 	baseRoot := t.TempDir()
+	directories(t, baseRoot, "previous")
 	rebased, err := head.ForRevision(baseRoot)
 	require.NoError(t, err)
 	revision := rebased.(*Session)
-	require.Empty(t, revision.requests, "the revision must not inherit HEAD's import-only scope")
+	require.Empty(t, revision.requests, "the revision must not inherit HEAD's discovery scope")
+	require.Empty(t, revision.imported, "the revision must not inherit HEAD's imported units")
 	require.Equal(t, baseRoot, revision.importProviders["terragrunt"].RootDirectory)
 	require.Equal(t, config.BasePathAbsolute, head.importProviders["terragrunt"].RootDirectory, "HEAD's provider template is unchanged")
 
 	// The revision accepts its own YAML imports independently of HEAD's.
-	handled, err = revision.RegisterImport(t.Context(), "terragrunt://previous")
+	components, handled, err = revision.ImportComponents(t.Context(), "terragrunt://previous")
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Equal(t, []string{"terragrunt://previous"}, revision.requests[0].Imports)
-	require.Equal(t, []string{"terragrunt://live"}, head.requests[0].Imports)
+	require.Contains(t, components, "app")
+	require.Contains(t, revision.imported, "live/app/terragrunt.hcl")
 }
 
-// Output reads must use the state the dependency was prepared with, not the
-// state its remote_state selects under the dependent's environment.
 func TestPreparationRejectsDependencyStateDrift(t *testing.T) {
 	stateAt := func(path string) *pluginv1.ComponentStateIdentity {
 		backend, err := adapter.EncodeObject(map[string]any{"path": path})

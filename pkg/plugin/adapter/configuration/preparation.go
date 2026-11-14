@@ -11,6 +11,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentconfiguration "github.com/cloudposse/atmos/pkg/component/configuration"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
@@ -31,6 +33,31 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
+	result, err := s.runProviderPrepare(ctx, info, selected)
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := preparedConfiguration(result)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkSourcesInRoot(ctx, s.root, prepared.Sources); err != nil {
+		return nil, err
+	}
+	return prepared, nil
+}
+
+// runProviderPrepare asks the owning provider to reevaluate the selected unit with every effect
+// granted, after checking module ownership and engine selection. Only an explicit --command
+// flag may switch the engine discovered from the global configuration. The dependencies the
+// scheduler ordered are rechecked first, so no provider effect runs when they changed.
+func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
+	if err := checkSourceOverride(info, selected.instance); err != nil {
+		return nil, err
+	}
+	if engine := expectedEngine(info, selected.instance); engine != selected.instance.Engine && info.ComponentCommand == "" {
+		return nil, engineMismatch(info, selected.instance.Engine, engine)
+	}
 	if err := s.checkPreparationDependencies(ctx, selected.instance, selected.request.Invocation.Environment, info.SubCommand); err != nil {
 		return nil, err
 	}
@@ -45,11 +72,55 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if result.State != nil {
 		s.prepared.Store(addressKey(selected.instance.Address), proto.Clone(result.State))
 	}
-	return preparedConfiguration(result)
+	return result, nil
+}
+
+// checkSourceOverride rejects a stack that points the component at another module. The module
+// belongs to the unit's own `terraform { source }`; every other `source` attribute (version, ttl,
+// included paths) is ordinary configuration and merges normally.
+func checkSourceOverride(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent) error {
+	discovered, err := adapter.DecodeObject(instance.Configuration)
+	if err != nil {
+		return err
+	}
+	want, got := sourceURI(discovered["source"]), sourceURI(info.ComponentSection["source"])
+	if want == "" || got == "" || want == got {
+		return nil
+	}
+	// Either URI can carry credentials, so the error shows only their redacted forms.
+	return errUtils.Build(fmt.Errorf("%w: the Terraform module of component %q in stack %q is owned by its unit, so `source.uri: %s` cannot replace `%s`", errUtils.ErrConfigurationOverrideUnsupported, info.ComponentFromArg, info.Stack, downloader.RedactSource(got), downloader.RedactSource(want))).
+		WithContext("component", info.ComponentFromArg).
+		WithContext("stack", info.Stack).
+		WithHint("Change `terraform { source = ... }` in the unit's `terragrunt.hcl`, or define a regular component with its own `source`").
+		Err()
+}
+
+// sourceURI returns the module location of a component `source`, written as a string or as a map with `uri`.
+func sourceURI(source any) string {
+	switch value := source.(type) {
+	case string:
+		return value
+	case map[string]any:
+		uri, _ := value["uri"].(string)
+		return uri
+	}
+	return ""
+}
+
+// engineMismatch explains a command that selects a different engine than the one the component was
+// discovered with. Stack configuration may pick another version or path of the same engine, but
+// not switch between Terraform and OpenTofu, because the unit's lock file and state belong to one.
+func engineMismatch(info *schema.ConfigAndStacksInfo, discovered, selected string) error {
+	return errUtils.Build(fmt.Errorf("%w: command %q selects the %s engine, but component %q was discovered for %s", errUtils.ErrConfigurationOverrideUnsupported, info.Command, selected, info.ComponentFromArg, discovered)).
+		WithContext("component", info.ComponentFromArg).
+		WithContext("stack", info.Stack).
+		WithContext("command", info.Command).
+		WithHint("Set `command` to another " + discovered + " executable, or change `components.terraform.command` in `atmos.yaml` to switch every unit to " + selected).
+		Err()
 }
 
 // expectedEngine is the engine of the command this invocation runs. Discovery records the engine of
-// the globally configured command, but --command or a component command may select another one,
+// the globally configured command, but --command may explicitly select another one,
 // and the provider prepares for the binary it is given. Any other engine is a protocol violation.
 func expectedEngine(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent) string {
 	if info.Command == "" {
@@ -74,11 +145,27 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 	if err := s.ensure(ctx); err != nil {
 		return nil, err
 	}
-	instance := s.instances[[3]string{info.Stack, "terraform", info.ComponentFromArg}]
-	if instance == nil {
-		return nil, errUtils.ErrPluginInvalidConfig
+	// A unit that failed discovery reports its own diagnostic, not a generic lookup failure.
+	if err := s.failureFor(info.Stack, info.ComponentFromArg); err != nil {
+		return nil, err
 	}
-	provider, ok := s.registry[instance.Provider]
+	instance, err := s.instanceFor(info)
+	if err != nil {
+		return nil, err
+	}
+	if instance == nil {
+		return nil, errUtils.Build(errUtils.ErrPluginInvalidConfig).
+			WithExplanation("The component is not provided by any enabled configuration provider.").
+			WithContext("component", info.ComponentFromArg).
+			WithContext("stack", info.Stack).
+			WithHint("Run `atmos list instances` to see the discovered and imported components").
+			Err()
+	}
+	registry, err := s.providers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	provider, ok := registry[instance.Provider]
 	if !ok {
 		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
@@ -94,38 +181,120 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 	return &selectedComponent{request: request, provider: provider, instance: instance}, nil
 }
 
+// instanceFor finds the unit behind a component. A discovered unit is addressed by its derived
+// stack; an imported unit lives in whichever stack imported it, so it is found by its source file
+// and addressed as the stack and component the user selected. When a discovered unit and an
+// imported unit claim the same stack and component, neither is chosen: the conflict is reported.
+func (s *Session) instanceFor(info *schema.ConfigAndStacksInfo) (*pluginv1.DiscoveredComponent, error) {
+	configuration, _ := info.ComponentSettingsSection["configuration"].(map[string]any)
+	source, _ := configuration["source"].(string)
+	s.importMu.lock()
+	imported := s.imported[source]
+	s.importMu.unlock()
+	if discovered := s.instances[[3]string{info.Stack, "terraform", info.ComponentFromArg}]; discovered != nil {
+		if imported != nil && imported.Source != discovered.Source {
+			return nil, componentconfiguration.ImportConflict(info.ComponentFromArg, discovered.Source, imported.Source, "stack "+info.Stack+": one discovered, one imported")
+		}
+		return discovered, nil
+	}
+	if imported == nil {
+		return nil, nil
+	}
+	instance := proto.Clone(imported).(*pluginv1.DiscoveredComponent)
+	instance.Address = &pluginv1.ComponentAddress{Stack: info.Stack, Component: info.ComponentFromArg, ComponentType: terraformType}
+	return instance, nil
+}
+
 // Reevaluate the inventory without preparation effects before any dependency
 // outputs are read. Identity and component environment overrides must not change
 // the units that the scheduler ordered using the original discovery result.
 func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pluginv1.DiscoveredComponent, env map[string]string, command string) error {
-	for _, original := range s.requests {
-		if original.Provider != instance.Provider {
-			continue
-		}
-		request := proto.Clone(original).(*pluginv1.DiscoverComponentsRequest)
-		request.Invocation = &pluginv1.Invocation{Environment: env}
-		request.Operation = &pluginv1.ComponentOperation{Command: command, Mode: "native"}
-		response, err := s.registry[instance.Provider].Discover(ctx, request)
-		if err != nil {
-			return err
-		}
-		current := make(map[[3]string]*pluginv1.DiscoveredComponent)
-		if err := addDiscovered(make(map[string]map[string]any), current, response); err != nil {
-			return err
-		}
-		selected := current[addressKey(instance.Address)]
-		if !sameDependencyUnit(instance, selected) || !sameDependencies(instance.Dependencies, selected.Dependencies) {
+	baseline := s.preparationBaseline(instance)
+	if baseline == nil {
+		return errUtils.ErrPluginInvalidConfig
+	}
+	request := proto.Clone(baseline.request).(*pluginv1.DiscoverComponentsRequest)
+	request.Invocation = &pluginv1.Invocation{Environment: env}
+	request.Operation = &pluginv1.ComponentOperation{Command: command, Mode: "native"}
+	response, err := s.registry[instance.Provider].Discover(ctx, request)
+	if err != nil {
+		return err
+	}
+	current := make(map[[3]string]*pluginv1.DiscoveredComponent)
+	if err := addDiscovered(make(map[string]map[string]any), current, response); err != nil {
+		return err
+	}
+	selected := current[addressKey(baseline.self.Address)]
+	if !sameDependencyUnit(baseline.self, selected) || !sameDependencies(baseline.self.Dependencies, selected.Dependencies) {
+		return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
+	}
+	for _, dependency := range selected.Dependencies {
+		key := addressKey(dependency.Target)
+		if !sameDependencyUnit(baseline.units[key], current[key]) {
 			return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
 		}
-		for _, dependency := range selected.Dependencies {
-			key := addressKey(dependency.Target)
-			if !sameDependencyUnit(s.instances[key], current[key]) {
-				return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
+	}
+	return s.checkDependencyStates(ctx, baseline, selected.Dependencies, env, command)
+}
+
+// preparationEvidence is the discovery request that found a unit, every unit that request found,
+// and the unit as that request reported it, all under the provider's own addresses.
+type preparationEvidence struct {
+	request *pluginv1.DiscoverComponentsRequest
+	units   map[[3]string]*pluginv1.DiscoveredComponent
+	self    *pluginv1.DiscoveredComponent
+}
+
+// preparationBaseline finds the evidence for a discovered unit in its provider's discovery
+// request, and for an imported unit in the import that resolved it. An imported unit is
+// addressed by the importing stack, so its provider address comes from the cached import.
+func (s *Session) preparationBaseline(instance *pluginv1.DiscoveredComponent) *preparationEvidence {
+	if discovered := s.instances[addressKey(instance.Address)]; discovered != nil && discovered.Source == instance.Source {
+		for _, request := range s.requests {
+			if request.Provider == instance.Provider {
+				return &preparationEvidence{request: request, units: s.instances, self: discovered}
 			}
 		}
-		return s.checkDependencyStates(ctx, original, selected.Dependencies, env, command)
+		return nil
 	}
-	return errUtils.ErrPluginInvalidConfig
+	return s.importBaseline(instance)
+}
+
+// importBaseline finds the cached import that resolved an imported unit.
+func (s *Session) importBaseline(instance *pluginv1.DiscoveredComponent) *preparationEvidence {
+	s.importMu.lock()
+	defer s.importMu.unlock()
+	reported := s.imported[instance.Source]
+	if reported == nil {
+		return nil
+	}
+	for key, units := range s.importResults {
+		if !slices.Contains(units, reported) {
+			continue
+		}
+		template := s.importTemplate(instance.Provider)
+		if template == nil {
+			return nil
+		}
+		request := proto.Clone(template).(*pluginv1.DiscoverComponentsRequest)
+		request.IncludePaths, request.ExcludePaths, request.Imports = nil, nil, []string{key}
+		byAddress := make(map[[3]string]*pluginv1.DiscoveredComponent, len(units))
+		for _, unit := range units {
+			byAddress[addressKey(unit.Address)] = unit
+		}
+		return &preparationEvidence{request: request, units: byAddress, self: reported}
+	}
+	return nil
+}
+
+// importTemplate returns the import request template of a provider, under any configured alias.
+func (s *Session) importTemplate(provider string) *pluginv1.DiscoverComponentsRequest {
+	for _, template := range s.importProviders {
+		if template.Provider == provider {
+			return template
+		}
+	}
+	return nil
 }
 
 // checkDependencyStates keeps output reads on the dependency's own state. The
@@ -133,13 +302,14 @@ func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pl
 // environment, so an identity or component override can select different state.
 // The reference is the identity the dependency was prepared with in this
 // invocation, or else its identity under the discovery environment.
-func (s *Session) checkDependencyStates(ctx context.Context, discovery *pluginv1.DiscoverComponentsRequest, dependencies []*pluginv1.ComponentDependency, env map[string]string, command string) error {
+func (s *Session) checkDependencyStates(ctx context.Context, baseline *preparationEvidence, dependencies []*pluginv1.ComponentDependency, env map[string]string, command string) error {
+	discovery := baseline.request
 	for _, dependency := range dependencies {
 		if dependency.Kind != pluginv1.ComponentDependency_OUTPUT {
 			continue
 		}
 		key := addressKey(dependency.Target)
-		target := s.instances[key]
+		target := baseline.units[key]
 		current, err := s.dependencyState(ctx, discovery, target, env, command)
 		if err != nil {
 			return err
@@ -221,7 +391,7 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	}
 	prepared.Execution = execution
 	for _, file := range result.Files {
-		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive})
+		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive, UnitFileCopy: file.UnitFileCopy})
 	}
 	for _, source := range result.Sources {
 		prepared.Sources = append(prepared.Sources, schema.ComponentConfigurationSource{Path: source.Path, Directory: source.Kind == pluginv1.ComponentSource_DIRECTORY})
@@ -264,7 +434,7 @@ func preparationEnvironment(info *schema.ConfigAndStacksInfo) map[string]string 
 
 func (s *Session) providerSettings(name string) *pluginv1.ComponentValue {
 	var settings *pluginv1.ComponentValue
-	for _, request := range s.requests {
+	for _, request := range s.importProviders {
 		if request.Provider == name {
 			settings = request.ProviderConfiguration
 		}

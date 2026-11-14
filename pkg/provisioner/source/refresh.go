@@ -148,7 +148,11 @@ func publishSource(ctx context.Context, stage, target string, config map[string]
 	if err := rejectActiveStateLock(target); err != nil {
 		return err
 	}
-	changes, incoming, err := sourceChanges(stage, target, next, previous, runtimePaths(target, config))
+	protected := runtimePaths(target, config)
+	if err := rejectLegacyResources(target, next, protected, hostGeneratedFiles(target, moduleRoots(target, config))); err != nil {
+		return err
+	}
+	changes, incoming, err := sourceChanges(stage, target, next, previous, protected)
 	if err != nil {
 		return err
 	}
@@ -165,6 +169,88 @@ func publishSource(ctx context.Context, stage, target string, config map[string]
 	}
 	publication := sourcePublication{stage: stage, target: target, backup: backup, rename: rename}
 	return publication.publish(ctx, changes, incoming)
+}
+
+// Without a receipt, neither metadata nor a source stamp proves ownership of a
+// removed file. Refuse to bless stale configuration; let the caller reconcile it.
+// Every Terraform configuration file absent from the incoming source counts, except
+// runtime files and the files Atmos itself writes into the workdir on every run.
+func rejectLegacyResources(target string, next sourceFiles, protected, generated map[string]bool) error {
+	if _, err := os.Lstat(filepath.Join(target, sourceFilesManifest)); !os.IsNotExist(err) {
+		return err
+	}
+	incoming := make(map[string]bool, len(next.Files))
+	for _, name := range next.Files {
+		incoming[name] = true
+	}
+	err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(target, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if protectedRuntimePath(path, relative, protected) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !staleLegacyFile(entry, relative, incoming, generated) {
+			return nil
+		}
+		return fmt.Errorf("%w: legacy workdir %s has no source ownership receipt and contains %s absent from the incoming source; inspect this file and move it outside the workdir or remove it if obsolete, then retry", errUtils.ErrSourceCopyFailed, target, relative)
+	})
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// hostWorkdirFiles are Terraform files Atmos generates in a component workdir on every run.
+var hostWorkdirFiles = map[string]bool{"backend.tf.json": true, "providers_override.tf.json": true}
+
+// generatedFilesManifest lists, per module root, the files a configuration provider generated.
+const generatedFilesManifest = ".atmos/generated-files.json"
+
+// staleLegacyFile reports a Terraform configuration file that the incoming source no longer has
+// and that Atmos did not write into the workdir itself.
+func staleLegacyFile(entry fs.DirEntry, relative string, incoming, generated map[string]bool) bool {
+	if entry.IsDir() || !terraformConfigurationFile(entry.Name()) {
+		return false
+	}
+	return !incoming[relative] && !generated[relative] && !hostWorkdirFiles[entry.Name()]
+}
+
+func terraformConfigurationFile(name string) bool {
+	return strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".tf.json")
+}
+
+// hostGeneratedFiles returns the target-relative paths of files recorded as generated in each
+// module root. An unreadable manifest records nothing, so its files are inspected like any other.
+func hostGeneratedFiles(target string, roots []string) map[string]bool {
+	generated := map[string]bool{}
+	for _, root := range roots {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(generatedFilesManifest)))
+		if err != nil {
+			continue
+		}
+		var recorded struct {
+			Files map[string]string `json:"files"`
+		}
+		if json.Unmarshal(data, &recorded) != nil {
+			continue
+		}
+		for name := range recorded.Files {
+			relative, err := filepath.Rel(target, filepath.Join(root, filepath.FromSlash(name)))
+			if err == nil && filepath.IsLocal(relative) {
+				generated[filepath.ToSlash(relative)] = true
+			}
+		}
+	}
+	return generated
 }
 
 func readSourceInventory(target string) (sourceFiles, error) {

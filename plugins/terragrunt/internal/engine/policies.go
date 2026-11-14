@@ -74,24 +74,21 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 // checkUnitPolicies rejects Terragrunt semantics that the native adapter cannot
 // represent faithfully. Backend reads skip the version probe, which may execute
 // the selected binary.
-func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.TerragruntConfig) error {
+func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.TerragruntConfig, path string) error {
 	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
-		return fmt.Errorf("native adapter requires terraform.source")
+		return missingSourceProblem(path)
 	}
 	if request.Phase != "backend" {
 		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
 			return err
 		}
 	}
-	if cfg.TerraformBinary != "" {
-		return fmt.Errorf("native adaptation of terraform_binary is not implemented")
+	if err := rejectUnsupported(cfg, path); err != nil {
+		return err
 	}
 	// Hooks and extra arguments are adapted as execution data by unitExecution.
 	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
 		return ErrPreventDestroy
-	}
-	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
-		return fmt.Errorf("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
 	}
 	return nil
 }
@@ -105,5 +102,11 @@ func validateRemoteSource(source string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("native adapter does not support this module source transport")
+	scheme, _, found := strings.Cut(source, "://")
+	return &model.Problem{
+		Code: model.CodeInvalidSource, Summary: "Unsupported module source transport",
+		Detail: fmt.Sprintf("The module source scheme %q is not supported. Registry sources such as `tfr://` need Terragrunt's version selection and are not interchangeable with Git or archive sources.", scheme),
+		Hints:  []string{"Use a local path, a `git::https://`, `git::ssh://`, or `https://` source, or a Git source pinned with `?ref=`."},
+		Key:    "terraform.source", Safe: found, Err: ErrUnsupportedExecution,
+	}
 }

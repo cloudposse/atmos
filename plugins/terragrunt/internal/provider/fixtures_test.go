@@ -113,5 +113,6 @@ func TestExplicitStackStateAndPreparation(t *testing.T) {
 	require.Len(t, prepared.Files, 1)
 	require.Equal(t, "backend.tf", prepared.Files[0].Path)
 	require.Contains(t, string(prepared.Files[0].Content), `backend "local"`)
+	require.True(t, prepared.Files[0].Sensitive, "the host keeps generated backend bytes out of saved-plan records")
 	require.NotNil(t, prepared.Inputs)
 }

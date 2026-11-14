@@ -1,8 +1,10 @@
 package backend
 
 import (
+	"fmt"
 	"path/filepath"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -28,7 +30,15 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	if err != nil {
 		return err
 	}
-	return u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode)
+	if err := u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode); err != nil {
+		return err
+	}
+	if _, owned := info.ComponentSettingsSection["configuration"]; owned {
+		if err := recordHostBackend(workingDir); err != nil {
+			return fmt.Errorf("%w: record ownership of %s: %w", errUtils.ErrBackendFileGeneration, backendFileName, err)
+		}
+	}
+	return nil
 }
 
 const backendFileMode = 0o600

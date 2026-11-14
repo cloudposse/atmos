@@ -13,7 +13,6 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
-	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
@@ -75,8 +74,8 @@ func (e *Executor) prepareComponentExecution(
 		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
 			return nil, err
 		}
-		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
-			return nil, err
+		if err := writePreparedConfiguration(componentPath, prepared); err != nil {
+			return nil, fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
 		}
 	}
 
@@ -299,13 +298,14 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
-	if mainErr != nil && !lifecycleOwnsRecovery(info) {
+	// A completed -detailed-exitcode plan reports changes with status 2 after writing the plan, so
+	// it is neither recovered nor returned before the reviewed plan is recorded. A component with
+	// provider-supplied hooks already recovered inside its lifecycle.
+	if mainErr != nil && !completedPlanWithChanges(mainErr) && !lifecycleOwnsRecovery(info) {
 		mainErr = e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
 			mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, append(slices.Clone(opts), captureArgs)...)
 	}
-	// An explicit -detailed-exitcode plan reports changes with status 2 after writing the
-	// plan, so the reviewed plan is recorded before that status is returned.
-	if mainErr != nil && !isExplicitDetailedPlanChanges(info, allArgsAndFlags, mainErr) {
+	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		return mainErr
 	}
 	// Policy plans run against a private artifact that is removed after the guard
@@ -320,9 +320,11 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	return mainErr
 }
 
-// isExplicitDetailedPlanChanges reports plan's "changes present" status from -detailed-exitcode.
-func isExplicitDetailedPlanChanges(info *schema.ConfigAndStacksInfo, args []string, err error) bool {
-	return info.SubCommand == subcommandPlan && slices.Contains(args, detailedExitCodeFlag) && resolveExitCode(err) == detailedExitCodeChangesDetected
+// completedPlanWithChanges accepts only the completed phase itself, not a joined
+// or wrapped failure that also contains a status-two result.
+func completedPlanWithChanges(err error) bool {
+	var changes *successfulPlanChanges
+	return errors.As(err, &changes) && err == changes //nolint:err113,errorlint // Identity is required: errors.Is would also accept joined failures.
 }
 
 // recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command

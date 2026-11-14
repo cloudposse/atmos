@@ -39,7 +39,8 @@ inputs = {
 }
 
 func TestInputWatchesConservativelyTrackDynamicPaths(t *testing.T) {
-	for _, expression := range []string{`file(local.path)`, `file("${get_terragrunt_dir()}/config.json")`, `fileset(local.root, "*.yaml")`, `find_in_parent_folders("optional.hcl")`, `file(null)`, `file(123)`, `file()`} {
+	// Expressions that need the environment, outputs, or missing locals cannot be resolved.
+	for _, expression := range []string{`file(local.path)`, `file("${get_env("DIR")}/config.json")`, `file(dependency.net.outputs.path)`, `fileset(local.root, "*.yaml")`, `find_in_parent_folders("optional.hcl")`, `file(null)`, `file(123)`, `file()`} {
 		t.Run(expression, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, "terragrunt.hcl")
@@ -64,7 +65,8 @@ func TestInputWatchesFailuresAndIncludedInputs(t *testing.T) {
 	// failing the whole inventory.
 	require.NoError(t, afero.WriteFile(fs, path, []byte("inputs = {"), 0o600))
 	require.NoError(t, trackInputSources(fs, root, result))
-	require.Equal(t, []string{path}, result.Files)
+	// The lock file beside the unit is always watched as well.
+	require.Equal(t, []string{filepath.Join(root, lockFileName), path}, result.Files)
 	require.Empty(t, result.Folders)
 	require.NoError(t, afero.WriteFile(fs, path, []byte(`locals { unrelated = "constant" }`), 0o600))
 	require.NoError(t, trackInputSources(fs, root, result))
