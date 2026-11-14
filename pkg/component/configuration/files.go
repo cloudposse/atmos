@@ -27,7 +27,7 @@ func CreateSensitiveTemp(directory string) (*os.File, string, error) {
 	defer perf.Track(nil, "configuration.CreateSensitiveTemp")()
 	root, err := os.OpenRoot(directory)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("%w: open temporary file directory %s: %w", errUtils.ErrFileOperation, directory, err)
 	}
 	defer root.Close()
 	for range sensitiveTempAttempts {
@@ -37,11 +37,11 @@ func CreateSensitiveTemp(directory string) (*os.File, string, error) {
 			continue
 		}
 		if err != nil {
-			return nil, "", err
+			return nil, "", fmt.Errorf("%w: create temporary file in %s: %w", errUtils.ErrFileOperation, directory, err)
 		}
 		return file, filepath.Join(directory, name), nil
 	}
-	return nil, "", os.ErrExist
+	return nil, "", fmt.Errorf("%w: create temporary file in %s after %d attempts: %w", errUtils.ErrFileOperation, directory, sensitiveTempAttempts, os.ErrExist)
 }
 
 // WriteFiles materializes evaluated bytes under the provisioned module, without templating.
@@ -212,21 +212,39 @@ func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists b
 	return nil
 }
 
+// replaceSensitiveWindowsFile writes the bytes to a secured temporary file and renames it over
+// an existing destination only after the write and close succeed, so a failed write leaves the
+// previous file unchanged.
 func replaceSensitiveWindowsFile(root *os.Root, file schema.ComponentConfigurationFile, exists bool) error {
-	output, err := openGeneratedFile(root, file, exists)
+	if !exists {
+		output, err := openGeneratedFile(root, file, false)
+		if err != nil {
+			return generatedFileError(file.Path, err)
+		}
+		if err := writeSensitiveGeneratedFile(output, file); err != nil {
+			_ = root.Remove(file.Path)
+			return err
+		}
+		return nil
+	}
+	temporary := filepath.Join(filepath.Dir(file.Path), "."+filepath.Base(file.Path)+"."+rand.Text()+".tmp")
+	output, err := createSensitiveTempFile(root, temporary)
 	if err != nil {
 		return generatedFileError(file.Path, err)
 	}
-	return writeSensitiveGeneratedFile(output, file, exists)
+	if err := writeSensitiveGeneratedFile(output, file); err != nil {
+		_ = root.Remove(temporary)
+		return err
+	}
+	if err := root.Rename(temporary, file.Path); err != nil {
+		_ = root.Remove(temporary)
+		return generatedFileError(file.Path, err)
+	}
+	return nil
 }
 
 // writeSensitiveGeneratedFile retains both operation and close failures on the secured handle.
-func writeSensitiveGeneratedFile(output *os.File, file schema.ComponentConfigurationFile, exists bool) error {
-	if exists {
-		if err := output.Truncate(0); err != nil {
-			return generatedFileError(file.Path, errors.Join(err, output.Close()))
-		}
-	}
+func writeSensitiveGeneratedFile(output *os.File, file schema.ComponentConfigurationFile) error {
 	_, writeErr := output.Write(file.Content)
 	if err := errors.Join(writeErr, output.Close()); err != nil {
 		return generatedFileError(file.Path, err)

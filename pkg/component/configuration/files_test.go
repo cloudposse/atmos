@@ -1,7 +1,6 @@
 package configuration
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -231,29 +230,64 @@ func TestWriteFilesClassifiesRemovalFailure(t *testing.T) {
 }
 
 func TestSensitiveGeneratedFileClassifiesHandleFailures(t *testing.T) {
-	for _, exists := range []bool{false, true} {
-		t.Run(map[bool]string{false: "write", true: "truncate"}[exists], func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "secret.tf")
-			require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
-			output, err := os.Open(path)
-			require.NoError(t, err)
-			require.NoError(t, output.Close())
-			err = writeSensitiveGeneratedFile(output, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement")}, exists)
-			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-			require.ErrorIs(t, err, os.ErrClosed)
-			require.ErrorContains(t, err, "generated file secret.tf")
-			var joined interface{ Unwrap() []error }
-			// The classified error wraps a join retaining the operation and close errors.
-			outer, ok := err.(interface{ Unwrap() []error })
-			require.True(t, ok)
-			require.True(t, errors.As(outer.Unwrap()[1], &joined))
-			require.Len(t, joined.Unwrap(), 2)
-			for _, cause := range joined.Unwrap() {
-				require.ErrorIs(t, cause, os.ErrClosed)
-			}
-			content, err := os.ReadFile(path)
-			require.NoError(t, err)
-			require.Equal(t, "original", string(content))
-		})
-	}
+	path := filepath.Join(t.TempDir(), "secret.tf")
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+	output, err := os.Open(path)
+	require.NoError(t, err)
+	require.NoError(t, output.Close())
+	err = writeSensitiveGeneratedFile(output, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrClosed)
+	require.ErrorContains(t, err, "generated file secret.tf")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "original", string(content))
+}
+
+// A failed replacement of a sensitive file must leave the existing destination untouched and
+// remove the temporary file it staged.
+func TestReplaceSensitiveFilePreservesDestinationOnFailure(t *testing.T) {
+	directory := t.TempDir()
+	// The destination is a non-empty directory, so the final rename cannot succeed.
+	blocked := filepath.Join(directory, "secret.tf")
+	require.NoError(t, os.MkdirAll(blocked, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(blocked, "keep"), []byte("original"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	err = replaceSensitiveWindowsFile(root, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement"), Sensitive: true}, true)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	content, err := os.ReadFile(filepath.Join(blocked, "keep"))
+	require.NoError(t, err)
+	require.Equal(t, "original", string(content))
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+}
+
+func TestReplaceSensitiveFileReplacesExistingBytes(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "secret.tf")
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	require.NoError(t, replaceSensitiveWindowsFile(root, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement"), Sensitive: true}, true))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", string(content))
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+}
+
+func TestCreateSensitiveTempClassifiesFailures(t *testing.T) {
+	_, _, err := CreateSensitiveTemp(filepath.Join(t.TempDir(), "missing"))
+	require.ErrorIs(t, err, errUtils.ErrFileOperation)
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	file, name, err := CreateSensitiveTemp(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	require.FileExists(t, name)
 }
