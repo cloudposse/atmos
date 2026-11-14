@@ -259,6 +259,7 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 
 	rt.EXPECT().Build(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, b *ctr.BuildConfig) error {
+			require.NotNil(t, b.Output, "build diagnostics must stream to the viewport")
 			assert.Equal(t, filepath.Join(componentRoot, "app"), b.Context)
 			assert.Equal(t, filepath.Join(componentRoot, "app", "Dockerfile"), b.Dockerfile)
 			assert.Equal(t, []string{"img:1"}, b.Tags)

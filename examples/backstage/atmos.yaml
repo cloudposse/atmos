@@ -52,11 +52,11 @@ commands:
           - type: script
             interpreter: starlark
             script: |
-              atmos.container("build", "backstage", flags = {"stack": "local"})
+              atmos.container("build", "backstage", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage", flags = {"stack": "local"})
               runner = module.load("scripts/modules/runner.star")
               runner.build_binary()
-              atmos.container("build", "backstage-runner", flags = {"stack": "local"})
+              atmos.container("build", "backstage-runner", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage-runner", flags = {"stack": "local"})
               ui.info("TechDocs: http://localhost:3000/catalog/default/component/payments/docs")
               ui.info("Actions: http://localhost:3001/atmos/deployments/actions")
