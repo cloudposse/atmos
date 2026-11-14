@@ -92,6 +92,79 @@ errors {
 	require.EqualValues(t, 2, discoveryCalls.Load())
 }
 
+// failingRegistryUnit writes a unit whose registry always answers 503 and counts the discovery requests.
+func failingRegistryUnit(t *testing.T, policies string) (request model.Request, discoveryCalls *atomic.Int32) {
+	t.Helper()
+	discoveryCalls = &atomic.Int32{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/terraform.json", func(w http.ResponseWriter, _ *http.Request) {
+		discoveryCalls.Add(1)
+		http.Error(w, "temporary", http.StatusServiceUnavailable)
+	})
+	server := httptest.NewTLSServer(mux)
+	t.Cleanup(server.Close)
+	previous := registryClient
+	registryClient = server.Client()
+	t.Cleanup(func() { registryClient = previous })
+	address, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	source := "tfr://" + address.Host + "/acme/vpc/aws?version=1.0.0"
+	request = registryUnit(t, `source = "`+source+`"`)
+	file := "terraform {\n  source = \"" + source + "\"\n}\nerrors {\n" + policies + "\n}\n"
+	require.NoError(t, os.WriteFile(request.Path, []byte(file), 0o644))
+	return request, discoveryCalls
+}
+
+const registryRetryPolicy = `  retry "registry" {
+    retryable_errors = ["status code 503"]
+    max_attempts = 3
+    sleep_interval_sec = 0
+  }`
+
+// A failure that matches an ignore policy and a retry policy is ignored on the first attempt: ignore
+// policies are read before retry policies, and the unit keeps the source it was written with.
+func TestRegistryResolutionFailureMatchingIgnoreAndRetryIsIgnoredWithoutRetrying(t *testing.T) {
+	request, discoveryCalls := failingRegistryUnit(t, registryRetryPolicy+`
+  ignore "registry_down" {
+    ignorable_errors = ["status code 503"]
+    message = "registry is down"
+  }`)
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, discoveryCalls.Load(), "an ignored failure must not be retried")
+	require.NotNil(t, result.RunIgnored)
+	assert.Equal(t, model.IgnoredRun{Policy: "registry_down", Message: "registry is down"}, *result.RunIgnored)
+	assert.Contains(t, result.Source, "tfr://", "no source was resolved, so the unit keeps the source it was written with")
+	assert.Nil(t, result.RegistryAuth)
+	assert.NotEmpty(t, result.WorkingDir)
+}
+
+// A failure no ignore policy matches is retried exactly as before and then fails.
+func TestRegistryResolutionFailureNotIgnoredIsStillRetried(t *testing.T) {
+	request, discoveryCalls := failingRegistryUnit(t, registryRetryPolicy+`
+  ignore "unrelated" {
+    ignorable_errors = ["certificate has expired"]
+  }`)
+	_, err := Resolve(t.Context(), request)
+	var problem *model.Problem
+	require.ErrorAs(t, err, &problem)
+	assert.Equal(t, model.CodeInvalidSource, problem.Code)
+	assert.EqualValues(t, 3, discoveryCalls.Load(), "a failure that no ignore policy matches is retried up to max_attempts")
+}
+
+func TestMatchingRegistryIgnore(t *testing.T) {
+	policies := []model.IgnorePolicy{
+		{Name: "vetoed", Patterns: []string{"status code 503", "!acme"}},
+		{Name: "first", Patterns: []string{"status code 503"}},
+		{Name: "second", Patterns: []string{"status code"}},
+	}
+	got := matchingRegistryIgnore(policies, "GET https://reg/acme: \x1b[31mstatus code\n 503\x1b[0m")
+	require.NotNil(t, got)
+	assert.Equal(t, "first", got.Name, "text is cleaned like a source fetch and the first match decides")
+	assert.Nil(t, matchingRegistryIgnore(policies, "connection refused"))
+	assert.Nil(t, matchingRegistryIgnore(nil, "status code 503"))
+}
+
 func TestRegistrySourceResolvesAtPreparation(t *testing.T) {
 	host, requests := registryServer(t)
 	request := registryUnit(t, `source = "tfr://`+host+`/acme/vpc/aws//modules/nat?version=1.4.0"`)
