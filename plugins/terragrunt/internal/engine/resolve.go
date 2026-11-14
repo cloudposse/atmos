@@ -66,6 +66,12 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if err := resolveBackend(result, cfg); err != nil {
 		return nil, err
 	}
+	if request.Phase != "backend" {
+		result.Overlay, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := convertGeneration(result, cfg); err != nil {
 		return nil, err
 	}
@@ -154,6 +160,9 @@ func parsingContext(request model.Request, path string) *config.ParsingContext {
 	pctx.OriginalTerraformCommand = command
 	pctx.TerraformCliArgs.SetCommand(command).AppendArgument(request.Arguments...)
 	pctx.DownloadDir = filepath.Join(filepath.Dir(path), ".terragrunt-cache")
+	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
+		pctx.DownloadDir = localPath(filepath.Dir(path), configured)
+	}
 	pctx.AutoInit = true
 	pctx.MaxFoldersToCheck = options.DefaultMaxFoldersToCheck
 	return pctx
@@ -179,7 +188,7 @@ func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *conf
 		return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
 	}
 	download := pctx.DownloadDir
-	if cfg.DownloadDir != "" {
+	if cfg.DownloadDir != "" && request.Environment["TG_DOWNLOAD_DIR"] == "" {
 		download = localPath(filepath.Dir(path), cfg.DownloadDir)
 	}
 	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {

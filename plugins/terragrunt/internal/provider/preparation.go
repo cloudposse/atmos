@@ -143,8 +143,15 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		return nil, err
 	}
 	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched}
-	for _, name := range slices.Sorted(maps.Keys(result.Generated)) {
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: "overwrite"})
+	files := maps.Clone(result.Overlay)
+	if files == nil {
+		files = map[string][]byte{}
+	}
+	for name, content := range result.Generated {
+		files[name] = []byte(content)
+	}
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: "overwrite"})
 	}
 	return response, nil
 }

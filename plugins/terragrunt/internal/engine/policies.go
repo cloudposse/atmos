@@ -82,6 +82,9 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 			return err
 		}
 	}
+	if cfg.RemoteState != nil && len(cfg.RemoteState.Encryption) > 0 {
+		return fmt.Errorf("native adaptation of remote_state.encryption is not implemented")
+	}
 	if cfg.TerraformBinary != "" {
 		return fmt.Errorf("native adaptation of terraform_binary is not implemented")
 	}

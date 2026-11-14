@@ -109,6 +109,8 @@ func TestExplicitStackStateAndPreparation(t *testing.T) {
 	require.NoError(t, decode(prepared.State.Backend, &after))
 	require.Equal(t, before, after)
 	require.Equal(t, filepath.Join(root, "state/dev/network.tfstate"), after["path"])
-	require.Empty(t, prepared.Files)
+	require.Len(t, prepared.Files, 2)
+	require.Equal(t, "terragrunt.hcl", prepared.Files[0].Path)
+	require.Equal(t, "terragrunt.values.hcl", prepared.Files[1].Path)
 	require.NotNil(t, prepared.Inputs)
 }

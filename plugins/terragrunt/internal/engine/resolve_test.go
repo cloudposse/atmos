@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -135,7 +136,7 @@ func TestVersionConstraintsUseSelectedExecutable(t *testing.T) {
 
 func TestResolveGuardsAndDownloadDirectory(t *testing.T) {
 	request := nativeUnit(t, `download_dir = "custom-cache"
-inputs = { value = "constant" }
+inputs = { value = "constant", working = get_working_dir() }
 generate "disabled" {
  path = "not-valid"
  disable = true
@@ -151,6 +152,7 @@ generate "disabled" {
 	result, err = Resolve(t.Context(), request)
 	require.NoError(t, err)
 	require.Contains(t, result.WorkingDir, "environment-cache")
+	require.Equal(t, result.WorkingDir, result.Inputs["working"])
 	request.LogLevel = "not-a-level"
 	_, err = Resolve(t.Context(), request)
 	require.Error(t, err)
@@ -168,4 +170,36 @@ generate "disabled" {
 		_, err = Resolve(t.Context(), request)
 		require.Error(t, err)
 	}
+}
+
+func TestResolvePreservesUnitOverlay(t *testing.T) {
+	request := nativeUnit(t, "")
+	directory := filepath.Dir(request.Path)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "override.tf"), []byte("# overlay"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, ".hidden"), []byte("ignored"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, ".tflint.hcl"), []byte("# lint"), 0o644))
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []byte("# overlay"), result.Overlay["override.tf"])
+	require.Equal(t, []byte("# lint"), result.Overlay[".tflint.hcl"])
+	require.NotContains(t, result.Overlay, ".hidden")
+	data, err := os.ReadFile(request.Path)
+	require.NoError(t, err)
+	configuration := strings.Replace(string(data), "terraform { source =", "terraform {\n include_in_copy = [\".hidden\"]\n exclude_from_copy = [\"override.tf\"]\n source =", 1)
+	configuration = strings.Replace(configuration, " }", "\n}", 1)
+	require.NoError(t, os.WriteFile(request.Path, []byte(configuration), 0o644))
+	result, err = Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []byte("ignored"), result.Overlay[".hidden"])
+	require.NotContains(t, result.Overlay, "override.tf")
+}
+
+func TestRejectRemoteStateEncryption(t *testing.T) {
+	request := nativeUnit(t, `remote_state {
+ backend = "local"
+ config = { path = "state.tfstate" }
+ encryption = { key_provider = "pbkdf2" }
+}`)
+	_, err := Resolve(t.Context(), request)
+	require.ErrorContains(t, err, "remote_state.encryption")
 }
