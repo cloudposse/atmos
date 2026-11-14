@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -194,11 +195,28 @@ func NewGoogleEngine(apiKey, cseID, baseURL string) *GoogleEngine {
 
 	return &GoogleEngine{
 		client: &http.Client{
-			Timeout: DefaultHTTPTimeout,
+			Timeout:       DefaultHTTPTimeout,
+			CheckRedirect: googleCheckRedirect(apiKey != ""),
 		},
 		apiKey:  apiKey,
 		cseID:   cseID,
 		baseURL: baseURL,
+	}
+}
+
+// googleMaxRedirects is the redirect limit of Go's default client policy.
+const googleMaxRedirects = 10
+
+// googleCheckRedirect applies the endpoint check to every redirect target, because a redirect keeps
+// the query string and the API key travels in it. The target is checked without its query so the
+// key never reaches an error message.
+func googleCheckRedirect(hasAPIKey bool) func(req *http.Request, via []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) >= googleMaxRedirects {
+			return fmt.Errorf("%w: stopped after %d redirects", errUtils.ErrWebSearchFailed, googleMaxRedirects)
+		}
+		target := url.URL{Scheme: req.URL.Scheme, Host: req.URL.Host, Path: req.URL.Path}
+		return base.ValidateProviderBaseURL(target.String(), hasAPIKey)
 	}
 }
 
@@ -274,6 +292,11 @@ func (e *GoogleEngine) fetchGoogleResults(ctx context.Context, apiURL string) ([
 	// Execute request (URL is constructed from configured search engine base URL, not user input).
 	resp, err := e.client.Do(req) //nolint:gosec // URL is built from trusted config, not user input.
 	if err != nil {
+		// A *url.Error prints the request URL, which carries the API key, so keep only its cause.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
 		return nil, wrapSearchError(errUtils.ErrWebSearchFailed, err)
 	}
 	defer resp.Body.Close()

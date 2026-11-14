@@ -236,6 +236,54 @@ func TestGoogleEngine_Search_AllowsLoopbackHTTP(t *testing.T) {
 	assert.Equal(t, 1, response.Count)
 }
 
+// roundTripperFunc adapts a function to http.RoundTripper.
+type roundTripperFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestGoogleEngine_Search_RejectsInsecureRedirect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://search.example.com/customsearch/v1?"+r.URL.RawQuery, http.StatusFound)
+	}))
+	defer server.Close()
+
+	mockTransport := new(MockRoundTripper)
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+	// The first hop goes to the local server; any later hop would reach the mock.
+	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == strings.TrimPrefix(server.URL, "http://") {
+			return http.DefaultTransport.RoundTrip(req)
+		}
+		return mockTransport.RoundTrip(req)
+	})
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	assert.ErrorIs(t, err, errUtils.ErrAIInsecureBaseURL)
+	assert.NotContains(t, err.Error(), "test-api-key")
+	mockTransport.AssertNotCalled(t, "RoundTrip", mock.Anything)
+}
+
+func TestGoogleEngine_Search_FollowsSecureRedirect(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "test-api-key", r.URL.Query().Get("key"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items": [{"title": "Result 1", "link": "https://example.com/1", "snippet": "Description 1"}]}`))
+	}))
+	defer target.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/customsearch/v1?"+r.URL.RawQuery, http.StatusFound)
+	}))
+	defer server.Close()
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+
+	response, err := engine.Search(context.Background(), "test query", 5)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, response.Count)
+}
+
 func TestConvertGoogleResults(t *testing.T) {
 	items := []googleItem{
 		{
