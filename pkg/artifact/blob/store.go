@@ -116,6 +116,10 @@ type GetOptions struct {
 
 	// Length is the number of bytes to read from Offset. Zero or negative reads to the end.
 	Length int64
+
+	// SkipETag tells the store the caller does not need the ETag, so a store that derives it from
+	// the content may leave it empty instead of reading the whole object first.
+	SkipETag bool
 }
 
 // IsRange reports whether the read is a partial read.
@@ -129,6 +133,10 @@ func (o GetOptions) IsRange() bool {
 type StatOptions struct {
 	// IncludeTags also loads the object tags, which may cost an extra request.
 	IncludeTags bool
+
+	// SkipETag tells the store the caller does not need the ETag, so a store that derives it from
+	// the content may leave it empty instead of reading the whole object first.
+	SkipETag bool
 }
 
 // DeleteOptions describe one delete.

@@ -108,7 +108,7 @@ func ignoreMissing(err error) error {
 // objectAt returns the object stored at a walked path, or false for directories, bookkeeping
 // files, keys outside the prefix, and files that vanished.
 func (s *Store) objectAt(name string, d fs.DirEntry, prefix string) (entry, bool, error) {
-	if d.IsDir() || reserved(name, d.Name()) {
+	if d.IsDir() || s.reserved(name, d.Name()) {
 		return entry{}, false, nil
 	}
 	key := name
@@ -122,10 +122,11 @@ func (s *Store) objectAt(name string, d fs.DirEntry, prefix string) (entry, bool
 	return entry{key: key, info: info}, info.Mode().IsRegular(), nil
 }
 
-// reserved reports whether a file is one of the store's own bookkeeping files.
-func reserved(name, base string) bool {
+// reserved reports whether a file is one of the store's own bookkeeping files. Plain-file stores
+// write no attribute files, so an attribute-looking name there is an object.
+func (s *Store) reserved(name, base string) bool {
 	return strings.HasPrefix(base, tempPrefix) ||
-		strings.HasSuffix(base, attrsSuffix) ||
+		(!s.plainFiles && strings.HasSuffix(base, attrsSuffix)) ||
 		(base == lockName && path.Dir(name) == ".")
 }
 

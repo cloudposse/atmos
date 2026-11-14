@@ -54,7 +54,7 @@ func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.P
 	}
 	defer release()
 
-	if err := s.checkCondition(root, key, target, opts.Condition); err != nil {
+	if err := s.checkCondition(ctx, root, key, target, opts.Condition); err != nil {
 		return nil, err
 	}
 	if err := s.commit(root, key, target, pending, fromPut(opts).empty()); err != nil {
@@ -75,6 +75,9 @@ func (s *Store) validatePut(ctx context.Context, key string, opts blob.PutOption
 	}
 	if opts.Condition.Kind == blob.ConditionIfMatch && opts.Condition.ETag == "" {
 		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: if-match requires an ETag", errUtils.ErrBlobInvalid))
+	}
+	if s.plainFiles && !fromPut(opts).empty() {
+		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: plain-file stores cannot store content type, metadata, or tags", errUtils.ErrBlobInvalid))
 	}
 	return checkContext(ctx, blob.OpPut, key)
 }
@@ -141,7 +144,7 @@ func copyBody(ctx context.Context, dst io.Writer, body io.Reader, size int64) (i
 }
 
 // checkCondition evaluates the put condition against the current object. Callers hold the lock.
-func (s *Store) checkCondition(root *os.Root, key, target string, cond blob.Condition) error {
+func (s *Store) checkCondition(ctx context.Context, root *os.Root, key, target string, cond blob.Condition) error {
 	if cond.Kind == blob.ConditionNone {
 		return nil
 	}
@@ -158,7 +161,7 @@ func (s *Store) checkCondition(root *os.Root, key, target string, cond blob.Cond
 			return preconditionFailed(blob.OpPut, key, "object already exists")
 		}
 	case blob.ConditionIfMatch:
-		return matchETag(root, blob.OpPut, key, state, cond.ETag)
+		return matchETag(ctx, root, objectRef{op: blob.OpPut, key: key}, state, cond.ETag)
 	}
 	return nil
 }
@@ -179,13 +182,20 @@ func inspect(root *os.Root, path string) (fileState, error) {
 	return fileState{path: path, info: info, exists: err == nil && info.Mode().IsRegular()}, nil
 }
 
+// objectRef names the object an operation addresses, for error reporting.
+type objectRef struct {
+	op  string
+	key string
+}
+
 // matchETag fails with NotFound when the object is missing and with a precondition failure when
 // its ETag differs from want.
-func matchETag(root *os.Root, op, key string, state fileState, want string) error {
+func matchETag(ctx context.Context, root *os.Root, ref objectRef, state fileState, want string) error {
+	op, key := ref.op, ref.key
 	if !state.exists {
 		return blob.NewError(blob.KindNotFound, op, key, nil)
 	}
-	current, err := etagOf(root, state.path)
+	current, err := etagOf(ctx, root, state.path)
 	if err != nil {
 		return wrapIO(op, key, err)
 	}
@@ -208,22 +218,12 @@ func (s *Store) commit(root *os.Root, key, target string, pending *staged, noAtt
 	if !s.plainFiles {
 		return s.commitManaged(root, key, pending, noAttrs, rootRenameReplace)
 	}
-	return commitPlain(root, key, target, pending, noAttrs)
+	return commitPlain(root, key, target, pending)
 }
 
-// commitPlain installs a staged object in a plain-files store: attributes first, then the object.
-func commitPlain(root *os.Root, key, target string, pending *staged, noAttrs bool) error {
-	switch {
-	case pending.attrsTemp != "":
-		if err := rootRenameReplace(root, pending.attrsTemp, attrsPath(target)); err != nil {
-			return wrapIO(blob.OpPut, key, err)
-		}
-		pending.attrsTemp = ""
-	case noAttrs:
-		if err := root.Remove(attrsPath(target)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return wrapIO(blob.OpPut, key, err)
-		}
-	}
+// commitPlain installs a staged object in a plain-files store. It never touches attribute paths:
+// a name such as "a.tar.atmos-blob.json" is an independent legacy object there.
+func commitPlain(root *os.Root, key, target string, pending *staged) error {
 	if err := rootRenameReplace(root, pending.tempPath, target); err != nil {
 		return wrapIO(blob.OpPut, key, err)
 	}

@@ -74,8 +74,8 @@ func (s *Store) Capabilities() blob.Capabilities {
 		ConditionalPut:    true,
 		ConditionalDelete: true,
 		Multipart:         true,
-		Tags:              true,
-		Metadata:          true,
+		Tags:              !s.plainFiles,
+		Metadata:          !s.plainFiles,
 		Range:             true,
 		Listing:           true,
 		ListDelimiter:     true,
@@ -91,7 +91,7 @@ func (s *Store) validate(op, key string) error {
 	if err := blob.ValidateKey(validationKey); err != nil {
 		return err
 	}
-	if key == lockName || hasReservedSegment(key) {
+	if strings.EqualFold(key, lockName) || s.hasReservedSegment(key) {
 		return blob.NewError(blob.KindInvalid, op, key, fmt.Errorf("%w: key uses a reserved name", errUtils.ErrBlobInvalid))
 	}
 	return nil
@@ -99,10 +99,13 @@ func (s *Store) validate(op, key string) error {
 
 // hasReservedSegment reports whether any slash-separated segment of key looks like one of the
 // store's own temporary or attribute files. A reserved directory name would otherwise hide the
-// objects under it from listings, which skip those names at every level.
-func hasReservedSegment(key string) bool {
+// objects under it from listings, which skip those names at every level. The comparison folds
+// case: on case-insensitive volumes a differently cased name addresses the same file. Plain-file
+// stores keep no attribute files, so for them an attribute-looking name is an ordinary object.
+func (s *Store) hasReservedSegment(key string) bool {
 	for _, segment := range strings.Split(key, "/") {
-		if strings.HasPrefix(segment, tempPrefix) || strings.HasSuffix(segment, attrsSuffix) {
+		folded := strings.ToLower(segment)
+		if strings.HasPrefix(folded, tempPrefix) || (!s.plainFiles && strings.HasSuffix(folded, attrsSuffix)) {
 			return true
 		}
 	}

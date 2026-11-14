@@ -181,7 +181,7 @@ func TestDescribeHashesOpenedFile(t *testing.T) {
 	root, err := store.openRoot(false)
 	require.NoError(t, err)
 	defer root.Close()
-	info, err := store.describe(root, blob.OpGet, "k", file, false)
+	info, err := store.describe(context.Background(), root, describeTarget{op: blob.OpGet, key: "k", file: file}, describeOptions{})
 	require.NoError(t, err)
 	sum := sha256.Sum256([]byte("old"))
 	assert.Equal(t, contentETag(sum[:]), info.ETag)
@@ -315,5 +315,142 @@ func TestListPrefixHonorsLiteralBackslashes(t *testing.T) {
 	for _, prefix := range []string{"/abs", "a\x00b", "../x"} {
 		_, err = literal.List(context.Background(), blob.ListOptions{Prefix: prefix})
 		require.ErrorIs(t, err, errUtils.ErrBlobInvalid, "%q stays rejected", prefix)
+	}
+}
+
+func TestReservedNamesFoldCase(t *testing.T) {
+	store := newStore(t)
+	for _, key := range []string{
+		".ATMOS-BLOB-TMP-TRANSACTION",
+		"d/.Atmos-Blob-Tmp-x",
+		"d/x.ATMOS-BLOB.JSON",
+		".ATMOS-BLOB.LOCK",
+		"Mixed/.atmos-blob-tmp-dir/child",
+	} {
+		_, err := store.Put(context.Background(), key, bytes.NewReader([]byte("x")), blob.PutOptions{Size: 1})
+		require.Error(t, err, key)
+		assert.ErrorIs(t, err, errUtils.ErrBlobInvalid, key)
+	}
+	assert.NoDirExists(t, filepath.Join(store.Root(), "d"), "a rejected key stages nothing")
+}
+
+func TestDeletePrefixOnlyDirectoryIsMissingObject(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts []Option
+	}{
+		{name: "managed"},
+		{name: "plain", opts: []Option{WithPlainFileCompatibility()}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newStore(t, tc.opts...)
+			ctx := context.Background()
+			_, err := store.Put(ctx, "prefix/child", bytes.NewReader([]byte("child")), blob.PutOptions{Size: 5})
+			require.NoError(t, err)
+
+			require.NoError(t, store.Delete(ctx, "prefix", blob.DeleteOptions{}), "an unconditional delete of a missing object succeeds")
+
+			info, err := store.Stat(ctx, "prefix/child", blob.StatOptions{})
+			require.NoError(t, err, "the children stay in place")
+			assert.Equal(t, int64(5), info.Size)
+			assert.DirExists(t, filepath.Join(store.Root(), "prefix"))
+
+			err = store.Delete(ctx, "prefix", blob.DeleteOptions{IfMatch: `"any"`})
+			require.ErrorIs(t, err, errUtils.ErrBlobNotFound, "a conditional delete of a prefix reports the object as missing")
+			assert.FileExists(t, filepath.Join(store.Root(), "prefix", "child"))
+		})
+	}
+}
+
+func TestETagHashingObservesCancellation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "big")
+	content := bytes.Repeat([]byte("x"), 1<<20)
+	require.NoError(t, os.WriteFile(path, content, 0o644))
+	file, err := openFile(path)
+	require.NoError(t, err)
+	defer file.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = etagOpen(ctx, file)
+	require.ErrorIs(t, err, context.Canceled, "hashing stops instead of scanning the whole file")
+
+	etag, err := etagOpen(context.Background(), file)
+	require.NoError(t, err)
+	sum := sha256.Sum256(content)
+	assert.Equal(t, contentETag(sum[:]), etag, "an active context hashes the full content")
+}
+
+func TestPlainFilesTreatAttributeLookingNamesAsObjects(t *testing.T) {
+	store := newStore(t, WithPlainFileCompatibility())
+	ctx := context.Background()
+	const object, lookalike = "a.tar", "a.tar" + attrsSuffix
+	put := func(key, body string) {
+		t.Helper()
+		_, err := store.Put(ctx, key, bytes.NewReader([]byte(body)), blob.PutOptions{Size: int64(len(body))})
+		require.NoError(t, err, key)
+	}
+	read := func(key string) string {
+		t.Helper()
+		obj, err := store.Get(ctx, key, blob.GetOptions{})
+		require.NoError(t, err, key)
+		defer obj.Body.Close()
+		data, err := io.ReadAll(obj.Body)
+		require.NoError(t, err)
+		return string(data)
+	}
+
+	put(object, "tar-v1")
+	put(lookalike, "not json at all")
+	assert.Equal(t, "tar-v1", read(object), "an unrelated object beside the data is not parsed as attributes")
+
+	put(object, "tar-v2")
+	assert.Equal(t, "tar-v2", read(object))
+	assert.Equal(t, "not json at all", read(lookalike), "updating a.tar leaves the independent artifact untouched")
+
+	page, err := store.List(ctx, blob.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, page.Objects, 2, "both names are listed as objects")
+	assert.Equal(t, object, page.Objects[0].Key)
+	assert.Equal(t, lookalike, page.Objects[1].Key)
+
+	require.NoError(t, store.Delete(ctx, object, blob.DeleteOptions{}))
+	assert.Equal(t, "not json at all", read(lookalike), "deleting a.tar leaves the independent artifact untouched")
+
+	_, err = store.Put(ctx, "tagged", bytes.NewReader([]byte("x")), blob.PutOptions{Size: 1, Tags: map[string]string{"a": "b"}})
+	require.ErrorIs(t, err, errUtils.ErrBlobInvalid, "attributes cannot be stored without a sidecar")
+	assert.False(t, store.Capabilities().Tags)
+	assert.False(t, store.Capabilities().Metadata)
+}
+
+func TestSkipETagAvoidsHashingTheObject(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	_, err := store.Put(ctx, "k", bytes.NewReader([]byte("body")), blob.PutOptions{Size: 4})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		skip     bool
+		wantETag bool
+	}{
+		{name: "default computes the content ETag", wantETag: true},
+		{name: "skip leaves the ETag empty", skip: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stat, err := store.Stat(ctx, "k", blob.StatOptions{SkipETag: tc.skip})
+			require.NoError(t, err)
+			assert.Equal(t, int64(4), stat.Size)
+			assert.Equal(t, tc.wantETag, stat.ETag != "")
+
+			obj, err := store.Get(ctx, "k", blob.GetOptions{SkipETag: tc.skip})
+			require.NoError(t, err)
+			defer obj.Body.Close()
+			data, err := io.ReadAll(obj.Body)
+			require.NoError(t, err)
+			assert.Equal(t, "body", string(data), "the body is complete either way")
+			assert.Equal(t, tc.wantETag, obj.ETag != "")
+		})
 	}
 }

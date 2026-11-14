@@ -52,7 +52,7 @@ func (s *Store) Get(ctx context.Context, key string, opts blob.GetOptions) (*blo
 	if err != nil {
 		return nil, wrapIO(blob.OpGet, key, err)
 	}
-	info, err := s.describe(root, blob.OpGet, key, file, false)
+	info, err := s.describe(ctx, root, describeTarget{op: blob.OpGet, key: key, file: file}, describeOptions{skipETag: opts.SkipETag})
 	if err != nil {
 		_ = file.Close()
 		return nil, err
@@ -109,11 +109,27 @@ func (s *Store) Stat(ctx context.Context, key string, opts blob.StatOptions) (*b
 		return nil, wrapIO(blob.OpStat, key, err)
 	}
 	defer file.Close()
-	return s.describe(root, blob.OpStat, key, file, opts.IncludeTags)
+	return s.describe(ctx, root, describeTarget{op: blob.OpStat, key: key, file: file}, describeOptions{withTags: opts.IncludeTags, skipETag: opts.SkipETag})
+}
+
+// describeTarget is the open file a description is built for.
+type describeTarget struct {
+	op   string
+	key  string
+	file *os.File
+}
+
+// describeOptions select the optional parts of a description.
+type describeOptions struct {
+	withTags bool
+
+	// skipETag leaves the ETag empty so a metadata check does not hash the whole object.
+	skipETag bool
 }
 
 // describe builds ObjectInfo for an open regular file. A directory is not an object.
-func (s *Store) describe(root *os.Root, op, key string, file *os.File, withTags bool) (*blob.ObjectInfo, error) {
+func (s *Store) describe(ctx context.Context, root *os.Root, target describeTarget, opts describeOptions) (*blob.ObjectInfo, error) {
+	op, key, file := target.op, target.key, target.file
 	stat, err := file.Stat()
 	if err != nil {
 		return nil, wrapIO(op, key, err)
@@ -121,16 +137,20 @@ func (s *Store) describe(root *os.Root, op, key string, file *os.File, withTags 
 	if !stat.Mode().IsRegular() {
 		return nil, blob.NewError(blob.KindNotFound, op, key, fmt.Errorf("%w: key is a prefix, not an object", errUtils.ErrBlobNotFound))
 	}
-	etag, err := etagOpen(file)
-	if err != nil {
-		return nil, wrapIO(op, key, err)
+	var etag string
+	if !opts.skipETag {
+		if etag, err = etagOpen(ctx, file); err != nil {
+			return nil, wrapIO(op, key, err)
+		}
 	}
-	a, err := readAttrs(root, filepath.FromSlash(key))
-	if err != nil {
-		return nil, blob.NewError(blob.KindOther, op, key, fmt.Errorf("read attributes: %w", err))
+	var a attrs
+	if !s.plainFiles {
+		if a, err = readAttrs(root, filepath.FromSlash(key)); err != nil {
+			return nil, blob.NewError(blob.KindOther, op, key, fmt.Errorf("read attributes: %w", err))
+		}
 	}
 	info := &blob.ObjectInfo{Key: key, Size: stat.Size(), ETag: etag, ContentType: a.ContentType, LastModified: stat.ModTime(), Metadata: a.Metadata}
-	if withTags {
+	if opts.withTags {
 		info.Tags = a.Tags
 	}
 	return info, nil

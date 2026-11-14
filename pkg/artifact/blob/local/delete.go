@@ -34,19 +34,28 @@ func (s *Store) Delete(ctx context.Context, key string, opts blob.DeleteOptions)
 		return wrapIO(blob.OpDelete, key, err)
 	}
 	defer root.Close()
-	return deleteFromRoot(root, key, opts.IfMatch)
+	return s.deleteFromRoot(ctx, root, key, opts.IfMatch)
 }
 
 // deleteFromRoot removes the object and its attributes after an optional ETag check, then prunes
-// directories the removal left empty.
-func deleteFromRoot(root *os.Root, key, ifMatch string) error {
+// directories the removal left empty. A key that is only a prefix of other objects names no object,
+// so deleting it succeeds and leaves the directory and its children untouched.
+func (s *Store) deleteFromRoot(ctx context.Context, root *os.Root, key, ifMatch string) error {
 	target := filepath.FromSlash(key)
 	if ifMatch != "" {
-		if err := checkDeleteETag(root, key, target, ifMatch); err != nil {
+		if err := checkDeleteETag(ctx, root, key, target, ifMatch); err != nil {
 			return err
 		}
 	}
-	for _, path := range []string{target, attrsPath(target)} {
+	if info, err := root.Stat(target); err == nil && info.IsDir() {
+		return nil
+	}
+	// Plain-file stores keep no attribute files, and a name that looks like one is another object.
+	paths := []string{target}
+	if !s.plainFiles {
+		paths = append(paths, attrsPath(target))
+	}
+	for _, path := range paths {
 		if err := root.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return wrapIO(blob.OpDelete, key, err)
 		}
@@ -56,10 +65,10 @@ func deleteFromRoot(root *os.Root, key, ifMatch string) error {
 }
 
 // checkDeleteETag verifies the if-match token of a conditional delete. Callers hold the lock.
-func checkDeleteETag(root *os.Root, key, target, want string) error {
+func checkDeleteETag(ctx context.Context, root *os.Root, key, target, want string) error {
 	state, err := inspect(root, target)
 	if err != nil {
 		return wrapIO(blob.OpDelete, key, err)
 	}
-	return matchETag(root, blob.OpDelete, key, state, want)
+	return matchETag(ctx, root, objectRef{op: blob.OpDelete, key: key}, state, want)
 }
