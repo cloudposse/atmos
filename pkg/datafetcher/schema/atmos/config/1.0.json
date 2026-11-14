@@ -5983,6 +5983,20 @@
     },
     "GitPushConfig": {
       "properties": {
+        "retry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Retry uses the shared retry policy; when set it takes precedence over Retries."
+        },
         "retries": {
           "anyOf": [
             {

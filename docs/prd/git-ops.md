@@ -574,9 +574,10 @@ Atmos must not perform force push in v1.
 
 **Push contention:** a rejected non-fast-forward push (another component, job, or human pushed first) is the most common failure mode in GitOps publishing and must be handled, not surfaced raw:
 
-1. On rejection, run a bounded retry loop: `pull --ff-only` (or fetch + replay of the managed-path commit), then re-push.
-2. Retry count is configurable via `push.retries` (default `3`).
-3. After exhaustion, fail with a clear error and hint (e.g., the remote branch is receiving concurrent pushes; consider serializing publishers or batching).
+1. On rejection, run a bounded retry loop: `pull --rebase` (or fetch + replay of the managed-path commit), then re-push. Only a rejected ref triggers a rebase; Atmos never adds force-push options.
+2. The loop follows the shared retry policy in `push.retry` (attempts, backoff, jitter, elapsed-time budget, and message conditions). When no policy is set, the legacy `push.retries` count (default `3`) with a 30-second retry budget applies.
+3. Remote rate limits (HTTP `429`, rate-limited `403`, `Retry-After`, `X-RateLimit-Reset`) are waited out without rebasing, and server cooldowns take precedence over the configured delay cap while attempts and the elapsed-time budget stay bounded.
+4. After exhaustion, fail with a clear error and hint (e.g., the remote branch is receiving concurrent pushes; consider serializing publishers or batching).
 
 ### Commit
 

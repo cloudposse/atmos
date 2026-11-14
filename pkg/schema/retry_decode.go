@@ -161,3 +161,20 @@ func validateRetryMapValue(raw any) error {
 	}
 	return checkRetryKeys(retryMapKeys(m))
 }
+
+// RetryConfigDecodeHook validates shared retry fields during configuration decoding.
+func RetryConfigDecodeHook() mapstructure.DecodeHookFuncType {
+	return func(from reflect.Type, to reflect.Type, data any) (any, error) {
+		if from.Kind() != reflect.Map || to != reflect.TypeOf(RetryConfig{}) {
+			return data, nil
+		}
+		config, err := DecodeRetryConfig(data)
+		if err != nil {
+			return nil, err
+		}
+		if config == nil {
+			return RetryConfig{}, nil
+		}
+		return *config, nil
+	}
+}

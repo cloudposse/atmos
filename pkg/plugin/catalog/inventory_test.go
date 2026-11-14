@@ -28,8 +28,8 @@ const catalogInventory = `packages:
 func inventoryRunner(t *testing.T, files map[string]string, failure string) *MockRunner {
 	t.Helper()
 	runner := NewMockRunner(gomock.NewController(t))
-	runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), pkgit.RunOptions{}).DoAndReturn(
-		func(_ context.Context, _ string, args []string, _ pkgit.RunOptions) (pkgit.RunResult, error) {
+	runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), &pkgit.RunOptions{}).DoAndReturn(
+		func(_ context.Context, _ string, args []string, _ *pkgit.RunOptions) (pkgit.RunResult, error) {
 			key := strings.Join(args, " ")
 			if key == failure {
 				return pkgit.RunResult{}, context.Canceled

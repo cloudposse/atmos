@@ -42,7 +42,7 @@ func (m *MockRunner) EXPECT() *MockRunnerMockRecorder {
 }
 
 // Run mocks base method.
-func (m *MockRunner) Run(ctx context.Context, command string, args []string, opts git.RunOptions) (git.RunResult, error) {
+func (m *MockRunner) Run(ctx context.Context, command string, args []string, opts *git.RunOptions) (git.RunResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", ctx, command, args, opts)
 	ret0, _ := ret[0].(git.RunResult)

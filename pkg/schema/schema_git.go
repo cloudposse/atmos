@@ -83,6 +83,8 @@ type GitAuthorConfig struct {
 
 // GitPushConfig controls push behavior.
 type GitPushConfig struct {
+	// Retry uses the shared retry policy; when set it takes precedence over Retries.
+	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	// Retries bounds the pull-ff/re-push loop on non-fast-forward rejection.
 	// nil means the default (3). 0 disables retries.
 	Retries *int `yaml:"retries,omitempty" json:"retries,omitempty" mapstructure:"retries"`

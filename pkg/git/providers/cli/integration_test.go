@@ -75,7 +75,7 @@ func TestGitTestEnvIsolatesObjectStorage(t *testing.T) {
 func gitRun(t *testing.T, env []string, dir string, args ...string) string {
 	t.Helper()
 
-	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, atmosgit.RunOptions{Dir: dir, Env: env})
+	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, &atmosgit.RunOptions{Dir: dir, Env: env})
 	require.NoError(t, err, "git %v: stderr tail: %s", args, result.StderrTail)
 	return result.Stdout
 }

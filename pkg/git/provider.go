@@ -2,6 +2,8 @@ package git
 
 import (
 	"context"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // SigningMode controls commit signing behavior.
@@ -170,6 +172,8 @@ type InitOptions struct {
 
 // PushOptions configures Push.
 type PushOptions struct {
+	// Retry overrides the legacy retry count with the shared policy.
+	Retry *schema.RetryConfig
 	RepoContext
 	// Retries bounds the rebase-and-retry loop on non-fast-forward rejection.
 	Retries int

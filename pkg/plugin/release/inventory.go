@@ -85,7 +85,7 @@ func (s *inventorySettings) run(ctx context.Context, entry *releaseplan.Entry, f
 	if !inventory.SafePath(entry.Path) || entry.Source == "" {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	source, err := s.runner.Run(ctx, gitCommand, []string{"rev-parse", "--verify", "--end-of-options", entry.Source + "^{commit}"}, pkgit.RunOptions{})
+	source, err := s.runner.Run(ctx, gitCommand, []string{"rev-parse", "--verify", "--end-of-options", entry.Source + "^{commit}"}, &pkgit.RunOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -103,12 +103,12 @@ func (s *inventorySettings) run(ctx context.Context, entry *releaseplan.Entry, f
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
-		_, cleanupErr := s.runner.Run(cleanup, gitCommand, []string{"worktree", "remove", "--force", directory}, pkgit.RunOptions{})
+		_, cleanupErr := s.runner.Run(cleanup, gitCommand, []string{"worktree", "remove", "--force", directory}, &pkgit.RunOptions{})
 		if cleanupErr != nil {
 			resultErr = errors.Join(resultErr, fmt.Errorf("remove plugin source worktree: %w", cleanupErr))
 		}
 	}()
-	if _, err := s.runner.Run(ctx, gitCommand, []string{"worktree", "add", "--detach", directory, revision}, pkgit.RunOptions{}); err != nil {
+	if _, err := s.runner.Run(ctx, gitCommand, []string{"worktree", "add", "--detach", directory, revision}, &pkgit.RunOptions{}); err != nil {
 		return nil, err
 	}
 	return Run(ctx, filepath.Join(directory, filepath.FromSlash(entry.Path)), factory(*entry, directory), WithCheck(s.check), WithTemporaryDirectory(temporary))
@@ -123,10 +123,10 @@ func CurrentInventoryHead(ctx context.Context, runner pkgit.Runner) (string, err
 	if runner == nil {
 		return "", errUtils.ErrPluginInvalidConfig
 	}
-	if _, err := runner.Run(ctx, gitCommand, []string{"fetch", "--no-tags", "origin", "HEAD"}, pkgit.RunOptions{}); err != nil {
+	if _, err := runner.Run(ctx, gitCommand, []string{"fetch", "--no-tags", "origin", "HEAD"}, &pkgit.RunOptions{}); err != nil {
 		return "", err
 	}
-	result, err := runner.Run(ctx, gitCommand, []string{"rev-parse", "--verify", "FETCH_HEAD^{commit}"}, pkgit.RunOptions{})
+	result, err := runner.Run(ctx, gitCommand, []string{"rev-parse", "--verify", "FETCH_HEAD^{commit}"}, &pkgit.RunOptions{})
 	if err != nil {
 		return "", err
 	}
