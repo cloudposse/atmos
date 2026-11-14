@@ -66,7 +66,10 @@ func vendorSourcePreserving(ctx context.Context, config *schema.AtmosConfigurati
 	// Concurrent publishers of one checkout run one after another: a waiter later finds the target
 	// up to date or republishes the same files. The wait is bounded by the caller's context.
 	lock := filelock.New(provisioner.LockCoordPath(canonical+".source-refresh") + ".lock")
-	warning := time.AfterFunc(sourceRefreshLockWarnAfter, func() { warnSourceRefreshLockWait(ctx, target) })
+	// The timer callback runs on its own goroutine, so it uses the hook captured here rather than
+	// reading the package variable when it fires (tests replace that variable).
+	warn := warnSourceRefreshLockWait
+	warning := time.AfterFunc(sourceRefreshLockWarnAfter, func() { warn(ctx, target) })
 	defer warning.Stop()
 	err = lock.WithExclusive(ctx, func() error {
 		warning.Stop()
