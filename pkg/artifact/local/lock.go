@@ -94,9 +94,22 @@ func (r *Repository) coversReference(lock *fileLock, reference string) bool {
 		resource == r.alias+"/"+reference
 }
 
+// holdsTargetLock reports whether lock already holds the physical lock file this repository uses
+// for reference. A matching namespace is not enough: a delegate repository with another root
+// acquires its lock file under its own root, so direct writers of this repository would not be
+// excluded by it. Only a handle on the target's own lock file can stand in for acquiring it.
+func (r *Repository) holdsTargetLock(lock *fileLock, reference string) bool {
+	return lock.path == r.referenceLockPath(reference)
+}
+
+// referenceLockPath returns the lock file this repository uses for reference (name:version).
+func (r *Repository) referenceLockPath(reference string) string {
+	return filepath.Join(r.root, native(layout.LockPath(reference)))
+}
+
 // acquire takes the OS lock for resource.
 func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*fileLock, error) {
-	lockPath := filepath.Join(r.root, native(layout.LockPath(resource)))
+	lockPath := r.referenceLockPath(resource)
 	if err := os.MkdirAll(filepath.Dir(lockPath), dirMode); err != nil {
 		return nil, fmt.Errorf("%w: create lock directory for %q: %w", errUtils.ErrArtifactConfigInvalid, resource, err)
 	}

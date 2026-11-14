@@ -59,7 +59,9 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 	if isLocalLock && !r.coversReference(localLock, prepared.Record.Name+":"+prepared.Record.Version) {
 		return nil, fmt.Errorf("%w: supplied lock does not cover reference %s:%s", errUtils.ErrArtifactConflict, prepared.Record.Name, prepared.Record.Version)
 	}
-	if !isLocalLock {
+	// A delegated handle covers the reference but may hold another repository's lock file, so the
+	// target-local lock is still taken unless the handle already holds it.
+	if !isLocalLock || !r.holdsTargetLock(localLock, prepared.Record.Name+":"+prepared.Record.Version) {
 		lock, lockErr := r.acquire(ctx, prepared.Record.Name+":"+prepared.Record.Version, r.settings.owner, job.opID)
 		if lockErr != nil {
 			return nil, lockErr
