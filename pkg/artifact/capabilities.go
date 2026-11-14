@@ -2,6 +2,7 @@ package artifact
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -72,6 +73,23 @@ func (c *Capabilities) HasEvidenceFormat(f EvidenceFormat) bool {
 	defer perf.Track(nil, "artifact.Capabilities.HasEvidenceFormat")()
 
 	return slices.Contains(c.EvidenceFormats, f)
+}
+
+// CheckSignerFormats refuses a signer before it is invoked when the repository can store none of
+// its evidence formats, so an unusable signer never signs anything. The repository argument
+// names the repository in the capability error.
+func (c *Capabilities) CheckSignerFormats(repository string, signer Signer) error {
+	defer perf.Track(nil, "artifact.Capabilities.CheckSignerFormats")()
+
+	formats := signer.Formats()
+	names := make([]string, 0, len(formats))
+	for _, format := range formats {
+		if c.HasEvidenceFormat(format) {
+			return nil
+		}
+		names = append(names, string(format))
+	}
+	return NewUnsupportedCapability(repository, "sign", "evidence/"+strings.Join(names, ","), "the repository cannot store this evidence format")
 }
 
 // HasSubjectKind reports whether the repository supports the signature subject kind.

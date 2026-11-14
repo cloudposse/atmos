@@ -7,6 +7,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"log"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -150,4 +152,46 @@ func buildZip(t *testing.T, files map[string]string) []byte {
 	}
 	require.NoError(t, zw.Close())
 	return buf.Bytes()
+}
+
+// Credential is the Basic-auth identity an authenticated test registry accepts.
+type Credential struct{ Username, Password string }
+
+// Server is an in-process registry that can be shut down independently of the test.
+type Server struct {
+	// Host is the "127.0.0.1:PORT" registry address.
+	Host   string
+	server *httptest.Server
+}
+
+// NewServer starts an empty in-process OCI registry (OCI 1.1 referrers included). When
+// credential is non-nil, every request must carry exactly that Basic identity; any other
+// request receives a 401 challenge, so a client that downgraded to anonymous or reused
+// another registry's credentials fails visibly.
+func NewServer(t *testing.T, credential *Credential) *Server {
+	defer perf.Track(nil, "ocitest.NewServer")()
+
+	t.Helper()
+
+	handler := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if credential != nil {
+			user, password, ok := r.BasicAuth()
+			if !ok || user != credential.Username || password != credential.Password {
+				w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return &Server{Host: strings.TrimPrefix(srv.URL, "http://"), server: srv}
+}
+
+// Close shuts the registry down now; calling it again is harmless.
+func (s *Server) Close() {
+	defer perf.Track(nil, "ocitest.Server.Close")()
+
+	s.server.Close()
 }

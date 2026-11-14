@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ func TestPublicTrustFailsWhenCacheDirectoryCannotBeCreated(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(path, nil, 0o600))
 	t.Setenv("ATMOS_XDG_DATA_HOME", path)
-	trusted, err := loadPublicRoot(t.Context(), true)
+	trusted, err := LoadPublicRoot(t.Context(), true)
 	require.Error(t, err)
 	require.Nil(t, trusted)
 }
@@ -49,5 +50,23 @@ func TestTrustHTTPClientUsesVerificationContext(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, response)
 	_, err = (offlineFetcher{}).DownloadFile(server.URL, 1024, 0)
-	require.ErrorIs(t, err, errUtils.ErrPluginOfflineArtifact)
+	require.ErrorIs(t, err, errUtils.ErrSignatureOffline)
+}
+
+type countingTransport struct{ requests atomic.Int32 }
+
+func (t *countingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	t.requests.Add(1)
+	return nil, errUtils.ErrSignatureOffline
+}
+
+func TestOfflineTrustCannotFetch(t *testing.T) {
+	transport := &countingTransport{}
+	original := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() { http.DefaultTransport = original })
+	t.Setenv("ATMOS_XDG_DATA_HOME", t.TempDir())
+	_, err := LoadPublicRoot(t.Context(), true)
+	require.Error(t, err)
+	require.Zero(t, transport.requests.Load())
 }
