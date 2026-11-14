@@ -94,6 +94,12 @@ func (l *lazyReader) Read(p []byte) (int, error) {
 }
 
 func (l *lazyReader) open() {
+	// The digest library panics on a digest without an algorithm, so a descriptor from a registry
+	// manifest is validated before anything asks for its algorithm.
+	if err := l.desc.Digest.Validate(); err != nil {
+		l.err = fmt.Errorf(errFormatDigestCause, errUtils.ErrArtifactIntegrityFailed, l.desc.Digest, err)
+		return
+	}
 	if !l.desc.Digest.Algorithm().Available() {
 		l.err = fmt.Errorf("%w: unavailable digest algorithm for %s", errUtils.ErrArtifactIntegrityFailed, l.desc.Digest)
 		return

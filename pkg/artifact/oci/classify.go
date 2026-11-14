@@ -104,6 +104,9 @@ func classify(desc ocispec.Descriptor, raw []byte) (*root, error) {
 		if err := json.Unmarshal(raw, &loaded.index); err != nil {
 			return nil, fmt.Errorf("%w: index %s: %w", errUtils.ErrArtifactIntegrityFailed, desc.Digest, err)
 		}
+		if err := requireDescriptorDigests(desc, loaded.index.Manifests); err != nil {
+			return nil, err
+		}
 		loaded.class = classIndex
 		if hasPluginAnnotations(loaded.index.Annotations) {
 			loaded.class = classPlugin
@@ -111,6 +114,9 @@ func classify(desc ocispec.Descriptor, raw []byte) (*root, error) {
 	case isManifestMediaType(desc.MediaType):
 		if err := json.Unmarshal(raw, &loaded.manifest); err != nil {
 			return nil, fmt.Errorf("%w: manifest %s: %w", errUtils.ErrArtifactIntegrityFailed, desc.Digest, err)
+		}
+		if err := requireDescriptorDigests(desc, []ocispec.Descriptor{loaded.manifest.Config}, loaded.manifest.Layers); err != nil {
+			return nil, err
 		}
 		loaded.class = classImage
 		switch loaded.manifest.Config.MediaType {
@@ -123,6 +129,20 @@ func classify(desc ocispec.Descriptor, raw []byte) (*root, error) {
 		return nil, fmt.Errorf("%w: %s has unsupported media type %q", errUtils.ErrArtifactRecordInvalid, desc.Digest, desc.MediaType)
 	}
 	return loaded, nil
+}
+
+// requireDescriptorDigests rejects a root that references a descriptor whose digest is malformed. A
+// registry serves whatever bytes it holds, so an empty or truncated digest is an integrity failure
+// of the root, caught here before a traversal or a read can ask the digest library for it.
+func requireDescriptorDigests(root ocispec.Descriptor, groups ...[]ocispec.Descriptor) error {
+	for _, group := range groups {
+		for index := range group {
+			if err := group[index].Digest.Validate(); err != nil {
+				return fmt.Errorf("%w: %s references a descriptor with the malformed digest %q: %w", errUtils.ErrArtifactIntegrityFailed, root.Digest, group[index].Digest, err)
+			}
+		}
+	}
+	return nil
 }
 
 // hasPluginAnnotations reports whether annotations identify a legacy plugin release.
