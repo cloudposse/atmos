@@ -106,10 +106,11 @@ const (
 )
 
 // backendGenerationOverlay generates the owning stack into an invocation-local
-// copy-on-write overlay before a backend read of a stack-generated unit. The
-// returned filesystem is the one the unit is then parsed from.
+// copy-on-write overlay before a backend read or IAM probe of a stack-generated unit. The
+// host probes IAM before the provider generates the stack, so on a clean checkout the unit
+// exists only in this overlay. The returned filesystem is the one the unit is then parsed from.
 func backendGenerationOverlay(ctx context.Context, request model.Request, filesystem afero.Fs) (afero.Fs, error) {
-	if request.Phase != "backend" || request.GenerationRoot == "" {
+	if (request.Phase != "backend" && request.Phase != "iam") || request.GenerationRoot == "" {
 		return filesystem, nil
 	}
 	filesystem = afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs())
