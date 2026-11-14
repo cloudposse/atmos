@@ -62,9 +62,7 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 		return nil, err
 	}
 	defer func() {
-		if releaseErr := release(); err == nil {
-			err = releaseErr
-		}
+		err = joinRelease(err, release())
 	}()
 	return r.publishLocked(ctx, job, &options, scope)
 }

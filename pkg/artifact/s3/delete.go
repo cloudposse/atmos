@@ -42,9 +42,7 @@ func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference
 		return nil, err
 	}
 	defer func() {
-		if releaseErr := release(); err == nil {
-			err = releaseErr
-		}
+		err = joinRelease(err, release())
 	}()
 	return r.deleteLocked(ctx, &pinned, &options)
 }
@@ -63,9 +61,7 @@ func (r *Repository) deleteLocked(ctx context.Context, pinned *artifact.PinnedRe
 		return nil, err
 	}
 	defer func() {
-		if releaseErr := claims.Release(ctx); err == nil {
-			err = releaseErr
-		}
+		err = joinRelease(err, claims.Release(ctx))
 	}()
 	id := deletionPrefix + uuid.NewString()
 	intent := deletionIntent(id)
@@ -143,9 +139,7 @@ func (r *Repository) recoverDeletion(ctx context.Context, state *refState) (err 
 		return err
 	}
 	defer func() {
-		if releaseErr := claims.Release(ctx); err == nil {
-			err = releaseErr
-		}
+		err = joinRelease(err, claims.Release(ctx))
 	}()
 	op, err := r.loadOperation(ctx, state.ref.OperationID)
 	if err != nil {

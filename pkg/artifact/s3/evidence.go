@@ -145,9 +145,7 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 		return nil, err
 	}
 	defer func() {
-		if releaseErr := release(); err == nil {
-			err = releaseErr
-		}
+		err = joinRelease(err, release())
 	}()
 	return r.signLocked(ctx, subject, signer)
 }
@@ -347,9 +345,7 @@ func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedR
 		return nil, err
 	}
 	defer func() {
-		if releaseErr := release(); err == nil {
-			err = releaseErr
-		}
+		err = joinRelease(err, release())
 	}()
 	raw, err := r.requireCurrentRecord(ctx, pinned.RecordDigest)
 	if err != nil {

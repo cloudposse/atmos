@@ -356,6 +356,20 @@ func (l *claimHandle) goneAfter(ctx context.Context, err error) bool {
 	return readErr == nil && current == nil
 }
 
+// joinRelease combines the outcome of a claimed mutation with the outcome of releasing its claim,
+// so a release failure after a failed mutation stays visible instead of being dropped. It returns
+// err unchanged when the release succeeded and the release error alone when err is nil.
+func joinRelease(err, releaseErr error) error {
+	switch {
+	case releaseErr == nil:
+		return err
+	case err == nil:
+		return releaseErr
+	default:
+		return errors.Join(err, releaseErr)
+	}
+}
+
 // holdClaim validates an existing claim or acquires one, and keeps it held through a mutation.
 func (r *Repository) holdClaim(ctx context.Context, supplied artifact.LockHandle, resource, operationID string) (func() error, error) {
 	handle, local := supplied.(*claimHandle)
