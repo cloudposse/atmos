@@ -154,7 +154,10 @@ func (h *ContainerHandler) buildRunConfig(ctx context.Context, step *schema.Work
 	}
 	mounts = append(mounts, credentialFileMounts(env)...)
 
-	ports := convertContainerPorts(run.Ports)
+	ports, err := convertContainerPorts(run.Ports)
+	if err != nil {
+		return nil, run, err
+	}
 
 	return &container.EphemeralConfig{
 		Name:              containerStepName(step.Name),
@@ -312,20 +315,8 @@ func convertContainerMounts(vars *Variables, mounts []schema.ContainerMount) ([]
 	return result, nil
 }
 
-func convertContainerPorts(ports []schema.ContainerPort) []container.PortBinding {
-	result := make([]container.PortBinding, 0, len(ports))
-	for _, port := range ports {
-		protocol := port.Protocol
-		if protocol == "" {
-			protocol = "tcp"
-		}
-		result = append(result, container.PortBinding{
-			HostPort:      port.Host,
-			ContainerPort: port.Container,
-			Protocol:      protocol,
-		})
-	}
-	return result
+func convertContainerPorts(ports []schema.ContainerPort) ([]container.PortBinding, error) {
+	return container.PortBindingsFromSchema(ports)
 }
 
 func defaultMountType(mountType string) string {

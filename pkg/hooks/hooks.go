@@ -20,7 +20,8 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes"     // Register kubernetes CI plugin.
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"      // Register terraform CI plugin.
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"      // Register generic CI provider.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"       // Register GitHub Actions CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/gitea"
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github" // Register GitHub Actions CI provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"

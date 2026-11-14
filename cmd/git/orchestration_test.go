@@ -575,3 +575,11 @@ func TestComposeEnv_EmptyIdentity(t *testing.T) {
 	// Should at least contain PATH.
 	assert.NotEmpty(t, env)
 }
+
+func TestCloneRefExcludesBranchAndOverridesConfiguredBranch(t *testing.T) {
+	opts := &cloneOptions{Ref: "revision", Branch: "main"}
+	require.ErrorIs(t, runClone(context.Background(), opts, []string{"https://example.com/repo.git"}), errUtils.ErrInvalidConfig)
+	opts.Branch = ""
+	require.Empty(t, cloneBranch(opts, "configured-main"))
+	require.Equal(t, "configured-main", cloneBranch(&cloneOptions{}, "configured-main"))
+}

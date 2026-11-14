@@ -82,7 +82,7 @@ func (p *Provider) Name() string {
 func (p *Provider) Detect() bool {
 	defer perf.Track(nil, "github.Provider.Detect")()
 
-	return os.Getenv("GITHUB_ACTIONS") == "true"
+	return os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("GITEA_ACTIONS") != "true"
 }
 
 // Context returns CI metadata from GitHub Actions environment variables.
