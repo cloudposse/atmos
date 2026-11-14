@@ -200,6 +200,16 @@ function createGeistTheme(mode: 'light' | 'dark') {
             },
           },
           searchField: {
+            paddingRight: 0,
+            '& .MuiInput-root': {
+              minHeight: 36, padding: '0 10px', borderRadius: 6,
+              border: `1px solid ${border}`, backgroundColor: background,
+              fontSize: 13,
+              '&:before, &:after': { display: 'none' },
+              '&:focus-within': { outline: `2px solid ${link}`, outlineOffset: 2 },
+            },
+            '& .MuiSvgIcon-root': { fontSize: 18, color: muted },
+            '& .MuiIconButton-root': { padding: 6 },
             '@media (max-width: 600px)': { width: '100%', paddingLeft: 0 },
           },
           title: { fontSize: 16, fontWeight: 600 },
@@ -207,7 +217,11 @@ function createGeistTheme(mode: 'light' | 'dark') {
       },
       BackstageTableHeader: {
         styleOverrides: {
-          header: { fontSize: 12, fontWeight: 500, color: muted, textTransform: 'none' },
+          header: {
+            fontSize: 12, fontWeight: 500, color: muted, textTransform: 'none',
+            padding: '10px 16px', backgroundColor: background,
+            borderTop: `1px solid ${border}`, borderBottom: `1px solid ${border}`,
+          },
         },
       },
       MuiStepper: { styleOverrides: { root: { padding: '16px 24px' } } },

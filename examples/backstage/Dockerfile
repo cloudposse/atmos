@@ -38,6 +38,7 @@ COPY --chown=node:node backstage/App.tsx packages/app/src/App.tsx
 COPY --chown=node:node backstage/portalModules.tsx packages/app/src/portalModules.tsx
 COPY --chown=node:node backstage/PortalNav.tsx packages/app/src/PortalNav.tsx
 COPY --chown=node:node backstage/PortalCatalog.tsx packages/app/src/PortalCatalog.tsx
+COPY --chown=node:node backstage/PortalApiExplorer.tsx packages/app/src/PortalApiExplorer.tsx
 RUN yarn tsc
 COPY catalog /demo/catalog
 COPY templates /demo/templates

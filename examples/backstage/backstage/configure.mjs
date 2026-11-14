@@ -23,6 +23,8 @@ writeFileSync(appPackagePath, `${JSON.stringify(appPackage, null, 2)}\n`);
 Object.assign(appPackage.dependencies, {
   '@backstage/theme': '0.7.3',
   '@backstage/plugin-catalog-react': '3.3.0',
+  '@backstage/plugin-catalog-common': '1.2.1',
+  '@backstage/plugin-permission-react': '0.5.6',
   '@backstage/plugin-techdocs-react': '1.4.0',
 });
 writeFileSync(appPackagePath, `${JSON.stringify(appPackage, null, 2)}\n`);

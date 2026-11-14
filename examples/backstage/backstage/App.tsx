@@ -31,12 +31,29 @@ const portalCatalog = catalog.withOverrides({
   ],
 });
 
+const portalApiDocs = apiDocs.withOverrides({
+  extensions: [
+    apiDocs.getExtension('page:api-docs').override({
+      factory(originalFactory, { config }) {
+        return originalFactory({
+          params: {
+            loader: async () => {
+              const { PortalApiExplorer } = await import('./PortalApiExplorer');
+              return <PortalApiExplorer initiallySelectedFilter={config.initiallySelectedFilter} />;
+            },
+          },
+        });
+      },
+    }),
+  ],
+});
+
 // Explicit features keep this example small and make the installed integrations
 // reviewable. Routes and plugin APIs are wired by the frontend extension system.
 export default createApp({
   features: [
     portalCatalog, catalogGraph, catalogImport, scaffolder, techdocs, search,
-    apiDocs, org, userSettings,
+    portalApiDocs, org, userSettings,
     portalAppModule, portalCatalogModule, portalDocsModule,
   ],
 });
