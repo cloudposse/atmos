@@ -123,6 +123,32 @@ updates:
   cooldown:
     default-days: 14  # 2 weeks minimum age for all dependencies
 
+# Digest-pinned base images (Scorecard Pinned-Dependencies) need Dependabot to
+# keep their digests current.
+- package-ecosystem: docker
+  directory: /.oss-scanner
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+- package-ecosystem: docker
+  directory: /examples/stack-lifecycle/components/helm/app
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
 # Standalone Go modules under tools/ aren't reached by the root gomod entry.
 - package-ecosystem: gomod
   directory: /tools/gomodcheck

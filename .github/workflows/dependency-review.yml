@@ -54,7 +54,11 @@ jobs:
           # sax: BlueOak-1.0.0 (verified at https://github.com/isaacs/sax-js/blob/main/LICENSE.md) -
           #   Blue Oak Model License, a permissive OSS license.
           #   Transitive dependency of svgo (website SVG optimization).
-          allow-dependencies-licenses: "pkg:golang/github.com/antlr4-go/antlr/v4, pkg:golang/github.com/google/cel-go, pkg:golang/golang.org/x/image, pkg:golang/modernc.org/libc, pkg:golang/github.com/opencontainers/go-digest, pkg:npm/pako, pkg:npm/sax"
+          # minimatch and @isaacs/nonrecursive-glob-match: BlueOak-1.0.0 is a permissive license,
+          #   approved for these two packages only (BlueOak-1.0.0 is deliberately not added to
+          #   allow-licenses). They come from the website docs tooling (pnpm override of minimatch
+          #   to v11) and the cdk-terraform example lockfile; neither ships in the atmos binary.
+          allow-dependencies-licenses: "pkg:golang/github.com/antlr4-go/antlr/v4, pkg:golang/github.com/google/cel-go, pkg:golang/golang.org/x/image, pkg:golang/modernc.org/libc, pkg:golang/github.com/opencontainers/go-digest, pkg:npm/pako, pkg:npm/sax, pkg:npm/minimatch, pkg:npm/%40isaacs/nonrecursive-glob-match"
 
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate

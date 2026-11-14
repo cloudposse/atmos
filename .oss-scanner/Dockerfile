@@ -1,4 +1,4 @@
-FROM golang:1.26-bookworm
+FROM golang:1.26-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl build-essential git pkg-config libudev-dev \

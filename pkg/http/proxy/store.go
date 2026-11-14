@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -101,12 +102,81 @@ func (s *FileStore) Root() string {
 	return s.root
 }
 
-func (s *FileStore) objectPath(key string) string {
-	return filepath.Join(s.root, filepath.FromSlash(key))
+// ValidateKey reports whether key is a safe, relative cache key: non-empty, free of
+// NUL bytes and backslashes, not absolute, and without "." or ".." path segments.
+// Keys come from request URL paths, so every filesystem path derived from one must
+// pass through this check before touching the cache root.
+func ValidateKey(key string) error {
+	defer perf.Track(nil, "proxy.ValidateKey")()
+
+	if key == "" {
+		return errUtils.ErrCacheKeyRequired
+	}
+	if strings.ContainsAny(key, "\\\x00") || strings.HasPrefix(key, "/") {
+		return fmt.Errorf("%w: invalid cache key %q", errUtils.ErrPathTraversal, key)
+	}
+	for _, seg := range strings.Split(key, "/") {
+		if seg == "." || seg == ".." {
+			return fmt.Errorf("%w: invalid cache key %q", errUtils.ErrPathTraversal, key)
+		}
+	}
+	if !filepath.IsLocal(filepath.FromSlash(key)) {
+		return fmt.Errorf("%w: invalid cache key %q", errUtils.ErrPathTraversal, key)
+	}
+	return nil
 }
 
-func (s *FileStore) sidecarPath(key string) string {
-	return s.objectPath(key) + metadataSuffix
+// objectPath resolves key to a path strictly inside the cache root. It rejects any
+// key that is unsafe or that would resolve outside the root.
+func (s *FileStore) objectPath(key string) (string, error) {
+	if err := ValidateKey(key); err != nil {
+		return "", err
+	}
+	root, err := filepath.Abs(s.root)
+	if err != nil {
+		return "", fmt.Errorf("%w: resolving cache root: %w", errUtils.ErrArtifactUploadFailed, err)
+	}
+	p := filepath.Join(root, filepath.FromSlash(key))
+	if !strings.HasPrefix(p, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("%w: cache key %q escapes the cache root", errUtils.ErrPathTraversal, key)
+	}
+	return p, nil
+}
+
+func (s *FileStore) sidecarPath(key string) (string, error) {
+	p, err := s.objectPath(key)
+	if err != nil {
+		return "", err
+	}
+	return p + metadataSuffix, nil
+}
+
+// invalidKeyLock is the FileLock returned for a rejected key: it never runs the
+// guarded function and always reports the key error.
+type invalidKeyLock struct{ err error }
+
+func (l invalidKeyLock) WithLock(func() error) error {
+	defer perf.Track(nil, "proxy.invalidKeyLock.WithLock")()
+
+	return l.err
+}
+
+func (l invalidKeyLock) WithLockContext(context.Context, func() error) error {
+	defer perf.Track(nil, "proxy.invalidKeyLock.WithLockContext")()
+
+	return l.err
+}
+
+func (l invalidKeyLock) WithRLock(func() error) error {
+	defer perf.Track(nil, "proxy.invalidKeyLock.WithRLock")()
+
+	return l.err
+}
+
+func (l invalidKeyLock) TryWithRLock(func() error) (bool, error) {
+	defer perf.Track(nil, "proxy.invalidKeyLock.TryWithRLock")()
+
+	return false, l.err
 }
 
 // Lock returns a file lock on the object path (FileLock appends a .lock sidecar).
@@ -115,15 +185,23 @@ func (s *FileStore) sidecarPath(key string) string {
 func (s *FileStore) Lock(key string) cache.FileLock {
 	defer perf.Track(nil, "proxy.FileStore.Lock")()
 
-	_ = os.MkdirAll(filepath.Dir(s.objectPath(key)), storeDirPerm)
-	return cache.NewFileLock(s.objectPath(key))
+	path, err := s.objectPath(key)
+	if err != nil {
+		return invalidKeyLock{err: err}
+	}
+	_ = os.MkdirAll(filepath.Dir(path), storeDirPerm)
+	return cache.NewFileLock(path)
 }
 
 // Stat returns the object's metadata if it exists.
 func (s *FileStore) Stat(key string) (Meta, bool, error) {
 	defer perf.Track(nil, "proxy.FileStore.Stat")()
 
-	info, err := os.Stat(s.objectPath(key))
+	path, err := s.objectPath(key)
+	if err != nil {
+		return Meta{}, false, err
+	}
+	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Meta{}, false, nil
@@ -161,7 +239,11 @@ func (s *FileStore) Open(key string) (io.ReadCloser, Meta, error) {
 	if !ok {
 		return nil, Meta{}, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
 	}
-	f, err := os.Open(s.objectPath(key))
+	path, err := s.objectPath(key)
+	if err != nil {
+		return nil, Meta{}, err
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, Meta{}, err
 	}
@@ -182,7 +264,10 @@ type tempObject struct {
 func (s *FileStore) Commit(ctx context.Context, req CommitRequest) (Meta, error) {
 	defer perf.Track(nil, "proxy.FileStore.Commit")()
 
-	finalPath := s.objectPath(req.Key)
+	finalPath, err := s.objectPath(req.Key)
+	if err != nil {
+		return Meta{}, err
+	}
 	dir := filepath.Dir(finalPath)
 	if err := os.MkdirAll(dir, storeDirPerm); err != nil {
 		return Meta{}, fmt.Errorf("%w: creating cache dir: %w", errUtils.ErrArtifactUploadFailed, err)
@@ -261,7 +346,10 @@ func (s *FileStore) writeSidecar(key string, meta Meta) error {
 		return err
 	}
 
-	finalPath := s.sidecarPath(key)
+	finalPath, err := s.sidecarPath(key)
+	if err != nil {
+		return err
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(finalPath), ".tmp-sidecar-*")
 	if err != nil {
 		return err
@@ -292,7 +380,11 @@ func (s *FileStore) writeSidecar(key string, meta Meta) error {
 }
 
 func (s *FileStore) readSidecar(key string) (sidecar, bool) {
-	b, err := os.ReadFile(s.sidecarPath(key))
+	path, err := s.sidecarPath(key)
+	if err != nil {
+		return sidecar{}, false
+	}
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return sidecar{}, false
 	}
