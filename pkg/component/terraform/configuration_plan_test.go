@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -313,11 +314,13 @@ func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 		args   []string
 		code   int
 		record bool
+		hook   bool
 	}{
 		{name: "explicit detailed exit code with changes", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 2, record: true},
 		{name: "provider detailed exit code", extra: true, args: []string{"plan", "-out", "changes.plan"}, code: 2, record: true},
 		{name: "failure with detailed exit code", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 1},
 		{name: "status 2 without detailed exit code", args: []string{"plan", "-out", "changes.plan"}, code: 2},
+		{name: "after hook failure with status 2", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 2, hook: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config, info, execCtx, _, _ := planFixture(t)
@@ -328,12 +331,19 @@ func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 				if err := os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("changes"), 0o600); err != nil {
 					return err
 				}
+				if test.hook {
+					// A hook that exits 2 after Terraform wrote the plan is a failure, not "changes present".
+					return fmt.Errorf("%w: after %q: %w", errUtils.ErrComponentHookFailed, "notify", errUtils.ExitCodeError{Code: test.code})
+				}
 				return errUtils.ExitCodeError{Code: test.code}
 			}}
 			executor := testExecutor(t)
 			executor.services.ExecuteShellCommand = shell.execute
 			err := executor.runMainCommandPhase(config, info, execCtx, test.args, execCtx.componentPath, false)
 			require.Equal(t, test.code, resolveExitCode(err), "the plan status is returned unchanged")
+			if test.hook {
+				require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+			}
 			binding := filepath.Join(execCtx.componentPath, "changes.plan") + configurationPlanSuffix
 			if test.record {
 				require.FileExists(t, binding)
@@ -425,6 +435,34 @@ func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
 			require.NoError(t, err)
 			require.NotEmpty(t, shell.calls)
 			require.FileExists(t, path+configurationPlanSuffix)
+		})
+	}
+}
+
+// TestRejectEnvironmentPlanOutputNameCase matches the variable names case-insensitively on Windows only.
+func TestRejectEnvironmentPlanOutputNameCase(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		goos    string
+		entries []string
+		reject  bool
+	}{
+		{name: "windows mixed-case plan variable", goos: "windows", entries: []string{"tf_cli_args_plan=-out=env.plan"}, reject: true},
+		{name: "windows mixed-case shared variable", goos: "windows", entries: []string{"Tf_Cli_Args=--out env.plan"}, reject: true},
+		{name: "windows later case variant clears the flag", goos: "windows", entries: []string{"TF_CLI_ARGS_plan=-out=env.plan", "tf_cli_args_PLAN=-lock=false"}},
+		{name: "windows later case variant sets the flag", goos: "windows", entries: []string{"TF_CLI_ARGS_plan=-lock=false", "tf_cli_args_plan=-out=env.plan"}, reject: true},
+		{name: "windows earlier case variant is overridden", goos: "windows", entries: []string{"tf_cli_args=-out=env.plan", "TF_CLI_ARGS="}},
+		{name: "linux keeps names exact", goos: "linux", entries: []string{"tf_cli_args_plan=-out=env.plan", "Tf_Cli_Args=-out"}},
+		{name: "linux exact name is rejected", goos: "linux", entries: []string{"TF_CLI_ARGS_plan=-out=env.plan"}, reject: true},
+		{name: "linux later exact name overrides", goos: "linux", entries: []string{"TF_CLI_ARGS_plan=-out=env.plan", "TF_CLI_ARGS_plan=-lock=false"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := rejectEnvironmentPlanOutput(test.entries, test.goos)
+			if test.reject {
+				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }

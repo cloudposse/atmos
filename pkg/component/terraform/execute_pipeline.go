@@ -321,7 +321,11 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 }
 
 // isExplicitDetailedPlanChanges reports plan's "changes present" status from -detailed-exitcode.
+// A failed hook is never that status, even when the hook itself exited with 2.
 func isExplicitDetailedPlanChanges(info *schema.ConfigAndStacksInfo, args []string, err error) bool {
+	if errors.Is(err, errUtils.ErrComponentHookFailed) {
+		return false
+	}
 	return info.SubCommand == subcommandPlan && slices.Contains(args, detailedExitCodeFlag) && resolveExitCode(err) == detailedExitCodeChangesDetected
 }
 
