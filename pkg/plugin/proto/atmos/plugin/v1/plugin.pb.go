@@ -185,7 +185,7 @@ func (x ComponentSource_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComponentSource_Kind.Descriptor instead.
 func (ComponentSource_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{33, 0}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{34, 0}
 }
 
 type ComponentDependency_Kind int32
@@ -234,7 +234,7 @@ func (x ComponentDependency_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComponentDependency_Kind.Descriptor instead.
 func (ComponentDependency_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{34, 0}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{35, 0}
 }
 
 // Invocation identifies the live call authorized to use the Atmos API broker.
@@ -1168,7 +1168,9 @@ func (x *SourceLocation) GetColumn() uint32 {
 }
 
 // LogEntry is one structured log event from a plugin's engine, for example a Terragrunt logger event.
-// A response carries the entries produced while it was computed, in order. The host renders them through
+// A plugin delivers entries while the call runs through the Log service of the Atmos API, so a slow
+// operation shows progress as it happens. A response carries only the entries that could not be delivered
+// that way, in order, and never an entry that was delivered live. The host renders them through
 // the Atmos logger on the UI channel (stderr), scoped to the component and stack of the call, with secret
 // masking, at the level each entry carries. They are hidden at the Atmos default level and shown with
 // --logs-level=Debug or Trace. Entries never change the outcome of the call and are never written to the
@@ -1252,6 +1254,50 @@ func (x *LogEntry) GetUnit() string {
 	return ""
 }
 
+type LogRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*LogEntry            `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogRequest) Reset() {
+	*x = LogRequest{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogRequest) ProtoMessage() {}
+
+func (x *LogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
+func (*LogRequest) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *LogRequest) GetEntries() []*LogEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
 // ErrorDetail is the structured, user-facing description of a plugin failure.
 // A plugin returns it as a gRPC status detail (google.rpc.Status.details) on a
 // failed call, or inside Diagnostic.detail for a per-item failure that must not
@@ -1297,7 +1343,7 @@ type ErrorDetail struct {
 
 func (x *ErrorDetail) Reset() {
 	*x = ErrorDetail{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1309,7 +1355,7 @@ func (x *ErrorDetail) String() string {
 func (*ErrorDetail) ProtoMessage() {}
 
 func (x *ErrorDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1322,7 +1368,7 @@ func (x *ErrorDetail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorDetail.ProtoReflect.Descriptor instead.
 func (*ErrorDetail) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ErrorDetail) GetCode() string {
@@ -1422,7 +1468,7 @@ type Diagnostic struct {
 
 func (x *Diagnostic) Reset() {
 	*x = Diagnostic{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[15]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1434,7 +1480,7 @@ func (x *Diagnostic) String() string {
 func (*Diagnostic) ProtoMessage() {}
 
 func (x *Diagnostic) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[15]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1447,7 +1493,7 @@ func (x *Diagnostic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Diagnostic.ProtoReflect.Descriptor instead.
 func (*Diagnostic) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Diagnostic) GetField() string {
@@ -1480,7 +1526,7 @@ type ValidateResponse struct {
 
 func (x *ValidateResponse) Reset() {
 	*x = ValidateResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[16]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1492,7 +1538,7 @@ func (x *ValidateResponse) String() string {
 func (*ValidateResponse) ProtoMessage() {}
 
 func (x *ValidateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[16]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1505,7 +1551,7 @@ func (x *ValidateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateResponse.ProtoReflect.Descriptor instead.
 func (*ValidateResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ValidateResponse) GetDiagnostics() []*Diagnostic {
@@ -1525,7 +1571,7 @@ type Unsupported struct {
 
 func (x *Unsupported) Reset() {
 	*x = Unsupported{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[17]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1537,7 +1583,7 @@ func (x *Unsupported) String() string {
 func (*Unsupported) ProtoMessage() {}
 
 func (x *Unsupported) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[17]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1550,7 +1596,7 @@ func (x *Unsupported) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Unsupported.ProtoReflect.Descriptor instead.
 func (*Unsupported) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Unsupported) GetOperation() string {
@@ -1577,7 +1623,7 @@ type RefreshRequest struct {
 
 func (x *RefreshRequest) Reset() {
 	*x = RefreshRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[18]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1589,7 +1635,7 @@ func (x *RefreshRequest) String() string {
 func (*RefreshRequest) ProtoMessage() {}
 
 func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[18]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1602,7 +1648,7 @@ func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshRequest.ProtoReflect.Descriptor instead.
 func (*RefreshRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RefreshRequest) GetProvider() *ProviderRequest {
@@ -1632,7 +1678,7 @@ type RefreshResponse struct {
 
 func (x *RefreshResponse) Reset() {
 	*x = RefreshResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[19]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1644,7 +1690,7 @@ func (x *RefreshResponse) String() string {
 func (*RefreshResponse) ProtoMessage() {}
 
 func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[19]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1657,7 +1703,7 @@ func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshResponse.ProtoReflect.Descriptor instead.
 func (*RefreshResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RefreshResponse) GetResult() isRefreshResponse_Result {
@@ -1710,7 +1756,7 @@ type EnvironmentResponse struct {
 
 func (x *EnvironmentResponse) Reset() {
 	*x = EnvironmentResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[20]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1722,7 +1768,7 @@ func (x *EnvironmentResponse) String() string {
 func (*EnvironmentResponse) ProtoMessage() {}
 
 func (x *EnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[20]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1735,7 +1781,7 @@ func (x *EnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*EnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *EnvironmentResponse) GetEnvironment() map[string]string {
@@ -1755,7 +1801,7 @@ type PrepareEnvironmentRequest struct {
 
 func (x *PrepareEnvironmentRequest) Reset() {
 	*x = PrepareEnvironmentRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[21]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1767,7 +1813,7 @@ func (x *PrepareEnvironmentRequest) String() string {
 func (*PrepareEnvironmentRequest) ProtoMessage() {}
 
 func (x *PrepareEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[21]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1780,7 +1826,7 @@ func (x *PrepareEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*PrepareEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *PrepareEnvironmentRequest) GetProvider() *ProviderRequest {
@@ -1809,7 +1855,7 @@ type CredentialPath struct {
 
 func (x *CredentialPath) Reset() {
 	*x = CredentialPath{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[22]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1821,7 +1867,7 @@ func (x *CredentialPath) String() string {
 func (*CredentialPath) ProtoMessage() {}
 
 func (x *CredentialPath) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[22]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1834,7 +1880,7 @@ func (x *CredentialPath) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialPath.ProtoReflect.Descriptor instead.
 func (*CredentialPath) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CredentialPath) GetLocation() string {
@@ -1874,7 +1920,7 @@ type PathsResponse struct {
 
 func (x *PathsResponse) Reset() {
 	*x = PathsResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[23]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1886,7 +1932,7 @@ func (x *PathsResponse) String() string {
 func (*PathsResponse) ProtoMessage() {}
 
 func (x *PathsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[23]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1899,7 +1945,7 @@ func (x *PathsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PathsResponse.ProtoReflect.Descriptor instead.
 func (*PathsResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PathsResponse) GetPaths() []*CredentialPath {
@@ -1919,7 +1965,7 @@ type IdentityAuthenticateRequest struct {
 
 func (x *IdentityAuthenticateRequest) Reset() {
 	*x = IdentityAuthenticateRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[24]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1931,7 +1977,7 @@ func (x *IdentityAuthenticateRequest) String() string {
 func (*IdentityAuthenticateRequest) ProtoMessage() {}
 
 func (x *IdentityAuthenticateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[24]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1944,7 +1990,7 @@ func (x *IdentityAuthenticateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityAuthenticateRequest.ProtoReflect.Descriptor instead.
 func (*IdentityAuthenticateRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *IdentityAuthenticateRequest) GetIdentity() *IdentityRequest {
@@ -1971,7 +2017,7 @@ type IdentityPrepareRequest struct {
 
 func (x *IdentityPrepareRequest) Reset() {
 	*x = IdentityPrepareRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1983,7 +2029,7 @@ func (x *IdentityPrepareRequest) String() string {
 func (*IdentityPrepareRequest) ProtoMessage() {}
 
 func (x *IdentityPrepareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1996,7 +2042,7 @@ func (x *IdentityPrepareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityPrepareRequest.ProtoReflect.Descriptor instead.
 func (*IdentityPrepareRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *IdentityPrepareRequest) GetIdentity() *IdentityRequest {
@@ -2026,7 +2072,7 @@ type CommandRequest struct {
 
 func (x *CommandRequest) Reset() {
 	*x = CommandRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[26]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2038,7 +2084,7 @@ func (x *CommandRequest) String() string {
 func (*CommandRequest) ProtoMessage() {}
 
 func (x *CommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[26]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2051,7 +2097,7 @@ func (x *CommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandRequest.ProtoReflect.Descriptor instead.
 func (*CommandRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CommandRequest) GetInvocation() *Invocation {
@@ -2091,7 +2137,7 @@ type CommandExit struct {
 
 func (x *CommandExit) Reset() {
 	*x = CommandExit{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[27]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2103,7 +2149,7 @@ func (x *CommandExit) String() string {
 func (*CommandExit) ProtoMessage() {}
 
 func (x *CommandExit) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[27]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2116,7 +2162,7 @@ func (x *CommandExit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandExit.ProtoReflect.Descriptor instead.
 func (*CommandExit) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{27}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CommandExit) GetCode() uint32 {
@@ -2140,7 +2186,7 @@ type CommandEvent struct {
 
 func (x *CommandEvent) Reset() {
 	*x = CommandEvent{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[28]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2152,7 +2198,7 @@ func (x *CommandEvent) String() string {
 func (*CommandEvent) ProtoMessage() {}
 
 func (x *CommandEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[28]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2165,7 +2211,7 @@ func (x *CommandEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandEvent.ProtoReflect.Descriptor instead.
 func (*CommandEvent) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{28}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CommandEvent) GetEvent() isCommandEvent_Event {
@@ -2239,7 +2285,7 @@ type ComponentValue struct {
 
 func (x *ComponentValue) Reset() {
 	*x = ComponentValue{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[29]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2251,7 +2297,7 @@ func (x *ComponentValue) String() string {
 func (*ComponentValue) ProtoMessage() {}
 
 func (x *ComponentValue) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[29]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2264,7 +2310,7 @@ func (x *ComponentValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentValue.ProtoReflect.Descriptor instead.
 func (*ComponentValue) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{29}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ComponentValue) GetTypeJson() []byte {
@@ -2297,7 +2343,7 @@ type ComponentValuePath struct {
 
 func (x *ComponentValuePath) Reset() {
 	*x = ComponentValuePath{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[30]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2309,7 +2355,7 @@ func (x *ComponentValuePath) String() string {
 func (*ComponentValuePath) ProtoMessage() {}
 
 func (x *ComponentValuePath) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[30]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2322,7 +2368,7 @@ func (x *ComponentValuePath) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentValuePath.ProtoReflect.Descriptor instead.
 func (*ComponentValuePath) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{30}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ComponentValuePath) GetSteps() []*ComponentValueStep {
@@ -2345,7 +2391,7 @@ type ComponentValueStep struct {
 
 func (x *ComponentValueStep) Reset() {
 	*x = ComponentValueStep{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[31]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2357,7 +2403,7 @@ func (x *ComponentValueStep) String() string {
 func (*ComponentValueStep) ProtoMessage() {}
 
 func (x *ComponentValueStep) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[31]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2370,7 +2416,7 @@ func (x *ComponentValueStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentValueStep.ProtoReflect.Descriptor instead.
 func (*ComponentValueStep) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{31}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ComponentValueStep) GetSelector() isComponentValueStep_Selector {
@@ -2427,7 +2473,7 @@ type ComponentAddress struct {
 
 func (x *ComponentAddress) Reset() {
 	*x = ComponentAddress{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[32]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2439,7 +2485,7 @@ func (x *ComponentAddress) String() string {
 func (*ComponentAddress) ProtoMessage() {}
 
 func (x *ComponentAddress) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[32]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2452,7 +2498,7 @@ func (x *ComponentAddress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentAddress.ProtoReflect.Descriptor instead.
 func (*ComponentAddress) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{32}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ComponentAddress) GetStack() string {
@@ -2489,7 +2535,7 @@ type ComponentSource struct {
 
 func (x *ComponentSource) Reset() {
 	*x = ComponentSource{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[33]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2501,7 +2547,7 @@ func (x *ComponentSource) String() string {
 func (*ComponentSource) ProtoMessage() {}
 
 func (x *ComponentSource) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[33]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2514,7 +2560,7 @@ func (x *ComponentSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentSource.ProtoReflect.Descriptor instead.
 func (*ComponentSource) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{33}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ComponentSource) GetPath() string {
@@ -2548,7 +2594,7 @@ type ComponentDependency struct {
 
 func (x *ComponentDependency) Reset() {
 	*x = ComponentDependency{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[34]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2560,7 +2606,7 @@ func (x *ComponentDependency) String() string {
 func (*ComponentDependency) ProtoMessage() {}
 
 func (x *ComponentDependency) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[34]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2573,7 +2619,7 @@ func (x *ComponentDependency) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentDependency.ProtoReflect.Descriptor instead.
 func (*ComponentDependency) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{34}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ComponentDependency) GetTarget() *ComponentAddress {
@@ -2605,7 +2651,7 @@ type DiscoveredComponent struct {
 
 func (x *DiscoveredComponent) Reset() {
 	*x = DiscoveredComponent{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[35]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2617,7 +2663,7 @@ func (x *DiscoveredComponent) String() string {
 func (*DiscoveredComponent) ProtoMessage() {}
 
 func (x *DiscoveredComponent) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[35]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2630,7 +2676,7 @@ func (x *DiscoveredComponent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoveredComponent.ProtoReflect.Descriptor instead.
 func (*DiscoveredComponent) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{35}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *DiscoveredComponent) GetAddress() *ComponentAddress {
@@ -2697,7 +2743,7 @@ type ComponentEffects struct {
 
 func (x *ComponentEffects) Reset() {
 	*x = ComponentEffects{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[36]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2709,7 +2755,7 @@ func (x *ComponentEffects) String() string {
 func (*ComponentEffects) ProtoMessage() {}
 
 func (x *ComponentEffects) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[36]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2722,7 +2768,7 @@ func (x *ComponentEffects) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentEffects.ProtoReflect.Descriptor instead.
 func (*ComponentEffects) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{36}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ComponentEffects) GetCommands() bool {
@@ -2777,7 +2823,7 @@ type ComponentOperation struct {
 
 func (x *ComponentOperation) Reset() {
 	*x = ComponentOperation{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[37]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2789,7 +2835,7 @@ func (x *ComponentOperation) String() string {
 func (*ComponentOperation) ProtoMessage() {}
 
 func (x *ComponentOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[37]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2802,7 +2848,7 @@ func (x *ComponentOperation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentOperation.ProtoReflect.Descriptor instead.
 func (*ComponentOperation) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{37}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ComponentOperation) GetCommand() string {
@@ -2853,7 +2899,7 @@ type DiscoverComponentsRequest struct {
 
 func (x *DiscoverComponentsRequest) Reset() {
 	*x = DiscoverComponentsRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[38]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2865,7 +2911,7 @@ func (x *DiscoverComponentsRequest) String() string {
 func (*DiscoverComponentsRequest) ProtoMessage() {}
 
 func (x *DiscoverComponentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[38]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2878,7 +2924,7 @@ func (x *DiscoverComponentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverComponentsRequest.ProtoReflect.Descriptor instead.
 func (*DiscoverComponentsRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{38}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *DiscoverComponentsRequest) GetInvocation() *Invocation {
@@ -2967,7 +3013,7 @@ type DiscoverComponentsResponse struct {
 
 func (x *DiscoverComponentsResponse) Reset() {
 	*x = DiscoverComponentsResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[39]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2979,7 +3025,7 @@ func (x *DiscoverComponentsResponse) String() string {
 func (*DiscoverComponentsResponse) ProtoMessage() {}
 
 func (x *DiscoverComponentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[39]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2992,7 +3038,7 @@ func (x *DiscoverComponentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverComponentsResponse.ProtoReflect.Descriptor instead.
 func (*DiscoverComponentsResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{39}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *DiscoverComponentsResponse) GetComponents() []*DiscoveredComponent {
@@ -3033,7 +3079,7 @@ type ComponentRequest struct {
 
 func (x *ComponentRequest) Reset() {
 	*x = ComponentRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3045,7 +3091,7 @@ func (x *ComponentRequest) String() string {
 func (*ComponentRequest) ProtoMessage() {}
 
 func (x *ComponentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3058,7 +3104,7 @@ func (x *ComponentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentRequest.ProtoReflect.Descriptor instead.
 func (*ComponentRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{40}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ComponentRequest) GetInvocation() *Invocation {
@@ -3138,7 +3184,7 @@ type ComponentStateIdentity struct {
 
 func (x *ComponentStateIdentity) Reset() {
 	*x = ComponentStateIdentity{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3150,7 +3196,7 @@ func (x *ComponentStateIdentity) String() string {
 func (*ComponentStateIdentity) ProtoMessage() {}
 
 func (x *ComponentStateIdentity) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3163,7 +3209,7 @@ func (x *ComponentStateIdentity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentStateIdentity.ProtoReflect.Descriptor instead.
 func (*ComponentStateIdentity) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{41}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ComponentStateIdentity) GetBackendType() string {
@@ -3211,7 +3257,7 @@ type ComponentGeneratedFile struct {
 
 func (x *ComponentGeneratedFile) Reset() {
 	*x = ComponentGeneratedFile{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[42]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3223,7 +3269,7 @@ func (x *ComponentGeneratedFile) String() string {
 func (*ComponentGeneratedFile) ProtoMessage() {}
 
 func (x *ComponentGeneratedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[42]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3236,7 +3282,7 @@ func (x *ComponentGeneratedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentGeneratedFile.ProtoReflect.Descriptor instead.
 func (*ComponentGeneratedFile) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{42}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ComponentGeneratedFile) GetPath() string {
@@ -3294,7 +3340,7 @@ type ComponentExecutionConfiguration struct {
 
 func (x *ComponentExecutionConfiguration) Reset() {
 	*x = ComponentExecutionConfiguration{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[43]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3306,7 +3352,7 @@ func (x *ComponentExecutionConfiguration) String() string {
 func (*ComponentExecutionConfiguration) ProtoMessage() {}
 
 func (x *ComponentExecutionConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[43]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3319,7 +3365,7 @@ func (x *ComponentExecutionConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentExecutionConfiguration.ProtoReflect.Descriptor instead.
 func (*ComponentExecutionConfiguration) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{43}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ComponentExecutionConfiguration) GetExtraArguments() []*ComponentExtraArguments {
@@ -3370,7 +3416,7 @@ type ComponentExtraArguments struct {
 
 func (x *ComponentExtraArguments) Reset() {
 	*x = ComponentExtraArguments{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[44]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3382,7 +3428,7 @@ func (x *ComponentExtraArguments) String() string {
 func (*ComponentExtraArguments) ProtoMessage() {}
 
 func (x *ComponentExtraArguments) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[44]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3395,7 +3441,7 @@ func (x *ComponentExtraArguments) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentExtraArguments.ProtoReflect.Descriptor instead.
 func (*ComponentExtraArguments) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{44}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ComponentExtraArguments) GetCommands() []string {
@@ -3450,7 +3496,7 @@ type ComponentHook struct {
 
 func (x *ComponentHook) Reset() {
 	*x = ComponentHook{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[45]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3462,7 +3508,7 @@ func (x *ComponentHook) String() string {
 func (*ComponentHook) ProtoMessage() {}
 
 func (x *ComponentHook) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[45]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3475,7 +3521,7 @@ func (x *ComponentHook) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentHook.ProtoReflect.Descriptor instead.
 func (*ComponentHook) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{45}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ComponentHook) GetName() string {
@@ -3584,7 +3630,7 @@ type PrepareComponentResponse struct {
 
 func (x *PrepareComponentResponse) Reset() {
 	*x = PrepareComponentResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[46]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3596,7 +3642,7 @@ func (x *PrepareComponentResponse) String() string {
 func (*PrepareComponentResponse) ProtoMessage() {}
 
 func (x *PrepareComponentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[46]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3609,7 +3655,7 @@ func (x *PrepareComponentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareComponentResponse.ProtoReflect.Descriptor instead.
 func (*PrepareComponentResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{46}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *PrepareComponentResponse) GetEngine() string {
@@ -3778,7 +3824,7 @@ type ComponentErrorsConfiguration struct {
 
 func (x *ComponentErrorsConfiguration) Reset() {
 	*x = ComponentErrorsConfiguration{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[47]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3790,7 +3836,7 @@ func (x *ComponentErrorsConfiguration) String() string {
 func (*ComponentErrorsConfiguration) ProtoMessage() {}
 
 func (x *ComponentErrorsConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[47]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3803,7 +3849,7 @@ func (x *ComponentErrorsConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentErrorsConfiguration.ProtoReflect.Descriptor instead.
 func (*ComponentErrorsConfiguration) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{47}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ComponentErrorsConfiguration) GetRetry() []*ComponentRetryPolicy {
@@ -3833,7 +3879,7 @@ type ComponentRetryPolicy struct {
 
 func (x *ComponentRetryPolicy) Reset() {
 	*x = ComponentRetryPolicy{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[48]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3845,7 +3891,7 @@ func (x *ComponentRetryPolicy) String() string {
 func (*ComponentRetryPolicy) ProtoMessage() {}
 
 func (x *ComponentRetryPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[48]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3858,7 +3904,7 @@ func (x *ComponentRetryPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentRetryPolicy.ProtoReflect.Descriptor instead.
 func (*ComponentRetryPolicy) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{48}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ComponentRetryPolicy) GetName() string {
@@ -3903,7 +3949,7 @@ type ComponentIgnorePolicy struct {
 
 func (x *ComponentIgnorePolicy) Reset() {
 	*x = ComponentIgnorePolicy{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[49]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3915,7 +3961,7 @@ func (x *ComponentIgnorePolicy) String() string {
 func (*ComponentIgnorePolicy) ProtoMessage() {}
 
 func (x *ComponentIgnorePolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[49]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3928,7 +3974,7 @@ func (x *ComponentIgnorePolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentIgnorePolicy.ProtoReflect.Descriptor instead.
 func (*ComponentIgnorePolicy) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{49}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ComponentIgnorePolicy) GetName() string {
@@ -3976,7 +4022,7 @@ type ComponentExclude struct {
 
 func (x *ComponentExclude) Reset() {
 	*x = ComponentExclude{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[50]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3988,7 +4034,7 @@ func (x *ComponentExclude) String() string {
 func (*ComponentExclude) ProtoMessage() {}
 
 func (x *ComponentExclude) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[50]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4001,7 +4047,7 @@ func (x *ComponentExclude) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentExclude.ProtoReflect.Descriptor instead.
 func (*ComponentExclude) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{50}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ComponentExclude) GetCondition() bool {
@@ -4040,7 +4086,7 @@ type ComponentIam struct {
 
 func (x *ComponentIam) Reset() {
 	*x = ComponentIam{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[51]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4052,7 +4098,7 @@ func (x *ComponentIam) String() string {
 func (*ComponentIam) ProtoMessage() {}
 
 func (x *ComponentIam) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[51]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4065,7 +4111,7 @@ func (x *ComponentIam) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentIam.ProtoReflect.Descriptor instead.
 func (*ComponentIam) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{51}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ComponentIam) GetRole() string {
@@ -4109,7 +4155,7 @@ type ResolveComponentStateResponse struct {
 
 func (x *ResolveComponentStateResponse) Reset() {
 	*x = ResolveComponentStateResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[52]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4121,7 +4167,7 @@ func (x *ResolveComponentStateResponse) String() string {
 func (*ResolveComponentStateResponse) ProtoMessage() {}
 
 func (x *ResolveComponentStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[52]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4134,7 +4180,7 @@ func (x *ResolveComponentStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveComponentStateResponse.ProtoReflect.Descriptor instead.
 func (*ResolveComponentStateResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{52}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ResolveComponentStateResponse) GetState() *ComponentStateIdentity {
@@ -4263,7 +4309,10 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x04unit\x18\x05 \x01(\tR\x04unit\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x90\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"A\n" +
+	"\n" +
+	"LogRequest\x123\n" +
+	"\aentries\x18\x01 \x03(\v2\x19.atmos.plugin.v1.LogEntryR\aentries\"\x90\x03\n" +
 	"\vErrorDetail\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x16\n" +
@@ -4536,7 +4585,9 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x10SEVERITY_WARNING\x10\x022\x9f\x01\n" +
 	"\x04Info\x12O\n" +
 	"\bDescribe\x12 .atmos.plugin.v1.DescribeRequest\x1a!.atmos.plugin.v1.DescribeResponse\x12F\n" +
-	"\tConfigure\x12!.atmos.plugin.v1.ConfigureRequest\x1a\x16.google.protobuf.Empty2\xd3\x04\n" +
+	"\tConfigure\x12!.atmos.plugin.v1.ConfigureRequest\x1a\x16.google.protobuf.Empty2C\n" +
+	"\x03Log\x12<\n" +
+	"\x05Write\x12\x1b.atmos.plugin.v1.LogRequest\x1a\x16.google.protobuf.Empty2\xd3\x04\n" +
 	"\fAuthProvider\x12O\n" +
 	"\bValidate\x12 .atmos.plugin.v1.ProviderRequest\x1a!.atmos.plugin.v1.ValidateResponse\x12V\n" +
 	"\fAuthenticate\x12 .atmos.plugin.v1.ProviderRequest\x1a\".atmos.plugin.v1.AuthenticateEvent0\x01\x12L\n" +
@@ -4577,7 +4628,7 @@ func file_atmos_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 
 var (
 	file_atmos_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-	file_atmos_plugin_v1_plugin_proto_msgTypes  = make([]protoimpl.MessageInfo, 65)
+	file_atmos_plugin_v1_plugin_proto_msgTypes  = make([]protoimpl.MessageInfo, 66)
 	file_atmos_plugin_v1_plugin_proto_goTypes   = []any{
 		LogLevel(0),                             // 0: atmos.plugin.v1.LogLevel
 		Severity(0),                             // 1: atmos.plugin.v1.Severity
@@ -4597,207 +4648,211 @@ var (
 		(*AuthenticateEvent)(nil),               // 15: atmos.plugin.v1.AuthenticateEvent
 		(*SourceLocation)(nil),                  // 16: atmos.plugin.v1.SourceLocation
 		(*LogEntry)(nil),                        // 17: atmos.plugin.v1.LogEntry
-		(*ErrorDetail)(nil),                     // 18: atmos.plugin.v1.ErrorDetail
-		(*Diagnostic)(nil),                      // 19: atmos.plugin.v1.Diagnostic
-		(*ValidateResponse)(nil),                // 20: atmos.plugin.v1.ValidateResponse
-		(*Unsupported)(nil),                     // 21: atmos.plugin.v1.Unsupported
-		(*RefreshRequest)(nil),                  // 22: atmos.plugin.v1.RefreshRequest
-		(*RefreshResponse)(nil),                 // 23: atmos.plugin.v1.RefreshResponse
-		(*EnvironmentResponse)(nil),             // 24: atmos.plugin.v1.EnvironmentResponse
-		(*PrepareEnvironmentRequest)(nil),       // 25: atmos.plugin.v1.PrepareEnvironmentRequest
-		(*CredentialPath)(nil),                  // 26: atmos.plugin.v1.CredentialPath
-		(*PathsResponse)(nil),                   // 27: atmos.plugin.v1.PathsResponse
-		(*IdentityAuthenticateRequest)(nil),     // 28: atmos.plugin.v1.IdentityAuthenticateRequest
-		(*IdentityPrepareRequest)(nil),          // 29: atmos.plugin.v1.IdentityPrepareRequest
-		(*CommandRequest)(nil),                  // 30: atmos.plugin.v1.CommandRequest
-		(*CommandExit)(nil),                     // 31: atmos.plugin.v1.CommandExit
-		(*CommandEvent)(nil),                    // 32: atmos.plugin.v1.CommandEvent
-		(*ComponentValue)(nil),                  // 33: atmos.plugin.v1.ComponentValue
-		(*ComponentValuePath)(nil),              // 34: atmos.plugin.v1.ComponentValuePath
-		(*ComponentValueStep)(nil),              // 35: atmos.plugin.v1.ComponentValueStep
-		(*ComponentAddress)(nil),                // 36: atmos.plugin.v1.ComponentAddress
-		(*ComponentSource)(nil),                 // 37: atmos.plugin.v1.ComponentSource
-		(*ComponentDependency)(nil),             // 38: atmos.plugin.v1.ComponentDependency
-		(*DiscoveredComponent)(nil),             // 39: atmos.plugin.v1.DiscoveredComponent
-		(*ComponentEffects)(nil),                // 40: atmos.plugin.v1.ComponentEffects
-		(*ComponentOperation)(nil),              // 41: atmos.plugin.v1.ComponentOperation
-		(*DiscoverComponentsRequest)(nil),       // 42: atmos.plugin.v1.DiscoverComponentsRequest
-		(*DiscoverComponentsResponse)(nil),      // 43: atmos.plugin.v1.DiscoverComponentsResponse
-		(*ComponentRequest)(nil),                // 44: atmos.plugin.v1.ComponentRequest
-		(*ComponentStateIdentity)(nil),          // 45: atmos.plugin.v1.ComponentStateIdentity
-		(*ComponentGeneratedFile)(nil),          // 46: atmos.plugin.v1.ComponentGeneratedFile
-		(*ComponentExecutionConfiguration)(nil), // 47: atmos.plugin.v1.ComponentExecutionConfiguration
-		(*ComponentExtraArguments)(nil),         // 48: atmos.plugin.v1.ComponentExtraArguments
-		(*ComponentHook)(nil),                   // 49: atmos.plugin.v1.ComponentHook
-		(*PrepareComponentResponse)(nil),        // 50: atmos.plugin.v1.PrepareComponentResponse
-		(*ComponentErrorsConfiguration)(nil),    // 51: atmos.plugin.v1.ComponentErrorsConfiguration
-		(*ComponentRetryPolicy)(nil),            // 52: atmos.plugin.v1.ComponentRetryPolicy
-		(*ComponentIgnorePolicy)(nil),           // 53: atmos.plugin.v1.ComponentIgnorePolicy
-		(*ComponentExclude)(nil),                // 54: atmos.plugin.v1.ComponentExclude
-		(*ComponentIam)(nil),                    // 55: atmos.plugin.v1.ComponentIam
-		(*ResolveComponentStateResponse)(nil),   // 56: atmos.plugin.v1.ResolveComponentStateResponse
-		nil,                                     // 57: atmos.plugin.v1.Invocation.EnvironmentEntry
-		nil,                                     // 58: atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
-		nil,                                     // 59: atmos.plugin.v1.Interaction.FieldsEntry
-		nil,                                     // 60: atmos.plugin.v1.LogEntry.FieldsEntry
-		nil,                                     // 61: atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
-		nil,                                     // 62: atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
-		nil,                                     // 63: atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
-		nil,                                     // 64: atmos.plugin.v1.ComponentOperation.OptionsEntry
-		nil,                                     // 65: atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntry
-		nil,                                     // 66: atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry
-		nil,                                     // 67: atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntry
-		nil,                                     // 68: atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry
-		(*timestamppb.Timestamp)(nil),           // 69: google.protobuf.Timestamp
-		(*structpb.Struct)(nil),                 // 70: google.protobuf.Struct
-		(*emptypb.Empty)(nil),                   // 71: google.protobuf.Empty
+		(*LogRequest)(nil),                      // 18: atmos.plugin.v1.LogRequest
+		(*ErrorDetail)(nil),                     // 19: atmos.plugin.v1.ErrorDetail
+		(*Diagnostic)(nil),                      // 20: atmos.plugin.v1.Diagnostic
+		(*ValidateResponse)(nil),                // 21: atmos.plugin.v1.ValidateResponse
+		(*Unsupported)(nil),                     // 22: atmos.plugin.v1.Unsupported
+		(*RefreshRequest)(nil),                  // 23: atmos.plugin.v1.RefreshRequest
+		(*RefreshResponse)(nil),                 // 24: atmos.plugin.v1.RefreshResponse
+		(*EnvironmentResponse)(nil),             // 25: atmos.plugin.v1.EnvironmentResponse
+		(*PrepareEnvironmentRequest)(nil),       // 26: atmos.plugin.v1.PrepareEnvironmentRequest
+		(*CredentialPath)(nil),                  // 27: atmos.plugin.v1.CredentialPath
+		(*PathsResponse)(nil),                   // 28: atmos.plugin.v1.PathsResponse
+		(*IdentityAuthenticateRequest)(nil),     // 29: atmos.plugin.v1.IdentityAuthenticateRequest
+		(*IdentityPrepareRequest)(nil),          // 30: atmos.plugin.v1.IdentityPrepareRequest
+		(*CommandRequest)(nil),                  // 31: atmos.plugin.v1.CommandRequest
+		(*CommandExit)(nil),                     // 32: atmos.plugin.v1.CommandExit
+		(*CommandEvent)(nil),                    // 33: atmos.plugin.v1.CommandEvent
+		(*ComponentValue)(nil),                  // 34: atmos.plugin.v1.ComponentValue
+		(*ComponentValuePath)(nil),              // 35: atmos.plugin.v1.ComponentValuePath
+		(*ComponentValueStep)(nil),              // 36: atmos.plugin.v1.ComponentValueStep
+		(*ComponentAddress)(nil),                // 37: atmos.plugin.v1.ComponentAddress
+		(*ComponentSource)(nil),                 // 38: atmos.plugin.v1.ComponentSource
+		(*ComponentDependency)(nil),             // 39: atmos.plugin.v1.ComponentDependency
+		(*DiscoveredComponent)(nil),             // 40: atmos.plugin.v1.DiscoveredComponent
+		(*ComponentEffects)(nil),                // 41: atmos.plugin.v1.ComponentEffects
+		(*ComponentOperation)(nil),              // 42: atmos.plugin.v1.ComponentOperation
+		(*DiscoverComponentsRequest)(nil),       // 43: atmos.plugin.v1.DiscoverComponentsRequest
+		(*DiscoverComponentsResponse)(nil),      // 44: atmos.plugin.v1.DiscoverComponentsResponse
+		(*ComponentRequest)(nil),                // 45: atmos.plugin.v1.ComponentRequest
+		(*ComponentStateIdentity)(nil),          // 46: atmos.plugin.v1.ComponentStateIdentity
+		(*ComponentGeneratedFile)(nil),          // 47: atmos.plugin.v1.ComponentGeneratedFile
+		(*ComponentExecutionConfiguration)(nil), // 48: atmos.plugin.v1.ComponentExecutionConfiguration
+		(*ComponentExtraArguments)(nil),         // 49: atmos.plugin.v1.ComponentExtraArguments
+		(*ComponentHook)(nil),                   // 50: atmos.plugin.v1.ComponentHook
+		(*PrepareComponentResponse)(nil),        // 51: atmos.plugin.v1.PrepareComponentResponse
+		(*ComponentErrorsConfiguration)(nil),    // 52: atmos.plugin.v1.ComponentErrorsConfiguration
+		(*ComponentRetryPolicy)(nil),            // 53: atmos.plugin.v1.ComponentRetryPolicy
+		(*ComponentIgnorePolicy)(nil),           // 54: atmos.plugin.v1.ComponentIgnorePolicy
+		(*ComponentExclude)(nil),                // 55: atmos.plugin.v1.ComponentExclude
+		(*ComponentIam)(nil),                    // 56: atmos.plugin.v1.ComponentIam
+		(*ResolveComponentStateResponse)(nil),   // 57: atmos.plugin.v1.ResolveComponentStateResponse
+		nil,                                     // 58: atmos.plugin.v1.Invocation.EnvironmentEntry
+		nil,                                     // 59: atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
+		nil,                                     // 60: atmos.plugin.v1.Interaction.FieldsEntry
+		nil,                                     // 61: atmos.plugin.v1.LogEntry.FieldsEntry
+		nil,                                     // 62: atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
+		nil,                                     // 63: atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
+		nil,                                     // 64: atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
+		nil,                                     // 65: atmos.plugin.v1.ComponentOperation.OptionsEntry
+		nil,                                     // 66: atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntry
+		nil,                                     // 67: atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry
+		nil,                                     // 68: atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntry
+		nil,                                     // 69: atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry
+		(*timestamppb.Timestamp)(nil),           // 70: google.protobuf.Timestamp
+		(*structpb.Struct)(nil),                 // 71: google.protobuf.Struct
+		(*emptypb.Empty)(nil),                   // 72: google.protobuf.Empty
 	}
 )
 
 var file_atmos_plugin_v1_plugin_proto_depIdxs = []int32{
-	69,  // 0: atmos.plugin.v1.Invocation.deadline:type_name -> google.protobuf.Timestamp
-	57,  // 1: atmos.plugin.v1.Invocation.environment:type_name -> atmos.plugin.v1.Invocation.EnvironmentEntry
-	69,  // 2: atmos.plugin.v1.Credentials.expires_at:type_name -> google.protobuf.Timestamp
-	70,  // 3: atmos.plugin.v1.Credentials.data:type_name -> google.protobuf.Struct
+	70,  // 0: atmos.plugin.v1.Invocation.deadline:type_name -> google.protobuf.Timestamp
+	58,  // 1: atmos.plugin.v1.Invocation.environment:type_name -> atmos.plugin.v1.Invocation.EnvironmentEntry
+	70,  // 2: atmos.plugin.v1.Credentials.expires_at:type_name -> google.protobuf.Timestamp
+	71,  // 3: atmos.plugin.v1.Credentials.data:type_name -> google.protobuf.Struct
 	6,   // 4: atmos.plugin.v1.DescribeRequest.host_supported:type_name -> atmos.plugin.v1.ServiceVersionRange
 	6,   // 5: atmos.plugin.v1.DescribeResponse.services:type_name -> atmos.plugin.v1.ServiceVersionRange
 	7,   // 6: atmos.plugin.v1.DescribeResponse.exports:type_name -> atmos.plugin.v1.Export
-	58,  // 7: atmos.plugin.v1.ConfigureRequest.broker_ids:type_name -> atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
-	70,  // 8: atmos.plugin.v1.ConfigureRequest.settings:type_name -> google.protobuf.Struct
+	59,  // 7: atmos.plugin.v1.ConfigureRequest.broker_ids:type_name -> atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
+	71,  // 8: atmos.plugin.v1.ConfigureRequest.settings:type_name -> google.protobuf.Struct
 	4,   // 9: atmos.plugin.v1.ProviderRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	70,  // 10: atmos.plugin.v1.ProviderRequest.spec:type_name -> google.protobuf.Struct
+	71,  // 10: atmos.plugin.v1.ProviderRequest.spec:type_name -> google.protobuf.Struct
 	4,   // 11: atmos.plugin.v1.IdentityRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	70,  // 12: atmos.plugin.v1.IdentityRequest.spec:type_name -> google.protobuf.Struct
-	70,  // 13: atmos.plugin.v1.IdentityRequest.principal:type_name -> google.protobuf.Struct
-	59,  // 14: atmos.plugin.v1.Interaction.fields:type_name -> atmos.plugin.v1.Interaction.FieldsEntry
+	71,  // 12: atmos.plugin.v1.IdentityRequest.spec:type_name -> google.protobuf.Struct
+	71,  // 13: atmos.plugin.v1.IdentityRequest.principal:type_name -> google.protobuf.Struct
+	60,  // 14: atmos.plugin.v1.Interaction.fields:type_name -> atmos.plugin.v1.Interaction.FieldsEntry
 	13,  // 15: atmos.plugin.v1.AuthenticateEvent.progress:type_name -> atmos.plugin.v1.Progress
 	14,  // 16: atmos.plugin.v1.AuthenticateEvent.interaction:type_name -> atmos.plugin.v1.Interaction
 	5,   // 17: atmos.plugin.v1.AuthenticateEvent.result:type_name -> atmos.plugin.v1.Credentials
 	0,   // 18: atmos.plugin.v1.LogEntry.level:type_name -> atmos.plugin.v1.LogLevel
-	60,  // 19: atmos.plugin.v1.LogEntry.fields:type_name -> atmos.plugin.v1.LogEntry.FieldsEntry
-	69,  // 20: atmos.plugin.v1.LogEntry.time:type_name -> google.protobuf.Timestamp
-	16,  // 21: atmos.plugin.v1.ErrorDetail.location:type_name -> atmos.plugin.v1.SourceLocation
-	1,   // 22: atmos.plugin.v1.ErrorDetail.severity:type_name -> atmos.plugin.v1.Severity
-	17,  // 23: atmos.plugin.v1.ErrorDetail.logs:type_name -> atmos.plugin.v1.LogEntry
-	18,  // 24: atmos.plugin.v1.Diagnostic.detail:type_name -> atmos.plugin.v1.ErrorDetail
-	19,  // 25: atmos.plugin.v1.ValidateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
-	11,  // 26: atmos.plugin.v1.RefreshRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
-	5,   // 27: atmos.plugin.v1.RefreshRequest.current:type_name -> atmos.plugin.v1.Credentials
-	5,   // 28: atmos.plugin.v1.RefreshResponse.credentials:type_name -> atmos.plugin.v1.Credentials
-	21,  // 29: atmos.plugin.v1.RefreshResponse.unsupported:type_name -> atmos.plugin.v1.Unsupported
-	61,  // 30: atmos.plugin.v1.EnvironmentResponse.environment:type_name -> atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
-	11,  // 31: atmos.plugin.v1.PrepareEnvironmentRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
-	62,  // 32: atmos.plugin.v1.PrepareEnvironmentRequest.environment:type_name -> atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
-	26,  // 33: atmos.plugin.v1.PathsResponse.paths:type_name -> atmos.plugin.v1.CredentialPath
-	12,  // 34: atmos.plugin.v1.IdentityAuthenticateRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
-	5,   // 35: atmos.plugin.v1.IdentityAuthenticateRequest.upstream:type_name -> atmos.plugin.v1.Credentials
-	12,  // 36: atmos.plugin.v1.IdentityPrepareRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
-	63,  // 37: atmos.plugin.v1.IdentityPrepareRequest.environment:type_name -> atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
-	4,   // 38: atmos.plugin.v1.CommandRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	70,  // 39: atmos.plugin.v1.CommandRequest.settings:type_name -> google.protobuf.Struct
-	31,  // 40: atmos.plugin.v1.CommandEvent.exit:type_name -> atmos.plugin.v1.CommandExit
-	34,  // 41: atmos.plugin.v1.ComponentValue.sensitive_paths:type_name -> atmos.plugin.v1.ComponentValuePath
-	35,  // 42: atmos.plugin.v1.ComponentValuePath.steps:type_name -> atmos.plugin.v1.ComponentValueStep
-	33,  // 43: atmos.plugin.v1.ComponentValueStep.index:type_name -> atmos.plugin.v1.ComponentValue
-	2,   // 44: atmos.plugin.v1.ComponentSource.kind:type_name -> atmos.plugin.v1.ComponentSource.Kind
-	36,  // 45: atmos.plugin.v1.ComponentDependency.target:type_name -> atmos.plugin.v1.ComponentAddress
-	3,   // 46: atmos.plugin.v1.ComponentDependency.kind:type_name -> atmos.plugin.v1.ComponentDependency.Kind
-	36,  // 47: atmos.plugin.v1.DiscoveredComponent.address:type_name -> atmos.plugin.v1.ComponentAddress
-	33,  // 48: atmos.plugin.v1.DiscoveredComponent.configuration:type_name -> atmos.plugin.v1.ComponentValue
-	37,  // 49: atmos.plugin.v1.DiscoveredComponent.sources:type_name -> atmos.plugin.v1.ComponentSource
-	38,  // 50: atmos.plugin.v1.DiscoveredComponent.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
-	64,  // 51: atmos.plugin.v1.ComponentOperation.options:type_name -> atmos.plugin.v1.ComponentOperation.OptionsEntry
-	4,   // 52: atmos.plugin.v1.DiscoverComponentsRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	41,  // 53: atmos.plugin.v1.DiscoverComponentsRequest.operation:type_name -> atmos.plugin.v1.ComponentOperation
-	40,  // 54: atmos.plugin.v1.DiscoverComponentsRequest.effects:type_name -> atmos.plugin.v1.ComponentEffects
-	33,  // 55: atmos.plugin.v1.DiscoverComponentsRequest.provider_configuration:type_name -> atmos.plugin.v1.ComponentValue
-	39,  // 56: atmos.plugin.v1.DiscoverComponentsResponse.components:type_name -> atmos.plugin.v1.DiscoveredComponent
-	19,  // 57: atmos.plugin.v1.DiscoverComponentsResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
-	17,  // 58: atmos.plugin.v1.DiscoverComponentsResponse.logs:type_name -> atmos.plugin.v1.LogEntry
-	4,   // 59: atmos.plugin.v1.ComponentRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	36,  // 60: atmos.plugin.v1.ComponentRequest.address:type_name -> atmos.plugin.v1.ComponentAddress
-	41,  // 61: atmos.plugin.v1.ComponentRequest.operation:type_name -> atmos.plugin.v1.ComponentOperation
-	40,  // 62: atmos.plugin.v1.ComponentRequest.effects:type_name -> atmos.plugin.v1.ComponentEffects
-	33,  // 63: atmos.plugin.v1.ComponentRequest.configuration:type_name -> atmos.plugin.v1.ComponentValue
-	33,  // 64: atmos.plugin.v1.ComponentRequest.provider_configuration:type_name -> atmos.plugin.v1.ComponentValue
-	33,  // 65: atmos.plugin.v1.ComponentStateIdentity.backend:type_name -> atmos.plugin.v1.ComponentValue
-	48,  // 66: atmos.plugin.v1.ComponentExecutionConfiguration.extra_arguments:type_name -> atmos.plugin.v1.ComponentExtraArguments
-	49,  // 67: atmos.plugin.v1.ComponentExecutionConfiguration.before_hooks:type_name -> atmos.plugin.v1.ComponentHook
-	49,  // 68: atmos.plugin.v1.ComponentExecutionConfiguration.after_hooks:type_name -> atmos.plugin.v1.ComponentHook
-	49,  // 69: atmos.plugin.v1.ComponentExecutionConfiguration.error_hooks:type_name -> atmos.plugin.v1.ComponentHook
-	47,  // 70: atmos.plugin.v1.ComponentExecutionConfiguration.apply:type_name -> atmos.plugin.v1.ComponentExecutionConfiguration
-	65,  // 71: atmos.plugin.v1.ComponentExtraArguments.environment:type_name -> atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntry
-	33,  // 72: atmos.plugin.v1.PrepareComponentResponse.inputs:type_name -> atmos.plugin.v1.ComponentValue
-	45,  // 73: atmos.plugin.v1.PrepareComponentResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
-	46,  // 74: atmos.plugin.v1.PrepareComponentResponse.files:type_name -> atmos.plugin.v1.ComponentGeneratedFile
-	38,  // 75: atmos.plugin.v1.PrepareComponentResponse.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
-	37,  // 76: atmos.plugin.v1.PrepareComponentResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
-	19,  // 77: atmos.plugin.v1.PrepareComponentResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
-	47,  // 78: atmos.plugin.v1.PrepareComponentResponse.execution:type_name -> atmos.plugin.v1.ComponentExecutionConfiguration
-	66,  // 79: atmos.plugin.v1.PrepareComponentResponse.input_origins:type_name -> atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry
-	51,  // 80: atmos.plugin.v1.PrepareComponentResponse.errors:type_name -> atmos.plugin.v1.ComponentErrorsConfiguration
-	54,  // 81: atmos.plugin.v1.PrepareComponentResponse.exclude:type_name -> atmos.plugin.v1.ComponentExclude
-	55,  // 82: atmos.plugin.v1.PrepareComponentResponse.iam:type_name -> atmos.plugin.v1.ComponentIam
-	33,  // 83: atmos.plugin.v1.PrepareComponentResponse.encryption:type_name -> atmos.plugin.v1.ComponentValue
-	67,  // 84: atmos.plugin.v1.PrepareComponentResponse.feature_flags:type_name -> atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntry
-	17,  // 85: atmos.plugin.v1.PrepareComponentResponse.logs:type_name -> atmos.plugin.v1.LogEntry
-	33,  // 86: atmos.plugin.v1.PrepareComponentResponse.module_source_authorization:type_name -> atmos.plugin.v1.ComponentValue
-	52,  // 87: atmos.plugin.v1.ComponentErrorsConfiguration.retry:type_name -> atmos.plugin.v1.ComponentRetryPolicy
-	53,  // 88: atmos.plugin.v1.ComponentErrorsConfiguration.ignore:type_name -> atmos.plugin.v1.ComponentIgnorePolicy
-	68,  // 89: atmos.plugin.v1.ComponentIgnorePolicy.signals:type_name -> atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry
-	33,  // 90: atmos.plugin.v1.ComponentIam.web_identity_token:type_name -> atmos.plugin.v1.ComponentValue
-	45,  // 91: atmos.plugin.v1.ResolveComponentStateResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
-	37,  // 92: atmos.plugin.v1.ResolveComponentStateResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
-	19,  // 93: atmos.plugin.v1.ResolveComponentStateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
-	17,  // 94: atmos.plugin.v1.ResolveComponentStateResponse.logs:type_name -> atmos.plugin.v1.LogEntry
-	33,  // 95: atmos.plugin.v1.ComponentOperation.OptionsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
-	16,  // 96: atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry.value:type_name -> atmos.plugin.v1.SourceLocation
-	33,  // 97: atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
-	8,   // 98: atmos.plugin.v1.Info.Describe:input_type -> atmos.plugin.v1.DescribeRequest
-	10,  // 99: atmos.plugin.v1.Info.Configure:input_type -> atmos.plugin.v1.ConfigureRequest
-	11,  // 100: atmos.plugin.v1.AuthProvider.Validate:input_type -> atmos.plugin.v1.ProviderRequest
-	11,  // 101: atmos.plugin.v1.AuthProvider.Authenticate:input_type -> atmos.plugin.v1.ProviderRequest
-	22,  // 102: atmos.plugin.v1.AuthProvider.Refresh:input_type -> atmos.plugin.v1.RefreshRequest
-	11,  // 103: atmos.plugin.v1.AuthProvider.Logout:input_type -> atmos.plugin.v1.ProviderRequest
-	11,  // 104: atmos.plugin.v1.AuthProvider.Environment:input_type -> atmos.plugin.v1.ProviderRequest
-	11,  // 105: atmos.plugin.v1.AuthProvider.Paths:input_type -> atmos.plugin.v1.ProviderRequest
-	25,  // 106: atmos.plugin.v1.AuthProvider.PrepareEnvironment:input_type -> atmos.plugin.v1.PrepareEnvironmentRequest
-	12,  // 107: atmos.plugin.v1.AuthIdentity.Validate:input_type -> atmos.plugin.v1.IdentityRequest
-	28,  // 108: atmos.plugin.v1.AuthIdentity.Authenticate:input_type -> atmos.plugin.v1.IdentityAuthenticateRequest
-	12,  // 109: atmos.plugin.v1.AuthIdentity.Logout:input_type -> atmos.plugin.v1.IdentityRequest
-	12,  // 110: atmos.plugin.v1.AuthIdentity.Environment:input_type -> atmos.plugin.v1.IdentityRequest
-	12,  // 111: atmos.plugin.v1.AuthIdentity.Paths:input_type -> atmos.plugin.v1.IdentityRequest
-	29,  // 112: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:input_type -> atmos.plugin.v1.IdentityPrepareRequest
-	30,  // 113: atmos.plugin.v1.Commands.Run:input_type -> atmos.plugin.v1.CommandRequest
-	42,  // 114: atmos.plugin.v1.ComponentDiscovery.Discover:input_type -> atmos.plugin.v1.DiscoverComponentsRequest
-	44,  // 115: atmos.plugin.v1.ComponentValidation.Validate:input_type -> atmos.plugin.v1.ComponentRequest
-	44,  // 116: atmos.plugin.v1.ComponentPreparation.Prepare:input_type -> atmos.plugin.v1.ComponentRequest
-	44,  // 117: atmos.plugin.v1.ComponentState.Resolve:input_type -> atmos.plugin.v1.ComponentRequest
-	9,   // 118: atmos.plugin.v1.Info.Describe:output_type -> atmos.plugin.v1.DescribeResponse
-	71,  // 119: atmos.plugin.v1.Info.Configure:output_type -> google.protobuf.Empty
-	20,  // 120: atmos.plugin.v1.AuthProvider.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	15,  // 121: atmos.plugin.v1.AuthProvider.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
-	23,  // 122: atmos.plugin.v1.AuthProvider.Refresh:output_type -> atmos.plugin.v1.RefreshResponse
-	71,  // 123: atmos.plugin.v1.AuthProvider.Logout:output_type -> google.protobuf.Empty
-	24,  // 124: atmos.plugin.v1.AuthProvider.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	27,  // 125: atmos.plugin.v1.AuthProvider.Paths:output_type -> atmos.plugin.v1.PathsResponse
-	24,  // 126: atmos.plugin.v1.AuthProvider.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	20,  // 127: atmos.plugin.v1.AuthIdentity.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	15,  // 128: atmos.plugin.v1.AuthIdentity.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
-	71,  // 129: atmos.plugin.v1.AuthIdentity.Logout:output_type -> google.protobuf.Empty
-	24,  // 130: atmos.plugin.v1.AuthIdentity.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	27,  // 131: atmos.plugin.v1.AuthIdentity.Paths:output_type -> atmos.plugin.v1.PathsResponse
-	24,  // 132: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	32,  // 133: atmos.plugin.v1.Commands.Run:output_type -> atmos.plugin.v1.CommandEvent
-	43,  // 134: atmos.plugin.v1.ComponentDiscovery.Discover:output_type -> atmos.plugin.v1.DiscoverComponentsResponse
-	20,  // 135: atmos.plugin.v1.ComponentValidation.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	50,  // 136: atmos.plugin.v1.ComponentPreparation.Prepare:output_type -> atmos.plugin.v1.PrepareComponentResponse
-	56,  // 137: atmos.plugin.v1.ComponentState.Resolve:output_type -> atmos.plugin.v1.ResolveComponentStateResponse
-	118, // [118:138] is the sub-list for method output_type
-	98,  // [98:118] is the sub-list for method input_type
-	98,  // [98:98] is the sub-list for extension type_name
-	98,  // [98:98] is the sub-list for extension extendee
-	0,   // [0:98] is the sub-list for field type_name
+	61,  // 19: atmos.plugin.v1.LogEntry.fields:type_name -> atmos.plugin.v1.LogEntry.FieldsEntry
+	70,  // 20: atmos.plugin.v1.LogEntry.time:type_name -> google.protobuf.Timestamp
+	17,  // 21: atmos.plugin.v1.LogRequest.entries:type_name -> atmos.plugin.v1.LogEntry
+	16,  // 22: atmos.plugin.v1.ErrorDetail.location:type_name -> atmos.plugin.v1.SourceLocation
+	1,   // 23: atmos.plugin.v1.ErrorDetail.severity:type_name -> atmos.plugin.v1.Severity
+	17,  // 24: atmos.plugin.v1.ErrorDetail.logs:type_name -> atmos.plugin.v1.LogEntry
+	19,  // 25: atmos.plugin.v1.Diagnostic.detail:type_name -> atmos.plugin.v1.ErrorDetail
+	20,  // 26: atmos.plugin.v1.ValidateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	11,  // 27: atmos.plugin.v1.RefreshRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
+	5,   // 28: atmos.plugin.v1.RefreshRequest.current:type_name -> atmos.plugin.v1.Credentials
+	5,   // 29: atmos.plugin.v1.RefreshResponse.credentials:type_name -> atmos.plugin.v1.Credentials
+	22,  // 30: atmos.plugin.v1.RefreshResponse.unsupported:type_name -> atmos.plugin.v1.Unsupported
+	62,  // 31: atmos.plugin.v1.EnvironmentResponse.environment:type_name -> atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
+	11,  // 32: atmos.plugin.v1.PrepareEnvironmentRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
+	63,  // 33: atmos.plugin.v1.PrepareEnvironmentRequest.environment:type_name -> atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
+	27,  // 34: atmos.plugin.v1.PathsResponse.paths:type_name -> atmos.plugin.v1.CredentialPath
+	12,  // 35: atmos.plugin.v1.IdentityAuthenticateRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
+	5,   // 36: atmos.plugin.v1.IdentityAuthenticateRequest.upstream:type_name -> atmos.plugin.v1.Credentials
+	12,  // 37: atmos.plugin.v1.IdentityPrepareRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
+	64,  // 38: atmos.plugin.v1.IdentityPrepareRequest.environment:type_name -> atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
+	4,   // 39: atmos.plugin.v1.CommandRequest.invocation:type_name -> atmos.plugin.v1.Invocation
+	71,  // 40: atmos.plugin.v1.CommandRequest.settings:type_name -> google.protobuf.Struct
+	32,  // 41: atmos.plugin.v1.CommandEvent.exit:type_name -> atmos.plugin.v1.CommandExit
+	35,  // 42: atmos.plugin.v1.ComponentValue.sensitive_paths:type_name -> atmos.plugin.v1.ComponentValuePath
+	36,  // 43: atmos.plugin.v1.ComponentValuePath.steps:type_name -> atmos.plugin.v1.ComponentValueStep
+	34,  // 44: atmos.plugin.v1.ComponentValueStep.index:type_name -> atmos.plugin.v1.ComponentValue
+	2,   // 45: atmos.plugin.v1.ComponentSource.kind:type_name -> atmos.plugin.v1.ComponentSource.Kind
+	37,  // 46: atmos.plugin.v1.ComponentDependency.target:type_name -> atmos.plugin.v1.ComponentAddress
+	3,   // 47: atmos.plugin.v1.ComponentDependency.kind:type_name -> atmos.plugin.v1.ComponentDependency.Kind
+	37,  // 48: atmos.plugin.v1.DiscoveredComponent.address:type_name -> atmos.plugin.v1.ComponentAddress
+	34,  // 49: atmos.plugin.v1.DiscoveredComponent.configuration:type_name -> atmos.plugin.v1.ComponentValue
+	38,  // 50: atmos.plugin.v1.DiscoveredComponent.sources:type_name -> atmos.plugin.v1.ComponentSource
+	39,  // 51: atmos.plugin.v1.DiscoveredComponent.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
+	65,  // 52: atmos.plugin.v1.ComponentOperation.options:type_name -> atmos.plugin.v1.ComponentOperation.OptionsEntry
+	4,   // 53: atmos.plugin.v1.DiscoverComponentsRequest.invocation:type_name -> atmos.plugin.v1.Invocation
+	42,  // 54: atmos.plugin.v1.DiscoverComponentsRequest.operation:type_name -> atmos.plugin.v1.ComponentOperation
+	41,  // 55: atmos.plugin.v1.DiscoverComponentsRequest.effects:type_name -> atmos.plugin.v1.ComponentEffects
+	34,  // 56: atmos.plugin.v1.DiscoverComponentsRequest.provider_configuration:type_name -> atmos.plugin.v1.ComponentValue
+	40,  // 57: atmos.plugin.v1.DiscoverComponentsResponse.components:type_name -> atmos.plugin.v1.DiscoveredComponent
+	20,  // 58: atmos.plugin.v1.DiscoverComponentsResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	17,  // 59: atmos.plugin.v1.DiscoverComponentsResponse.logs:type_name -> atmos.plugin.v1.LogEntry
+	4,   // 60: atmos.plugin.v1.ComponentRequest.invocation:type_name -> atmos.plugin.v1.Invocation
+	37,  // 61: atmos.plugin.v1.ComponentRequest.address:type_name -> atmos.plugin.v1.ComponentAddress
+	42,  // 62: atmos.plugin.v1.ComponentRequest.operation:type_name -> atmos.plugin.v1.ComponentOperation
+	41,  // 63: atmos.plugin.v1.ComponentRequest.effects:type_name -> atmos.plugin.v1.ComponentEffects
+	34,  // 64: atmos.plugin.v1.ComponentRequest.configuration:type_name -> atmos.plugin.v1.ComponentValue
+	34,  // 65: atmos.plugin.v1.ComponentRequest.provider_configuration:type_name -> atmos.plugin.v1.ComponentValue
+	34,  // 66: atmos.plugin.v1.ComponentStateIdentity.backend:type_name -> atmos.plugin.v1.ComponentValue
+	49,  // 67: atmos.plugin.v1.ComponentExecutionConfiguration.extra_arguments:type_name -> atmos.plugin.v1.ComponentExtraArguments
+	50,  // 68: atmos.plugin.v1.ComponentExecutionConfiguration.before_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	50,  // 69: atmos.plugin.v1.ComponentExecutionConfiguration.after_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	50,  // 70: atmos.plugin.v1.ComponentExecutionConfiguration.error_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	48,  // 71: atmos.plugin.v1.ComponentExecutionConfiguration.apply:type_name -> atmos.plugin.v1.ComponentExecutionConfiguration
+	66,  // 72: atmos.plugin.v1.ComponentExtraArguments.environment:type_name -> atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntry
+	34,  // 73: atmos.plugin.v1.PrepareComponentResponse.inputs:type_name -> atmos.plugin.v1.ComponentValue
+	46,  // 74: atmos.plugin.v1.PrepareComponentResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
+	47,  // 75: atmos.plugin.v1.PrepareComponentResponse.files:type_name -> atmos.plugin.v1.ComponentGeneratedFile
+	39,  // 76: atmos.plugin.v1.PrepareComponentResponse.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
+	38,  // 77: atmos.plugin.v1.PrepareComponentResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
+	20,  // 78: atmos.plugin.v1.PrepareComponentResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	48,  // 79: atmos.plugin.v1.PrepareComponentResponse.execution:type_name -> atmos.plugin.v1.ComponentExecutionConfiguration
+	67,  // 80: atmos.plugin.v1.PrepareComponentResponse.input_origins:type_name -> atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry
+	52,  // 81: atmos.plugin.v1.PrepareComponentResponse.errors:type_name -> atmos.plugin.v1.ComponentErrorsConfiguration
+	55,  // 82: atmos.plugin.v1.PrepareComponentResponse.exclude:type_name -> atmos.plugin.v1.ComponentExclude
+	56,  // 83: atmos.plugin.v1.PrepareComponentResponse.iam:type_name -> atmos.plugin.v1.ComponentIam
+	34,  // 84: atmos.plugin.v1.PrepareComponentResponse.encryption:type_name -> atmos.plugin.v1.ComponentValue
+	68,  // 85: atmos.plugin.v1.PrepareComponentResponse.feature_flags:type_name -> atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntry
+	17,  // 86: atmos.plugin.v1.PrepareComponentResponse.logs:type_name -> atmos.plugin.v1.LogEntry
+	34,  // 87: atmos.plugin.v1.PrepareComponentResponse.module_source_authorization:type_name -> atmos.plugin.v1.ComponentValue
+	53,  // 88: atmos.plugin.v1.ComponentErrorsConfiguration.retry:type_name -> atmos.plugin.v1.ComponentRetryPolicy
+	54,  // 89: atmos.plugin.v1.ComponentErrorsConfiguration.ignore:type_name -> atmos.plugin.v1.ComponentIgnorePolicy
+	69,  // 90: atmos.plugin.v1.ComponentIgnorePolicy.signals:type_name -> atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry
+	34,  // 91: atmos.plugin.v1.ComponentIam.web_identity_token:type_name -> atmos.plugin.v1.ComponentValue
+	46,  // 92: atmos.plugin.v1.ResolveComponentStateResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
+	38,  // 93: atmos.plugin.v1.ResolveComponentStateResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
+	20,  // 94: atmos.plugin.v1.ResolveComponentStateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	17,  // 95: atmos.plugin.v1.ResolveComponentStateResponse.logs:type_name -> atmos.plugin.v1.LogEntry
+	34,  // 96: atmos.plugin.v1.ComponentOperation.OptionsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
+	16,  // 97: atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry.value:type_name -> atmos.plugin.v1.SourceLocation
+	34,  // 98: atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
+	8,   // 99: atmos.plugin.v1.Info.Describe:input_type -> atmos.plugin.v1.DescribeRequest
+	10,  // 100: atmos.plugin.v1.Info.Configure:input_type -> atmos.plugin.v1.ConfigureRequest
+	18,  // 101: atmos.plugin.v1.Log.Write:input_type -> atmos.plugin.v1.LogRequest
+	11,  // 102: atmos.plugin.v1.AuthProvider.Validate:input_type -> atmos.plugin.v1.ProviderRequest
+	11,  // 103: atmos.plugin.v1.AuthProvider.Authenticate:input_type -> atmos.plugin.v1.ProviderRequest
+	23,  // 104: atmos.plugin.v1.AuthProvider.Refresh:input_type -> atmos.plugin.v1.RefreshRequest
+	11,  // 105: atmos.plugin.v1.AuthProvider.Logout:input_type -> atmos.plugin.v1.ProviderRequest
+	11,  // 106: atmos.plugin.v1.AuthProvider.Environment:input_type -> atmos.plugin.v1.ProviderRequest
+	11,  // 107: atmos.plugin.v1.AuthProvider.Paths:input_type -> atmos.plugin.v1.ProviderRequest
+	26,  // 108: atmos.plugin.v1.AuthProvider.PrepareEnvironment:input_type -> atmos.plugin.v1.PrepareEnvironmentRequest
+	12,  // 109: atmos.plugin.v1.AuthIdentity.Validate:input_type -> atmos.plugin.v1.IdentityRequest
+	29,  // 110: atmos.plugin.v1.AuthIdentity.Authenticate:input_type -> atmos.plugin.v1.IdentityAuthenticateRequest
+	12,  // 111: atmos.plugin.v1.AuthIdentity.Logout:input_type -> atmos.plugin.v1.IdentityRequest
+	12,  // 112: atmos.plugin.v1.AuthIdentity.Environment:input_type -> atmos.plugin.v1.IdentityRequest
+	12,  // 113: atmos.plugin.v1.AuthIdentity.Paths:input_type -> atmos.plugin.v1.IdentityRequest
+	30,  // 114: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:input_type -> atmos.plugin.v1.IdentityPrepareRequest
+	31,  // 115: atmos.plugin.v1.Commands.Run:input_type -> atmos.plugin.v1.CommandRequest
+	43,  // 116: atmos.plugin.v1.ComponentDiscovery.Discover:input_type -> atmos.plugin.v1.DiscoverComponentsRequest
+	45,  // 117: atmos.plugin.v1.ComponentValidation.Validate:input_type -> atmos.plugin.v1.ComponentRequest
+	45,  // 118: atmos.plugin.v1.ComponentPreparation.Prepare:input_type -> atmos.plugin.v1.ComponentRequest
+	45,  // 119: atmos.plugin.v1.ComponentState.Resolve:input_type -> atmos.plugin.v1.ComponentRequest
+	9,   // 120: atmos.plugin.v1.Info.Describe:output_type -> atmos.plugin.v1.DescribeResponse
+	72,  // 121: atmos.plugin.v1.Info.Configure:output_type -> google.protobuf.Empty
+	72,  // 122: atmos.plugin.v1.Log.Write:output_type -> google.protobuf.Empty
+	21,  // 123: atmos.plugin.v1.AuthProvider.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	15,  // 124: atmos.plugin.v1.AuthProvider.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
+	24,  // 125: atmos.plugin.v1.AuthProvider.Refresh:output_type -> atmos.plugin.v1.RefreshResponse
+	72,  // 126: atmos.plugin.v1.AuthProvider.Logout:output_type -> google.protobuf.Empty
+	25,  // 127: atmos.plugin.v1.AuthProvider.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	28,  // 128: atmos.plugin.v1.AuthProvider.Paths:output_type -> atmos.plugin.v1.PathsResponse
+	25,  // 129: atmos.plugin.v1.AuthProvider.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	21,  // 130: atmos.plugin.v1.AuthIdentity.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	15,  // 131: atmos.plugin.v1.AuthIdentity.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
+	72,  // 132: atmos.plugin.v1.AuthIdentity.Logout:output_type -> google.protobuf.Empty
+	25,  // 133: atmos.plugin.v1.AuthIdentity.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	28,  // 134: atmos.plugin.v1.AuthIdentity.Paths:output_type -> atmos.plugin.v1.PathsResponse
+	25,  // 135: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	33,  // 136: atmos.plugin.v1.Commands.Run:output_type -> atmos.plugin.v1.CommandEvent
+	44,  // 137: atmos.plugin.v1.ComponentDiscovery.Discover:output_type -> atmos.plugin.v1.DiscoverComponentsResponse
+	21,  // 138: atmos.plugin.v1.ComponentValidation.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	51,  // 139: atmos.plugin.v1.ComponentPreparation.Prepare:output_type -> atmos.plugin.v1.PrepareComponentResponse
+	57,  // 140: atmos.plugin.v1.ComponentState.Resolve:output_type -> atmos.plugin.v1.ResolveComponentStateResponse
+	120, // [120:141] is the sub-list for method output_type
+	99,  // [99:120] is the sub-list for method input_type
+	99,  // [99:99] is the sub-list for extension type_name
+	99,  // [99:99] is the sub-list for extension extendee
+	0,   // [0:99] is the sub-list for field type_name
 }
 
 func init() { file_atmos_plugin_v1_plugin_proto_init() }
@@ -4810,16 +4865,16 @@ func file_atmos_plugin_v1_plugin_proto_init() {
 		(*AuthenticateEvent_Interaction)(nil),
 		(*AuthenticateEvent_Result)(nil),
 	}
-	file_atmos_plugin_v1_plugin_proto_msgTypes[19].OneofWrappers = []any{
+	file_atmos_plugin_v1_plugin_proto_msgTypes[20].OneofWrappers = []any{
 		(*RefreshResponse_Credentials)(nil),
 		(*RefreshResponse_Unsupported)(nil),
 	}
-	file_atmos_plugin_v1_plugin_proto_msgTypes[28].OneofWrappers = []any{
+	file_atmos_plugin_v1_plugin_proto_msgTypes[29].OneofWrappers = []any{
 		(*CommandEvent_Stdout)(nil),
 		(*CommandEvent_Stderr)(nil),
 		(*CommandEvent_Exit)(nil),
 	}
-	file_atmos_plugin_v1_plugin_proto_msgTypes[31].OneofWrappers = []any{
+	file_atmos_plugin_v1_plugin_proto_msgTypes[32].OneofWrappers = []any{
 		(*ComponentValueStep_Attribute)(nil),
 		(*ComponentValueStep_Index)(nil),
 	}
@@ -4829,9 +4884,9 @@ func file_atmos_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atmos_plugin_v1_plugin_proto_rawDesc), len(file_atmos_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   65,
+			NumMessages:   66,
 			NumExtensions: 0,
-			NumServices:   8,
+			NumServices:   9,
 		},
 		GoTypes:           file_atmos_plugin_v1_plugin_proto_goTypes,
 		DependencyIndexes: file_atmos_plugin_v1_plugin_proto_depIdxs,

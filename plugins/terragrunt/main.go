@@ -36,8 +36,8 @@ func description() *pluginv1.DescribeResponse {
 }
 
 func main() {
-	plugin.Main(plugin.Config{Description: description(), Build: func(_ *api.Client) plugin.Services {
-		service := provider.New(nil)
+	plugin.Main(plugin.Config{Description: description(), Build: func(client *api.Client) plugin.Services {
+		service := provider.New(nil, provider.WithAPI(client))
 		return plugin.Services{Discovery: service, Validation: service, Preparation: service, State: service}
 	}})
 }

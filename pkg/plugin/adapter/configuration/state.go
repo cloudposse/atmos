@@ -21,7 +21,7 @@ func (s *Session) ResolveState(ctx context.Context, info *schema.ConfigAndStacks
 		return nil, err
 	}
 	// Discovery and preparation do not authorize state resolution; the request grants no effects.
-	result, err := selected.provider.ResolveState(ctx, selected.request)
+	result, err := selected.provider.ResolveState(adapter.WithLogScope(ctx, logScope(selected.request, info, &s.warnings)), selected.request)
 	if err != nil {
 		return nil, err
 	}

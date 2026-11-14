@@ -47,6 +47,10 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	if err != nil {
 		return nil, err
 	}
+	// This fixed progress event is safe to show before configuration values are evaluated.
+	if sink := logSinkFrom(ctx); sink != nil {
+		sink.Event(log.InfoLevel, "Evaluating unit", filepath.Dir(path))
+	}
 	ctx = config.WithCaches(ctx)
 	logger, err := evaluationLogger(ctx, request.LogLevel)
 	if err != nil {

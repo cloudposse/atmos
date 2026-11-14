@@ -133,28 +133,29 @@ func (b *ErrorBuilder) WithLocation(file string, line int) *ErrorBuilder {
 //   - Error message includes "container already running"
 //   - Hints and context from cause are preserved
 func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
-	if cause != nil {
-		// Guard against nil b.err - if no sentinel was provided, use cause directly.
-		if b.err == nil {
-			b.err = cause
-		} else {
-			// Extract hints from cause before wrapping, since fmt.Errorf
-			// doesn't preserve cockroachdb hint metadata.
-			if causeHints := AllHints(cause); len(causeHints) > 0 {
-				b.hints = append(b.hints, causeHints...)
-			}
-			causeDetails := AllDetails(cause)
-			// Extract context from cause before wrapping, since fmt.Errorf
-			// doesn't preserve cockroachdb safe details metadata.
-			b.extractContextFromCause(cause)
-			// Use fmt.Errorf with double %w to maintain both errors in chain.
-			// This is compatible with std errors.Is() used by testify's assert.ErrorIs().
-			// Note: cockroachdb/errors.Wrap() only works with cockroachdb's errors.Is(),
-			// not the standard library's, which breaks test assertions.
-			b.err = fmt.Errorf("%w: %w", b.err, cause)
-			for _, detail := range causeDetails {
-				b.err = errors.WithDetail(b.err, detail)
-			}
+	if cause == nil {
+		return b
+	}
+	// Guard against nil b.err - if no sentinel was provided, use cause directly.
+	if b.err == nil {
+		b.err = cause
+	} else {
+		// Extract hints from cause before wrapping, since fmt.Errorf
+		// doesn't preserve cockroachdb hint metadata.
+		if causeHints := AllHints(cause); len(causeHints) > 0 {
+			b.hints = append(b.hints, causeHints...)
+		}
+		causeDetails := AllDetails(cause)
+		// Extract context from cause before wrapping, since fmt.Errorf
+		// doesn't preserve cockroachdb safe details metadata.
+		b.extractContextFromCause(cause)
+		// Use fmt.Errorf with double %w to maintain both errors in chain.
+		// This is compatible with std errors.Is() used by testify's assert.ErrorIs().
+		// Note: cockroachdb/errors.Wrap() only works with cockroachdb's errors.Is(),
+		// not the standard library's, which breaks test assertions.
+		b.err = fmt.Errorf("%w: %w", b.err, cause)
+		for _, detail := range causeDetails {
+			b.err = errors.WithDetail(b.err, detail)
 		}
 	}
 	return b

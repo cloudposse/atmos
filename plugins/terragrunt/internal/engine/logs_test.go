@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
 func TestTruncatePreservesUTF8Boundary(t *testing.T) {
@@ -149,6 +151,70 @@ func TestResolveReportsLoggerEventsToTheContextSink(t *testing.T) {
 
 	_, err = Resolve(t.Context(), request)
 	require.NoError(t, err, "evaluation without a sink still works")
+}
+
+func TestLogSinkForwardsSafeProgressAndBuffersTerragruntEvents(t *testing.T) {
+	sink := NewLogSink("debug", "")
+	var forwarded []string
+	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, entry.Level+":"+entry.Message) })
+	l := logger(t, sink)
+
+	l.Trace("below the level")
+	l.Debug("first")
+	l.Warn("second")
+	sink.Event(log.InfoLevel, "third", "")
+
+	assert.Equal(t, []string{"info:third"}, forwarded)
+	entries := sink.Entries()
+	require.Len(t, entries, 2)
+	assert.Equal(t, "first", entries[0].Message)
+	assert.Equal(t, "second", entries[1].Message)
+}
+
+func TestLogSinkForwardingKeepsOrderAcrossConcurrentUnits(t *testing.T) {
+	sink := NewLogSink("debug", "")
+	forwarded := make(map[string][]string)
+	var total int
+	sink.Forward(func(entry *model.LogEntry) {
+		forwarded[entry.Unit] = append(forwarded[entry.Unit], entry.Message)
+		total++
+	})
+	var wg sync.WaitGroup
+	for unit := range 8 {
+		wg.Go(func() {
+			for sequence := range 50 {
+				sink.Event(log.InfoLevel, fmt.Sprint(sequence), strings.Repeat("u", unit+1))
+			}
+		})
+	}
+	wg.Wait()
+	// The deliverer is never called concurrently, so it needs no lock of its own.
+	assert.Equal(t, 400, total)
+	for unit := range 8 {
+		var want []string
+		for sequence := range 50 {
+			want = append(want, fmt.Sprint(sequence))
+		}
+		assert.Equal(t, want, forwarded[strings.Repeat("u", unit+1)])
+	}
+}
+
+func TestLogSinkEventsFollowTheLevelAndAreRelativeToTheRoot(t *testing.T) {
+	root := t.TempDir()
+	for level, want := range map[string]int{"": 0, "warn": 0, "debug": 1, "trace": 2} {
+		sink := NewLogSink(level, root)
+		assert.Equal(t, want > 0, sink.Enabled(), level)
+		sink.Event(log.InfoLevel, "Evaluating unit", filepath.Join(root, "live", "app"))
+		sink.Event(log.TraceLevel, "too verbose", "")
+		entries := sink.Entries()
+		require.Len(t, entries, want, level)
+		if want > 0 {
+			assert.Equal(t, model.LogEntry{Time: entries[0].Time, Level: "info", Message: "Evaluating unit", Unit: "live/app"}, entries[0])
+			assert.False(t, entries[0].Time.IsZero())
+		}
+	}
+	var missing *LogSink
+	assert.NotPanics(t, func() { missing.Event(log.InfoLevel, "ignored", "") })
 }
 
 // A value registered as sensitive is redacted from every event, including events collected before the

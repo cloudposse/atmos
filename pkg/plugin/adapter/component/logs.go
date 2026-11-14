@@ -1,6 +1,7 @@
 package component
 
 import (
+	"context"
 	"maps"
 	"slices"
 	"strings"
@@ -20,6 +21,36 @@ type LogScope struct {
 	Component string
 	Stack     string
 	Warnings  *WarningDeduper
+}
+
+type logScopeKey struct{}
+
+// WithLogScope names the component and stack that log events delivered during a call belong to. A plugin
+// delivers its log events while the call runs, so the call must carry the scope; a call without one is scoped
+// to the plugin alone.
+func WithLogScope(ctx context.Context, scope LogScope) context.Context {
+	defer perf.Track(nil, "componentadapter.WithLogScope")()
+
+	return context.WithValue(ctx, logScopeKey{}, scope)
+}
+
+// liveLogs renders the entries a plugin delivers while a call runs, scoped to the call.
+type liveLogs struct{ scope LogScope }
+
+// newLiveLogs returns the sink for the call made with ctx by the provider named name.
+func newLiveLogs(ctx context.Context, name string) liveLogs {
+	scope, _ := ctx.Value(logScopeKey{}).(LogScope)
+	if scope.Provider == "" {
+		scope.Provider = name
+	}
+	return liveLogs{scope: scope}
+}
+
+// WriteLogs renders the entries now, in order, through the same path as entries a response carries.
+func (l liveLogs) WriteLogs(_ context.Context, entries []*pluginv1.LogEntry) {
+	defer perf.Track(nil, "componentadapter.liveLogs.WriteLogs")()
+
+	RenderLogs(l.scope, entries)
 }
 
 // logOff is the level that tells a plugin to return no log events.
@@ -75,7 +106,9 @@ func RenderLogs(scope LogScope, entries []*pluginv1.LogEntry) {
 
 	for _, entry := range entries {
 		level, ok := logLevel(entry.GetLevel())
-		if !ok {
+		// The plugin drops events below the level it was given, and the host checks again here: a plugin may
+		// ignore the level, and masking and formatting an event nobody will see is wasted work.
+		if !ok || level < log.GetLevel() {
 			continue
 		}
 		message := atmosio.MaskString(entry.GetMessage())

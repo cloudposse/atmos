@@ -33,7 +33,7 @@ func (p *Provider) invoke(ctx context.Context, capability string, run func(conte
 	defer handle.Close()
 	// No ambient HTTP, browser, secret, or private-credential grants. Future host
 	// adapters must provide explicit invocation-scoped grants for allowed effects.
-	scope := bridge.Invocation{Namespace: p.owner + ":component:" + p.name}
+	scope := bridge.Invocation{Namespace: p.owner + ":component:" + p.name, Logs: newLiveLogs(ctx, p.name)}
 	err = handle.Invoke(ctx, scope, func(call context.Context, invocation *pluginv1.Invocation) error {
 		return run(call, handle, invocation)
 	})

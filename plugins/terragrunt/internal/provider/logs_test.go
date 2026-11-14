@@ -27,16 +27,16 @@ func TestLogsRedactSensitiveRequestValues(t *testing.T) {
 	options, err := encode(map[string]any{"token": "not-sensitive"})
 	require.NoError(t, err)
 
-	_, sink := withLogs(t.Context(), &pluginv1.Invocation{LogLevel: "debug"}, "", configuration, options, nil)
-	logger := log.New(log.WithOutput(io.Discard), log.WithHooks(sink.Hook()))
-	require.NoError(t, logger.SetLevel(sink.TerragruntLevel()))
+	_, logs := (&Provider{}).withLogs(t.Context(), &pluginv1.Invocation{LogLevel: "debug"}, "", configuration, options, nil)
+	logger := log.New(log.WithOutput(io.Discard), log.WithHooks(logs.sink.Hook()))
+	require.NoError(t, logger.SetLevel(logs.sink.TerragruntLevel()))
 	logger.Debug("pw-789 8443 visible not-sensitive")
 
-	entries := logEntries(sink)
+	entries := logs.entries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "<MASKED> <MASKED> visible not-sensitive", entries[0].GetMessage())
 
-	err = withFailureLogs(rpcError(&model.Problem{Code: model.CodeUnsupportedSetting, Summary: "failed", Safe: true, Err: ErrUnsupported}), sink)
+	err = withFailureLogs(rpcError(&model.Problem{Code: model.CodeUnsupportedSetting, Summary: "failed", Safe: true, Err: ErrUnsupported}), logs)
 	detail, ok := component.FailureDetail(err)
 	require.True(t, ok)
 	require.Len(t, detail.Logs, 1)
@@ -52,12 +52,12 @@ func TestLogsRedactLargeSensitiveIntegersExactly(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	_, sink := withLogs(t.Context(), &pluginv1.Invocation{LogLevel: "debug"}, "", configuration)
-	logger := log.New(log.WithOutput(io.Discard), log.WithHooks(sink.Hook()))
-	require.NoError(t, logger.SetLevel(sink.TerragruntLevel()))
+	_, logs := (&Provider{}).withLogs(t.Context(), &pluginv1.Invocation{LogLevel: "debug"}, "", configuration)
+	logger := log.New(log.WithOutput(io.Discard), log.WithHooks(logs.sink.Hook()))
+	require.NoError(t, logger.SetLevel(logs.sink.TerragruntLevel()))
 	logger.Debug("account 9007199254740993")
 
-	entries := logEntries(sink)
+	entries := logs.entries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "account <MASKED>", entries[0].GetMessage())
 }

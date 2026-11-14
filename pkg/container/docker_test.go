@@ -353,8 +353,6 @@ func TestDockerRuntime_Pull_Integration(t *testing.T) {
 // (Create, Start, Stop, Remove) for Docker runtime. Tests are intentionally duplicated
 // to verify both Docker and Podman implementations independently, ensuring consistency
 // across runtimes and allowing runtime-specific test evolution if needed.
-//
-//nolint:dupl // Docker and Podman implement identical Runtime interface with same lifecycle behavior.
 func TestDockerRuntime_ContainerLifecycle_Integration(t *testing.T) {
 	// Integration test - tests Create, Start, Stop, Remove lifecycle.
 	runtime := NewDockerRuntime()
@@ -689,7 +687,9 @@ func TestDockerRuntime_SharedNetworkAliasReachable_Integration(t *testing.T) {
 		return
 	}
 
-	const networkName = "atmos-test-alias-net"
+	// Isolate resources across concurrent test processes sharing one Docker daemon.
+	runSuffix := strconv.Itoa(os.Getpid()) + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	networkName := "atmos-test-alias-net-" + runSuffix
 	require.NoError(t, runtime.EnsureNetwork(ctx, networkName))
 	t.Cleanup(func() {
 		_ = exec.Command("docker", "network", "rm", networkName).Run() // Best-effort test cleanup.
@@ -698,7 +698,7 @@ func TestDockerRuntime_SharedNetworkAliasReachable_Integration(t *testing.T) {
 	// The "server" side: a container that just listens on a TCP port,
 	// registered under the alias its sibling will dial.
 	serverID, err := runtime.Create(ctx, &CreateConfig{
-		Name:    "atmos-test-alias-server",
+		Name:    "atmos-test-alias-server-" + runSuffix,
 		Image:   "alpine:latest",
 		Command: []string{"nc", "-l", "-p", "8080"},
 		Networks: []NetworkAttachment{
@@ -713,7 +713,7 @@ func TestDockerRuntime_SharedNetworkAliasReachable_Integration(t *testing.T) {
 	// no special knowledge of the server beyond its alias -- exactly the
 	// relationship between a job container and an emulator container.
 	clientID, err := runtime.Create(ctx, &CreateConfig{
-		Name:            "atmos-test-alias-client",
+		Name:            "atmos-test-alias-client-" + runSuffix,
 		Image:           "alpine:latest",
 		OverrideCommand: true, // sleep infinity.
 		Networks: []NetworkAttachment{
