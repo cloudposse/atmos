@@ -137,7 +137,14 @@ func (s *FileStore) objectPath(key string) (string, error) {
 		return "", fmt.Errorf("%w: resolving cache root: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 	p := filepath.Join(root, filepath.FromSlash(key))
-	if !strings.HasPrefix(p, root+string(filepath.Separator)) {
+	// A filesystem or drive root ("/" or `C:\`) already ends in a separator, so only
+	// append one when it is missing; otherwise the prefix would be "//" and reject
+	// every valid key.
+	prefix := root
+	if !strings.HasSuffix(prefix, string(filepath.Separator)) {
+		prefix += string(filepath.Separator)
+	}
+	if !strings.HasPrefix(p, prefix) {
 		return "", fmt.Errorf("%w: cache key %q escapes the cache root", errUtils.ErrPathTraversal, key)
 	}
 	return p, nil

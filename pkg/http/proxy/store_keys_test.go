@@ -180,3 +180,57 @@ func TestProxy_RejectsTraversalCacheKeyWithBadRequest(t *testing.T) {
 	body := httpGet(t, srv.BaseURL()+"leak/aws.zip")
 	assert.Equal(t, "payload", string(body))
 }
+
+func TestFileStore_ObjectPathContainmentAcrossRoots(t *testing.T) {
+	sep := string(filepath.Separator)
+	// The filesystem (or drive) root of the temp dir: "/" on Unix, `C:\` on Windows.
+	fsRoot := filepath.VolumeName(t.TempDir()) + sep
+	nested := filepath.Join(t.TempDir(), "cache")
+
+	tests := []struct {
+		name    string
+		root    string
+		key     string
+		want    string
+		wantErr error
+	}{
+		{name: "filesystem root accepts a normal key", root: fsRoot, key: "obj/a.zip", want: filepath.Join(fsRoot, "obj", "a.zip")},
+		{name: "filesystem root accepts a single-segment key", root: fsRoot, key: "a.zip", want: filepath.Join(fsRoot, "a.zip")},
+		{name: "filesystem root with trailing separator is the same root", root: fsRoot + sep, key: "obj/a.zip", want: filepath.Join(fsRoot, "obj", "a.zip")},
+		{name: "filesystem root rejects parent traversal", root: fsRoot, key: "../a.zip", wantErr: errUtils.ErrPathTraversal},
+		{name: "filesystem root rejects nested traversal", root: fsRoot, key: "obj/../../a.zip", wantErr: errUtils.ErrPathTraversal},
+		{name: "filesystem root rejects absolute key", root: fsRoot, key: "/etc/passwd", wantErr: errUtils.ErrPathTraversal},
+		{name: "nested root accepts a normal key", root: nested, key: "obj/a.zip", want: filepath.Join(nested, "obj", "a.zip")},
+		{name: "nested root with trailing separator accepts a normal key", root: nested + sep, key: "obj/a.zip", want: filepath.Join(nested, "obj", "a.zip")},
+		{name: "nested root rejects traversal", root: nested, key: "../cache2/a.zip", wantErr: errUtils.ErrPathTraversal},
+		{name: "empty key is rejected", root: nested, key: "", wantErr: errUtils.ErrCacheKeyRequired},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NewFileStore(tc.root).objectPath(tc.key)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+			// A containment prefix check must keep the result strictly inside the root.
+			rel, relErr := filepath.Rel(filepath.Clean(tc.root), got)
+			require.NoError(t, relErr)
+			assert.True(t, filepath.IsLocal(rel), "%q must be inside %q", got, tc.root)
+		})
+	}
+}
+
+func TestFileStore_FilesystemRootSidecarPath(t *testing.T) {
+	fsRoot := filepath.VolumeName(t.TempDir()) + string(filepath.Separator)
+	store := NewFileStore(fsRoot)
+
+	got, err := store.sidecarPath("obj/a.zip")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(fsRoot, "obj", "a.zip")+metadataSuffix, got)
+
+	_, err = store.sidecarPath("../a.zip")
+	require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
