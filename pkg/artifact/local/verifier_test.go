@@ -164,6 +164,6 @@ func TestVerifyFailsClosedOnTooManyMalformedEvidenceFiles(t *testing.T) {
 	}
 	_, err := repo.Verify(context.Background(), subject, trustedPolicy)
 	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
-	require.ErrorIs(t, err, errTooManyMalformedEvidence)
+	require.ErrorIs(t, err, errUtils.ErrArtifactEvidenceMalformed)
 	assert.Zero(t, probe.seen)
 }

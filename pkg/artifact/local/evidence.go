@@ -19,8 +19,6 @@ import (
 // maxMalformedEvidence bounds diagnostics and reads for invalid evidence entries.
 const maxMalformedEvidence = 64
 
-var errTooManyMalformedEvidence = errors.New("too many malformed evidence files")
-
 // loadedEvidence is one stored evidence file that parsed and matched its file name.
 type loadedEvidence struct {
 	evidence *layout.Evidence
@@ -56,7 +54,7 @@ func (t *tree) loadEvidence(subject digest.Digest) ([]loadedEvidence, []artifact
 			}
 			if ignored > maxMalformedEvidence {
 				diags = append(diags, artifact.Diagnostic{Severity: artifact.SeverityWarning, Code: "evidence-truncated", Message: "too many invalid evidence entries; remaining entries were not read"})
-				return nil, diags, errTooManyMalformedEvidence
+				return nil, diags, fmt.Errorf("%w: more than %d invalid entries for %s", errUtils.ErrArtifactEvidenceMalformed, maxMalformedEvidence, subject)
 			}
 		}
 		if errors.Is(readErr, io.EOF) {
@@ -134,7 +132,7 @@ func (r *Repository) checkSubject(operation string, subject artifact.SignatureSu
 // and stores it as a detached file named by the evidence digest. Evidence lives beside the Record,
 // so signing never changes the Record, the reference, or the payload. A signature added after
 // publication covers the Record that describes the archive, not the original archive bytes.
-func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, _ artifact.SignOptions) ([]artifact.SignatureEvidence, error) {
+func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, opts artifact.SignOptions) ([]artifact.SignatureEvidence, error) {
 	defer perf.Track(nil, "local.Repository.Sign")()
 
 	if err := r.checkSignRequest(subject, signer); err != nil {
@@ -159,11 +157,39 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 	if payload == nil {
 		return nil, fmt.Errorf("%w: the signer returned no evidence", errUtils.ErrArtifactVerificationFailed)
 	}
-	stored, err := r.storeEvidence(t, subject, payload)
+	// The signer may have waited arbitrarily long, so a concurrent Delete can have removed the Record
+	// since the first check. Store the evidence under the reference lock, against a re-checked Record.
+	var stored artifact.SignatureEvidence
+	err = r.withEvidenceLock(ctx, t, subject.Digest, opts.Lock, func() error {
+		var storeErr error
+		stored, storeErr = r.storeEvidence(t, subject, payload)
+		return storeErr
+	})
 	if err != nil {
 		return nil, err
 	}
 	return []artifact.SignatureEvidence{stored}, nil
+}
+
+// withEvidenceLock runs fn while holding the reference lock of the Record, after confirming the
+// Record is still current. A matching caller lock is reused; otherwise the lock is acquired and
+// released here, so evidence is never written for a Record a concurrent Delete removed.
+func (r *Repository) withEvidenceLock(ctx context.Context, t *tree, recordDigest digest.Digest, lock artifact.LockHandle, fn func() error) (err error) {
+	held, err := r.lockEvidenceReference(ctx, t, recordDigest, lock)
+	if err != nil {
+		return err
+	}
+	if held != nil {
+		defer func() {
+			if releaseErr := held.Release(context.WithoutCancel(ctx)); err == nil {
+				err = releaseErr
+			}
+		}()
+	}
+	if _, err := r.requireCurrentRecord(t, recordDigest); err != nil {
+		return err
+	}
+	return fn()
 }
 
 // checkSignRequest refuses an unsupported subject, a missing signer, and a signer whose evidence
@@ -300,11 +326,11 @@ func (r *Repository) ReadEvidence(ctx context.Context, pinned *artifact.PinnedRe
 	if err != nil {
 		return nil, err
 	}
-	blobs := make([]artifact.EvidenceBlob, 0, len(loaded))
-	for index := range loaded {
-		blobs = append(blobs, loaded[index].evidence.Blob(loaded[index].locator))
-	}
-	return blobs, nil
+	// Evidence bound to another subject can share the directory. Verification ignores it, so the
+	// export must too: the destination rejects a foreign envelope and would stop before importing
+	// the valid signatures that follow it.
+	var ignored []artifact.Diagnostic
+	return evidenceBlobs(artifact.SignatureSubject{Kind: artifact.SubjectRecord, Digest: pinned.RecordDigest}, loaded, &ignored), nil
 }
 
 // WriteEvidence implements [artifact.EvidenceWriter]: it imports evidence for an artifact this
@@ -321,21 +347,12 @@ func (r *Repository) WriteEvidence(ctx context.Context, pinned *artifact.PinnedR
 		return nil, r.missingRoot(err, pinned.Ref)
 	}
 	defer t.Close()
-	held, err := r.lockEvidenceReference(ctx, t, pinned, lock)
-	if err != nil {
-		return nil, err
-	}
-	if held != nil {
-		defer func() {
-			if releaseErr := held.Release(context.WithoutCancel(ctx)); err == nil {
-				err = releaseErr
-			}
-		}()
-	}
-	if _, err := r.requireCurrentRecord(t, pinned.RecordDigest); err != nil {
-		return nil, err
-	}
-	return r.writeEvidenceLocked(t, pinned, evidence)
+	err = r.withEvidenceLock(ctx, t, pinned.RecordDigest, lock, func() error {
+		var writeErr error
+		stored, writeErr = r.writeEvidenceLocked(t, pinned, evidence)
+		return writeErr
+	})
+	return stored, err
 }
 
 // writeEvidenceLocked validates and stores each evidence blob under the reference lock.
@@ -363,8 +380,8 @@ func (r *Repository) writeEvidenceLocked(t *tree, pinned *artifact.PinnedReferen
 }
 
 // lockEvidenceReference reuses a matching caller lock or acquires the reference lock.
-func (r *Repository) lockEvidenceReference(ctx context.Context, t *tree, pinned *artifact.PinnedReference, lock artifact.LockHandle) (*fileLock, error) {
-	record, _, err := t.loadRecord(pinned.RecordDigest)
+func (r *Repository) lockEvidenceReference(ctx context.Context, t *tree, recordDigest digest.Digest, lock artifact.LockHandle) (*fileLock, error) {
+	record, _, err := t.loadRecord(recordDigest)
 	if err != nil {
 		return nil, err
 	}

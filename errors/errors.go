@@ -2138,6 +2138,10 @@ var (
 	// ErrArtifactStreamFailed is returned when reading or closing an artifact stream fails. The
 	// underlying I/O error is wrapped alongside it for diagnostics.
 	ErrArtifactStreamFailed = errors.New("artifact stream failed")
+
+	// ErrArtifactEvidenceMalformed is returned when a subject's evidence directory holds more malformed
+	// entries than the repository is willing to read, so valid evidence may be hidden behind them.
+	ErrArtifactEvidenceMalformed = errors.New("too many malformed evidence files")
 )
 
 // Blob transport sentinels. They classify outcomes of the transport-only object I/O in

@@ -362,11 +362,15 @@ func TestLock_ReleasesWhenItsOwnerProcessExits(t *testing.T) {
 	_, err = repo.Lock(ctx, lockRequest(resource))
 	require.ErrorIs(t, err, context.DeadlineExceeded, "the helper process holds the lock")
 
-	// Kill the owner without letting it release: the OS must free the lock.
-	_ = stdin.Close()
+	// Kill the owner while its stdin is still open, so it cannot leave its read loop and release
+	// the lock on the normal path: the OS alone must free it. Stdin closes only after the wait.
 	require.NoError(t, cmd.Process.Kill())
-	_ = cmd.Wait()
+	waitErr := cmd.Wait()
 	exited = true
+	_ = stdin.Close()
+	require.Error(t, waitErr, "the owner was terminated rather than exiting on its own")
+	require.NotNil(t, cmd.ProcessState)
+	assert.False(t, cmd.ProcessState.Success(), "the owner did not exit cleanly through its release path")
 
 	acquire, cancelAcquire := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelAcquire()

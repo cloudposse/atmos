@@ -2,9 +2,11 @@ package local
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
@@ -292,4 +294,109 @@ func TestSignature_EvidenceFollowsTheRecordLifecycle(t *testing.T) {
 	_, err = repo.Delete(context.Background(), current, artifact.DeleteOptions{Scope: artifact.DeleteObject})
 	require.NoError(t, err)
 	assert.NoDirExists(t, currentDir, "delete removes the evidence the artifact exclusively owns")
+}
+
+func TestSignature_ReadEvidenceExportsOnlyThePinnedSubject(t *testing.T) {
+	source := newRepo(t, signedSpec(dirSpec()))
+	publish(t, source, &prepareSpec{}, artifact.PublishOptions{})
+	pinned := resolve(t, source, defaultRef())
+	subject := recordSubject(t, source)
+	signer := newSigner()
+	signed, err := source.Sign(context.Background(), subject, signer, artifact.SignOptions{})
+	require.NoError(t, err)
+
+	// A valid envelope for another subject sits in the same directory, as the verification test
+	// above explicitly permits. Exporting it would make the destination reject the whole batch.
+	dir := filepath.Join(source.root, filepath.FromSlash(layout.SignatureDir(artifact.SubjectRecord, subject.Digest)))
+	foreign, err := layout.NewEvidence(artifact.SignatureSubject{Kind: artifact.SubjectRecord, Digest: digest.FromString("foreign subject")},
+		&artifact.EvidencePayload{Format: artifact.EvidenceSigstoreBundle, MediaType: "application/json", Data: []byte("{}")})
+	require.NoError(t, err)
+	raw, err := foreign.Marshal()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, foreign.Digest().Encoded()+".json"), raw, 0o644))
+	require.Len(t, listFiles(t, dir), 2, "both envelopes are on disk")
+
+	blobs, err := source.ReadEvidence(context.Background(), &pinned)
+	require.NoError(t, err)
+	require.Len(t, blobs, 1, "only evidence bound to the pinned Record is exported")
+	assert.Equal(t, signed[0].Descriptor.Digest, blobs[0].Evidence.Descriptor.Digest)
+	assert.Equal(t, subject.Digest, blobs[0].Evidence.Subject.Digest)
+
+	destination := newRepo(t, signedSpec(dirSpec()))
+	publish(t, destination, &prepareSpec{}, artifact.PublishOptions{})
+	destPinned := resolve(t, destination, defaultRef())
+	stored, err := destination.WriteEvidence(context.Background(), &destPinned, blobs, nil)
+	require.NoError(t, err, "the destination accepts the exported batch")
+	require.Len(t, stored, 1)
+	verified, err := destination.Verify(context.Background(), recordSubject(t, destination), signer.TrustedPolicy())
+	require.NoError(t, err)
+	assert.Equal(t, artifact.VerificationVerified, verified.Status)
+}
+
+func TestSignature_ReadEvidenceReportsExhaustedMalformedEntries(t *testing.T) {
+	repo, subject := signedWith(t, &artifacttest.FakeVerifier{})
+	pinned := resolve(t, repo, defaultRef())
+	dir := filepath.Join(repo.root, filepath.FromSlash(layout.SignatureDir(subject.Kind, subject.Digest)))
+	for i := range maxMalformedEvidence + 1 {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("bad-%03d.json", i)), []byte("bad"), 0o644))
+	}
+
+	blobs, err := repo.ReadEvidence(context.Background(), &pinned)
+	require.ErrorIs(t, err, errUtils.ErrArtifactEvidenceMalformed)
+	assert.Empty(t, blobs)
+}
+
+// A signer may wait long enough for the Record to be deleted. Signing must then fail instead of
+// recreating the evidence directory for a Record that no longer exists.
+func TestSignature_SignDoesNotResurrectEvidenceForADeletedRecord(t *testing.T) {
+	repo := newRepo(t, signedSpec(dirSpec()))
+	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
+	pinned := resolve(t, repo, defaultRef())
+	subject := recordSubject(t, repo)
+
+	signer := artifact.NewMockSigner(gomock.NewController(t))
+	signer.EXPECT().Formats().Return([]artifact.EvidenceFormat{artifact.EvidenceSigstoreBundle}).AnyTimes()
+	signer.EXPECT().Sign(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ artifact.SignatureSubject) (*artifact.EvidencePayload, error) {
+		_, deleteErr := repo.Delete(ctx, pinned, artifact.DeleteOptions{})
+		require.NoError(t, deleteErr, "the Record is deleted while the signer is working")
+		return &artifact.EvidencePayload{Format: artifact.EvidenceSigstoreBundle, MediaType: "application/json", Data: []byte(`{"late":true}`)}, nil
+	})
+
+	evidence, err := repo.Sign(context.Background(), subject, signer, artifact.SignOptions{})
+	require.Error(t, err, "signing a deleted Record must not report success")
+	assert.Empty(t, evidence)
+	assert.NoDirExists(t, filepath.Join(repo.root, filepath.FromSlash(layout.SignatureDir(artifact.SubjectRecord, subject.Digest))),
+		"no evidence directory is recreated for the deleted Record")
+}
+
+func TestSignature_SignStoresEvidenceUnderTheReferenceLock(t *testing.T) {
+	repo := newRepo(t, signedSpec(dirSpec()))
+	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
+	subject := recordSubject(t, repo)
+	resource := testName + ":" + testVersion
+
+	handle, err := repo.Lock(context.Background(), lockRequest(resource))
+	require.NoError(t, err)
+
+	t.Run("another writer holds the lock, so storing waits and honors the deadline", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		_, signErr := repo.Sign(ctx, subject, newSigner(), artifact.SignOptions{})
+		require.ErrorIs(t, signErr, context.DeadlineExceeded)
+		assert.NoDirExists(t, filepath.Join(repo.root, filepath.FromSlash(layout.SignatureDir(artifact.SubjectRecord, subject.Digest))))
+	})
+	t.Run("a matching caller lock is reused", func(t *testing.T) {
+		evidence, signErr := repo.Sign(context.Background(), subject, newSigner(), artifact.SignOptions{Lock: handle})
+		require.NoError(t, signErr)
+		require.Len(t, evidence, 1)
+	})
+	require.NoError(t, handle.Release(context.Background()))
+
+	t.Run("the lock is released after signing", func(t *testing.T) {
+		_, signErr := repo.Sign(context.Background(), subject, newSigner(), artifact.SignOptions{})
+		require.NoError(t, signErr)
+		reacquired, lockErr := repo.Lock(context.Background(), lockRequest(resource))
+		require.NoError(t, lockErr)
+		require.NoError(t, reacquired.Release(context.Background()))
+	})
 }
