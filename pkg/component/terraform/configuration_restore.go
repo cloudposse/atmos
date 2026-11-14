@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -290,7 +291,7 @@ func (e *Executor) installReviewedModules(atmosConfig *schema.AtmosConfiguration
 	if rebuild == nil || !rebuild.plan.Modules || info.DryRun {
 		return nil
 	}
-	if err := e.services.ExecuteShellCommand(*atmosConfig, info.Command, []string{"get"}, workdir, info.ComponentEnvList, false, info.RedirectStdErr); err != nil {
+	if err := e.services.ExecuteShellCommand(*atmosConfig, info.Command, []string{"get"}, workdir, info.ComponentEnvList, false, info.RedirectStdErr, component.WithEnvironment(info.SanitizedEnv)); err != nil {
 		return errUtils.Build(fmt.Errorf("%w: downloading the reviewed child modules: %w", errUtils.ErrPlanVerificationFailed, err)).
 			WithExplanation("The reviewed plan uses downloaded child modules, which must be downloaded again and match before the plan is applied.").
 			WithHint("Check that the module sources are reachable from this runner, or apply on the runner that created the plan.").
