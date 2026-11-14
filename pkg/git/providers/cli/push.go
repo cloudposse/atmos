@@ -22,11 +22,10 @@ const (
 	pushRetryJitter       = 0.5
 )
 
-// Push pushes the current branch, retrying on non-fast-forward rejection —
-// the most common GitOps publishing failure (a concurrent publisher pushed
-// first). Each retry rebases local commits onto the updated remote ref and
-// pushes again using the configured shared retry policy. Legacy retry counts
-// use jittered exponential backoff and a 30-second deadline. Atmos never adds force-push options.
+// Push retries rejected refs and throttled transports with the shared retry policy.
+// Only rejected refs trigger a rebase. Server cooldowns take precedence over the
+// configured delay cap, while attempts and the elapsed-time budget remain bounded.
+// Atmos never adds force-push options.
 func (p *Provider) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 	defer perf.Track(nil, "cli.Provider.Push")()
 
@@ -73,39 +72,19 @@ func (p *Provider) pushWithRetry(ctx context.Context, opts *atmosgit.PushOptions
 		return err
 	}
 	start := time.Now()
-	attempts := 0
-	rejected := false
+	state := &pushRetryState{provider: p, opts: opts, config: config, patterns: patterns}
 	err = retry.New(*config, executorOptions...).ExecuteWithPredicate(ctx, func() error {
-		if rejected {
-			rejected = false
-			if err := p.rebaseOntoRemote(ctx, opts.RepoContext); err != nil {
-				return err
-			}
-		}
-		attempts++
-		result, err := p.pushOnce(ctx, opts)
-		if err == nil {
-			return nil
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		// Authentication failures must win even if the output also mentions rejection.
-		if retryablePushResult(result, patterns) {
-			rejected = true
-			return errUtils.ErrGitPushRejected
-		}
-		return classify(err, result, "push")
-	}, func(error) bool { return rejected })
+		return state.attempt(ctx)
+	}, func(err error) bool { return state.rejected || errors.Is(err, errUtils.ErrGitRateLimited) })
 	if err == nil {
 		return nil
 	}
-	if rejected && !errors.Is(err, errUtils.ErrGitPushRejected) {
+	if state.rejected && !errors.Is(err, errUtils.ErrGitPushRejected) {
 		err = errors.Join(errUtils.ErrGitPushRejected, err)
 	}
 	// Do not include remote URLs, ref names or subprocess output in diagnostics.
 	return fmt.Errorf("git push after %d attempt(s), %d retr%s, elapsed %s: %w",
-		attempts, max(0, attempts-1), pluralRetry(max(0, attempts-1)), time.Since(start).Round(time.Millisecond), err)
+		state.attempts, max(0, state.attempts-1), pluralRetry(max(0, state.attempts-1)), time.Since(start).Round(time.Millisecond), err)
 }
 
 // pushOnce performs a single push attempt.
@@ -115,22 +94,7 @@ func (p *Provider) pushOnce(ctx context.Context, opts *atmosgit.PushOptions) (at
 		args = append(args, opts.Branch)
 	}
 	args = append(args, opts.ExtraArgs...)
-	return p.run(ctx, opts.Workdir, opts.Env, args...)
-}
-
-// rebaseOntoRemote replays local commits onto the updated remote ref so the
-// next push attempt is fast-forward for the remote.
-func (p *Provider) rebaseOntoRemote(ctx context.Context, rc atmosgit.RepoContext) error {
-	args := []string{"pull", "--rebase", remoteOrDefault(rc.Remote)}
-	if rc.Branch != "" {
-		args = append(args, rc.Branch)
-	}
-
-	result, err := p.run(ctx, rc.Workdir, rc.Env, args...)
-	if err != nil {
-		return classify(err, result, "pull --rebase")
-	}
-	return nil
+	return p.runPushTransport(ctx, opts.Workdir, opts.Env, args...)
 }
 
 // pluralRetry pluralizes "retry" for error messages.
@@ -143,7 +107,7 @@ func pluralRetry(n int) string {
 
 // retryablePushResult keeps configured conditions within safe rejected-push recovery.
 func retryablePushResult(result atmosgit.RunResult, patterns []*regexp.Regexp) bool {
-	if matchesAny(result.StderrTail, authPatterns) || !isRejectedPush(result) {
+	if isAuthenticationFailure(result.StderrTail) || !isRejectedPush(result) {
 		return false
 	}
 	return len(patterns) == 0 || retry.MatchesAny(patterns, result.StderrTail)

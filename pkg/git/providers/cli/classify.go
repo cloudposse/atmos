@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -17,8 +18,6 @@ var authPatterns = []string{
 	"permission denied",
 	"access denied",
 	"invalid username or password",
-	"403",
-	"401",
 }
 
 // rejectedPatterns identify non-fast-forward push rejections in git stderr.
@@ -43,7 +42,7 @@ func classify(err error, result atmosgit.RunResult, op string) error {
 	if err == nil {
 		return nil
 	}
-	if matchesAny(result.StderrTail, authPatterns) {
+	if isAuthenticationFailure(result.StderrTail) {
 		return fmt.Errorf("%w: during git %s: %w", errUtils.ErrGitAuthFailed, op, err)
 	}
 	return err
@@ -72,4 +71,12 @@ func matchesAny(s string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// HTTP status digits alone can also occur in object IDs, paths, and ref names.
+var httpAuthStatus = regexp.MustCompile(`(?i)(?:returned error:\s*|http(?:/[0-9.]+)?\s+)(?:401|403)\b`)
+
+// isAuthenticationFailure recognizes explicit credentials errors or HTTP status diagnostics.
+func isAuthenticationFailure(stderr string) bool {
+	return matchesAny(stderr, authPatterns) || httpAuthStatus.MatchString(stderr)
 }

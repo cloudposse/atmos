@@ -27,6 +27,8 @@ type RunOptions struct {
 	// DiscoverRepository permits Git to search above Dir when locating the source root.
 	// Other operations retain the repository ceiling to avoid touching a parent checkout.
 	DiscoverRepository bool
+	// CaptureHTTPMetadata extracts sanitized rate-limit response metadata.
+	CaptureHTTPMetadata bool
 	// Env is the full subprocess environment; nil inherits the process env.
 	Env []string
 	// Stdin supplies optional input (for index plumbing and patches).
@@ -38,6 +40,8 @@ type RunOptions struct {
 
 // RunResult is the outcome of a git subprocess invocation.
 type RunResult struct {
+	// HTTP contains only sanitized response metadata when capture is enabled.
+	HTTP *HTTPResponse
 	// Stdout is the captured standard output.
 	Stdout string
 	// ExitCode is the subprocess exit code (0 on success).
@@ -95,8 +99,23 @@ func (r *ExecRunner) Run(ctx context.Context, command string, args []string, opt
 		cmd.Stderr = tail
 	}
 
+	var metadata *httpMetadataWriter
+	if opts.CaptureHTTPMetadata {
+		cmd.Env = httpMetadataEnv(cmd.Env)
+		metadata = &httpMetadataWriter{sink: cmd.Stderr}
+		cmd.Stderr = metadata
+	}
+
 	err := cmd.Run()
+	if metadata != nil && len(metadata.line) > 0 {
+		if flushErr := metadata.flush(); err == nil {
+			err = flushErr
+		}
+	}
 	result := RunResult{Stdout: stdout.String(), StderrTail: tail.String()}
+	if metadata != nil {
+		result.HTTP = &metadata.response
+	}
 	if err == nil {
 		return result, nil
 	}

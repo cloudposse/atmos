@@ -21,6 +21,8 @@ The `git` section in `atmos.yaml` makes Git a foundational Atmos capability — 
 - Configure local Git hooks (`pre-commit`, `commit-msg`, ...) that run a `command` or a list of `steps`
 </KeyPoints>
 
+For independent workflows publishing to the same destination, see [Concurrent Git Publishing](/best-practices/concurrent-git-publishing) for retry budgets, transport behavior, and platform limits.
+
 ## Basic Configuration
 
 <File title="atmos.yaml">
@@ -151,7 +153,7 @@ git:
 
   <dt>`push.retry`</dt>
   <dd>
-    Shared [retry policy](/steps/retry) for rejected pushes. The example above shows the default contention backoff: four total attempts, exponential delays starting at 250 ms, a 5-second cap before ±50% jitter, and a 30-second deadline including Git commands. An explicit policy uses the shared retry semantics: omitted fields are not filled from these defaults, and `retry: {}` makes one attempt. Set `max_attempts: 1` to disable retries. `conditions` can narrow which rejected-push messages are retried; authentication failures and other non-rejection errors always fail immediately.
+    Shared [retry policy](/steps/retry) for rejected pushes and remote throttling. The example above shows the default contention backoff: four total attempts, exponential delays starting at 250 ms, a 5-second cap before ±50% jitter, and a 30-second deadline including Git commands. An explicit policy uses the shared retry semantics: omitted fields are not filled from these defaults, and `retry: {}` makes one attempt. Set `max_attempts: 1` to disable retries. `conditions` can narrow which rejected-push messages are retried; authentication failures and unrelated errors fail immediately. Recognized rate limits retry independently of these conditions. Server cooldowns override `max_delay` without overriding the attempt or elapsed-time budget; see [remote rate limits](/cli/commands/git/push#remote-rate-limits). Increase `max_elapsed_time` beyond the default 30 seconds to accommodate minute-long cooldowns.
   </dd>
 
   <dt>`push.retries` (legacy)</dt>

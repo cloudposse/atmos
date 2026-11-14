@@ -28,7 +28,14 @@ git:
     flux-deploy:
       uri: https://github.com/acme/flux-deploy.git
       push:
-        retries: 3        # bounded pull --rebase + re-push loop on rejection
+        retry:
+          max_attempts: 12
+          backoff_strategy: exponential
+          initial_delay: 1s
+          max_delay: 30s
+          multiplier: 2
+          random_jitter: 0.5
+          max_elapsed_time: 10m
 ```
 
 ```shell
@@ -56,11 +63,13 @@ atmos git push flux-deploy -- --follow-tags
 
 ## Push Contention
 
+For workload sizing, platform limits, and publishing from multiple source repositories, see [Concurrent Git Publishing](/best-practices/concurrent-git-publishing).
+
 A rejected non-fast-forward push is the most common failure mode in GitOps publishing — multiple components, CI jobs, or humans pushing to the same deployment branch. Atmos handles it instead of surfacing a raw Git error:
 
 1. On rejection, including a concurrent remote ref update (`cannot lock ref ... is at ... but expected ...`), run `pull --rebase`, then re-push.
 2. Wait with exponential backoff and random jitter, then retry according to `push.retry` (four total attempts by default; configurable per repository).
-3. After exhaustion, fail with a clear error and hints (serialize publishers, or batch publishing).
+3. After exhaustion, fail with a clear error. Size the retry budget for bursts from independent publishers.
 
 Configure backoff and jitter using the shared [retry policy](/steps/retry) under `git.repositories.<name>.push`:
 
@@ -77,6 +86,18 @@ push:
 ```
 
 `max_attempts` includes the initial attempt. `max_elapsed_time` bounds the entire operation, including running Git commands. The delay cap applies before jitter. An explicit policy uses shared retry semantics without inheriting omitted fields from the defaults; `retry: {}` or `max_attempts: 1` makes one attempt. Legacy `push.retries` remains supported when `push.retry` is absent. Optional `conditions` narrow the rejected-push messages eligible for retry; they never enable retries for authentication failures or unrelated errors.
+
+## Remote Rate Limits
+
+Push and its recovery fetch recognize HTTP `429`, HTTP `403` with rate-limit response metadata, and explicit rate-limit diagnostics. Ordinary authentication failures still stop immediately. A throttled push waits and retries without rebasing; a throttled recovery fetch retries before the next push.
+
+Atmos honors `Retry-After` (seconds or an HTTP date) and `X-RateLimit-Reset` when `X-RateLimit-Remaining` is zero. Without a usable hint, it waits at least one minute. Repeated throttling increases that minimum exponentially. Configured `random_jitter` adds only positive jitter to this cooldown, so publishers spread out without retrying before the server permits it.
+
+Server cooldowns take precedence over `max_delay`; `max_attempts` and `max_elapsed_time` remain hard limits. If the cooldown cannot fit in the remaining elapsed-time budget, Atmos returns a rate-limit error immediately instead of retrying early. The default 30-second budget cannot accommodate a one-minute cooldown; the example above allows a longer window. `conditions` restrict rejected-ref recovery, not recognized rate-limit recovery.
+
+Each invocation reacts independently. There is no shared lock, concurrency group, or global rate counter across source repositories. This reduces retry pressure after throttling but does not guarantee an aggregate write rate or prevent the initial burst. Git transport limits are distinct from REST/GraphQL API budgets; Atmos does not poll GitHub APIs to predict them. See [GitHub's rate-limit recovery guidance](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit).
+
+Only status and cooldown metadata are retained from HTTP tracing; trace headers and payloads are excluded from diagnostics. SSH has no HTTP headers, so explicit rate-limit messages use the fallback cooldown.
 
 ## Arguments
 
