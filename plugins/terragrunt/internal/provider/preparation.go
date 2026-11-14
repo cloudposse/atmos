@@ -148,12 +148,19 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		return nil, err
 	}
 	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution)}
-	for _, name := range slices.Sorted(maps.Keys(result.Generated)) {
+	files := maps.Clone(result.Overlay)
+	if files == nil {
+		files = map[string][]byte{}
+	}
+	for name, content := range result.Generated {
+		files[name] = []byte(content)
+	}
+	for _, name := range slices.Sorted(maps.Keys(files)) {
 		policy := result.GeneratedPolicies[name]
 		if policy == "" {
 			policy = "overwrite"
 		}
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name]})
+		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name]})
 	}
 	return response, nil
 }

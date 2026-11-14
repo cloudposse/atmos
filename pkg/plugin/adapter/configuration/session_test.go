@@ -509,3 +509,16 @@ func TestPreparationRejectsDependencyStateDrift(t *testing.T) {
 		})
 	}
 }
+
+func TestDiscoveryConfiguredEnvironment(t *testing.T) {
+	config := enabledConfig(t)
+	config.Env = map[string]string{"DISCOVERY_SETTING": "configured"}
+	t.Setenv("DISCOVERY_SETTING", "ambient-value")
+	t.Setenv("DISCOVERY_AMBIENT", "ambient")
+	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
+	request, err := discoveryRequest(config, &settings, "terragrunt", config.BasePathAbsolute, "plan")
+	require.NoError(t, err)
+	require.Equal(t, "configured", request.Invocation.Environment["DISCOVERY_SETTING"])
+	require.Equal(t, "ambient", request.Invocation.Environment["DISCOVERY_AMBIENT"])
+	require.Equal(t, "tofu", request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
+}

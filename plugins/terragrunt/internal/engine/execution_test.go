@@ -485,3 +485,56 @@ func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanRejectsArgumentDependentSavedHooks(t *testing.T) {
+	request := executionUnit(t, `before_hook "args" {
+ commands = ["apply"]
+ execute = ["echo", join(",", get_terraform_cli_args())]
+}`)
+	_, err := Resolve(t.Context(), request)
+	require.ErrorIs(t, err, ErrUnsupportedExecution)
+}
+
+func TestPreventDestroyChecksExpandedArguments(t *testing.T) {
+	request := executionUnit(t, `extra_arguments "destroy" {
+ commands = ["plan"]
+ arguments = ["-destroy"]
+}`)
+	file, err := os.OpenFile(request.Path, os.O_APPEND|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, err = file.WriteString("\nprevent_destroy = true\n")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	_, err = Resolve(t.Context(), request)
+	require.ErrorIs(t, err, ErrPreventDestroy)
+	request.Arguments = []string{"-destroy=false"}
+	_, err = Resolve(t.Context(), request)
+	require.NoError(t, err)
+}
+
+func TestPlanApplyMetadataReusesPlanApprovedMocks(t *testing.T) {
+	request := executionUnit(t, `before_hook "command" {
+ commands = ["plan", "apply"]
+ execute = ["echo", get_terraform_command()]
+}`)
+	dependency := filepath.Join(request.BasePath, "dependency")
+	require.NoError(t, os.MkdirAll(dependency, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dependency, "terragrunt.hcl"), []byte("inputs = {}"), 0o644))
+	file, err := os.OpenFile(request.Path, os.O_APPEND|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, err = file.WriteString(`
+dependency "upstream" {
+ config_path = "./dependency"
+ skip_outputs = true
+ mock_outputs = { value = "planned" }
+ mock_outputs_allowed_terraform_commands = ["plan"]
+}
+inputs = { value = dependency.upstream.outputs.value }
+`)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "planned", result.Inputs["value"])
+	require.NotNil(t, result.Execution.Apply)
+}

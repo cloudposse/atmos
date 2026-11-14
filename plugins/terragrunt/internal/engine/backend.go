@@ -18,7 +18,7 @@ func resolveBackend(cfg *config.TerragruntConfig, result *model.Resolution) erro
 	}
 	if cfg.RemoteState.DisableInit || len(cfg.RemoteState.Encryption) > 0 {
 		return &model.Problem{
-			Code: model.CodeUnsupportedSetting, Summary: "Unsupported Terragrunt setting in `remote_state`", Detail: "The native adaptation does not implement `disable_init` or `encryption` in `remote_state`.",
+			Code: model.CodeUnsupportedSetting, Summary: "Unsupported Terragrunt setting in `remote_state`", Detail: "The native adaptation does not implement `disable_init` or `remote_state.encryption`.",
 			Hints: []string{"Remove `disable_init` and `encryption` from `remote_state`. To manage the backend with Atmos instead, migrate the unit to a regular Atmos component with its own `backend` settings."}, File: result.Path, Key: "remote_state", Safe: true, Err: errors.Join(ErrUnsupportedExecution, ErrUnsupportedRemoteState),
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependencies"
@@ -77,7 +78,7 @@ func readToolchainProbes(t *testing.T, path string) []toolchainProbe {
 }
 
 // When the process PATH already starts with the toolchain directories (for example an Atmos run
-// nested inside a toolchain shell), there is nothing left to prepend: the selected PATH is used as is.
+// nested inside a toolchain shell), replacing PATH still preserves the toolchain directories.
 func TestToolchainPathEnvWithToolchainDirectoriesAlreadyInAmbientPath(t *testing.T) {
 	harness := newToolchainHarness(t, "1.0.0")
 	info := harness.info(t, &toolchainScenario{identity: "development", tofuVersion: "1.0.0", toolVersion: "1.0.0"}, filepath.Join(t.TempDir(), "probe.jsonl"))
@@ -90,12 +91,12 @@ func TestToolchainPathEnvWithToolchainDirectoriesAlreadyInAmbientPath(t *testing
 
 	selected := filepath.Join(t.TempDir(), "selected")
 	got := toolchainPathEnv(&schema.ConfigAndStacksInfo{ComponentEnvList: []string{"PATH=" + selected}}, tenv)
-	require.Equal(t, []string{"PATH=" + selected}, got)
+	require.Equal(t, []string{"PATH=" + tenv.PrependToPath(selected)}, got)
 
-	// An empty selected PATH is the same case with nothing to extend: only the toolchain prefix remains, which is empty.
+	// An empty selected PATH retains only the toolchain directories.
 	got = toolchainPathEnv(&schema.ConfigAndStacksInfo{ComponentEnvList: []string{"PATH="}}, tenv)
-	require.Equal(t, []string{"PATH="}, got)
-	require.False(t, strings.Contains(got[0], full), "the ambient toolchain directories must not be re-added")
+	require.Equal(t, []string{"PATH=" + tenv.PrependToPath("")}, got)
+	require.NotEmpty(t, tenv.ToolchainDirs())
 }
 
 // installToolchainFixture places a hard link (or copy) of the test binary where the real
@@ -141,51 +142,41 @@ func pathContains(path string) (string, bool) {
 	return "", false
 }
 
-// recordingConfigurationProvider is a native configuration provider that records what the
-// host sent over the plugin boundary. It stands in only for the out-of-process plugin.
+// recordingConfigurationProvider stores observations from generated mock callbacks.
 type recordingConfigurationProvider struct {
 	mu       sync.Mutex
 	events   *[]string
 	requests []*pluginv1.ComponentRequest
 }
 
-func (p *recordingConfigurationProvider) ComponentType() string { return "terraform" }
-
-func (p *recordingConfigurationProvider) Discover(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-	configuration, err := adapter.EncodeObject(map[string]any{"source": "./module", "vars": map[string]any{}})
-	if err != nil {
-		return nil, err
-	}
-	return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{{
-		Address:  &pluginv1.ComponentAddress{Stack: "live", Component: "app", ComponentType: "terraform"},
-		Provider: "terragrunt", Engine: "opentofu", Source: "live/app/terragrunt.hcl", Configuration: configuration,
-	}}}, nil
-}
-
-func (p *recordingConfigurationProvider) Prepare(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	*p.events = append(*p.events, "evaluate")
-	p.requests = append(p.requests, request)
+func newRecordingConfigurationProvider(t *testing.T, events *[]string) (*MockConfigurationProvider, *recordingConfigurationProvider) {
+	t.Helper()
+	p := &recordingConfigurationProvider{events: events}
+	provider := NewMockConfigurationProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		configuration, err := adapter.EncodeObject(map[string]any{"source": "./module", "vars": map[string]any{}})
+		if err != nil {
+			return nil, err
+		}
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{{
+			Address:  &pluginv1.ComponentAddress{Stack: "live", Component: "app", ComponentType: "terraform"},
+			Provider: "terragrunt", Engine: "opentofu", Source: "live/app/terragrunt.hcl", Configuration: configuration,
+		}}}, nil
+	}).AnyTimes()
+	backend, err := adapter.EncodeObject(map[string]any{"path": "terraform.tfstate"})
+	require.NoError(t, err)
 	inputs, err := adapter.EncodeObject(map[string]any{})
-	if err != nil {
-		return nil, err
-	}
-	backend, err := adapter.EncodeObject(map[string]any{"path": "terraform.tfstate"})
-	if err != nil {
-		return nil, err
-	}
-	return &pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "./module", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default"}}, nil
-}
-
-// ResolveState reports the same local state Prepare returns; the single discovered unit has
-// no output dependencies, so preparation never needs it.
-func (p *recordingConfigurationProvider) ResolveState(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
-	backend, err := adapter.EncodeObject(map[string]any{"path": "terraform.tfstate"})
-	if err != nil {
-		return nil, err
-	}
-	return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default"}}, nil
+	require.NoError(t, err)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		*p.events = append(*p.events, "evaluate")
+		p.requests = append(p.requests, request)
+		return &pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "./module", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default"}}, nil
+	}).AnyTimes()
+	provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).Return(&pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default"}}, nil).AnyTimes()
+	return provider, p
 }
 
 // toolchainScenario is one component execution: an identity and the tool versions it pins.
@@ -240,9 +231,10 @@ func newToolchainHarness(t *testing.T, versions ...string) *toolchainHarness {
 		harness.tools["fixture-tool@"+version] = installToolchainFixture(t, config.Toolchain.InstallPath, "acme", "fixture-tool", version, "fixture-tool")
 	}
 
-	harness.provider = &recordingConfigurationProvider{events: &harness.events}
+	provider, recorder := newRecordingConfigurationProvider(t, &harness.events)
+	harness.provider = recorder
 	session, err := configadapter.New(t.Context(), config, "plan", func(context.Context, []string) (map[string]configadapter.Provider, error) {
-		return map[string]configadapter.Provider{"terragrunt": harness.provider}, nil
+		return map[string]configadapter.Provider{"terragrunt": provider}, nil
 	})
 	require.NoError(t, err)
 	config.ComponentConfigurations = session

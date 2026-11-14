@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -360,4 +361,10 @@ dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDepe
 			require.NoDirExists(t, filepath.Join(root, "live/app/.terragrunt-cache"))
 		})
 	}
+}
+
+func TestRPCErrorPreservesDestroyProtection(t *testing.T) {
+	err := rpcError(fmt.Errorf("private evaluator context: %w", engine.ErrPreventDestroy))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.NotContains(t, status.Convert(err).Message(), "private evaluator context")
 }

@@ -502,12 +502,15 @@ func protectedRuntimePath(path, relative string, protected map[string]bool) bool
 	if underProtectedRoot(path, protected) {
 		return true
 	}
-	return strings.HasSuffix(filepath.Base(path), ".terraform.lock.hcl") || relative == ".atmos/metadata.json" || relative == ".atmos/source.json"
+	return strings.HasSuffix(strings.ToLower(filepath.Base(path)), ".terraform.lock.hcl") ||
+		strings.EqualFold(relative, ".atmos/metadata.json") || strings.EqualFold(relative, ".atmos/source.json")
 }
 
 // underProtectedRoot reports whether path is a protected runtime root or lies beneath one.
 func underProtectedRoot(path string, protected map[string]bool) bool {
+	path = strings.ToLower(path)
 	for root := range protected {
+		root = strings.ToLower(root)
 		if path == root || strings.HasPrefix(path, root+string(filepath.Separator)) {
 			return true
 		}
@@ -575,10 +578,7 @@ func sourceChange(stage, target, name string, flags sourceChangeFlags, protected
 		return false, fmt.Errorf("%w: inspect runtime artifact %s: %w", errUtils.ErrSourceCopyFailed, name, err)
 	}
 	if runtime {
-		if install && !strings.HasSuffix(filepath.Base(name), ".terraform.lock.hcl") {
-			return false, fmt.Errorf("%w: downloaded source collides with runtime artifact %s", errUtils.ErrSourceCopyFailed, name)
-		}
-		return false, nil
+		return false, validateRuntimeSource(stage, path, name, flags, protected)
 	}
 	if !install {
 		_, err := os.Lstat(path)
@@ -590,4 +590,22 @@ func sourceChange(stage, target, name string, flags sourceChangeFlags, protected
 		}
 	}
 	return true, nil
+}
+
+// identicalSourceFile permits unchanged source fixtures without replacing runtime-modified contents.
+func identicalSourceFile(stage, path, name string) bool {
+	old, oldErr := os.ReadFile(path)
+	fresh, freshErr := os.ReadFile(filepath.Join(stage, filepath.FromSlash(name)))
+	return oldErr == nil && freshErr == nil && string(old) == string(fresh)
+}
+
+// validateRuntimeSource allows only preserved locks and unchanged source-owned fixtures.
+func validateRuntimeSource(stage, path, name string, flags sourceChangeFlags, protected map[string]bool) error {
+	if !flags.install || strings.HasSuffix(strings.ToLower(filepath.Base(name)), ".terraform.lock.hcl") {
+		return nil
+	}
+	if flags.owned && !protectedRuntimePath(path, name, protected) && identicalSourceFile(stage, path, name) {
+		return nil
+	}
+	return fmt.Errorf("%w: downloaded source collides with runtime artifact %s", errUtils.ErrSourceCopyFailed, name)
 }

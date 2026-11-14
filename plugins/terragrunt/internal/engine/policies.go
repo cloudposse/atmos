@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
@@ -87,7 +88,7 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 		return err
 	}
 	// Hooks and extra arguments are adapted as execution data by unitExecution.
-	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, effectivePolicyArguments(request, cfg)) {
 		return ErrPreventDestroy
 	}
 	return nil
@@ -109,4 +110,15 @@ func validateRemoteSource(source string) error {
 		Hints:  []string{"Use a local path, a `git::https://`, `git::ssh://`, or `https://` source, or a Git source pinned with `?ref=`."},
 		Key:    "terraform.source", Safe: found, Err: ErrUnsupportedExecution,
 	}
+}
+
+// effectivePolicyArguments follows host ordering: extra arguments precede user arguments.
+func effectivePolicyArguments(request model.Request, cfg *config.TerragruntConfig) []string {
+	var args []string
+	for _, extra := range cfg.Terraform.ExtraArgs {
+		if slices.Contains(extra.Commands, request.Command) && extra.Arguments != nil {
+			args = append(args, (*extra.Arguments)...)
+		}
+	}
+	return append(args, request.Arguments...)
 }

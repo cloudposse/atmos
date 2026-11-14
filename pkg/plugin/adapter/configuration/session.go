@@ -233,6 +233,9 @@ func discoveryRequest(config *schema.AtmosConfiguration, settings *schema.Compon
 		includes = slices.Clone(defaultIncludedPaths)
 	}
 	env := environment()
+	for key, value := range config.Env {
+		env[key] = value
+	}
 	env["ATMOS_TERRAFORM_BINARY"] = config.Components.Terraform.Command
 	return &pluginv1.DiscoverComponentsRequest{Provider: name, RootDirectory: root, IncludePaths: includes, ExcludePaths: slices.Clone(settings.Discovery.ExcludedPaths), ProviderConfiguration: value, Operation: &pluginv1.ComponentOperation{Command: command, Mode: "native"}, Invocation: &pluginv1.Invocation{Environment: env}}, nil
 }
