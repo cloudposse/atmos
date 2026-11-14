@@ -236,12 +236,22 @@ func (r *Repository) digestAt(ctx context.Context, st store, ref artifact.Ref, v
 	}
 	loaded, err := r.loadCachedRoot(ctx, st, ref.Name, desc)
 	if err != nil {
-		if ctx.Err() != nil {
+		// A root that cannot be verified or classified is simply not the one being looked for, but
+		// a registry that fails to answer says nothing about the digest: reporting "not found"
+		// would turn an outage into a false negative.
+		if ctx.Err() != nil || isOperationalFailure(err) {
 			return ocispec.Descriptor{}, false, err
 		}
 		return ocispec.Descriptor{}, false, nil
 	}
 	return desc, loaded.class == classAtmos && loaded.manifest.Config.Digest == ref.Digest, nil
+}
+
+// isOperationalFailure reports whether a failed root load says something about the store rather than
+// about the root: the fetch itself failed, as opposed to returning content that is absent, fails
+// digest verification, or is not a usable manifest.
+func isOperationalFailure(err error) bool {
+	return errors.Is(err, errUtils.ErrArtifactDownloadFailed) && !errors.Is(err, errUtils.ErrOCIIntegrity) && !isNotFound(err)
 }
 
 // resolveError classifies a store failure: absent content is not found, a canceled context is
