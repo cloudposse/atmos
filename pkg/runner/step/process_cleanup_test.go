@@ -14,9 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/api"
 )
 
-// processTreeTimeout is long enough for the helper tree to start on a loaded CI runner and short
-// enough to keep the test quick.
-const processTreeTimeout = "3s"
+// processTreeTimeout allows both race-instrumented subprocesses to start on a loaded CI runner.
+// Cleanup latency is checked separately after the deadline rather than including startup time.
+const processTreeTimeout = "30s"
 
 // startedStepHelpers waits until both helpers of the spawn-grandchild tree recorded their pids.
 func startedStepHelpers(t *testing.T, dir string) (int, int) {
@@ -25,7 +25,7 @@ func startedStepHelpers(t *testing.T, dir string) (int, int) {
 	require.Eventually(t, func() bool {
 		parent, child = stepHelperPID(dir, "parent"), stepHelperPID(dir, "child")
 		return parent > 0 && child > 0
-	}, 10*time.Second, 25*time.Millisecond, "the helper process tree never started; the step timeout may be too short for this machine")
+	}, 25*time.Second, 25*time.Millisecond, "the helper process tree never started; the step timeout may be too short for this machine")
 	return parent, child
 }
 
@@ -75,10 +75,27 @@ func TestStepTimeoutEndsTheWholeProcessTree(t *testing.T) {
 			}
 
 			library := NewAutomationLibrary(NewVariables(), nil)
-			_, runErr := library.Run(t.Context(), &api.StepCall{Type: tc.stepType, Configuration: fields, WorkingDirectory: dir})
+			ctx, cancel := context.WithCancel(t.Context())
+			result := make(chan error, 1)
+			done := make(chan struct{})
+			defer func() {
+				cancel()
+				<-done
+			}()
+			go func() {
+				defer close(done)
+				_, runErr := library.Run(ctx, &api.StepCall{Type: tc.stepType, Configuration: fields, WorkingDirectory: dir})
+				result <- runErr
+			}()
 
-			require.ErrorIs(t, runErr, errUtils.ErrStepTimeout, "a step that outlives its timeout reports the step timeout")
 			parent, child := startedStepHelpers(t, dir)
+			select {
+			case runErr := <-result:
+				t.Fatalf("step ended before the helper tree was observed: %v", runErr)
+			default:
+			}
+			runErr := <-result
+			require.ErrorIs(t, runErr, errUtils.ErrStepTimeout, "a step that outlives its timeout reports the step timeout")
 			requireStepProcessesGone(t, map[string]int{"command started by the step": parent, "grandchild of that command": child})
 		})
 	}

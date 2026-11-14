@@ -308,7 +308,10 @@ Tests must distinguish archive-file mode from member mode and from filesystem AC
 
 Below the configured root reserve `.atmos-artifacts/v1/` for managed records. Reject payload paths
 and key patterns that overlap this namespace in either direction, including ancestors such as
-`.atmos-artifacts`. Use SHA-256 of canonical name/version for private
+`.atmos-artifacts`. Reject a payload path that contains a `.atmos-artifacts` segment at any depth,
+in any letter case, so a root's payload can never enter the control namespace of another
+configured root nested below it, and a write or deletion through one root can never change another
+root's records or references. Use SHA-256 of canonical name/version for private
 reference keys so names containing slashes cannot collide with control paths.
 
 ```text
@@ -335,6 +338,9 @@ overwriting it; another reference cannot claim it even when its key_pattern coll
 ancestor, and descendant locations conflict. Claims atomically reserve the payload and its sidecar
 paths together, rejecting payload-to-sidecar and sidecar-to-sidecar overlaps as well as payload
 overlaps. Thus a force replacement or deletion cannot remove another reference's payload or sidecars.
+Claims cover the references of one configured root. Payload claims are not checked across roots, so
+configured roots must not nest or overlap where both publish payloads; such a configuration is
+unsupported. The control-namespace rule above still protects every root's records and references.
 
 Publication sequence:
 

@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: local
+
+components:
+  emulator:
+    # A Gitea server with Actions enabled. The driver presets a throwaway
+    # instance-wide runner registration token and bootstraps the atmos/atmos admin.
+    gitea:
+      driver: gitea
+      # Throwaway server: every `up` starts from an empty Gitea.
+      ephemeral: true
+      container:
+        env:
+          # Workflow jobs run in sibling containers on the stack's shared network
+          # (atmos-local), so Gitea must advertise its network alias, not localhost.
+          # From the host, use the published port instead: http://localhost:3300.
+          GITEA__server__ROOT_URL: "http://local-gitea:3000/"
+          GITEA__server__DOMAIN: "local-gitea"
+        ports:
+          - container: 3000
+            host: 3300
+
+  container:
+    # The Gitea runner registers with the emulator using the preset token, then runs
+    # each workflow job as a container on the host's Docker through the mounted socket.
+    gitea-runner:
+      image: gitea/runner:5.4.1
+      env:
+        GITEA_INSTANCE_URL: "http://local-gitea:3000"
+        # Throwaway-local token preset by the gitea emulator driver.
+        GITEA_RUNNER_REGISTRATION_TOKEN: "atmos-local-gitea-runner-registration-token"
+        GITEA_RUNNER_NAME: "atmos-local"
+        CONFIG_FILE: "/config/runner.yaml"
+      run:
+        restart:
+          policy: unless-stopped
+        mounts:
+          # The runner starts job containers on the host's Docker. This grants the
+          # runner root-equivalent access to that Docker daemon; use it only locally.
+          - source: /var/run/docker.sock
+            target: /var/run/docker.sock
+          - source: runner.yaml
+            target: /config/runner.yaml
+            read_only: true

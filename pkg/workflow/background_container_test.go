@@ -19,14 +19,17 @@ func TestFirstNonEmpty(t *testing.T) {
 }
 
 func TestToPortBindings(t *testing.T) {
-	assert.Nil(t, toPortBindings(nil))
+	empty, err := toPortBindings(nil)
+	require.NoError(t, err)
+	assert.Nil(t, empty)
 
-	out := toPortBindings([]schema.ContainerPort{
-		{Host: 8080, Container: 80}, // default protocol -> tcp.
+	out, err := toPortBindings([]schema.ContainerPort{
+		{Host: "127.0.0.1:8080", Container: 80}, // default protocol -> tcp.
 		{Host: 53, Container: 53, Protocol: "udp"},
 	})
+	require.NoError(t, err)
 	require.Len(t, out, 2)
-	assert.Equal(t, container.PortBinding{HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}, out[0])
+	assert.Equal(t, container.PortBinding{Bind: "127.0.0.1", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}, out[0])
 	assert.Equal(t, container.PortBinding{HostPort: 53, ContainerPort: 53, Protocol: "udp"}, out[1])
 }
 
@@ -146,4 +149,14 @@ func TestContainerRunner_Start_Errors(t *testing.T) {
 		assert.ErrorIs(t, err, schema.ErrWorkflowControlStepInvalid)
 		assert.Contains(t, err.Error(), "command")
 	})
+}
+
+func TestContainerRunnerRejectsInvalidHost(t *testing.T) {
+	cr := &ContainerRunner{Stack: "test-stack", DryRun: true}
+	handle, err := cr.Start(context.Background(), &schema.WorkflowStep{
+		Name: "svc",
+		Run:  &schema.ContainerRunStep{Image: "alpine", Command: "echo ok", Ports: []schema.ContainerPort{{Host: "localhost:8080", Container: 80}}},
+	}, nil)
+	require.ErrorContains(t, err, "ports[0].host")
+	assert.Nil(t, handle)
 }

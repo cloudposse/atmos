@@ -74,11 +74,18 @@ test('CI/CD exposes workflow guides and orders capabilities from setup to review
     'Setup Atmos', 'Plan on Pull Request', 'Apply on Merge', 'Deploy Affected Components',
     'Deploy All Components', 'Deployment Approvals', 'Authentication & Permissions', 'Validate Workflows',
   ]);
-  assert.deepEqual(ci.items.slice(1).map(item => item.label), [
+  const gitea = ci.items[1];
+  assert.equal(gitea.label, 'Gitea Actions');
+  assert.equal(gitea.link.id, 'integrations/gitea-actions/index');
+  assert.deepEqual(gitea.items.map(item => item.label), [
+    'Setup and Authentication', 'Plan on Pull Request', 'Apply on Merge', 'Deploy Affected Components',
+    'Deploy All Components', 'Validate Workflows',
+  ]);
+  assert.deepEqual(ci.items.slice(2).map(item => item.label), [
     'CI Configuration', 'Planfile Storage', 'Build Cache', 'Outputs', 'Job Summaries',
     'Pull Request Comments', 'Status Checks', 'Migrate from Legacy Actions',
   ]);
-  for (const item of github.items) {
+  for (const item of [...github.items, ...gitea.items]) {
     const content = readFileSync(new URL(`../docs/${item.id}.mdx`, import.meta.url), 'utf8');
     assert.match(content, /<Intro>/, `${item.id} needs an introduction`);
   }
