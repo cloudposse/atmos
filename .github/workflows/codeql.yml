@@ -393,7 +393,7 @@ jobs:
       # Key settings:
       # - install-mode: none - Tells the action to use the binary already in PATH
       #                        (our custom-gcl that we just installed)
-      # - only-new-issues: true - Only report issues in changed code
+      # - only-new-issues / --new-from-merge-base - Only report issues in changed code
       # - SARIF output - For GitHub Advanced Security / CodeQL integration
       # - issues-exit-code: 0 - Always exit 0 so we upload SARIF to CodeQL
       #
@@ -416,10 +416,17 @@ jobs:
           # can fail transiently. The subsequent lint command still parses and
           # validates the configuration, so skip the duplicate network preflight.
           verify: false
-          only-new-issues: true
+          # Pull requests filter with git (--new-from-merge-base) instead of the
+          # action's only-new-issues. only-new-issues downloads the PR diff from the
+          # GitHub API, which refuses diffs over 20000 lines; the action then silently
+          # falls back to linting the whole repository and uploads every pre-existing
+          # finding to code scanning. Git has no such limit. The two options cannot be
+          # combined, so only-new-issues stays on for the other events (merge queue).
+          only-new-issues: ${{ github.event_name != 'pull_request' }}
           args: >
             --output.sarif.path=golangci-lint.sarif
             --issues-exit-code=0
+            ${{ github.event_name == 'pull_request' && format('--new-from-merge-base=origin/{0}', github.base_ref) || '' }}
 
       - name: Upload filtered SARIF results
         # merge_group's ephemeral gh-readonly-queue/... ref is deleted as soon
