@@ -342,7 +342,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "G117: not a hardcoded credential, populated from !env YAML function"
         },
         "max_tokens": {
           "anyOf": [
@@ -9445,7 +9446,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Provider configuration intentionally accepts a user-supplied password."
         },
         "driver": {
           "anyOf": [

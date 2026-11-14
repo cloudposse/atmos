@@ -1231,7 +1231,7 @@ func readConfigWithResolvedDotenvMergeIncludes(v *viper.Viper, path, fileName st
 	if err != nil {
 		return err
 	}
-	content, err := os.ReadFile(configFile) //nolint:gosec // configFile is resolved from Atmos config search paths.
+	content, err := os.ReadFile(configFile) // configFile is resolved from Atmos config search paths.
 	if err != nil {
 		return err
 	}
@@ -1250,7 +1250,7 @@ func findConfigFile(path, fileName string) (string, error) {
 	}
 	for _, candidate := range candidates {
 		configFile := filepath.Join(path, candidate)
-		info, err := os.Stat(configFile) //nolint:gosec // configFile is resolved from Atmos config search paths.
+		info, err := os.Stat(configFile) // configFile is resolved from Atmos config search paths.
 		if err == nil && !info.IsDir() {
 			return configFile, nil
 		}
@@ -1379,7 +1379,7 @@ func readConfigFileContent(configFilePath string) ([]byte, error) {
 func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte, runtimeBasePath string) (interface{}, error) {
 	configDir := path
 	configFileForIncludes := path
-	if info, err := os.Stat(path); err == nil && !info.IsDir() { //nolint:gosec // path is an Atmos config path selected by the loader or tests.
+	if info, err := os.Stat(path); err == nil && !info.IsDir() { // path is an Atmos config path selected by the loader or tests.
 		configDir = filepath.Dir(path)
 	} else {
 		configFileForIncludes = filepath.Join(path, AtmosConfigFileName)
@@ -2076,7 +2076,7 @@ func extractCommandsWithYamlFunctionsForFile(content []byte, sourceFile string) 
 }
 
 func mergeConfigFileWithImports(path string, v *viper.Viper) error {
-	//nolint:gosec // path is a resolved Atmos configuration/profile file path selected by the loader.
+	// path is a resolved Atmos configuration/profile file path selected by the loader.
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
