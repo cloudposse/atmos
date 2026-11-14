@@ -107,7 +107,7 @@ The `outcome` is `read` when the command downloaded the artifact into the output
     <dd>A digest mismatch, or a required signature that is missing or untrusted, fails before materialization.</dd>
 </dl>
 
-Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+Every failure exits with a nonzero status. For failures reached while the command runs, `--format=json` or `--format=yaml` still writes the result to stdout with `outcome: failed` and an `error` field. Argument and flag parsing failures, such as a missing reference or an unknown flag, are rejected before the command runs and do not produce a structured result.
 
 ## Related
 
