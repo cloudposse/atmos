@@ -3,6 +3,7 @@ package materialize
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 
@@ -127,7 +128,7 @@ func fillFiles(ctx context.Context, t *tree, content *artifact.Content) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := fillInventoryEntry(t, t.inventory[entryPath], streams); err != nil {
+		if err := fillInventoryEntry(ctx, t, t.inventory[entryPath], streams); err != nil {
 			return err
 		}
 		delete(streams, entryPath)
@@ -159,7 +160,22 @@ func payloadStreams(t *tree, content *artifact.Content) (map[string]*artifact.Co
 	return streams, nil
 }
 
-func fillInventoryEntry(t *tree, entry *artifact.Entry, streams map[string]*artifact.ContentStream) error {
+// contextReader stops an in-progress copy as soon as the context is canceled.
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (c contextReader) Read(p []byte) (int, error) {
+	defer perf.Track(nil, "materialize.contextReader.Read")()
+
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.reader.Read(p)
+}
+
+func fillInventoryEntry(ctx context.Context, t *tree, entry *artifact.Entry, streams map[string]*artifact.ContentStream) error {
 	if _, err := t.entryFor(entry.Path); err != nil {
 		return err
 	}
@@ -173,6 +189,6 @@ func fillInventoryEntry(t *tree, entry *artifact.Entry, streams map[string]*arti
 		if !ok || stream.Reader == nil {
 			return fmt.Errorf("%w: payload for %q is missing", errUtils.ErrArtifactIntegrityFailed, entry.Path)
 		}
-		return t.writeFile(entry, stream.Reader)
+		return t.writeFile(entry, contextReader{ctx: ctx, reader: stream.Reader})
 	}
 }

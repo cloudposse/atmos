@@ -617,3 +617,82 @@ func TestMaterialize_DestinationSwappedForASymlinkNeverRedirectsRemoval(t *testi
 	_, newErr := os.Stat(filepath.Join(outside, "new.txt"))
 	assert.True(t, os.IsNotExist(newErr), "staged content must not land in the link target")
 }
+
+// cancelOnReadReader cancels the context on its first read and then yields one byte per read.
+type cancelOnReadReader struct {
+	cancel context.CancelFunc
+	data   []byte
+}
+
+func (c *cancelOnReadReader) Read(p []byte) (int, error) {
+	c.cancel()
+	if len(c.data) == 0 {
+		return 0, io.EOF
+	}
+	p[0] = c.data[0]
+	c.data = c.data[1:]
+	return 1, nil
+}
+
+func (c *cancelOnReadReader) Close() error { return nil }
+
+func TestMaterialize_CancellationStopsInProgressFileCopy(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "big.txt", "0123456789", 0o644)
+	content := contentOf(t, prepared(t, src, artifact.PackagingNone))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	replaced := false
+	for index := range content.Streams {
+		if content.Streams[index].Role != artifact.BlobPayload {
+			continue
+		}
+		_ = content.Streams[index].Reader.Close()
+		content.Streams[index].Reader = &cancelOnReadReader{cancel: cancel, data: []byte("0123456789")}
+		replaced = true
+	}
+	require.True(t, replaced, "the fixture must have a payload stream")
+
+	out := dest(t)
+	err := materialize.Materialize(ctx, content, out)
+	require.ErrorIs(t, err, context.Canceled)
+	_, statErr := os.Lstat(out)
+	assert.True(t, os.IsNotExist(statErr))
+	assertNoScratch(t, out)
+}
+
+func TestMaterialize_TrailingSeparatorDestination(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "new.txt", "new", 0o644)
+
+	t.Run("absent destination", func(t *testing.T) {
+		root := t.TempDir()
+		out := filepath.Join(root, "out") + string(filepath.Separator)
+		require.NoError(t, materialize.Materialize(context.Background(), contentOf(t, prepared(t, src, artifact.PackagingTgz)), out))
+		data, err := os.ReadFile(filepath.Join(root, "out", "new.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, "new", string(data))
+		assertNoScratch(t, filepath.Join(root, "out"))
+		items, err := os.ReadDir(root)
+		require.NoError(t, err)
+		require.Len(t, items, 1, "staging must be created beside the destination, not inside it")
+	})
+
+	t.Run("existing destination", func(t *testing.T) {
+		root := t.TempDir()
+		existing := filepath.Join(root, "out")
+		fixtures.WriteFile(t, existing, "stale.txt", "stale", 0o644)
+		out := existing + string(filepath.Separator)
+		err := materialize.Materialize(context.Background(), contentOf(t, prepared(t, src, artifact.PackagingTgz)), out)
+		if runtime.GOOS == "windows" {
+			require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+			return
+		}
+		require.NoError(t, err)
+		items, err := os.ReadDir(existing)
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		assert.Equal(t, "new.txt", items[0].Name())
+		assertNoScratch(t, existing)
+	})
+}
