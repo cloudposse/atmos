@@ -170,6 +170,43 @@ func TestLock_WaitIsBoundedByTheContext(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
 }
 
+// The configured wait bounds the poll sleep too: a poll interval longer than the wait must not
+// carry the acquisition past its deadline into another attempt.
+func TestLock_PollSleepIsLimitedToTheRemainingWait(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	holder := newRepo(t, spec)
+	_, err := holder.Lock(context.Background(), artifact.LockRequest{Resource: lockResource, Owner: "owner-a"})
+	require.NoError(t, err)
+
+	// The poll interval is far longer than the wait and the context, so only a sleep clamped to
+	// the remaining wait lets the conflict arrive before the context ends.
+	peer := peerOf(t, spec, WithLockWait(20*time.Millisecond), withLockPoll(time.Hour))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err = peer.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "owner-b"})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+	require.NoError(t, ctx.Err(), "the wait, not the context, ended the acquisition")
+	assert.NotErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestBoundedPoll(t *testing.T) {
+	tests := []struct {
+		name      string
+		poll      time.Duration
+		remaining time.Duration
+		want      time.Duration
+	}{
+		{name: "poll shorter than the wait", poll: 10 * time.Millisecond, remaining: time.Second, want: 10 * time.Millisecond},
+		{name: "poll longer than the remaining wait", poll: 250 * time.Millisecond, remaining: 20 * time.Millisecond, want: 20 * time.Millisecond},
+		{name: "poll equal to the remaining wait", poll: time.Second, remaining: time.Second, want: time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, boundedPoll(tt.poll, tt.remaining))
+		})
+	}
+}
+
 // A crash leaves the claim; nothing expires or steals it, and removing exactly that object recovers.
 func TestLock_CrashLeftClaimBlocksUntilTheOperatorRemovesIt(t *testing.T) {
 	spec := noneSpec().fresh(t)

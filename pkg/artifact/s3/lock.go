@@ -114,6 +114,29 @@ func (r *Repository) acquire(ctx context.Context, resource, owner, operationID s
 	}
 }
 
+// awaitRetry waits one poll interval before the next claim attempt. It returns the held-claim
+// diagnostic when the context ends or the wait deadline passes, and nil when another attempt is due.
+func (r *Repository) awaitRetry(ctx context.Context, key, resource string, deadline time.Time) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return r.heldError(ctx, key, resource, ctxErr)
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return r.heldError(ctx, key, resource, nil)
+	}
+	// The sleep never outlasts the configured wait, so the last attempt happens at the deadline
+	// instead of one full poll interval after it.
+	if err := sleep(ctx, boundedPoll(r.settings.lockPoll, remaining)); err != nil {
+		return r.heldError(ctx, key, resource, err)
+	}
+	return nil
+}
+
+// boundedPoll limits one poll interval to the wait that remains.
+func boundedPoll(poll, remaining time.Duration) time.Duration {
+	return min(poll, remaining)
+}
+
 // sleep waits for d or until ctx ends.
 func sleep(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
