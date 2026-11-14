@@ -26,19 +26,9 @@ func constructTerraformComponentVarfileName(info *schema.ConfigAndStacksInfo) st
 	return terraformcomponent.ConstructTerraformComponentVarfileName(info)
 }
 
-// constructTerraformComponentTestVarfileName delegates to the Terraform component.
-func constructTerraformComponentTestVarfileName(info *schema.ConfigAndStacksInfo) string {
-	return terraformcomponent.ConstructTerraformComponentTestVarfileName(info)
-}
-
 // constructTerraformComponentVarfilePath delegates to the Terraform component.
 func constructTerraformComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
 	return terraformcomponent.ConstructTerraformComponentVarfilePath(atmosConfig, info)
-}
-
-// constructTerraformComponentTestVarfilePath delegates to the Terraform component.
-func constructTerraformComponentTestVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	return terraformcomponent.ConstructTerraformComponentTestVarfilePath(atmosConfig, info)
 }
 
 // constructTerraformComponentPlanfilePath delegates to the Terraform component.

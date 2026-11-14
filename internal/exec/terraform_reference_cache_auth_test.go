@@ -59,7 +59,7 @@ func TestGetTerraformStateCacheSeparatesCallerCredentials(t *testing.T) {
 }
 
 // Invalidating a component removes the reads of every caller scope.
-// atmos.Component() results are partitioned by the enclosing component's credentials and
+// Results of atmos.Component() are partitioned by the enclosing component's credentials and
 // by whether authentication is disabled.
 func TestComponentFuncCacheSeparatesCallerCredentials(t *testing.T) {
 	tests := []struct {
