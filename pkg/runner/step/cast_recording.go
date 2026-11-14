@@ -4,14 +4,34 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// castRecordingActive is the process-wide recording guard. It is held from just
+// before the recorder and UI environment are installed until the restore func
+// returned by startStepRecorder runs, so the full SetRecorder-to-restore
+// lifetime of one recording is exclusive. It is a non-blocking guard rather
+// than a blocking lock on purpose: a cast step nested inside another cast step
+// (or re-entering on the same goroutine) would otherwise wait on itself forever.
+// The UI environment lock is not used for this; it only protects the UI environment state.
+var castRecordingActive atomic.Bool
+
+// acquireCastRecording claims the process-wide recording guard.
+// It returns a release func that is safe to call more than once.
+func acquireCastRecording(name string) (func(), error) {
+	if !castRecordingActive.CompareAndSwap(false, true) {
+		return nil, fmt.Errorf("%w: cannot start cast step '%s'; cast steps cannot be nested or run in parallel or matrix branches", errUtils.ErrCastRecordingActive, name)
+	}
+	return sync.OnceFunc(func() { castRecordingActive.Store(false) }), nil
+}
 
 func startStepRecorder(step *schema.WorkflowStep, vars *Variables) (*asciicast.Recorder, func(), error) {
 	applyCastRecordingDefaults(step)
@@ -30,11 +50,16 @@ func startStepRecorder(step *schema.WorkflowStep, vars *Variables) (*asciicast.R
 	if err != nil {
 		return nil, nil, err
 	}
+	releaseRecording, err := acquireCastRecording(step.Name)
+	if err != nil {
+		return nil, nil, err
+	}
 	uiRestore := forceRecordingUIEnv(env)
 	width, height := castRecorderDimensions(step)
 	outputRate, err := parseDurationDefault(step.Rate, 0)
 	if err != nil {
 		uiRestore()
+		releaseRecording()
 		return nil, nil, err
 	}
 	rec, err := asciicast.Start(&asciicast.Options{
@@ -53,24 +78,36 @@ func startStepRecorder(step *schema.WorkflowStep, vars *Variables) (*asciicast.R
 	})
 	if err != nil {
 		uiRestore()
+		releaseRecording()
 		return nil, nil, err
 	}
 	ioRestore := iolib.SetRecorder(rec)
-	return rec, func() {
+	// The guard is released last, after the recorder and UI environment are
+	// restored, so the next recording never observes this one's state. The
+	// returned func is idempotent.
+	return rec, sync.OnceFunc(func() {
 		ioRestore()
 		uiRestore()
-	}, nil
+		releaseRecording()
+	}), nil
 }
 
-// castUIEnvMu and castUIEnvDepth guard forceRecordingUIEnv against nested or
-// parallel-sibling `type: cast` steps (a cast step can be one branch of a
-// top-level workflow `type: parallel`/`matrix` step): only the outermost call
-// mutates or restores the process env and re-detected UI state, so
-// overlapping recordings never clobber or prematurely restore each other.
-var (
-	castUIEnvMu    sync.Mutex
-	castUIEnvDepth int
-)
+// castUIEnvState is the shared state behind forceRecordingUIEnv. The original
+// environment is captured here, not in a per-call closure, so whichever
+// recording exits last (not necessarily the first to start) performs the
+// restore. It guards forceRecordingUIEnv against nested or parallel-sibling
+// `type: cast` steps (a cast step can be one branch of a top-level workflow
+// `type: parallel`/`matrix` step): only the first call mutates the process env
+// and re-detected UI state, and only the last exit restores it, so overlapping
+// recordings never clobber or prematurely restore each other.
+type castUIEnvState struct {
+	mu    sync.Mutex
+	depth int
+	// prior maps each forced key to its original value (nil when it was unset).
+	prior map[string]*string
+}
+
+var castUIEnv castUIEnvState
 
 // castUIEnvKeys are the environment variables that influence color/TTY
 // detection; only these are captured/restored around a recording.
@@ -106,47 +143,57 @@ func forceRecordingUIEnv(env map[string]string) func() {
 		return func() {}
 	}
 
-	castUIEnvMu.Lock()
-	defer castUIEnvMu.Unlock()
-	castUIEnvDepth++
-	if castUIEnvDepth > 1 {
-		// An outer (or concurrent sibling) cast recording already forced the
-		// environment; just track this scope's exit without mutating/restoring.
-		return func() {
-			castUIEnvMu.Lock()
-			defer castUIEnvMu.Unlock()
-			castUIEnvDepth--
-		}
+	castUIEnv.mu.Lock()
+	defer castUIEnv.mu.Unlock()
+	castUIEnv.depth++
+	if castUIEnv.prior == nil {
+		castUIEnv.prior = make(map[string]*string, len(relevant))
 	}
-
-	priorEnv := make(map[string]*string, len(relevant))
+	// The first scope always re-detects; later scopes only when they change the env.
+	changed := castUIEnv.depth == 1
 	for key, value := range relevant {
-		if old, ok := os.LookupEnv(key); ok {
-			oldCopy := old
-			priorEnv[key] = &oldCopy
-		} else {
-			priorEnv[key] = nil
+		old, wasSet := os.LookupEnv(key)
+		if _, captured := castUIEnv.prior[key]; !captured {
+			if wasSet {
+				oldCopy := old
+				castUIEnv.prior[key] = &oldCopy
+			} else {
+				castUIEnv.prior[key] = nil
+			}
+		}
+		if !wasSet || old != value {
+			changed = true
 		}
 		_ = os.Setenv(key, value)
 	}
-	ui.ReinitFormatter()
-
-	return func() {
-		castUIEnvMu.Lock()
-		defer castUIEnvMu.Unlock()
-		castUIEnvDepth--
-		if castUIEnvDepth > 0 {
-			return
-		}
-		for key, old := range priorEnv {
-			if old == nil {
-				_ = os.Unsetenv(key)
-			} else {
-				_ = os.Setenv(key, *old)
-			}
-		}
+	if changed {
 		ui.ReinitFormatter()
 	}
+
+	// Every call shares this one cleanup path; sync.OnceFunc keeps a repeated
+	// restore call from decrementing the depth twice.
+	return sync.OnceFunc(releaseCastUIEnv)
+}
+
+// releaseCastUIEnv drops one forceRecordingUIEnv scope. When the last scope
+// exits it restores the original environment captured in the shared state and
+// re-detects the UI formatter.
+func releaseCastUIEnv() {
+	castUIEnv.mu.Lock()
+	defer castUIEnv.mu.Unlock()
+	castUIEnv.depth--
+	if castUIEnv.depth > 0 {
+		return
+	}
+	for key, old := range castUIEnv.prior {
+		if old == nil {
+			_ = os.Unsetenv(key)
+		} else {
+			_ = os.Setenv(key, *old)
+		}
+	}
+	castUIEnv.prior = nil
+	ui.ReinitFormatter()
 }
 
 func castRecorderEnv(step *schema.WorkflowStep, vars *Variables) (map[string]string, error) {
