@@ -34,7 +34,7 @@ func (p *Provider) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 		return err
 	}
 	// Also bound running Git commands when the shared policy specifies a budget.
-	if config.MaxElapsedTime != nil {
+	if opts.Retry != nil && config.MaxElapsedTime != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, *config.MaxElapsedTime)
 		defer cancel()

@@ -14,6 +14,7 @@ type call struct {
 	args []string
 	dir  string
 	env  []string
+	ctx  context.Context
 }
 
 // response scripts the result for a matched invocation.
@@ -46,8 +47,8 @@ func exitErr(code int) error {
 }
 
 //nolint:gocritic // hugeParam: Runner requires RunOptions by value.
-func (f *fakeRunner) Run(_ context.Context, _ string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
-	f.calls = append(f.calls, call{args: args, dir: opts.Dir, env: opts.Env})
+func (f *fakeRunner) Run(ctx context.Context, _ string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+	f.calls = append(f.calls, call{ctx: ctx, args: args, dir: opts.Dir, env: opts.Env})
 
 	joined := strings.Join(args, " ")
 	var bestPrefix string

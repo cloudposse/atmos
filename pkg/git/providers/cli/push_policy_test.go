@@ -64,3 +64,23 @@ func TestPushConditionsCannotRetryAuthentication(t *testing.T) {
 		require.Len(t, runner.calls, 1)
 	}
 }
+
+func TestPushLegacyPreservesCallerDeadline(t *testing.T) {
+	for _, retries := range []int{0, 3} {
+		for _, bounded := range []bool{false, true} {
+			ctx := t.Context()
+			if bounded {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, time.Hour)
+				defer cancel()
+			}
+			runner := newFakeRunner()
+			require.NoError(t, New(WithRunner(runner)).Push(ctx, &atmosgit.PushOptions{Retries: retries}))
+			require.NotEmpty(t, runner.calls)
+			want, wantOK := ctx.Deadline()
+			got, gotOK := runner.calls[0].ctx.Deadline()
+			require.Equal(t, wantOK, gotOK)
+			require.Equal(t, want, got)
+		}
+	}
+}
