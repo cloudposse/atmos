@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -415,6 +417,11 @@ func disableTerraformPluginCacheForExecution(atmosConfig *schema.AtmosConfigurat
 }
 
 func removeEnvKeys(env []string, keys ...string) []string {
+	return removeEnvKeysForGOOS(env, runtime.GOOS, keys...)
+}
+
+// removeEnvKeysForGOOS keeps the Windows matching behavior testable on any host.
+func removeEnvKeysForGOOS(env []string, goos string, keys ...string) []string {
 	if len(env) == 0 || len(keys) == 0 {
 		return env
 	}
@@ -427,13 +434,25 @@ func removeEnvKeys(env []string, keys ...string) []string {
 	// and filtering in place would corrupt it for later or concurrent executions.
 	filtered := make([]string, 0, len(env))
 	for _, entry := range env {
-		key := envKey(entry)
-		if _, ok := skip[key]; ok {
+		if shouldRemoveEnvKey(envKey(entry), skip, goos) {
 			continue
 		}
 		filtered = append(filtered, entry)
 	}
 	return filtered
+}
+
+func shouldRemoveEnvKey(key string, skip map[string]struct{}, goos string) bool {
+	if _, ok := skip[key]; ok {
+		return true
+	}
+	if goos != "windows" {
+		return false
+	}
+	_, skipCacheDir := skip[terraformPluginCacheDirEnv]
+	_, skipCacheLockFile := skip[terraformPluginCacheMayBreakLockFileEnv]
+	return (skipCacheDir && strings.EqualFold(key, terraformPluginCacheDirEnv)) ||
+		(skipCacheLockFile && strings.EqualFold(key, terraformPluginCacheMayBreakLockFileEnv))
 }
 
 func envKey(entry string) string {

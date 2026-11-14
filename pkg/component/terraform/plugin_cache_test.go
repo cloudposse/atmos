@@ -247,6 +247,33 @@ func TestDisableTerraformPluginCacheForExecutionKeepsCallerEnvSlice(t *testing.T
 	assert.Equal(t, []string{"KEEP_SHARED=1"}, info.SanitizedEnv)
 }
 
+func TestRemoveEnvKeysForGOOS(t *testing.T) {
+	env := []string{
+		"tf_plugin_cache_dir=/cache",
+		"Tf_Plugin_Cache_May_Break_Dependency_Lock_File=true",
+		"TF_CLI_ARGS_plan=-lock=false",
+		"tf_cli_args_plan=other",
+		"KEEP_ME=1",
+	}
+	keys := []string{terraformPluginCacheDirEnv, terraformPluginCacheMayBreakLockFileEnv, "TF_CLI_ARGS_plan"}
+
+	t.Run("windows matches only plugin cache names ignoring case", func(t *testing.T) {
+		got := removeEnvKeysForGOOS(env, "windows", keys...)
+		assert.Equal(t, []string{"tf_cli_args_plan=other", "KEEP_ME=1"}, got)
+		assert.Equal(t, "tf_plugin_cache_dir=/cache", env[0], "filter must not rewrite caller entries")
+	})
+
+	t.Run("other systems retain exact-case matching", func(t *testing.T) {
+		got := removeEnvKeysForGOOS(env, "linux", keys...)
+		assert.Equal(t, []string{
+			"tf_plugin_cache_dir=/cache",
+			"Tf_Plugin_Cache_May_Break_Dependency_Lock_File=true",
+			"tf_cli_args_plan=other",
+			"KEEP_ME=1",
+		}, got)
+	})
+}
+
 func TestDisableTerraformPluginCacheForExecutionNoopWithoutFlag(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Components: schema.Components{
