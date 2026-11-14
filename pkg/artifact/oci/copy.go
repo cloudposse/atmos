@@ -4,6 +4,7 @@ package oci
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,7 +73,7 @@ func (r *Repository) destinationRef(ctx context.Context, st store, loaded *root,
 
 // transfer copies a root and its referrers from src into this repository under ref after the
 // reference contract (expected prior, force, plugin immutability) allows it.
-func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphStore, loaded *root, ref artifact.Ref, options artifact.PublishOptions) (*artifact.PublishResult, error) {
+func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphStore, loaded *root, ref artifact.Ref, options artifact.PublishOptions) (result *artifact.PublishResult, err error) {
 	if err := ref.Validate(); err != nil {
 		return nil, err
 	}
@@ -81,6 +82,15 @@ func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphSto
 		return nil, err
 	}
 	defer release()
+	releaseReference, err := r.guardReference(ctx, ref, options.Lock)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if releaseErr := releaseReference(); releaseErr != nil {
+			err = errors.Join(err, releaseErr)
+		}
+	}()
 	dst, err := r.be.open(ctx, ref.Name, true)
 	if err != nil {
 		return nil, err
@@ -108,6 +118,23 @@ func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphSto
 		return nil, err
 	}
 	return r.transferred(ctx, &pinned, ref, outcome, options)
+}
+
+// guardReference keeps the registry copy's read-decide-write sequence under one lock. A registry
+// tag has no compare-and-swap, and the tag is written unconditionally once the graph has been
+// transferred, so the policy decision made from the tag read is only as good as the exclusion that
+// protects the tag until the write. A caller that holds the reference lock already has that
+// exclusion; a caller that passes none gets the reference lock taken here, before the tag is
+// read. A layout is protected by its write guard instead, so it takes no reference lock.
+func (r *Repository) guardReference(ctx context.Context, ref artifact.Ref, held artifact.LockHandle) (func() error, error) {
+	if r.be.kind() != artifact.RepositoryKindOCIRegistry || held != nil {
+		return func() error { return nil }, nil
+	}
+	handle, err := r.Lock(ctx, artifact.LockRequest{Resource: ref.String()})
+	if err != nil {
+		return nil, fmt.Errorf("lock %s before copying into repository %q: %w", ref, r.alias, err)
+	}
+	return func() error { return handle.Release(ctx) }, nil
 }
 
 // pinCopied pins the digest that was copied, read back from the destination. The destination tag
