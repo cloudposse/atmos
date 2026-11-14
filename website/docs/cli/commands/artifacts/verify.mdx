@@ -87,7 +87,7 @@ Stdout carries `outcome` (`read`), `ref`, `location`, the digests, `verification
     <dd>The repository cannot verify evidence for this subject kind.</dd>
 </dl>
 
-Every failure exits with a nonzero status. For failures reached while the command runs, `--format=json` or `--format=yaml` still writes the result to stdout with `outcome: failed`, the `verification` result, and an `error` field. Argument and flag parsing failures, such as a missing reference or an unknown flag, are rejected before the command runs and do not produce a structured result.
+Every failure exits with a nonzero status. For failures reached while the command runs, `--format=json` or `--format=yaml` still writes the result to stdout with `outcome: failed` and an `error` field. The `verification` result is included only when verification ran far enough to produce one, such as an `unchecked` or `failed` status. Failures that happen first, such as a missing repository, an unresolvable reference, or an unavailable service, carry no `verification` field, so check for its presence before reading it. Argument and flag parsing failures, such as a missing reference or an unknown flag, are rejected before the command runs and do not produce a structured result.
 
 ## Related
 
