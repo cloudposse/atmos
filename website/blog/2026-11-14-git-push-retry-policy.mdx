@@ -1,23 +1,26 @@
 ---
 slug: git-push-retry-policy
-title: "Pushes That Survive Concurrent Publishers and Rate Limits"
+title: "GitOps at Scale: Pushes That Keep Up With Concurrent Publishers"
 authors: [osterman]
 tags: [feature]
 ---
 
-When several jobs publish to the same deployment branch, one of them always loses the race. The branch moves while a push is being accepted, Git reports a remote ref mismatch, and the publish fails even though a rebase and a second attempt would have succeeded. Hosted Git providers add a second failure mode on top of that: after enough pushes in a short window, they start answering with rate-limit errors, and retrying immediately only makes things worse.
+GitOps moves at the speed of version control. Flux and Argo CD both reconcile whatever lands on a branch, so every deployment starts as a commit, and how quickly teams can commit to Git sets how quickly they can ship. That holds for an organization with hundreds of repositories, one with a few dozen, or one with a single monorepo. The faster the teams move, the more often two of them reach the same branch at the same moment.
 
-Atmos now handles both. A rejected push is rebased and retried under a policy you control, and a throttled push waits for the server's cooldown instead of hammering it.
+Git makes that collision unavoidable. It is a distributed version control system, and the same design that lets every clone work independently leaves the server with no lock to take and little help for concurrent writers. Two publishers that start from the same branch tip both build a commit on top of it, and only the first push wins. The second finds out when its push is rejected. Without a plan for locking or retrying, that rejection becomes a failed deployment, and failed deployments become routine. Hosting providers add a ceiling of their own by throttling pushes that arrive too quickly. Atmos now treats both outcomes as a normal part of publishing.
 
 <!--truncate-->
 
 ## The Problem
 
-GitOps publishing is a many-writers workload. Every component that finishes a plan or apply wants to commit its output to the same branch, and they finish at nearly the same moment. A fixed number of immediate retries is the wrong tool for that:
+Contention is not a sign of a badly run pipeline. Any team sees it once it moves quickly enough, whatever its repository layout, and without a retry story the effects pile up:
 
-- Retrying instantly collides with the same competing push again.
-- A remote cap such as HTTP `429` or a rate-limited `403` is a signal to slow down, not to try again right away.
-- Some environments need a longer budget than a single push normally gets, while others need exactly one attempt and a fast failure.
+- A publisher that loses the race fails its deployment even though a rebase and a second attempt would have succeeded, and someone reruns it by hand.
+- Retrying immediately collides with the same competing pushes again, so the retry only adds load.
+- A remote cap such as HTTP `429` or a rate-limited `403` is a request to slow down, and answering it right away makes the throttling last longer.
+- Pipelines differ in what they can afford. Some can wait several minutes for a clear branch, while others should fail fast and let the next run pick the change up.
+
+Git offers no way to reserve a branch, so the practical answer is for every publisher to expect contention and to back off in a way that spreads the writers out.
 
 ## The Fix
 
