@@ -231,3 +231,28 @@ func TestDecodeOptions_S3EndpointAndPathStyle(t *testing.T) {
 	err := DecodeOptions(map[string]any{"bucket": "acme-artifacts", "path_style": "yes please"}, &S3Options{})
 	require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
 }
+
+// TestValidateEndpoint_NeverEchoesCredentials guards that no endpoint diagnostic, including scheme
+// and parse failures, repeats credentials embedded in the configured endpoint.
+func TestValidateEndpoint_NeverEchoesCredentials(t *testing.T) {
+	const secret = "s3cr3t-password"
+	tests := []struct {
+		name     string
+		endpoint string
+		wantErr  string
+	}{
+		{name: "wrong scheme with credentials", endpoint: "ftp://user:" + secret + "@example.com", wantErr: "credentials"},
+		{name: "parse failure with credentials", endpoint: "http://user:" + secret + "@exa mple.com", wantErr: "not a valid URL"},
+		{name: "bad port with credentials", endpoint: "http://user:" + secret + "@example.com:port", wantErr: "not a valid URL"},
+		{name: "no host with credentials", endpoint: "https://user:" + secret + "@", wantErr: "credentials"},
+		{name: "valid scheme with credentials", endpoint: "https://user:" + secret + "@example.com", wantErr: "credentials"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEndpoint(tt.endpoint)
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.NotContains(t, err.Error(), secret)
+		})
+	}
+}

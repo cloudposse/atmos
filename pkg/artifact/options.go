@@ -173,21 +173,29 @@ func (o *S3Options) Validate() error {
 }
 
 // validateEndpoint checks an S3 endpoint override: an absolute http or https URL with a host and
-// no embedded credentials. It performs no network access.
+// no embedded credentials. It performs no network access. No diagnostic repeats the configured
+// endpoint until it is known to carry no credentials: the credential check runs first, and a parse
+// failure reports only the underlying cause, never the raw URL.
 func validateEndpoint(endpoint string) error {
 	if endpoint == "" {
 		return nil
 	}
 	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		// url.Error embeds the raw URL, which can include credentials; keep only the cause.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return fmt.Errorf("%w: endpoint is not a valid URL: %w", errUtils.ErrArtifactConfigInvalid, err)
+	}
 	switch {
-	case err != nil:
-		return fmt.Errorf("%w: endpoint %q is not a valid URL: %w", errUtils.ErrArtifactConfigInvalid, endpoint, err)
+	case parsed.User != nil:
+		return fmt.Errorf("%w: endpoint must not embed credentials; reference an auth identity with `identity` instead", errUtils.ErrArtifactConfigInvalid)
 	case parsed.Scheme != "http" && parsed.Scheme != "https":
 		return fmt.Errorf("%w: endpoint %q must use the http or https scheme", errUtils.ErrArtifactConfigInvalid, endpoint)
 	case parsed.Host == "":
 		return fmt.Errorf("%w: endpoint %q has no host", errUtils.ErrArtifactConfigInvalid, endpoint)
-	case parsed.User != nil:
-		return fmt.Errorf("%w: endpoint must not embed credentials; reference an auth identity with `identity` instead", errUtils.ErrArtifactConfigInvalid)
 	}
 	return nil
 }
