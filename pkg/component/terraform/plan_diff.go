@@ -209,12 +209,9 @@ func (s *Operations) ComparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfig
 		_ = data.Writeln("")
 		_ = data.Writeln(diff)
 
-		// Print the error message
-		errUtils.CheckErrorAndPrint(errUtils.ErrPlanHasDiff, "", "")
-
-		// Exit with code 2 to indicate that the plans are different
-		errUtils.OsExit(2)
-		return nil // This line will never be reached
+		// Return the detailed status so deferred cleanup of owned temporary plans
+		// runs before the command boundary exits. Caller-owned plans are retained.
+		return errUtils.WithExitCode(errUtils.ErrPlanHasDiff, 2)
 	}
 
 	_ = data.Writeln("The planfiles are identical")
@@ -265,34 +262,49 @@ func ExtractJSONFromOutput(output string) (string, error) {
 func CopyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error) {
 	defer perf.Track(nil, "terraform.CopyPlanFileIfNeeded")()
 
-	rel, err := filepath.Rel(componentPath, planFile)
-	if err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	planFile, err := filepath.Abs(planFile)
+	if err != nil {
+		return "", nil, fmt.Errorf("error resolving source plan file: %w", err)
+	}
+	componentPath, err = filepath.Abs(componentPath)
+	if err != nil {
+		return "", nil, fmt.Errorf("error resolving component directory: %w", err)
+	}
+	relative, err := filepath.Rel(componentPath, planFile)
+
+	// A different volume (Rel returns an error on Windows) is also outside the
+	// component directory. Preserve support for caller plans on another drive.
+	if err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return planFile, nil, nil
 	}
 
+	// Open source file.
 	src, err := os.Open(planFile)
 	if err != nil {
 		return "", nil, fmt.Errorf("error opening source plan file: %w", err)
 	}
 	defer src.Close()
 
-	// A caller may compare an external plan whose basename matches a saved plan
-	// in this component. Never overwrite or later delete that existing file.
+	// Own a unique temporary file. Never truncate a caller's same-named plan.
 	dst, err := os.CreateTemp(componentPath, ".atmos-plan-diff-*.planfile")
 	if err != nil {
 		return "", nil, fmt.Errorf("error creating destination plan file: %w", err)
 	}
-	cleanup := func() { _ = os.Remove(dst.Name()) }
-	if _, err = io.Copy(dst, src); err != nil {
-		_ = dst.Close()
+	planFileInComponentDir := dst.Name()
+	cleanup := func() { _ = os.Remove(planFileInComponentDir) }
+
+	// Copy the file contents without loading it all into memory.
+	_, err = io.Copy(dst, src)
+	closeErr := dst.Close()
+	if err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("error copying plan file to component directory: %w", err)
 	}
-	if err = dst.Close(); err != nil {
+	if closeErr != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("error closing destination plan file: %w", err)
+		return "", nil, fmt.Errorf("error closing temporary plan file: %w", closeErr)
 	}
-	return dst.Name(), cleanup, nil
+	return planFileInComponentDir, cleanup, nil
 }
 
 // runTerraformShow runs the terraform show command and captures its output.
@@ -334,6 +346,11 @@ func (s *Operations) runTerraformInit(atmosConfig *schema.AtmosConfiguration, di
 	// Create a copy of the info struct with init subcommand
 	initInfo := *info
 	initInfo.SubCommand = "init"
+	// Plan-diff borrows the caller's plans. Mark the canonical plan as supplied
+	// so the init lifecycle does not remove it as an unrelated generated artifact.
+	if initInfo.PlanFile == "" {
+		initInfo.PlanFile = filepath.Join(dir, ConstructTerraformComponentPlanfileName(info))
+	}
 
 	// No manual -reconfigure flag here: initInfo.SubCommand == "init" routes this call through
 	// ExecuteTerraform's normal explicit-init path (buildInitSubcommandArgs), which now decides

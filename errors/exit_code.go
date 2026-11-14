@@ -99,3 +99,27 @@ func GetExitCode(err error) int {
 
 	return 1 // default
 }
+
+// PrerequisiteError marks a failure from a phase that runs before the main subcommand (for example
+// `terraform init` or workspace selection). Its exit status describes the prerequisite, not the
+// subcommand, so callers that interpret subcommand exit codes (such as plan's detailed exit code 2)
+// must not treat it as the subcommand's own result. The message and the wrapped chain are unchanged.
+type PrerequisiteError struct {
+	Err error
+}
+
+func (e *PrerequisiteError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *PrerequisiteError) Unwrap() error {
+	return e.Err
+}
+
+// AsPrerequisiteError marks err as a prerequisite failure. A nil error stays nil.
+func AsPrerequisiteError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &PrerequisiteError{Err: err}
+}

@@ -58,6 +58,11 @@ func autoProvisionSourceTerraform(
 	return AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext, writers)
 }
 
+// afterTargetOwnerCheck runs right after the initial ownership check in AutoProvisionSource. It is a
+// seam that lets tests interleave a competing provisioner into the window between that check and the
+// publication lock, deterministically.
+var afterTargetOwnerCheck = func(string) {}
+
 // AutoProvisionSource automatically vendors component source on first use.
 // This enables JIT (Just-in-Time) vendoring - sources are fetched automatically
 // when running terraform/helmfile/packer commands if the target directory doesn't exist.
@@ -80,6 +85,9 @@ func AutoProvisionSource(
 ) (retErr error) {
 	defer perf.Track(atmosConfig, "source.AutoProvisionSource")()
 	out := ui.New(writers.Stderr)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	sourceSpec, component, err := extractSourceAndComponent(componentConfig)
 	if err != nil {
@@ -88,24 +96,6 @@ func AutoProvisionSource(
 	if sourceSpec == nil {
 		return nil // No source configured - skip.
 	}
-
-	// Guard against double-invocation within the same command lifecycle.
-	// AutoProvisionSource is called both directly (from resolveAndProvisionComponentPath)
-	// and indirectly via the before.terraform.init hook (from prepareInitExecution).
-	// Without this check a zero TTL would delete varfiles and backend configs that were
-	// written to the workdir between the two calls, causing the subprocess to fail with
-	// "file does not exist" errors.  Once this function completes (provision or skip),
-	// no further provisioning should happen for this invocation.
-	if _, done := componentConfig[invocationDoneKey]; done {
-		return nil
-	}
-	// Mark as complete when this call returns successfully so any subsequent call
-	// (e.g., the before.terraform.init hook) is a no-op for this invocation.
-	defer func() {
-		if retErr == nil {
-			componentConfig[invocationDoneKey] = struct{}{}
-		}
-	}()
 
 	// Apply global TTL default if not set per-component.
 	applyGlobalTTLDefault(sourceSpec, atmosConfig, componentType)
@@ -117,18 +107,58 @@ func AutoProvisionSource(
 	if err != nil {
 		return wrapProvisionError(err, "Failed to determine target directory", component)
 	}
+	if err := validateTargetOwner(target, stack); err != nil {
+		return err
+	}
+	afterTargetOwnerCheck(target.Dir)
 	targetDir, isWorkdir := target.Dir, target.IsWorkdir
+
+	key := provisioningKey(target, componentType, componentConfig, sourceSpec, authContext)
+	marker := provisionedMarker{key: key, invocation: currentInvocation.Load()}
+	if done, ok := componentConfig[invocationDoneKey].(provisionedMarker); ok && marker.invocation == nil && done == marker && isNonEmptyDir(targetDir) && markerTargetMatches(target, stack, sourceSpec) {
+		if isWorkdir {
+			setProvisionedWorkdir(componentConfig, targetDir)
+		}
+		return nil
+	}
+	reused, finish, err := beginProvision(ctx, key, targetDir)
+	if err != nil {
+		return err
+	}
+	if reused {
+		// beginProvision may have waited for an in-process peer; another process can claim an
+		// explicit target in that window, so confirm ownership before reusing the directory.
+		if err := validateTargetOwner(target, stack); err != nil {
+			return err
+		}
+		if isWorkdir {
+			setProvisionedWorkdir(componentConfig, targetDir)
+		}
+		componentConfig[invocationDoneKey] = marker
+		return nil
+	}
+	defer func() {
+		finish(retErr == nil)
+		if retErr == nil {
+			componentConfig[invocationDoneKey] = marker
+		}
+	}()
 
 	// Check if provisioning is needed (version change, URI change, or fresh workdir).
 	needs, reason := needsProvisioning(targetDir, sourceSpec, isWorkdir)
 	if !needs {
+		// Another instance may have claimed an explicit target after the first owner check, so
+		// confirm ownership again before reporting the target as ready.
+		if err := validateTargetOwner(target, stack); err != nil {
+			return err
+		}
 		// No provisioning needed - touch LastAccessed and return.
 		if isWorkdir {
 			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
 				// Non-critical error - log and continue.
 				out.Warningf("Failed to update workdir last accessed time: %s", err)
 			}
-			componentConfig[workdir.WorkdirPathKey] = targetDir
+			setProvisionedWorkdir(componentConfig, targetDir)
 		}
 		return nil
 	}
@@ -146,26 +176,57 @@ func AutoProvisionSource(
 		ctx = downloader.WithAWSAuthContext(ctx, authContext.AWS)
 	}
 
+	hadSource := isNonEmptyDir(targetDir)
 	// Vendor the source to target directory.
-	if err := vendorToTarget(ctx, atmosConfig, sourceSpec, vendorTarget{path: targetDir, component: component, writers: writers}); err != nil {
+	var receipt downloader.ResolvedArtifact
+	options := []VendorSourceOption{WithArtifactReceipt(&receipt)}
+	if componentType == cfg.TerraformComponentType {
+		options = append(options, WithRuntimePreservation(componentConfig), withProvenance(target, stack, sourceSpec, &receipt))
+	}
+	if err := vendorToTarget(ctx, atmosConfig, sourceSpec, &vendorTarget{path: targetDir, component: component, writers: writers, options: options, preserveRuntime: componentType == cfg.TerraformComponentType}); err != nil {
 		return err
 	}
 
 	// Record provenance: workdir metadata for workdir targets, the `.atmos/source.json` marker for
 	// shared component directories. Non-critical: a failure only limits `source delete`.
-	if err := recordProvenance(target, stack, sourceSpec); err != nil {
-		out.Warningf("Failed to record source provenance: %s", err)
+	if componentType != cfg.TerraformComponentType {
+		if err := recordProvenance(target, stack, sourceSpec, &receipt); err != nil {
+			out.Warningf("Failed to record source provenance: %s", err)
+		}
 	}
 	if isWorkdir {
-		componentConfig[workdir.WorkdirPathKey] = targetDir
-		// Signal that the workdir was wiped and re-provisioned this invocation.
-		// buildInitArgs checks this to decide whether -reconfigure is needed:
-		// a re-provisioned workdir has no .terraform/ cache so -reconfigure is safe;
-		// a preserved workdir (TTL not expired) has a valid cache and -reconfigure
-		// causes a spurious "migrate all workspaces?" prompt from tofu.
-		componentConfig[workdir.WorkdirReprovisionedKey] = struct{}{}
+		setProvisionedWorkdir(componentConfig, targetDir)
+		// Only first materialization has no backend cache. Refresh preserves .terraform;
+		// normal init fingerprinting decides whether its actual inputs changed.
+		if !hadSource {
+			componentConfig[workdir.WorkdirReprovisionedKey] = struct{}{}
+		}
 	}
 	return nil
+}
+
+// markerTargetMatches reports whether a workdir target still holds what this selector provisioned.
+// Another selector may have re-vendored a shared target since the marker was recorded; its metadata
+// then names a different instance, stack, or source, and the marker must not be reused. The TTL is
+// deliberately ignored so a zero-TTL source is not downloaded twice within one command. Shared
+// component directories carry no per-selector workdir metadata and keep the marker as recorded.
+func markerTargetMatches(target *Target, stack string, sourceSpec *schema.VendorComponentSource) bool {
+	if !target.IsWorkdir {
+		return true
+	}
+	metadata, err := workdir.ReadMetadata(target.Dir)
+	if err != nil || metadata == nil {
+		return false
+	}
+	instance := target.Instance
+	if instance == "" {
+		instance = target.Component
+	}
+	if metadata.Component != instance || metadata.Stack != stack {
+		return false
+	}
+	changed, _ := checkMetadataChanges(metadata, sourceSpec)
+	return !changed
 }
 
 // applyGlobalTTLDefault sets the source TTL from the global config if not already set per-component.
@@ -217,36 +278,28 @@ func extractSourceAndComponent(componentConfig map[string]any) (*schema.VendorCo
 
 // vendorTarget identifies the provisioning destination and progress output streams.
 type vendorTarget struct {
-	path      string
-	component string
-	writers   provisioner.OutputWriters
+	path            string
+	component       string
+	writers         provisioner.OutputWriters
+	options         []VendorSourceOption
+	preserveRuntime bool
 }
 
 // vendorToTarget provisions with progress reporting and removes a newly created target when downloading fails.
-func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, target vendorTarget) error {
+func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, target *vendorTarget) error {
 	progressMsg := fmt.Sprintf("Auto-provisioning source for %q", target.component)
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", target.path)
 	out := ui.New(target.writers.Stderr)
 
 	operation := func() error {
-		// Track whether this attempt creates the target directory so a failed
-		// provisioning can remove it again. A leftover directory is worse than
-		// none: an empty one misleads path resolution (the component "exists"
-		// but has no code), and a partially populated one is treated as fully
-		// provisioned by needsProvisioning on the next run, silently skipping
-		// re-provisioning.
-		_, statErr := os.Stat(target.path)
-		createdTarget := os.IsNotExist(statErr)
-
-		if err := os.MkdirAll(target.path, DirPermissions); err != nil {
-			return errUtils.Build(errUtils.ErrSourceProvision).
-				WithCause(err).
-				WithExplanation("Failed to create target directory").
-				WithContext("path", target.path).
-				Err()
+		// Transactional Terraform refresh owns creation/publication under its target lock.
+		// An outer "created target" cleanup can otherwise delete a concurrent winner.
+		createdTarget, err := prepareAutoVendorTarget(target.path, target.preserveRuntime)
+		if err != nil {
+			return err
 		}
 
-		if err := VendorSource(ctx, atmosConfig, sourceSpec, target.path); err != nil {
+		if err := VendorSource(ctx, atmosConfig, sourceSpec, target.path, target.options...); err != nil {
 			if createdTarget {
 				if rmErr := os.RemoveAll(target.path); rmErr != nil {
 					out.Warningf("Failed to clean up target directory after failed provisioning: %s", rmErr)
@@ -310,7 +363,8 @@ func determineSourceTargetDirectory(
 		if err != nil {
 			return "", false, err
 		}
-		return workdirPath, true, nil
+		workdirPath, err = sourceWorkdirOverride(atmosConfig, componentConfig, workdirPath)
+		return workdirPath, true, err
 	}
 
 	// No workdir - use standard component path.
@@ -522,7 +576,7 @@ func isLocalSource(uri string) bool {
 }
 
 // writeWorkdirMetadata writes workdir metadata based on source type (local or remote).
-func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *schema.VendorComponentSource) error {
+func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *schema.VendorComponentSource, receipts ...*downloader.ResolvedArtifact) error {
 	now := time.Now()
 
 	// Read existing metadata to preserve CreatedAt if it exists.
@@ -546,14 +600,15 @@ func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *sche
 		LastAccessed:  now,
 		ContentHash:   "", // Content hash is computed separately for local sources.
 	}
-	// The common artifact resolver records a local, credential-free receipt for
-	// JIT workdirs. Failure is deliberately non-fatal: the provisioning result
-	// remains usable, while SBOM coverage can report the missing evidence.
-	if artifact, err := downloader.ResolveArtifact(context.Background(), nil, sourceSpec.Uri, workdirPath); err == nil {
-		metadata.SourceURI = artifact.Declared
-		metadata.SourceResolved = artifact.Resolved
-		metadata.SourceIdentity = artifact.Identity
+	// Use the fetch receipt captured before Git metadata is stripped. Compatibility
+	// callers without one get an honest content digest, never the enclosing repo HEAD.
+	artifact := downloader.ResolvedArtifact{Declared: downloader.RedactSource(sourceSpec.Uri), Resolved: downloader.RedactSource(sourceSpec.Uri)}
+	if len(receipts) > 0 && receipts[0] != nil {
+		artifact = *receipts[0]
+	} else if digest, err := downloader.TreeSHA256(workdirPath); err == nil {
+		artifact.Identity = digest
 	}
+	metadata.SourceURI, metadata.SourceResolved, metadata.SourceIdentity = artifact.Declared, artifact.Resolved, artifact.Identity
 
 	// Preserve original CreatedAt and ContentHash if metadata already existed.
 	if existingMetadata != nil {
@@ -590,4 +645,26 @@ func extractComponentName(componentConfig map[string]any) string {
 	}
 
 	return ""
+}
+
+// setProvisionedWorkdir does not undo the runtime's already-resolved module subdirectory
+// when a later hook reuses the same source provisioning result.
+func setProvisionedWorkdir(config map[string]any, target string) {
+	if existing, ok := config[workdir.WorkdirPathKey].(string); ok && existing != "" && isWithinBase(existing, target) {
+		if info, err := os.Stat(existing); err == nil && info.IsDir() {
+			return
+		}
+	}
+	config[workdir.WorkdirPathKey] = target
+}
+
+func prepareAutoVendorTarget(path string, preserveRuntime bool) (bool, error) {
+	if preserveRuntime {
+		return false, nil
+	}
+	_, statErr := os.Stat(path)
+	if err := os.MkdirAll(path, DirPermissions); err != nil {
+		return false, errUtils.Build(errUtils.ErrSourceProvision).WithCause(err).WithExplanation("Failed to create target directory").WithContext("path", path).Err()
+	}
+	return os.IsNotExist(statErr), nil
 }

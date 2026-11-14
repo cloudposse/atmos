@@ -18,7 +18,7 @@ import (
 )
 
 func TestCheckBundlePath(t *testing.T) {
-	allowed := []string{"bin/plugin", "bin/plugin.exe", "plugin.yaml", "schemas/provider.json", "schemas/nested/dir/broker.json"}
+	allowed := []string{"bin/plugin", "bin/plugin.exe", "bin/plugin..exe", "plugin.yaml", "schemas/provider.json", "schemas/nested/dir/broker.json"}
 	for _, path := range allowed {
 		t.Run("allowed/"+path, func(t *testing.T) {
 			require.NoError(t, CheckBundlePath(path))
@@ -91,6 +91,11 @@ func TestScanBundleRejectsEveryUnsafeEntryClass(t *testing.T) {
 		files, err := scanBundle(bytes.NewReader(tarOf(t, regular("plugin.yaml"), &tar.Header{Name: "bin/plugin", Mode: 0o755, Typeflag: tar.TypeReg})), &bundleRules{})
 		require.NoError(t, err)
 		require.Equal(t, []BundleFile{{Path: "plugin.yaml", Size: 1, Mode: "0644"}, {Path: "bin/plugin", Size: 1, Mode: "0755"}}, files)
+	})
+	t.Run("double dots within a filename are local", func(t *testing.T) {
+		files, err := scanBundle(bytes.NewReader(tarOf(t, regular("bin/plugin..exe"))), &bundleRules{})
+		require.NoError(t, err)
+		require.Equal(t, []BundleFile{{Path: "bin/plugin..exe", Size: 1, Mode: "0644"}}, files)
 	})
 }
 

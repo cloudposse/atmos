@@ -25,7 +25,8 @@ func scopedVault(t *testing.T, cleanup error) (*VaultStore, *fakeVaultKV, *int) 
 			err := operation(ctx, &store.EnvironmentAuthConfig{Environment: map[string]string{"VAULT_TOKEN": "synthetic-identity"}})
 			*releases++
 			return errors.Join(err, cleanup)
-		}).AnyTimes()
+		},
+	).AnyTimes()
 	s.SetAuthContext(resolver, "openbao")
 	return s, fake, releases
 }
@@ -130,7 +131,8 @@ func TestVaultOperationLifetimeRejectsMissingCredentials(t *testing.T) {
 					return operation(ctx, nil)
 				}
 				return operation(ctx, &store.EnvironmentAuthConfig{Environment: environment})
-			})
+			},
+		)
 		s.SetAuthContext(resolver, "openbao")
 		value, err := s.GetKey("key")
 		require.ErrorIs(t, err, store.ErrAuthContextNotAvailable)

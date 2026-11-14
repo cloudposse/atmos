@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -20,6 +22,16 @@ import (
 
 // errTestInitFailed is a sentinel used to assert init-failure propagation in the shell lifecycle.
 var errTestInitFailed = errors.New("init failed")
+
+func TestShellInfoFromOptions_DisabledIdentity(t *testing.T) {
+	for _, identity := range []string{"false", "FALSE", "0", "off", "no", config.IdentityFlagDisabledValue} {
+		t.Run(identity, func(t *testing.T) {
+			info := shellInfoFromOptions(&ShellOptions{Identity: identity})
+			assert.Equal(t, config.IdentityFlagDisabledValue, info.Identity)
+			assert.True(t, info.AuthDisabled)
+		})
+	}
+}
 
 func TestShellInfoFromOptions(t *testing.T) {
 	tests := []struct {
@@ -258,6 +270,20 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 				"Component: rds",
 				"Stack: prod",
 				"Terraform workspace: ",
+			},
+		},
+		{
+			name: "Unverified cold source path",
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"},
+			cfg: &shellConfig{
+				componentPath:  "/.workdir/terraform/dev-vpc",
+				workingDir:     "/.workdir/terraform/dev-vpc",
+				varFile:        "dev-vpc.terraform.tfvars.json",
+				unverifiedPath: true,
+			},
+			expectedOutput: []string{
+				"Component path: /.workdir/terraform/dev-vpc" + unverifiedPathNote,
+				"Working directory: /.workdir/terraform/dev-vpc" + unverifiedPathNote,
 			},
 		},
 	}
@@ -767,4 +793,28 @@ func TestPrepareShellExecution_AuthErrorStopsSetup(t *testing.T) {
 	err := testExecutor(t).prepareShellExecution(atmosConfig, info, cfg, false)
 	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
 	assert.Empty(t, info.ComponentEnvList, "env must not be assembled after an auth failure")
+}
+
+// TestExecuteTerraformShell_DisabledAuthDoesNotMutateCallerConfig verifies that --identity=false configures
+// the disabled-auth manager on an invocation-local copy, so a caller that reuses its configuration (the
+// interactive UI) does not carry disabled auth into a later authenticated shell.
+func TestExecuteTerraformShell_DisabledAuthDoesNotMutateCallerConfig(t *testing.T) {
+	stop := errors.New("stop after auth setup")
+	var seen *schema.AtmosConfiguration
+	executor := NewExecutor(Services{
+		CreateAndAuthenticateAuthManager: func(atmosConfig *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+			seen = atmosConfig
+			return nil, stop
+		},
+	})
+	shared := &schema.AtmosConfiguration{}
+
+	err := executor.ExecuteTerraformShell(&ShellOptions{Component: "vpc", Stack: "dev", Identity: "false"}, shared)
+	require.ErrorIs(t, err, stop)
+
+	require.NotNil(t, seen)
+	assert.NotSame(t, shared, seen, "disabled auth must be configured on a copy")
+	assert.NotNil(t, seen.AuthManager, "the invocation must see the disabled-auth manager")
+	assert.Nil(t, shared.AuthManager, "the caller's configuration must keep no auth manager")
+	assert.Nil(t, shared.DeferredEvaluation, "the caller's configuration must keep no deferred evaluation context")
 }

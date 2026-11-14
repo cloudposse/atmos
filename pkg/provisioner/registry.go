@@ -23,6 +23,8 @@ type HookEvent string
 // whose provisioners use in-process SDKs). It lives here, with the runner closure built in
 // the exec layer, so pkg/provisioner does not need to import internal/exec (a cycle).
 type TerraformExecContext struct {
+	// DryRun suppresses all provisioners, including those that use SDKs instead of Run.
+	DryRun bool
 	// Run executes a terraform/tofu subcommand (args after the binary, e.g.
 	// {"providers","lock","-platform=linux_amd64"}) with the live env, RC, and workdir.
 	Run func(args []string) error
@@ -148,6 +150,9 @@ func ExecuteProvisioners(
 	var ec *TerraformExecContext
 	if len(execCtx) > 0 {
 		ec = execCtx[0]
+	}
+	if ec != nil && ec.DryRun {
+		return nil
 	}
 
 	provisioners := GetProvisionersForEvent(event)
