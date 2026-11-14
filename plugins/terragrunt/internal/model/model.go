@@ -237,6 +237,8 @@ type Problem struct {
 
 // Error returns the headline and detail for local diagnostics and tests. The provider never sends it
 // to the host: it sends only the structured fields, honoring Safe.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func (p *Problem) Error() string {
 	if p.Detail == "" {
 		return p.Summary
@@ -245,4 +247,6 @@ func (p *Problem) Error() string {
 }
 
 // Unwrap exposes the cause for classification.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func (p *Problem) Unwrap() error { return p.Err }
