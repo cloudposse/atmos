@@ -78,12 +78,13 @@ type publishState struct {
 // publication bundles everything one write needs: the operation, the target repository, the
 // incoming artifact, the force flag, the write closure, and the state commit fills in.
 type publication struct {
-	op    *operation
-	tgt   *target
-	in    *incoming
-	force bool
-	write writer
-	state *publishState
+	op         *operation
+	tgt        *target
+	in         *incoming
+	force      bool
+	write      writer
+	state      *publishState
+	afterWrite func(context.Context, artifact.LockHandle) error
 }
 
 // commit runs the shared publication sequence under the writer lock: read the current reference,
@@ -114,6 +115,9 @@ func (s *Service) commit(ctx context.Context, pub *publication) (err error) {
 	}
 	if decision == verdictUnchanged {
 		s.reportUnchanged(pub, cur)
+		if pub.afterWrite != nil {
+			return pub.afterWrite(ctx, locks.handleFor(pub.tgt.alias))
+		}
 		return nil
 	}
 	result, err := s.execute(ctx, pub, cur, decision, locks.handleFor(pub.tgt.alias))
@@ -121,6 +125,9 @@ func (s *Service) commit(ctx context.Context, pub *publication) (err error) {
 		return err
 	}
 	s.reportWritten(pub, result, locks, decision, cur)
+	if pub.afterWrite != nil {
+		return pub.afterWrite(ctx, locks.handleFor(pub.tgt.alias))
+	}
 	return nil
 }
 
