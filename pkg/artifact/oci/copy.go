@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -241,7 +242,8 @@ func layoutRoot(directory, selector string) (ocispec.Descriptor, error) {
 	}
 	var matches []ocispec.Descriptor
 	for _, entry := range index.Manifests {
-		if (selector == "" && entry.Annotations[ocispec.AnnotationRefName] != "") || (selector != "" && (entry.Digest.String() == selector || entry.Annotations[ocispec.AnnotationRefName] == selector)) {
+		if matchesLayoutSelector(entry, selector) && !slices.ContainsFunc(matches, func(seen ocispec.Descriptor) bool { return seen.Digest == entry.Digest }) {
+			// Two reference names for one root digest select one root, not two.
 			matches = append(matches, entry)
 		}
 	}
