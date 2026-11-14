@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,22 +83,30 @@ func TestSensitiveGeneratedFileWindowsExistingReader(t *testing.T) {
 	require.NoError(t, err)
 	defer reader.Close()
 	err = WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "secret.tf", IfExists: "overwrite", Sensitive: true, Content: []byte("secret")}})
-	require.ErrorIs(t, err, windows.ERROR_SHARING_VIOLATION)
+	// Replacing a file another process holds open fails: the temporary file cannot be renamed over
+	// it. Windows reports that as a sharing violation or as access denied depending on the handle.
+	require.Error(t, err)
+	require.True(t, errors.Is(err, windows.ERROR_SHARING_VIOLATION) || errors.Is(err, windows.ERROR_ACCESS_DENIED), "unexpected error: %v", err)
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, previous, content)
 }
 
-func TestSensitiveGeneratedFileWindowsRejectsHardLink(t *testing.T) {
+// A sensitive file is replaced through a temporary file renamed over it, which replaces the
+// directory entry and never writes through a hard link, so the other name keeps its bytes.
+func TestSensitiveGeneratedFileWindowsReplacementLeavesHardLinkUntouched(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "original.tf")
 	previous := []byte("original")
 	require.NoError(t, os.WriteFile(path, previous, 0o644))
 	require.NoError(t, os.Link(path, filepath.Join(directory, "secret.tf")))
-	require.Error(t, WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "secret.tf", IfExists: "overwrite", Sensitive: true, Content: []byte("secret")}}))
+	require.NoError(t, WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "secret.tf", IfExists: "overwrite", Sensitive: true, Content: []byte("secret")}}))
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.Equal(t, previous, content)
+	require.Equal(t, previous, content, "the other hard link must not be written through")
+	replaced, err := os.ReadFile(filepath.Join(directory, "secret.tf"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("secret"), replaced)
 }
 
 func TestSensitiveGeneratedFileWindowsACLFailurePreservesContent(t *testing.T) {
