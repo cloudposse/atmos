@@ -17,6 +17,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/component"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/policy"
@@ -804,7 +805,8 @@ func TestPrepareComponentExecutionEndsAnIgnoredRunWithoutExecuting(t *testing.T)
 	require.Empty(t, shell.names(), "nothing may execute")
 	require.NoDirExists(t, filepath.Join(root, ".workdir"), "an ignored run must not provision a source")
 	require.NoFileExists(t, filepath.Join(root, "components", "terraform", "app", "generated.tf"), "an ignored run writes no generated files")
-	require.Contains(t, output.String(), "Ignoring an error in app in dev because it matches policy registry_down: registry is down")
+	// CI runners advertise color, so strip the ANSI styling before matching the text.
+	require.Contains(t, ansi.Strip(output.String()), "Ignoring an error in app in dev because it matches policy registry_down: registry is down")
 }
 
 func TestEndIgnoredRunReportsLikeAnIgnoredFetch(t *testing.T) {
@@ -816,8 +818,10 @@ func TestEndIgnoredRunReportsLikeAnIgnoredFetch(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app"}
 
 	require.ErrorIs(t, endIgnoredRun(info, &schema.ComponentIgnoredRun{Policy: "quiet"}), errUtils.ErrComponentRunIgnored)
-	require.Contains(t, output.String(), "Ignoring an error in app in dev because it matches policy quiet\n")
-	require.NotContains(t, output.String(), "quiet:", "no message means no trailing colon")
+	// CI runners advertise color, so strip the ANSI styling before matching the text.
+	plain := ansi.Strip(output.String())
+	require.Contains(t, plain, "Ignoring an error in app in dev because it matches policy quiet\n")
+	require.NotContains(t, plain, "quiet:", "no message means no trailing colon")
 }
 
 func TestWarnOverlappingRetryOnlyForBothMechanisms(t *testing.T) {
