@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -70,7 +71,7 @@ func SearchConfigFile(configPath string, atmosConfig *schema.AtmosConfiguration)
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, nil
 		}
-		return "", fmt.Errorf("%w: %s", errSpecifiedConfigNotFound, configPath)
+		return "", fmt.Errorf("%w: %s", errUtils.ErrSpecifiedConfigNotFound, configPath)
 	}
 
 	dir := filepath.Dir(configPath)
@@ -97,5 +98,5 @@ func SearchConfigFile(configPath string, atmosConfig *schema.AtmosConfiguration)
 		}
 	}
 
-	return "", fmt.Errorf("%w '%s' ('%s' + '%s')", errImportMatchNotFound, configPath, dir, base)
+	return "", fmt.Errorf("%w '%s' ('%s' + '%s')", errUtils.ErrImportMatchNotFound, configPath, dir, base)
 }

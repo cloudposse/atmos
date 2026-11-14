@@ -175,7 +175,7 @@ func processTerraformInitEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE", componentsTerraformApplyAutoApprove)
 		applyAutoApproveBool, err := strconv.ParseBool(componentsTerraformApplyAutoApprove)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.ApplyAutoApprove = applyAutoApproveBool
 	}
@@ -185,7 +185,7 @@ func processTerraformInitEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT", componentsTerraformDeployRunInit)
 		deployRunInitBool, err := strconv.ParseBool(componentsTerraformDeployRunInit)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.DeployRunInit = deployRunInitBool
 	}
@@ -199,7 +199,7 @@ func processTerraformInitFlagsEnv(atmosConfig *schema.AtmosConfiguration) error 
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE", componentsInitRunReconfigure)
 		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.OverrideInitRunReconfigure(initRunReconfigureBool)
 	}
@@ -209,7 +209,7 @@ func processTerraformInitFlagsEnv(atmosConfig *schema.AtmosConfiguration) error 
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS", componentsInitPassVars)
 		initPassVarsBool, err := strconv.ParseBool(componentsInitPassVars)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 	}
@@ -255,7 +255,7 @@ func processTerraformPlanEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE", componentsPlanSkipPlanfile)
 		planSkipPlanfileBool, err := strconv.ParseBool(componentsPlanSkipPlanfile)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
 	}
@@ -265,7 +265,7 @@ func processTerraformPlanEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE", componentsTerraformAutoGenerateBackendFile)
 		componentsTerraformAutoGenerateBackendFileBool, err := strconv.ParseBool(componentsTerraformAutoGenerateBackendFile)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
 	}
@@ -341,7 +341,7 @@ func processHelmfileEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_USE_EKS", componentsHelmfileUseEKS)
 		useEKSBool, err := strconv.ParseBool(componentsHelmfileUseEKS)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_HELMFILE_USE_EKS: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Helmfile.UseEKS = useEKSBool
 	}

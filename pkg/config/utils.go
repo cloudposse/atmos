@@ -21,13 +21,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-var (
-	errStackBasePathMissing      = errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
-	errStackIncludedPathsMissing = errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
-	errSpecifiedConfigNotFound   = errors.New("specified config file not found")
-	errImportMatchNotFound       = errors.New("failed to find a match for the import")
-)
-
 // resolveStackGlobMatches expands p into its candidate glob patterns (template-aware, via
 // getStackFilePatterns when p has no extension), resolves matches for each, and distinguishes a
 // genuine glob error (invalid pattern syntax, permission denied) from a valid-but-empty pattern,
@@ -197,11 +190,11 @@ func FindAllStackConfigsInPaths(
 
 func checkConfig(atmosConfig *schema.AtmosConfiguration, isProcessStack bool) error {
 	if isProcessStack && len(atmosConfig.Stacks.BasePath) < 1 {
-		return errStackBasePathMissing
+		return errUtils.ErrStackBasePathMissing
 	}
 
 	if isProcessStack && len(atmosConfig.Stacks.IncludedPaths) < 1 {
-		return errStackIncludedPathsMissing
+		return errUtils.ErrStackIncludedPathsMissing
 	}
 
 	if len(atmosConfig.Logs.Level) > 0 {
