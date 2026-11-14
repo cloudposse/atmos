@@ -6,6 +6,10 @@
 // edits to .tf files follow the same shape as structural edits to YAML stack
 // manifests.
 //
+// It also renders Go maps as HCL attribute files (EncodeAttributes and
+// WriteAttributesFile), the format Terraform reads from .tfvars and
+// -backend-config files.
+//
 // Example usage:
 //
 //	out, err := hcl.SetAttribute(content, "resource.aws_instance.web.instance_type", `"t3.micro"`)

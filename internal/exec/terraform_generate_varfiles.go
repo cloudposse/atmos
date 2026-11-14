@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/literalsource"
+	"github.com/cloudposse/atmos/pkg/hcl"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -351,7 +352,7 @@ func ExecuteTerraformGenerateVarfiles(
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(fileAbsolutePath, varsToWrite, filePermissions)
+						err = hcl.WriteAttributesFile(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}

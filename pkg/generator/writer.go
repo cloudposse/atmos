@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/hcl"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -80,7 +81,7 @@ func (w *FileWriter) WriteHCL(dir, filename string, data map[string]any) error {
 	defer perf.Track(nil, "generator.FileWriter.WriteHCL")()
 
 	path := filepath.Join(dir, filename)
-	return u.WriteToFileAsHcl(path, data, w.fileMode)
+	return hcl.WriteAttributesFile(path, data, w.fileMode)
 }
 
 // MockWriter is a test implementation that captures written content.

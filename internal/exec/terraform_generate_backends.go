@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/literalsource"
+	"github.com/cloudposse/atmos/pkg/hcl"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -412,7 +413,7 @@ func ExecuteTerraformGenerateBackends(
 							return err
 						}
 					} else if format == "backend-config" {
-						err = u.WriteToFileAsHcl(backendFileAbsolutePath, backendSection, 0o644)
+						err = hcl.WriteAttributesFile(backendFileAbsolutePath, backendSection, DefaultFileMode)
 						if err != nil {
 							return err
 						}

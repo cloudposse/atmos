@@ -1,118 +1,13 @@
 package utils
 
 import (
-	"fmt"
 	"os"
-	"sort"
-	"strings"
 
-	"github.com/hashicorp/hcl/hcl/ast"
-	jsonParser "github.com/hashicorp/hcl/json/parser"
 	"github.com/hashicorp/hcl/v2/hclwrite"
-	ctyjson "github.com/zclconf/go-cty/cty/json"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
-
-// WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file.
-func WriteToFileAsHcl(
-	filePath string,
-	data any,
-	fileMode os.FileMode,
-) error {
-	defer perf.Track(nil, "utils.WriteToFileAsHcl")()
-
-	content, err := ConvertToHclAttributes(data)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
-	if err != nil {
-		return err
-	}
-
-	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			log.Warn(err.Error())
-		}
-	}(f)
-
-	_, err = f.Write(content)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// ConvertToHclAttributes renders the top-level keys of the provided map as HCL attributes, the format
-// Terraform expects in .tfvars and -backend-config files. Nested maps become object values and lists
-// (including lists of maps) become tuple values.
-func ConvertToHclAttributes(data any) ([]byte, error) {
-	defer perf.Track(nil, "utils.ConvertToHclAttributes")()
-
-	j, err := ConvertToJSONFast(data)
-	if err != nil {
-		return nil, err
-	}
-
-	ty, err := ctyjson.ImpliedType([]byte(j))
-	if err != nil {
-		return nil, err
-	}
-	if !ty.IsObjectType() {
-		return nil, fmt.Errorf("%w: HCL attributes can only be generated from a map, got %s", errUtils.ErrUnsupportedInputType, ty.FriendlyName())
-	}
-
-	value, err := ctyjson.Unmarshal([]byte(j), ty)
-	if err != nil {
-		return nil, err
-	}
-
-	hclFile := hclwrite.NewEmptyFile()
-	body := hclFile.Body()
-	names := make([]string, 0, len(ty.AttributeTypes()))
-	for name := range ty.AttributeTypes() {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		body.SetAttributeValue(name, value.GetAttr(name))
-	}
-
-	return hclwrite.Format(hclFile.Bytes()), nil
-}
-
-// ConvertToHclAst converts the provided value to an HCL abstract syntax tree.
-func ConvertToHclAst(data any) (ast.Node, error) {
-	defer perf.Track(nil, "utils.ConvertToHclAst")()
-
-	j, err := ConvertToJSONFast(data)
-	if err != nil {
-		return nil, err
-	}
-
-	astree, err := jsonParser.Parse([]byte(j))
-	if err != nil {
-		return nil, err
-	}
-
-	// Remove the double quotes around the terraform variable names (the double quotes come from JSON keys)
-	// since they will be written to the terraform varfiles and terraform does not like it.
-	if objectList, ok := astree.Node.(*ast.ObjectList); ok {
-		for _, item := range objectList.Items {
-			for i, key := range item.Keys {
-				item.Keys[i].Token.Text = strings.Replace(key.Token.Text, "\"", "", -1)
-			}
-		}
-	}
-
-	return astree.Node, nil
-}
 
 // WriteTerraformBackendConfigToFileAsHcl writes the provided Terraform backend config to the specified file.
 // https://dev.to/pdcommunity/write-terraform-files-in-go-with-hclwrite-2e1j
