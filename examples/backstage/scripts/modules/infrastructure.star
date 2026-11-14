@@ -31,7 +31,7 @@ def seed():
             "path": [".gitignore", "atmos.yaml", "catalog", "components", "stacks", ".gitea", "ci"],
         })
     atmos.git("push", "deployments")
-    ui.success("Git repository ready: http://localhost:3001/atmos/deployments")
+    ui.success("Git repository ready: `http://localhost:3001/atmos/deployments`")
 
 def publish_request(name):
     name = service_name(name)

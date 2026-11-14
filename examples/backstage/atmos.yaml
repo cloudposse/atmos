@@ -58,10 +58,10 @@ commands:
               runner.build_binary()
               atmos.container("build", "backstage-runner", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage-runner", flags = {"stack": "local"})
-              ui.info("TechDocs: http://localhost:3000/catalog/default/component/payments/docs")
-              ui.info("Actions: http://localhost:3001/atmos/deployments/actions")
-              ui.info("Backstage dashboard: http://localhost:3000 (sign in as guest)")
-              ui.info("Gitea: http://localhost:3001 (login: atmos / atmos)")
+              ui.info("TechDocs: `http://localhost:3000/catalog/default/component/payments/docs`")
+              ui.info("Actions: `http://localhost:3001/atmos/deployments/actions`")
+              ui.info("Backstage dashboard: `http://localhost:3000` (sign in as guest)")
+              ui.info("Gitea: `http://localhost:3001` (login: `atmos` / `atmos`)")
               if ctx.flags["open"]:
                   browser.open("http://localhost:3000")
       - name: open

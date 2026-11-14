@@ -26,4 +26,4 @@ def register_service(name):
     target = "http://local-backstage-git:3000/atmos/deployments/raw/branch/main/catalog/" + name + ".yaml"
     request("/catalog/locations", {"type": "url", "target": target}, token, expected = [201, 409])
     request("/catalog/refresh", {"entityRef": "component:default/" + name}, token, expected = [204, 404])
-    ui.success("Provisioned local bucket and registered http://localhost:3000/catalog/default/component/" + name)
+    ui.success("Provisioned local bucket and registered `http://localhost:3000/catalog/default/component/" + name + "`")
