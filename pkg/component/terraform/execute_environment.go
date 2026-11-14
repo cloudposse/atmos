@@ -5,6 +5,7 @@ import (
 	fmt "fmt"
 	os "os"
 	filepath "path/filepath"
+	runtime "runtime"
 	slices "slices"
 	strings "strings"
 
@@ -126,12 +127,18 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 // discarded by it, so the toolchain directories are prepended to that PATH instead. Without a
 // component-specific PATH this is exactly the toolchain PATH.
 func toolchainPathEnv(info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) []string {
+	return toolchainPathEnvForGOOS(info, tenv, runtime.GOOS)
+}
+
+// toolchainPathEnvForGOOS is toolchainPathEnv parameterized by GOOS so the Windows
+// case-insensitive PATH name (Path, PATH) can be unit-tested from any host platform.
+func toolchainPathEnvForGOOS(info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment, goos string) []string {
 	if tenv.PATH() == "" {
 		return tenv.EnvVars()
 	}
-	selected, ok := lastEnvListValue(info.ComponentEnvList)
+	selected, ok := lastEnvListValue(info.ComponentEnvList, envPath, goos)
 	if !ok {
-		selected, ok = lastEnvListValue(info.SanitizedEnv)
+		selected, ok = lastEnvListValue(info.SanitizedEnv, envPath, goos)
 	}
 	if !ok {
 		return tenv.EnvVars()
@@ -139,11 +146,21 @@ func toolchainPathEnv(info *schema.ConfigAndStacksInfo, tenv *dependencies.Toolc
 	return []string{envPath + envAssign + tenv.PrependToPath(selected)}
 }
 
-// lastEnvListValue returns the value of the last PATH=value entry; later entries win.
-func lastEnvListValue(list []string) (string, bool) {
+// envNamesEqual reports whether two environment variable names are the same variable on goos.
+// Windows names are case-insensitive; every other platform compares them exactly.
+func envNamesEqual(a, b, goos string) bool {
+	if goos == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// lastEnvListValue returns the value of the last KEY=value entry for key; later entries win.
+// Names compare case-insensitively on Windows only.
+func lastEnvListValue(list []string, key, goos string) (string, bool) {
 	value, found := "", false
 	for _, entry := range list {
-		if k, v, ok := strings.Cut(entry, envAssign); ok && k == envPath {
+		if k, v, ok := strings.Cut(entry, envAssign); ok && envNamesEqual(k, key, goos) {
 			value, found = v, true
 		}
 	}

@@ -846,6 +846,25 @@ func TestPlanPreparationRecordsApplyTimeExecution(t *testing.T) {
 	require.Equal(t, planned.Execution.Apply.AfterHooks, applied.Execution.AfterHooks)
 }
 
+// The apply-time evaluation uses the same download directory as the plan-time evaluation, so a
+// hook that reports the working directory sees the TG_DOWNLOAD_DIR override in both.
+func TestPlanPreparationApplyTimeUsesDownloadDirectory(t *testing.T) {
+	request := executionUnit(t, `
+  after_hook "where" {
+    commands = ["apply"]
+    execute  = ["tool", get_working_dir()]
+    if       = get_terraform_command() == "apply"
+  }
+`)
+	request.Environment["TG_DOWNLOAD_DIR"] = "environment-cache"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, result.Execution.Apply)
+	require.Len(t, result.Execution.Apply.AfterHooks, 1)
+	require.Contains(t, result.Execution.Apply.AfterHooks[0].Execute[1], "environment-cache")
+	require.NotContains(t, result.Execution.Apply.AfterHooks[0].Execute[1], ".terragrunt-cache")
+}
+
 // Configuration that only the apply-time evaluation reads also shapes the reviewed plan, so the
 // plan's watched sources include it.
 func TestPlanPreparationWatchesApplyTimeReads(t *testing.T) {

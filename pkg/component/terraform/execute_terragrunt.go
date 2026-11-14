@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -156,8 +157,8 @@ func resolveTerragruntPath(binary string, base, overrides []string) (string, err
 	if base == nil {
 		base = os.Environ()
 	}
-	path, _ := lastEnvListValue(base)
-	if value, ok := lastEnvListValue(overrides); ok {
+	path, _ := lastEnvListValue(base, envPath, runtime.GOOS)
+	if value, ok := lastEnvListValue(overrides, envPath, runtime.GOOS); ok {
 		path = value
 	}
 	if strings.ContainsAny(binary, `/\`) {
