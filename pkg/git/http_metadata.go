@@ -134,7 +134,7 @@ func httpMetadataEnv(env []string) []string {
 		env = os.Environ()
 	}
 	overrides := map[string]string{"GIT_TRACE_CURL": "1", "GIT_TRACE_CURL_NO_DATA": "1", "GIT_TRACE_REDACT": "1", "GIT_TRACE_BRIEF": "0", "GIT_HTTP_MAX_RETRIES": "0"}
-	out := make([]string, 0, len(env)+len(overrides))
+	out := make([]string, 0, len(env))
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")
 		if _, replace := overrides[key]; !replace && key != "GIT_CURL_VERBOSE" {
