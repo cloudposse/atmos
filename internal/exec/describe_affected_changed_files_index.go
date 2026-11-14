@@ -27,6 +27,10 @@ type changedFilesIndex struct {
 	resolvedOnce sync.Once
 	resolved     *changedFilesIndex
 
+	// watchMu protects filtered views for this change set.
+	watchMu      sync.Mutex
+	watchIndexes map[string]*changedFilesIndex
+
 	mu sync.RWMutex
 }
 

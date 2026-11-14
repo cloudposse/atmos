@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/gruntwork-io/terragrunt/internal/configbridge"
+	"github.com/gruntwork-io/terragrunt/internal/iacargs"
 	"github.com/gruntwork-io/terragrunt/internal/tf"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
 	"github.com/gruntwork-io/terragrunt/internal/vexec"
@@ -77,4 +78,9 @@ func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path,
 		return errors.Join(err, pool.Wait())
 	}
 	return pool.Wait()
+}
+
+// IsDestroyOperation uses upstream boolean flag parsing, including last-value precedence.
+func IsDestroyOperation(command string, arguments []string) bool {
+	return command == "destroy" || iacargs.HasDestroyFlag(arguments)
 }

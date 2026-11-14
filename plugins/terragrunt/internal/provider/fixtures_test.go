@@ -109,8 +109,66 @@ func TestExplicitStackStateAndPreparation(t *testing.T) {
 	require.NoError(t, decode(prepared.State.Backend, &after))
 	require.Equal(t, before, after)
 	require.Equal(t, filepath.Join(root, "state/dev/network.tfstate"), after["path"])
-	require.Len(t, prepared.Files, 2)
-	require.Equal(t, "terragrunt.hcl", prepared.Files[0].Path)
-	require.Equal(t, "terragrunt.values.hcl", prepared.Files[1].Path)
+	require.True(t, prepared.BackendGenerated)
+	require.Len(t, prepared.Files, 3)
+	require.Equal(t, "backend.tf", prepared.Files[0].Path)
+	require.Contains(t, string(prepared.Files[0].Content), `backend "local"`)
+	require.Equal(t, "terragrunt.hcl", prepared.Files[1].Path)
+	require.Equal(t, "terragrunt.values.hcl", prepared.Files[2].Path)
 	require.NotNil(t, prepared.Inputs)
+}
+
+func TestImportsSelectExplicitFilesAndDirectories(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "live"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "live", "terragrunt.stack.hcl"), nil, 0o600))
+	settings, err := encode(map[string]any{"enabled": true})
+	require.NoError(t, err)
+	request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: settings, Operation: &pluginv1.ComponentOperation{Mode: "native"}, Imports: []string{"terragrunt://live", "terragrunt://live/terragrunt.stack.hcl"}}
+	paths, err := importPaths(request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/**", "live/terragrunt.stack.hcl"}, paths)
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		require.Equal(t, paths, req.IncludedPaths)
+		return &model.Resolution{}, nil
+	})
+	_, err = p.Discover(t.Context(), request)
+	require.NoError(t, err)
+	for uri, want := range map[string]string{"terragrunt://.": "**", "terragrunt://./": "**", "terragrunt://live/": "live/**", "terragrunt://./live": "live/**", "terragrunt://./live/terragrunt.stack.hcl": "live/terragrunt.stack.hcl", "terragrunt://live//terragrunt.stack.hcl": "live/terragrunt.stack.hcl"} {
+		request.Imports = []string{uri}
+		got, err := importPaths(request)
+		require.NoError(t, err, uri)
+		require.Equal(t, []string{want}, got, uri)
+	}
+	for _, uri := range []string{"wrong://live", "terragrunt://../outside", "terragrunt://live?ref=main", "terragrunt://absent", "terragrunt://live/*", `terragrunt://live\child`} {
+		request.Imports = []string{uri}
+		_, err := importPaths(request)
+		require.Error(t, err)
+		_, err = p.Discover(t.Context(), request)
+		require.Error(t, err)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "live", "other.txt"), nil, 0o600))
+	request.Imports = []string{"terragrunt://live/other.txt"}
+	_, err = importPaths(request)
+	require.Error(t, err)
+	request.Imports = nil
+	_, err = importPaths(request)
+	require.Error(t, err)
+}
+
+func TestRemoteModuleSourceIsNotAFileWatch(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	path := filepath.Join(root, "live", "app", "terragrunt.hcl")
+	remote := "git::https://example.com/modules.git//app?ref=v1.0.0"
+	unit := model.DiscoveredUnit{Config: model.Resolution{Path: path, Source: remote, Files: []string{path}}}
+	addresses := map[string]*pluginv1.ComponentAddress{path: {Stack: "live", Component: "app", ComponentType: "terraform"}}
+	instance, err := discoveredUnit(model.Request{BasePath: root}, unit, addresses)
+	require.NoError(t, err)
+	var configuration map[string]any
+	require.NoError(t, decode(instance.Configuration, &configuration))
+	require.Equal(t, remote, configuration["source"])
+	require.Len(t, instance.Sources, 1)
+	require.Equal(t, "live/app/terragrunt.hcl", instance.Sources[0].Path)
 }

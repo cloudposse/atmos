@@ -241,15 +241,15 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement unit
 }
 
 func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, placement unitPlacement) error {
-	if len(resolved.Folders) == 0 {
-		// Shared include, not a runnable local-source unit.
+	if resolved.Source == "" && len(resolved.Folders) == 0 {
+		// Shared include, not a runnable unit.
 		return d.checkInlineModule(path)
-	}
-	if !plainLocalSource(resolved.Folders[0]) {
-		return discoveryError(d.root, path, "NONLOCAL_SOURCE", fmt.Errorf("discovery requires local sources"))
 	}
 	resolved.Files = append(resolved.Files, placement.files...)
 	resolved.Folders = append(resolved.Folders, placement.folders...)
+	if err := trackInputSources(d.overlay, d.root, resolved); err != nil {
+		return err
+	}
 	d.result.Inventory = append(d.result.Inventory, model.DiscoveredUnit{Stack: placement.stack, Name: filepath.ToSlash(placement.name), GenerationRoot: placement.generationRoot, Config: *resolved})
 	return nil
 }
@@ -312,7 +312,7 @@ func generateStack(ctx context.Context, logger log.Logger, environment *atmosbri
 	if err := atmosbridge.GenerateStack(ctx, logger, environment, path, request.Tofu); err != nil {
 		return err
 	}
-	stack, err := readStack(ctx, logger, environment, parsingContext(request, path), path)
+	stack, err := readStack(ctx, logger, environment, requestParsingContext(request, path), path)
 	if err != nil {
 		return err
 	}
@@ -393,7 +393,11 @@ func resolveUnitInventory(ctx context.Context, logger log.Logger, environment *a
 		return nil, fmt.Errorf("native output dependencies with non-default workspaces require a dependency backend adapter: %s", path)
 	}
 	if cfg.Terraform != nil && cfg.Terraform.Source != nil {
-		result.Folders = []string{localPath(filepath.Dir(path), *cfg.Terraform.Source)}
+		result.Source = *cfg.Terraform.Source
+		if plainLocalSource(result.Source) {
+			result.Source = localPath(filepath.Dir(path), result.Source)
+			result.Folders = []string{result.Source}
+		}
 	}
 	if result.OutputDependencies, err = outputDependencies(cfg, path); err != nil {
 		return nil, err

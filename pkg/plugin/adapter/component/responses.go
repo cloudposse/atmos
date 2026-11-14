@@ -90,7 +90,7 @@ func checkGeneratedFiles(files []*pluginv1.ComponentGeneratedFile) error {
 		}
 		seen[filepath.Clean(file.Path)] = true
 		switch file.IfExists {
-		case "error", "skip", "overwrite", "overwrite_terragrunt":
+		case "error", "skip", "overwrite", "overwrite_terragrunt", "remove", "remove_terragrunt":
 		default:
 			return errUtils.ErrPluginProtocol
 		}

@@ -103,6 +103,10 @@ func (e *Executor) executeMainTerraformCommand( //nolint:revive // argument-limi
 	}
 
 	err := e.runMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, opts...)
+	// Invalid output selection is a preflight failure, not a Terraform exit code.
+	if errors.Is(err, errUtils.ErrPlanVerificationFailed) {
+		return err
+	}
 	return e.finishMainTerraformCommand(atmosConfig, info, err, uploadStatusFlag)
 }
 
@@ -130,22 +134,7 @@ func (e *Executor) runMainTerraformCommand(
 		capturedMetrics = m
 	}))
 
-	err := ExecuteShellCommandWithRetry(
-		atmosConfig,
-		info,
-		info.SubCommand,
-		func(o ...component.ExecutionOption) error {
-			return e.executeStreamingOrShell(atmosConfig, executionInfo, &streamingExecRequest{
-				componentPath:  componentPath,
-				args:           allArgsAndFlags,
-				gatePhase:      info.SubCommand,
-				subCommand:     info.SubCommand,
-				redirectStdErr: info.RedirectStdErr,
-				shellOpts:      o,
-			})
-		},
-		allOpts...,
-	)
+	err := e.runMainShellCommand(atmosConfig, executionInfo, allArgsAndFlags, componentPath, allOpts)
 
 	// An explicit `atmos terraform init` reaches this main-command path rather
 	// than executeTerraformInitCommand. Keep its lifecycle equivalent to an
@@ -399,7 +388,7 @@ func ExecuteShellCommandWithRetry(
 // os/exec.Cmd copies each stream in its own goroutine whenever Stdout and Stderr aren't the
 // exact same Writer value — so without synchronization, concurrent Write calls into buf would
 // race (bytes.Buffer is not safe for concurrent use).
-func composeRetryCaptureWriters(baseOpts []component.ExecutionOption, buf *bytes.Buffer) (stdout, stderr io.Writer) {
+func composeRetryCaptureWriters(baseOpts []component.ExecutionOption, buf io.Writer) (stdout, stderr io.Writer) {
 	var probe component.ExecutionOptions
 	for _, opt := range baseOpts {
 		opt(&probe)

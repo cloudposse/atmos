@@ -89,10 +89,11 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 // newAutoInitInputs builds this invocation's fingerprint inputs -- the thin internal/exec-local
-// wrapper around autoinit.InputsFromInfo shared by buildInitSubcommandArgs, recordAutoInit, and
-// executeTerraformInitForced.
+// wrapper around autoinit.InputsFromInfo shared by buildInitSubcommandArgs, recordAutoInit,
+// executeTerraformInitCommand, and executeTerraformInitForced. It adds the init settings that
+// provider extra arguments contribute, which the init phase applies.
 func newAutoInitInputs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string) *autoinit.Inputs {
-	return autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile)
+	return withProviderInitSettings(autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile), info, componentPath)
 }
 
 // decideAutoInit resolves atmos.yaml's init policy plus force into an autoinit.Request and
@@ -177,6 +178,10 @@ func (e *Executor) executeTerraformInitForced(atmosConfig *schema.AtmosConfigura
 // situation as a backend migration, producing the "Do you want to migrate all workspaces?"
 // prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
+	if schema.ConfigurationOwned(info.ComponentSettingsSection) && usesConfigurationPlan(info) {
+		// Saved plans retain their reviewed modules and generated files.
+		return componentPath, nil
+	}
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !isWorkdir && !info.DryRun {
 		cleanTerraformWorkspace(*atmosConfig, componentPath, info.ComponentEnvList)
@@ -222,6 +227,11 @@ func (e *Executor) executeTerraformInitPhase(atmosConfig *schema.AtmosConfigurat
 	if err != nil {
 		return componentPath, err
 	}
+	// Check the requested command's required variable files in the provisioned directory
+	// before implicit init and its hooks run, so a fresh unit fails without side effects.
+	if err = preflightRequiredVarFiles(info, newPath); err != nil {
+		return newPath, err
+	}
 
 	if err = e.executeTerraformInitCommand(atmosConfig, info, newPath, varFile, opts...); err != nil {
 		return newPath, err
@@ -247,25 +257,30 @@ func (e *Executor) runTerraformInitSubprocess(atmosConfig *schema.AtmosConfigura
 	stdoutW, stderrW := composeRetryCaptureWriters(opts, &buf)
 	captureOpts := append(slices.Clone(opts), component.WithStdoutCapture(stdoutW), component.WithStderrCapture(stderrW))
 
-	err := ExecuteShellCommandWithRetry(
-		atmosConfig,
-		info,
-		"init",
-		func(o ...component.ExecutionOption) error {
-			// Classify only the final attempt: a diagnostic printed by an earlier retried
-			// attempt must not make RecoverInit re-run init with recovery flags.
-			buf.Reset()
-			return e.executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
-				componentPath:  componentPath,
-				args:           args,
-				gatePhase:      subcommandInit,
-				subCommand:     subcommandInit,
-				redirectStdErr: info.RedirectStdErr,
-				shellOpts:      o,
-			})
-		},
-		captureOpts...,
-	)
+	// An implicit init is its own phase: provider-supplied hooks and extra arguments match the
+	// command "init" here, never the command the user asked for.
+	phase := &executionPhase{command: subcommandInit, args: args, insertAt: 1, componentPath: componentPath}
+	err := e.runExecutionPhase(atmosConfig, info, phase, captureOpts, func(phaseInfo *schema.ConfigAndStacksInfo, phaseArgs []string, phaseOpts []component.ExecutionOption) error {
+		return ExecuteShellCommandWithRetry(
+			atmosConfig,
+			phaseInfo,
+			"init",
+			func(o ...component.ExecutionOption) error {
+				// Classify only the final attempt: a diagnostic printed by an earlier retried
+				// attempt must not make RecoverInit re-run init with recovery flags.
+				buf.Reset()
+				return e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
+					componentPath:  componentPath,
+					args:           phaseArgs,
+					gatePhase:      subcommandInit,
+					subCommand:     subcommandInit,
+					redirectStdErr: info.RedirectStdErr,
+					shellOpts:      o,
+				})
+			},
+			phaseOpts...,
+		)
+	})
 	return buf.String(), err
 }
 
@@ -322,7 +337,7 @@ func isDataSubcommand(info *schema.ConfigAndStacksInfo) bool {
 func (e *Executor) executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...component.ExecutionOption) error {
 	defer perf.Track(atmosConfig, "exec.executeTerraformInitCommand")()
 
-	in := autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile)
+	in := newAutoInitInputs(atmosConfig, info, componentPath, varFile)
 	decision := autoinit.Decide(autoinit.RequestFromInfo(atmosConfig, info, in, false))
 
 	if !decision.RunInit {

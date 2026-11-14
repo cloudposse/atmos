@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/edition"
 	pluginlock "github.com/cloudposse/atmos/pkg/plugin/lock"
 )
 
@@ -97,4 +99,26 @@ func invalidAlias(alias string) error {
 		WithExplanationf("`%s` is not a valid plugin alias.", alias).
 		WithHint("Aliases start with a lowercase letter and contain only lowercase letters, digits, `-` and `_`.").
 		Err()
+}
+
+// defaultAliasBehavior is the edition transition from publisher-qualified to product-only aliases.
+const defaultAliasBehavior = "plugins.default_alias"
+
+// defaultAlias derives the alias used when no alias is given. Projects pinned before the
+// transition keep the publisher-qualified alias ("publisher-product"); later editions and
+// unpinned projects use the short product name. Aliases already recorded are never rewritten.
+func (m *Manager) defaultAlias(packageID string) (string, error) {
+	pin := ""
+	if m.Config != nil {
+		pin = m.Config.Edition
+	}
+	changed, err := edition.BehaviorChanged(pin, defaultAliasBehavior)
+	if err != nil {
+		return "", err
+	}
+	if !changed {
+		return strings.ReplaceAll(packageID, "/", "-"), nil
+	}
+	_, product, _ := strings.Cut(packageID, "/")
+	return product, nil
 }

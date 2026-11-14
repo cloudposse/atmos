@@ -14,6 +14,10 @@ import (
 
 // ComponentConfig holds validated configuration for terraform output execution.
 type ComponentConfig struct {
+	// BaseEnvironment is the authoritative sanitized identity environment when non-nil.
+	BaseEnvironment []string
+	// ReadOnlyState prevents output lookups from creating absent workspaces.
+	ReadOnlyState bool
 	// Executable is the path to the terraform/opentofu executable.
 	Executable string
 	// Workspace is the terraform workspace name.
@@ -103,6 +107,22 @@ func isComponentEnabled(varsSection map[string]any) bool {
 
 // extractRequiredFields extracts required fields from sections into config.
 func extractRequiredFields(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string, config *ComponentConfig) error {
+	if err := extractCommandFields(sections, component, stack, config); err != nil {
+		return err
+	}
+
+	// Extract component_path (required).
+	componentPath, err := extractComponentPath(atmosConfig, sections, component, stack)
+	if err != nil {
+		return err
+	}
+	config.ComponentPath = componentPath
+
+	return nil
+}
+
+// extractCommandFields extracts the executable and workspace every output read requires.
+func extractCommandFields(sections map[string]any, component, stack string, config *ComponentConfig) error {
 	// Extract executable (required).
 	executable, ok := sections[cfg.CommandSectionName].(string)
 	if !ok {
@@ -120,13 +140,6 @@ func extractRequiredFields(atmosConfig *schema.AtmosConfiguration, sections map[
 			Err()
 	}
 	config.Workspace = workspace
-
-	// Extract component_path (required).
-	componentPath, err := extractComponentPath(atmosConfig, sections, component, stack)
-	if err != nil {
-		return err
-	}
-	config.ComponentPath = componentPath
 
 	return nil
 }
@@ -247,15 +260,7 @@ func extractOptionalFields(sections map[string]any, config *ComponentConfig) {
 func ExtractComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string) (*ComponentConfig, error) {
 	defer perf.Track(atmosConfig, "output.ExtractComponentConfig")()
 
-	config := &ComponentConfig{
-		AutoGenerateBackend:            atmosConfig.Components.Terraform.AutoGenerateBackendFile,
-		InitMode:                       atmosConfig.Components.Terraform.EffectiveInitMode(),
-		InitReconfigure:                atmosConfig.Components.Terraform.EffectiveInitReconfigure(),
-		InitUpgrade:                    atmosConfig.Components.Terraform.EffectiveInitUpgrade(),
-		AutoProvisionWorkdirForOutputs: atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs,
-		PassVars:                       atmosConfig.Components.Terraform.Init.PassVars,
-	}
-
+	config := newComponentConfig(atmosConfig)
 	if err := extractRequiredFields(atmosConfig, sections, component, stack, config); err != nil {
 		return nil, err
 	}
@@ -263,6 +268,30 @@ func ExtractComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map
 	extractOptionalFields(sections, config)
 
 	return config, nil
+}
+
+// extractConfigurationStateConfig extracts what a plugin-owned state read needs. That read runs
+// in a scratch or the unit's own initialized directory, never in the component's execution
+// workdir, so the workdir path is not resolved and its configuration cannot fail the read.
+func extractConfigurationStateConfig(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string) (*ComponentConfig, error) {
+	config := newComponentConfig(atmosConfig)
+	if err := extractCommandFields(sections, component, stack, config); err != nil {
+		return nil, err
+	}
+	extractOptionalFields(sections, config)
+	return config, nil
+}
+
+// newComponentConfig applies the project-wide output defaults.
+func newComponentConfig(atmosConfig *schema.AtmosConfiguration) *ComponentConfig {
+	return &ComponentConfig{
+		AutoGenerateBackend:            atmosConfig.Components.Terraform.AutoGenerateBackendFile,
+		InitMode:                       atmosConfig.Components.Terraform.EffectiveInitMode(),
+		InitReconfigure:                atmosConfig.Components.Terraform.EffectiveInitReconfigure(),
+		InitUpgrade:                    atmosConfig.Components.Terraform.EffectiveInitUpgrade(),
+		AutoProvisionWorkdirForOutputs: atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs,
+		PassVars:                       atmosConfig.Components.Terraform.Init.PassVars,
+	}
 }
 
 // ValidateBackendConfig validates that backend configuration is complete for backend generation.

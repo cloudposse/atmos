@@ -72,6 +72,12 @@ var (
 	ErrPluginUnlockedInCI = errors.New("plugin is declared but not locked; automatic installation is disabled in CI")
 	// ErrPluginFlagConflict identifies flags that cannot be combined.
 	ErrPluginFlagConflict = errors.New("plugin flags cannot be combined")
+	// ErrComponentHookFailed identifies a provider-supplied hook that exited unsuccessfully or could not run.
+	ErrComponentHookFailed = errors.New("component hook failed")
+	// ErrComponentVarFileMissing identifies a required variable file that does not exist.
+	ErrComponentVarFileMissing = errors.New("required variable file does not exist")
+	// ErrComponentOutputCapture identifies command output that could not be recorded for error hook matching.
+	ErrComponentOutputCapture = errors.New("failed to capture command output for error hooks")
 
 	ErrInvalidCredentialCodec    = errors.New("invalid credential codec")
 	ErrDuplicateCredentialCodec  = errors.New("duplicate credential codec")

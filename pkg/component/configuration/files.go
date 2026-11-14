@@ -53,13 +53,20 @@ func validateFile(file schema.ComponentConfigurationFile) error {
 	if !filepath.IsLocal(file.Path) || file.Mode > maxRequestedMode {
 		return errUtils.ErrPluginProtocol
 	}
-	if file.IfExists != "error" && file.IfExists != "skip" && file.IfExists != "overwrite" {
+	if !validFilePolicy(file.IfExists) {
 		return errUtils.ErrPluginUnsupportedExtension
 	}
 	return nil
 }
 
 func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
+	remove, err := checkFileOwnership(root, file)
+	if err != nil {
+		return err
+	}
+	if remove {
+		return removeFile(root, file.Path)
+	}
 	mode := writtenMode(file)
 	if file.Sensitive {
 		atmosio.RegisterSecretValue(string(file.Content))
@@ -67,11 +74,7 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
 	if err := root.MkdirAll(filepath.Dir(file.Path), directoryMode); err != nil {
 		return err
 	}
-	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if file.IfExists == "overwrite" {
-		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-	}
-	output, err := root.OpenFile(file.Path, flags, mode)
+	output, err := root.OpenFile(file.Path, openFlags(file.IfExists), mode)
 	if errors.Is(err, os.ErrExist) && file.IfExists == "skip" {
 		return nil
 	}
@@ -85,6 +88,23 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
 	}
 	_, writeErr := output.Write(file.Content)
 	return errors.Join(writeErr, output.Close())
+}
+
+// openFlags selects exclusive creation unless the policy replaces existing content.
+func openFlags(policy string) int {
+	if policy == "overwrite" || policy == "overwrite_terragrunt" {
+		return os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	}
+	return os.O_WRONLY | os.O_CREATE | os.O_EXCL
+}
+
+// removeFile deletes a provider-owned file, treating an already absent file as removed.
+func removeFile(root *os.Root, path string) error {
+	err := root.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 // applyMode sets the permission bits explicitly because open applies the umask

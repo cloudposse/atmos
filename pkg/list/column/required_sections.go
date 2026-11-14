@@ -33,8 +33,16 @@ var derivedFields = map[string]struct{}{
 	"atmos_component_type": {}, "enabled": {}, "locked": {}, "abstract": {},
 	"file": {}, "name": {}, "workflow": {}, "description": {}, "steps": {},
 	"components": {}, "atmos_vendor_type": {}, "atmos_vendor_file": {}, "atmos_vendor_target": {},
-	"status": {}, "status_text": {}, "component_type": {}, "component_folder": {},
+	"engine": {}, "status": {}, "status_text": {}, "component_type": {}, "component_folder": {},
 	"component_base": {}, "inherits": {}, "type": {}, "tags": {}, "labels": {}, "stack_count": {},
+}
+
+// derivedFieldInputs lists the component fields a derived field is computed from. RequiredPaths
+// evaluates exactly these fields, so a templated input never decides the value raw, without
+// requiring (and fully evaluating) the sections that contain them. The engine comes from
+// settings.configuration.engine or the component command.
+var derivedFieldInputs = map[string][][]string{
+	"engine": {{"settings", "configuration", "engine"}, {"command"}},
 }
 
 // RequiredSections statically determines which top-level Atmos component sections (vars,
@@ -110,6 +118,7 @@ func RequiredPaths(columns []Config) [][]string {
 				if _, ok := sectionBackedFields[ref.Path[0]]; ok {
 					paths = append(paths, ref.Path)
 				}
+				paths = append(paths, derivedFieldInputs[ref.Path[0]]...)
 			}
 		}
 	}

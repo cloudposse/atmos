@@ -12,10 +12,13 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
@@ -31,22 +34,15 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if info.DryRun {
 		return nil, nil
 	}
-	// Plugins do not inherit PATH. Resolve the selected host executable before
-	// Terragrunt evaluates version constraints or dependency outputs.
-	binary, err := exec.LookPath(info.Command)
-	if err != nil {
-		return nil, fmt.Errorf("%w: Terraform executable: %w", errUtils.ErrPluginInvalidConfig, err)
+	if err := resolveHostExecutable(info); err != nil {
+		return nil, err
 	}
-	binary, err = filepath.Abs(binary)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
-	}
-	info.Command = binary
-	prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+	prepared, execution, err := prepareOrRestore(ctx, config, info)
 	if err != nil || prepared == nil {
 		return prepared, err
 	}
 	info.ComponentVarsSection = prepared.Inputs
+	info.ComponentExecution = execution
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
@@ -57,11 +53,69 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 		source = make(map[string]any)
 	}
 	source["uri"] = prepared.Source
+	if isLocalModuleSource(prepared.Source) {
+		// A local module changes without its location changing, so the retained workdir
+		// would keep the code of the first run. Refreshing is a cheap local copy.
+		source["ttl"] = "0s"
+	}
 	info.ComponentSection["source"] = source
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
-	config.Components.Terraform.AutoGenerateBackendFile = true
+	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
 	return prepared, nil
+}
+
+// resolveHostExecutable makes info.Command the absolute path of the selected executable.
+func resolveHostExecutable(info *schema.ConfigAndStacksInfo) error {
+	// Plugins do not inherit PATH. Resolve the selected host executable before
+	// Terragrunt evaluates version constraints or dependency outputs.
+	binary, err := exec.LookPath(info.Command)
+	if err != nil {
+		return fmt.Errorf("%w: Terraform executable: %w", errUtils.ErrPluginInvalidConfig, err)
+	}
+	binary, err = filepath.Abs(binary)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
+	}
+	info.Command = binary
+	return nil
+}
+
+// prepareOrRestore prepares the component, or restores the reviewed preparation of a saved
+// plan. It also returns the hooks and extra arguments the invocation runs: a saved plan was
+// prepared for plan, so it runs the apply-time metadata recorded with it.
+func prepareOrRestore(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *schema.ComponentExecution, error) {
+	if !usesConfigurationPlan(info) {
+		prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+		if err != nil || prepared == nil {
+			return prepared, nil, err
+		}
+		return prepared, prepared.Execution, nil
+	}
+	if err := useRetainedWorkdir(config, info); err != nil {
+		return nil, nil, err
+	}
+	prepared, err := restoreConfigurationPlan(ctx, config, info)
+	if err != nil || prepared == nil {
+		return prepared, nil, err
+	}
+	return prepared, prepared.Execution.ForSavedPlanApply(), nil
+}
+
+// isLocalModuleSource reports whether the evaluated module source is a path on this machine.
+func isLocalModuleSource(uri string) bool {
+	return strings.HasPrefix(uri, ".") || filepath.IsAbs(uri)
+}
+
+// useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.
+// A new process has not provisioned anything, so the path is derived the way provisioning does.
+func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	fallback, err := u.GetComponentPath(config, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component path: %w", err)
+	}
+	_, err = component.ResolveRetainedWorkdir(config, info, cfg.TerraformComponentType, fallback)
+	return err
 }
 
 func configurationArtifactName(info *schema.ConfigAndStacksInfo, suffix string) (string, bool) {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	ctyjson "github.com/zclconf/go-cty/cty/json"
@@ -106,11 +107,13 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 	if binary == "" {
 		binary = "terraform"
 	}
-	return model.Request{BasePath: root, Mode: "native", Command: op.Command, Tofu: binary, Environment: env}, nil
+	return model.Request{BasePath: root, Mode: "native", Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env}, nil
 }
 
 func engineName(binary string) string {
-	if strings.TrimSuffix(filepath.Base(binary), ".exe") == "tofu" {
+	// Match the host's executable-name detection, which treats any basename containing
+	// "tofu", case-insensitively, as OpenTofu.
+	if strings.Contains(strings.ToLower(filepath.Base(binary)), "tofu") {
 		return "opentofu"
 	}
 	return "terraform"
@@ -161,6 +164,13 @@ func rpcError(err error) error {
 	// HCL diagnostics can contain secrets. Do not copy evaluator payloads into RPC errors.
 	if errors.Is(err, ErrUnsupported) {
 		return status.Error(codes.Unimplemented, ErrUnsupported.Error())
+	}
+	// Unsupported hook semantics name only hook identifiers and commands, so the reason is safe to show.
+	if errors.Is(err, engine.ErrUnsupportedExecution) {
+		return status.Error(codes.Unimplemented, err.Error())
+	}
+	if errors.Is(err, engine.ErrPreventDestroy) {
+		return status.Error(codes.FailedPrecondition, engine.ErrPreventDestroy.Error())
 	}
 	result := status.New(codes.InvalidArgument, "Terragrunt evaluation failed")
 	var diagnostic *engine.DiscoveryError

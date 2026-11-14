@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -25,6 +26,9 @@ func Resolve(ctx context.Context, request model.Request) (*model.Resolution, err
 	return resolve(ctx, request, nil)
 }
 
+// ErrPreventDestroy rejects a destroy operation on a unit that sets prevent_destroy.
+var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
+
 func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
@@ -46,12 +50,15 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if err != nil {
 		return nil, err
 	}
-	pctx := parsingContext(request, path)
+	pctx := requestParsingContext(request, path)
 	if filepath.Base(path) == stackFile {
 		return resolveStack(ctx, logger, environment, pctx, request, path)
 	}
 	if discovering(request) {
 		return resolveUnitInventory(ctx, logger, environment, pctx, request, path)
+	}
+	if err := checkDestroyGuard(ctx, logger, environment, pctx, request, path); err != nil {
+		return nil, err
 	}
 	cfg, err := parseUnit(ctx, logger, environment, pctx, request, path)
 	if err != nil {
@@ -60,11 +67,17 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if err := checkUnitPolicies(ctx, request, cfg); err != nil {
 		return nil, err
 	}
+	execution, applyFiles, err := unitExecution(ctx, logger, environment, pctx, request, cfg, path)
+	if err != nil {
+		return nil, err
+	}
 	result, err := unitResolution(logger, environment, pctx, request, cfg, path)
 	if err != nil {
 		return nil, err
 	}
-	if err := resolveBackend(result, cfg); err != nil {
+	result.Execution = execution
+	result.Files = append(result.Files, applyFiles...)
+	if err := resolveBackend(cfg, result); err != nil {
 		return nil, err
 	}
 	if request.Phase != "backend" {
@@ -73,7 +86,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 			return nil, err
 		}
 	}
-	if err := convertGeneration(result, cfg); err != nil {
+	if err := generatedFiles(ctx, logger, cfg, result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -149,24 +162,66 @@ func evaluationEnvironment(request model.Request, filesystem afero.Fs, path stri
 	return environment, nil
 }
 
-func parsingContext(request model.Request, path string) *config.ParsingContext {
+// requestParsingContext evaluates the unit at path as the request's command;
+// discovery and generation evaluate as plan.
+func requestParsingContext(request model.Request, path string) *config.ParsingContext {
 	command := request.Command
 	if command == "" || command == "discover" || command == "generate" {
 		command = "plan"
 	}
-	pctx := config.NewParsingContext().WithFileReadTracking()
-	pctx.WorkingDir, pctx.RootWorkingDir = filepath.Dir(path), filepath.Dir(path)
-	pctx.TerragruntConfigPath, pctx.OriginalTerragruntConfigPath = path, path
-	pctx.TFPath, pctx.TerraformCommand = request.Tofu, command
-	pctx.OriginalTerraformCommand = command
-	pctx.TerraformCliArgs.SetCommand(command).AppendArgument(request.Arguments...)
-	pctx.DownloadDir = filepath.Join(filepath.Dir(path), ".terragrunt-cache")
+	pctx := parsingContext(path, request.Tofu, command, request.Arguments)
 	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
 		pctx.DownloadDir = localPath(filepath.Dir(path), configured)
 	}
+	return pctx
+}
+
+// parsingContext configures Terragrunt evaluation of the unit at path as the named command.
+func parsingContext(path, tofu, command string, arguments []string) *config.ParsingContext {
+	pctx := config.NewParsingContext().WithFileReadTracking()
+	pctx.WorkingDir, pctx.RootWorkingDir = filepath.Dir(path), filepath.Dir(path)
+	pctx.TerragruntConfigPath, pctx.OriginalTerragruntConfigPath = path, path
+	pctx.TFPath, pctx.TerraformCommand = tofu, command
+	pctx.OriginalTerraformCommand = command
+	pctx.TerraformCliArgs.SetCommand(command).AppendArgument(arguments...)
+	pctx.DownloadDir = filepath.Join(filepath.Dir(path), ".terragrunt-cache")
 	pctx.AutoInit = true
 	pctx.MaxFoldersToCheck = options.DefaultMaxFoldersToCheck
 	return pctx
+}
+
+// checkDestroyGuard rejects destroy before a full parse can evaluate HCL functions
+// for a unit that sets prevent_destroy. Backend reads never destroy.
+func checkDestroyGuard(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) error {
+	if request.Phase == "backend" || !atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+		return nil
+	}
+	guard, err := config.PartialParseConfigFile(ctx, logger, atmosbridge.Discovery(environment, false),
+		pctx.WithDecodeList(config.TerragruntFlags), path, nil)
+	if err != nil {
+		return err
+	}
+	if guard.PreventDestroy != nil && *guard.PreventDestroy {
+		return ErrPreventDestroy
+	}
+	return nil
+}
+
+// unitExecution returns hooks and extra arguments as data for the host to run;
+// evaluation never executes them. Backend identity is read from a partial parse
+// that does not decode them.
+func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Execution, []string, error) {
+	if request.Phase == "backend" {
+		return nil, nil, nil
+	}
+	execution, err := executionFromConfig(cfg.Terraform)
+	if err != nil {
+		return nil, nil, err
+	}
+	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
+		return config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
+	}
+	return applyTimeExecution(request, path, execution, environment.FS, pctx.FilesRead.Paths(), reparse)
 }
 
 func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*config.TerragruntConfig, error) {
@@ -200,17 +255,18 @@ func withDownloadDir(ctx context.Context, logger log.Logger, environment *atmosb
 	return cfg, nil
 }
 
-// unitResolution converts the parsed unit into its local module identity.
+// unitResolution converts the parsed unit into its module identity. Local sources
+// must be existing directories; remote sources keep their getter URI.
 func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Resolution, error) {
 	result := &model.Resolution{Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
-	if !plainLocalSource(result.Source) {
-		return nil, fmt.Errorf("native adapter only adapts plain local directory sources")
-	}
-	if !filepath.IsAbs(result.Source) {
-		result.Source = filepath.Join(filepath.Dir(path), result.Source)
-	}
-	if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
+	if plainLocalSource(result.Source) {
+		result.Source = localPath(filepath.Dir(path), result.Source)
+		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
+		}
+		result.Folders = []string{result.Source}
+	} else if err := validateRemoteSource(result.Source); err != nil {
+		return nil, err
 	}
 	download := pctx.DownloadDir
 	if cfg.DownloadDir != "" && request.Environment["TG_DOWNLOAD_DIR"] == "" {
@@ -224,47 +280,7 @@ func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *conf
 		return nil, err
 	}
 	result.WorkingDir = workingDir
-	result.Folders = []string{result.Source}
 	result.Files = append(result.Files, request.OriginFiles...)
 	result.Folders = append(result.Folders, request.OriginFolders...)
 	return result, nil
-}
-
-// resolveBackend adapts only the local backend. Local backend paths are relative
-// to Terragrunt's working directory, including the separate non-default-workspace
-// state directory.
-func resolveBackend(result *model.Resolution, cfg *config.TerragruntConfig) error {
-	if cfg.RemoteState == nil {
-		return nil
-	}
-	result.BackendType = cfg.RemoteState.BackendName
-	result.Backend = cfg.RemoteState.BackendConfig
-	if result.BackendType != "local" {
-		return fmt.Errorf("native adapter only adapts the local backend")
-	}
-	for key, fallback := range map[string]string{"path": "terraform.tfstate", "workspace_dir": "terraform.tfstate.d"} {
-		value, _ := result.Backend[key].(string)
-		if value == "" {
-			value = fallback
-		}
-		result.Backend[key] = localPath(result.WorkingDir, value)
-	}
-	return nil
-}
-
-// convertGeneration returns literal generated files that Atmos writes itself.
-func convertGeneration(result *model.Resolution, cfg *config.TerragruntConfig) error {
-	for _, generated := range cfg.GenerateConfigs {
-		if generated.Disable {
-			continue
-		}
-		if filepath.Base(generated.Path) != generated.Path || !strings.HasSuffix(generated.Path, ".tf") {
-			return fmt.Errorf("unsupported generated path: %s", generated.Path)
-		}
-		if generated.IfExistsStr != "overwrite" || !generated.DisableSignature {
-			return fmt.Errorf("native adapter generation requires overwrite and disable_signature")
-		}
-		result.Generated[generated.Path] = generated.Contents
-	}
-	return nil
 }

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
@@ -115,6 +117,96 @@ func TestEvaluatorErrorsDoNotExposePayloads(t *testing.T) {
 	}
 }
 
+func TestPrepareReturnsExecutionInDeclarationOrder(t *testing.T) {
+	request := componentRequest(t)
+	execution := &model.Execution{
+		ExtraArguments: []model.ExtraArguments{
+			{Commands: []string{"plan"}, Arguments: []string{"-lock=false"}},
+			{Commands: []string{"apply", "plan"}, RequiredVarFiles: []string{"a.tfvars"}, OptionalVarFiles: []string{"b.tfvars"}, Environment: map[string]string{"TF_LOG": "INFO"}},
+		},
+		BeforeHooks: []model.Hook{
+			{Name: "second", Commands: []string{"plan"}, Execute: []string{"tool", "2"}},
+			{Name: "first", Commands: []string{"plan"}, Execute: []string{"tool", "1"}, WorkingDirectory: "sub", SuppressStdout: true},
+		},
+		AfterHooks: []model.Hook{{Name: "after", Commands: []string{"plan"}, Execute: []string{"tool"}, RunOnError: true}},
+		ErrorHooks: []model.Hook{{Name: "oops", Commands: []string{"apply"}, Execute: []string{"tool"}, OnErrors: []string{"x", "y"}}},
+	}
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Execution: execution, Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: request.RootDirectory, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	got := result.GetExecution()
+	require.NotNil(t, got)
+
+	require.Len(t, got.ExtraArguments, 2)
+	require.Equal(t, []string{"-lock=false"}, got.ExtraArguments[0].Arguments)
+	require.Equal(t, []string{"apply", "plan"}, got.ExtraArguments[1].Commands)
+	require.Equal(t, []string{"a.tfvars"}, got.ExtraArguments[1].RequiredVarFiles)
+	require.Equal(t, []string{"b.tfvars"}, got.ExtraArguments[1].OptionalVarFiles)
+	require.Equal(t, map[string]string{"TF_LOG": "INFO"}, got.ExtraArguments[1].Environment)
+
+	require.Len(t, got.BeforeHooks, 2)
+	require.Equal(t, "second", got.BeforeHooks[0].Name)
+	require.Equal(t, "first", got.BeforeHooks[1].Name)
+	require.Equal(t, "sub", got.BeforeHooks[1].WorkingDirectory)
+	require.True(t, got.BeforeHooks[1].SuppressStdout)
+	require.Equal(t, []string{"tool", "1"}, got.BeforeHooks[1].Execute)
+	require.Len(t, got.AfterHooks, 1)
+	require.True(t, got.AfterHooks[0].RunOnError)
+	require.Len(t, got.ErrorHooks, 1)
+	require.Equal(t, []string{"x", "y"}, got.ErrorHooks[0].OnErrors)
+}
+
+// The apply-time evaluation crosses the boundary distinctly, including an empty one, which
+// means apply runs nothing rather than the plan-time metadata.
+func TestPrepareReturnsApplyTimeExecution(t *testing.T) {
+	request := componentRequest(t)
+	execution := &model.Execution{
+		BeforeHooks: []model.Hook{{Name: "plan_only", Commands: []string{"plan"}, Execute: []string{"tool", "plan"}}},
+		Apply:       &model.Execution{AfterHooks: []model.Hook{{Name: "notify", Commands: []string{"apply"}, Execute: []string{"tool", "notify"}}}},
+	}
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Execution: execution, Source: request.RootDirectory, WorkingDir: request.RootDirectory, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	got := result.GetExecution()
+	require.Equal(t, "plan_only", got.GetBeforeHooks()[0].GetName())
+	require.Empty(t, got.GetAfterHooks())
+	require.Len(t, got.GetApply().GetAfterHooks(), 1)
+	require.Equal(t, "notify", got.GetApply().GetAfterHooks()[0].GetName())
+	require.Equal(t, []string{"tool", "notify"}, got.GetApply().GetAfterHooks()[0].GetExecute())
+	require.Nil(t, got.GetApply().GetApply())
+
+	execution.Apply = &model.Execution{}
+	result, err = p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, result.GetExecution().GetApply(), "an empty apply-time evaluation must be preserved")
+	require.Empty(t, result.GetExecution().GetApply().GetBeforeHooks())
+}
+
+func TestPrepareOmitsExecutionWithoutHooks(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Source: request.RootDirectory, WorkingDir: request.RootDirectory, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Nil(t, result.GetExecution())
+}
+
+// An unsupported hook must reach the user with its specific reason, unlike generic evaluator
+// failures whose payloads can hold secrets.
+func TestUnsupportedExecutionIsReportedSpecifically(t *testing.T) {
+	cause := fmt.Errorf("%w: before_hook %q lists the %q lifecycle command", engine.ErrUnsupportedExecution, "setup", "init-from-module")
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) { return nil, cause })
+	_, err := p.Prepare(t.Context(), componentRequest(t))
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+	require.Contains(t, err.Error(), "init-from-module")
+	require.Contains(t, err.Error(), "setup")
+}
+
 func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
 	request := componentRequest(t)
 	parsing := make(chan struct{})
@@ -176,6 +268,12 @@ func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
 			require.NotContains(t, status.Convert(err).Proto().String(), request.RootDirectory)
 		})
 	}
+}
+
+func TestRPCErrorPreservesDestroyProtection(t *testing.T) {
+	err := rpcError(fmt.Errorf("private evaluator context: %w", engine.ErrPreventDestroy))
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, engine.ErrPreventDestroy.Error(), status.Convert(err).Message())
 }
 
 func TestPreparationExportsOverlayModes(t *testing.T) {
