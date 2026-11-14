@@ -75,9 +75,11 @@ func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphSto
 	if err := ref.Validate(); err != nil {
 		return nil, err
 	}
-	if layout, ok := r.be.(*layoutBackend); ok {
-		defer lockLayout(layout.root)()
+	release, err := r.guardLayout(ctx)
+	if err != nil {
+		return nil, err
 	}
+	defer release()
 	dst, err := r.be.open(ctx, ref.Name, true)
 	if err != nil {
 		return nil, err

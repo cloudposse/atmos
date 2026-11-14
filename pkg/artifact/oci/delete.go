@@ -32,9 +32,11 @@ func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference
 	if err := artifact.ValidateName(name); err != nil {
 		return nil, err
 	}
-	if layout, ok := r.be.(*layoutBackend); ok {
-		defer lockLayout(layout.root)()
+	release, err := r.guardLayout(ctx)
+	if err != nil {
+		return nil, err
 	}
+	defer release()
 	st, loaded, err := r.rootOf(ctx, &pinned)
 	if err != nil {
 		return nil, err

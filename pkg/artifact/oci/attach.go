@@ -213,6 +213,21 @@ type attachRequest struct {
 // signature additionally carries the Record digest and the config descriptor digest of the
 // addressed manifest. Writing is idempotent: identical evidence yields an identical manifest.
 func (r *Repository) storeAttachment(ctx context.Context, st store, request *attachRequest) (artifact.SignatureEvidence, string, error) {
+	// A layout records the attachment root in the shared index.json, so the write joins the same
+	// layout-wide guard as publication, and the store is reopened under it: a handle opened before
+	// the guard was taken could hold an index that another writer has since replaced.
+	release, err := r.guardLayout(ctx)
+	if err != nil {
+		return artifact.SignatureEvidence{}, "", err
+	}
+	defer release()
+	if layout, isLayout := r.be.(*layoutBackend); isLayout {
+		fresh, openErr := layout.layout(ctx, true)
+		if openErr != nil {
+			return artifact.SignatureEvidence{}, "", openErr
+		}
+		st = fresh
+	}
 	rootDesc, subject, payload, configDigest := request.root, request.subject, request.payload, request.configDigest
 	layer := ocispec.Descriptor{
 		MediaType:   payload.MediaType,

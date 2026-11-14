@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	atmosoci "github.com/cloudposse/atmos/pkg/oci"
 )
 
@@ -201,15 +202,41 @@ func (b *layoutBackend) deleteScope() artifact.DeleteSemantics { return artifact
 
 func (b *layoutBackend) enumeratesCollection() bool { return true }
 
-// layoutPathLocks serializes in-process writers to one layout; cross-process writers are excluded
-// by the host guard the service takes.
-var layoutPathLocks sync.Map
+// layoutGuardResource names the layout-wide write guard. It starts with a NUL byte, which no
+// artifact reference can contain, so it can never collide with a reference lock.
+const layoutGuardResource = "\x00layout"
 
-func lockLayout(root string) func() {
-	value, _ := layoutPathLocks.LoadOrStore(root, &sync.Mutex{})
-	mu, _ := value.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
+// guardLayout serializes one read-modify-write of a layout's index.json against every other writer
+// of the same layout: other goroutines, other Repository values, and other Atmos processes on this
+// host. The scope is the layout root, not the artifact reference, because every reference lives in
+// the same index.json and two writers of different references would otherwise overwrite each
+// other's successful update. The returned release function must be called when the write is done.
+// A registry has no shared index file to protect, so its guard is a no-op.
+func (r *Repository) guardLayout(ctx context.Context) (func(), error) {
+	if _, isLayout := r.be.(*layoutBackend); !isLayout {
+		return func() {}, nil
+	}
+	path, err := r.lockPath(layoutGuardResource)
+	if err != nil {
+		return nil, err
+	}
+	held, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		done <- filelock.New(path).WithExclusive(ctx, func() error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	select {
+	case <-held:
+		return func() {
+			close(release)
+			<-done
+		}, nil
+	case err := <-done:
+		return nil, fmt.Errorf("waiting for the write guard of layout %q in repository %q: %w", r.lockNamespace(), r.alias, err)
+	}
 }
 
 // exists reports whether the layout has been created.
@@ -292,7 +319,7 @@ func (b *layoutBackend) names(ctx context.Context) ([]string, error) {
 }
 
 // remove untags one reference. Blobs stay: they may be shared with other references. The caller
-// holds the in-process layout lock.
+// holds the layout write guard.
 func (b *layoutBackend) remove(ctx context.Context, name, version string, _ ocispec.Descriptor) error {
 	opened, err := b.layout(ctx, true)
 	if err != nil {
