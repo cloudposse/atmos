@@ -72,6 +72,7 @@ func WithCopyConcurrency(concurrency int) CopyOption {
 }
 
 // WithCopyObserver reports every node that was actually transferred (not skipped as present).
+// The observer may be called from several goroutines concurrently, so it must be safe for concurrent use.
 //
 //nolint:lintroller // Functional option only.
 func WithCopyObserver(observe func(ocispec.Descriptor)) CopyOption {

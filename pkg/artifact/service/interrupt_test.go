@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -253,29 +254,27 @@ func TestPublish_TwoWritersWithIdenticalIntentCreateOnce(t *testing.T) {
 }
 
 // unlockedRepository hides the writer lock so the repository's own conditional guard is exercised.
-type unlockedRepository struct {
-	*artifacttest.Repository
+// It forwards every other operation to base through the generated repository mock.
+func unlockedRepository(t *testing.T, base artifact.Repository) *artifact.MockRepository {
+	t.Helper()
+	return delegatingRepository(t, base, repoHooks{lock: func(_ context.Context, request artifact.LockRequest) (artifact.LockHandle, error) {
+		handle := artifact.NewMockLockHandle(gomock.NewController(t))
+		handle.EXPECT().Resource().Return(request.Resource).AnyTimes()
+		handle.EXPECT().Owner().Return("noop").AnyTimes()
+		handle.EXPECT().Scope().Return(artifact.LockScopeHost).AnyTimes()
+		handle.EXPECT().Token().Return("noop").AnyTimes()
+		handle.EXPECT().ExpiresAt().Return(time.Time{}, false).AnyTimes()
+		handle.EXPECT().Renew(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		handle.EXPECT().Release(gomock.Any()).Return(nil).AnyTimes()
+		return handle, nil
+	}})
 }
-
-func (u *unlockedRepository) Lock(_ context.Context, request artifact.LockRequest) (artifact.LockHandle, error) {
-	return noopLock{resource: request.Resource}, nil
-}
-
-type noopLock struct{ resource string }
-
-func (n noopLock) Resource() string                           { return n.resource }
-func (n noopLock) Owner() string                              { return "noop" }
-func (n noopLock) Scope() artifact.LockScope                  { return artifact.LockScopeHost }
-func (n noopLock) Token() string                              { return "noop" }
-func (n noopLock) ExpiresAt() (time.Time, bool)               { return time.Time{}, false }
-func (n noopLock) Renew(context.Context, time.Duration) error { return nil }
-func (n noopLock) Release(context.Context) error              { return nil }
 
 func TestPublish_ConditionalGuardRejectsRacingWritersEvenWithoutAWriterLock(t *testing.T) {
 	const writers = 6
 	e := newEnv(t, envConfig{})
 	bare := artifacttest.New(artifacttest.Options{Alias: "bare"})
-	e.static.Repositories["bare"] = &unlockedRepository{Repository: bare}
+	e.static.Repositories["bare"] = unlockedRepository(t, bare)
 	e.static.Info["bare"] = service.RepositoryInfo{Alias: "bare", Capabilities: bare.Capabilities(), Packaging: artifact.PackagingNone}
 
 	sources := make([]string, writers)

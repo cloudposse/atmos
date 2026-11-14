@@ -52,7 +52,7 @@ func pluginError(err error) error {
 	switch {
 	case errors.Is(shared.Kind, errUtils.ErrSignatureConfigInvalid):
 		legacy = errUtils.ErrPluginInvalidConfig
-	case errors.Is(shared.Kind, errUtils.ErrSignatureOffline):
+	case errors.Is(shared.Kind, errUtils.ErrSignatureOffline) || errors.Is(shared.Cause, errUtils.ErrSignatureOffline):
 		// Offline trust failures were always signature failures too; keep both classifications.
 		legacy = errors.Join(errUtils.ErrPluginOfflineArtifact, errUtils.ErrPluginSignatureInvalid)
 	}
