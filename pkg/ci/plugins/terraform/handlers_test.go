@@ -1159,6 +1159,44 @@ state, without changing any real infrastructure.
 	assert.NotContains(t, rendered, "NO_CHANGE-inactive")
 }
 
+func TestOnAfterPlan_ImportWithOutputChanges_RendersImportSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "test-stack",
+			ComponentFromArg: "test/component",
+		},
+		Output: `Plan: 1 to import, 0 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  ~ image_id = "old-image" -> "new-image"
+`,
+	}
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+	require.Len(t, mp.writer.summaries, 1)
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "## Resource Changes Found for")
+	assert.Contains(t, rendered, "PLAN-IMPORT-success")
+	assert.Contains(t, rendered, "1 resource to import</summary>")
+	assert.NotContains(t, rendered, "Output values will change. No infrastructure changes.")
+}
+
 func TestOnAfterPlan_CheckEnabled_UpdatesCheckRun(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()

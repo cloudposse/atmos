@@ -475,6 +475,35 @@ Plan: 2 to add, 1 to change, 0 to destroy.
 			wantUpdatedRes: []string{"aws_security_group.main"},
 		},
 		{
+			// Import blocks prefix the summary with "N to import,"; the resource
+			// counts that follow must still be parsed.
+			name: "plan with imports and changes",
+			output: `
+Terraform will perform the following actions:
+
+  # terraform_data.account_verification[0] will be created
+  + resource "terraform_data" "account_verification" {
+      + id = (known after apply)
+    }
+
+  # aws_s3_bucket.default[0] will be updated in-place
+  # (imported from "vbpt-legacy-use2-example-data")
+  ~ resource "aws_s3_bucket" "default" {
+      ~ tags = {
+          + "Name" = "vbpt-legacy-use2-example-data"
+        }
+    }
+
+Plan: 5 to import, 2 to add, 2 to change, 0 to destroy.
+`,
+			hasChanges:     true,
+			create:         2,
+			change:         2,
+			destroy:        0,
+			wantCreatedRes: []string{"terraform_data.account_verification[0]"},
+			wantUpdatedRes: []string{"aws_s3_bucket.default[0]"},
+		},
+		{
 			name: "plan no changes",
 			output: `
 No changes. Your infrastructure matches the configuration.
@@ -640,6 +669,23 @@ Apply complete! Resources: 2 added, 1 changed, 0 destroyed.
 			change:         1,
 			destroy:        0,
 			wantCreatedRes: []string{"aws_instance.example"},
+		},
+		{
+			// Import blocks prefix the summary with "N imported,".
+			name: "apply complete with imports and changes",
+			output: `
+aws_s3_bucket.default[0]: Importing... [id=example-data]
+aws_s3_bucket.default[0]: Import complete [id=example-data]
+aws_s3_bucket.default[0]: Modifying... [id=example-data]
+aws_s3_bucket.default[0]: Modifications complete after 1s [id=example-data]
+
+Apply complete! Resources: 5 imported, 2 added, 2 changed, 0 destroyed.
+`,
+			hasChanges:     true,
+			create:         2,
+			change:         2,
+			destroy:        0,
+			wantUpdatedRes: []string{"aws_s3_bucket.default[0]"},
 		},
 		{
 			name: "apply with destroy",

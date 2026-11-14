@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -54,6 +55,17 @@ const (
 // Regular expressions for parsing terraform stdout (errors/warnings only).
 // These are compiled at package initialization and are safe for concurrent use
 // as regexp.Regexp is immutable after compilation.
+//
+// The tfAddrPattern constant matches a resource address. Index keys are matched as bracketed
+// units so a for_each key containing spaces (aws_instance.x["my key"]) stays
+// part of the address instead of truncating it.
+const tfAddrPattern = `(?:[^\s\[]+|\[[^\]"]*\]|\["(?:[^"\\]|\\.)*"\])+`
+
+// The deposedPattern constant matches the optional "(deposed object <key>)" qualifier that
+// follows an address when a create_before_destroy replacement leaves an old
+// instance behind.
+const deposedPattern = `(?: \(deposed object [0-9a-f]+\))?`
+
 var (
 	// Matches error messages in terraform output.
 	errorRe = regexp.MustCompile(`(?m)^(?:[│|] )?Error:\s*(.+)$`)
@@ -63,7 +75,8 @@ var (
 
 	// Matches apply summary: "Apply complete! Resources: X added, Y changed, Z destroyed."
 	// Used as fallback when JSON is not available.
-	applySummaryRe = regexp.MustCompile(`Apply complete!\s*Resources:\s*(\d+)\s+added,\s*(\d+)\s+changed,\s*(\d+)\s+destroyed`)
+	// The optional "N imported," prefix appears when the configuration has import blocks.
+	applySummaryRe = regexp.MustCompile(`Apply complete!\s*Resources:\s*(?:(\d+)\s+imported,\s*)?(\d+)\s+added,\s*(\d+)\s+changed,\s*(\d+)\s+destroyed`)
 
 	// Matches destroy summary: "Destroy complete! Resources: X destroyed."
 	// Used as fallback when JSON is not available.
@@ -71,25 +84,56 @@ var (
 
 	// Matches "Plan: X to add, Y to change, Z to destroy."
 	// Used as fallback when JSON is not available.
-	planSummaryRe = regexp.MustCompile(`Plan:\s*(\d+)\s+to add,\s*(\d+)\s+to change,\s*(\d+)\s+to destroy`)
+	// The optional "N to import," prefix appears when the configuration has import blocks;
+	// without it, such plans parsed as zero resource changes.
+	planSummaryRe = regexp.MustCompile(`Plan:\s*(?:(\d+)\s+to import,\s*)?(\d+)\s+to add,\s*(\d+)\s+to change,\s*(\d+)\s+to destroy`)
 
 	// NoChangesRe matches "No changes. Your infrastructure matches the configuration.".
-	noChangesRe = regexp.MustCompile(`No changes\.|Your infrastructure matches the configuration`)
+	// Both phrases are anchored to the start of a line (allowing leading color codes) so
+	// the same words inside a planned attribute value do not read as an empty plan.
+	noChangesRe = regexp.MustCompile(`(?m)^(?:\x1b\[[0-9;]*m)*(?:No changes\.|Your infrastructure matches the configuration)`)
 
 	// Matches resource action lines in terraform plan output:
 	//   # resource_type.name will be created
 	//   # resource_type.name will be updated in-place
 	//   # resource_type.name will be destroyed
+	//   # resource_type.name (deposed object 1234abcd) will be destroyed
+	//   # resource_type.name will be imported
 	//   # resource_type.name must be replaced
+	//   # resource_type.name is tainted, so must be replaced
+	//   # resource_type.name will be replaced, as requested
 	//   # resource_type.name will be read during apply
-	resourceActionRe  = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+will be (created|destroyed|updated in-place|read during apply)`)
-	resourceReplaceRe = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+must be replaced`)
+	resourceActionRe = regexp.MustCompile(
+		`(?m)^\s*#\s+(` + tfAddrPattern + `)` + deposedPattern + `\s+will be (created|destroyed|updated in-place|read during apply|imported)`,
+	)
+	resourceReplaceRe = regexp.MustCompile(
+		`(?m)^\s*#\s+(` + tfAddrPattern + `)\s+(?:(?:is tainted, so )?must be replaced|will be replaced, as requested)`,
+	)
+
+	// Matches the header comment that opens a resource block in plan output and
+	// captures its address, whatever the action.
+	planResourceHeaderRe = regexp.MustCompile(
+		`^\s*#\s+(` + tfAddrPattern + `)` + deposedPattern + `\s+(?:will be|must be|is tainted)`,
+	)
+
+	// Matches the annotation lines that follow a resource header:
+	//   # (imported from "bucket-name")
+	//   # (moved from aws_s3_bucket.old)
+	planImportedFromRe = regexp.MustCompile(`^\s*#\s+\(imported from `)
+	planMovedFromRe    = regexp.MustCompile(`^\s*#\s+\(moved from (` + tfAddrPattern + `)\)`)
+
+	// Matches a move with no other change: "# old.addr has moved to new.addr".
+	planHasMovedRe = regexp.MustCompile(`^\s*#\s+(` + tfAddrPattern + `)\s+has moved to\s+(` + tfAddrPattern + `)`)
 
 	// Matches resource operation progress lines in terraform apply stdout:
 	//   aws_instance.web: Creating...
 	//   aws_instance.web: Modifying... [id=i-12345]
 	//   aws_instance.web: Destroying... [id=i-12345]
-	applyResourceActionRe = regexp.MustCompile(`(?m)^(\S+): (Creating|Modifying|Destroying)\.\.\.`)
+	//   aws_instance.web (deposed object 1234abcd): Destroying... [id=i-12345]
+	//   aws_s3_bucket.data: Importing... [id=bucket-name]
+	applyResourceActionRe = regexp.MustCompile(
+		`(?m)^(` + tfAddrPattern + `)` + deposedPattern + `: (Creating|Modifying|Destroying|Importing)\.\.\.`,
+	)
 
 	// Matches "Outputs:" section header in terraform apply stdout.
 	outputsSectionRe = regexp.MustCompile(`(?m)^Outputs:\s*$`)
@@ -100,7 +144,13 @@ var (
 
 	// Matches simple output lines: 'key = "value"' or 'key = value'.
 	// Captures key and raw value (including quotes).
-	outputLineRe = regexp.MustCompile(`^(\w+)\s*=\s*(.+)$`)
+	outputLineRe = regexp.MustCompile(`^([\w-]+)\s*=\s*(.+)$`)
+
+	// Matches a double-quoted string, including one left unterminated at end of line.
+	quotedStringRe = regexp.MustCompile(`"(?:[^"\\]|\\.)*"?`)
+
+	// Matches a heredoc opener as an output value: "<<EOT" or "<<-EOT".
+	heredocOpenRe = regexp.MustCompile(`^<<-?(\w+)$`)
 
 	// Matches per-run result lines in `terraform test` stdout:
 	//   run "bucket_name_is_namespaced"... pass
@@ -202,6 +252,7 @@ func processResourceChange(rc *tfjson.ResourceChange, data *plugin.TerraformOutp
 	}
 
 	if rc.Change.Importing != nil {
+		data.ResourceCounts.Import++
 		data.ImportedResources = append(data.ImportedResources, addr)
 	}
 }
@@ -416,10 +467,12 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 	extractResourceAddresses(output, data)
 
 	// Try to parse plan summary (fallback regex parsing).
-	if matches := planSummaryRe.FindStringSubmatch(output); len(matches) == 4 {
-		data.ResourceCounts.Create = parseIntOrZero(matches[1])
-		data.ResourceCounts.Change = parseIntOrZero(matches[2])
-		data.ResourceCounts.Destroy = parseIntOrZero(matches[3])
+	importCount := 0
+	if matches := planSummaryRe.FindStringSubmatch(output); matches != nil {
+		importCount = parseIntOrZero(matches[1])
+		data.ResourceCounts.Create = parseIntOrZero(matches[2])
+		data.ResourceCounts.Change = parseIntOrZero(matches[3])
+		data.ResourceCounts.Destroy = parseIntOrZero(matches[4])
 		result.HasChanges = data.ResourceCounts.Create > 0 ||
 			data.ResourceCounts.Change > 0 ||
 			data.ResourceCounts.Destroy > 0
@@ -434,6 +487,19 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 		result.HasChanges = true
 		data.HasOutputChanges = true
 		data.ChangedResult = "Output values will change. No infrastructure changes."
+	}
+
+	// Keep the summary's import count even when no import addresses were
+	// extracted, so templates can still report the imports.
+	data.ResourceCounts.Import = max(importCount, len(data.ImportedResources))
+
+	// A plan that only imports or moves resources adds, changes and destroys
+	// nothing, yet applying it still rewrites state, so it is not a no-op.
+	if !hasResourceChanges(data.ResourceCounts) {
+		if summary := buildStateOnlySummary(data.ResourceCounts.Import, len(data.MovedResources)); summary != "" {
+			result.HasChanges = true
+			data.ChangedResult = summary
+		}
 	}
 
 	// Extract full warning blocks for CI summary display.
@@ -472,11 +538,15 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 	}
 
 	// Parse apply summary.
-	if matches := applySummaryRe.FindStringSubmatch(output); len(matches) == 4 {
-		data.ResourceCounts.Create = parseIntOrZero(matches[1])
-		data.ResourceCounts.Change = parseIntOrZero(matches[2])
-		data.ResourceCounts.Destroy = parseIntOrZero(matches[3])
-		result.HasChanges = data.ResourceCounts.Create > 0 ||
+	if matches := applySummaryRe.FindStringSubmatch(output); len(matches) == applySummaryRe.NumSubexp()+1 {
+		// The completed import count comes from the summary, not from "Importing..."
+		// progress lines, which also appear for imports that failed.
+		data.ResourceCounts.Import = parseIntOrZero(matches[1])
+		data.ResourceCounts.Create = parseIntOrZero(matches[2])
+		data.ResourceCounts.Change = parseIntOrZero(matches[3])
+		data.ResourceCounts.Destroy = parseIntOrZero(matches[4])
+		result.HasChanges = data.ResourceCounts.Import > 0 ||
+			data.ResourceCounts.Create > 0 ||
 			data.ResourceCounts.Change > 0 ||
 			data.ResourceCounts.Destroy > 0
 		data.ChangedResult = matches[0]
@@ -501,6 +571,8 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 			data.UpdatedResources = append(data.UpdatedResources, resource)
 		case "Destroying":
 			data.DeletedResources = append(data.DeletedResources, resource)
+		case "Importing":
+			data.ImportedResources = append(data.ImportedResources, resource)
 		}
 	}
 
@@ -605,90 +677,135 @@ func ParseDestroyOutput(output string) *plugin.OutputResult {
 func extractApplyOutputs(output string) map[string]plugin.TerraformOutput {
 	defer perf.Track(nil, "terraform.extractApplyOutputs")()
 
-	outputs := make(map[string]plugin.TerraformOutput)
+	scanner := applyOutputScanner{outputs: make(map[string]plugin.TerraformOutput)}
 
 	// Find the "Outputs:" section.
 	loc := outputsSectionRe.FindStringIndex(output)
 	if loc == nil {
-		return outputs
+		return scanner.outputs
 	}
 
 	// Parse lines after "Outputs:".
-	section := output[loc[1]:]
-	lines := strings.Split(section, "\n")
-
-	var currentKey string
-	var currentValue strings.Builder
-	depth := 0 // Track nesting depth for complex values (lists, maps).
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Skip empty lines.
-		if trimmed == "" {
-			continue
-		}
-
-		// If we're inside a complex value (depth > 0), accumulate lines.
-		if depth > 0 {
-			currentValue.WriteString("\n")
-			currentValue.WriteString(trimmed)
-			depth += strings.Count(trimmed, "[") + strings.Count(trimmed, "{")
-			depth -= strings.Count(trimmed, "]") + strings.Count(trimmed, "}")
-			if depth <= 0 {
-				// Complex value complete.
-				outputs[currentKey] = plugin.TerraformOutput{
-					Value: currentValue.String(),
-				}
-				currentKey = ""
-				currentValue.Reset()
-				depth = 0
-			}
-			continue
-		}
-
-		// Try to match a new output line.
-		matches := outputLineRe.FindStringSubmatch(trimmed)
-		if matches == nil {
-			// Non-output line — end of outputs section.
+	for _, line := range strings.Split(output[loc[1]:], "\n") {
+		if !scanner.consume(line) {
 			break
-		}
-
-		key := matches[1]
-		rawValue := strings.TrimSpace(matches[2])
-
-		// Check if this is the start of a complex value.
-		openCount := strings.Count(rawValue, "[") + strings.Count(rawValue, "{")
-		closeCount := strings.Count(rawValue, "]") + strings.Count(rawValue, "}")
-		if openCount > closeCount {
-			// Multi-line complex value.
-			currentKey = key
-			currentValue.WriteString(rawValue)
-			depth = openCount - closeCount
-			continue
-		}
-
-		// Simple value — strip surrounding quotes if present.
-		value := rawValue
-		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
-			value = value[1 : len(value)-1]
-		}
-
-		// Terraform prints the literal placeholder <sensitive> (unquoted, no
-		// real value ever reaches this text) in place of a sensitive-flagged
-		// output's value, so that literal is itself a reliable signal to flag
-		// Sensitive: true here — unlike most fields in this regex-based
-		// parser, this one doesn't need the real value to detect sensitivity.
-		// Compare the raw (unquoted-stripped) value so a real string output
-		// whose value happens to be the quoted literal "<sensitive>" isn't
-		// misflagged as sensitive.
-		outputs[key] = plugin.TerraformOutput{
-			Value:     value,
-			Sensitive: rawValue == sensitiveOutputPlaceholder,
 		}
 	}
 
-	return outputs
+	return scanner.outputs
+}
+
+// applyOutputScanner accumulates the "Outputs:" section of apply stdout one
+// line at a time, tracking the multi-line value (list/map or heredoc) it is
+// inside of, if any.
+type applyOutputScanner struct {
+	outputs map[string]plugin.TerraformOutput
+
+	// key and value hold the multi-line output being accumulated.
+	key   string
+	value strings.Builder
+	// depth is the open-bracket nesting of a list/map value; 0 when not in one.
+	depth int
+	// heredocMarker is the closing marker of a heredoc value; "" when not in one.
+	heredocMarker string
+	heredocLines  []string
+}
+
+// consume processes one line and reports whether the outputs section continues.
+func (s *applyOutputScanner) consume(line string) bool {
+	trimmed := strings.TrimSpace(line)
+
+	if s.heredocMarker != "" {
+		s.consumeHeredocLine(line, trimmed)
+		return true
+	}
+
+	// Skip empty lines.
+	if trimmed == "" {
+		return true
+	}
+
+	// If we're inside a complex value (depth > 0), accumulate lines.
+	if s.depth > 0 {
+		s.value.WriteString("\n")
+		s.value.WriteString(trimmed)
+		s.depth += bracketDepthDelta(trimmed)
+		if s.depth <= 0 {
+			// Complex value complete.
+			s.outputs[s.key] = plugin.TerraformOutput{Value: s.value.String()}
+			s.key = ""
+			s.value.Reset()
+			s.depth = 0
+		}
+		return true
+	}
+
+	// Try to match a new output line; a non-output line ends the section.
+	matches := outputLineRe.FindStringSubmatch(trimmed)
+	if matches == nil {
+		return false
+	}
+
+	s.startOutput(matches[1], strings.TrimSpace(matches[2]))
+	return true
+}
+
+// consumeHeredocLine accumulates a heredoc body line, closing the value at its marker.
+func (s *applyOutputScanner) consumeHeredocLine(line, trimmed string) {
+	if trimmed != s.heredocMarker {
+		s.heredocLines = append(s.heredocLines, strings.TrimRight(line, "\r"))
+		return
+	}
+	s.outputs[s.key] = plugin.TerraformOutput{Value: strings.Join(s.heredocLines, "\n")}
+	s.key = ""
+	s.heredocMarker = ""
+	s.heredocLines = nil
+}
+
+// startOutput records a single-line output, or opens a multi-line one.
+func (s *applyOutputScanner) startOutput(key, rawValue string) {
+	if match := heredocOpenRe.FindStringSubmatch(rawValue); match != nil {
+		s.key = key
+		s.heredocMarker = match[1]
+		return
+	}
+
+	// Check if this is the start of a complex value.
+	if depth := bracketDepthDelta(rawValue); depth > 0 {
+		// Multi-line complex value.
+		s.key = key
+		s.value.WriteString(rawValue)
+		s.depth = depth
+		return
+	}
+
+	// Simple value — strip surrounding quotes if present.
+	value := rawValue
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		value = value[1 : len(value)-1]
+	}
+
+	// Terraform prints the literal placeholder <sensitive> (unquoted, no
+	// real value ever reaches this text) in place of a sensitive-flagged
+	// output's value, so that literal is itself a reliable signal to flag
+	// Sensitive: true here — unlike most fields in this regex-based
+	// parser, this one doesn't need the real value to detect sensitivity.
+	// Compare the raw (unquoted-stripped) value so a real string output
+	// whose value happens to be the quoted literal "<sensitive>" isn't
+	// misflagged as sensitive.
+	s.outputs[key] = plugin.TerraformOutput{
+		Value:     value,
+		Sensitive: rawValue == sensitiveOutputPlaceholder,
+	}
+}
+
+// bracketDepthDelta returns the net count of opening minus closing list/map
+// brackets on a line, ignoring any inside a quoted string so a value such as
+// "x[y" is not mistaken for an unterminated list.
+func bracketDepthDelta(line string) int {
+	structure := quotedStringRe.ReplaceAllString(line, "")
+	return strings.Count(structure, "[") + strings.Count(structure, "{") -
+		strings.Count(structure, "]") - strings.Count(structure, "}")
 }
 
 // ParseTestOutput parses terraform test stdout into per-run results and counts.
@@ -1328,6 +1445,8 @@ func extractResourceAddresses(output string, data *plugin.TerraformOutputData) {
 			data.DeletedResources = append(data.DeletedResources, addr)
 		case "updated in-place":
 			data.UpdatedResources = append(data.UpdatedResources, addr)
+		case "imported":
+			data.ImportedResources = append(data.ImportedResources, addr)
 		}
 	}
 
@@ -1335,6 +1454,55 @@ func extractResourceAddresses(output string, data *plugin.TerraformOutputData) {
 	for _, match := range resourceReplaceRe.FindAllStringSubmatch(output, -1) {
 		data.ReplacedResources = append(data.ReplacedResources, match[1])
 	}
+
+	extractImportsAndMoves(output, data)
+}
+
+// extractImportsAndMoves records imports and moves that Terraform reports as
+// annotations rather than as actions of their own: "# (imported from ...)" and
+// "# (moved from ...)" lines under a resource header, and standalone
+// "# a has moved to b" headers.
+func extractImportsAndMoves(output string, data *plugin.TerraformOutputData) {
+	header := ""
+	for _, line := range strings.Split(output, "\n") {
+		if match := planHasMovedRe.FindStringSubmatch(line); match != nil {
+			data.MovedResources = append(data.MovedResources, plugin.MovedResource{From: match[1], To: match[2]})
+			header = match[2]
+			continue
+		}
+		if match := planResourceHeaderRe.FindStringSubmatch(line); match != nil {
+			header = match[1]
+			continue
+		}
+		if header == "" {
+			continue
+		}
+		switch {
+		case planImportedFromRe.MatchString(line):
+			if !slices.Contains(data.ImportedResources, header) {
+				data.ImportedResources = append(data.ImportedResources, header)
+			}
+		case planMovedFromRe.MatchString(line):
+			from := planMovedFromRe.FindStringSubmatch(line)[1]
+			data.MovedResources = append(data.MovedResources, plugin.MovedResource{From: from, To: header})
+		default:
+			// Annotations sit directly under the header; anything else ends them.
+			header = ""
+		}
+	}
+}
+
+// buildStateOnlySummary describes a plan whose only effect is importing or
+// moving resources. It returns "" when there is neither.
+func buildStateOnlySummary(imports, moves int) string {
+	var parts []string
+	if imports > 0 {
+		parts = append(parts, resourceCount(imports)+" to import")
+	}
+	if moves > 0 {
+		parts = append(parts, resourceCount(moves)+" to move")
+	}
+	return strings.Join(parts, ", ")
 }
 
 // buildChangeSummary builds a human-readable change summary string.

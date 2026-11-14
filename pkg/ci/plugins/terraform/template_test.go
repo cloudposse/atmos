@@ -70,6 +70,67 @@ func TestTemplateRendering(t *testing.T) {
 			},
 		},
 		{
+			name:         "import-only plan shows changes",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component: "bucket",
+					Stack:     "dev",
+					Command:   "plan",
+					Result:    &plugin.OutputResult{HasChanges: true},
+				},
+				ImportedResources: []string{"aws_s3_bucket.b"},
+				ChangedResult:     "1 resource to import",
+			},
+			wantContains: []string{
+				"Resource Changes Found",
+				"PLAN-IMPORT-success",
+				"1 resource to import</summary>",
+				"<= aws_s3_bucket.b",
+			},
+			wantNotContains: []string{"No Changes", "NO_CHANGE", "0 to add"},
+		},
+		{
+			name:         "import-only summary without addresses shows changes",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component: "bucket",
+					Stack:     "dev",
+					Command:   "plan",
+					Result:    &plugin.OutputResult{HasChanges: true},
+				},
+				Resources:     plugin.ResourceCounts{Import: 3},
+				ChangedResult: "3 resources to import",
+			},
+			wantContains: []string{
+				"Resource Changes Found",
+				"PLAN-IMPORT-success",
+				"#result-dev-bucket",
+			},
+			wantNotContains: []string{"No Changes", "NO_CHANGE", "### <a id=\"import-"},
+		},
+		{
+			name:         "move-only plan shows changes",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component: "bucket",
+					Stack:     "dev",
+					Command:   "plan",
+					Result:    &plugin.OutputResult{HasChanges: true},
+				},
+				MovedResources: []plugin.MovedResource{{From: "aws_s3_bucket.a", To: "aws_s3_bucket.b"}},
+				ChangedResult:  "1 resource to move",
+			},
+			wantContains: []string{
+				"Resource Changes Found",
+				"PLAN-MOVE-informational",
+				"1 resource to move</summary>",
+			},
+			wantNotContains: []string{"No Changes", "NO_CHANGE", "0 to add"},
+		},
+		{
 			name:         "plan with destroys shows warning",
 			templateName: "plan",
 			context: &TerraformTemplateContext{
@@ -741,6 +802,19 @@ func TestTerraformTemplateContextHelpers(t *testing.T) {
 		result := blockquoteWarnings(input)
 		assert.Equal(t, "> Warning: Something\n>\n> Details here\n> More details", result[0])
 		assert.Equal(t, "> Warning: Another", result[1])
+	})
+
+	t.Run("HasStateChanges", func(t *testing.T) {
+		assert.False(t, (&TerraformTemplateContext{}).HasStateChanges())
+		assert.True(t, (&TerraformTemplateContext{ImportedResources: []string{"a.b"}}).HasStateChanges())
+		assert.True(t, (&TerraformTemplateContext{MovedResources: []plugin.MovedResource{{From: "a.b", To: "a.c"}}}).HasStateChanges())
+		assert.True(t, (&TerraformTemplateContext{Resources: plugin.ResourceCounts{Import: 2}}).HasStateChanges())
+	})
+
+	t.Run("ImportCount", func(t *testing.T) {
+		assert.Equal(t, 0, (&TerraformTemplateContext{}).ImportCount())
+		assert.Equal(t, 2, (&TerraformTemplateContext{Resources: plugin.ResourceCounts{Import: 2}}).ImportCount())
+		assert.Equal(t, 1, (&TerraformTemplateContext{ImportedResources: []string{"a.b"}}).ImportCount())
 	})
 
 	t.Run("TotalChanges", func(t *testing.T) {
