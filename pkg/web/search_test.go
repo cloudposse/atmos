@@ -264,6 +264,22 @@ func TestGoogleEngine_Search_RejectsInsecureRedirect(t *testing.T) {
 	mockTransport.AssertNotCalled(t, "RoundTrip", mock.Anything)
 }
 
+func TestGoogleEngine_Search_MalformedRedirectKeepsKeyOutOfError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/%zz?"+r.URL.RawQuery)
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+	assert.NotContains(t, err.Error(), "test-api-key")
+}
+
 func TestGoogleEngine_Search_FollowsSecureRedirect(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "test-api-key", r.URL.Query().Get("key"))

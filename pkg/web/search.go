@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -281,6 +282,30 @@ func buildGoogleAPIURL(baseURL, apiKey, cseID, query string, maxResults int) (st
 	return endpoint.String(), nil
 }
 
+// searchRequestError keeps the API key out of a failed request's error. A *url.Error prints the
+// request URL, and its cause can quote a malformed Location header, which can carry the query.
+// Only causes whose text holds no query are kept: the redirect check's own errors, a cancelled
+// or expired context, and network errors, which name only the host. Any other cause is reduced
+// to the failed operation.
+func searchRequestError(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return wrapSearchError(errUtils.ErrWebSearchFailed, err)
+	}
+	cause := urlErr.Err
+	var netErr *net.OpError
+	switch {
+	case errors.Is(cause, errUtils.ErrAIInsecureBaseURL), errors.Is(cause, errUtils.ErrWebSearchFailed):
+		return wrapSearchError(errUtils.ErrWebSearchFailed, cause)
+	case errors.Is(cause, context.Canceled), errors.Is(cause, context.DeadlineExceeded):
+		return fmt.Errorf("%w: %s request failed: %w", errUtils.ErrWebSearchFailed, urlErr.Op, cause)
+	case errors.As(cause, &netErr):
+		return wrapSearchError(errUtils.ErrWebSearchFailed, netErr)
+	default:
+		return fmt.Errorf("%w: %s request failed", errUtils.ErrWebSearchFailed, urlErr.Op)
+	}
+}
+
 // fetchGoogleResults performs the API request and returns the items.
 func (e *GoogleEngine) fetchGoogleResults(ctx context.Context, apiURL string) ([]googleItem, error) {
 	// Create request.
@@ -292,12 +317,7 @@ func (e *GoogleEngine) fetchGoogleResults(ctx context.Context, apiURL string) ([
 	// Execute request (URL is constructed from configured search engine base URL, not user input).
 	resp, err := e.client.Do(req) //nolint:gosec // URL is built from trusted config, not user input.
 	if err != nil {
-		// A *url.Error prints the request URL, which carries the API key, so keep only its cause.
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			err = urlErr.Err
-		}
-		return nil, wrapSearchError(errUtils.ErrWebSearchFailed, err)
+		return nil, searchRequestError(err)
 	}
 	defer resp.Body.Close()
 
