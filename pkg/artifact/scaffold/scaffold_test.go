@@ -172,3 +172,52 @@ func TestValidator_RejectsManifestSymlinkOutsideRoot(t *testing.T) {
 	_, err := scaffold.Validator{}.ValidateScaffold(context.Background(), dir)
 	require.ErrorIs(t, err, errUtils.ErrArtifactScaffoldInvalid)
 }
+
+// A scaffold root that does not exist, a manifest that cannot be read as a file, and a manifest
+// symlink that cannot be resolved are each reported as an invalid scaffold with the cause kept.
+func TestValidator_ReportsUnreadableRootsAndManifests(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T) string
+		cause error
+		names string
+	}{
+		{
+			name:  "root does not exist",
+			setup: func(t *testing.T) string { return filepath.Join(t.TempDir(), "missing") },
+			cause: os.ErrNotExist,
+			names: "scaffold root",
+		},
+		{
+			name: "manifest is a directory",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				require.NoError(t, os.Mkdir(filepath.Join(dir, "scaffold.yaml"), 0o755))
+				return dir
+			},
+			names: "scaffold.yaml",
+		},
+		{
+			name: "manifest symlink loops",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				if !fixtures.Symlink(t, dir, "scaffold.yaml", "scaffold.yaml") {
+					t.Skip("symlinks are unavailable")
+				}
+				return dir
+			},
+			names: "scaffold.yaml",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := scaffold.Validator{}.ValidateScaffold(context.Background(), tt.setup(t))
+
+			require.ErrorIs(t, err, errUtils.ErrArtifactScaffoldInvalid)
+			if tt.cause != nil {
+				require.ErrorIs(t, err, tt.cause)
+			}
+			assert.Contains(t, err.Error(), tt.names)
+		})
+	}
+}

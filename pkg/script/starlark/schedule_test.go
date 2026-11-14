@@ -154,3 +154,51 @@ func TestScheduleGroupLeavesOtherLibrariesAlone(t *testing.T) {
 	plain := scheduledFake{forks: &forks}
 	assert.Equal(t, api.StepLibrary(plain), scheduleGroup(plain), "a library that does not position groups is used as is")
 }
+
+// taskForkFake is a step library that hands every parallel task its own fork, as the automation
+// library does to isolate artifact operation identities.
+type taskForkFake struct {
+	mu    *sync.Mutex
+	id    int
+	next  *int
+	steps *[]int
+}
+
+func (*taskForkFake) Names() []string              { return []string{"ping"} }
+func (*taskForkFake) Validate(*api.StepCall) error { return nil }
+
+func (f *taskForkFake) Run(context.Context, *api.StepCall) (*api.StepResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	*f.steps = append(*f.steps, f.id)
+	return &api.StepResult{}, nil
+}
+
+func (f *taskForkFake) Fork() api.StepLibrary { return f }
+
+func (f *taskForkFake) ForkTask() api.StepLibrary {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	*f.next++
+	return &taskForkFake{mu: f.mu, id: *f.next, next: f.next, steps: f.steps}
+}
+
+// TestParallelTasksRunOnTheirOwnTaskFork checks that steps called inside a parallel task reach the
+// task's fork and never the group's shared library.
+func TestParallelTasksRunOnTheirOwnTaskFork(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		next  int
+		steps []int
+	)
+	library := &taskForkFake{mu: &mu, next: &next, steps: &steps}
+	_, err := New().Execute(t.Context(), script.Spec{
+		Steps:  library,
+		Source: "def work(name):\n    steps.ping()\nsteps.parallel(tasks = [steps.task(name = n, function = work, args = [n]) for n in [\"a\", \"b\"]], max_concurrency = 2)\n",
+	})
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.ElementsMatch(t, []int{1, 2}, steps, "each task steps on its own fork, never on the shared library (id 0)")
+}

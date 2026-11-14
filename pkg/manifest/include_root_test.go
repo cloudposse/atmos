@@ -120,3 +120,30 @@ func TestOutsideRoot(t *testing.T) {
 		})
 	}
 }
+
+// An include whose argument cannot be parsed, or whose local file cannot be resolved, fails the
+// load instead of slipping past the boundary check unexamined.
+func TestLoad_WithIncludeRoot_RejectsUnresolvableIncludes(t *testing.T) {
+	tests := []struct {
+		name        string
+		includePath string
+		contains    string
+	}{
+		{name: "missing local file", includePath: "./absent.yaml", contains: "absent.yaml"},
+		{name: "unterminated quote", includePath: `"./greeting.yaml`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeIncludeFixture(t, dir, "greeting.yaml", "hello: world\n")
+
+			err := loadIncludeRootWith(t, dir, tt.includePath)
+
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, errUtils.ErrArtifactScaffoldInvalid, "not a boundary violation")
+			if tt.contains != "" {
+				assert.Contains(t, err.Error(), tt.contains)
+			}
+		})
+	}
+}

@@ -84,12 +84,15 @@ func TestInvalidTemplateIsAReportingError(t *testing.T) {
 	base := t.TempDir()
 	writeTemplate(t, base, "broken.md", "{{ .Nope }")
 	writeTemplate(t, base, "unknown.md", "{{ .NoSuchField }}")
-	for _, name := range []string{"broken.md", "unknown.md"} {
-		fake := &fakeReporter{}
-		session := newSession(templateConfig(base, map[string]string{"summary": name}), fake)
-		session.Record(entry("publish", "a", 1, published("a", "x/y:1"), nil))
-		err := session.Flush()
-		require.ErrorIs(t, err, errUtils.ErrArtifactReportRender, name)
-		assert.Empty(t, fake.summaries)
+	// A section template is rendered per operation, so its failure is reported the same way as the frame's.
+	for _, key := range []string{"summary", "publish"} {
+		for _, name := range []string{"broken.md", "unknown.md"} {
+			fake := &fakeReporter{}
+			session := newSession(templateConfig(base, map[string]string{key: name}), fake)
+			session.Record(entry("publish", "a", 1, published("a", "x/y:1"), nil))
+			err := session.Flush()
+			require.ErrorIs(t, err, errUtils.ErrArtifactReportRender, key+" "+name)
+			assert.Empty(t, fake.summaries, key+" "+name)
+		}
 	}
 }
