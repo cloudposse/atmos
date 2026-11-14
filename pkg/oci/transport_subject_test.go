@@ -247,3 +247,39 @@ func TestExtendedCopyWithoutSubjectTraversalKeepsTheSelectedRootAndItsReferrers(
 	require.NoError(t, err)
 	assert.Equal(t, root.Digest, resolved.Digest)
 }
+
+// An empty reference is rejected before index.json is filtered: it would otherwise drop every
+// unnamed root, including attachment roots, and persist that before the store refuses the call.
+func TestLayoutUntag_EmptyReferenceLeavesTheIndexUnchanged(t *testing.T) {
+	ctx := t.Context()
+	directory := filepath.Join(t.TempDir(), "layout")
+	layout, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	attachment := `{"schemaVersion":2,"subject":` + subject + `}`
+	attachmentDescriptor := oci.Descriptor(ocispec.MediaTypeImageManifest, []byte(attachment))
+	require.NoError(t, layout.Push(ctx, attachmentDescriptor, strings.NewReader(attachment)))
+	named := `{"schemaVersion":2,"layers":[]}`
+	namedDescriptor := oci.Descriptor(ocispec.MediaTypeImageManifest, []byte(named))
+	require.NoError(t, layout.Push(ctx, namedDescriptor, strings.NewReader(named)))
+	require.NoError(t, layout.Tag(ctx, namedDescriptor, "app:1"))
+	wantRoots := []string{attachmentDescriptor.Digest.String(), namedDescriptor.Digest.String()}
+	require.Equal(t, wantRoots, layoutRoots(t, directory), "the unnamed attachment root and the named root are listed")
+	before, err := os.ReadFile(filepath.Join(directory, ocispec.ImageIndexFile))
+	require.NoError(t, err)
+
+	err = layout.Untag(ctx, "")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrOCILayout)
+
+	after, err := os.ReadFile(filepath.Join(directory, ocispec.ImageIndexFile))
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "the persisted index is untouched")
+	assert.Equal(t, wantRoots, layoutRoots(t, directory))
+	assert.Equal(t, []string{"app:1"}, layout.References())
+
+	reopened, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"app:1"}, reopened.References())
+}

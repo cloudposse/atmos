@@ -327,6 +327,11 @@ func withReference(entries []ocispec.Descriptor, named ocispec.Descriptor) []oci
 func (l *Layout) Untag(ctx context.Context, reference string) error {
 	defer perf.Track(nil, "oci.Layout.Untag")()
 
+	// Reject an empty reference before filtering: it would match every unnamed root, including
+	// attachment roots, and index.json would be rewritten before the store refused the call.
+	if reference == "" {
+		return layoutError(errdef.ErrMissingReference)
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	kept := l.index[:0:0]
