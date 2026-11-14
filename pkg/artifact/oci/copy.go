@@ -74,7 +74,12 @@ func (r *Repository) destinationRef(ctx context.Context, st store, loaded *root,
 // transfer copies a root and its referrers from src into this repository under ref after the
 // reference contract (expected prior, force, plugin immutability) allows it.
 func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphStore, loaded *root, ref artifact.Ref, options artifact.PublishOptions) (result *artifact.PublishResult, err error) {
-	if err := ref.Validate(); err != nil {
+	if err := requireDestinationVersion(ref); err != nil {
+		return nil, err
+	}
+	// A package is checked as a whole before any lock is taken or the destination is touched: the
+	// tag moves once the graph has been copied, so a malformed package must never get that far.
+	if err := r.requireImportable(ctx, src, loaded, ref); err != nil {
 		return nil, err
 	}
 	release, err := r.guardLayout(ctx)
@@ -186,6 +191,9 @@ type ImportOptions struct {
 func (r *Repository) ImportLayout(ctx context.Context, directory string, ref artifact.Ref, options ImportOptions) (*artifact.PublishResult, error) {
 	defer perf.Track(nil, "oci.Repository.ImportLayout")()
 
+	if err := requireDestinationVersion(ref); err != nil {
+		return nil, err
+	}
 	desc, err := layoutRoot(directory, options.Select)
 	if err != nil {
 		return nil, err
@@ -198,18 +206,28 @@ func (r *Repository) ImportLayout(ctx context.Context, directory string, ref art
 	if err != nil {
 		return nil, err
 	}
-	// The Record binds a package to its own name and version. Checking it before the transfer
-	// keeps a mismatched import from publishing a tag that every later read would reject.
-	if err := r.requireImportIdentity(ctx, src, loaded, ref); err != nil {
-		return nil, err
-	}
 	return r.transfer(ctx, src, loaded, ref, artifact.PublishOptions{ExpectedPrior: options.ExpectedPrior, Force: options.Force, Lock: options.Lock})
 }
 
-// requireImportIdentity rejects an import of an Atmos package whose Record names another
-// reference than the one it would be published under. A foreign graph carries no Record and is
-// published under the requested reference as it is.
-func (r *Repository) requireImportIdentity(ctx context.Context, src atmosoci.Fetcher, loaded *root, ref artifact.Ref) error {
+// requireDestinationVersion rejects a destination without a version. A reference may name a digest
+// to resolve with, but a copy or import publishes a name:version tag: a digest-only destination
+// would be stored under an empty version, which artifact listing never exposes.
+func requireDestinationVersion(ref artifact.Ref) error {
+	if err := ref.Validate(); err != nil {
+		return err
+	}
+	if ref.Version == "" {
+		return fmt.Errorf("%w: %s needs a version to be published under, not only a digest", errUtils.ErrArtifactRefInvalid, ref)
+	}
+	return nil
+}
+
+// requireImportable rejects a package that every later read would reject, before the transfer can
+// publish it. The Record binds an Atmos package to its own name and version, the manifest must
+// carry exactly the archive payload and the documents the Record describes, and every descriptor
+// must be well formed. A foreign graph carries no Record and is published under the requested
+// reference as it is.
+func (r *Repository) requireImportable(ctx context.Context, src atmosoci.Fetcher, loaded *root, ref artifact.Ref) error {
 	if loaded.class != classAtmos {
 		return nil
 	}
@@ -217,7 +235,14 @@ func (r *Repository) requireImportIdentity(ctx context.Context, src atmosoci.Fet
 	if err != nil {
 		return err
 	}
-	return requireSubjectOf(record, ref)
+	if err := requireSubjectOf(record, ref); err != nil {
+		return err
+	}
+	layers, err := splitAtmosLayers(&loaded.manifest)
+	if err != nil {
+		return err
+	}
+	return checkDocuments(record, layers)
 }
 
 // ExportLayout exports the pinned graph, with every referrer, to a standard OCI image layout
