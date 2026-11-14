@@ -241,7 +241,7 @@ func shouldCheckForUpdatesAt(lastChecked int64, frequency string, now int64) boo
 	if err != nil {
 		// Log warning and default to daily if we can't parse.
 		log.Warn("Unsupported check for update frequency encountered. Defaulting to daily", "frequency", frequency)
-		interval = 86400 // daily
+		interval = int64((24 * time.Hour).Seconds()) // daily
 	}
 	return now-lastChecked >= interval
 }

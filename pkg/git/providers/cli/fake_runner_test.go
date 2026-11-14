@@ -46,8 +46,7 @@ func exitErr(code int) error {
 	return fmt.Errorf("%w: git (exit %d)", errUtils.ErrGitCommandExited, code)
 }
 
-//nolint:gocritic // hugeParam: Runner requires RunOptions by value.
-func (f *fakeRunner) Run(ctx context.Context, _ string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+func (f *fakeRunner) Run(ctx context.Context, _ string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 	f.calls = append(f.calls, call{ctx: ctx, args: args, dir: opts.Dir, env: opts.Env})
 
 	joined := strings.Join(args, " ")

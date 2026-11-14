@@ -37,7 +37,7 @@ func sandboxRepo(t *testing.T) string {
 
 func sandboxGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	result, err := atmosgit.NewExecRunner().Run(t.Context(), "git", args, atmosgit.RunOptions{Dir: dir})
+	result, err := atmosgit.NewExecRunner().Run(t.Context(), "git", args, &atmosgit.RunOptions{Dir: dir})
 	require.NoError(t, err)
 	return result.Stdout
 }

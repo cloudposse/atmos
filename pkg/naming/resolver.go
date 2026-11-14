@@ -46,7 +46,7 @@ func (r Resolver) ResolveStackName(
 
 	case atmosConfig.Stacks.NamePattern != "":
 		context := cfg.GetContextFromVars(literalsource.RestoreMap(varsSection))
-		name, err := cfg.GetContextPrefix(stackFileName, context, atmosConfig.Stacks.NamePattern, stackFileName)
+		name, err := cfg.GetContextPrefix(stackFileName, &context, atmosConfig.Stacks.NamePattern, stackFileName)
 		if err != nil {
 			// Fall back to filename when pattern validation fails.
 			log.Debug("Pattern validation failed, using filename as stack name",
@@ -97,7 +97,7 @@ func (r Resolver) ProcessStackContextPrefix(
 		var err error
 		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
 			configAndStacksInfo.Stack,
-			configAndStacksInfo.Context,
+			&configAndStacksInfo.Context,
 			atmosConfig.Stacks.NamePattern,
 			stackName,
 		)
@@ -150,7 +150,7 @@ func (r Resolver) workspaceContextPrefix(config *schema.AtmosConfiguration, info
 	case config.Stacks.NameTemplate != "":
 		return r.StackTemplate(config, info.Stack, config.Stacks.NameTemplate, info.ComponentSection, config.Templates.Settings.IgnoreMissingTemplateValues)
 	case config.Stacks.NamePattern != "":
-		prefix, err := cfg.GetContextPrefix(info.Stack, info.Context, config.Stacks.NamePattern, info.Stack)
+		prefix, err := cfg.GetContextPrefix(info.Stack, &info.Context, config.Stacks.NamePattern, info.Stack)
 		if err == nil {
 			return prefix, nil
 		}
@@ -167,7 +167,7 @@ func (r Resolver) workspaceOverride(config *schema.AtmosConfiguration, info *sch
 		return r.Template(config, "terraform-workspace-template", value, info.ComponentSection, false)
 	}
 	if value, ok := metadata["terraform_workspace_pattern"].(string); ok {
-		return cfg.ReplaceContextTokens(info.Context, value), nil
+		return cfg.ReplaceContextTokens(&info.Context, value), nil
 	}
 	if value, ok := metadata["terraform_workspace"].(string); ok {
 		return value, nil

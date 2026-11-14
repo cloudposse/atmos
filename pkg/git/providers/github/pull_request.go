@@ -97,23 +97,11 @@ func NewWithClientFactory(factory func() (client, error)) *Provider {
 }
 
 // Reconcile creates or updates a pull request and applies configured metadata.
-//
-//nolint:cyclop,revive // Reconciliation keeps its forge API calls together at the provider boundary.
 func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestOptions) (*atmosgit.PullRequestResult, error) {
 	defer perf.Track(nil, "github.Provider.Reconcile")()
 
-	if options == nil {
-		return nil, fmt.Errorf("%w: pull request options are required", errUtils.ErrComponentUpdaterConfig)
-	}
-	if options.Owner == "" || options.Repository == "" || options.Base == "" || options.Head == "" {
-		return nil, fmt.Errorf("%w: owner, repository, base, and head are required", errUtils.ErrComponentUpdaterConfig)
-	}
-	if len(options.Namespace) > 0 {
-		// GitHub addresses repositories with exactly two segments (owner/repository); a non-empty
-		// Namespace means the caller built options for a forge that needs a third segment (e.g.
-		// Azure DevOps' project) and pointed it at the wrong provider. Reject outright rather than
-		// silently ignoring Namespace and resolving to the wrong repository.
-		return nil, fmt.Errorf("%w: github does not support a pull request namespace (got %v); GitHub repositories are addressed as owner/repository", errUtils.ErrComponentUpdaterConfig, options.Namespace)
+	if err := validatePullRequestOptions(options); err != nil {
+		return nil, err
 	}
 	c, err := p.newClient()
 	if err != nil {
@@ -150,26 +138,50 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 
 	result := &atmosgit.PullRequestResult{Number: pr.GetNumber(), URL: pr.GetHTMLURL(), Created: created}
 
+	if err := applyPullRequestMetadata(ctx, api, options, pr.GetNumber()); err != nil {
+		// The PR itself already exists at this point; surface it alongside the error so the
+		// caller (and the user) aren't left with no way to find a pull request that was, in
+		// fact, created -- only its labels/assignees/reviewers didn't fully apply.
+		return result, err
+	}
+	return result, nil
+}
+
+func validatePullRequestOptions(options *atmosgit.PullRequestOptions) error {
+	if options == nil {
+		return fmt.Errorf("%w: pull request options are required", errUtils.ErrComponentUpdaterConfig)
+	}
+	if options.Owner == "" || options.Repository == "" || options.Base == "" || options.Head == "" {
+		return fmt.Errorf("%w: owner, repository, base, and head are required", errUtils.ErrComponentUpdaterConfig)
+	}
+	if len(options.Namespace) > 0 {
+		// GitHub addresses repositories with exactly two segments (owner/repository); a non-empty
+		// Namespace means the caller built options for a forge that needs a third segment (e.g.
+		// Azure DevOps' project) and pointed it at the wrong provider. Reject outright rather than
+		// silently ignoring Namespace and resolving to the wrong repository.
+		return fmt.Errorf("%w: github does not support a pull request namespace (got %v); GitHub repositories are addressed as owner/repository", errUtils.ErrComponentUpdaterConfig, options.Namespace)
+	}
+	return nil
+}
+
+func applyPullRequestMetadata(ctx context.Context, api *gh.Client, options *atmosgit.PullRequestOptions, number int) error {
 	if len(options.Labels) > 0 {
-		if _, response, err = api.Issues.AddLabelsToIssue(ctx, options.Owner, options.Repository, pr.GetNumber(), options.Labels); err != nil {
-			// The PR itself already exists at this point; surface it alongside the error so the
-			// caller (and the user) aren't left with no way to find a pull request that was, in
-			// fact, created -- only its labels/assignees/reviewers didn't fully apply.
-			return result, githubError(err, response)
+		if _, response, err := api.Issues.AddLabelsToIssue(ctx, options.Owner, options.Repository, number, options.Labels); err != nil {
+			return githubError(err, response)
 		}
 	}
 	if len(options.Assignees) > 0 {
-		if _, response, err = api.Issues.AddAssignees(ctx, options.Owner, options.Repository, pr.GetNumber(), options.Assignees); err != nil {
-			return result, githubError(err, response)
+		if _, response, err := api.Issues.AddAssignees(ctx, options.Owner, options.Repository, number, options.Assignees); err != nil {
+			return githubError(err, response)
 		}
 	}
 	if len(options.Reviewers) > 0 {
-		if _, response, err = api.PullRequests.RequestReviewers(ctx, options.Owner, options.Repository, pr.GetNumber(), gh.ReviewersRequest{Reviewers: options.Reviewers}); err != nil {
-			return result, githubError(err, response)
+		if _, response, err := api.PullRequests.RequestReviewers(ctx, options.Owner, options.Repository, number, gh.ReviewersRequest{Reviewers: options.Reviewers}); err != nil {
+			return githubError(err, response)
 		}
 	}
 
-	return result, nil
+	return nil
 }
 
 // PullRequestBodyBadge implements atmosgit.PullRequestBodyBadger.

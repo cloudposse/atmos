@@ -392,11 +392,9 @@ func TestIdentityAndProfile_AreIndependent(t *testing.T) {
 		Profiles:      schema.ProfilesConfig{},
 	}
 
-	locations, err := discoverProfileLocations(&atmosConfig)
-	require.NoError(t, err)
+	locations := discoverProfileLocations(&atmosConfig)
 
-	available, err := listAvailableProfiles(locations)
-	require.NoError(t, err)
+	available := listAvailableProfiles(locations)
 
 	_, hasCi := available["ci"]
 	_, hasDev := available["developer"]

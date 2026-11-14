@@ -85,7 +85,7 @@ push:
     max_elapsed_time: 30s
 ```
 
-`max_attempts` includes the initial attempt. `max_elapsed_time` bounds the entire operation, including running Git commands. The delay cap applies before jitter. An explicit policy uses shared retry semantics without inheriting omitted fields from the defaults; `retry: {}` or `max_attempts: 1` makes one attempt. Legacy `push.retries` remains supported when `push.retry` is absent. Legacy and path-based pushes use a 30-second retry-scheduling budget without imposing a deadline on running Git commands; the caller’s context still applies. Optional `conditions` narrow the rejected-push messages eligible for retry; they never enable retries for authentication failures or unrelated errors.
+`max_attempts` includes the initial attempt. `max_elapsed_time` bounds the entire operation, including running Git commands. The delay cap applies before jitter. An explicit policy uses shared retry semantics. Omitted fields are not inherited from the defaults: `max_attempts` and `max_elapsed_time` are unlimited, and `initial_delay` is `0s`. Set all three fields for a bounded policy; `retry: {}` or `max_attempts: 1` makes one attempt. Legacy `push.retries` remains supported when `push.retry` is absent. Legacy and path-based pushes use a 30-second retry-scheduling budget without imposing a deadline on running Git commands; the caller’s context still applies. Optional `conditions` narrow the rejected-push messages eligible for retry; they never enable retries for authentication failures or unrelated errors.
 
 ## Remote Rate Limits
 

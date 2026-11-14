@@ -309,7 +309,7 @@ func TestContextTokenReplacement(t *testing.T) {
 		}
 
 		template := "{namespace}/{tenant}/{environment}/{stage}/backend.tf"
-		result := cfg.ReplaceContextTokens(context, template)
+		result := cfg.ReplaceContextTokens(&context, template)
 
 		expected := "cp/platform/ue2/dev/backend.tf"
 		assert.Equal(t, expected, result)

@@ -520,7 +520,7 @@ func isolatedGitEnv(t *testing.T) {
 
 func gitCmd(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, atmosgit.RunOptions{Dir: dir, Env: os.Environ()})
+	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, &atmosgit.RunOptions{Dir: dir, Env: os.Environ()})
 	require.NoError(t, err, "git %v: %s", args, result.StderrTail)
 	return result.Stdout
 }

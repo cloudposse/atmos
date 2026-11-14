@@ -53,9 +53,10 @@ type RunResult struct {
 }
 
 // Runner executes git commands. The production implementation shells out;
-// tests substitute a fake to assert command construction.
+// tests substitute a fake to assert command construction. Options must be non-nil
+// and remain unchanged for the duration of Run.
 type Runner interface {
-	Run(ctx context.Context, command string, args []string, opts RunOptions) (RunResult, error)
+	Run(ctx context.Context, command string, args []string, opts *RunOptions) (RunResult, error)
 }
 
 // ExecRunner is the production Runner using pkg/exec.CommandExecutor.
@@ -79,7 +80,7 @@ func NewExecRunnerWithExecutor(executor pkgexec.CommandExecutor) *ExecRunner {
 // Run executes the command and returns the captured result. A non-zero exit
 // returns the result alongside an error wrapping ErrGitCommandExited; other
 // failures (binary missing, context canceled) wrap ErrGitCommandFailed.
-func (r *ExecRunner) Run(ctx context.Context, command string, args []string, opts RunOptions) (RunResult, error) {
+func (r *ExecRunner) Run(ctx context.Context, command string, args []string, opts *RunOptions) (RunResult, error) {
 	defer perf.Track(nil, "git.ExecRunner.Run")()
 
 	var stdout bytes.Buffer

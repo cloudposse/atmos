@@ -52,7 +52,7 @@ func ResolveAWSAuth(input AuthInput, context *Context) (*AuthResult, error) {
 		if context == nil {
 			return nil, fmt.Errorf("ResolveAWSAuth: context is required for helm_aws_profile_pattern expansion: %w", errUtils.ErrNilParam)
 		}
-		profile := cfg.ReplaceContextTokens(*context, input.ProfilePattern)
+		profile := cfg.ReplaceContextTokens(context, input.ProfilePattern)
 		return &AuthResult{
 			UseIdentityAuth: false,
 			Profile:         profile,

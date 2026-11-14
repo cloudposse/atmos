@@ -45,7 +45,7 @@ func CleanEnvironment(env []string) []string {
 
 func sourceGitOutput(ctx context.Context, dir string, args ...string) (string, error) {
 	s := services(ctx)
-	result, err := s.runner.Run(ctx, "git", args, atmosgit.RunOptions{Dir: dir, Env: s.env, Stderr: s.stderr, DiscoverRepository: len(args) == 2 && args[0] == "rev-parse" && args[1] == "--show-toplevel"})
+	result, err := s.runner.Run(ctx, "git", args, &atmosgit.RunOptions{Dir: dir, Env: s.env, Stderr: s.stderr, DiscoverRepository: len(args) == 2 && args[0] == "rev-parse" && args[1] == "--show-toplevel"})
 	return result.Stdout, err
 }
 
@@ -55,7 +55,7 @@ func gitOutput(ctx context.Context, dir string, args ...string) (string, error) 
 
 func gitInput(ctx context.Context, dir string, input io.Reader, args ...string) (string, error) {
 	s := services(ctx)
-	result, err := s.runner.Run(ctx, "git", args, atmosgit.RunOptions{Dir: dir, Env: CleanEnvironment(s.env), Stdin: input, Stderr: s.stderr})
+	result, err := s.runner.Run(ctx, "git", args, &atmosgit.RunOptions{Dir: dir, Env: CleanEnvironment(s.env), Stdin: input, Stderr: s.stderr})
 	return result.Stdout, err
 }
 

@@ -103,7 +103,7 @@ func resolveHooksDir(ctx context.Context) (string, error) {
 	defer perf.Track(nil, "hooks.resolveHooksDir")()
 
 	runner := atmosgit.NewExecRunner()
-	result, err := runner.Run(ctx, "git", []string{"rev-parse", "--git-path", "hooks"}, atmosgit.RunOptions{})
+	result, err := runner.Run(ctx, "git", []string{"rev-parse", "--git-path", "hooks"}, &atmosgit.RunOptions{})
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrNotInGitRepository).
 			WithHint("Run 'atmos git hooks install' from inside a Git repository.").
@@ -131,7 +131,7 @@ func resolveHooksDir(ctx context.Context) (string, error) {
 // Git's --git-path hooks honors core.hooksPath, so resolving it without this guard
 // could install Atmos shims into another tool's directory.
 func validateHooksPath(ctx context.Context) error {
-	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"config", "--get", "core.hooksPath"}, atmosgit.RunOptions{})
+	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"config", "--get", "core.hooksPath"}, &atmosgit.RunOptions{})
 	if err != nil {
 		if result.ExitCode == 1 {
 			return nil // The configuration key is absent.

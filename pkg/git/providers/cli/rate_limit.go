@@ -83,7 +83,7 @@ func rateLimitHint(h *atmosgit.HTTPResponse) time.Duration {
 // runPushTransport captures only sanitized HTTP response metadata. The Runner
 // filters curl tracing in memory; it is never written to a trace file or log.
 func (p *Provider) runPushTransport(ctx context.Context, dir string, env []string, args ...string) (atmosgit.RunResult, error) {
-	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr, CaptureHTTPMetadata: true})
+	return p.runner.Run(ctx, gitCommand, args, &atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr, CaptureHTTPMetadata: true})
 }
 
 // pushRetryState distinguishes a rejected ref from a throttled transport. A

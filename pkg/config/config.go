@@ -18,6 +18,8 @@ import (
 )
 
 const (
+	configTrue = "true"
+
 	// BasePathSourceRuntime indicates the base path came from a runtime source
 	// (env var ATMOS_BASE_PATH, CLI flag --base-path, or provider param atmos_base_path).
 	basePathSourceRuntime = "runtime"
@@ -57,7 +59,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Check config
-	err = checkConfig(atmosConfig, processStacks)
+	err = checkConfig(&atmosConfig, processStacks)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -88,27 +90,41 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	// TODO: This is a quick patch to mitigate the issue we can look for better code later
 	// Issue: https://linear.app/cloudposse/issue/DEV-3093/create-a-cli-command-core-library
-	if os.Getenv("ATMOS_LOGS_LEVEL") != "" {
-		atmosConfig.Logs.Level = os.Getenv("ATMOS_LOGS_LEVEL")
+	if configEnvValue("ATMOS_LOGS_LEVEL") != "" {
+		atmosConfig.Logs.Level = configEnvValue("ATMOS_LOGS_LEVEL")
 	}
 	flagKeyValue := parseFlags()
 	if v, ok := flagKeyValue["logs-level"]; ok {
 		atmosConfig.Logs.Level = v
 	}
-	if os.Getenv("ATMOS_LOGS_FILE") != "" {
-		atmosConfig.Logs.File = os.Getenv("ATMOS_LOGS_FILE")
+	if configEnvValue("ATMOS_LOGS_FILE") != "" {
+		atmosConfig.Logs.File = configEnvValue("ATMOS_LOGS_FILE")
 	}
 	if v, ok := flagKeyValue["logs-file"]; ok {
 		atmosConfig.Logs.File = v
 	}
 	// Handle ATMOS_VERBOSE environment variable (lower precedence than --logs-level flag).
-	if os.Getenv("ATMOS_VERBOSE") == "true" {
+	if configEnvValue("ATMOS_VERBOSE") == configTrue {
 		atmosConfig.Logs.Level = "Debug"
 	}
 	// Handle verbose flag (higher precedence than environment).
-	if v, ok := flagKeyValue["verbose"]; ok && v == "true" {
+	if v, ok := flagKeyValue["verbose"]; ok && v == configTrue {
 		atmosConfig.Logs.Level = "Debug"
 	}
+	setTerminalOverrides(atmosConfig, flagKeyValue)
+
+	// Configure the global logger with the log level from flags/env/config.
+	// This ensures auth pre-hooks (executed during processStackConfigs) respect the log level.
+	// Parse and convert log level using existing utilities for consistency.
+	logLevel, err := log.ParseLogLevel(atmosConfig.Logs.Level)
+	if err != nil {
+		// Default to Warning on parse error.
+		logLevel = log.LogLevelWarning
+	}
+	log.SetLevel(log.ConvertLogLevel(logLevel))
+}
+
+func setTerminalOverrides(atmosConfig *schema.AtmosConfiguration, flagKeyValue map[string]string) {
 	// Resolve boolean color flags without consuming the following command name.
 	if options := terminalenv.ColorOptionsFromArgs(os.Args[1:]); options.NoColorSet {
 		atmosConfig.Settings.Terminal.NoColor = options.NoColor
@@ -122,29 +138,14 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 
 	// Handle NO_PAGER environment variable (standard CLI convention)
 	// Check this after --pager flag so CLI flag takes precedence
-	//nolint:forbidigo // NO_PAGER is a standard CLI convention that requires direct env access.
-	// We intentionally don't use viper.BindEnv() here because:
-	// 1. NO_PAGER uses negative logic (NO_PAGER=true disables pager)
-	// 2. Atmos config convention uses positive boolean names (pager: true enables pager)
-	// 3. We don't want a configurable "no_pager" field that would confuse the config schema
-	// 4. NO_PAGER should remain an environment-only standard, not a config file setting
-	if os.Getenv("NO_PAGER") != "" {
+	// NO_PAGER is environment-only and disables the pager unless explicitly overridden.
+	if configEnvValue("NO_PAGER") != "" {
 		// Check if --pager flag was explicitly provided
 		if _, hasPagerFlag := flagKeyValue["pager"]; !hasPagerFlag {
 			// NO_PAGER is set, and no explicit --pager flag was provided, disable the pager
 			atmosConfig.Settings.Terminal.Pager = "false"
 		}
 	}
-
-	// Configure the global logger with the log level from flags/env/config.
-	// This ensures auth pre-hooks (executed during processStackConfigs) respect the log level.
-	// Parse and convert log level using existing utilities for consistency.
-	logLevel, err := log.ParseLogLevel(atmosConfig.Logs.Level)
-	if err != nil {
-		// Default to Warning on parse error.
-		logLevel = log.LogLevelWarning
-	}
-	log.SetLevel(log.ConvertLogLevel(logLevel))
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
@@ -194,7 +195,7 @@ func parseFlagsFromArgs(args []string) map[string]string {
 		case rootBoolFlags[arg]:
 			// Boolean flag: only an explicit true/false literal is its value, so that
 			// "--verbose version" does not swallow the command name.
-			flags[arg] = "true"
+			flags[arg] = configTrue
 			if i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1]) {
 				flags[arg] = strings.ToLower(args[i+1])
 				i++ // Skip the next argument as it's the value.
@@ -204,8 +205,8 @@ func parseFlagsFromArgs(args []string) map[string]string {
 			flags[arg] = args[i+1]
 			i++ // Skip the next argument as it's the value
 		default:
-			// Case where flag has no value, e.g., --flag (we set it to "true")
-			flags[arg] = "true"
+			// Case where flag has no value, e.g., --flag (we set it to configTrue)
+			flags[arg] = configTrue
 		}
 	}
 	return flags
@@ -380,35 +381,30 @@ func tryResolveWithConfigPath(wd, path, cliConfigPath, source string) (string, e
 		}
 	}
 
-	// Try config-dir-relative (atmos.yaml dir).
-	if cliConfigPath != "" {
-		if path == "" {
-			return absPathOrError(wd, cliConfigPath, fmt.Sprintf("Cannot resolve config path %q", cliConfigPath))
-		}
+	if cliConfigPath == "" {
+		return absPathOrError(wd, path, fmt.Sprintf("Cannot resolve path %q", path))
+	}
+	return resolveFromConfigDirectory(wd, path, cliConfigPath, source)
+}
 
-		configJoined, err := absPathOrError(wd, filepath.Join(cliConfigPath, path),
-			fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath))
-		if err != nil {
-			return "", err
-		}
-
-		if _, statErr := os.Stat(configJoined); statErr == nil {
-			return configJoined, nil
-		}
-
-		// Config-dir path doesn't exist — try CWD-relative (if not already tried for runtime).
-		if source != basePathSourceRuntime {
-			if resolved, ok := tryCWDRelative(wd, path); ok {
-				return resolved, nil
-			}
-		}
-
-		// Neither exists — return config-dir path for consistent error messages.
+func resolveFromConfigDirectory(wd, path, cliConfigPath, source string) (string, error) {
+	if path == "" {
+		return absPathOrError(wd, cliConfigPath, fmt.Sprintf("Cannot resolve config path %q", cliConfigPath))
+	}
+	configJoined, err := absPathOrError(wd, filepath.Join(cliConfigPath, path), fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath))
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(configJoined); err == nil {
 		return configJoined, nil
 	}
-
-	// No config path: resolve relative to CWD.
-	return absPathOrError(wd, path, fmt.Sprintf("Cannot resolve path %q", path))
+	if source != basePathSourceRuntime {
+		if resolved, ok := tryCWDRelative(wd, path); ok {
+			return resolved, nil
+		}
+	}
+	// Neither exists; retain the config-relative path for consistent diagnostics.
+	return configJoined, nil
 }
 
 // tryCWDRelative attempts to resolve a path relative to CWD and returns it if it exists on disk.
@@ -436,8 +432,7 @@ func getGitRootOrEmpty() string {
 // getGitRootOrEmptyFrom is getGitRootOrEmpty anchored to wd; an empty wd means the process working directory.
 func getGitRootOrEmptyFrom(wd string) string {
 	// Check if git root discovery is disabled.
-	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
-	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
+	if configEnvValue("ATMOS_GIT_ROOT_BASEPATH") == "false" {
 		return ""
 	}
 
@@ -533,6 +528,10 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
+	return resolveComponentAbsolutePaths(atmosConfig, atmosBasePathAbs)
+}
+
+func resolveComponentAbsolutePaths(atmosConfig *schema.AtmosConfiguration, atmosBasePathAbs string) error {
 	// Convert Terraform dir to an absolute path.
 	terraformBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
@@ -581,6 +580,10 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.HelmDirAbsolutePath = helmDirAbsPath
 
+	return resolvePublishingAbsolutePaths(atmosConfig, atmosBasePathAbs)
+}
+
+func resolvePublishingAbsolutePaths(atmosConfig *schema.AtmosConfiguration, atmosBasePathAbs string) error {
 	// Convert Container dir to an absolute path. Unlike Terraform/Helmfile/etc.,
 	// components.container.base_path is a brand-new field: existing atmos.yaml
 	// files never set it, and defaultCliConfig's own default only applies via
@@ -639,8 +642,8 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 
 func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo, includeStackAbsPaths, excludeStackAbsPaths []string) error {
 	// If the specified stack name is a logical name, find all stack manifests in the provided paths
-	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
-		*atmosConfig,
+	stackFiles, err := FindAllStackConfigsInPathsForStack(
+		atmosConfig,
 		configAndStacksInfo.Stack,
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
@@ -649,7 +652,7 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 		return err
 	}
 
-	if len(stackConfigFilesAbsolutePaths) < 1 {
+	if len(stackFiles.AbsolutePaths) < 1 {
 		j, err := u.ConvertToYAML(includeStackAbsPaths)
 		if err != nil {
 			return err
@@ -660,13 +663,13 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 		return errors.New(errorMessage)
 	}
 
-	atmosConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
-	atmosConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
+	atmosConfig.StackConfigFilesAbsolutePaths = stackFiles.AbsolutePaths
+	atmosConfig.StackConfigFilesRelativePaths = stackFiles.RelativePaths
 
-	if stackIsPhysicalPath {
+	if stackFiles.Physical {
 		log.Debug("The stack matches the stack manifest",
 			"stack", configAndStacksInfo.Stack,
-			"manifest", stackConfigFilesRelativePaths[0])
+			"manifest", stackFiles.RelativePaths[0])
 		atmosConfig.StackType = "Directory"
 	} else {
 		// The stack is a logical name

@@ -99,8 +99,7 @@ type competingPushRunner struct {
 	pushes     int
 }
 
-//nolint:gocritic // The Runner interface requires value-based options.
-func (r *competingPushRunner) Run(ctx context.Context, name string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+func (r *competingPushRunner) Run(ctx context.Context, name string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 	if len(args) > 0 && args[0] == "push" {
 		r.pushes++
 		r.beforePush()

@@ -159,8 +159,6 @@ var (
 		},
 		Docs: schema.Docs{
 			// Even if these fields are deprecated, initialize them with valid values.
-			MaxWidth:   0,
-			Pagination: false,
 			Generate: map[string]schema.DocsGenerate{
 				"readme": {
 					BaseDir:  ".",

@@ -26,7 +26,7 @@ func requireGit(t *testing.T) {
 func TestExecRunnerCapturesStdout(t *testing.T) {
 	requireGit(t)
 
-	result, err := NewExecRunner().Run(context.Background(), "git", []string{"version"}, RunOptions{})
+	result, err := NewExecRunner().Run(context.Background(), "git", []string{"version"}, &RunOptions{})
 	require.NoError(t, err)
 	assert.Contains(t, result.Stdout, "git version")
 	assert.Equal(t, 0, result.ExitCode)
@@ -38,7 +38,7 @@ func TestExecRunnerNonZeroExitWrapsSentinel(t *testing.T) {
 	// `git rev-parse` outside a repository exits non-zero.
 	dir := t.TempDir()
 	var stderr bytes.Buffer
-	result, err := NewExecRunner().Run(context.Background(), "git", []string{"rev-parse", "--verify", "HEAD"}, RunOptions{Dir: dir, Stderr: &stderr})
+	result, err := NewExecRunner().Run(context.Background(), "git", []string{"rev-parse", "--verify", "HEAD"}, &RunOptions{Dir: dir, Stderr: &stderr})
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitCommandExited))
@@ -50,7 +50,7 @@ func TestExecRunnerNonZeroExitWrapsSentinel(t *testing.T) {
 }
 
 func TestExecRunnerMissingBinaryWrapsSentinel(t *testing.T) {
-	_, err := NewExecRunner().Run(context.Background(), "definitely-not-a-real-binary-atmos", nil, RunOptions{})
+	_, err := NewExecRunner().Run(context.Background(), "definitely-not-a-real-binary-atmos", nil, &RunOptions{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitCommandFailed))
 }
@@ -67,7 +67,7 @@ func TestExecRunnerDoesNotDiscoverParentGitRepo(t *testing.T) {
 	child := filepath.Join(root, "cache", "repositories", "deploy")
 	require.NoError(t, os.MkdirAll(child, 0o755))
 
-	result, err := NewExecRunner().Run(context.Background(), "git", []string{"status", "--porcelain"}, RunOptions{Dir: child})
+	result, err := NewExecRunner().Run(context.Background(), "git", []string{"status", "--porcelain"}, &RunOptions{Dir: child})
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitCommandExited))

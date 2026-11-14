@@ -1799,10 +1799,8 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.CloudFormation, true
 	default:
 		// Check plugin types.
-		if config, ok := c.Plugins[componentType]; ok {
-			return config, true
-		}
-		return nil, false
+		config, ok := c.Plugins[componentType]
+		return config, ok
 	}
 }
 

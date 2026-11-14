@@ -25,7 +25,7 @@ func TestExecRunnerHTTPRateLimitMetadata(t *testing.T) {
 	}))
 	defer server.Close()
 	var output bytes.Buffer
-	result, err := NewExecRunner().Run(t.Context(), "git", []string{"-c", "credential.helper=", "-c", "http.extraHeader=X-Private: private-request-canary", "ls-remote", server.URL + "/repo.git"}, RunOptions{Dir: t.TempDir(), CaptureHTTPMetadata: true, Stderr: &output})
+	result, err := NewExecRunner().Run(t.Context(), "git", []string{"-c", "credential.helper=", "-c", "http.extraHeader=X-Private: private-request-canary", "ls-remote", server.URL + "/repo.git"}, &RunOptions{Dir: t.TempDir(), CaptureHTTPMetadata: true, Stderr: &output})
 	require.Error(t, err)
 	require.NotNil(t, result.HTTP)
 	require.Equal(t, 429, result.HTTP.Status)
