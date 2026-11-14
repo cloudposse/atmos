@@ -272,6 +272,24 @@ func TestPreparedConfigurationRejectsUnsupportedValues(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 }
 
+func TestPreparedConfigurationCarriesFileMode(t *testing.T) {
+	backend, err := adapter.EncodeObject(map[string]any{})
+	require.NoError(t, err)
+	response := &pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, WorkingDirectory: t.TempDir(), Workspace: "default"}, Files: []*pluginv1.ComponentGeneratedFile{{Path: "bin/run.sh", Content: []byte("#!/bin/sh\n"), IfExists: "overwrite", Mode: 0o755}, {Path: "main.tf", IfExists: "overwrite"}}}
+	// The mode must survive wire encoding, and an older plugin that omits it decodes as zero.
+	data, err := proto.Marshal(response)
+	require.NoError(t, err)
+	decoded := &pluginv1.PrepareComponentResponse{}
+	require.NoError(t, proto.Unmarshal(data, decoded))
+	prepared, err := preparedConfiguration(decoded)
+	require.NoError(t, err)
+	require.Len(t, prepared.Files, 2)
+	require.Equal(t, "bin/run.sh", prepared.Files[0].Path)
+	require.Equal(t, uint32(0o755), prepared.Files[0].Mode)
+	require.Equal(t, "main.tf", prepared.Files[1].Path)
+	require.Zero(t, prepared.Files[1].Mode)
+}
+
 func TestPreparedConfigurationRetainsSensitiveInputs(t *testing.T) {
 	atmosio.Reset()
 	t.Cleanup(atmosio.Reset)
@@ -508,4 +526,17 @@ func TestPreparationRejectsDependencyStateDrift(t *testing.T) {
 			require.NotNil(t, result)
 		})
 	}
+}
+
+func TestDiscoveryConfiguredEnvironment(t *testing.T) {
+	config := enabledConfig(t)
+	config.Env = map[string]string{"DISCOVERY_SETTING": "configured"}
+	t.Setenv("DISCOVERY_SETTING", "ambient-value")
+	t.Setenv("DISCOVERY_AMBIENT", "ambient")
+	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
+	request, err := discoveryRequest(config, &settings, "terragrunt", config.BasePathAbsolute, "plan")
+	require.NoError(t, err)
+	require.Equal(t, "configured", request.Invocation.Environment["DISCOVERY_SETTING"])
+	require.Equal(t, "ambient", request.Invocation.Environment["DISCOVERY_AMBIENT"])
+	require.Equal(t, "tofu", request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
 }

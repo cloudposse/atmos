@@ -47,8 +47,8 @@ func (s *Operations) ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig 
 		ComponentFromArg: opts.Component,
 		Stack:            opts.Stack,
 		StackFromArg:     opts.Stack,
-		ComponentType:    "terraform",
-		CliArgs:          []string{"terraform", "generate", "planfile"},
+		ComponentType:    cfg.TerraformComponentType,
+		CliArgs:          []string{cfg.TerraformComponentType, "generate", "planfile"},
 	}
 
 	return s.ExecuteTerraformGeneratePlanfile(opts, info)
@@ -94,12 +94,12 @@ func (s *Operations) ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, arg
 		return err
 	}
 
-	info, err := s.host.ProcessCommandLineArgs("terraform", cmd, args, nil)
+	info, err := s.host.ProcessCommandLineArgs(cfg.TerraformComponentType, cmd, args, nil)
 	if err != nil {
 		return err
 	}
 
-	info.CliArgs = []string{"terraform", "generate", "planfile"}
+	info.CliArgs = []string{cfg.TerraformComponentType, "generate", "planfile"}
 
 	component := args[0]
 
@@ -135,7 +135,7 @@ func (s *Operations) ExecuteTerraformGeneratePlanfile(
 
 	info.ComponentFromArg = options.Component
 	info.Stack = options.Stack
-	info.ComponentType = "terraform"
+	info.ComponentType = cfg.TerraformComponentType
 	info.NeedHelp = false
 
 	// Process templates and Atmos YAML functions.
@@ -245,7 +245,7 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 func writePlanfile(planFilePath, format string, planJSON string) error {
 	d, err := u.ConvertFromJSON(planJSON)
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrConvertingJsonToGoType, err)
+		return fmt.Errorf("%w: %w", ErrConvertingJsonToGoType, err)
 	}
 
 	const fileMode = 0o644

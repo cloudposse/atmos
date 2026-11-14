@@ -2,6 +2,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
 	"github.com/spf13/afero"
+	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
@@ -91,6 +93,12 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	result.Files = append(result.Files, applyFiles...)
 	if err := resolveBackend(cfg, result, &request); err != nil {
 		return nil, err
+	}
+	if request.Phase != "backend" {
+		result.Overlay, result.OverlayModes, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := generatedFiles(ctx, logger, cfg, result); err != nil {
 		return nil, err
@@ -178,6 +186,9 @@ func requestParsingContext(request model.Request, path string) *config.ParsingCo
 		command = "plan"
 	}
 	pctx := parsingContext(path, request.Tofu, command, request.Arguments)
+	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
+		pctx.DownloadDir = localPath(filepath.Dir(path), configured)
+	}
 	// Explicit feature overrides apply to every unit, as Terragrunt's --feature flag does.
 	pctx.FeatureFlags = request.Features
 	return pctx
@@ -270,9 +281,46 @@ func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.
 		if err != nil {
 			return nil, err
 		}
-		return cfg, checkBackendGeneration(environment.FS, append(pctx.FilesRead.Paths(), path))
+		// Fail closed on unverifiable backend generation before the download_dir probe, which
+		// parses the whole unit and would evaluate inputs, hooks and commands.
+		if err := checkBackendGeneration(environment.FS, append(pctx.FilesRead.Paths(), path)); err != nil {
+			return nil, err
+		}
+		return withDownloadDir(ctx, logger, environment, pctx, request, cfg, path)
 	}
 	return config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
+}
+
+// withDownloadDir restores download_dir on a partially parsed unit. Partial
+// decoding has no section for that attribute, but the working directory (and so
+// every relative local-state path) depends on it. The extra parse skips
+// dependency output resolution (an unknown placeholder replaces every
+// dependency), so backend reads still never read outputs.
+func withDownloadDir(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*config.TerragruntConfig, error) {
+	if request.Environment["TG_DOWNLOAD_DIR"] != "" || !mentionsDownloadDir(environment.FS, append(pctx.FilesRead.Paths(), path)) {
+		return cfg, nil
+	}
+	placeholder := cty.DynamicVal
+	probe := pctx.WithSkipOutputsResolution()
+	probe.DecodedDependencies = &placeholder
+	full, err := config.ParseConfigFile(ctx, logger, environment, probe, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	cfg.DownloadDir = full.DownloadDir
+	return cfg, nil
+}
+
+// mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
+// in withDownloadDir parses the whole unit, so a unit that never sets it skips the probe and its
+// inputs stay unevaluated during backend reads.
+func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
+	for _, path := range paths {
+		if content, err := afero.ReadFile(filesystem, path); err == nil && bytes.Contains(content, []byte("download_dir")) {
+			return true
+		}
+	}
+	return false
 }
 
 // unitResolution converts the parsed unit into its module identity. Local sources
@@ -297,7 +345,7 @@ func unitResolution(ctx context.Context, logger log.Logger, environment *atmosbr
 		}
 	}
 	download := pctx.DownloadDir
-	if cfg.DownloadDir != "" {
+	if cfg.DownloadDir != "" && request.Environment["TG_DOWNLOAD_DIR"] == "" {
 		download = localPath(filepath.Dir(path), cfg.DownloadDir)
 	}
 	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {

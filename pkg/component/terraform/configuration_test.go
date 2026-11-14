@@ -432,16 +432,6 @@ func TestPreparedConfigurationSensitiveInputsNeverHitDisk(t *testing.T) {
 	}
 }
 
-// failingStateRuntime owns the component but cannot identify its backend.
-type failingStateRuntime struct {
-	schema.ComponentConfigurationRuntime
-	err error
-}
-
-func (r failingStateRuntime) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-	return nil, r.err
-}
-
 func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
 	failure := errors.New("provider could not locate state")
 	executor := testExecutor(t)
@@ -453,7 +443,9 @@ func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
 			"backend":  map[string]any{"path": "must-not-be-read"},
 		}, nil
 	}
-	config := &schema.AtmosConfiguration{ComponentConfigurations: failingStateRuntime{err: failure}}
+	runtime := NewMockReviewedPlanRuntime(gomock.NewController(t))
+	runtime.EXPECT().ResolveState(gomock.Any(), gomock.Any()).Return(nil, failure)
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 
 	result, err := executor.GetTerraformState(config, "!terraform.state", "live", "network", "vpc_id", true, nil, nil)
 	require.ErrorIs(t, err, failure, "the provider's failure is returned as is, not retried against a guessed backend")

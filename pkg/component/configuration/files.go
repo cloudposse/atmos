@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
@@ -17,6 +18,11 @@ const (
 	fileMode      = 0o644
 	secretMode    = 0o600
 	directoryMode = 0o755
+	// Requests carry at most the permission, setuid, setgid, and sticky bits.
+	maxRequestedMode = 0o7777
+	// Granted modes keep owner rwx and group/other read-execute bits only.
+	grantedModeMask = 0o755
+	ownerReadWrite  = 0o600
 )
 
 // WriteFiles materializes evaluated bytes under the provisioned module, without templating.
@@ -37,11 +43,8 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 	}
 	defer root.Close()
 	for _, file := range files {
-		if !filepath.IsLocal(file.Path) {
-			return errUtils.ErrPluginProtocol
-		}
-		if !validFilePolicy(file.IfExists) {
-			return errUtils.ErrPluginUnsupportedExtension
+		if err := validateFile(file); err != nil {
+			return err
 		}
 	}
 	previous := readManifest(root)
@@ -77,6 +80,16 @@ func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string)
 	return writeManifest(root, current)
 }
 
+func validateFile(file schema.ComponentConfigurationFile) error {
+	if !filepath.IsLocal(file.Path) || file.Mode > maxRequestedMode {
+		return errUtils.ErrPluginProtocol
+	}
+	if !validFilePolicy(file.IfExists) {
+		return errUtils.ErrPluginUnsupportedExtension
+	}
+	return nil
+}
+
 // writeFile applies one file's policy and returns the digest to record, or empty when the host
 // does not own the file afterwards (removed, or an existing file that "skip" left alone).
 func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded string) (string, error) {
@@ -85,11 +98,7 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded s
 		return "", err
 	}
 	if remove {
-		err := root.Remove(file.Path)
-		if errors.Is(err, os.ErrNotExist) {
-			return "", nil
-		}
-		return "", err
+		return "", removeFile(root, file.Path)
 	}
 	// Register sensitive bytes even when the file is kept, so a hook that prints it is masked.
 	if file.Sensitive {
@@ -115,7 +124,7 @@ func unchangedFileOutcome(root *os.Root, file schema.ComponentConfigurationFile,
 		// removing the block keeps it. Its bytes already match, so if_exists = "error" has nothing to reject.
 		return "", nil
 	}
-	return digest, ensureMode(root, file.Path)
+	return digest, ensureMode(root, file)
 }
 
 // existingFileOutcome applies the policy to a file that exists with different bytes. It reports
@@ -146,16 +155,21 @@ func recordedIfOwned(recorded, existing string) string {
 	return ""
 }
 
-// ensureMode tightens a file written by an earlier run, which may predate the private mode.
-func ensureMode(root *os.Root, path string) error {
-	if err := root.Chmod(path, secretMode); err != nil {
-		return generatedFileError(path, err)
+// ensureMode applies the file's permission bits to a file written by an earlier run, which may
+// predate them. Like a fresh write, it leaves the mode alone unless the file is sensitive or
+// requests one. Windows keeps its ACLs.
+func ensureMode(root *os.Root, file schema.ComponentConfigurationFile) error {
+	if (!file.Sensitive && file.Mode == 0) || runtime.GOOS == "windows" {
+		return nil
+	}
+	if err := root.Chmod(file.Path, writtenMode(file)); err != nil {
+		return generatedFileError(file.Path, err)
 	}
 	return nil
 }
 
-// replaceFile writes the bytes. Generated files can embed backend credentials, so they are
-// private to the owner, like the backend file Atmos writes itself.
+// replaceFile writes the bytes with the file's clamped permission bits; sensitive files, which can
+// embed backend credentials, stay private to the owner.
 //
 // An existing file is replaced through a temporary file renamed over it, so a failed write leaves
 // the previous bytes, and the digest recorded for them, valid for a retry.
@@ -165,10 +179,10 @@ func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists b
 	}
 	// Policy has already approved replacing an existing file; creating one must not race another writer.
 	if !exists {
-		return createFile(root, file.Path, file.Content)
+		return createFile(root, file.Path, file)
 	}
 	temporary := filepath.Join(filepath.Dir(file.Path), "."+filepath.Base(file.Path)+"."+rand.Text()+".tmp")
-	if err := createFile(root, temporary, file.Content); err != nil {
+	if err := createFile(root, temporary, file); err != nil {
 		return err
 	}
 	if err := root.Rename(temporary, file.Path); err != nil {
@@ -178,19 +192,21 @@ func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists b
 	return nil
 }
 
-// createFile writes a new private file and removes it again if the write does not complete, so a
-// partial file is never left behind.
-func createFile(root *os.Root, path string, content []byte) error {
-	output, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, secretMode)
+// createFile writes a new file with the permission bits the file carries and removes it again if
+// the write does not complete, so a partial file is never left behind.
+func createFile(root *os.Root, path string, file schema.ComponentConfigurationFile) error {
+	mode := writtenMode(file)
+	output, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
 		return generatedFileError(path, err)
 	}
-	if err := output.Chmod(secretMode); err != nil {
+	// Open applies the process umask, so set the mode explicitly.
+	if err := applyMode(output, file, mode); err != nil {
 		_ = output.Close()
 		_ = root.Remove(path)
 		return generatedFileError(path, err)
 	}
-	_, writeErr := output.Write(content)
+	_, writeErr := output.Write(file.Content)
 	if err := errors.Join(writeErr, output.Close()); err != nil {
 		_ = root.Remove(path)
 		return generatedFileError(path, err)
@@ -201,6 +217,38 @@ func createFile(root *os.Root, path string, content []byte) error {
 // generatedFileError classifies a filesystem failure on a generated file as invalid configuration.
 func generatedFileError(path string, err error) error {
 	return fmt.Errorf("%w: generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err)
+}
+
+// removeFile deletes a provider-owned file, treating an already absent file as removed.
+func removeFile(root *os.Root, path string) error {
+	err := root.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// applyMode sets the permission bits explicitly because open applies the umask
+// and leaves an existing file's mode alone. Windows keeps its ACLs.
+func applyMode(output *os.File, file schema.ComponentConfigurationFile, mode os.FileMode) error {
+	if (!file.Sensitive && file.Mode == 0) || runtime.GOOS == "windows" {
+		return nil
+	}
+	return output.Chmod(mode)
+}
+
+// writtenMode returns the clamped permission bits for a generated file. An absent
+// mode keeps the historical defaults. A requested mode keeps owner access (rw)
+// and the read and execute bits, and drops everything that widens privilege.
+// Sensitive files never grant group or other access.
+func writtenMode(file schema.ComponentConfigurationFile) os.FileMode {
+	if file.Sensitive {
+		return os.FileMode(secretMode | file.Mode&0o100)
+	}
+	if file.Mode == 0 {
+		return fileMode
+	}
+	return os.FileMode(file.Mode&grantedModeMask | ownerReadWrite)
 }
 
 // WatchPaths resolves provider-owned watches against the project
