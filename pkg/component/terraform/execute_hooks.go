@@ -386,7 +386,7 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 	}
 	arguments := hook.Execute[1:]
 	if hook.Execute[0] == "tflint" {
-		arguments, err = resolveTflintHookArguments(arguments, directory)
+		arguments, err = resolveTflintHookArguments(arguments, directory, r.info.ComponentVarsSection)
 		if err != nil {
 			return nil, fmt.Errorf("tflint hook %q: %w", hook.Name, err)
 		}

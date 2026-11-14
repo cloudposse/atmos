@@ -256,9 +256,7 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := finalizeExecution(execution, path, cfg.Inputs); err != nil {
-		return nil, nil, err
-	}
+	finalizeExecution(execution, path)
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 		return config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
 	}

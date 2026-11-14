@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
-	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -552,7 +551,7 @@ func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
 	require.Equal(t, []string{"tflint", "--init", "--config", tflintConfigSearchPrefix + root, "--chdir", "."}, initHook.Execute)
 	require.Equal(t, []string{
 		"tflint", "--config", tflintConfigSearchPrefix + root, "--chdir", ".",
-		"--var=count=2", "--var=name=web",
+		tflintInputVariablesMarker,
 		"--var=region=eu", "--var-file=required.tfvars",
 		"--minimum-failure-severity=error",
 	}, lintHook.Execute)
@@ -564,8 +563,7 @@ func TestTflintHookDefersConfigurationLookup(t *testing.T) {
 	root := t.TempDir()
 	unit := filepath.Join(root, "a", "b")
 	require.NoError(t, os.MkdirAll(unit, 0o755))
-	hooks, err := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"), nil)
-	require.NoError(t, err)
+	hooks := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"))
 	require.Len(t, hooks, 2)
 	require.Contains(t, hooks[0].Execute, tflintConfigSearchPrefix+unit)
 }
@@ -587,24 +585,6 @@ func TestTflintConfigFlagForms(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, filepath.Join(dir, "rel.hcl"), got, "a relative config is anchored at the unit")
 	require.Equal(t, []string{"--format", "json"}, withoutConfigFlag([]string{"--config", "x", "--format", "json", "-c=y", "--config=z"}))
-}
-
-func TestVariableValueRendering(t *testing.T) {
-	text, err := variableValue("plain")
-	require.NoError(t, err)
-	require.Equal(t, "plain", text)
-	text, err = variableValue(map[string]any{"a": []any{1, "${x}"}})
-	require.NoError(t, err)
-	require.Equal(t, `{"a":[1,"$${x}"]}`, text)
-	text, err = variableValue(map[string]any{"literal": "%{ if true } ${x}"})
-	require.NoError(t, err)
-	expr, diags := hclsyntax.ParseExpression([]byte(text), "input", hcl.Pos{Line: 1, Column: 1})
-	require.False(t, diags.HasErrors(), diags.Error())
-	value, diags := expr.Value(nil)
-	require.False(t, diags.HasErrors(), diags.Error())
-	require.Equal(t, "%{ if true } ${x}", value.GetAttr("literal").AsString())
-	_, err = variableValue(make(chan int))
-	require.Error(t, err)
 }
 
 func TestCtyStringRendersEveryValueKind(t *testing.T) {
@@ -645,23 +625,16 @@ func mustSignals(t *testing.T, signals map[string]cty.Value) map[string]any {
 	return result
 }
 
-func TestFinalizeExecutionHandlesAbsentAndFailingHooks(t *testing.T) {
-	require.NoError(t, finalizeExecution(nil, "terragrunt.hcl", nil))
+func TestFinalizeExecutionHandlesAbsentAndEveryHookKind(t *testing.T) {
+	finalizeExecution(nil, "terragrunt.hcl")
 	unit := filepath.Join(t.TempDir(), "terragrunt.hcl")
-	for name, execution := range map[string]*model.Execution{
-		"before": {BeforeHooks: []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}},
-		"after":  {AfterHooks: []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}},
-		"error":  {ErrorHooks: []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}},
-	} {
-		t.Run(name, func(t *testing.T) {
-			require.NoError(t, finalizeExecution(execution, unit, nil))
-		})
+	lint := []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}
+	execution := &model.Execution{BeforeHooks: slices.Clone(lint), AfterHooks: slices.Clone(lint), ErrorHooks: slices.Clone(lint)}
+	finalizeExecution(execution, unit)
+	for name, hooks := range map[string][]model.Hook{"before": execution.BeforeHooks, "after": execution.AfterHooks, "error": execution.ErrorHooks} {
+		require.Len(t, hooks, 2, name)
+		require.Contains(t, hooks[1].Execute, tflintInputVariablesMarker, name)
 	}
-	// Inputs that cannot be rendered fail the whole unit with the error, not a silent gap.
-	config := filepath.Join(filepath.Dir(unit), ".tflint.hcl")
-	require.NoError(t, os.WriteFile(config, nil, 0o644))
-	err := finalizeExecution(&model.Execution{BeforeHooks: []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}}, unit, map[string]any{"bad": make(chan int)})
-	require.Error(t, err)
 }
 
 func TestTflintVariablesFromExtraArguments(t *testing.T) {
@@ -685,8 +658,7 @@ func TestTflintHookScopesExtraArgumentsToEachCommand(t *testing.T) {
 		{Commands: []string{"plan"}, Arguments: []string{"-var=only=plan"}},
 		{Commands: []string{"apply"}, Arguments: []string{"-var=only=apply"}},
 	}}
-	hooks, err := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan", "apply"}, Execute: []string{"tflint"}}, execution, unit, nil)
-	require.NoError(t, err)
+	hooks := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan", "apply"}, Execute: []string{"tflint"}}, execution, unit)
 	require.Len(t, hooks, 4)
 	require.Equal(t, []string{"plan"}, hooks[1].Commands)
 	require.Contains(t, hooks[1].Execute, "--var=only=plan")

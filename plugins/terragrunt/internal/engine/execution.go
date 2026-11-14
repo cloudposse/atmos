@@ -78,9 +78,7 @@ func applyTimeExecution(request model.Request, path string, planned *model.Execu
 		return nil, nil, err
 	}
 	// The plan-time execution is already finalized, so both are compared in the same form.
-	if err := finalizeExecution(applied, path, cfg.Inputs); err != nil {
-		return nil, nil, err
-	}
+	finalizeExecution(applied, path)
 	if applied == nil {
 		applied = &model.Execution{}
 	}
