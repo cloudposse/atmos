@@ -196,7 +196,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 				ProcessOverrides: step.ScriptProcessOverrides,
 				Hook:             vars.ScriptHook,
 				Args:             vars.ScriptArgs,
-				Viewport:         scriptViewport,
+				Viewport:         scriptViewport(GetViewportConfig(step, workflow)),
 			})
 			return runErr
 		}
@@ -333,10 +333,13 @@ func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) (
 
 // scriptViewport shows a subprocess's live output in the step output viewport, the same one
 // `output: viewport` gives a shell step, so exec.run(output="viewport") works in custom command,
-// workflow, and hook script steps and not only in standalone scripts.
-func scriptViewport(title string, run func(stdout, stderr io.Writer) error) error {
-	_, _, err := NewOutputModeWriter(OutputModeViewport, title, nil).ExecuteWithIO(run)
-	return err
+// workflow, and hook script steps and not only in standalone scripts. It inherits the step
+// or workflow viewport settings.
+func scriptViewport(viewport *schema.ViewportConfig) func(string, func(io.Writer, io.Writer) error) error {
+	return func(title string, run func(stdout, stderr io.Writer) error) error {
+		_, _, err := NewOutputModeWriter(OutputModeViewport, title, viewport).ExecuteWithIO(run)
+		return err
+	}
 }
 
 // ProcessEnvironmentWithSelection adds the profile and identity chosen with global flags to env, so

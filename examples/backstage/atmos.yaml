@@ -51,6 +51,9 @@ commands:
             source: scripts/seed.star
           - type: script
             interpreter: starlark
+            viewport:
+              height: 8
+              padding: 1
             script: |
               atmos.container("build", "backstage", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage", flags = {"stack": "local"})

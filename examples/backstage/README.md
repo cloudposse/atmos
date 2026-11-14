@@ -52,6 +52,10 @@ atmos portal open
 You can also use `atmos portal up --open` to request a browser launch after startup. Plain
 `portal up` does not launch a browser.
 
+Build output uses an eight-line scrolling viewport, including its status line. Adjust
+`viewport.height` on the build script step in `atmos.yaml` to change its size; the
+viewport also shrinks to fit smaller terminals.
+
 Wait for Backstage to become **healthy**, then open:
 
 - **Backstage:** http://localhost:3000 — enter as a guest.
