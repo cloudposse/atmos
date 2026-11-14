@@ -55,6 +55,6 @@ func cloudConfig(backendConfig map[string]any, terraformWorkspace string) (map[s
 		return nil, err
 	}
 	ctx := schema.Context{TerraformWorkspace: terraformWorkspace}
-	backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
+	backendConfigStrReplaced := cfg.ReplaceContextTokens(&ctx, backendConfigStr)
 	return u.UnmarshalYAML[schema.AtmosSectionMapType](backendConfigStrReplaced)
 }
