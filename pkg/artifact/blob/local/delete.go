@@ -17,6 +17,9 @@ func (s *Store) Delete(ctx context.Context, key string, opts blob.DeleteOptions)
 	if err := s.validate(blob.OpDelete, key); err != nil {
 		return err
 	}
+	if err := s.Capabilities().CheckDelete(storeName, key, opts); err != nil {
+		return err
+	}
 	if err := checkContext(ctx, blob.OpDelete, key); err != nil {
 		return err
 	}

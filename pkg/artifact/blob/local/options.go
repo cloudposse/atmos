@@ -30,7 +30,9 @@ func WithFilePerm(perm os.FileMode) Option {
 }
 
 // WithLockAllWrites serializes unconditional writes and deletes with conditional ones. Managed
-// stores already do this; it can also be used with plain-file compatibility.
+// stores already do this. A plain-file store enforces if-absent and if-match conditions only with
+// this option, because only then does every mutation honor the lock that makes a condition check
+// and its commit atomic; without it the plain-file store refuses conditional operations.
 func WithLockAllWrites() Option {
 	defer perf.Track(nil, "blob.local.WithLockAllWrites")()
 
@@ -38,7 +40,8 @@ func WithLockAllWrites() Option {
 }
 
 // WithPlainFileCompatibility preserves the legacy CI layout and unlocked unconditional operations.
-// Do not mix this mode with managed stores on the same root when consistency is required.
+// Because unconditional operations stay unlocked, the store refuses conditional puts and deletes
+// and does not advertise them unless [WithLockAllWrites] is also set. Do not mix this mode with managed stores on the same root when consistency is required.
 func WithPlainFileCompatibility() Option {
 	defer perf.Track(nil, "local.WithPlainFileCompatibility")()
 

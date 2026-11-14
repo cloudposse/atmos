@@ -67,6 +67,9 @@ func (s *Store) validatePut(ctx context.Context, key string, opts blob.PutOption
 	if err := s.validate(blob.OpPut, key); err != nil {
 		return err
 	}
+	if err := s.Capabilities().CheckPut(storeName, key, opts.Condition); err != nil {
+		return err
+	}
 	if opts.Size < blob.UnknownSize || opts.Size == math.MaxInt64 {
 		return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: invalid or unverifiable size %d", errUtils.ErrBlobInvalid, opts.Size))
 	}

@@ -70,9 +70,12 @@ func (s *Store) Root() string {
 func (s *Store) Capabilities() blob.Capabilities {
 	defer perf.Track(nil, "local.Store.Capabilities")()
 
+	// A plain-file store leaves unconditional mutations unlocked for legacy writers, so it can only
+	// make a condition atomic when WithLockAllWrites makes every mutation honor the same lock.
+	conditional := s.enforcesConditions()
 	return blob.Capabilities{
-		ConditionalPut:    true,
-		ConditionalDelete: true,
+		ConditionalPut:    conditional,
+		ConditionalDelete: conditional,
 		Multipart:         true,
 		Tags:              !s.plainFiles,
 		Metadata:          !s.plainFiles,
@@ -80,6 +83,12 @@ func (s *Store) Capabilities() blob.Capabilities {
 		Listing:           true,
 		ListDelimiter:     true,
 	}
+}
+
+// enforcesConditions reports whether every mutation takes the root lock, which is what makes an
+// if-absent or if-match check and its commit atomic against competing writers of this store.
+func (s *Store) enforcesConditions() bool {
+	return !s.plainFiles || s.lockAll
 }
 
 // validate rejects keys that are unsafe on a filesystem or collide with the store's own files.

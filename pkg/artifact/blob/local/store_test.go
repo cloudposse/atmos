@@ -340,7 +340,7 @@ func TestDeletePrefixOnlyDirectoryIsMissingObject(t *testing.T) {
 		opts []Option
 	}{
 		{name: "managed"},
-		{name: "plain", opts: []Option{WithPlainFileCompatibility()}},
+		{name: "plain", opts: []Option{WithPlainFileCompatibility(), WithLockAllWrites()}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := newStore(t, tc.opts...)

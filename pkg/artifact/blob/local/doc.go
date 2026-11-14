@@ -10,7 +10,9 @@
 // protects content and attributes across interrupted commits; recovery runs before the next managed
 // operation. Direct filesystem edits and mixing [WithPlainFileCompatibility] with managed stores
 // on one root are outside this coordination. Plain-file mode preserves the legacy CI layout and
-// unlocked unconditional operations. The journal recovers interrupted processes, not power loss.
+// unlocked unconditional operations, so it refuses conditional puts and deletes (and does not
+// advertise them) unless [WithLockAllWrites] makes every mutation honor the same lock. The journal
+// recovers interrupted processes, not power loss.
 //
 // A local object cannot share a path with a key prefix: "a" and "a/b" cannot both exist. ETags are
 // opaque content-based SHA-256 tokens. Identical contents have the same token, including after an
