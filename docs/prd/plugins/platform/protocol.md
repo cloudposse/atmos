@@ -256,14 +256,16 @@ The runtime writes events to caller-provided stdout/stderr writers; callers supp
 
 ### Component configuration services
 
-The component configuration protocol, generated CLI and SDK bindings, and component-specific host descriptors, package loading, and adapters are planned. CLI stack and execution integration are also unavailable. These proposed independently negotiated version-1 services replace the earlier proposed monolithic `Component` service:
+The component configuration protocol is now defined in `proto/atmos/plugin/v1/plugin.proto` and generated for the CLI and SDK. The host has static descriptors, explicit package loading, and service adapters. Stack processing and Terraform execution call the plugin configuration runtime for components that declare a `configuration` settings section, and that call reaches the provider `Prepare` RPC. These independently negotiated services replace the earlier proposed monolithic `Component` service. Discovery, validation, and state use version 1. Preparation uses version 2:
 
 | Capability | RPC | Result |
 |---|---|---|
 | `component.discovery` | `ComponentDiscovery.Discover` | Logical instances, source watches, and dependency edges for an explicit root/revision. |
 | `component.validation` | `ComponentValidation.Validate` | Unsupported mode/command/options diagnostics before effects. |
-| `component.preparation` | `ComponentPreparation.Prepare` | Fresh inputs, module, backend identity, and literal generated files. |
+| `component.preparation` | `ComponentPreparation.Prepare` | Fresh inputs, module, backend identity, literal generated files, backend ownership, and execution metadata. |
 | `component.state` | `ComponentState.Resolve` | Backend/workspace identity without preparation. |
+
+Preparation version 2 adds `terraform_arguments` to the request, and `backend_generated` and `execution` to the response. A host that only speaks version 1 would ignore these fields, drop hooks and extra arguments, and omit the arguments that `prevent_destroy` checks. The version change makes such a host reject the plugin during the handshake, before preparation. The manifest declares the same requirement as `component.preparation: ">=2 <3"`.
 
 `ComponentRequest` carries explicit invocation, provider, coordinates, root/source, operation/options, effects, resolved component configuration, and separate provider settings. It does not carry host Go structs or callbacks. `ComponentValue` uses cty type JSON plus MessagePack and sensitivity paths, preserving exact numbers, unknowns, nulls, collection types, and sensitive values. Do not use `protobuf.Struct` for these values. The SDK rejects unsupported marks and sensitivity paths that cannot be applied.
 

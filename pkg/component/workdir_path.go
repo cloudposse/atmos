@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -85,6 +86,62 @@ func ResolveWorkdirSubpath(metadataSubpath, workdirRoot string) (string, error) 
 	return workdirRoot, nil
 }
 
+// resolveConfiguredSubpath selects the explicit module under a copied local
+// source root. Unlike the legacy metadata.component hint, an explicit source
+// subdirectory must exist and cannot silently fall back to the root.
+func ResolveConfiguredSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string) (string, error) {
+	defer perf.Track(nil, "component.ResolveConfiguredSubpath")()
+
+	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
+	subdir, _ := metadata["source_subdir"].(string)
+	if subdir == "" {
+		return ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
+	}
+	if err := validateSourceSubdir(subdir); err != nil {
+		return "", err
+	}
+	selected := filepath.Join(workdirRoot, filepath.FromSlash(subdir))
+	selectedInfo, err := os.Stat(selected)
+	if err != nil {
+		return "", fmt.Errorf("%w: inspect source subdirectory: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	if !selectedInfo.IsDir() {
+		return "", fmt.Errorf("%w: source subdirectory is not a directory", errUtils.ErrWorkdirProvision)
+	}
+	if err := checkSourceSubdirBoundary(workdirRoot, selected); err != nil {
+		return "", err
+	}
+	return selected, nil
+}
+
+func validateSourceSubdir(subdir string) error {
+	if filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`) {
+		return fmt.Errorf("%w: invalid source subdirectory", errUtils.ErrWorkdirProvision)
+	}
+	for _, part := range strings.Split(filepath.ToSlash(subdir), "/") {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("%w: invalid source subdirectory", errUtils.ErrWorkdirProvision)
+		}
+	}
+	return nil
+}
+
+func checkSourceSubdirBoundary(workdirRoot, selected string) error {
+	root, err := filepath.EvalSymlinks(workdirRoot)
+	if err != nil {
+		return fmt.Errorf("%w: resolve source root: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	module, err := filepath.EvalSymlinks(selected)
+	if err != nil {
+		return fmt.Errorf("%w: resolve source module: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	rel, err := filepath.Rel(root, module)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%w: source subdirectory escapes its root", errUtils.ErrWorkdirProvision)
+	}
+	return nil
+}
+
 // ApplyWorkdirSubpathToSection resolves provWorkdir.WorkdirPathKey in
 // info.ComponentSection against info.BaseComponentPath (joining the subpath
 // only when it exists on disk; see ResolveWorkdirSubpath) and returns the
@@ -110,7 +167,7 @@ func ApplyWorkdirSubpathToSection(info *schema.ConfigAndStacksInfo) (string, err
 	if _, applied := info.ComponentSection[workdirSubpathAppliedKey].(subpathAppliedMarker); applied {
 		return workdirPath, nil
 	}
-	resolved, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirPath)
+	resolved, err := ResolveConfiguredSubpath(info, workdirPath)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +211,7 @@ func BuildAndResolveWorkdirPath(
 		}
 		workdirRoot = target.Dir
 	}
-	resolved, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
+	resolved, err := ResolveConfiguredSubpath(info, workdirRoot)
 	if err != nil {
 		return "", false, err
 	}

@@ -50,6 +50,19 @@ func TestComponentDiscoveryRequiresBothOptIns(t *testing.T) {
 	require.False(t, (&AtmosConfiguration{}).HasComponentDiscovery())
 }
 
+func TestComponentExecutionIsEmptyCountsErrorHandling(t *testing.T) {
+	var none *ComponentExecution
+	if !none.IsEmpty() || !(&ComponentExecution{}).IsEmpty() {
+		t.Fatal("an absent or zero execution adds nothing")
+	}
+	if (&ComponentExecution{Errors: &ComponentErrors{}}).IsEmpty() {
+		t.Fatal("error handling alone is execution metadata")
+	}
+	if (&ComponentExecution{BeforeHooks: []ComponentHook{{Name: "h"}}}).IsEmpty() {
+		t.Fatal("a hook is execution metadata")
+	}
+}
+
 func TestConfigurationOwned(t *testing.T) {
 	for _, test := range []struct {
 		name     string

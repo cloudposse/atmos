@@ -57,8 +57,14 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		return nil, err
 	}
 	pctx := requestParsingContext(request, path)
+	if request.Phase == "iam" {
+		return resolveIAM(ctx, logger, environment, pctx, request, path)
+	}
 	if filepath.Base(path) == stackFile {
 		return resolveStack(ctx, logger, environment, pctx, request, path)
+	}
+	if err := checkRequestFeatureOverrides(ctx, logger, environment, pctx, request, path); err != nil {
+		return nil, err
 	}
 	if discovering(request) {
 		return resolveUnitInventory(ctx, logger, environment, pctx, request, path)
@@ -77,13 +83,13 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	if err != nil {
 		return nil, err
 	}
-	result, err := unitResolution(logger, environment, pctx, request, cfg, path)
+	result, err := unitResolution(ctx, logger, environment, pctx, request, cfg, path)
 	if err != nil {
 		return nil, err
 	}
 	result.Execution = execution
 	result.Files = append(result.Files, applyFiles...)
-	if err := resolveBackend(cfg, result); err != nil {
+	if err := resolveBackend(cfg, result, &request); err != nil {
 		return nil, err
 	}
 	if err := generatedFiles(ctx, logger, cfg, result); err != nil {
@@ -170,7 +176,42 @@ func requestParsingContext(request model.Request, path string) *config.ParsingCo
 	if command == "" || command == "discover" || command == "generate" {
 		command = "plan"
 	}
-	return parsingContext(path, request.Tofu, command, request.Arguments)
+	pctx := parsingContext(path, request.Tofu, command, request.Arguments)
+	// Explicit feature overrides apply to every unit, as Terragrunt's --feature flag does.
+	pctx.FeatureFlags = request.Features
+	return pctx
+}
+
+// resolveIAM resolves the role before the full parse evaluates AWS functions. The host
+// assumes it and supplies the resulting session on the second call.
+func resolveIAM(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*model.Resolution, error) {
+	flags, err := config.PartialParseConfigFile(ctx, logger, environment,
+		pctx.WithDecodeList(config.TerragruntFlags, config.ExcludeBlock), path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if PreventsRun(excludeFromConfig(flags.Exclude), OperationCommand(request.Command, request.Arguments)) {
+		return &model.Resolution{Path: path}, nil
+	}
+	iam, warnings, err := iamSettings(flags, &request, path)
+	if err != nil {
+		return nil, err
+	}
+	return &model.Resolution{Path: path, IAM: iam, Warnings: warnings}, nil
+}
+
+// checkRequestFeatureOverrides rejects feature overrides the unit does not declare. Backend
+// reads do not evaluate feature flags.
+func checkRequestFeatureOverrides(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) error {
+	if request.Phase == "backend" {
+		return nil
+	}
+	return checkFeatureOverrides(path, request.Features, func() (*config.TerragruntConfig, error) {
+		// Read the declarations without the overrides, which are what is being checked.
+		declarations := pctx.WithDecodeList(config.FeatureFlagsBlock)
+		declarations.FeatureFlags = nil
+		return config.PartialParseConfigFile(ctx, logger, environment, declarations, path, nil)
+	})
 }
 
 // parsingContext configures Terragrunt evaluation of the unit at path as the named command.
@@ -215,6 +256,9 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := finalizeExecution(execution, path, cfg.Inputs); err != nil {
+		return nil, nil, err
+	}
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 		return config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
 	}
@@ -233,17 +277,25 @@ func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.
 }
 
 // unitResolution converts the parsed unit into its module identity. Local sources
-// must be existing directories; remote sources keep their getter URI.
-func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Resolution, error) {
+// must be existing directories; remote sources keep the identity they were written with.
+func unitResolution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Resolution, error) {
 	result := &model.Resolution{Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
-	if plainLocalSource(result.Source) {
-		result.Source = localPath(filepath.Dir(path), result.Source)
-		if problem := localSourceProblem(environment.FS, path, *cfg.Terraform.Source, result.Source); problem != nil {
-			return nil, problem
-		}
-		result.Folders = []string{result.Source}
-	} else if err := validateRemoteSource(result.Source); err != nil {
+	if err := unitSettings(ctx, cfg, request, path, result); err != nil {
 		return nil, err
+	}
+	// A remote source keeps the identity it was written with, exactly as Terragrunt names its working
+	// copy; resolving a registry source below only changes where the module is fetched from.
+	identity := result.Source
+	if resolved, root, local, problem := resolveLocalModuleSource(environment.FS, path, result.Source); problem != nil {
+		return nil, problem
+	} else if local {
+		result.Source = resolved
+		identity, result.Folders = result.Source, []string{root}
+	} else if !PreventsRun(result.Exclude, OperationCommand(request.Command, request.Arguments)) {
+		// An operation the exclude block prevents never runs, so its registry source is not resolved.
+		if err := prepareRemoteSource(ctx, logger, &request, cfg, result); err != nil {
+			return nil, err
+		}
 	}
 	download := pctx.DownloadDir
 	if cfg.DownloadDir != "" {
@@ -252,7 +304,7 @@ func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *conf
 	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
 		download = localPath(filepath.Dir(path), configured)
 	}
-	workingDir, err := atmosbridge.WorkingDir(logger, environment, result.Source, download, filepath.Dir(path))
+	workingDir, err := atmosbridge.WorkingDir(logger, environment, identity, download, filepath.Dir(path))
 	if err != nil {
 		return nil, err
 	}
@@ -260,4 +312,21 @@ func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *conf
 	result.Files = append(result.Files, request.OriginFiles...)
 	result.Folders = append(result.Folders, request.OriginFolders...)
 	return result, nil
+}
+
+// unitSettings applies the parity and IAM settings of a fully evaluated unit. Backend reads
+// evaluate only the backend identity, so they skip them.
+func unitSettings(ctx context.Context, cfg *config.TerragruntConfig, request model.Request, path string, result *model.Resolution) error {
+	if request.Phase == "backend" {
+		return nil
+	}
+	if err := applyUnitSettings(ctx, cfg, request, path, result); err != nil {
+		return err
+	}
+	iam, warnings, err := iamSettings(cfg, &request, path)
+	if err != nil {
+		return err
+	}
+	result.IAM, result.Warnings = iam, append(result.Warnings, warnings...)
+	return nil
 }

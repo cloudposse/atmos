@@ -3383,9 +3383,15 @@ type PrepareComponentResponse struct {
 	// encryption block as opaque, provider-defined data.
 	Encryption *ComponentValue `protobuf:"bytes,17,opt,name=encryption,proto3" json:"encryption,omitempty"`
 	// feature flag name to its evaluated value rendered as a string.
-	FeatureFlags  map[string]string `protobuf:"bytes,18,rep,name=feature_flags,json=featureFlags,proto3" json:"feature_flags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	FeatureFlags map[string]string `protobuf:"bytes,18,rep,name=feature_flags,json=featureFlags,proto3" json:"feature_flags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Authorization for an archive returned by a module registry. This value is
+	// sensitive and may be sent only to module_source_auth_origin.
+	ModuleSourceAuthorization *ComponentValue `protobuf:"bytes,19,opt,name=module_source_authorization,json=moduleSourceAuthorization,proto3" json:"module_source_authorization,omitempty"`
+	ModuleSourceAuthOrigin    string          `protobuf:"bytes,20,opt,name=module_source_auth_origin,json=moduleSourceAuthOrigin,proto3" json:"module_source_auth_origin,omitempty"`
+	// Time spent resolving a tfr:// source, including its bounded retries.
+	RegistryResolutionNanos uint64 `protobuf:"varint,21,opt,name=registry_resolution_nanos,json=registryResolutionNanos,proto3" json:"registry_resolution_nanos,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *PrepareComponentResponse) Reset() {
@@ -3542,6 +3548,27 @@ func (x *PrepareComponentResponse) GetFeatureFlags() map[string]string {
 		return x.FeatureFlags
 	}
 	return nil
+}
+
+func (x *PrepareComponentResponse) GetModuleSourceAuthorization() *ComponentValue {
+	if x != nil {
+		return x.ModuleSourceAuthorization
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetModuleSourceAuthOrigin() string {
+	if x != nil {
+		return x.ModuleSourceAuthOrigin
+	}
+	return ""
+}
+
+func (x *PrepareComponentResponse) GetRegistryResolutionNanos() uint64 {
+	if x != nil {
+		return x.RegistryResolutionNanos
+	}
+	return 0
 }
 
 // ComponentErrorsConfiguration mirrors the Terragrunt errors block. Reserved; not implemented.
@@ -4211,8 +4238,7 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\frun_on_error\x18\x05 \x01(\bR\n" +
 	"runOnError\x12'\n" +
 	"\x0fsuppress_stdout\x18\x06 \x01(\bR\x0esuppressStdout\x12\x1b\n" +
-	"\ton_errors\x18\a \x03(\tR\bonErrors\"\x85\n" +
-	"\n" +
+	"\ton_errors\x18\a \x03(\tR\bonErrors\"\xdd\v\n" +
 	"\x18PrepareComponentResponse\x12\x16\n" +
 	"\x06engine\x18\x01 \x01(\tR\x06engine\x12+\n" +
 	"\x11working_directory\x18\x02 \x01(\tR\x10workingDirectory\x12#\n" +
@@ -4234,7 +4260,10 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"encryption\x18\x11 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\n" +
 	"encryption\x12`\n" +
-	"\rfeature_flags\x18\x12 \x03(\v2;.atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntryR\ffeatureFlags\x1a`\n" +
+	"\rfeature_flags\x18\x12 \x03(\v2;.atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntryR\ffeatureFlags\x12_\n" +
+	"\x1bmodule_source_authorization\x18\x13 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x19moduleSourceAuthorization\x129\n" +
+	"\x19module_source_auth_origin\x18\x14 \x01(\tR\x16moduleSourceAuthOrigin\x12:\n" +
+	"\x19registry_resolution_nanos\x18\x15 \x01(\x04R\x17registryResolutionNanos\x1a`\n" +
 	"\x11InputOriginsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.SourceLocationR\x05value:\x028\x01\x1a?\n" +
@@ -4472,61 +4501,62 @@ var file_atmos_plugin_v1_plugin_proto_depIdxs = []int32{
 	53,  // 77: atmos.plugin.v1.PrepareComponentResponse.iam:type_name -> atmos.plugin.v1.ComponentIam
 	31,  // 78: atmos.plugin.v1.PrepareComponentResponse.encryption:type_name -> atmos.plugin.v1.ComponentValue
 	64,  // 79: atmos.plugin.v1.PrepareComponentResponse.feature_flags:type_name -> atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntry
-	50,  // 80: atmos.plugin.v1.ComponentErrorsConfiguration.retry:type_name -> atmos.plugin.v1.ComponentRetryPolicy
-	51,  // 81: atmos.plugin.v1.ComponentErrorsConfiguration.ignore:type_name -> atmos.plugin.v1.ComponentIgnorePolicy
-	65,  // 82: atmos.plugin.v1.ComponentIgnorePolicy.signals:type_name -> atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry
-	31,  // 83: atmos.plugin.v1.ComponentIam.web_identity_token:type_name -> atmos.plugin.v1.ComponentValue
-	43,  // 84: atmos.plugin.v1.ResolveComponentStateResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
-	35,  // 85: atmos.plugin.v1.ResolveComponentStateResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
-	17,  // 86: atmos.plugin.v1.ResolveComponentStateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
-	31,  // 87: atmos.plugin.v1.ComponentOperation.OptionsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
-	15,  // 88: atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry.value:type_name -> atmos.plugin.v1.SourceLocation
-	31,  // 89: atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
-	7,   // 90: atmos.plugin.v1.Info.Describe:input_type -> atmos.plugin.v1.DescribeRequest
-	9,   // 91: atmos.plugin.v1.Info.Configure:input_type -> atmos.plugin.v1.ConfigureRequest
-	10,  // 92: atmos.plugin.v1.AuthProvider.Validate:input_type -> atmos.plugin.v1.ProviderRequest
-	10,  // 93: atmos.plugin.v1.AuthProvider.Authenticate:input_type -> atmos.plugin.v1.ProviderRequest
-	20,  // 94: atmos.plugin.v1.AuthProvider.Refresh:input_type -> atmos.plugin.v1.RefreshRequest
-	10,  // 95: atmos.plugin.v1.AuthProvider.Logout:input_type -> atmos.plugin.v1.ProviderRequest
-	10,  // 96: atmos.plugin.v1.AuthProvider.Environment:input_type -> atmos.plugin.v1.ProviderRequest
-	10,  // 97: atmos.plugin.v1.AuthProvider.Paths:input_type -> atmos.plugin.v1.ProviderRequest
-	23,  // 98: atmos.plugin.v1.AuthProvider.PrepareEnvironment:input_type -> atmos.plugin.v1.PrepareEnvironmentRequest
-	11,  // 99: atmos.plugin.v1.AuthIdentity.Validate:input_type -> atmos.plugin.v1.IdentityRequest
-	26,  // 100: atmos.plugin.v1.AuthIdentity.Authenticate:input_type -> atmos.plugin.v1.IdentityAuthenticateRequest
-	11,  // 101: atmos.plugin.v1.AuthIdentity.Logout:input_type -> atmos.plugin.v1.IdentityRequest
-	11,  // 102: atmos.plugin.v1.AuthIdentity.Environment:input_type -> atmos.plugin.v1.IdentityRequest
-	11,  // 103: atmos.plugin.v1.AuthIdentity.Paths:input_type -> atmos.plugin.v1.IdentityRequest
-	27,  // 104: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:input_type -> atmos.plugin.v1.IdentityPrepareRequest
-	28,  // 105: atmos.plugin.v1.Commands.Run:input_type -> atmos.plugin.v1.CommandRequest
-	40,  // 106: atmos.plugin.v1.ComponentDiscovery.Discover:input_type -> atmos.plugin.v1.DiscoverComponentsRequest
-	42,  // 107: atmos.plugin.v1.ComponentValidation.Validate:input_type -> atmos.plugin.v1.ComponentRequest
-	42,  // 108: atmos.plugin.v1.ComponentPreparation.Prepare:input_type -> atmos.plugin.v1.ComponentRequest
-	42,  // 109: atmos.plugin.v1.ComponentState.Resolve:input_type -> atmos.plugin.v1.ComponentRequest
-	8,   // 110: atmos.plugin.v1.Info.Describe:output_type -> atmos.plugin.v1.DescribeResponse
-	68,  // 111: atmos.plugin.v1.Info.Configure:output_type -> google.protobuf.Empty
-	18,  // 112: atmos.plugin.v1.AuthProvider.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	14,  // 113: atmos.plugin.v1.AuthProvider.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
-	21,  // 114: atmos.plugin.v1.AuthProvider.Refresh:output_type -> atmos.plugin.v1.RefreshResponse
-	68,  // 115: atmos.plugin.v1.AuthProvider.Logout:output_type -> google.protobuf.Empty
-	22,  // 116: atmos.plugin.v1.AuthProvider.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	25,  // 117: atmos.plugin.v1.AuthProvider.Paths:output_type -> atmos.plugin.v1.PathsResponse
-	22,  // 118: atmos.plugin.v1.AuthProvider.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	18,  // 119: atmos.plugin.v1.AuthIdentity.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	14,  // 120: atmos.plugin.v1.AuthIdentity.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
-	68,  // 121: atmos.plugin.v1.AuthIdentity.Logout:output_type -> google.protobuf.Empty
-	22,  // 122: atmos.plugin.v1.AuthIdentity.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	25,  // 123: atmos.plugin.v1.AuthIdentity.Paths:output_type -> atmos.plugin.v1.PathsResponse
-	22,  // 124: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	30,  // 125: atmos.plugin.v1.Commands.Run:output_type -> atmos.plugin.v1.CommandEvent
-	41,  // 126: atmos.plugin.v1.ComponentDiscovery.Discover:output_type -> atmos.plugin.v1.DiscoverComponentsResponse
-	18,  // 127: atmos.plugin.v1.ComponentValidation.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	48,  // 128: atmos.plugin.v1.ComponentPreparation.Prepare:output_type -> atmos.plugin.v1.PrepareComponentResponse
-	54,  // 129: atmos.plugin.v1.ComponentState.Resolve:output_type -> atmos.plugin.v1.ResolveComponentStateResponse
-	110, // [110:130] is the sub-list for method output_type
-	90,  // [90:110] is the sub-list for method input_type
-	90,  // [90:90] is the sub-list for extension type_name
-	90,  // [90:90] is the sub-list for extension extendee
-	0,   // [0:90] is the sub-list for field type_name
+	31,  // 80: atmos.plugin.v1.PrepareComponentResponse.module_source_authorization:type_name -> atmos.plugin.v1.ComponentValue
+	50,  // 81: atmos.plugin.v1.ComponentErrorsConfiguration.retry:type_name -> atmos.plugin.v1.ComponentRetryPolicy
+	51,  // 82: atmos.plugin.v1.ComponentErrorsConfiguration.ignore:type_name -> atmos.plugin.v1.ComponentIgnorePolicy
+	65,  // 83: atmos.plugin.v1.ComponentIgnorePolicy.signals:type_name -> atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry
+	31,  // 84: atmos.plugin.v1.ComponentIam.web_identity_token:type_name -> atmos.plugin.v1.ComponentValue
+	43,  // 85: atmos.plugin.v1.ResolveComponentStateResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
+	35,  // 86: atmos.plugin.v1.ResolveComponentStateResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
+	17,  // 87: atmos.plugin.v1.ResolveComponentStateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	31,  // 88: atmos.plugin.v1.ComponentOperation.OptionsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
+	15,  // 89: atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry.value:type_name -> atmos.plugin.v1.SourceLocation
+	31,  // 90: atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
+	7,   // 91: atmos.plugin.v1.Info.Describe:input_type -> atmos.plugin.v1.DescribeRequest
+	9,   // 92: atmos.plugin.v1.Info.Configure:input_type -> atmos.plugin.v1.ConfigureRequest
+	10,  // 93: atmos.plugin.v1.AuthProvider.Validate:input_type -> atmos.plugin.v1.ProviderRequest
+	10,  // 94: atmos.plugin.v1.AuthProvider.Authenticate:input_type -> atmos.plugin.v1.ProviderRequest
+	20,  // 95: atmos.plugin.v1.AuthProvider.Refresh:input_type -> atmos.plugin.v1.RefreshRequest
+	10,  // 96: atmos.plugin.v1.AuthProvider.Logout:input_type -> atmos.plugin.v1.ProviderRequest
+	10,  // 97: atmos.plugin.v1.AuthProvider.Environment:input_type -> atmos.plugin.v1.ProviderRequest
+	10,  // 98: atmos.plugin.v1.AuthProvider.Paths:input_type -> atmos.plugin.v1.ProviderRequest
+	23,  // 99: atmos.plugin.v1.AuthProvider.PrepareEnvironment:input_type -> atmos.plugin.v1.PrepareEnvironmentRequest
+	11,  // 100: atmos.plugin.v1.AuthIdentity.Validate:input_type -> atmos.plugin.v1.IdentityRequest
+	26,  // 101: atmos.plugin.v1.AuthIdentity.Authenticate:input_type -> atmos.plugin.v1.IdentityAuthenticateRequest
+	11,  // 102: atmos.plugin.v1.AuthIdentity.Logout:input_type -> atmos.plugin.v1.IdentityRequest
+	11,  // 103: atmos.plugin.v1.AuthIdentity.Environment:input_type -> atmos.plugin.v1.IdentityRequest
+	11,  // 104: atmos.plugin.v1.AuthIdentity.Paths:input_type -> atmos.plugin.v1.IdentityRequest
+	27,  // 105: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:input_type -> atmos.plugin.v1.IdentityPrepareRequest
+	28,  // 106: atmos.plugin.v1.Commands.Run:input_type -> atmos.plugin.v1.CommandRequest
+	40,  // 107: atmos.plugin.v1.ComponentDiscovery.Discover:input_type -> atmos.plugin.v1.DiscoverComponentsRequest
+	42,  // 108: atmos.plugin.v1.ComponentValidation.Validate:input_type -> atmos.plugin.v1.ComponentRequest
+	42,  // 109: atmos.plugin.v1.ComponentPreparation.Prepare:input_type -> atmos.plugin.v1.ComponentRequest
+	42,  // 110: atmos.plugin.v1.ComponentState.Resolve:input_type -> atmos.plugin.v1.ComponentRequest
+	8,   // 111: atmos.plugin.v1.Info.Describe:output_type -> atmos.plugin.v1.DescribeResponse
+	68,  // 112: atmos.plugin.v1.Info.Configure:output_type -> google.protobuf.Empty
+	18,  // 113: atmos.plugin.v1.AuthProvider.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	14,  // 114: atmos.plugin.v1.AuthProvider.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
+	21,  // 115: atmos.plugin.v1.AuthProvider.Refresh:output_type -> atmos.plugin.v1.RefreshResponse
+	68,  // 116: atmos.plugin.v1.AuthProvider.Logout:output_type -> google.protobuf.Empty
+	22,  // 117: atmos.plugin.v1.AuthProvider.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	25,  // 118: atmos.plugin.v1.AuthProvider.Paths:output_type -> atmos.plugin.v1.PathsResponse
+	22,  // 119: atmos.plugin.v1.AuthProvider.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	18,  // 120: atmos.plugin.v1.AuthIdentity.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	14,  // 121: atmos.plugin.v1.AuthIdentity.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
+	68,  // 122: atmos.plugin.v1.AuthIdentity.Logout:output_type -> google.protobuf.Empty
+	22,  // 123: atmos.plugin.v1.AuthIdentity.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	25,  // 124: atmos.plugin.v1.AuthIdentity.Paths:output_type -> atmos.plugin.v1.PathsResponse
+	22,  // 125: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	30,  // 126: atmos.plugin.v1.Commands.Run:output_type -> atmos.plugin.v1.CommandEvent
+	41,  // 127: atmos.plugin.v1.ComponentDiscovery.Discover:output_type -> atmos.plugin.v1.DiscoverComponentsResponse
+	18,  // 128: atmos.plugin.v1.ComponentValidation.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	48,  // 129: atmos.plugin.v1.ComponentPreparation.Prepare:output_type -> atmos.plugin.v1.PrepareComponentResponse
+	54,  // 130: atmos.plugin.v1.ComponentState.Resolve:output_type -> atmos.plugin.v1.ResolveComponentStateResponse
+	111, // [111:131] is the sub-list for method output_type
+	91,  // [91:111] is the sub-list for method input_type
+	91,  // [91:91] is the sub-list for extension type_name
+	91,  // [91:91] is the sub-list for extension extendee
+	0,   // [0:91] is the sub-list for field type_name
 }
 
 func init() { file_atmos_plugin_v1_plugin_proto_init() }

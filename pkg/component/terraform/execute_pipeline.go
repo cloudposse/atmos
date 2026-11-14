@@ -58,6 +58,17 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
+	if excludedFromOperation(info, prepared) {
+		skipExcluded(info)
+		return nil, errUtils.ErrComponentExcluded
+	}
+	warnOverlappingRetry(info, prepared)
+	if err := clearStaleSignals(atmosConfig, info); err != nil {
+		return nil, err
+	}
+	if err = e.runReadConfigHooks(ctx, atmosConfig, info, prepared); err != nil {
+		return nil, err
+	}
 
 	var componentPath string
 	if prepared != nil && usesConfigurationPlan(info) {
@@ -248,6 +259,17 @@ func (e *Executor) executeCommandPipeline(
 
 	cleanupTerraformFiles(atmosConfig, info)
 	return nil
+}
+
+// runPreparedPipeline translates an ignored preparatory failure into the
+// successful end of this unit invocation, after the pipeline has stopped.
+func (e *Executor) runPreparedPipeline(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, opts ...component.ExecutionOption) error {
+	err := e.executeCommandPipeline(atmosConfig, info, execCtx, opts...)
+	if onlyRunIgnored(err) {
+		cleanupTerraformFiles(atmosConfig, info)
+		return nil
+	}
+	return err
 }
 
 // runMainCommandPhase runs the main plan/apply/destroy/… subcommand under its own CI phase

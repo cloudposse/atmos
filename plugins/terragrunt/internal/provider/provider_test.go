@@ -60,6 +60,33 @@ func TestPreparationAndStateUseSeparatePhases(t *testing.T) {
 	require.Equal(t, result.State.WorkingDirectory, state.State.WorkingDirectory)
 }
 
+func TestIAMProbeReturnsOnlyRoleSettings(t *testing.T) {
+	request := componentRequest(t)
+	request.Operation.Mode = "iam-probe"
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		require.Equal(t, "iam", req.Phase)
+		return &model.Resolution{IAM: &model.IAM{Role: "arn:aws:iam::1:role/x"}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "arn:aws:iam::1:role/x", result.Iam.Role)
+	require.Empty(t, result.ModuleSource)
+	require.Nil(t, result.State)
+}
+
+func TestPreparationCarriesSensitiveRegistryAuthorization(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Source: "https://registry.example/archive.tar.gz", WorkingDir: request.RootDirectory, RegistryAuth: &model.RegistryAuth{Origin: "https://registry.example", Authorization: "Bearer secret"}, Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}}, nil
+	})
+	response, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "https://registry.example", response.ModuleSourceAuthOrigin)
+	require.Len(t, response.ModuleSourceAuthorization.SensitivePaths, 1)
+	require.Empty(t, response.ModuleSourceAuthorization.SensitivePaths[0].Steps)
+	require.NotContains(t, response.ModuleSource, "secret")
+}
+
 func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 	for _, test := range []struct {
 		name   string
@@ -215,6 +242,163 @@ func TestUnsupportedExecutionIsReportedSpecifically(t *testing.T) {
 	require.True(t, detail.UserSafe)
 	require.Equal(t, []string{"Remove it."}, detail.Hints)
 	require.NotEmpty(t, detail.Unit)
+}
+
+func TestPrepareReturnsIAMAsDataWithASensitiveToken(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		if req.Phase == "discover" {
+			return &model.Resolution{}, nil
+		}
+		return &model.Resolution{Source: "git::https://example.test/m.git", WorkingDir: filepath.Join(request.RootDirectory, "cache"), IAM: &model.IAM{Role: "arn:aws:iam::1:role/x", SessionName: "s", DurationSeconds: 7200, WebIdentityToken: "token-secret"}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "arn:aws:iam::1:role/x", result.Iam.Role)
+	require.Equal(t, "s", result.Iam.SessionName)
+	require.Equal(t, uint32(7200), result.Iam.DurationSeconds)
+	token, err := component.Decode(result.Iam.WebIdentityToken)
+	require.NoError(t, err)
+	require.True(t, token.ContainsMarked(), "the token is a sensitive value")
+	require.Len(t, result.Iam.WebIdentityToken.SensitivePaths, 1)
+	require.Empty(t, result.Iam.WebIdentityToken.SensitivePaths[0].Steps, "the whole value is sensitive")
+}
+
+func TestIAMResponseOmitsWhatIsNotSet(t *testing.T) {
+	none, err := iamResponse(nil)
+	require.NoError(t, err)
+	require.Nil(t, none)
+	bare, err := iamResponse(&model.IAM{Role: "r", DurationSeconds: -5})
+	require.NoError(t, err)
+	require.Nil(t, bare.WebIdentityToken)
+	require.Zero(t, bare.DurationSeconds)
+	huge, err := iamResponse(&model.IAM{Role: "r", DurationSeconds: 1 << 40})
+	require.NoError(t, err)
+	require.Equal(t, uint32(1<<32-1), huge.DurationSeconds)
+}
+
+func TestFeatureSettingsAndEnvironmentMerge(t *testing.T) {
+	config, err := encode(map[string]any{"enabled": true, "features": map[string]any{"flag": true, "size": 3, "tier": "gold", "env": "config"}})
+	require.NoError(t, err)
+	req := model.Request{Environment: map[string]string{"TG_FEATURE": "env=environment, extra=1"}}
+	require.NoError(t, withFeatures(&req, config))
+	require.Equal(t, map[string]string{"flag": "true", "size": "3", "tier": "gold", "env": "environment", "extra": "1"}, req.Features,
+		"TG_FEATURE replaces the configured value per name")
+
+	none := model.Request{}
+	require.NoError(t, withFeatures(&none, nil))
+	require.Nil(t, none.Features)
+
+	for name, bad := range map[string]any{
+		"not a map":    map[string]any{"features": "x"},
+		"nested value": map[string]any{"features": map[string]any{"a": map[string]any{"b": 1}}},
+		"list value":   map[string]any{"features": map[string]any{"a": []any{1}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			value, err := encode(bad)
+			require.NoError(t, err)
+			var request model.Request
+			require.Error(t, withFeatures(&request, value))
+		})
+	}
+	unknown, err := encode(map[string]any{"features": map[string]any{}, "typo": 1})
+	require.NoError(t, err)
+	require.Error(t, settings(unknown))
+	invalid := model.Request{Environment: map[string]string{"TG_FEATURE": "novalue"}}
+	require.Error(t, withFeatures(&invalid, nil))
+}
+
+func TestOperationCommandNamesTheTerragruntAction(t *testing.T) {
+	for _, test := range []struct {
+		command   string
+		arguments []string
+		want      string
+	}{
+		{"plan", nil, "plan"},
+		{"deploy", nil, "apply"},
+		{"destroy", nil, "destroy"},
+		{"apply", []string{"-destroy"}, "destroy"},
+		{"apply", []string{"--destroy=true"}, "destroy"},
+		{"apply", []string{"-destroy=false"}, "apply"},
+		{"apply", []string{"-destroy", "-destroy=false"}, "apply"},
+		{"plan", []string{"-destroy"}, "plan"},
+	} {
+		require.Equal(t, test.want, operationCommand(test.command, test.arguments), "%s %v", test.command, test.arguments)
+	}
+}
+
+func TestPrepareReturnsParityData(t *testing.T) {
+	request := componentRequest(t)
+	yes := true
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		if req.Phase == "discover" {
+			return &model.Resolution{}, nil
+		}
+		return &model.Resolution{
+			Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: filepath.Join(request.RootDirectory, "cache"),
+			Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{},
+			TerraformBinary: "tofu", FeatureFlags: map[string]string{"flag": "true"},
+			Exclude: &model.Exclude{Actions: []string{"all"}, NoRun: &yes, ExcludeDependencies: true},
+			Errors: &model.Errors{
+				Retry:  []model.RetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3, SleepIntervalSec: 5}},
+				Ignore: []model.IgnorePolicy{{Name: "known", Patterns: []string{"exists"}, Message: "fine", Signals: map[string]any{"note": "kept", "nothing": nil}}},
+			},
+			Warnings: []model.Warning{{Code: "read_config_before_hook_ignored", Path: filepath.Join(request.RootDirectory, "live", "terragrunt.hcl"), Message: "never runs"}},
+		}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "tofu", result.TerraformBinary)
+	require.Equal(t, map[string]string{"flag": "true"}, result.FeatureFlags)
+	require.Equal(t, []string{"apply"}, result.Exclude.Actions, "the exclusion carries this operation, with no_run applied")
+	require.True(t, result.Exclude.Condition)
+	require.True(t, result.Exclude.ExcludeDependencies)
+	require.Equal(t, "net", result.Errors.Retry[0].Name)
+	require.EqualValues(t, 3, result.Errors.Retry[0].MaxAttempts)
+	require.EqualValues(t, 5, result.Errors.Retry[0].SleepIntervalSeconds)
+	require.Equal(t, []string{"exists"}, result.Errors.Ignore[0].IgnorableErrors)
+	require.Contains(t, result.Errors.Ignore[0].Signals, "note")
+	require.Contains(t, result.Errors.Ignore[0].Signals, "nothing")
+	require.Len(t, result.Diagnostics, 1)
+	require.Equal(t, "live/terragrunt.hcl", result.Diagnostics[0].Field)
+	require.Equal(t, pluginv1.Severity_SEVERITY_WARNING, result.Diagnostics[0].Detail.Severity)
+	require.Equal(t, "prepare", result.Diagnostics[0].Detail.Operation)
+}
+
+func TestPrepareOmitsExclusionWhenTheRunIsNotPrevented(t *testing.T) {
+	request := componentRequest(t)
+	no := false
+	for name, exclude := range map[string]*model.Exclude{
+		"no block":          nil,
+		"no_run false":      {Actions: []string{"apply"}, NoRun: &no},
+		"other action":      {Actions: []string{"plan"}},
+		"all, no_run unset": {Actions: []string{"all"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+				return &model.Resolution{Inputs: map[string]any{}, Backend: map[string]any{}, Exclude: exclude, WorkingDir: req.BasePath}, nil
+			})
+			result, err := p.Prepare(t.Context(), request)
+			require.NoError(t, err)
+			require.Nil(t, result.Exclude)
+			require.Nil(t, result.Errors)
+		})
+	}
+}
+
+func TestDiscoveryPublishesCommandAndExclude(t *testing.T) {
+	config := map[string]any{"settings": map[string]any{"terragrunt": map[string]any{}}}
+	discoveryParity(config, &model.Resolution{})
+	require.NotContains(t, config, "command")
+	require.NotContains(t, config["settings"].(map[string]any)["terragrunt"], "exclude")
+
+	discoveryParity(config, &model.Resolution{TerraformBinary: "tofu", Exclude: &model.Exclude{Actions: []string{"plan"}, ExcludeDependencies: true}})
+	require.Equal(t, "tofu", config["command"])
+	require.Equal(t, map[string]any{"actions": []string{"plan"}, "exclude_dependencies": true}, config["settings"].(map[string]any)["terragrunt"].(map[string]any)["exclude"])
+
+	require.Equal(t, "opentofu", unitEngine(model.Request{Tofu: "terraform"}, &model.Resolution{TerraformBinary: "/opt/bin/tofu"}))
+	require.Equal(t, "terraform", unitEngine(model.Request{Tofu: "terraform"}, &model.Resolution{}))
+	require.Equal(t, "opentofu", unitEngine(model.Request{Tofu: "tofu"}, nil))
 }
 
 func TestPreparationTransmitsUnitFileCopyProvenance(t *testing.T) {

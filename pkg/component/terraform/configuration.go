@@ -48,21 +48,54 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if info.DryRun {
 		return nil, nil
 	}
-	if err := resolveHostExecutable(info); err != nil {
+	if err := resolveSelectedExecutable(info); err != nil {
 		return nil, err
 	}
-	prepared, execution, err := prepareOrRestore(ctx, config, info)
+	prepared, stagedIAM, err := restoreOrPrepareConfiguration(ctx, config, info)
 	if err != nil || prepared == nil {
 		return prepared, err
 	}
-	if err = applyStackOverrides(config, info, prepared); err != nil {
+	if err = finalizePreparedConfiguration(ctx, config, info, prepared, stagedIAM); err != nil {
 		return nil, err
 	}
+	applyPreparedConfiguration(config, info, prepared)
+	return prepared, nil
+}
+
+func finalizePreparedConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, stagedIAM *schema.ComponentIAM) error {
+	if err := applyStackOverrides(config, info, prepared); err != nil {
+		return err
+	}
+	return finishIAM(ctx, info, prepared, stagedIAM)
+}
+
+// Plugins do not inherit PATH. Resolve the selected host executable before
+// Terragrunt evaluates version constraints or dependency outputs.
+func resolveSelectedExecutable(info *schema.ConfigAndStacksInfo) error {
+	binary, err := exec.LookPath(info.Command)
+	if err != nil {
+		return errUtils.Build(fmt.Errorf("%w: Terraform executable of component %q in stack %q: %w", errUtils.ErrPluginInvalidConfig, info.ComponentFromArg, info.Stack, err)).
+			WithContext("component", info.ComponentFromArg).
+			WithContext("stack", info.Stack).
+			WithContext("executable", info.Command).
+			WithHint("The unit's `terraform_binary` or the component's `command` must name an installed executable, a toolchain tool from `dependencies.tools`, or an absolute path").
+			Err()
+	}
+	binary, err = filepath.Abs(binary)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
+	}
+	info.Command = binary
+	return nil
+}
+
+func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
 	// The stack's env section wins over provider environment in the metadata this invocation runs,
 	// including the apply-time metadata of a restored saved plan.
-	info.ComponentExecution = withoutStackEnvironment(execution, info.ComponentEnvSection)
+	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
+	info.SourceAuthorization = prepared.SourceAuthorization
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
 	info.ComponentSection["vars"] = prepared.Inputs
@@ -77,9 +110,24 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	info.ComponentSection["source"] = source
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
-	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
+	info.SetBackendFileGeneration(!prepared.BackendGenerated)
 	warnOnCacheLocalState(info, prepared)
-	return prepared, nil
+}
+
+func restoreOrPrepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *schema.ComponentIAM, error) {
+	if usesConfigurationPlan(info) {
+		if err := useRetainedWorkdir(config, info); err != nil {
+			return nil, nil, err
+		}
+		prepared, err := restoreConfigurationPlan(ctx, config, info)
+		return prepared, nil, err
+	}
+	staged, err := probeAndApplyIAM(ctx, config.ComponentConfigurations, info)
+	if err != nil {
+		return nil, nil, err
+	}
+	prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+	return prepared, staged, err
 }
 
 // terragruntCacheDirectory is where Terragrunt keeps its working copies of a unit.
@@ -114,41 +162,13 @@ func warnOnCacheLocalState(info *schema.ConfigAndStacksInfo, prepared *schema.Pr
 		"`path = \"${get_terragrunt_dir()}/terraform.tfstate\"`, and move the existing state file there.")
 }
 
-// resolveHostExecutable makes info.Command the absolute path of the selected executable.
-func resolveHostExecutable(info *schema.ConfigAndStacksInfo) error {
-	// Plugins do not inherit PATH. Resolve the selected host executable before
-	// Terragrunt evaluates version constraints or dependency outputs.
-	binary, err := exec.LookPath(info.Command)
-	if err != nil {
-		return fmt.Errorf("%w: Terraform executable: %w", errUtils.ErrPluginInvalidConfig, err)
+// invocationExecution returns the hooks and extra arguments the invocation runs. A saved plan was
+// prepared for plan, so applying it runs the apply-time metadata recorded with it.
+func invocationExecution(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) *schema.ComponentExecution {
+	if usesConfigurationPlan(info) {
+		return prepared.Execution.ForSavedPlanApply()
 	}
-	binary, err = filepath.Abs(binary)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
-	}
-	info.Command = binary
-	return nil
-}
-
-// prepareOrRestore prepares the component, or restores the reviewed preparation of a saved
-// plan. It also returns the hooks and extra arguments the invocation runs: a saved plan was
-// prepared for plan, so it runs the apply-time metadata recorded with it.
-func prepareOrRestore(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *schema.ComponentExecution, error) {
-	if !usesConfigurationPlan(info) {
-		prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
-		if err != nil || prepared == nil {
-			return prepared, nil, err
-		}
-		return prepared, prepared.Execution, nil
-	}
-	if err := useRetainedWorkdir(config, info); err != nil {
-		return nil, nil, err
-	}
-	prepared, err := restoreConfigurationPlan(ctx, config, info)
-	if err != nil || prepared == nil {
-		return prepared, nil, err
-	}
-	return prepared, prepared.Execution.ForSavedPlanApply(), nil
+	return prepared.Execution
 }
 
 // useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.

@@ -20,6 +20,9 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 	if err := settings(request.GetProviderConfiguration()); err != nil {
 		return nil, rpcError(err)
 	}
+	if err := withFeatures(&req, request.GetProviderConfiguration()); err != nil {
+		return nil, rpcError(err)
+	}
 	paths, err := importPaths(request)
 	if err != nil {
 		return nil, rpcError(err)
@@ -56,7 +59,15 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 		return nil, err
 	}
 	module := unit.Config.Source
-	if len(unit.Config.Folders) > 0 && (module == "" || filepath.IsAbs(module)) {
+	moduleSubdir := ""
+	if root, subdir, ok := localModuleSubdir(module); ok {
+		moduleSubdir = subdir
+		local, err := relative(req.BasePath, root)
+		if err != nil {
+			return nil, err
+		}
+		module = "./" + local + "//" + subdir
+	} else if len(unit.Config.Folders) > 0 && (module == "" || filepath.IsAbs(module)) {
 		path := module
 		if path == "" {
 			path = unit.Config.Folders[0]
@@ -81,7 +92,7 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 	if workspace == "" {
 		workspace = "default"
 	}
-	config, err := encode(map[string]any{
+	component := map[string]any{
 		"source": module, "vars": map[string]any{},
 		"provision":    map[string]any{"workdir": map[string]any{"enabled": true}},
 		"backend_type": "local", "backend": map[string]any{"local": map[string]any{}},
@@ -90,7 +101,12 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 			"terragrunt":    map[string]any{"generation_root": generation},
 			"configuration": map[string]any{"watch_excludes": []string{"**/.terragrunt-cache/**", "**/.terragrunt-stack/**", "**/.terraform/**", "**/.atmos/**"}},
 		},
-	})
+	}
+	if moduleSubdir != "" {
+		component["metadata"].(map[string]any)["source_subdir"] = moduleSubdir
+	}
+	discoveryParity(component, &unit.Config)
+	config, err := encode(component)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +114,7 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 	if err != nil {
 		return nil, err
 	}
-	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: engineName(req.Tofu), Source: source, Configuration: config, Sources: watched}
+	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: unitEngine(req, &unit.Config), Source: source, Configuration: config, Sources: watched}
 	for _, path := range unit.Config.Dependencies {
 		target := addresses[path]
 		if target == nil {
@@ -116,6 +132,24 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 		instance.Dependencies = append(instance.Dependencies, &pluginv1.ComponentDependency{Target: target, Kind: kind})
 	}
 	return instance, nil
+}
+
+func localModuleSubdir(source string) (root, subdir string, ok bool) {
+	volume := filepath.VolumeName(source)
+	rest := source[len(volume):]
+	if strings.ContainsAny(rest, "?:") {
+		return "", "", false
+	}
+	index := strings.Index(filepath.ToSlash(rest), "//")
+	if index <= 0 {
+		return "", "", false
+	}
+	root = volume + rest[:index]
+	first := strings.SplitN(strings.TrimPrefix(root, "./"), "/", 2)[0]
+	if strings.Contains(first, ".") && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) {
+		return "", "", false
+	}
+	return root, rest[index+2:], true
 }
 
 // importPaths adds explicit files or directory roots to the same scoped inventory.

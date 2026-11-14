@@ -61,7 +61,7 @@ func TestPreflightRejectsEveryBrokenComponentBeforeAnyRuns(t *testing.T) {
 	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime.mock(t)}
 	graph := graphOf(t, [2]string{"live", "a"}, [2]string{"live", "b"}, [2]string{"live", "c"})
 
-	err := preflightTerraformGraph(t.Context(), config, graph)
+	err := preflightTerraformGraph(t.Context(), config, graph, nil)
 	require.ErrorIs(t, err, errUtils.ErrPluginComponentsFailed)
 	assert.ErrorContains(t, err, "first")
 	assert.ErrorContains(t, err, "second")
@@ -70,8 +70,18 @@ func TestPreflightRejectsEveryBrokenComponentBeforeAnyRuns(t *testing.T) {
 
 func TestPreflightIgnoresHealthyGraphsAndProvidersWithoutFailures(t *testing.T) {
 	graph := graphOf(t, [2]string{"live", "a"})
-	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{}, graph))
-	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{ComponentConfigurations: (&failureRuntime{}).mock(t)}, graph))
+	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{}, graph, nil))
+	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{ComponentConfigurations: (&failureRuntime{}).mock(t)}, graph, nil))
+}
+
+func TestPreflightSkipsExcludedButStillRejectsIncludedFailures(t *testing.T) {
+	runtime := &failureRuntime{failures: map[string]error{"live/a": errors.New("excluded"), "live/b": errors.New("included")}}
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime.mock(t)}
+	graph := graphOf(t, [2]string{"live", "a"}, [2]string{"live", "b"})
+	err := preflightTerraformGraph(t.Context(), config, graph, map[string]string{terraformNodeID("a", "live"): "excluded"})
+	require.ErrorContains(t, err, "included")
+	require.NotContains(t, runtime.asked, "live/a")
+	require.Contains(t, runtime.asked, "live/b")
 }
 
 func TestExecuteTerraformPreflightRejectsFailuresBeforeDispatch(t *testing.T) {

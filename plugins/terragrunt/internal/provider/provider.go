@@ -82,9 +82,9 @@ func settings(value *pluginv1.ComponentValue) error {
 	}
 	for _, key := range slices.Sorted(maps.Keys(config)) {
 		switch key {
-		case "enabled", "provider", "mode", "discovery":
+		case "enabled", "provider", "mode", "discovery", "features":
 		default:
-			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, and `discovery`. Check the spelling.")
+			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, `discovery`, and `features`. Check the spelling.")
 		}
 	}
 	if mode, _ := config["mode"].(string); mode != "" && mode != "native" {
@@ -94,7 +94,7 @@ func settings(value *pluginv1.ComponentValue) error {
 }
 
 func operation(root, name string, op *pluginv1.ComponentOperation, invocation *pluginv1.Invocation) (model.Request, error) {
-	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || op.Mode != "native" || len(op.Options) != 0 {
+	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || (op.Mode != "native" && op.Mode != "iam-probe") || len(op.Options) != 0 {
 		return model.Request{}, ErrUnsupported
 	}
 	env := maps.Clone(invocation.GetEnvironment())
@@ -105,7 +105,11 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 	if binary == "" {
 		binary = "terraform"
 	}
-	return model.Request{BasePath: root, Mode: "native", Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env}, nil
+	request := model.Request{BasePath: root, Mode: "native", Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env}
+	if op.Mode == "iam-probe" {
+		request.Phase = "iam"
+	}
+	return request, nil
 }
 
 func engineName(binary string) string {

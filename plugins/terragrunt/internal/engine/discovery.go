@@ -115,6 +115,7 @@ func discoverProjectWithResolver(ctx context.Context, request model.Request, eva
 		return nil, err
 	}
 	slices.SortFunc(d.result.Inventory, func(a, b model.DiscoveredUnit) int { return strings.Compare(a.Stack+"/"+a.Name, b.Stack+"/"+b.Name) })
+	d.result.Warnings = append(d.result.Warnings, featureOverrideWarnings(request.Features, d.result.Inventory)...)
 	if err := checkIdentityCollisions(d.root, d.result.Inventory); err != nil {
 		return nil, err
 	}
@@ -448,19 +449,20 @@ func resolveUnitInventory(ctx context.Context, logger log.Logger, environment *a
 		return nil, err
 	}
 	result := &model.Resolution{Path: path, Files: append(pctx.FilesRead.Paths(), path)}
+	if err := applyParity(cfg, request, path, result); err != nil {
+		return nil, err
+	}
 	if workspace := request.Environment["TF_WORKSPACE"]; workspace != "" && workspace != "default" && len(cfg.TerragruntDependencies) > 0 && cfg.Dependencies != nil && len(cfg.Dependencies.Paths) > 0 {
 		return nil, workspaceDependencyProblem(path, workspace)
 	}
 	if cfg.Terraform != nil && cfg.Terraform.Source != nil {
 		result.Source = *cfg.Terraform.Source
-		if plainLocalSource(result.Source) {
-			result.Source = localPath(filepath.Dir(path), result.Source)
-			// A missing local module fails discovery, so a bulk run stops before any unit runs. The
-			// active filesystem also sees modules that a generated stack unit names in the overlay.
-			if problem := localSourceProblem(environment.FS, path, *cfg.Terraform.Source, result.Source); problem != nil {
-				return nil, problem
-			}
-			result.Folders = []string{result.Source}
+		if resolved, root, local, problem := resolveLocalModuleSource(environment.FS, path, result.Source); problem != nil {
+			return nil, problem
+		} else if local {
+			// A missing local module fails discovery before any unit runs.
+			result.Source = resolved
+			result.Folders = []string{root}
 		}
 	}
 	if result.OutputDependencies, err = outputDependencies(environment, cfg, path); err != nil {

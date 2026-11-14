@@ -270,6 +270,21 @@ func TestExplicitLockGenerationReplacesAdjacentCopy(t *testing.T) {
 	require.Equal(t, "# pinned\n", read(t, root, lockFileName))
 }
 
+// A manifest that cannot be written is reported with the configuration sentinel and keeps its
+// filesystem cause; the generated file written before it stays in place.
+func TestManifestWriteFailureCarriesSentinel(t *testing.T) {
+	root := t.TempDir()
+	// A regular file where the bookkeeping directory belongs makes the manifest write fail.
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".atmos"), []byte("blocker\n"), 0o600))
+
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{generated("main.tf", "locals {}\n", "overwrite")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.Contains(t, err.Error(), manifestName)
+	var pathErr *os.PathError
+	require.ErrorAs(t, err, &pathErr, "the filesystem cause is preserved")
+	require.Equal(t, "locals {}\n", read(t, root, "main.tf"))
+}
+
 // requireEffectiveDirectoryPermissions skips a test when the process can still create files in a
 // read-only directory, as root with CAP_DAC_OVERRIDE can, or on Windows.
 func requireEffectiveDirectoryPermissions(t *testing.T, directory string) {

@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -211,6 +212,9 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := e.prepareComponentExecution(component.ContextFromOptions(opts...), executionOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
+	if errors.Is(err, errUtils.ErrComponentExcluded) || onlyRunIgnored(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -231,7 +235,7 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, component.WithEnvironment(info.SanitizedEnv))
-	err = e.executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
+	err = e.runPreparedPipeline(&atmosConfig, &info, execCtx, opts...)
 	// A Terraform command can create, change, or remove state, and a failed apply can
 	// still persist partial changes. Drop any preflight snapshot either way so a later
 	// graph node (including one in a keep-going run) reads the current outputs.
@@ -244,6 +248,13 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 	})
 
 	return err
+}
+
+// onlyRunIgnored reports whether err is an ignored failure and nothing else. A lifecycle hook that
+// failed beside it, such as an init-from-module after hook, is an independent failure that still
+// fails the command.
+func onlyRunIgnored(err error) bool {
+	return errors.Is(err, errUtils.ErrComponentRunIgnored) && !errors.Is(err, errUtils.ErrComponentHookFailed)
 }
 
 // invalidateTerraformExecutionCaches clears snapshots under both execution identities.

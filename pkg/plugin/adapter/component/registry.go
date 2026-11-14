@@ -17,6 +17,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
+	"github.com/cloudposse/atmos/pkg/plugin/manifest"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 )
 
@@ -95,8 +96,9 @@ func declaresCapability(activation *extension.Activation) bool {
 			exported = true
 		}
 	}
+	version := manifest.HostContractVersion(activation.Capability)
 	for _, service := range activation.Description.Services {
-		if service.GetService() == activation.Capability && service.GetMin() == 1 && service.GetMax() == 1 {
+		if service.GetService() == activation.Capability && service.GetMin() == version && service.GetMax() == version {
 			versioned = true
 		}
 	}
