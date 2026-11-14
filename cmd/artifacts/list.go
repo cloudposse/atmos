@@ -2,15 +2,14 @@ package artifacts
 
 import (
 	"context"
-	"sort"
 
-	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -19,14 +18,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// collectionQuery runs a list or a search against the service.
-type collectionQuery func(ctx context.Context, svc artifact.Service, in *input, repositories []string, labels []artifact.Label) (*artifact.ListResult, error)
-
 // collection describes one collection-producing subcommand (list or search).
 type collection struct {
+	action artifact.Action
 	parser *flags.StandardParser
 	prefix string
-	query  collectionQuery
 }
 
 // collectionSpec describes how list and search differ; everything else is shared.
@@ -37,12 +33,12 @@ type collectionSpec struct {
 	example string
 	usage   string
 	prefix  string
-	query   collectionQuery
+	action  artifact.Action
 }
 
 func newCollectionCommand(spec *collectionSpec) *cobra.Command {
 	parser := newListParser(spec.prefix)
-	c := &collection{parser: parser, prefix: spec.prefix, query: spec.query}
+	c := &collection{action: spec.action, parser: parser, prefix: spec.prefix}
 	cmd := &cobra.Command{
 		Use:     spec.use,
 		Short:   spec.short,
@@ -74,9 +70,7 @@ list only its versions. Labels are exact key=value selectors; every selector mus
 		example: markdown.ArtifactsListUsageMarkdown,
 		usage:   "atmos artifacts list [name] [--repository=<alias>] [--labels=key=value]",
 		prefix:  listPrefix,
-		query: func(ctx context.Context, svc artifact.Service, in *input, repositories []string, labels []artifact.Label) (*artifact.ListResult, error) {
-			return svc.List(ctx, artifact.ListRequest{Repositories: repositories, Name: firstArg(in), Labels: labels, Refresh: in.flag(flagRefresh)})
-		},
+		action:  artifact.ActionList,
 	})
 }
 
@@ -90,9 +84,7 @@ and caches; it never mutates a catalog.`,
 		example: markdown.ArtifactsSearchUsageMarkdown,
 		usage:   "atmos artifacts search [text] [--repository=<alias>] [--labels=key=value]",
 		prefix:  searchPrefix,
-		query: func(ctx context.Context, svc artifact.Service, in *input, repositories []string, labels []artifact.Label) (*artifact.ListResult, error) {
-			return svc.Search(ctx, artifact.SearchRequest{Repositories: repositories, Query: firstArg(in), Labels: labels, Refresh: in.flag(flagRefresh)})
-		},
+		action:  artifact.ActionSearch,
 	})
 }
 
@@ -111,15 +103,7 @@ func (c *collection) execute(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	listing, err := c.run(commandContext(cmd), in)
-	envelope := &listEnvelope{Artifacts: []listedArtifact{}}
-	if listing != nil {
-		envelope.Artifacts = listed(listing.Artifacts)
-		envelope.Repositories = listing.Repositories
-	}
-	if err != nil {
-		envelope.Error = err.Error()
-	}
+	envelope, err := c.run(commandContext(cmd), in)
 	if renderErr := renderCollection(outputFormat, envelope, err != nil); renderErr != nil && err == nil {
 		return renderErr
 	}
@@ -127,100 +111,45 @@ func (c *collection) execute(cmd *cobra.Command, args []string) error {
 }
 
 // listEnvelope is the structured result of list and search: the `artifacts` array plus
-// per-repository outcomes, and the error when the query failed.
-type listEnvelope struct {
-	// Artifacts are the entries across the selected repositories, sorted lexically.
-	Artifacts []listedArtifact `json:"artifacts"`
+// per-repository outcomes, and the error when the query failed. The type is shared with the
+// artifact step (see pkg/artifact/invoke), so the field names are identical everywhere.
+type listEnvelope = invoke.Collection
 
-	// Repositories reports per-repository outcomes.
-	Repositories []artifact.RepositoryListing `json:"repositories,omitempty"`
+// listedArtifact is one entry of the `artifacts` array.
+type listedArtifact = invoke.Listed
 
-	// Error is set when the query failed.
-	Error string `json:"error,omitempty"`
-}
-
-// listedArtifact is one entry of the `artifacts` array. It carries the named outputs of an
-// operation result (ref, resolved_digest, record_digest, content_digest) next to the listing
-// fields, plus the pinned reference a consumer lockfile persists.
-type listedArtifact struct {
-	Repository     string                   `json:"repository,omitempty"`
-	Ref            string                   `json:"ref"`
-	Name           string                   `json:"name"`
-	Version        string                   `json:"version"`
-	Kind           string                   `json:"kind"`
-	Description    string                   `json:"description,omitempty"`
-	Labels         map[string]string        `json:"labels,omitempty"`
-	Documents      []artifact.Document      `json:"documents,omitempty"`
-	ResolvedDigest digest.Digest            `json:"resolved_digest,omitempty"`
-	RecordDigest   digest.Digest            `json:"record_digest,omitempty"`
-	ContentDigest  digest.Digest            `json:"content_digest,omitempty"`
-	Pinned         artifact.PinnedReference `json:"pinned"`
-}
-
-// listed converts service entries into envelope entries.
-func listed(entries []artifact.ListEntry) []listedArtifact {
-	out := make([]listedArtifact, 0, len(entries))
-	for index := range entries {
-		entry := &entries[index]
-		out = append(out, listedArtifact{
-			Repository:     entry.Repository,
-			Ref:            artifact.Ref{Name: entry.Name, Version: entry.Version}.String(),
-			Name:           entry.Name,
-			Version:        entry.Version,
-			Kind:           entry.Kind,
-			Description:    entry.Description,
-			Labels:         entry.Labels,
-			Documents:      entry.Documents,
-			ResolvedDigest: entry.Pinned.ResolvedDigest,
-			RecordDigest:   entry.Pinned.RecordDigest,
-			ContentDigest:  entry.Pinned.ContentDigest,
-			Pinned:         entry.Pinned,
-		})
+// run maps the flags onto operation parameters and runs the query through the shared
+// implementation. The envelope is never nil: a failed query still yields an empty array and the
+// error text, while the returned error keeps the exit code nonzero.
+func (c *collection) run(ctx context.Context, in *input) (*listEnvelope, error) {
+	failed := func(err error) (*listEnvelope, error) {
+		return &listEnvelope{Artifacts: []listedArtifact{}, Error: err.Error()}, err
 	}
-	return out
-}
-
-func (c *collection) run(ctx context.Context, in *input) (*artifact.ListResult, error) {
 	if atmosConfigPtr == nil {
-		return nil, errUtils.Build(errUtils.ErrArtifactConfigInvalid).
+		return failed(errUtils.Build(errUtils.ErrArtifactConfigInvalid).
 			WithExplanation("Atmos configuration is not loaded.").
 			WithHint("Run this command from a project directory that contains an `atmos.yaml`, or pass `--config`.").
-			Err()
+			Err())
 	}
-	labels, err := selectorLabels(in)
+	labels, err := in.labels()
 	if err != nil {
-		return nil, err
+		return failed(err)
 	}
 	svc, err := newService(atmosConfigPtr, ServiceOptions{})
 	if err != nil {
-		return nil, err
+		return failed(err)
 	}
-	var repositories []string
+	params := &invoke.Params{Action: c.action, Labels: labels, Refresh: in.flag(flagRefresh)}
 	if selected := in.v.GetStringSlice(in.key(flagRepository)); len(selected) > 0 {
-		repositories = selected
+		params.Repositories = selected
 	}
-	return c.query(ctx, svc, in, repositories, labels)
-}
-
-// selectorLabels parses --labels into sorted exact key/value selectors.
-func selectorLabels(in *input) ([]artifact.Label, error) {
-	parsed, err := in.labels()
-	if err != nil {
-		return nil, err
+	if c.action == artifact.ActionSearch {
+		params.Query = firstArg(in)
+	} else {
+		params.Name = firstArg(in)
 	}
-	if len(parsed) == 0 {
-		return nil, nil
-	}
-	keys := make([]string, 0, len(parsed))
-	for key := range parsed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	labels := make([]artifact.Label, 0, len(keys))
-	for _, key := range keys {
-		labels = append(labels, artifact.Label{Key: key, Value: parsed[key]})
-	}
-	return labels, nil
+	outcome, err := invoke.Run(ctx, svc, params)
+	return outcome.Collection, err
 }
 
 // renderCollection writes a listing. Structured formats always render; table-like formats render
@@ -245,9 +174,16 @@ func renderCollection(outputFormat string, envelope *listEnvelope, failed bool) 
 }
 
 // reportListingDiagnostics sends per-repository notes (for example a capability that is missing) to stderr.
+// A repository that could not be listed is reported by name, because the command still succeeds
+// when other repositories were listed and the result must never read as complete.
 func reportListingDiagnostics(repositories []artifact.RepositoryListing) {
 	for index := range repositories {
 		reportDiagnostics(repositories[index].Diagnostics)
+		for _, diagnostic := range repositories[index].Diagnostics {
+			if diagnostic.Severity == artifact.SeverityError {
+				ui.Warningf("The listing is incomplete: repository `%s` could not be listed: %s", repositories[index].Repository, diagnostic.Message)
+			}
+		}
 	}
 }
 

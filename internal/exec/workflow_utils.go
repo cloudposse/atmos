@@ -1083,6 +1083,13 @@ func ExecuteWorkflow(
 					}
 					break
 				}
+				if stepPkg.WrapperRetriesStep(commandType) {
+					// The handler leaves `retry:` to this wrapper; it keeps the operation identity stable between attempts.
+					err = stepPkg.RetryWithConditions(context.Background(), steps[stepIdx].Retry, func() error {
+						return executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
+					})
+					break
+				}
 				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
 			}
 			if err != nil {

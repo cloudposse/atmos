@@ -1,18 +1,17 @@
 package artifacts
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func newCopyCommand() *cobra.Command {
 	parser := newCopyParser()
-	c := &command{action: artifact.ActionCopy, parser: parser, prefix: copyPrefix, run: runCopy, text: textCopy}
+	c := &command{action: artifact.ActionCopy, parser: parser, prefix: copyPrefix, params: paramsCopy, text: textCopy}
 	cmd := &cobra.Command{
 		Use:   "copy <ref>",
 		Short: "Copy an artifact between two repositories",
@@ -28,11 +27,7 @@ content are preserved. Both the source and the destination verification policy a
 	return cmd
 }
 
-func runCopy(ctx context.Context, svc artifact.Service, in *input) (*result, error) {
-	ref, err := in.ref()
-	if err != nil {
-		return nil, err
-	}
+func paramsCopy(in *input) (*invoke.Params, error) {
 	from, err := in.required(flagFrom, envFrom)
 	if err != nil {
 		return nil, err
@@ -41,8 +36,7 @@ func runCopy(ctx context.Context, svc artifact.Service, in *input) (*result, err
 	if err != nil {
 		return nil, err
 	}
-	op, err := svc.Copy(ctx, artifact.CopyRequest{Ref: ref, From: from, To: to, Force: in.flag(flagForce)})
-	return operationFrom(op), err
+	return &invoke.Params{Action: artifact.ActionCopy, Ref: in.args[0], From: from, To: to, Force: in.flag(flagForce)}, nil
 }
 
 func textCopy(res *result) error {

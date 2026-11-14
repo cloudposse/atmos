@@ -147,6 +147,8 @@ func packagingOf(mediaType string) (artifact.Packaging, bool) {
 		return artifact.PackagingTgz, true
 	case artifact.MediaTypeZip:
 		return artifact.PackagingZip, true
+	case artifact.MediaTypeCatalogPayload:
+		return artifact.PackagingCatalog, true
 	default:
 		return "", false
 	}
@@ -161,6 +163,8 @@ func mediaTypeOf(packaging artifact.Packaging) (string, bool) {
 		return artifact.MediaTypeTarGzip, true
 	case artifact.PackagingZip:
 		return artifact.MediaTypeZip, true
+	case artifact.PackagingCatalog:
+		return artifact.MediaTypeCatalogPayload, true
 	default:
 		return "", false
 	}

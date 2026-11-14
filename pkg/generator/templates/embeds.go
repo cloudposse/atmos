@@ -279,6 +279,9 @@ func loadConfiguration(fsys fs.FS, templatePath, defaultName, source, excludeRoo
 			Err()
 	}
 
+	// The reserved distribution directory never reaches generated output.
+	files = withoutDistributionMetadata(files)
+
 	// Find README if it exists
 	var readmeContent string
 	// Use path.Join (forward slashes) not filepath.Join for fs.FS paths.

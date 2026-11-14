@@ -31,11 +31,14 @@ type capturer struct {
 	root    string
 	dataDir string
 	entries []artifact.Entry
-	staged  map[string]string
-	dirs    map[string][]string
-	sources []sourceRecord
-	total   int64
-	counter int
+	// exclusions are the entries the excluder left out.
+	exclusions      []artifact.Exclusion
+	excludedSources []sourceRecord
+	staged          map[string]string
+	dirs            map[string][]string
+	sources         []sourceRecord
+	total           int64
+	counter         int
 
 	// staging identifies the private staging directory, which is skipped when it lies inside the source.
 	staging os.FileInfo
@@ -75,6 +78,11 @@ func (c *capturer) captureChild(abs, rel string) error {
 		return nil
 	}
 	mode := info.Mode()
+	if c.opts.excluder != nil {
+		if rule, excluded := c.opts.excluder(rel, mode.IsDir()); excluded {
+			return c.exclude(abs, rel, rule, info)
+		}
+	}
 	switch {
 	case mode.IsDir():
 		if err := c.addEntry(&artifact.Entry{Path: rel, Type: artifact.EntryDirectory, Mode: permBits(info)}); err != nil {
@@ -89,6 +97,16 @@ func (c *capturer) captureChild(abs, rel string) error {
 	default:
 		return fmt.Errorf("%w: %q is a device, socket, pipe, or other special file (%s)", errUtils.ErrArtifactPackagingInvalid, rel, mode.Type())
 	}
+}
+
+// exclude records a bounded exclusion and its source type for the final recheck.
+func (c *capturer) exclude(abs, rel, rule string, info os.FileInfo) error {
+	if len(c.exclusions) >= c.opts.limits.MaxEntries {
+		return fmt.Errorf("%w: more than %d exclusions", errUtils.ErrArtifactTooLarge, c.opts.limits.MaxEntries)
+	}
+	c.exclusions = append(c.exclusions, artifact.Exclusion{Path: rel, Rule: rule})
+	c.excludedSources = append(c.excludedSources, sourceRecord{abs: abs, rel: rel, info: info})
+	return nil
 }
 
 // captureSymlink records a relative symlink without following it. Absolute or escaping targets
@@ -162,8 +180,30 @@ func (c *capturer) checkLinkContainment() error {
 			continue
 		}
 		resolved, reachable := linkpath.Resolve(record.abs)
+		if reachable && c.opts.excluder != nil && linkpath.Within(realRoot, resolved) {
+			if err := c.checkExcludedTarget(realRoot, resolved, record.rel); err != nil {
+				return err
+			}
+		}
 		if reachable && !linkpath.Within(realRoot, resolved) {
 			return fmt.Errorf("%w: symlink %q resolves outside the source", errUtils.ErrArtifactUnsafePath, record.rel)
+		}
+	}
+	return nil
+}
+
+func (c *capturer) checkExcludedTarget(root, resolved, link string) error {
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return changedError(link, err)
+	}
+	for candidate := rel; candidate != "."; candidate = filepath.Dir(candidate) {
+		info, err := os.Lstat(filepath.Join(root, candidate))
+		if err != nil {
+			continue
+		}
+		if _, excluded := c.opts.excluder(filepath.ToSlash(candidate), info.IsDir()); excluded {
+			return fmt.Errorf("%w: symlink %q targets excluded path %q", errUtils.ErrArtifactUnsafePath, link, candidate)
 		}
 	}
 	return nil

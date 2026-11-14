@@ -111,6 +111,15 @@ func (c *capturer) recheck() error {
 			return err
 		}
 	}
+	for _, record := range c.excludedSources {
+		now, err := os.Lstat(record.abs)
+		if err != nil {
+			return changedError(record.rel, err)
+		}
+		if now.Mode().Type() != record.info.Mode().Type() {
+			return fmt.Errorf("%w: %q changed type while it was being captured", errUtils.ErrArtifactSourceChanged, record.rel)
+		}
+	}
 	for abs, names := range c.dirs {
 		current, err := readDirNames(abs)
 		if err != nil {

@@ -66,6 +66,7 @@ func (c *ConfigRepositories) Describe(alias string) (RepositoryInfo, error) {
 		Packaging:         desc.EffectivePackaging(repoCfg.Packaging),
 		RequiredLockScope: plan.Required,
 		Policy:            policy,
+		Discovery:         discoveryInfoOf(&repoCfg),
 	}
 	if repoCfg.Defaults != nil && repoCfg.Defaults.Metadata != nil {
 		info.Defaults = artifact.Metadata{Description: repoCfg.Defaults.Metadata.Description, Labels: repoCfg.Defaults.Metadata.Labels}

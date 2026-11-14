@@ -1,19 +1,19 @@
 package artifacts
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func newVerifyCommand() *cobra.Command {
 	parser := newRepositoryParser(verifyPrefix)
-	c := &command{action: artifact.ActionVerify, parser: parser, prefix: verifyPrefix, run: runVerify, text: textVerify}
+	c := &command{action: artifact.ActionVerify, parser: parser, prefix: verifyPrefix, params: paramsVerify, text: textVerify}
 	cmd := &cobra.Command{
 		Use:   "verify <ref>",
 		Short: "Require a trusted, valid signature for an artifact",
@@ -30,26 +30,12 @@ instead of reporting success, and the exit code is nonzero on any failure.`,
 	return cmd
 }
 
-func runVerify(ctx context.Context, svc artifact.Service, in *input) (*result, error) {
+func paramsVerify(in *input) (*invoke.Params, error) {
 	repository, err := in.repository()
 	if err != nil {
 		return nil, err
 	}
-	ref, err := in.ref()
-	if err != nil {
-		return nil, err
-	}
-	verified, err := svc.Verify(ctx, artifact.VerifyRequest{Repository: repository, Ref: ref})
-	if verified == nil {
-		return nil, err
-	}
-	res := operationFrom(&verified.Operation)
-	verification := verified.Verification
-	res.Verification = &verification
-	if verification.Subject.Digest != "" {
-		res.Subject = &verification.Subject
-	}
-	return res, err
+	return &invoke.Params{Action: artifact.ActionVerify, Repository: repository, Ref: in.args[0]}, nil
 }
 
 func textVerify(res *result) error {

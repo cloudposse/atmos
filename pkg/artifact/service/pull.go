@@ -18,7 +18,7 @@ import (
 func (s *Service) Pull(ctx context.Context, request artifact.PullRequest) (*artifact.OperationResult, error) {
 	defer perf.Track(nil, "service.Service.Pull")()
 
-	op := s.begin(artifact.ActionPull, request.Repository, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionPull, request.Repository, request.Ref.String())
 	err := s.pull(ctx, op, &request)
 	result := op.done(err)
 	return &result, err
@@ -178,6 +178,7 @@ func fillFromInspection(op *operation, pinned *artifact.PinnedReference, inspect
 	op.result.ContentDigest = pinned.ContentDigest
 	op.result.RepresentationDigest = inspection.Representation.RepresentationDigest
 	op.result.Size = payloadSize(inspection)
+	op.result.SizeMeasured = true
 	if inspection.Record != nil {
 		op.result.Ref = artifact.Ref{Name: inspection.Record.Name, Version: inspection.Record.Version}.String()
 		op.result.ContentDigest = inspection.Record.ContentDigest

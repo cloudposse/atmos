@@ -22,6 +22,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -197,8 +198,18 @@ func processImageWithFS(ctx context.Context, atmosConfig *schema.AtmosConfigurat
 		return ErrNoLayers
 	}
 
+	atmos, err := isAtmosPackage(img)
+	if err != nil {
+		return err
+	}
+	// An Atmos package extracts only its payload layer; legacy images extract every layer.
+	layers, err = selectLayers(img, layers)
+	if err != nil {
+		return err
+	}
+
 	for i, layer := range layers {
-		if err := processLayerWithRetry(ctx, layer, i, destDir, defaultOCILayerRetryConfig()); err != nil {
+		if err := processLayerWithRetryClassified(ctx, layer, i, destDir, layerRetryOptions{config: defaultOCILayerRetryConfig(), atmos: atmos}); err != nil {
 			return errors.Join(
 				errUtils.ErrProcessLayer,
 				fmt.Errorf("layer %d: %w", i, err),
@@ -302,6 +313,10 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 }
 
 func processLayerContext(ctx context.Context, layer v1.Layer, index int, destDir string) error {
+	return processLayerContextClassified(ctx, layer, index, destDir, true)
+}
+
+func processLayerContextClassified(ctx context.Context, layer v1.Layer, index int, destDir string, atmos bool) error {
 	layerDesc, err := layer.Digest()
 	if err != nil {
 		if !observed(ctx) {
@@ -316,10 +331,7 @@ func processLayerContext(ctx context.Context, layer v1.Layer, index int, destDir
 	}
 	defer uncompressed.Close()
 
-	extract := extractTarball
-	if mediaType, mtErr := layer.MediaType(); mtErr == nil && mediaType == zipLayerMediaType {
-		extract = extractZip
-	}
+	extract := extractorForLayer(layer, atmos)
 
 	if err := extract(uncompressed, destDir); err != nil {
 		if !observed(ctx) {
@@ -329,6 +341,20 @@ func processLayerContext(ctx context.Context, layer v1.Layer, index int, destDir
 	}
 
 	return nil
+}
+
+func extractorForLayer(layer v1.Layer, atmos bool) func(io.Reader, string) error {
+	mediaType, err := layer.MediaType()
+	if err != nil {
+		return extractTarball
+	}
+	if mediaType == zipLayerMediaType || (!atmos && string(mediaType) == artifact.MediaTypeZip) {
+		return extractZip
+	}
+	if extract, ok := atmosPayloadExtractor(string(mediaType)); atmos && ok {
+		return extract
+	}
+	return extractTarball
 }
 
 // remoteGetWithRetry calls remoteGet, retrying only transient connection-level
@@ -392,14 +418,23 @@ func isRetryableOCIConnectError(err error) bool {
 // layer stream. Archive extraction failures are deliberately not retried: they
 // may reflect invalid image content and can leave partial files in destDir.
 func processLayerWithRetry(ctx context.Context, layer v1.Layer, index int, destDir string, retryConfig *schema.RetryConfig) error {
+	return processLayerWithRetryClassified(ctx, layer, index, destDir, layerRetryOptions{config: retryConfig, atmos: true})
+}
+
+type layerRetryOptions struct {
+	config *schema.RetryConfig
+	atmos  bool
+}
+
+func processLayerWithRetryClassified(ctx context.Context, layer v1.Layer, index int, destDir string, options layerRetryOptions) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
 	attempts := 0
-	err := retry.WithPredicate(ctx, retryConfig, func() error {
+	err := retry.WithPredicate(ctx, options.config, func() error {
 		attempts++
-		err := processLayerContext(ctx, layer, index, destDir)
+		err := processLayerContextClassified(ctx, layer, index, destDir, options.atmos)
 		if err != nil && ctx.Err() == nil && isRetryableOCILayerError(err) && attempts < ociLayerRetryMaxAttempts {
 			// Do not include the underlying error here: OCI blob errors can contain
 			// signed URLs. The layer index is enough to correlate the retry with the
@@ -456,7 +491,7 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 		return
 	}
 	switch manifest.ArtifactType {
-	case targetArtifactType, opentofuModulePkgArtifactType:
+	case targetArtifactType, opentofuModulePkgArtifactType, artifact.MediaTypeComponent, artifact.MediaTypeScaffold, artifact.MediaTypeArtifact:
 		// Recognized and supported artifact type; nothing to warn about.
 	default:
 		log.Warn("OCI image does not match a recognized artifact type", "image", imageName, "artifactType", manifest.ArtifactType)

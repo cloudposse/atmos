@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	genfs "github.com/cloudposse/atmos/pkg/generator/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -117,6 +118,12 @@ func inspectTree(ctx context.Context, source, target string) ([]entry, error) {
 		if err != nil || rel == "." {
 			return err
 		}
+		if skip, err := isDistributionMetadata(name, rel, d); err != nil || skip {
+			if err == nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return err
+		}
 		if err := rejectDestinationSymlinks(target, rel); err != nil {
 			return err
 		}
@@ -127,6 +134,27 @@ func inspectTree(ctx context.Context, source, target string) ([]entry, error) {
 		return nil
 	})
 	return entries, err
+}
+
+// isDistributionMetadata reports whether a source entry is the reserved distribution directory of a
+// published scaffold (`.atmos/artifact`), which describes the distribution and never reaches the
+// copy. The `.atmos` directory above it is skipped too when nothing else lives there.
+func isDistributionMetadata(name, relative string, d fs.DirEntry) (bool, error) {
+	switch filepath.ToSlash(relative) {
+	case artifact.DistributionDir:
+		return true, nil
+	case artifact.DistributionParent:
+		if !d.IsDir() {
+			return false, nil
+		}
+		children, err := os.ReadDir(name)
+		if err != nil {
+			return false, err
+		}
+		return len(children) == 1 && children[0].Name() == filepath.Base(artifact.DistributionDir), nil
+	default:
+		return false, nil
+	}
 }
 
 func regularEntryInfo(name string, d fs.DirEntry) (fs.FileInfo, error) {
