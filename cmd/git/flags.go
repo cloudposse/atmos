@@ -4,9 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	atmosgit "github.com/cloudposse/atmos/pkg/git"
-
 	"github.com/cloudposse/atmos/pkg/flags"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 

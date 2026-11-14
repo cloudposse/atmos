@@ -548,7 +548,7 @@ func deriveStackNameFromPattern(
 	}
 
 	context := cfg.GetContextFromVars(varsSection)
-	stackName, err := cfg.GetContextPrefix(stackFileName, context, pattern, stackFileName)
+	stackName, err := cfg.GetContextPrefix(stackFileName, &context, pattern, stackFileName)
 	if err != nil {
 		log.Debug("Failed to evaluate name pattern for stack", "file", stackFileName, "error", err)
 		return ""

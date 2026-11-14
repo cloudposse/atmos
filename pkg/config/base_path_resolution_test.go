@@ -761,8 +761,8 @@ func TestFindAllStackConfigsInPathsForStack_ErrorWrapping(t *testing.T) {
 		filepath.Join(os.TempDir(), "nonexistent-stacks-dir-test", "**", "*.yaml"),
 	}
 
-	_, _, _, err := FindAllStackConfigsInPathsForStack(
-		atmosConfig,
+	_, err := FindAllStackConfigsInPathsForStack(
+		&atmosConfig,
 		"test-stack",
 		includeStackPaths,
 		nil,
@@ -789,8 +789,8 @@ func TestFindAllStackConfigsInPathsForStack_GenuineGlobError(t *testing.T) {
 		filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern", "[invalid"),
 	}
 
-	_, _, _, err := FindAllStackConfigsInPathsForStack(
-		atmosConfig,
+	_, err := FindAllStackConfigsInPathsForStack(
+		&atmosConfig,
 		"test-stack",
 		includeStackPaths,
 		nil,

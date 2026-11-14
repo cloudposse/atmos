@@ -21,12 +21,37 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+var (
+	errStackBasePathMissing      = errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
+	errStackIncludedPathsMissing = errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
+	errSpecifiedConfigNotFound   = errors.New("specified config file not found")
+	errImportMatchNotFound       = errors.New("failed to find a match for the import")
+)
+
 // resolveStackGlobMatches expands p into its candidate glob patterns (template-aware, via
 // getStackFilePatterns when p has no extension), resolves matches for each, and distinguishes a
 // genuine glob error (invalid pattern syntax, permission denied) from a valid-but-empty pattern,
 // which must not abort discovery of the other includeStackPaths entries (cloudposse/atmos#2867).
 // Returns (nil, nil) when the pattern is valid but matched nothing -- callers must treat that as
 // "continue to the next included_paths entry", not an error. Shared by
+// stackPathExcluded preserves physical-stack matching's tolerance of invalid
+// exclusion patterns while normal manifest discovery treats them as exclusions.
+func stackPathExcluded(patterns []string, path string, excludeInvalid bool) bool {
+	for _, pattern := range patterns {
+		matched, err := u.PathMatch(pattern, path)
+		if err != nil {
+			if excludeInvalid {
+				return true
+			}
+			continue
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
 // FindAllStackConfigsInPathsForStack and FindAllStackConfigsInPaths, which were previously
 // duplicating this exact pattern-expansion/error-construction logic.
 func resolveStackGlobMatches(atmosConfig *schema.AtmosConfiguration, p string) ([]string, error) {
@@ -67,21 +92,23 @@ func resolveStackGlobMatches(atmosConfig *schema.AtmosConfiguration, p string) (
 	return allMatches, nil
 }
 
+// StackConfigFiles contains discovered manifest paths and the physical-stack match mode.
+type StackConfigFiles struct {
+	AbsolutePaths []string
+	RelativePaths []string
+	Physical      bool
+}
+
 // FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack.
-func FindAllStackConfigsInPathsForStack(
-	atmosConfig schema.AtmosConfiguration,
-	stack string,
-	includeStackPaths []string,
-	excludeStackPaths []string,
-) ([]string, []string, bool, error) {
+func FindAllStackConfigsInPathsForStack(atmosConfig *schema.AtmosConfiguration, stack string, includeStackPaths, excludeStackPaths []string) (StackConfigFiles, error) {
 	var absolutePaths []string
 	var relativePaths []string
 	stackIsDir := strings.IndexAny(stack, "/") > 0
 
 	for _, p := range includeStackPaths {
-		allMatches, err := resolveStackGlobMatches(&atmosConfig, p)
+		allMatches, err := resolveStackGlobMatches(atmosConfig, p)
 		if err != nil {
-			return nil, nil, false, err
+			return StackConfigFiles{}, err
 		}
 		if len(allMatches) == 0 {
 			continue
@@ -94,35 +121,10 @@ func FindAllStackConfigsInPathsForStack(
 			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
 			stackMatch := matchesStackFilePattern(filepath.ToSlash(matchedFileAbsolutePath), stack)
 
-			if stackMatch {
-				allExcluded := true
-				for _, excludePath := range excludeStackPaths {
-					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
-					if err != nil {
-						continue
-					} else if excludeMatch {
-						allExcluded = false
-						break
-					}
-				}
-
-				if allExcluded && stackIsDir {
-					return []string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true, nil
-				}
+			if stackMatch && stackIsDir && !stackPathExcluded(excludeStackPaths, matchedFileAbsolutePath, false) {
+				return StackConfigFiles{[]string{matchedFileAbsolutePath}, []string{matchedFileRelativePath}, true}, nil
 			}
-
-			include := true
-
-			for _, excludePath := range excludeStackPaths {
-				excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
-				if err != nil {
-					include = false
-					continue
-				} else if excludeMatch {
-					include = false
-					continue
-				}
-			}
+			include := !stackPathExcluded(excludeStackPaths, matchedFileAbsolutePath, true)
 
 			if include {
 				absolutePaths = append(absolutePaths, matchedFileAbsolutePath)
@@ -135,10 +137,10 @@ func FindAllStackConfigsInPathsForStack(
 		// The paths are backtick-wrapped so the markdown error renderer treats them as a literal
 		// code span instead of parsing the "**" glob wildcard (a common included_paths pattern) as
 		// emphasis, which otherwise corrupts the rendered path list.
-		return nil, nil, false, fmt.Errorf("%w for the provided stack '%s' in the paths `%v`", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
+		return StackConfigFiles{}, fmt.Errorf("%w for the provided stack '%s' in the paths `%v`", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
 	}
 
-	return absolutePaths, relativePaths, false, nil
+	return StackConfigFiles{absolutePaths, relativePaths, false}, nil
 }
 
 // FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs.
@@ -193,406 +195,13 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
-// processEnvVars applies the ATMOS_* environment variable overrides to the Atmos configuration.
-func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
-	defer perf.Track(atmosConfig, "config.processEnvVars")()
-
-	foundEnvVarMessage := "Found ENV variable"
-
-	basePath := os.Getenv("ATMOS_BASE_PATH")
-	if len(basePath) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_BASE_PATH", basePath)
-		atmosConfig.BasePath = basePath
-		atmosConfig.BasePathSource = basePathSourceRuntime
-	}
-
-	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
-	if len(vendorBasePath) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_VENDOR_BASE_PATH", vendorBasePath)
-		atmosConfig.Vendor.BasePath = vendorBasePath
-	}
-
-	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
-	if len(stacksBasePath) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_STACKS_BASE_PATH", stacksBasePath)
-		atmosConfig.Stacks.BasePath = stacksBasePath
-	}
-
-	stacksIncludedPaths := os.Getenv("ATMOS_STACKS_INCLUDED_PATHS")
-	if len(stacksIncludedPaths) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_STACKS_INCLUDED_PATHS", stacksIncludedPaths)
-		atmosConfig.Stacks.IncludedPaths = strings.Split(stacksIncludedPaths, ",")
-	}
-
-	stacksExcludedPaths := os.Getenv("ATMOS_STACKS_EXCLUDED_PATHS")
-	if len(stacksExcludedPaths) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_STACKS_EXCLUDED_PATHS", stacksExcludedPaths)
-		atmosConfig.Stacks.ExcludedPaths = strings.Split(stacksExcludedPaths, ",")
-	}
-
-	stacksNamePattern := os.Getenv("ATMOS_STACKS_NAME_PATTERN")
-	if len(stacksNamePattern) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_STACKS_NAME_PATTERN", stacksNamePattern)
-		atmosConfig.Stacks.NamePattern = stacksNamePattern
-	}
-
-	stacksNameTemplate := os.Getenv("ATMOS_STACKS_NAME_TEMPLATE")
-	if len(stacksNameTemplate) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_STACKS_NAME_TEMPLATE", stacksNameTemplate)
-		atmosConfig.Stacks.NameTemplate = stacksNameTemplate
-	}
-
-	componentsTerraformCommand := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND")
-	if len(componentsTerraformCommand) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_COMMAND", componentsTerraformCommand)
-		atmosConfig.Components.Terraform.Command = componentsTerraformCommand
-	}
-
-	componentsTerraformBasePath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-	if len(componentsTerraformBasePath) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", componentsTerraformBasePath)
-		atmosConfig.Components.Terraform.BasePath = componentsTerraformBasePath
-	}
-
-	componentsTerraformApplyAutoApprove := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE")
-	if len(componentsTerraformApplyAutoApprove) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE", componentsTerraformApplyAutoApprove)
-		applyAutoApproveBool, err := strconv.ParseBool(componentsTerraformApplyAutoApprove)
-		if err != nil {
-			return err
-		}
-		atmosConfig.Components.Terraform.ApplyAutoApprove = applyAutoApproveBool
-	}
-
-	componentsTerraformDeployRunInit := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT")
-	if len(componentsTerraformDeployRunInit) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT", componentsTerraformDeployRunInit)
-		deployRunInitBool, err := strconv.ParseBool(componentsTerraformDeployRunInit)
-		if err != nil {
-			return err
-		}
-		atmosConfig.Components.Terraform.DeployRunInit = deployRunInitBool
-	}
-
-	componentsInitRunReconfigure := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE")
-	if len(componentsInitRunReconfigure) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE", componentsInitRunReconfigure)
-		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
-		if err != nil {
-			return err
-		}
-		atmosConfig.Components.Terraform.OverrideInitRunReconfigure(initRunReconfigureBool)
-	}
-
-	componentsInitPassVars := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS")
-	if len(componentsInitPassVars) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS", componentsInitPassVars)
-		initPassVarsBool, err := strconv.ParseBool(componentsInitPassVars)
-		if err != nil {
-			return err
-		}
-		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
-	}
-
-	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", foundEnvVarMessage,
-		schema.TerraformInitMode.IsValid, errUtils.ErrInvalidInitMode, &atmosConfig.Components.Terraform.Init.Mode); err != nil {
-		return err
-	}
-
-	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE", foundEnvVarMessage,
-		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
-		return fmt.Errorf("%w (from ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE)", err)
-	}
-
-	if err := normalizeConfiguredMocksMode(atmosConfig); err != nil {
-		return err
-	}
-
-	if err := normalizeConfiguredToolchainInstall(atmosConfig); err != nil {
-		return err
-	}
-
-	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", foundEnvVarMessage,
-		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
-		return err
-	}
-
-	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", foundEnvVarMessage,
-		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
-		return err
-	}
-
-	componentsPlanSkipPlanfile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE")
-	if len(componentsPlanSkipPlanfile) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE", componentsPlanSkipPlanfile)
-		planSkipPlanfileBool, err := strconv.ParseBool(componentsPlanSkipPlanfile)
-		if err != nil {
-			return err
-		}
-		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
-	}
-
-	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
-	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE", componentsTerraformAutoGenerateBackendFile)
-		componentsTerraformAutoGenerateBackendFileBool, err := strconv.ParseBool(componentsTerraformAutoGenerateBackendFile)
-		if err != nil {
-			return err
-		}
-		atmosConfig.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
-	}
-
-	// This function reads 40+ ATMOS_* env vars by direct os.Getenv into atmosConfig fields
-	// (see ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE etc. above) — that established
-	// pattern predates the forbidigo os.Getenv ban and is grandfathered in as existing code.
-	// viper.BindEnv is not an option either: it's restricted to pkg/flags/ and test files
-	// (see .golangci.yml). Follow the same NO_PAGER precedent in config.go for new additions
-	// to this function until it's migrated wholesale to the newer flags infrastructure.
-	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
-	componentsTerraformFlagsLockTimeout := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT")
-	if len(componentsTerraformFlagsLockTimeout) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT", componentsTerraformFlagsLockTimeout)
-		atmosConfig.Components.Terraform.Flags.LockTimeout = componentsTerraformFlagsLockTimeout
-	}
-
-	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
-	componentsTerraformFlagsLock := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK")
-	if len(componentsTerraformFlagsLock) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", componentsTerraformFlagsLock)
-		componentsTerraformFlagsLockBool, err := strconv.ParseBool(componentsTerraformFlagsLock)
-		if err != nil {
-			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK: %w", errUtils.ErrInvalidConfig, err)
-		}
-		atmosConfig.Components.Terraform.Flags.Lock = &componentsTerraformFlagsLockBool
-	}
-
-	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
-	componentsTerraformFlagsParallelism := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM")
-	if len(componentsTerraformFlagsParallelism) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", componentsTerraformFlagsParallelism)
-		componentsTerraformFlagsParallelismInt, err := strconv.Atoi(componentsTerraformFlagsParallelism)
-		if err != nil {
-			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM: %w", errUtils.ErrInvalidConfig, err)
-		}
-		atmosConfig.Components.Terraform.Flags.Parallelism = &componentsTerraformFlagsParallelismInt
-	}
-
-	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
-	componentsTerraformFlagsRefresh := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH")
-	if len(componentsTerraformFlagsRefresh) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", componentsTerraformFlagsRefresh)
-		componentsTerraformFlagsRefreshBool, err := strconv.ParseBool(componentsTerraformFlagsRefresh)
-		if err != nil {
-			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH: %w", errUtils.ErrInvalidConfig, err)
-		}
-		atmosConfig.Components.Terraform.Flags.Refresh = &componentsTerraformFlagsRefreshBool
-	}
-
-	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
-	componentsTerraformFlagsCompactWarnings := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS")
-	if len(componentsTerraformFlagsCompactWarnings) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", componentsTerraformFlagsCompactWarnings)
-		componentsTerraformFlagsCompactWarningsBool, err := strconv.ParseBool(componentsTerraformFlagsCompactWarnings)
-		if err != nil {
-			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS: %w", errUtils.ErrInvalidConfig, err)
-		}
-		atmosConfig.Components.Terraform.Flags.CompactWarnings = componentsTerraformFlagsCompactWarningsBool
-	}
-
-	componentsHelmfileCommand := os.Getenv("ATMOS_COMPONENTS_HELMFILE_COMMAND")
-	if len(componentsHelmfileCommand) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_COMMAND", componentsHelmfileCommand)
-		atmosConfig.Components.Helmfile.Command = componentsHelmfileCommand
-	}
-
-	componentsHelmfileBasePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
-	if len(componentsHelmfileBasePath) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_BASE_PATH", componentsHelmfileBasePath)
-		atmosConfig.Components.Helmfile.BasePath = componentsHelmfileBasePath
-	}
-
-	componentsHelmfileUseEKS := os.Getenv("ATMOS_COMPONENTS_HELMFILE_USE_EKS")
-	if len(componentsHelmfileUseEKS) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_USE_EKS", componentsHelmfileUseEKS)
-		useEKSBool, err := strconv.ParseBool(componentsHelmfileUseEKS)
-		if err != nil {
-			return err
-		}
-		atmosConfig.Components.Helmfile.UseEKS = useEKSBool
-	}
-
-	componentsHelmfileKubeconfigPath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH")
-	if len(componentsHelmfileKubeconfigPath) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH", componentsHelmfileKubeconfigPath)
-		atmosConfig.Components.Helmfile.KubeconfigPath = componentsHelmfileKubeconfigPath
-	}
-
-	componentsHelmfileHelmAwsProfilePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN")
-	if len(componentsHelmfileHelmAwsProfilePattern) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN", componentsHelmfileHelmAwsProfilePattern)
-		atmosConfig.Components.Helmfile.HelmAwsProfilePattern = componentsHelmfileHelmAwsProfilePattern
-	}
-
-	componentsHelmfileClusterNamePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN")
-	if len(componentsHelmfileClusterNamePattern) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN", componentsHelmfileClusterNamePattern)
-		atmosConfig.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
-	}
-
-	componentsPackerCommand := os.Getenv("ATMOS_COMPONENTS_PACKER_COMMAND")
-	if len(componentsPackerCommand) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_PACKER_COMMAND", componentsPackerCommand)
-		atmosConfig.Components.Packer.Command = componentsPackerCommand
-	}
-
-	componentsPackerBasePath := os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
-	if len(componentsPackerBasePath) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_PACKER_BASE_PATH", componentsPackerBasePath)
-		atmosConfig.Components.Packer.BasePath = componentsPackerBasePath
-	}
-
-	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
-	if len(workflowsBasePath) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_WORKFLOWS_BASE_PATH", workflowsBasePath)
-		atmosConfig.Workflows.BasePath = workflowsBasePath
-	}
-
-	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
-	if len(jsonschemaBasePath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"jsonschema\"] using ENV variable", "ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH", jsonschemaBasePath)
-		atmosConfig.SetResourcePath("jsonschema", schema.ResourcePath{BasePath: jsonschemaBasePath})
-	}
-
-	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
-	if len(opaBasePath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"opa\"] using ENV variable", "ATMOS_SCHEMAS_OPA_BASE_PATH", opaBasePath)
-		atmosConfig.SetResourcePath("opa", schema.ResourcePath{BasePath: opaBasePath})
-	}
-
-	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
-	if len(cueBasePath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"cue\"] using ENV variable", "ATMOS_SCHEMAS_CUE_BASE_PATH", cueBasePath)
-		atmosConfig.SetResourcePath("cue", schema.ResourcePath{BasePath: cueBasePath})
-	}
-
-	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
-	if len(atmosManifestJsonSchemaPath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"atmos\"] using ENV variable", "ATMOS_SCHEMAS_ATMOS_MANIFEST", atmosManifestJsonSchemaPath)
-		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: atmosManifestJsonSchemaPath})
-	}
-
-	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
-	if len(tfAppendUserAgent) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT", tfAppendUserAgent)
-		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
-	}
-
-	// Note: ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE and ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR
-	// are handled via Viper bindEnv in setEnv() and populated during Unmarshal, not here.
-
-	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
-	if len(listMergeStrategy) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_SETTINGS_LIST_MERGE_STRATEGY", listMergeStrategy)
-		atmosConfig.Settings.ListMergeStrategy = listMergeStrategy
-	}
-
-	versionEnabled := os.Getenv("ATMOS_VERSION_CHECK_ENABLED")
-	if len(versionEnabled) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_VERSION_CHECK_ENABLED", versionEnabled)
-		enabled, err := strconv.ParseBool(versionEnabled)
-		if err != nil {
-			log.Warn("Invalid boolean value for ENV variable; using default.", "ATMOS_VERSION_CHECK_ENABLED", versionEnabled)
-		} else {
-			atmosConfig.Version.Check.Enabled = enabled
-		}
-	}
-
-	ciCommentsEnabled := os.Getenv("ATMOS_CI_COMMENTS_ENABLED")
-	if len(ciCommentsEnabled) > 0 {
-		log.Debug(foundEnvVarMessage, "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
-		enabled, err := strconv.ParseBool(ciCommentsEnabled)
-		if err != nil {
-			log.Warn("Invalid boolean value for ENV variable; using default.", "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
-		} else {
-			atmosConfig.CI.Comments.Enabled = &enabled
-		}
-	}
-
-	return nil
-}
-
-// setInitEnumEnvVar reads envVar, normalizes it (trim + lowercase), validates it with isValid,
-// and stores it in dest. Shared by the init.mode/init.reconfigure/init.upgrade ENV variables so
-// each one stays a single call in processEnvVars instead of a repeated read/validate/assign block.
-func setInitEnumEnvVar[T ~string](envVar, foundEnvVarMessage string, isValid func(T) bool, sentinel error, dest *T) error {
-	value := os.Getenv(envVar) //nolint:forbidigo // matches the established os.Getenv pattern used throughout processEnvVars; see comment above ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT.
-	if len(value) == 0 {
-		return nil
-	}
-	log.Debug(foundEnvVarMessage, envVar, value)
-	normalized, err := normalizeInitEnumValue(value, isValid, sentinel)
-	if err != nil {
-		return err
-	}
-	*dest = normalized
-	return nil
-}
-
-// normalizeConfiguredMocksMode lower-cases and validates components.terraform.mocks.mode as loaded
-// from atmos.yaml, so a typo fails at config load (as an invalid ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE
-// does) instead of being accepted silently until a --use-mocks lookup runs.
-func normalizeConfiguredMocksMode(atmosConfig *schema.AtmosConfiguration) error {
-	mode, err := normalizeInitEnumValue(string(atmosConfig.Components.Terraform.Mocks.Mode),
-		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode)
-	if err != nil {
-		return fmt.Errorf("%w (from components.terraform.mocks.mode in atmos.yaml)", err)
-	}
-	atmosConfig.Components.Terraform.Mocks.Mode = mode
-	return nil
-}
-
-// normalizeConfiguredToolchainInstall lower-cases and validates toolchain.install as loaded from
-// atmos.yaml or ATMOS_TOOLCHAIN_INSTALL (bound through Viper), so a typo fails at config load
-// instead of being accepted silently until a tool is needed.
-func normalizeConfiguredToolchainInstall(atmosConfig *schema.AtmosConfiguration) error {
-	policy, err := normalizeInitEnumValue(string(atmosConfig.Toolchain.Install),
-		schema.ToolchainInstall.IsValid, errUtils.ErrInvalidToolchainInstall)
-	if err != nil {
-		return errUtils.Build(err).
-			WithHintf("Set `toolchain.install` (or `ATMOS_TOOLCHAIN_INSTALL`) to one of: %s", toolchainInstallValuesList()).
-			WithContext("value", string(atmosConfig.Toolchain.Install)).
-			Err()
-	}
-	atmosConfig.Toolchain.Install = policy
-	return nil
-}
-
-// toolchainInstallValuesList renders the valid toolchain.install values for hints.
-func toolchainInstallValuesList() string {
-	values := make([]string, 0, len(schema.ToolchainInstallValues))
-	for _, value := range schema.ToolchainInstallValues {
-		values = append(values, string(value))
-	}
-	return strings.Join(values, ", ")
-}
-
-// normalizeInitEnumValue trims and lower-cases value, then validates it with isValid, returning
-// a wrapped sentinel error (with the original, un-normalized value for readability) when invalid.
-func normalizeInitEnumValue[T ~string](value string, isValid func(T) bool, sentinel error) (T, error) {
-	normalized := T(strings.ToLower(strings.TrimSpace(value)))
-	if !isValid(normalized) {
-		return "", fmt.Errorf("%w: %q", sentinel, value)
-	}
-	return normalized, nil
-}
-
-func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) error {
+func checkConfig(atmosConfig *schema.AtmosConfiguration, isProcessStack bool) error {
 	if isProcessStack && len(atmosConfig.Stacks.BasePath) < 1 {
-		return errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
+		return errStackBasePathMissing
 	}
 
 	if isProcessStack && len(atmosConfig.Stacks.IncludedPaths) < 1 {
-		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
+		return errStackIncludedPathsMissing
 	}
 
 	if len(atmosConfig.Logs.Level) > 0 {
@@ -845,6 +454,13 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		atmosConfig.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
 		log.Debug(cmdLineArg, WorkflowDirFlag, configAndStacksInfo.WorkflowsDir)
 	}
+	return setTerraformInitFlags(atmosConfig, configAndStacksInfo)
+}
+
+// applyInitEnumFlag normalizes and validates a CLI-flag override (raw, possibly empty) for one of
+// the init.mode/init.reconfigure/init.upgrade tri-state settings, storing the result in dest when
+// raw is non-empty. Shared by setFeatureFlags so each of the three flags stays a single call.
+func setTerraformInitFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
 		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
 		if err != nil {
@@ -861,6 +477,21 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.InitPassVars)
 	}
+	if err := setInitEnumFlags(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {
+		planSkipPlanfileBool, err := strconv.ParseBool(configAndStacksInfo.PlanSkipPlanfile)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
+		log.Debug(cmdLineArg, PlanSkipPlanfile, configAndStacksInfo.PlanSkipPlanfile)
+	}
+	return nil
+}
+
+func setInitEnumFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if err := applyInitEnumFlag(configAndStacksInfo.InitMode, InitModeFlag,
 		schema.TerraformInitMode.IsValid, errUtils.ErrInvalidInitMode, &atmosConfig.Components.Terraform.Init.Mode); err != nil {
 		return err
@@ -877,20 +508,9 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
 		return err
 	}
-	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {
-		planSkipPlanfileBool, err := strconv.ParseBool(configAndStacksInfo.PlanSkipPlanfile)
-		if err != nil {
-			return err
-		}
-		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
-		log.Debug(cmdLineArg, PlanSkipPlanfile, configAndStacksInfo.PlanSkipPlanfile)
-	}
 	return nil
 }
 
-// applyInitEnumFlag normalizes and validates a CLI-flag override (raw, possibly empty) for one of
-// the init.mode/init.reconfigure/init.upgrade tri-state settings, storing the result in dest when
-// raw is non-empty. Shared by setFeatureFlags so each of the three flags stays a single call.
 func applyInitEnumFlag[T ~string](raw, flagName string, isValid func(T) bool, sentinel error, dest *T) error {
 	if len(raw) == 0 {
 		return nil
@@ -986,256 +606,4 @@ func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.Stores = storeRegistry
 
 	return nil
-}
-
-// GetContextFromVars creates a context object from the provided variables.
-func GetContextFromVars(vars map[string]any) schema.Context {
-	var context schema.Context
-
-	if namespace, ok := vars["namespace"].(string); ok {
-		context.Namespace = namespace
-	}
-
-	if tenant, ok := vars["tenant"].(string); ok {
-		context.Tenant = tenant
-	}
-
-	if environment, ok := vars["environment"].(string); ok {
-		context.Environment = environment
-	}
-
-	if stage, ok := vars["stage"].(string); ok {
-		context.Stage = stage
-	}
-
-	if region, ok := vars["region"].(string); ok {
-		context.Region = region
-	}
-
-	if attributes, ok := vars["attributes"].([]any); ok {
-		context.Attributes = attributes
-	}
-
-	return context
-}
-
-// GetContextPrefix calculates context prefix from the context.
-func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
-	if len(stackNamePattern) == 0 {
-		return "", errUtils.ErrMissingStackNameTemplateAndPattern
-	}
-
-	contextPrefix := ""
-	stackNamePatternParts := strings.Split(stackNamePattern, "-")
-
-	for _, part := range stackNamePatternParts {
-		if part == "{namespace}" {
-			if len(context.Namespace) == 0 {
-				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'namespace', but the stack '%s' does not have a namespace defined in the stack file '%s'",
-					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
-			}
-			if len(contextPrefix) == 0 {
-				contextPrefix = context.Namespace
-			} else {
-				contextPrefix = contextPrefix + "-" + context.Namespace
-			}
-		} else if part == "{tenant}" {
-			if len(context.Tenant) == 0 {
-				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'tenant', but the stack '%s' does not have a tenant defined in the stack file '%s'",
-					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
-			}
-			if len(contextPrefix) == 0 {
-				contextPrefix = context.Tenant
-			} else {
-				contextPrefix = contextPrefix + "-" + context.Tenant
-			}
-		} else if part == "{environment}" {
-			if len(context.Environment) == 0 {
-				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'environment', but the stack '%s' does not have an environment defined in the stack file '%s'",
-					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
-			}
-			if len(contextPrefix) == 0 {
-				contextPrefix = context.Environment
-			} else {
-				contextPrefix = contextPrefix + "-" + context.Environment
-			}
-		} else if part == "{stage}" {
-			if len(context.Stage) == 0 {
-				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'stage', but the stack '%s' does not have a stage defined in the stack file '%s'",
-					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
-			}
-			if len(contextPrefix) == 0 {
-				contextPrefix = context.Stage
-			} else {
-				contextPrefix = contextPrefix + "-" + context.Stage
-			}
-		}
-	}
-
-	return contextPrefix, nil
-}
-
-// ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced.
-func ReplaceContextTokens(context schema.Context, pattern string) string {
-	r := strings.NewReplacer(
-		"{base-component}", context.BaseComponent,
-		"{component}", context.Component,
-		"{component-path}", context.ComponentPath,
-		"{namespace}", context.Namespace,
-		"{environment}", context.Environment,
-		"{region}", context.Region,
-		"{tenant}", context.Tenant,
-		"{stage}", context.Stage,
-		"{workspace}", context.Workspace,
-		"{terraform_workspace}", context.TerraformWorkspace,
-		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOfStrings(context.Attributes), "-"),
-	)
-	return r.Replace(pattern)
-}
-
-// GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern.
-func GetStackNameFromContextAndStackNamePattern(
-	namespace string,
-	tenant string,
-	environment string,
-	stage string,
-	stackNamePattern string,
-) (string, error) {
-	if len(stackNamePattern) == 0 {
-		return "", errUtils.ErrMissingStackNameTemplateAndPattern
-	}
-
-	var stack string
-	stackNamePatternParts := strings.Split(stackNamePattern, "-")
-
-	for _, part := range stackNamePatternParts {
-		if part == "{namespace}" {
-			if len(namespace) == 0 {
-				return "", fmt.Errorf("stack name pattern '%s' includes '{namespace}', but namespace is not provided", stackNamePattern)
-			}
-			if len(stack) == 0 {
-				stack = namespace
-			} else {
-				stack = fmt.Sprintf("%s-%s", stack, namespace)
-			}
-		} else if part == "{tenant}" {
-			if len(tenant) == 0 {
-				return "", fmt.Errorf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", stackNamePattern)
-			}
-			if len(stack) == 0 {
-				stack = tenant
-			} else {
-				stack = fmt.Sprintf("%s-%s", stack, tenant)
-			}
-		} else if part == "{environment}" {
-			if len(environment) == 0 {
-				return "", fmt.Errorf("stack name pattern '%s' includes '{environment}', but environment is not provided", stackNamePattern)
-			}
-			if len(stack) == 0 {
-				stack = environment
-			} else {
-				stack = fmt.Sprintf("%s-%s", stack, environment)
-			}
-		} else if part == "{stage}" {
-			if len(stage) == 0 {
-				return "", fmt.Errorf("stack name pattern '%s' includes '{stage}', but stage is not provided", stackNamePattern)
-			}
-			if len(stack) == 0 {
-				stack = stage
-			} else {
-				stack = fmt.Sprintf("%s-%s", stack, stage)
-			}
-		}
-	}
-
-	return stack, nil
-}
-
-// getStackFilePatterns returns a slice of possible file patterns for a given base path.
-func getStackFilePatterns(basePath string, includeTemplates bool) []string {
-	patterns := []string{
-		basePath + u.YamlFileExtension,
-		basePath + u.YmlFileExtension,
-	}
-
-	if includeTemplates {
-		patterns = append(
-			patterns,
-			basePath+u.YamlTemplateExtension,
-			basePath+u.YmlTemplateExtension,
-		)
-	}
-
-	return patterns
-}
-
-// matchesStackFilePattern checks if a file path matches any of the valid stack file patterns.
-func matchesStackFilePattern(filePath, stackName string) bool {
-	defer perf.Track(nil, "config.matchesStackFilePattern")()
-
-	// Always include template files for normal operations (imports, etc.)
-	patterns := getStackFilePatterns(stackName, true)
-	for _, pattern := range patterns {
-		if strings.HasSuffix(filePath, pattern) {
-			return true
-		}
-	}
-	return false
-}
-
-func getConfigFilePatterns(path string, forGlobMatch bool) []string {
-	defer perf.Track(nil, "config.getConfigFilePatterns")()
-
-	if path == "" {
-		return []string{}
-	}
-	ext := filepath.Ext(path)
-	if ext != "" {
-		return []string{path}
-	}
-
-	// include template files for normal operations
-	patterns := getStackFilePatterns(path, true)
-	if !forGlobMatch {
-		// For direct file search, include the exact path without extension
-		patterns = append([]string{path}, patterns...)
-	}
-
-	return patterns
-}
-
-func SearchConfigFile(configPath string, atmosConfig schema.AtmosConfiguration) (string, error) {
-	// If path already has an extension, verify it exists
-	if ext := filepath.Ext(configPath); ext != "" {
-		if _, err := os.Stat(configPath); err == nil {
-			return configPath, nil
-		}
-		return "", fmt.Errorf("specified config file not found: %s", configPath)
-	}
-
-	dir := filepath.Dir(configPath)
-	base := filepath.Base(configPath)
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", fmt.Errorf("error reading directory %s: %v", dir, err)
-	}
-
-	// Create a map of existing files for quick lookup
-	fileMap := make(map[string]bool)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			fileMap[entry.Name()] = true
-		}
-	}
-
-	// Try all patterns in order
-	patterns := getConfigFilePatterns(base, false)
-	for _, pattern := range patterns {
-		if fileMap[pattern] {
-			return filepath.Join(dir, pattern), nil
-		}
-	}
-
-	return "", fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", configPath, dir, base)
 }
