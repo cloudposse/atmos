@@ -44,6 +44,12 @@ const (
 	giteaHTTPTimeout = 10 * time.Second
 )
 
+// GiteaRunnerRegistrationToken is the throwaway-local, instance-wide runner
+// registration token the Gitea emulator presets (Gitea requires at least 32
+// characters). A gitea/runner container passes the same value to register itself.
+// Like the admin credentials, it only works against the local emulator.
+const GiteaRunnerRegistrationToken = "atmos-local-gitea-runner-registration-token"
+
 // giteaExecer is the subset of container.Runtime the git bootstrap needs (Exec).
 // It keeps the helpers testable and the dependency explicit (mirrors vaultExecer).
 type giteaExecer interface {

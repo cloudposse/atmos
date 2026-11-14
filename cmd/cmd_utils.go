@@ -2214,6 +2214,7 @@ func isRootValueFlag(arg string) bool {
 		"--heatmap-mode",
 		"--identity",
 		"--logs-file",
+		"--links",
 		"--logs-level",
 		"--pager",
 		"--profile",

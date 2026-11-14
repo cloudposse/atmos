@@ -101,7 +101,8 @@ type ContainerMount struct {
 
 // ContainerPort represents a port mapping for container steps.
 type ContainerPort struct {
-	Host      int    `yaml:"host,omitempty" json:"host,omitempty" mapstructure:"host"`
+	// Host is a port number or an IP:port string (IPv6 addresses require brackets).
+	Host      any    `yaml:"host,omitempty" json:"host,omitempty" mapstructure:"host" jsonschema:"oneof_type=integer;string;null"`
 	Container int    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
 	Protocol  string `yaml:"protocol,omitempty" json:"protocol,omitempty" mapstructure:"protocol"`
 }

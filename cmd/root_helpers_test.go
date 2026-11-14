@@ -924,12 +924,25 @@ func TestIsBuiltinConfigValidationArgs(t *testing.T) {
 }
 
 func TestConfigForStartupLogger(t *testing.T) {
+	// Neutralize any inherited log-level environment so the default-fallback case is deterministic.
+	for _, key := range []string{"ATMOS_LOGS_LEVEL", "ATMOS_LOGS_FILE", "ATMOS_VERBOSE"} {
+		t.Setenv(key, "")
+	}
+
 	config := &schema.AtmosConfiguration{Logs: schema.Logs{File: "custom.log", Level: "Info"}}
 	assert.Same(t, config, configForStartupLogger(config, nil))
 
+	// On a config-load failure with no explicit level requested, fall back to the safe default.
 	fallback := configForStartupLogger(config, errors.New("invalid config"))
 	assert.Equal(t, "/dev/stderr", fallback.Logs.File)
 	assert.Equal(t, "Warning", fallback.Logs.Level)
+
+	// But an explicitly requested level (here via ATMOS_LOGS_LEVEL) must be preserved on the
+	// fallback instead of being discarded in favor of Warning, so that a Debug/Trace diagnostic the
+	// user explicitly asked for is not silently filtered out when configuration fails to load.
+	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+	explicit := configForStartupLogger(config, errors.New("invalid config"))
+	assert.Equal(t, "Debug", explicit.Logs.Level, "explicit log level must survive the config-error fallback")
 }
 
 // TestSetupLogger_InvalidLogLevel tests error handling for invalid log levels.

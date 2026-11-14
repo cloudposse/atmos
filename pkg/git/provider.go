@@ -42,6 +42,9 @@ type CloneOptions struct {
 	RepoContext
 	// URI is the remote repository URI.
 	URI string
+	// Ref selects a detached checkout of a branch, tag, ref, or commit SHA.
+	// Mutually exclusive with Branch.
+	Ref string
 	// Depth is the shallow-clone depth; 0 means full history.
 	Depth int
 	// Filter is an optional partial-clone filter spec (e.g. "blob:none").

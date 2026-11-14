@@ -350,7 +350,7 @@ func detectStoreFromEnv() *artifact.StoreOptions {
 	}
 
 	// Check for GitHub Actions.
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
+	if os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("GITEA_ACTIONS") != "true" {
 		return &artifact.StoreOptions{
 			Type: "github/artifacts",
 			Options: map[string]any{

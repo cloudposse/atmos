@@ -286,6 +286,10 @@ func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]str
 	if err != nil {
 		return nil, err
 	}
+	bindings, err := portBindings(ports)
+	if err != nil {
+		return nil, err
+	}
 	return &container.NamedConfig{
 		Stack:            stack,
 		ComponentType:    cfg.EmulatorComponentType,
@@ -293,7 +297,7 @@ func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]str
 		Image:            image,
 		Command:          command,
 		RunArgs:          runArgs,
-		Ports:            portBindings(ports),
+		Ports:            bindings,
 		Env:              mergeEnv(defaultEnv, specContainerEnv(spec), env),
 		Mounts:           mounts,
 		Privileged:       privileged,
@@ -357,20 +361,8 @@ func mergeEnv(envs ...map[string]string) map[string]string {
 
 // portBindings converts the spec's container ports into runtime port bindings,
 // defaulting the protocol and leaving the host port 0 (auto-assigned) unless pinned.
-func portBindings(ports []schema.ContainerPort) []container.PortBinding {
-	bindings := make([]container.PortBinding, 0, len(ports))
-	for _, port := range ports {
-		protocol := port.Protocol
-		if protocol == "" {
-			protocol = defaultProtocol
-		}
-		bindings = append(bindings, container.PortBinding{
-			HostPort:      port.Host, // 0 -> auto-assigned.
-			ContainerPort: port.Container,
-			Protocol:      protocol,
-		})
-	}
-	return bindings
+func portBindings(ports []schema.ContainerPort) ([]container.PortBinding, error) {
+	return container.PortBindingsFromSchema(ports)
 }
 
 // Resolve discovers the running emulator and builds its connection profile. It is
@@ -476,14 +468,22 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 	}
 
 	ports := make(map[int]int, len(info.Ports))
+	tcpPorts := make(map[int]bool, len(info.Ports))
+	bindings := make(map[int]container.PortBinding, len(info.Ports))
 	for _, binding := range info.Ports {
-		if binding.HostPort != 0 {
+		if binding.HostPort == 0 {
+			continue
+		}
+		isTCP := binding.Protocol == "" || binding.Protocol == defaultProtocol
+		if !tcpPorts[binding.ContainerPort] {
 			ports[binding.ContainerPort] = binding.HostPort
+			bindings[binding.ContainerPort] = binding
+			tcpPorts[binding.ContainerPort] = isTCP
 		}
 	}
 	return Endpoint{
 		Target:     target,
-		Host:       reachableHostForPublishedPorts(),
+		Host:       publishedPortsHost(bindings),
 		Ports:      ports,
 		NetworkIPs: info.NetworkIPs,
 		Region:     spec.Region,

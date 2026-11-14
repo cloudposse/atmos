@@ -69,6 +69,9 @@ GLOBAL FLAGS
       --justification string                 Reason recorded for privileged auth actions such as PIM role activation (--
                                              justification=REASON)
 
+      --links string                         How long URLs (such as sign-in links) are shown: auto, osc8, clipboard, or
+                                             raw
+
       --logs-color                           Enable log color when available; --no-color and NO_COLOR always override
                                              (default true)
 
