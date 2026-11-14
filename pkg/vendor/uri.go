@@ -263,6 +263,26 @@ func IsLocalPath(uri string) bool {
 	return true
 }
 
+// LocalRootSubdir recognizes a local root//module source before path cleaning
+// erases the go-getter delimiter. It leaves validation of the selected module
+// to the caller.
+func LocalRootSubdir(uri string) (root, subdir string, ok bool) {
+	volume := filepath.VolumeName(uri)
+	rest := uri[len(volume):]
+	if strings.ContainsAny(rest, "?:") {
+		return "", "", false
+	}
+	index := strings.Index(filepath.ToSlash(rest), "//")
+	if index <= 0 {
+		return "", "", false
+	}
+	root = volume + rest[:index]
+	if !IsLocalPath(root) {
+		return "", "", false
+	}
+	return root, rest[index+2:], true
+}
+
 // IsDomainLikeURI checks if the URI has a domain-like structure (hostname.domain/path).
 func IsDomainLikeURI(uri string) bool {
 	dotPos := strings.Index(uri, ".")

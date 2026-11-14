@@ -20,10 +20,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestExecuteTerraformSharesRegistryCacheAcrossBulkRun(t *testing.T) {
@@ -3644,4 +3646,152 @@ func TestTerraformOutputGroupsNonPlanSubcommands(t *testing.T) {
 			require.Nil(t, out)
 		})
 	}
+}
+
+// excludeStacks marks components of the dev test stack with a provider exclude block.
+func excludeStacks(blocks map[string]map[string]any) map[string]any {
+	stacks := terraformAdapterTestStacks()
+	components := stacks["dev"].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.TerraformSectionName].(map[string]any)
+	for name, block := range blocks {
+		components[name].(map[string]any)[cfg.SettingsSectionName] = map[string]any{"terragrunt": map[string]any{"exclude": block}}
+	}
+	return stacks
+}
+
+func runExcluded(t *testing.T, stacks map[string]any, info *schema.ConfigAndStacksInfo) []string {
+	t.Helper()
+	var executed []string
+	require.NoError(t, ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{}, Info: info, Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component)
+			return TerraformExecutionResult{}, nil
+		},
+	}))
+	return executed
+}
+
+func TestExecuteTerraformSkipsComponentsExcludedForTheCommand(t *testing.T) {
+	stacks := excludeStacks(map[string]map[string]any{"vpc": {"actions": []any{"plan"}}})
+	require.Equal(t, []string{"database", "app"}, runExcluded(t, stacks, &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"}),
+		"the excluded component is skipped and the rest keep their order")
+	require.Equal(t, []string{"vpc", "database", "app"}, runExcluded(t, stacks, &schema.ConfigAndStacksInfo{All: true, SubCommand: "apply"}),
+		"a command the block does not list runs everything")
+}
+
+func TestExecuteTerraformExcludeDependenciesExcludesDirectDependencies(t *testing.T) {
+	stacks := excludeStacks(map[string]map[string]any{"app": {"actions": []string{"all"}, "exclude_dependencies": true}})
+	require.Equal(t, []string{"vpc"}, runExcluded(t, stacks, &schema.ConfigAndStacksInfo{All: true, SubCommand: "destroy"}),
+		"app and its direct dependency database are excluded; vpc is two levels away")
+}
+
+func TestExecuteTerraformNamedComponentsAreNeverExcluded(t *testing.T) {
+	stacks := excludeStacks(map[string]map[string]any{"vpc": {"actions": []any{"all"}}, "database": {"actions": []any{"all_except_output"}}})
+	require.Equal(t, []string{"vpc", "database"}, runExcluded(t, stacks, &schema.ConfigAndStacksInfo{Components: []string{"vpc", "database"}, SubCommand: "plan"}))
+}
+
+func TestExecuteTerraformDeployMatchesApplyExclusions(t *testing.T) {
+	stacks := excludeStacks(map[string]map[string]any{"app": {"actions": []any{"apply"}}})
+	require.Equal(t, []string{"vpc", "database"}, runExcluded(t, stacks, &schema.ConfigAndStacksInfo{All: true, SubCommand: "deploy"}))
+}
+
+func TestTerraformExclusionsReasonsAndEdges(t *testing.T) {
+	graph, err := BuildTerraformGraph(excludeStacks(map[string]map[string]any{
+		"app": {"actions": []any{"plan"}, "exclude_dependencies": true},
+	}))
+	require.NoError(t, err)
+	excluded := terraformExclusions(graph, &schema.ConfigAndStacksInfo{SubCommand: "plan"})
+	require.Len(t, excluded, 2)
+	require.Contains(t, excluded[terraformNodeID("app", "dev")], "`plan`")
+	require.Contains(t, excluded[terraformNodeID("database", "dev")], "dependency of `app` in `dev`")
+	require.Empty(t, terraformExclusions(nil, &schema.ConfigAndStacksInfo{}))
+	require.Empty(t, terraformExclusions(graph, nil))
+	require.Empty(t, terraformExclusions(graph, &schema.ConfigAndStacksInfo{SubCommand: "apply"}))
+	require.Equal(t, "Skipped `app` in `dev`: excluded by the Terragrunt `exclude` block (it lists `plan`)", describeExclusion(graph.Nodes[terraformNodeID("app", "dev")], " it lists `plan` "))
+	require.Equal(t, []string{"a"}, stringList([]any{"a", 1}))
+	require.Equal(t, []string{"a"}, stringList([]string{"a"}))
+	require.Nil(t, stringList("a"))
+}
+
+func TestSkippedResultNamesNameTheComponents(t *testing.T) {
+	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
+	require.NoError(t, err)
+	result := &scheduler.AggregateResult{Results: []scheduler.Result{
+		{NodeID: terraformNodeID("vpc", "dev"), Status: scheduler.StatusSucceeded},
+		{NodeID: terraformNodeID("database", "dev"), Status: scheduler.StatusSkipped},
+		{NodeID: "unknown-node", Status: scheduler.StatusSkipped},
+		{NodeID: terraformNodeID("app", "dev"), Status: scheduler.StatusSkipped},
+	}}
+	require.Equal(t, []string{"`app` in `dev`", "`database` in `dev`", "unknown-node"}, skippedResultNames(result, graph))
+	require.Nil(t, skippedResultNames(nil, graph))
+}
+
+func TestExecuteTerraformExcludeDependenciesIgnoresContractedEdges(t *testing.T) {
+	stacks := excludeStacks(map[string]map[string]any{"app": {"actions": []any{"plan"}, "exclude_dependencies": true}})
+	components := stacks["dev"].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.TerraformSectionName].(map[string]any)
+	for _, name := range []string{"app", "vpc"} {
+		components[name].(map[string]any)[cfg.MetadataSectionName].(map[string]any)["tags"] = []any{"edge"}
+	}
+	// The tag filter drops database, so app's ordering edge is contracted onto vpc. vpc is still
+	// two levels away from app and must not be excluded as if it were a direct dependency.
+	var executed []string
+	require.NoError(t, ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{}, Info: &schema.ConfigAndStacksInfo{Tags: []string{"edge"}, SubCommand: "plan"}, Stacks: stacks,
+		Selection: &TerraformSelection{NodeIDs: []string{"vpc-dev"}, IncludeDependents: true},
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component)
+			return TerraformExecutionResult{}, nil
+		},
+	}))
+	require.Equal(t, []string{"vpc"}, executed)
+}
+
+func TestExecuteTerraformAllExcludedCIResults(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var output bytes.Buffer
+	t.Cleanup(iolib.PushUIWriter(&output))
+	handler := &capturingTerraformPlanCIResultHandler{}
+	stacks := excludeStacks(map[string]map[string]any{
+		"vpc": {"actions": []any{"plan"}}, "database": {"actions": []any{"plan"}}, "app": {"actions": []any{"plan"}},
+	})
+	executed := runExcluded(t, stacks, &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan", TerraformPlanCIResultHandler: handler})
+	require.Empty(t, executed)
+	require.Contains(t, output.String(), "Skipped")
+	require.NotContains(t, output.String(), "No components matched")
+	require.Len(t, handler.resultSet.Results, 3)
+	for _, result := range handler.resultSet.Results {
+		require.Equal(t, "succeeded", result.Status)
+		require.False(t, result.Processed)
+	}
+}
+
+func TestExecuteTerraformExclusionPrecedesValidationAndPreflight(t *testing.T) {
+	stacks := excludeStacks(map[string]map[string]any{"app": {"actions": []any{"plan"}}})
+	components := stacks["dev"].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.TerraformSectionName].(map[string]any)
+	components["app"].(map[string]any)[cfg.DependenciesSectionName] = map[string]any{"components": []any{map[string]any{"name": "missing", "required": true}}}
+	runtime := &failureRuntime{failures: map[string]error{"dev/app": errors.New("excluded failure")}}
+	var executed []string
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{ComponentConfigurations: runtime.mock(t)},
+		Info:        &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"}, Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"vpc", "database"}, executed)
+	require.NotContains(t, runtime.asked, "dev/app")
+
+	// The same invalid dependency must still fail when its source is included.
+	info := &schema.ConfigAndStacksInfo{All: true, SubCommand: "apply"}
+	err = ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{}, Info: info, Stacks: stacks,
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) { return TerraformExecutionResult{}, nil },
+	})
+	require.ErrorContains(t, err, "missing")
 }

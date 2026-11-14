@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -66,6 +67,18 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 	require.Equal(t, []string{"-var=a=1", "-lock=false"}, sent.Operation.TerraformArguments)
 	info.AdditionalArgsAndFlags[0] = "mutated"
 	require.Equal(t, "-var=a=1", sent.Operation.TerraformArguments[0], "the request owns a copy of the arguments")
+}
+
+func TestProbeIAMUsesStagedProviderMode(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		require.Equal(t, "iam-probe", request.Operation.Mode)
+		require.True(t, request.Effects.Secrets)
+		return &pluginv1.PrepareComponentResponse{Iam: &pluginv1.ComponentIam{Role: "arn:aws:iam::1:role/x"}}, nil
+	})
+	iam, err := session.ProbeIAM(t.Context(), info)
+	require.NoError(t, err)
+	require.Equal(t, "arn:aws:iam::1:role/x", iam.Role)
 }
 
 func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {
@@ -208,6 +221,83 @@ func TestPrepareRejectsAnotherModuleSourceButAllowsOtherSourceSettings(t *testin
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestPrepareTranslatesErrorsExclusionAndFeatures(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	signal, err := adapter.EncodeObject(map[string]any{"flag": true})
+	require.NoError(t, err)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{
+		Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{Backend: signal},
+		Errors: &pluginv1.ComponentErrorsConfiguration{
+			Retry:  []*pluginv1.ComponentRetryPolicy{{Name: "net", RetryableErrors: []string{"timeout", "!fatal"}, MaxAttempts: 3, SleepIntervalSeconds: 4}},
+			Ignore: []*pluginv1.ComponentIgnorePolicy{{Name: "known", IgnorableErrors: []string{"exists"}, Message: "fine", Signals: map[string]*pluginv1.ComponentValue{"alert": signal}}},
+		},
+		Exclude:      &pluginv1.ComponentExclude{Condition: true, Actions: []string{"plan"}},
+		FeatureFlags: map[string]string{"flag": "true"},
+		Diagnostics:  []*pluginv1.Diagnostic{{Detail: &pluginv1.ErrorDetail{Code: "read_config_before_hook_ignored", Summary: "never runs", Severity: pluginv1.Severity_SEVERITY_WARNING}}},
+	}, nil)
+	prepared, err := session.Prepare(t.Context(), info)
+	require.NoError(t, err)
+
+	require.NotNil(t, prepared.Execution, "error handling alone still produces execution metadata")
+	require.Equal(t, []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout", "!fatal"}, MaxAttempts: 3, SleepInterval: 4 * time.Second}}, prepared.Execution.Errors.Retry)
+	require.Equal(t, "known", prepared.Execution.Errors.Ignore[0].Name)
+	require.Equal(t, "fine", prepared.Execution.Errors.Ignore[0].Message)
+	require.Equal(t, map[string]any{"flag": true}, prepared.Execution.Errors.Ignore[0].Signals["alert"])
+	require.Equal(t, &schema.ComponentExclusion{Actions: []string{"plan"}}, prepared.Exclusion)
+	require.Equal(t, map[string]string{"flag": "true"}, prepared.FeatureFlags)
+}
+
+func TestPreparedErrorsRejectsPoliciesTheHostCannotHonor(t *testing.T) {
+	empty, err := preparedErrors(&pluginv1.ComponentErrorsConfiguration{})
+	require.NoError(t, err)
+	require.Nil(t, empty)
+	for name, source := range map[string]*pluginv1.ComponentErrorsConfiguration{
+		"no attempts":         {Retry: []*pluginv1.ComponentRetryPolicy{{Name: "x", RetryableErrors: []string{"a"}}}},
+		"nil retry":           {Retry: []*pluginv1.ComponentRetryPolicy{nil}},
+		"bad retry pattern":   {Retry: []*pluginv1.ComponentRetryPolicy{{Name: "x", RetryableErrors: []string{"("}, MaxAttempts: 1}}},
+		"bad ignore pattern":  {Ignore: []*pluginv1.ComponentIgnorePolicy{{Name: "x", IgnorableErrors: []string{"!("}}}},
+		"nil ignore":          {Ignore: []*pluginv1.ComponentIgnorePolicy{nil}},
+		"undecodable signals": {Ignore: []*pluginv1.ComponentIgnorePolicy{{Name: "x", Signals: map[string]*pluginv1.ComponentValue{"s": {TypeJson: []byte("nope")}}}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := preparedErrors(source)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestPreparedExclusionNeedsItsCondition(t *testing.T) {
+	require.Nil(t, preparedExclusion(nil))
+	require.Nil(t, preparedExclusion(&pluginv1.ComponentExclude{Actions: []string{"plan"}}))
+	require.Equal(t, &schema.ComponentExclusion{Actions: []string{"plan"}}, preparedExclusion(&pluginv1.ComponentExclude{Condition: true, Actions: []string{"plan"}}))
+}
+
+func TestTerraformBinaryMustMatchDiscovery(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app", Stack: "live"}
+	configuration, err := adapter.EncodeObject(map[string]any{"command": "tofu"})
+	require.NoError(t, err)
+	discovered := &pluginv1.DiscoveredComponent{Configuration: configuration}
+
+	require.NoError(t, checkTerraformBinary(info, discovered, "tofu"))
+	plain, err := adapter.EncodeObject(map[string]any{})
+	require.NoError(t, err)
+	require.NoError(t, checkTerraformBinary(info, &pluginv1.DiscoveredComponent{Configuration: plain}, ""), "a unit without terraform_binary has nothing to compare")
+	removed := checkTerraformBinary(info, discovered, "")
+	require.ErrorIs(t, removed, errUtils.ErrComponentBinaryChanged, "removing terraform_binary after discovery is a change")
+	require.ErrorContains(t, removed, `discovered with "tofu"`)
+	err = checkTerraformBinary(info, discovered, "terraform")
+	require.ErrorIs(t, err, errUtils.ErrComponentBinaryChanged)
+	require.ErrorContains(t, err, `now selects "terraform"`)
+	require.ErrorContains(t, err, `discovered with "tofu"`)
+}
+
+func TestPrepareRejectsAnExecutableChangeSinceDiscovery(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", TerraformBinary: "tofu", State: &pluginv1.ComponentStateIdentity{}}, nil)
+	_, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrComponentBinaryChanged)
 }
 
 func TestSessionResolvesStateWithoutPreparation(t *testing.T) {

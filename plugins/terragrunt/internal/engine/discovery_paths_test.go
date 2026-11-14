@@ -272,7 +272,7 @@ func TestDiscoveryKeepsSiblingsOfAFailedGeneratedUnit(t *testing.T) {
 	}
 	write("modules/unit/main.tf", "")
 	write("catalog/good/terragrunt.hcl", "terraform { source = \"${get_repo_root()}/modules/unit\" }\n")
-	write("catalog/broken/terragrunt.hcl", "terraform { source = \"${get_repo_root()}/modules/unit\" }\nterraform_binary = \"tofu\"\n")
+	write("catalog/broken/terragrunt.hcl", "terraform { source = \"${get_repo_root()}/modules/unit\" }\nerrors {\n  retry \"x\" {\n    retryable_errors = [\".*\"]\n    max_attempts = 0\n    sleep_interval_sec = 1\n  }\n}\n")
 	write(".git/HEAD", "ref: refs/heads/main\n")
 	write("live/terragrunt.stack.hcl", `
 unit "a_broken" {
@@ -292,7 +292,7 @@ unit "z_good" {
 	require.Equal(t, "live", result.Failures[0].Stack)
 	require.Equal(t, "a_broken", result.Failures[0].Name)
 	problem := asProblem(t, result.Failures[0].Err)
-	require.Equal(t, "terraform_binary", problem.Key)
+	require.Equal(t, `errors.retry "x"`, problem.Key)
 }
 
 // stackProject writes a module, a catalog unit pointing at it, and the given files.

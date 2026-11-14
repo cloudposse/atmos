@@ -88,6 +88,47 @@ func TestPreparedConfigurationRetainedBackend(t *testing.T) {
 	}
 }
 
+// Terragrunt writes `remote_state.encryption` only into the file `remote_state.generate` produces,
+// together with the backend block. A different file kept by if_exists = "skip" would drop the
+// encryption and let OpenTofu write plain state, so it is refused before anything is written.
+func TestPreparedConfigurationRetainedBackendKeepsEncryption(t *testing.T) {
+	const generated = `terraform {
+ backend "local" {
+  path = "expected.tfstate"
+ }
+ encryption {
+  key_provider "pbkdf2" "default" {
+   passphrase = "correct-horse-battery-staple"
+  }
+ }
+}`
+	for _, test := range []struct {
+		name, retained string
+		blocked        bool
+	}{
+		{"same backend without encryption", "terraform {\n backend \"local\" {\n  path = \"expected.tfstate\"\n }\n}", true},
+		{"no backend and no encryption", "locals { enabled = true }", true},
+		{"identical encrypted backend", generated, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			path := filepath.Join(directory, "backend.tf")
+			require.NoError(t, os.WriteFile(path, []byte(test.retained), 0o600))
+			prepared := &schema.PreparedComponentConfiguration{BackendGenerated: true, Files: []schema.ComponentConfigurationFile{{Path: "backend.tf", Content: []byte(generated), IfExists: "skip"}}}
+			err := writePreparedConfiguration(directory, prepared)
+			if !test.blocked {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			assert.NotContains(t, err.Error(), "correct-horse-battery-staple", "the error never shows the generated secrets")
+			content, readErr := os.ReadFile(path)
+			require.NoError(t, readErr)
+			assert.Equal(t, test.retained, string(content), "the retained file is left alone")
+		})
+	}
+}
+
 func TestRetainedBackendFailurePreservesHostBackend(t *testing.T) {
 	directory := t.TempDir()
 	config := &schema.AtmosConfiguration{}

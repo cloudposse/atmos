@@ -233,6 +233,17 @@ func TestPipelineRunsHooksAroundEachPhaseSeparately(t *testing.T) {
 	require.NotContains(t, pipeline.stdout.String(), "hook says hello", "hook stdout must not mix into data stdout")
 }
 
+func TestIgnoredInitStopsPreparedPipelineSuccessfully(t *testing.T) {
+	pipeline := newProcessPipeline(t, &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"init"}, Arguments: []string{"stderr=already exists", "exit=1"}}},
+		Errors:         &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "existing", Patterns: []string{"already exists"}}}},
+	})
+	streams := process.Streams{Stdout: pipeline.stdout, Stderr: pipeline.stderr}
+	err := testExecutor(t).runPreparedPipeline(&schema.AtmosConfiguration{}, pipeline.info, pipeline.execCtx, component.WithProcessStreams(streams))
+	require.NoError(t, err, "an ignored preparatory failure ends the unit successfully")
+	require.Equal(t, []string{"init"}, timeline(readHookLog(t, pipeline.log)), "plan and workspace setup must not run after ignored init")
+}
+
 func physicalPath(t *testing.T, path string) string {
 	t.Helper()
 	resolved, err := filepath.EvalSymlinks(path)

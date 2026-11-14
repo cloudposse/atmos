@@ -266,6 +266,7 @@ func TestBuildRelativePath(t *testing.T) {
 
 // TestInitializeFilesToClear tests the initializeFilesToClear method.
 func TestInitializeFilesToClear(t *testing.T) {
+	providerOwned := false
 	mock := &mockStackProcessor{
 		constructVarfileNameFn: func(info *schema.ConfigAndStacksInfo) string {
 			return "test-stack.tfvars.json"
@@ -325,6 +326,15 @@ func TestInitializeFilesToClear(t *testing.T) {
 				},
 			},
 			expectedContains: []string{".terraform", "backend.tf.json"},
+		},
+		{
+			name: "Prepared provider backend overrides project default",
+			info: schema.ConfigAndStacksInfo{
+				ComponentFromArg:      "vpc",
+				BackendFileGeneration: &providerOwned,
+			},
+			atmosConfig:         &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{AutoGenerateBackendFile: true}}},
+			expectedNotContains: []string{"backend.tf.json"},
 		},
 		{
 			name: "With auto generate files enabled",

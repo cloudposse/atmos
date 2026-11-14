@@ -178,3 +178,26 @@ func TestApplyStackOverridesReportsMergeFailures(t *testing.T) {
 	err := applyStackOverrides(config, overrideInfo(t), &schema.PreparedComponentConfiguration{Inputs: map[string]any{"a": 1}})
 	require.Error(t, err)
 }
+
+func TestPrepareConfigurationDoesNotAssumeTheRoleOfAnExcludedOperation(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+	info := overrideInfo(t)
+	prepared := &schema.PreparedComponentConfiguration{
+		Engine: "terraform", Source: "./module", BackendType: "local", Backend: map[string]any{}, Workspace: "default", Inputs: map[string]any{},
+		IAM:       &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"},
+		Exclusion: &schema.ComponentExclusion{Actions: []string{"plan"}},
+	}
+	runtime.EXPECT().Prepare(gomock.Any(), info).Return(prepared, nil)
+	_, err := prepareConfiguration(t.Context(), config, info)
+	require.NoError(t, err)
+	require.Zero(t, recorded.calls, "an excluded operation must not assume the unit's role")
+
+	info = overrideInfo(t)
+	prepared.Exclusion = &schema.ComponentExclusion{Actions: []string{"apply"}}
+	runtime.EXPECT().Prepare(gomock.Any(), info).Return(prepared, nil)
+	_, err = prepareConfiguration(t.Context(), config, info)
+	require.NoError(t, err)
+	require.Equal(t, 1, recorded.calls, "an operation the block does not exclude still assumes the role")
+}

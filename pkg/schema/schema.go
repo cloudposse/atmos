@@ -2145,6 +2145,11 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection       AtmosSectionMapType
 	ComponentAuthSection      AtmosSectionMapType
 	ComponentEnvList          []string
+	// SourceAuthorization is an invocation-only header for a resolved registry archive.
+	SourceAuthorization *SourceAuthorization `json:"-" yaml:"-" mapstructure:"-"`
+	// IAMSession is the invocation-only AWS session of a role the component configuration assumed.
+	// In-process source downloads use it so they run as the same principal as the component's commands.
+	IAMSession map[string]string `json:"-" yaml:"-" mapstructure:"-"`
 	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
 	// whose value contains a resolved secret (detected via the masker). These variables
 	// are excluded from the on-disk Terraform varfile and injected at runtime as
@@ -2160,6 +2165,9 @@ type ConfigAndStacksInfo struct {
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
 	SanitizedEnv            []string
 	ComponentBackendSection AtmosSectionMapType
+	// BackendFileGeneration is the prepared component's invocation-local choice.
+	// Nil retains the project-wide auto_generate_backend_file default.
+	BackendFileGeneration *bool `json:"-" yaml:"-" mapstructure:"-"`
 	// ComponentRetrySection holds the per-component `retry:` block parsed from stack
 	// manifests. When non-nil and `Conditions` is populated, each subprocess invocation
 	// in the terraform execution pipeline (init, workspace, main) is retried independently

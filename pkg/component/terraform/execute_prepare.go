@@ -14,6 +14,7 @@ import (
 	component "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	degradation "github.com/cloudposse/atmos/pkg/degradation"
+	downloader "github.com/cloudposse/atmos/pkg/downloader"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	perf "github.com/cloudposse/atmos/pkg/perf"
@@ -48,6 +49,9 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+	ctx = e.withInitFromModule(ctx, atmosConfig, info)
+	ctx = downloader.WithSourceAuthorization(ctx, info.SourceAuthorization)
+	ctx = downloader.WithAWSSession(ctx, info.IAMSession)
 	componentPath, componentPathExists, err := provisionAndResolveTerraformComponentPath(
 		ctx, writers, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)

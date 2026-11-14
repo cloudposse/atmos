@@ -184,6 +184,8 @@ service Commands {
 // implement an executor or replace the built-in Terraform component provider.
 // Negotiate each service through Info using component.discovery,
 // component.validation, component.preparation, and component.state respectively.
+// component.preparation is version 2: it adds terraform_arguments,
+// backend_generated, and execution. A version-1 host must reject the plugin.
 
 // ComponentValue uses cty's JSON type encoding and MessagePack value encoding.
 // Unlike protobuf.Struct, it preserves exact numbers, nulls, unknowns, and
@@ -385,6 +387,12 @@ message PrepareComponentResponse {
   ComponentValue encryption = 17;
   // feature flag name to its evaluated value rendered as a string.
   map<string, string> feature_flags = 18;
+  // Authorization for an archive returned by a module registry. This value is
+  // sensitive and may be sent only to module_source_auth_origin.
+  ComponentValue module_source_authorization = 19;
+  string module_source_auth_origin = 20;
+  // Time spent resolving a tfr:// source, including its bounded retries.
+  uint64 registry_resolution_nanos = 21;
 }
 
 // ComponentErrorsConfiguration mirrors the Terragrunt errors block. Reserved; not implemented.

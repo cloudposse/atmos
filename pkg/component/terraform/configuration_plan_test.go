@@ -613,6 +613,44 @@ func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 	}
 }
 
+// An ignored failure of the main command ends the run successfully, without a plan to bind. A plan
+// that completed is still bound when an errors policy is present but does not match.
+func TestIgnoredPlanFailureDoesNotRecordAPlanBinding(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		ignore string
+	}{
+		{name: "ignored failure", ignore: "backend unavailable"},
+		{name: "unmatched policy", ignore: "never matches"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, _ := planFixture(t)
+			info.ComponentExecution = &schema.ComponentExecution{Errors: &schema.ComponentErrors{
+				Ignore: []schema.ComponentIgnorePolicy{{Name: "ignored", Patterns: []string{test.ignore}}},
+			}}
+			// The failed plan writes no artifact.
+			shell := &fakeShell{run: func(call *shellCall) error {
+				if call.options.StderrCapture != nil {
+					_, _ = io.WriteString(call.options.StderrCapture, "Error: backend unavailable")
+				}
+				return errUtils.ExitCodeError{Code: 1}
+			}}
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.execute
+			path := filepath.Join(execCtx.componentPath, "failed.plan")
+
+			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false)
+
+			if test.ignore == "backend unavailable" {
+				require.NoError(t, err, "the ignored failure completes the run")
+			} else {
+				require.Error(t, err, "a failure that no policy ignores still fails")
+			}
+			require.NoFileExists(t, path+configurationPlanSuffix)
+		})
+	}
+}
+
 // newPlanShowRunner returns a generated runner whose plan show prints an empty JSON plan.
 func newPlanShowRunner(t *testing.T) process.Runner {
 	t.Helper()
