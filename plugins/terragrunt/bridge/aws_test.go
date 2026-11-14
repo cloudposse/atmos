@@ -367,6 +367,8 @@ func TestAWSEndpointsNormalizeServiceNames(t *testing.T) {
 }
 
 func TestAWSCredentialCacheReusesUnexpiredEntriesOnly(t *testing.T) {
+	// Each invocation gets its own namespace, so repeated runs (-count) never share cached entries.
+	prefix := t.TempDir()
 	loads := 0
 	loader := func(expires time.Time) func() (aws.Credentials, error) {
 		return func() (aws.Credentials, error) {
@@ -375,22 +377,22 @@ func TestAWSCredentialCacheReusesUnexpiredEntriesOnly(t *testing.T) {
 		}
 	}
 
-	first, err := cachedCredentials(t.Name()+"/static", loader(time.Time{}))
+	first, err := cachedCredentials(prefix+"/static", loader(time.Time{}))
 	require.NoError(t, err)
-	second, err := cachedCredentials(t.Name()+"/static", loader(time.Time{}))
+	second, err := cachedCredentials(prefix+"/static", loader(time.Time{}))
 	require.NoError(t, err)
 	assert.Equal(t, first, second, "credentials without an expiry are loaded once")
 	assert.Equal(t, 1, loads)
 
-	_, err = cachedCredentials(t.Name()+"/expiring", loader(time.Now().Add(time.Second)))
+	_, err = cachedCredentials(prefix+"/expiring", loader(time.Now().Add(time.Second)))
 	require.NoError(t, err)
-	refreshed, err := cachedCredentials(t.Name()+"/expiring", loader(time.Now().Add(time.Hour)))
+	refreshed, err := cachedCredentials(prefix+"/expiring", loader(time.Now().Add(time.Hour)))
 	require.NoError(t, err)
 	assert.Equal(t, "AKIA3", refreshed.AccessKeyID, "credentials inside the expiry margin are reloaded")
 
-	_, err = cachedCredentials(t.Name()+"/failing", func() (aws.Credentials, error) { return aws.Credentials{}, errors.New("denied") })
+	_, err = cachedCredentials(prefix+"/failing", func() (aws.Credentials, error) { return aws.Credentials{}, errors.New("denied") })
 	require.Error(t, err)
-	_, found := awsCache.entries[t.Name()+"/failing"]
+	_, found := awsCache.entries[prefix+"/failing"]
 	assert.False(t, found, "a failure is never cached")
 }
 
