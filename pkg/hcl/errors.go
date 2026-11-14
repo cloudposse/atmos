@@ -23,4 +23,8 @@ var (
 
 	// ErrHCLWriteFile is returned when a file cannot be written.
 	ErrHCLWriteFile = errors.New("failed to write file")
+
+	// ErrHCLEncodeFailed is returned when a value cannot be encoded as HCL
+	// attributes.
+	ErrHCLEncodeFailed = errors.New("failed to encode value as HCL")
 )

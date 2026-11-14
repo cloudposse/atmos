@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/hcl"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -532,7 +533,7 @@ func TestBackendGenerationWithNestedMaps(t *testing.T) {
 
 		// Write backend-config
 		backendFile := filepath.Join(componentDir, "backend.tfbackend")
-		err = u.WriteToFileAsHcl(backendFile, backendConfig, 0o644)
+		err = hcl.WriteAttributesFile(backendFile, backendConfig, 0o644)
 		require.NoError(t, err)
 
 		// Read and verify
