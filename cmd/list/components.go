@@ -229,7 +229,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		return componentsExtractResult{}, err
 	}
 
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := config.InitCliConfigWithContext(cmd.Context(), configAndStacksInfo, true)
 	if err != nil {
 		return componentsExtractResult{}, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
 	}

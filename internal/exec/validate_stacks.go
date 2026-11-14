@@ -78,9 +78,14 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	// workflows and legitimately have no stacks directory. Validation is a
 	// no-op in that case; a missing imported manifest is still reported later
 	// once a stack base directory exists and manifests are discovered.
+	// Discovered components are still validated without a stacks directory.
+	stacksDirMissing := false
 	if atmosConfig.StacksBaseAbsolutePath != "" {
 		if _, err := os.Stat(atmosConfig.StacksBaseAbsolutePath); os.IsNotExist(err) {
-			return nil
+			if !atmosConfig.HasComponentDiscovery() {
+				return nil
+			}
+			stacksDirMissing = true
 		} else if err != nil {
 			return err
 		}
@@ -153,25 +158,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			manifestSchema.Manifest)
 	}
 
-	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
-	includedPaths := []string{"**/*"}
-	// Don't exclude any YAML files for validation except template files and user-configured exclusions
-	excludedPaths := []string{
-		// Exclude template files from validation since they may contain invalid YAML before being rendered
-		"**/*.tmpl",
-		"**/*.yaml.tmpl",
-		"**/*.yml.tmpl",
-	}
-	// Also exclude paths specified in the atmos.yaml stacks.excluded_paths config
-	// This prevents non-Atmos YAML files (e.g., Helm Chart.yaml) from being validated as stack manifests
-	excludedPaths = append(excludedPaths, atmosConfig.Stacks.ExcludedPaths...)
-
-	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
-	if err != nil {
-		return err
-	}
-
-	stackConfigFilesAbsolutePaths, _, err := cfg.FindAllStackConfigsInPaths(atmosConfig, includeStackAbsPaths, excludedPaths)
+	stackConfigFilesAbsolutePaths, err := stackManifestsToValidate(atmosConfig, stacksDirMissing)
 	if err != nil {
 		return err
 	}
@@ -259,11 +246,51 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
+	discoveredErrors, err := validateDiscoveredManifests(atmosConfig, atmosManifestJsonSchemaFilePath)
+	if err != nil {
+		return err
+	}
+	validationErrorMessages = append(validationErrorMessages, discoveredErrors...)
+
 	if len(validationErrorMessages) > 0 {
 		return errors.New(strings.Join(dedupeStrings(validationErrorMessages), "\n\n"))
 	}
 
 	return nil
+}
+
+// stackManifestsToValidate returns the YAML manifests whose schema is validated.
+// A discovery-only project has no YAML stack directory, so it validates exactly
+// the manifests that stacks.included_paths selected instead of treating the
+// project root (and atmos.yaml itself) as a directory of stack manifests.
+func stackManifestsToValidate(atmosConfig *schema.AtmosConfiguration, stacksDirMissing bool) ([]string, error) {
+	if stacksDirMissing {
+		return nil, nil
+	}
+	if atmosConfig.HasComponentDiscovery() && atmosConfig.Stacks.BasePath == "" {
+		return atmosConfig.StackConfigFilesAbsolutePaths, nil
+	}
+
+	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
+	includedPaths := []string{"**/*"}
+	// Don't exclude any YAML files for validation except template files and user-configured exclusions
+	excludedPaths := []string{
+		// Exclude template files from validation since they may contain invalid YAML before being rendered
+		"**/*.tmpl",
+		"**/*.yaml.tmpl",
+		"**/*.yml.tmpl",
+	}
+	// Also exclude paths specified in the atmos.yaml stacks.excluded_paths config
+	// This prevents non-Atmos YAML files (e.g., Helm Chart.yaml) from being validated as stack manifests
+	excludedPaths = append(excludedPaths, atmosConfig.Stacks.ExcludedPaths...)
+
+	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
+	if err != nil {
+		return nil, err
+	}
+
+	stackConfigFilesAbsolutePaths, _, err := cfg.FindAllStackConfigsInPaths(atmosConfig, includeStackAbsPaths, excludedPaths)
+	return stackConfigFilesAbsolutePaths, err
 }
 
 func warnDeprecatedStackFields(atmosConfig *schema.AtmosConfiguration, schemaPath string, files []string) {

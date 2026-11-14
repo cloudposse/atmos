@@ -47,7 +47,10 @@ jobs:
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
         with:
-          go-version-file: go.mod
+          # Use the newest Go any module in the repository requires. plugins/terragrunt requires a newer Go
+          # than the root module, and go mod tidy runs with GOTOOLCHAIN=local, so a Go taken from the root
+          # go.mod cannot tidy that module. The newer toolchain still builds the root module.
+          go-version-file: plugins/terragrunt/go.mod
 
       - name: Install Go tools
         env:

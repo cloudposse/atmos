@@ -1,0 +1,72 @@
+package configuration
+
+import (
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+func TestPreparationEnvironmentPrecedenceAndSanitization(t *testing.T) {
+	t.Setenv("ATMOS_ENV_AMBIENT_PROBE", "ambient")
+	t.Setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "must-not-return")
+	for _, test := range []struct {
+		name      string
+		sanitized []string
+		overrides []string
+		present   bool
+		want      string
+	}{
+		{name: "ambient without identity", present: true, want: "ambient"},
+		{name: "sanitized identity", sanitized: []string{"AWS_PROFILE=selected", "ATMOS_ENV_AMBIENT_PROBE=identity"}, want: "identity"},
+		{name: "explicit empty environment", sanitized: []string{}},
+		{name: "component overrides", sanitized: []string{"ATMOS_ENV_AMBIENT_PROBE=identity"}, overrides: []string{"ATMOS_ENV_AMBIENT_PROBE=component"}, want: "component"},
+		{name: "explicit empty override", sanitized: []string{"ATMOS_ENV_AMBIENT_PROBE=identity"}, overrides: []string{"ATMOS_ENV_AMBIENT_PROBE="}},
+		{name: "last path wins", sanitized: []string{"PATH=ambient"}, overrides: []string{"PATH=component", "PATH=toolchain"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{SanitizedEnv: test.sanitized, ComponentEnvList: test.overrides, ComponentEnvSection: map[string]any{"AWS_WEB_IDENTITY_TOKEN_FILE": "stale-section"}}
+			got := preparationEnvironment(info)
+			require.Equal(t, test.want, got["ATMOS_ENV_AMBIENT_PROBE"])
+			if test.name == "explicit empty override" {
+				require.Contains(t, got, "ATMOS_ENV_AMBIENT_PROBE", "an explicit empty override must stay set")
+			}
+			_, present := got["AWS_WEB_IDENTITY_TOKEN_FILE"]
+			require.Equal(t, test.present, present)
+			if test.name == "last path wins" {
+				require.Equal(t, "toolchain", got["PATH"])
+			}
+			got["AWS_PROFILE"] = "mutated"
+			require.NotEqual(t, "mutated", preparationEnvironment(info)["AWS_PROFILE"])
+			if len(info.SanitizedEnv) > 0 {
+				info.SanitizedEnv[0] = "SOURCE_CHANGED=yes"
+				require.NotContains(t, got, "SOURCE_CHANGED")
+			}
+			require.Equal(t, "must-not-return", os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"))
+		})
+	}
+}
+
+func TestDiscoveredDependenciesKeepProviderSettings(t *testing.T) {
+	app := unit(t, "app")
+	declared := map[string]any{"source": "./modules/unit", "dependencies": map[string]any{"tools": map[string]any{"opentofu": "1.10.0"}, "files": []any{"extra.hcl"}}}
+	value, err := adapter.EncodeObject(declared)
+	require.NoError(t, err)
+	app.Configuration = value
+	definitions := map[string]map[string]any{}
+	require.NoError(t, addInstance(definitions, app))
+	deps := definitions["live"]["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)["dependencies"].(map[string]any)
+	require.Equal(t, map[string]any{"opentofu": "1.10.0"}, deps["tools"], "tool pins must survive discovery")
+	require.Equal(t, []any{"extra.hcl", "root.hcl"}, deps["files"])
+	require.Equal(t, []any{"modules"}, deps["folders"])
+
+	// Without declared dependencies, the discovered set is used as-is.
+	plain := map[string]map[string]any{}
+	require.NoError(t, addInstance(plain, unit(t, "network")))
+	network := plain["live"]["components"].(map[string]any)["terraform"].(map[string]any)["network"].(map[string]any)["dependencies"].(map[string]any)
+	require.Equal(t, []any{"root.hcl"}, network["files"])
+	require.NotContains(t, network, "tools")
+}
