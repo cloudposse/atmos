@@ -1377,6 +1377,7 @@ var (
 	ErrManifestPrototypeNil   = errors.New("manifest prototype is nil")
 	ErrManifestSchemaGenerate = errors.New("failed to generate manifest JSON schema")
 	ErrManifestValidation     = errors.New("manifest validation failed")
+	ErrManifestIncludeRoot    = errors.New("failed to resolve manifest include root")
 
 	// Generator errors.
 	ErrReadTemplatesDirectory                 = errors.New("failed to read templates directory")

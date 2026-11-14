@@ -1119,6 +1119,15 @@ func executeCustomCommand(
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 	stepVars := executor.Variables()
+	// Artifact steps record into one CI report that is written after the command ends, even on failure.
+	flushArtifactReport := stepVars.UseArtifactReport(&atmosConfig)
+	defer flushArtifactReport()
+	// os.Exit skips deferred calls, so from here on every exit path writes the artifact report first.
+	// The closure shadows the package function of the same name for the rest of this command.
+	exitOrRecordDependencyErr := func(cmd *cobra.Command, err error, title, suggestion string) {
+		flushArtifactReport()
+		exitOrRecordDependencyErr(cmd, err, title, suggestion)
+	}
 	stepVars.SetTemplateDelimiters(stepDelims)
 	stepVars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
 		return e.ProcessStepTmpl(&atmosConfig, name, input, data, stepDelims)
@@ -1591,7 +1600,9 @@ func executeCustomCommand(
 				}
 				return runExtendedStep(stepCtx, workflowStep)
 			case schema.TaskTypeExec:
-				// Replace the Atmos process with the command (shell exec semantics).
+				// Replace the Atmos process with the command (shell exec semantics). A successful
+				// replacement skips the deferred flush, so write the artifact report first.
+				stepVars.FlushArtifactReport()
 				return process.ReplaceShellSession(&process.ExecSpec{
 					Command: commandToRun,
 					Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
@@ -1652,6 +1663,8 @@ func executeCustomCommand(
 		// tflint steps bounds the whole logical step: one deadline wraps the retry loop, so backoff waits
 		// and later attempts end with the timeout instead of each attempt getting a fresh one.
 		runStepBounded := func() error {
+			restoreArtifactScope := stepVars.BeginArtifactStep()
+			defer restoreArtifactScope()
 			runRetrying := func(ctx context.Context) error {
 				if step.Retry == nil {
 					return runStep(ctx)

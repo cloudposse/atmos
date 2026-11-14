@@ -107,6 +107,7 @@ func TestAutomationLibraryPreservesContextOnHandlerExit(t *testing.T) {
 		waitForContext bool
 		succeed        bool
 		wantContext    error
+		wantTimeout    bool
 	}{
 		{name: "step deadline", ownTimeout: "10ms", waitForContext: true, wantContext: context.DeadlineExceeded},
 		{name: "parent cancellation", cancelParent: true, wantContext: context.Canceled},
@@ -114,6 +115,8 @@ func TestAutomationLibraryPreservesContextOnHandlerExit(t *testing.T) {
 		{name: "ordinary exit"},
 		{name: "success", succeed: true},
 		{name: "successful handler after parent cancellation", cancelParent: true, succeed: true},
+		{name: "successful handler after parent deadline", parentDeadline: true, ownTimeout: "2s", waitForContext: true, succeed: true},
+		{name: "successful handler after own deadline", ownTimeout: "10ms", waitForContext: true, succeed: true, wantTimeout: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -151,6 +154,10 @@ func TestAutomationLibraryPreservesContextOnHandlerExit(t *testing.T) {
 			})
 			call := &api.StepCall{Type: handlerName, Configuration: map[string]any{"timeout": tc.ownTimeout}}
 			result, err := NewAutomationLibrary(nil, nil).Run(ctx, call)
+			if tc.wantTimeout {
+				require.ErrorIs(t, err, errUtils.ErrStepTimeout)
+				return
+			}
 			if tc.succeed {
 				require.NoError(t, err)
 				require.NotNil(t, result)

@@ -50,7 +50,7 @@ func Load[S any](kind string, data []byte, opts ...LoadOption) (*Manifest[S], er
 		opt(&options)
 	}
 	if options.includeAtmosConfig != nil {
-		resolved, err := resolveIncludeTags(options.includeAtmosConfig, data, options.includeFile, options.consumedPaths)
+		resolved, err := resolveIncludeTags(options.includeAtmosConfig, data, options.includeFile, options.consumedPaths, options.includeRoot)
 		if err != nil {
 			return nil, err
 		}

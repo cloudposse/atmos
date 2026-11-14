@@ -11,10 +11,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// detailedPublisher is implemented by the real service. It returns the sealed Record next to the
+// DetailedPublisher is implemented by the real service. It returns the sealed Record next to the
 // operation result, which a dry run needs in order to show the files it selected.
-type detailedPublisher interface {
+type DetailedPublisher interface {
 	PublishDetailed(ctx context.Context, request artifact.PublishRequest) (*service.PublishOutcome, error)
+}
+
+// DetailedService is a service that also publishes with details, as the real service does.
+//
+//go:generate mockgen -destination=mock_detailed_service.go -package=invoke github.com/cloudposse/atmos/pkg/artifact/invoke DetailedService
+type DetailedService interface {
+	artifact.Service
+	DetailedPublisher
 }
 
 // Run executes one operation against the service and returns its typed result.
@@ -108,7 +116,7 @@ func runPublish(ctx context.Context, svc artifact.Service, params *Params) (*Res
 		Force:      params.Force,
 		DryRun:     params.DryRun,
 	}
-	if detailed, ok := svc.(detailedPublisher); ok {
+	if detailed, ok := svc.(DetailedPublisher); ok {
 		outcome, err := detailed.PublishDetailed(ctx, request)
 		res := fromOperation(&outcome.Operation)
 		if outcome.Record.Name != "" {

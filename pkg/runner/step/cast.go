@@ -535,7 +535,7 @@ func (r castChildStepRunner) runSessionBlock(block *schema.WorkflowStep) error {
 	if err := applySessionPromptEnv(block, env); err != nil {
 		return err
 	}
-	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
+	return runCastSession(ctx, &asciicast.SessionOptions{
 		Recorder:    rec,
 		Shell:       block.Shell,
 		ShellInit:   castSessionShellInit(block),
@@ -624,6 +624,9 @@ func prepareCastChildStep(castStep, child *schema.WorkflowStep, index int) {
 	}
 }
 
+// runCastSession is a seam for test harnesses that synchronize shell readiness.
+var runCastSession = asciicast.RunSession
+
 func runCastSessionMode(ctx context.Context, rec *asciicast.Recorder, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
 	writeRate, err := parseDurationDefault(castStep.WriteRate, 40*time.Millisecond)
 	if err != nil {
@@ -640,7 +643,7 @@ func runCastSessionMode(ctx context.Context, rec *asciicast.Recorder, castStep *
 	if err := applySessionPromptEnv(castStep, env); err != nil {
 		return err
 	}
-	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
+	return runCastSession(ctx, &asciicast.SessionOptions{
 		Recorder:    rec,
 		Shell:       castStep.Shell,
 		ShellInit:   castSessionShellInit(castStep),

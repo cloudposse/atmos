@@ -164,7 +164,7 @@ steps:
 
 ## CI reports
 
-A workflow, custom command, embedded script, or hook that runs artifact steps writes one [CI report](/cli/commands/artifacts/usage) when it ends, even when it failed. The report has one section per operation, ordered by where each step was scheduled: sequential steps in order, and the branches of a parallel group in branch order, whatever order they finish in. Every attempt of a retried step is one operation, and the report shows the final attempt.
+A workflow, custom command, embedded script, or hook that runs artifact steps writes one [CI report](/cli/commands/artifacts/usage#ci-summaries-and-outputs) when it ends, even when it failed. The report has one section per operation, ordered by where each step was scheduled: sequential steps in order, and the branches of a parallel group in branch order, whatever order they finish in. Every attempt of a retried step is one operation, and the report shows the final attempt.
 
 The named outputs are also written as CI output variables when `ci.output.enabled` is on: `artifact_<output>` carries the last operation in the report, and `artifact_<step>_<output>` carries the last operation of the step with that name, with every character other than a letter or digit in the step name replaced by an underscore. A hook adds nothing to its own output, so the report is never rendered twice.
 

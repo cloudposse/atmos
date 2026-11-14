@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/muesli/termenv"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/asciicast"
@@ -22,6 +24,52 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// installSessionReadyGate waits for the fake shell to enter its input loop before
+// session action deadlines begin. The gate is test setup, not a behavioral timeout.
+func installSessionReadyGate(t *testing.T) {
+	t.Helper()
+	previous := runCastSession
+	root := t.TempDir()
+	runCastSession = func(ctx context.Context, opts *asciicast.SessionOptions) error {
+		file, err := os.CreateTemp(root, "session-ready-*")
+		if err != nil {
+			return err
+		}
+		path := file.Name()
+		if err := file.Close(); err != nil {
+			return err
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+		opts.Env = maps.Clone(opts.Env)
+		if opts.Env == nil {
+			opts.Env = make(map[string]string)
+		}
+		opts.Env[sessionShellReadyFileEnv] = path
+		opts.BeforeActions = func(ctx context.Context, observed func(string) bool) error {
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			ticker := time.NewTicker(10 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				if _, err := os.Stat(path); err == nil && observed(sessionShellBanner) {
+					return nil
+				} else if err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-ticker.C:
+				}
+			}
+		}
+		return previous(ctx, opts)
+	}
+	t.Cleanup(func() { runCastSession = previous })
+}
 
 // sessionReadyWaitTimeout bounds every session test's "write a command, wait
 // for its response" round trip below. It self-execs the test binary as a fake
@@ -1814,6 +1862,7 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 	t.Setenv(sessionShellBannerEnv, "1")
+	installSessionReadyGate(t)
 	castPath := filepath.Join(t.TempDir(), "session-simulate.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2197,12 +2246,13 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 	t.Setenv(sessionShellBannerEnv, "1")
+	installSessionReadyGate(t)
 
 	// Must outlive the wait action's own sessionReadyWaitTimeout below: this
 	// parent context's deadline firing first would return ctx.Err() instead
 	// of ever giving the wait action its own, longer budget to succeed (see
 	// sessionReadyWaitTimeoutDuration's doc comment).
-	ctx, cancel := context.WithTimeout(context.Background(), 2*sessionReadyWaitTimeoutDuration+2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*sessionReadyWaitTimeoutDuration+32*time.Second)
 	defer cancel()
 
 	err = runCastSessionMode(ctx, nil, &schema.WorkflowStep{
@@ -2235,6 +2285,7 @@ func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
 			}
 			t.Setenv(sessionShellHelperEnv, "1")
 			t.Setenv(sessionShellBannerEnv, "1")
+			installSessionReadyGate(t)
 			castPath := filepath.Join(t.TempDir(), "session.cast")
 
 			_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2272,6 +2323,7 @@ func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 	t.Setenv(sessionShellBannerEnv, "1")
+	installSessionReadyGate(t)
 	castPath := filepath.Join(t.TempDir(), "session-exec.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2328,6 +2380,7 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 	t.Setenv(sessionShellBannerEnv, "1")
+	installSessionReadyGate(t)
 	castPath := filepath.Join(t.TempDir(), "nested-session.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2383,6 +2436,7 @@ func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 	t.Setenv(sessionShellBannerEnv, "1")
+	installSessionReadyGate(t)
 	castPath := filepath.Join(t.TempDir(), "nested-session-workflow.cast")
 
 	_, err = (&CastHandler{}).ExecuteWithWorkflow(context.Background(), &schema.WorkflowStep{
@@ -2484,6 +2538,7 @@ func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 	t.Setenv(sessionShellBannerEnv, "1")
+	installSessionReadyGate(t)
 	castPath := filepath.Join(t.TempDir(), "session-then-simulate.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2564,4 +2619,29 @@ func castEventText(t *testing.T, content []byte) string {
 		}
 	}
 	return out.String()
+}
+
+func TestCastSessionWaitStartsAfterHelperReadiness(t *testing.T) {
+	initShellTestIO(t)
+	shell, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
+	t.Setenv(sessionShellStartupDelayEnv, "2s")
+	installSessionReadyGate(t)
+	castPath := filepath.Join(t.TempDir(), "ready.cast")
+	cast := &schema.WorkflowStep{Type: "cast", Mode: "session", Shell: shell, CastOutput: &schema.CastOutput{Cast: castPath}, Steps: []schema.WorkflowStep{
+		{Type: "wait", Text: sessionShellBanner, Timeout: "1s"},
+		{Type: "write", Text: "printf ready", Rate: "0"},
+		{Type: "key", Key: "enter"},
+		{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
+	}}
+	_, err = (&CastHandler{}).Execute(t.Context(), cast, NewVariables())
+	require.NoError(t, err)
+
+	// Readiness does not extend or bypass the timeout of a later behavioral wait.
+	cast.CastOutput.Cast = filepath.Join(t.TempDir(), "missing.cast")
+	cast.Steps = []schema.WorkflowStep{{Type: "wait", Text: "never-produced", Timeout: "50ms"}}
+	_, err = (&CastHandler{}).Execute(t.Context(), cast, NewVariables())
+	require.ErrorIs(t, err, asciicast.ErrWaitTimeout)
 }

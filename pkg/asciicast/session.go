@@ -104,6 +104,10 @@ type SessionOptions struct {
 	KeyInterval time.Duration
 	Actions     []SessionAction
 	Recorder    *Recorder
+	// BeforeActions can wait for externally observed shell readiness before action deadlines start.
+	// Its predicate reports whether captured output contains text without consuming it.
+	// It must return on context cancellation; a failure stops and reaps the shell.
+	BeforeActions func(context.Context, func(string) bool) error
 	// ScopedWaits consumes matched output between waits for declarative recordings.
 	ScopedWaits bool
 	// Observe runs after an action and its output have reached the recorder. It runs
@@ -149,6 +153,17 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 	state.echo.disabled = !echoTrackingSupported()
 	state.mu.Unlock()
 
+	if opts.BeforeActions != nil {
+		containsOutput := func(text string) bool {
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			return strings.Contains(state.output.String(), text)
+		}
+		if err := opts.BeforeActions(ctx, containsOutput); err != nil {
+			proc.kill()
+			return errors.Join(err, reapKilledSessionProcess(proc))
+		}
+	}
 	waitForSessionQuiet(ctx, state, sessionReadyQuietPeriod, sessionReadyMaxWait)
 	if err := sessionShellExitedError(state, proc, opts.Shell); err != nil {
 		return err

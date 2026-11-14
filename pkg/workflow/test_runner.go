@@ -285,14 +285,16 @@ func (r *testRun) skipStep(s *schema.WorkflowStep, status string) {
 }
 
 type testGroupExecutor struct {
-	run      *testRun
-	parent   *schema.WorkflowStep
-	group    *testGroup
-	vars     *step.Variables
-	mu       sync.Mutex
-	failures atomic.Int64
-	policy   controlFailConfig
-	cancel   context.CancelFunc
+	run       *testRun
+	parent    *schema.WorkflowStep
+	group     *testGroup
+	vars      *step.Variables
+	scheduled *step.ScheduledGroup
+	indices   map[string]int
+	mu        sync.Mutex
+	failures  atomic.Int64
+	policy    controlFailConfig
+	cancel    context.CancelFunc
 }
 
 // group schedules isolated children with the group concurrency and failure policies.
@@ -305,7 +307,11 @@ func (r *testRun) group(ctx context.Context, s *schema.WorkflowStep, g *testGrou
 		r.report.Update("step:"+s.Name, testreport.Failed, 0, err.Error())
 		return err
 	}
-	executor := &testGroupExecutor{run: r, parent: s, group: g, vars: groupVars, policy: effectiveControlFail(s), cancel: cancel}
+	indices := make(map[string]int, len(g.order))
+	for index, id := range g.order {
+		indices[id] = index
+	}
+	executor := &testGroupExecutor{run: r, parent: s, group: g, vars: groupVars, scheduled: groupVars.ScheduleGroup(), indices: indices, policy: effectiveControlFail(s), cancel: cancel}
 	aggregate := scheduler.New(g.graph, executor, scheduler.WithMaxConcurrency(effectiveControlConcurrency(s, len(g.order)))).Run(ctx)
 	r.reportSkipped(g, aggregate)
 	for name, result := range groupVars.Steps {
@@ -331,7 +337,7 @@ func (r *testRun) group(ctx context.Context, s *schema.WorkflowStep, g *testGrou
 // Dispatch executes one scheduled case and records its result before applying group cancellation.
 func (e *testGroupExecutor) Dispatch(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 	cn := node.Metadata["child"].(controlNode)
-	local := e.branchVariables(cn.matrix)
+	local := e.branchVariables(node.ID, cn.matrix)
 	child := cn.step
 	if len(cn.matrix) > 0 {
 		child.Name = strings.TrimPrefix(child.Name, e.parent.Name+"_"+matrixRowSuffix(cn.matrix)+"_")
@@ -364,9 +370,9 @@ func (e *testGroupExecutor) accountFailure(vars *step.Variables) bool {
 }
 
 // branchVariables isolates mutable state and exposes prior results from the same matrix row.
-func (e *testGroupExecutor) branchVariables(matrix map[string]string) *step.Variables {
+func (e *testGroupExecutor) branchVariables(id string, matrix map[string]string) *step.Variables {
 	e.mu.Lock()
-	local := e.vars.Clone()
+	local := e.scheduled.ForkAt(e.indices[id])
 	e.mu.Unlock()
 	local.SetTemplateRoot("matrix", matrix)
 	if len(matrix) == 0 {
