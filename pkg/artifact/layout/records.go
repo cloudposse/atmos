@@ -236,10 +236,36 @@ func (r *Representation) Validate() error {
 	if _, err := CleanLocation(r.Location); err != nil || r.Location != cleanedOrSelf(r.Location) {
 		return invalid(kindRepresentation, "location %q is not a canonical relative location", r.Location)
 	}
+	if err := r.validateLists(); err != nil {
+		return err
+	}
+	return validateOptionalDigests(r.RepresentationDigest)
+}
+
+// validateLists checks that both blob descriptor lists are present and well formed.
+func (r *Representation) validateLists() error {
 	if r.Payload == nil || r.Documents == nil {
 		return invalid(kindRepresentation, "payload and documents lists are required (use empty lists)")
 	}
-	return validateOptionalDigests(r.RepresentationDigest)
+	if err := validateDescriptors("payload", r.Payload); err != nil {
+		return err
+	}
+	return validateDescriptors("documents", r.Documents)
+}
+
+// validateDescriptors checks that every blob descriptor carries a sha256 digest and a size that
+// stream verification can enforce. A malformed digest must be rejected here: later reads hand it
+// straight to the verifying reader, which has no error path for an unparsable algorithm.
+func validateDescriptors(list string, descriptors []ocispec.Descriptor) error {
+	for index := range descriptors {
+		if err := artifact.ValidateDigest(descriptors[index].Digest); err != nil {
+			return invalid(kindRepresentation, "%s[%d] has an invalid digest: %v", list, index, err)
+		}
+		if descriptors[index].Size < 0 {
+			return invalid(kindRepresentation, "%s[%d] has a negative size %d", list, index, descriptors[index].Size)
+		}
+	}
+	return nil
 }
 
 // validateNameVersion checks the name and version of a document.

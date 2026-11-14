@@ -363,6 +363,50 @@ func TestRepresentation_RejectsUnsafeStoredLocation(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestRepresentation_RejectsMalformedDescriptors(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(rep *Representation)
+	}{
+		{name: "payload digest that is not a digest", mutate: func(rep *Representation) { rep.Payload[0].Digest = "x" }},
+		{name: "payload digest with an unsupported algorithm", mutate: func(rep *Representation) {
+			rep.Payload[0].Digest = digest.SHA512.FromString("b")
+		}},
+		{name: "payload digest empty", mutate: func(rep *Representation) { rep.Payload[0].Digest = "" }},
+		{name: "payload size negative", mutate: func(rep *Representation) { rep.Payload[0].Size = -1 }},
+		{name: "document digest malformed", mutate: func(rep *Representation) {
+			rep.Documents = []ocispec.Descriptor{{MediaType: "application/json", Digest: "sha256:zz", Size: 2}}
+		}},
+		{name: "document size negative", mutate: func(rep *Representation) {
+			rep.Documents = []ocispec.Descriptor{{MediaType: "application/json", Digest: digestC, Size: -5}}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := sampleRepresentation()
+			tc.mutate(&rep)
+			require.NotPanics(t, func() { _ = rep.Validate() })
+			require.ErrorIs(t, rep.Validate(), errUtils.ErrArtifactRecordInvalid)
+
+			_, err := rep.Marshal()
+			require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed, "a malformed descriptor never reaches storage")
+		})
+	}
+
+	valid := sampleRepresentation()
+	valid.Documents = []ocispec.Descriptor{{MediaType: "application/json", Digest: digestC, Size: 0}}
+	require.NoError(t, valid.Validate(), "well-formed descriptors, including an empty document, stay valid")
+
+	// A stored record with a hand-edited digest fails decoding instead of reaching stream verification.
+	good := sampleRepresentation()
+	raw, err := good.Marshal()
+	require.NoError(t, err)
+	tampered := strings.Replace(string(raw), digestB.String(), "x", 1)
+	require.NotEqual(t, string(raw), tampered)
+	_, err = DecodeRepresentation([]byte(tampered))
+	require.ErrorIs(t, err, errUtils.ErrArtifactRecordInvalid)
+}
+
 func sampleOperation() Operation {
 	return Operation{
 		SchemaVersion: SchemaVersion, RepositoryKind: artifact.RepositoryKindLocalDir, OperationID: "op/1", Name: "team/app", Version: "1.0.0",
