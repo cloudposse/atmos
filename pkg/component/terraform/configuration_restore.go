@@ -40,6 +40,8 @@ type reviewedRebuild struct {
 	transient []string
 	// prepared is the fresh preparation the workdir is regenerated from.
 	prepared *schema.PreparedComponentConfiguration
+	// appliedIAM is the reviewed role applied before the unit was evaluated for the rebuild.
+	appliedIAM *schema.ComponentIAM
 }
 
 // newReviewedRebuild accepts a workdir that is absent or holds only the restored artifacts, and
@@ -240,14 +242,37 @@ func putBack(holding, workdir string, names []string) error {
 		} else if err != nil {
 			return err
 		}
-		if err := os.Remove(destination); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		if err := os.Rename(staged, destination); err != nil {
+		if err := restoreArtifact(staged, destination); err != nil {
 			return err
 		}
 	}
 	return os.Remove(holding)
+}
+
+// restoreArtifact moves one staged artifact into place. A staged directory merges into a directory that
+// provisioning recreated, so files provisioning wrote there (for example a plans/.gitkeep the module
+// ships) stay while the staged files return exactly as they were. Anything else replaces the destination.
+func restoreArtifact(staged, destination string) error {
+	stagedInfo, err := os.Lstat(staged)
+	if err != nil {
+		return err
+	}
+	if destinationInfo, err := os.Lstat(destination); err == nil && stagedInfo.IsDir() && destinationInfo.IsDir() {
+		entries, err := os.ReadDir(staged)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := restoreArtifact(filepath.Join(staged, entry.Name()), filepath.Join(destination, entry.Name())); err != nil {
+				return err
+			}
+		}
+		return os.Remove(staged)
+	}
+	if err := os.Remove(destination); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return os.Rename(staged, destination)
 }
 
 // verify compares the re-provisioned directory to the reviewed one.
