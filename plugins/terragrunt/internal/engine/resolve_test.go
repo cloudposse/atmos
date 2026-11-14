@@ -16,7 +16,12 @@ import (
 
 func nativeUnit(t *testing.T, extra string) model.Request {
 	t.Helper()
-	root := t.TempDir()
+	return nativeUnitAt(t, t.TempDir(), extra)
+}
+
+// nativeUnitAt writes the native unit fixture below root, which the caller owns.
+func nativeUnitAt(t *testing.T, root, extra string) model.Request {
+	t.Helper()
 	module := filepath.Join(root, "module")
 	require.NoError(t, os.MkdirAll(module, 0o755))
 	source, err := json.Marshal(filepath.ToSlash(module))
@@ -191,6 +196,25 @@ func TestResolvePreservesUnitOverlay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("ignored"), result.Overlay[".hidden"])
 	require.NotContains(t, result.Overlay, "override.tf")
+}
+
+// The unit path is the root of copy-rule globs, so a glob metacharacter in it (or in the name of
+// any test that owns a temp directory) must not widen the overlay read to the parent directory.
+func TestResolveUnitInDirectoryWithGlobMetacharacters(t *testing.T) {
+	base := t.TempDir()
+	locked := filepath.Join(base, "locked")
+	root := filepath.Join(base, "unit{with-brace")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	require.NoError(t, os.MkdirAll(locked, 0o755))
+	request := nativeUnitAt(t, root, "")
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".tflint.hcl"), []byte("# lint"), 0o644))
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
+		require.NoError(t, os.Chmod(locked, 0))
+		t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	}
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []byte("# lint"), result.Overlay[".tflint.hcl"])
 }
 
 func TestRejectRemoteStateEncryption(t *testing.T) {
