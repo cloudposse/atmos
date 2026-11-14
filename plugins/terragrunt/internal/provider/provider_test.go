@@ -1,0 +1,179 @@
+package provider
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
+)
+
+func componentRequest(t *testing.T) *pluginv1.ComponentRequest {
+	t.Helper()
+	config, err := encode(map[string]any{"settings": map[string]any{"terragrunt": map[string]any{"generation_root": "live/terragrunt.stack.hcl"}}})
+	require.NoError(t, err)
+	options, err := encode(map[string]any{"enabled": true, "discovery": map[string]any{"enabled": true}})
+	require.NoError(t, err)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	return &pluginv1.ComponentRequest{Provider: "terragrunt", RootDirectory: root, Source: "live/.terragrunt-stack/app/terragrunt.hcl", Configuration: config, ProviderConfiguration: options, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "apply"}, Effects: &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "tofu", "TF_WORKSPACE": "stage"}}}
+}
+
+func TestPreparationAndStateUseSeparatePhases(t *testing.T) {
+	request := componentRequest(t)
+	phases := []string{}
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		require.Equal(t, "stage", req.Environment["TF_WORKSPACE"])
+		require.Equal(t, "tofu", req.Tofu)
+		phases = append(phases, req.Phase)
+		if req.Phase == "discover" {
+			require.Equal(t, "generate", req.Command)
+			require.Equal(t, filepath.Join(request.RootDirectory, "live/terragrunt.stack.hcl"), req.Path)
+		}
+		return &model.Resolution{Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: filepath.Join(request.RootDirectory, "cache"), Inputs: map[string]any{"payload": "fresh"}, BackendType: "local", Backend: map[string]any{"path": "relative.tfstate"}, Generated: map[string]string{"z.tf": "{{ literal }}", "a.tf": "${expression}"}, Files: []string{filepath.Join(request.RootDirectory, "root.hcl")}}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"discover", ""}, phases)
+	require.Equal(t, "opentofu", result.Engine)
+	require.Equal(t, "stage", result.State.Workspace)
+	require.Equal(t, "a.tf", result.Files[0].Path)
+	require.Equal(t, "z.tf", result.Files[1].Path)
+	require.Equal(t, "{{ literal }}", string(result.Files[1].Content))
+	phases = nil
+	state, err := p.Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"backend"}, phases)
+	require.Equal(t, result.State.WorkingDirectory, state.State.WorkingDirectory)
+}
+
+func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change func(*pluginv1.ComponentRequest)
+	}{
+		{"provider", func(r *pluginv1.ComponentRequest) { r.Provider = "other" }},
+		{"relative root", func(r *pluginv1.ComponentRequest) { r.RootDirectory = "relative" }},
+		{"missing operation", func(r *pluginv1.ComponentRequest) { r.Operation = nil }},
+		{"cli fallback", func(r *pluginv1.ComponentRequest) { r.Operation.Mode = "cli" }},
+		{"options", func(r *pluginv1.ComponentRequest) {
+			r.Operation.Options = map[string]*pluginv1.ComponentValue{"unsupported": {}}
+		}},
+		{"source traversal", func(r *pluginv1.ComponentRequest) { r.Source = "../escape" }},
+		{"missing effects", func(r *pluginv1.ComponentRequest) { r.Effects = nil }},
+		{"partial effects", func(r *pluginv1.ComponentRequest) { r.Effects.StateReads = false }},
+		{"bad settings", func(r *pluginv1.ComponentRequest) { r.ProviderConfiguration = &pluginv1.ComponentValue{} }},
+		{"bad configuration", func(r *pluginv1.ComponentRequest) { r.Configuration = &pluginv1.ComponentValue{} }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := componentRequest(t)
+			test.change(r)
+			p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+				t.Fatal("evaluation must not start")
+				return nil, nil
+			})
+			_, err := p.Prepare(t.Context(), r)
+			require.Error(t, err)
+		})
+	}
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		t.Fatal("evaluation must not start")
+		return nil, nil
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := p.Validate(ctx, componentRequest(t))
+	require.Equal(t, codes.Canceled, status.Code(err))
+	// Prepare and Resolve keep the validation status instead of re-mapping it to InvalidArgument.
+	_, err = p.Prepare(ctx, componentRequest(t))
+	require.Equal(t, codes.Canceled, status.Code(err))
+	unsupported := componentRequest(t)
+	unsupported.Operation.Mode = "cli"
+	_, err = p.Resolve(t.Context(), unsupported)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+}
+
+func TestEvaluatorErrorsDoNotExposePayloads(t *testing.T) {
+	for _, test := range []struct {
+		err  error
+		code codes.Code
+	}{{errors.New("secret-evaluated-value"), codes.InvalidArgument}, {context.Canceled, codes.Canceled}, {context.DeadlineExceeded, codes.DeadlineExceeded}, {ErrUnsupported, codes.Unimplemented}} {
+		p := New(func(context.Context, model.Request) (*model.Resolution, error) { return nil, test.err })
+		_, err := p.Prepare(t.Context(), componentRequest(t))
+		require.Equal(t, test.code, status.Code(err))
+		require.NotContains(t, err.Error(), "secret-evaluated-value")
+	}
+}
+
+func TestPreparationsSerializeGenerationAndParsing(t *testing.T) {
+	request := componentRequest(t)
+	parsing := make(chan struct{})
+	release := make(chan struct{})
+	secondGeneration := make(chan struct{}, 1)
+	var calls atomic.Int32
+	p := New(func(ctx context.Context, req model.Request) (*model.Resolution, error) {
+		if req.Phase == "discover" {
+			if calls.Add(1) == 2 {
+				secondGeneration <- struct{}{}
+			}
+		} else if calls.Load() == 1 {
+			close(parsing)
+			<-release
+		}
+		return &model.Resolution{Source: request.RootDirectory, WorkingDir: request.RootDirectory}, nil
+	})
+	first := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); first <- err }()
+	<-parsing
+	second := make(chan error, 1)
+	go func() { _, err := p.Prepare(t.Context(), request); second <- err }()
+	select {
+	case <-secondGeneration:
+		t.Fatal("second generation started before the first parse finished")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	select {
+	case <-secondGeneration:
+	default:
+		t.Fatal("second generation did not run")
+	}
+}
+
+func TestDiscoveryDiagnosticsRedactPayloads(t *testing.T) {
+	for _, test := range []struct{ name, content, reason string }{
+		{"inline", "locals { password = \"secret-evaluated-value\" }", "MISSING_TERRAFORM_SOURCE"},
+		{"parse", "locals { password = \"secret-evaluated-value\"", "EVALUATION_FAILED"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := componentRequest(t)
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "terragrunt.hcl"), []byte(test.content), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "main.tf"), []byte("terraform {}"), 0o600))
+			_, err := New(nil).Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{
+				RootDirectory: request.RootDirectory, Provider: request.Provider,
+				ProviderConfiguration: request.ProviderConfiguration, Operation: request.Operation, IncludePaths: []string{"**"},
+			})
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			details := status.Convert(err).Details()
+			require.Len(t, details, 1)
+			info := details[0].(*errdetails.ErrorInfo)
+			require.Equal(t, "atmos.terragrunt.discovery.v1", info.Domain)
+			require.Equal(t, test.reason, info.Reason)
+			require.Equal(t, map[string]string{"file": "terragrunt.hcl"}, info.Metadata)
+			require.NotContains(t, status.Convert(err).Proto().String(), "secret-evaluated-value")
+			require.NotContains(t, status.Convert(err).Proto().String(), request.RootDirectory)
+		})
+	}
+}

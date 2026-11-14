@@ -47,7 +47,7 @@ func (e *Executor) ExecuteTerraformAllWithContext(ctx context.Context, info *sch
 	preflight := spinner.New("Loading stack configuration and resolving templates")
 	preflight.Start()
 
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	atmosConfig, err := cfg.InitCliConfigWithContext(ctx, *info, true)
 	if err != nil {
 		preflight.Error("Failed to load Terraform stack configuration")
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
