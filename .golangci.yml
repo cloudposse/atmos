@@ -108,6 +108,11 @@ linters:
             # Only this cloud-specific leaf imports the SDK; the parent downloader stays generic.
             - "!**/pkg/downloader/s3/**"
             - "!**/pkg/github/**"
+            # The Terragrunt plugin bridge resolves the AWS identity of an invocation for Terragrunt's own
+            # AWS calls (get_aws_account_id, S3 dependency state). It is an AWS-specific leaf of a separate
+            # module that cannot import the Atmos auth packages.
+            - "!**/plugins/terragrunt/bridge/aws.go"
+            - "!**/plugins/terragrunt/bridge/aws_test.go"
             # The S3 deployment Mage target is an AWS-specific build tool and
             # intentionally uses the AWS SDK instead of shelling out to a CLI.
             - "!**/magefiles/s3/**"

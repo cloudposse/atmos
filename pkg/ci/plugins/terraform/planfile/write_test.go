@@ -1,14 +1,18 @@
 package planfile
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestWritePlanfileResults(t *testing.T) {
@@ -201,4 +205,111 @@ func TestVerificationStopsOnUnreadableLockfile(t *testing.T) {
 	target, err := os.Readlink(lockPath)
 	require.NoError(t, err)
 	assert.Equal(t, LockFilename, target, "a stat error must not overwrite the current lockfile")
+}
+
+func TestWritePlanfileResultsRestoresThePlanRecordBesideThePlan(t *testing.T) {
+	tmpDir := t.TempDir()
+	planPath := filepath.Join(tmpDir, "atmos-key.planfile")
+	results := []FileResult{
+		{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("plan data"))},
+		{Name: BindingFilename, Data: io.NopCloser(strings.NewReader(`{"Version":3}`))},
+	}
+	require.NoError(t, WritePlanfileResults(results, planPath))
+
+	record, err := os.ReadFile(BindingPath(planPath))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"Version":3}`, string(record))
+	assert.Equal(t, planPath+".atmos.json", BindingPath(planPath))
+}
+
+func TestWritePlanfileResultsForVerificationDoesNotRestoreARecord(t *testing.T) {
+	tmpDir := t.TempDir()
+	stored := filepath.Join(tmpDir, StoredPlanPrefix+PlanFilename)
+	canonical := filepath.Join(tmpDir, "atmos-key.planfile")
+	results := []FileResult{
+		{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("plan data"))},
+		{Name: BindingFilename, Data: io.NopCloser(strings.NewReader("{}"))},
+	}
+	require.NoError(t, WritePlanfileResultsForVerification(results, stored, canonical))
+
+	assert.FileExists(t, stored)
+	assert.NoFileExists(t, BindingPath(stored), "a stored plan is only compared against; the fresh plan gets its own record")
+	assert.NoFileExists(t, BindingPath(canonical))
+}
+
+func TestOpenBindingFindsOnlyAnExistingRecord(t *testing.T) {
+	planPath := filepath.Join(t.TempDir(), "atmos-key.planfile")
+	_, closer, err := OpenBinding(planPath)
+	require.NoError(t, err)
+	assert.Nil(t, closer, "components without a record upload nothing under the record name")
+
+	require.NoError(t, os.WriteFile(BindingPath(planPath), []byte("record"), 0o600))
+	entry, closer, err := OpenBinding(planPath)
+	require.NoError(t, err)
+	require.NotNil(t, closer)
+	defer closer.Close()
+	assert.Equal(t, BindingFilename, entry.Name)
+	data, err := io.ReadAll(entry.Data)
+	require.NoError(t, err)
+	assert.Equal(t, "record", string(data))
+}
+
+func TestOpenBindingReportsARecordThatCannotBeOpened(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permission bits enforced for the current user")
+	}
+	planPath := filepath.Join(t.TempDir(), "atmos-key.planfile")
+	require.NoError(t, os.WriteFile(BindingPath(planPath), []byte("record"), 0o600))
+	require.NoError(t, os.Chmod(BindingPath(planPath), 0o000))
+	t.Cleanup(func() { _ = os.Chmod(BindingPath(planPath), 0o600) })
+
+	_, closer, err := OpenBinding(planPath)
+	require.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed, "a record that exists is never silently left out")
+	assert.Nil(t, closer)
+}
+
+func TestWritePlanfileResultsKeepsThePlanRecordOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use POSIX permission bits")
+	}
+	planPath := filepath.Join(t.TempDir(), "atmos-key.planfile")
+	// An earlier, looser copy must not keep the replaced record readable by others.
+	require.NoError(t, os.WriteFile(BindingPath(planPath), []byte("old"), 0o644))
+	require.NoError(t, os.Chmod(BindingPath(planPath), 0o644))
+	results := []FileResult{
+		{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("plan data"))},
+		{Name: BindingFilename, Data: io.NopCloser(strings.NewReader("{\"secret\":true}"))},
+	}
+	require.NoError(t, WritePlanfileResults(results, planPath))
+
+	info, err := os.Stat(BindingPath(planPath))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	data, err := os.ReadFile(BindingPath(planPath))
+	require.NoError(t, err)
+	assert.Equal(t, "{\"secret\":true}", string(data))
+	plan, err := os.Stat(planPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0), plan.Mode().Perm()&^os.FileMode(0o644), "the plan file respects the umask")
+}
+
+func TestWritePlanfileResultsPreservesExistingPlanPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use POSIX permission bits")
+	}
+	for _, verification := range []bool{false, true} {
+		t.Run(fmt.Sprintf("verification=%t", verification), func(t *testing.T) {
+			planPath := filepath.Join(t.TempDir(), "plan")
+			require.NoError(t, os.WriteFile(planPath, []byte("old"), 0o600))
+			results := []FileResult{{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("new"))}}
+			if verification {
+				require.NoError(t, WritePlanfileResultsForVerification(results, planPath, planPath+"-canonical"))
+			} else {
+				require.NoError(t, WritePlanfileResults(results, planPath))
+			}
+			info, err := os.Stat(planPath)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		})
+	}
 }

@@ -19,6 +19,11 @@ message Invocation {
   string component = 7;
   string component_type = 8;
   bool interactive = 9;
+  // The host's effective log level: "trace", "debug", "info", "warn", "error", or "off". Engine log events
+  // are diagnostic chatter, so a plugin returns LogEntry messages only for "debug" and "trace" and none
+  // for any other level, including the Atmos default "warn". Anything the user must act on belongs in a
+  // Diagnostic or an ErrorDetail instead. The host filters entries by its level as well.
+  string log_level = 10;
 }
 
 message Credentials {
@@ -83,6 +88,33 @@ message SourceLocation {
   uint32 column = 3;
 }
 
+// LogLevel is the severity of a LogEntry, from most to least verbose.
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_TRACE = 1;
+  LOG_LEVEL_DEBUG = 2;
+  LOG_LEVEL_INFO = 3;
+  LOG_LEVEL_WARN = 4;
+  LOG_LEVEL_ERROR = 5;
+}
+
+// LogEntry is one structured log event from a plugin's engine, for example a Terragrunt logger event.
+// A response carries the entries produced while it was computed, in order. The host renders them through
+// the Atmos logger on the UI channel (stderr), scoped to the component and stack of the call, with secret
+// masking, at the level each entry carries. They are hidden at the Atmos default level and shown with
+// --logs-level=Debug or Trace. Entries never change the outcome of the call and are never written to the
+// data channel.
+// A plugin must not put evaluated values in message or fields; the host masks them anyway.
+message LogEntry {
+  LogLevel level = 1;
+  string message = 2;
+  // Structured fields of the event, rendered as key/value pairs.
+  map<string, string> fields = 3;
+  google.protobuf.Timestamp time = 4;
+  // Unit the event is about, relative to the project root, when the engine reports one.
+  string unit = 5;
+}
+
 // ErrorDetail is the structured, user-facing description of a plugin failure.
 // A plugin returns it as a gRPC status detail (google.rpc.Status.details) on a
 // failed call, or inside Diagnostic.detail for a per-item failure that must not
@@ -117,6 +149,10 @@ message ErrorDetail {
   string operation = 10;
   // Severity of the problem. Unset means ERROR.
   Severity severity = 11;
+  // Log entries produced before the failure, in order. Only a failed call's status detail carries them,
+  // so that Debug and Trace output explains the failure. The host renders them like LogEntry messages
+  // of a successful response.
+  repeated LogEntry logs = 12;
 }
 
 // Severity classifies an ErrorDetail. A WARNING never fails a command: the host
@@ -277,6 +313,8 @@ message DiscoverComponentsResponse {
   // reported only to commands that target that component; others keep working.
   // A diagnostic without a unit is a project-level failure.
   repeated Diagnostic diagnostics = 2;
+  // Engine log events produced while discovering. See LogEntry.
+  repeated LogEntry logs = 3;
 }
 service ComponentDiscovery {
   rpc Discover(DiscoverComponentsRequest) returns (DiscoverComponentsResponse);
@@ -354,6 +392,11 @@ message PrepareComponentResponse {
   string engine = 1;
   string working_directory = 2;
   string module_source = 3;
+  // The evaluated variables of the unit, an object. Numbers keep their exact decimal value, null and
+  // empty collections are preserved, and the value is wholly known: an unknown value is a plugin bug and
+  // the host rejects it naming the input. sensitive_paths mark every input path the unit declared
+  // sensitive. The host masks those values in all output and logs and keeps them out of variable files,
+  // exactly like secrets.
   ComponentValue inputs = 4;
   ComponentStateIdentity state = 5;
   repeated ComponentGeneratedFile files = 6;
@@ -368,21 +411,28 @@ message PrepareComponentResponse {
   // its value, for provenance reporting. Missing entries mean unknown origin.
   map<string, SourceLocation> input_origins = 12;
 
-  // Fields 13-18 are reserved for Terragrunt parity. The host does not read
-  // them yet; a plugin that cannot honor a setting must reject it with an
-  // ErrorDetail instead of returning it, and must leave these fields unset.
-  // Engine executable selected by terraform_binary.
+  // Fields 13-18 carry Terragrunt settings that decide how the host runs the unit. The host reads
+  // 13 to 17. A plugin that cannot honor a setting must reject it with an ErrorDetail instead of
+  // returning a value the host would silently ignore.
+  // Engine executable selected by terraform_binary. Empty means the engine of the component.
   string terraform_binary = 13;
-  // errors block: retry and ignore policies.
+  // errors block: retry and ignore policies. The host applies them around the engine subprocess.
   ComponentErrorsConfiguration errors = 14;
-  // exclude block: conditional unit exclusion.
+  // exclude block, set only when its condition holds and it applies to the current operation.
+  // The host skips the operation for the component and runs nothing. See ComponentExclude.
   ComponentExclude exclude = 15;
   // iam_role, iam_assume_role_session_name, iam_assume_role_duration, iam_web_identity_token.
+  // The host assumes the role, never the plugin.
   ComponentIam iam = 16;
-  // encryption block as opaque, provider-defined data.
+  // encryption block as opaque, provider-defined data (state and plan encryption settings).
   ComponentValue encryption = 17;
-  // feature flag name to its evaluated value rendered as a string.
+  // Feature flag name to its evaluated value rendered as a string. Informational: the plugin has
+  // already applied the flags while evaluating the unit, so they are reflected in every other field.
+  // The host keeps them with the prepared configuration for display and no host behavior depends on
+  // them. A plugin may leave this field unset.
   map<string, string> feature_flags = 18;
+  // Engine log events produced while preparing. See LogEntry.
+  repeated LogEntry logs = 22;
   // Authorization for an archive returned by a module registry. This value is
   // sensitive and may be sent only to module_source_auth_origin.
   ComponentValue module_source_authorization = 19;
@@ -391,7 +441,8 @@ message PrepareComponentResponse {
   uint64 registry_resolution_nanos = 21;
 }
 
-// ComponentErrorsConfiguration mirrors the Terragrunt errors block. Reserved; not implemented.
+// ComponentErrorsConfiguration mirrors the Terragrunt errors block. The host retries or ignores a failed
+// engine command according to these policies, in declaration order.
 message ComponentErrorsConfiguration {
   repeated ComponentRetryPolicy retry = 1;
   repeated ComponentIgnorePolicy ignore = 2;
@@ -411,15 +462,19 @@ message ComponentIgnorePolicy {
   // Extra signals written for the caller, keyed by name.
   map<string, ComponentValue> signals = 4;
 }
-// ComponentExclude mirrors the Terragrunt exclude block. Reserved; not implemented.
+// ComponentExclude mirrors the Terragrunt exclude block for the operation being prepared. It does not
+// carry no_run: the plugin applies no_run itself. The plugin sets the PrepareComponentResponse.exclude
+// field only when the host must not run the command, and then actions equals that command. A response
+// without the field means run the command. exclude_dependencies is informational for the host's graph.
 message ComponentExclude {
-  // Evaluated "if" condition.
+  // Evaluated "if" condition. The host skips the operation when it is true and the field is set.
   bool condition = 1;
   // Commands the exclusion applies to; "all" and "all_except_output" are plugin vocabulary.
   repeated string actions = 2;
   bool exclude_dependencies = 3;
 }
-// ComponentIam mirrors the Terragrunt IAM settings. Reserved; not implemented.
+// ComponentIam mirrors the Terragrunt IAM settings. The host assumes the role for the unit's commands, on
+// top of the credentials of the invocation, unless an Atmos identity is selected explicitly.
 // The web identity token is a secret and must be carried as a sensitive value.
 message ComponentIam {
   string role = 1;
@@ -437,6 +492,8 @@ message ResolveComponentStateResponse {
   ComponentStateIdentity state = 1;
   repeated ComponentSource sources = 2;
   repeated Diagnostic diagnostics = 3;
+  // Engine log events produced while resolving. See LogEntry.
+  repeated LogEntry logs = 4;
 }
 // Resolve backend identity without preparing a component, running hooks,
 // writing generated files, or reading unrelated dependency outputs.

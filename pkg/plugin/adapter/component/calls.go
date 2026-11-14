@@ -86,7 +86,7 @@ func (p *Provider) Prepare(ctx context.Context, input *pluginv1.ComponentRequest
 		if err != nil {
 			return err
 		}
-		return checkPreparation(result)
+		return checkPreparationResponse(result, request.GetOperation().GetMode())
 	})
 	if err != nil {
 		return nil, err
@@ -128,4 +128,26 @@ func (p *Provider) ResolveState(ctx context.Context, input *pluginv1.ComponentRe
 		return nil, err
 	}
 	return result, nil
+}
+
+func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode string) error {
+	if mode != "iam-probe" {
+		return checkPreparation(result)
+	}
+	if result == nil {
+		return errUtils.ErrPluginProtocol
+	}
+	if err := firstDiagnosticError(result.Diagnostics); err != nil {
+		return err
+	}
+	// IAM is resolved before module evaluation. This response may carry only the
+	// role settings and diagnostics/logs, never a prepared module or artifacts.
+	remaining := proto.Clone(result).(*pluginv1.PrepareComponentResponse)
+	remaining.Iam = nil
+	remaining.Diagnostics = nil
+	remaining.Logs = nil
+	if proto.Size(remaining) != 0 {
+		return errUtils.ErrPluginProtocol
+	}
+	return nil
 }

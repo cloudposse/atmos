@@ -3,8 +3,11 @@ package component
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
@@ -128,50 +131,77 @@ func TestDecodeStringReadsStringsAndRejectsEverythingElse(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestObjectStructuredSensitivity(t *testing.T) {
-	atmosio.Reset()
-	t.Cleanup(atmosio.Reset)
-	require.NoError(t, atmosio.Initialize())
+func TestDecodeInputsKeepsExactNumbersNullsAndShapes(t *testing.T) {
+	exact, _, err := big.ParseFloat("9007199254740993", 10, 512, big.ToNearestEven)
+	require.NoError(t, err)
 	value := cty.ObjectVal(map[string]cty.Value{
-		"credentials": cty.ObjectVal(map[string]cty.Value{"private-map-key": cty.StringVal("")}),
-		"empty":       cty.EmptyObjectVal,
-		"public":      cty.StringVal("visible"),
+		"large":  cty.NumberVal(exact),
+		"empty":  cty.EmptyTupleVal,
+		"absent": cty.NullVal(cty.DynamicPseudoType),
+		"tuple":  cty.TupleVal([]cty.Value{cty.StringVal("a"), cty.NumberIntVal(2)}),
+		"map":    cty.MapVal(map[string]cty.Value{"k": cty.StringVal("v")}),
+		"object": cty.ObjectVal(map[string]cty.Value{"n": cty.NumberFloatVal(0.1)}),
 	})
-	attr := func(name string) *pluginv1.ComponentValueStep {
-		return &pluginv1.ComponentValueStep{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: name}}
-	}
-	for _, test := range []struct {
-		name  string
-		paths []*pluginv1.ComponentValuePath
-		keys  map[string]bool
-	}{
-		{name: "map with empty value", paths: []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{attr("credentials")}}}, keys: map[string]bool{"credentials": true}},
-		{name: "empty descendant", paths: []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{attr("credentials"), attr("private-map-key")}}}, keys: map[string]bool{"credentials": true}},
-		{name: "empty object", paths: []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{attr("empty")}}}, keys: map[string]bool{"empty": true}},
-		{name: "root", paths: []*pluginv1.ComponentValuePath{{}}, keys: map[string]bool{"credentials": true, "empty": true, "public": true}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			encoded := objectWireValue(t, value)
-			encoded.SensitivePaths = test.paths
-			decoded, keys, err := DecodeObjectWithSensitiveKeys(encoded)
-			require.NoError(t, err)
-			require.Equal(t, test.keys, keys)
-			require.Equal(t, map[string]any{"private-map-key": ""}, decoded["credentials"])
-		})
-	}
-	require.Equal(t, "<MASKED>", atmosio.MaskString("private-map-key"))
-	rendered, err := json.Marshal(map[string]any{"credentials": map[string]any{"private-map-key": ""}})
+
+	decoded, err := DecodeInputs(objectWireValue(t, value))
+
 	require.NoError(t, err)
-	require.NotContains(t, atmosio.MaskString(string(rendered)), "private-map-key")
-	encoded := objectWireValue(t, cty.MapVal(map[string]cty.Value{"empty": cty.EmptyObjectVal}))
-	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Index{Index: objectWireValue(t, cty.StringVal("empty"))}}}}}
-	_, keys, err := DecodeObjectWithSensitiveKeys(encoded)
+	assert.Equal(t, json.Number("9007199254740993"), decoded["large"])
+	assert.Equal(t, []any{}, decoded["empty"])
+	assert.Contains(t, decoded, "absent")
+	assert.Nil(t, decoded["absent"])
+	assert.Equal(t, []any{"a", json.Number("2")}, decoded["tuple"])
+	assert.Equal(t, map[string]any{"k": "v"}, decoded["map"])
+	assert.Equal(t, map[string]any{"n": json.Number("0.1")}, decoded["object"])
+	empty, err := DecodeInputs(nil)
 	require.NoError(t, err)
-	require.Equal(t, map[string]bool{"empty": true}, keys)
-	_, keys, err = DecodeObjectWithSensitiveKeys(nil)
+	assert.Empty(t, empty)
+}
+
+func TestDecodeInputsRegistersSensitivePathsForMasking(t *testing.T) {
+	value := cty.ObjectVal(map[string]cty.Value{"password": cty.StringVal("inputs-secret-value-1f3a"), "public": cty.StringVal("visible-value")})
+	encoded := objectWireValue(t, value)
+	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "password"}}}}}
+
+	_, err := DecodeInputs(encoded)
+
 	require.NoError(t, err)
-	require.Empty(t, keys)
-	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{nil}
-	_, _, err = DecodeObjectWithSensitiveKeys(encoded)
+	assert.NotContains(t, atmosio.MaskString("token=inputs-secret-value-1f3a"), "inputs-secret-value-1f3a", "a sensitive input is masked in all output")
+	assert.Equal(t, "visible-value", atmosio.MaskString("visible-value"), "an input that is not sensitive is left alone")
+}
+
+func TestDecodeInputsNamesTheUnknownInput(t *testing.T) {
+	value := cty.ObjectVal(map[string]cty.Value{
+		"fine": cty.StringVal("ok"),
+		"zone": cty.ObjectVal(map[string]cty.Value{"ids": cty.TupleVal([]cty.Value{cty.StringVal("a"), cty.UnknownVal(cty.String)})}),
+	})
+
+	_, err := DecodeInputs(objectWireValue(t, value))
+
 	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	text := err.Error() + strings.Join(errUtils.AllDetails(err), "\n")
+	assert.Contains(t, text, "zone.ids[1]")
+	assert.NotContains(t, text, "fine")
+	assert.NotEmpty(t, errUtils.AllHints(err))
+
+	_, err = DecodeInputs(objectWireValue(t, cty.UnknownVal(cty.EmptyObject)))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	_, err = DecodeInputs(objectWireValue(t, cty.StringVal("not an object")))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
+func TestDecodeInputsRejectsUnknownSetElementWithoutExposingKey(t *testing.T) {
+	value := cty.ObjectVal(map[string]cty.Value{
+		"items": cty.SetVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+			"secret":  cty.StringVal("private-set-key"),
+			"pending": cty.UnknownVal(cty.String),
+		})}),
+	})
+	_, err := DecodeInputs(objectWireValue(t, value))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.NotContains(t, err.Error(), "private-set-key")
+	path := cty.Path{cty.IndexStep{Key: cty.ObjectVal(map[string]cty.Value{
+		"secret": cty.StringVal("private-set-key"),
+	})}}
+	require.Empty(t, formatPath(path))
 }

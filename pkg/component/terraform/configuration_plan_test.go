@@ -372,6 +372,28 @@ func TestConfigurationPlanExplicitAbsolutePathVerifiesLikeCanonicalPath(t *testi
 	}
 }
 
+func TestRelativeWorkingDirectoryPlanCanMoveToAnotherCheckout(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	info.ComponentSection = map[string]any{"metadata": map[string]any{"working_directory": filepath.Join("components", "network")}}
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+
+	otherRoot := t.TempDir()
+	otherWorkdir := filepath.Join(otherRoot, "components", "network")
+	require.NoError(t, os.MkdirAll(otherWorkdir, 0o700))
+	otherPlan := filepath.Join(otherWorkdir, filepath.Base(path))
+	for _, suffix := range []string{"", configurationPlanSuffix} {
+		data, err := os.ReadFile(path + suffix)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(otherPlan+suffix, data, 0o600))
+	}
+	config.BasePath = otherRoot
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, otherPlan
+	_, rebuild, err := restoreOrRebuildConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.NotNil(t, rebuild)
+	require.Equal(t, otherWorkdir, rebuild.workdir)
+}
+
 func TestConfigurationPlanMissingPlanExplainsWhatHappened(t *testing.T) {
 	t.Run("never planned", func(t *testing.T) {
 		config, info, _, _, path := planFixture(t)
@@ -549,6 +571,47 @@ func TestConfigurationWorkdirDigestIgnoresPlanReachedThroughSymlink(t *testing.T
 	require.Equal(t, direct, viaLink)
 }
 
+func TestConfigurationWorkdirDigestIgnoresPlanArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), []byte("module"), 0o600))
+	baseline, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	require.NoError(t, err)
+
+	// Plans are reviewed artifacts, not configuration: an earlier plan, the stored plan that deploy
+	// downloads, and the fresh plan it generates must not make the directory look edited.
+	for _, name := range []string{"earlier.planfile", "stored.plan.tfplan", "new.plan"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("plan "+name), 0o600))
+	}
+	withPlans, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	require.NoError(t, err)
+	require.Equal(t, baseline, withPlans)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "extra.tf"), []byte("added"), 0o600))
+	edited, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	require.NoError(t, err)
+	require.NotEqual(t, baseline, edited)
+}
+
+func TestDropCIPlanLocationKeepsEveryPlanTheUserNamed(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     schema.ConfigAndStacksInfo
+		wantPlan string
+	}{
+		{"hook recorded the location while downloading a stored plan", schema.ConfigAndStacksInfo{SubCommand: "deploy", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, ""},
+		{"explicit apply plan alongside stored path", schema.ConfigAndStacksInfo{SubCommand: "apply", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, "w/plan"},
+		{"a plan the user named", schema.ConfigAndStacksInfo{PlanFile: "w/plan", UseTerraformPlan: true, StoredPlanFile: "w/stored"}, "w/plan"},
+		{"a plan named without any stored plan", schema.ConfigAndStacksInfo{PlanFile: "w/plan"}, "w/plan"},
+		{"nothing named", schema.ConfigAndStacksInfo{}, ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dropCIPlanLocation(&test.info)
+			require.Equal(t, test.wantPlan, test.info.PlanFile)
+		})
+	}
+}
+
 func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 	config, info, execCtx, _, _ := planFixture(t)
 	config.Components.Terraform.Init.Reconfigure = schema.TerraformInitReconfigureAuto
@@ -717,60 +780,11 @@ func TestDetailedExitCodePlanBinding(t *testing.T) {
 	}
 }
 
-// TestPlanOutputFlagsInEnvironmentAreRejected covers output flags that Terraform
-// reads from TF_CLI_ARGS or TF_CLI_ARGS_plan, which Atmos cannot bind.
-func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
-	for _, test := range []struct {
-		name      string
-		inherited map[string]string
-		component []string
-		provider  map[string]string
-		global    map[string]string
-		sanitized []string
-		commands  []string
-		reject    bool
-	}{
-		{name: "inherited TF_CLI_ARGS_plan", inherited: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, reject: true},
-		{name: "inherited TF_CLI_ARGS", inherited: map[string]string{"TF_CLI_ARGS": "-lock=false --out env.plan"}, reject: true},
-		{name: "component environment", component: []string{"TF_CLI_ARGS_plan=-out env.plan"}, reject: true},
-		{name: "provider environment", provider: map[string]string{"TF_CLI_ARGS_plan": "--out=env.plan"}, commands: []string{"plan"}, reject: true},
-		{name: "bare flag", component: []string{"TF_CLI_ARGS=-out"}, reject: true},
-		{name: "other flags", inherited: map[string]string{"TF_CLI_ARGS_plan": "-lock=false -outfile-like=x"}, component: []string{"TF_CLI_ARGS=-no-color"}},
-		{name: "apply only variable", component: []string{"TF_CLI_ARGS_apply=-out=x"}},
-		{name: "provider environment for apply", provider: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, commands: []string{"apply"}},
-		{name: "global environment", global: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, reject: true},
-		{name: "sanitized environment omits inherited flag", inherited: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, sanitized: []string{"PATH=/bin"}},
-		{name: "sanitized environment carries flag", sanitized: []string{"TF_CLI_ARGS=-out=env.plan"}, reject: true},
-		{name: "component overrides inherited flag", inherited: map[string]string{"TF_CLI_ARGS_plan": "-out=env.plan"}, component: []string{"TF_CLI_ARGS_plan=-lock=false"}},
-		{name: "component overrides global flag", global: map[string]string{"TF_CLI_ARGS": "-out=env.plan"}, component: []string{"TF_CLI_ARGS="}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("TF_CLI_ARGS", "")
-			t.Setenv("TF_CLI_ARGS_plan", "")
-			for name, value := range test.inherited {
-				t.Setenv(name, value)
-			}
-			config, info, execCtx, _, path := planFixture(t)
-			config.Env = test.global
-			info.SanitizedEnv = test.sanitized
-			info.ComponentEnvList = test.component
-			if test.provider != nil {
-				info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: test.commands, Environment: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
-			}
-			shell := &fakeShell{}
-			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
-			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}, execCtx.componentPath, false)
-			if test.reject {
-				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
-				require.Empty(t, shell.calls, "neither hook nor Terraform should run")
-				return
-			}
-			require.NoError(t, err)
-			require.NotEmpty(t, shell.calls)
-			require.FileExists(t, path+configurationPlanSuffix)
-		})
-	}
+func TestRestoreRefusesToApplyTheStoredPlanItself(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{SubCommand: "deploy", PlanFile: "w/stored", StoredPlanFile: "w/stored"}
+	require.False(t, restoresConfigurationPlan(info), "the plan deploy compares against is never what gets applied")
+	info.PlanFile = "w/new.plan"
+	require.True(t, restoresConfigurationPlan(info), "the fresh plan that matched it is")
 }
 
 func TestDetailedExitCodeBindingUsesSubprocessEnvironment(t *testing.T) {

@@ -29,7 +29,32 @@ def pack_native_release(work, package):
     fixtures.run(work, ["plugin", "build", payload])
     layout = work + "/release"
     fixtures.run(work, ["plugin", "pack", payload, "--output", layout])
+    verify_registry_links(work, payload, layout, manifest)
     return struct(layout=layout, version=manifest["metadata"]["version"])
+
+
+def release_annotations(layout):
+    # The index manifest's annotations are what GHCR reads to link a package to its repository.
+    index = json.decode(fs.read_file(layout + "/index.json"))
+    digest = index["manifests"][0]["digest"].split(":")[1]
+    return json.decode(fs.read_file(layout + "/blobs/sha256/" + digest))["annotations"]
+
+
+def verify_registry_links(work, payload, layout, manifest):
+    # The repository declared in plugin.yaml links the published package; nothing else is implied.
+    annotations = release_annotations(layout)
+    metadata = manifest["metadata"]
+    fixtures.check(annotations["org.opencontainers.image.source"] == metadata["repository"], "The package is not linked to its repository: " + str(annotations))
+    fixtures.check(annotations["org.opencontainers.image.version"] == metadata["version"], "Missing version annotation: " + str(annotations))
+    fixtures.check(annotations["org.opencontainers.image.title"] == metadata["display_name"], "Missing title annotation: " + str(annotations))
+
+    # An explicit source overrides the manifest, and a source that could leak credentials is refused.
+    override = work + "/release-override"
+    fixtures.run(work, ["plugin", "pack", payload, "--output", override, "--source", "https://github.com/acme/internal-plugins"])
+    fixtures.check(release_annotations(override)["org.opencontainers.image.source"] == "https://github.com/acme/internal-plugins", "--source did not override the manifest repository")
+    refused = fixtures.run_failing(work, ["plugin", "pack", payload, "--output", work + "/release-unsafe", "--source", "https://user:token@github.com/acme/internal-plugins"])
+    fixtures.check("without credentials" in refused.stdout + refused.stderr, "A source with credentials must be refused with an explanation:\n" + refused.stderr)
+    fixtures.check(not fs.exists(work + "/release-unsafe"), "A refused pack left a layout behind")
 
 
 def install_and_discover(work, package, release):

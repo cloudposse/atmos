@@ -250,15 +250,12 @@ func localSourceChanged(metadata *workdir.WorkdirMetadata, spec *schema.VendorCo
 // be read. It reports false for remote sources.
 func localSourceMissing(spec *schema.VendorComponentSource) bool {
 	uri := vendor.NormalizeURI(resolveSourceURI(spec))
-	if root, subdir, ok := vendor.LocalRootSubdir(uri); ok {
-		if !filepath.IsAbs(root) {
-			absolute, err := resolveLocalSourcePath(root, "")
-			if err != nil {
-				return true
-			}
-			uri = absolute + "//" + subdir
+	if _, _, ok := vendor.LocalRootSubdir(uri); ok {
+		resolved, err := resolveLocalSubdirURI(uri, "")
+		if err != nil {
+			return true
 		}
-		_, present, err := localDirectorySource(uri)
+		_, present, err := localDirectorySource(resolved)
 		return err != nil || !present
 	}
 	switch {

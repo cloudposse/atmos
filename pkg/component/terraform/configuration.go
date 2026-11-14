@@ -25,53 +25,82 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
-	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/backend"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// prepareConfiguration prepares a provider-owned component whose saved plan, if any, still has its
+// retained working directory. Execution uses prepareConfigurationForExecution, which can also
+// re-provision the directory of a plan restored on another runner.
 func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+	prepared, rebuild, err := prepareConfigurationForExecution(ctx, config, info)
+	if err == nil && rebuild != nil {
+		return nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	return prepared, err
+}
+
+// prepareConfigurationForExecution is prepareConfiguration that reports a pending rebuild: the
+// returned reviewedRebuild is non-nil when the reviewed plan was verified but its working directory
+// must be re-provisioned and checked before the plan can be applied.
+func prepareConfigurationForExecution(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *reviewedRebuild, error) {
 	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
-		return nil, nil
+		return nil, nil, nil
 	}
-	if config.ComponentConfigurations == nil {
-		return nil, errUtils.ErrPluginUnsupportedExtension
-	}
-	if err := checkComponentRestrictions(info); err != nil {
-		return nil, err
-	}
-	if err := checkStackOverrides(info); err != nil {
-		return nil, err
+	if err := checkConfigurationPreconditions(config, info); err != nil {
+		return nil, nil, err
 	}
 	if info.DryRun {
-		return nil, nil
+		return nil, nil, nil
 	}
-	if err := resolveSelectedExecutable(info); err != nil {
-		return nil, err
+	if err := resolveConfigurationBinary(info); err != nil {
+		return nil, nil, err
 	}
-	prepared, stagedIAM, err := restoreOrPrepareConfiguration(ctx, config, info)
+	stagedIAM, err := stageConfigurationIAM(ctx, config, info)
+	if err != nil {
+		return nil, nil, err
+	}
+	prepared, rebuild, err := obtainConfiguration(ctx, config, info)
 	if err != nil || prepared == nil {
-		return prepared, err
+		return prepared, nil, err
 	}
-	if err = finalizePreparedConfiguration(ctx, config, info, prepared, stagedIAM); err != nil {
-		return nil, err
+	if err = applyStackOverrides(config, info, prepared); err != nil {
+		return nil, nil, err
+	}
+	if err = finishIAM(ctx, info, prepared, stagedIAM); err != nil {
+		return nil, nil, err
 	}
 	applyPreparedConfiguration(config, info, prepared)
-	return prepared, nil
+	return prepared, rebuild, nil
 }
 
-func finalizePreparedConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, stagedIAM *schema.ComponentIAM) error {
-	if err := applyStackOverrides(config, info, prepared); err != nil {
+func stageConfigurationIAM(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.ComponentIAM, error) {
+	if usesConfigurationPlan(info) {
+		return nil, nil
+	}
+	return probeAndApplyIAM(ctx, config.ComponentConfigurations, info)
+}
+
+// checkConfigurationPreconditions rejects what no preparation can fix: no provider, a restricted
+// component, or a stack that overrides what the provider owns.
+func checkConfigurationPreconditions(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if config.ComponentConfigurations == nil {
+		return errUtils.ErrPluginUnsupportedExtension
+	}
+	dropCIPlanLocation(info)
+	if err := checkComponentRestrictions(info); err != nil {
 		return err
 	}
-	return finishIAM(ctx, info, prepared, stagedIAM)
+	return checkStackOverrides(info)
 }
 
-// Plugins do not inherit PATH. Resolve the selected host executable before
-// Terragrunt evaluates version constraints or dependency outputs.
-func resolveSelectedExecutable(info *schema.ConfigAndStacksInfo) error {
+// resolveConfigurationBinary resolves the selected Terraform executable to an absolute path.
+// Plugins do not inherit PATH, so this happens before Terragrunt evaluates version constraints
+// or dependency outputs.
+func resolveConfigurationBinary(info *schema.ConfigAndStacksInfo) error {
 	binary, err := exec.LookPath(info.Command)
 	if err != nil {
 		return errUtils.Build(fmt.Errorf("%w: Terraform executable of component %q in stack %q: %w", errUtils.ErrPluginInvalidConfig, info.ComponentFromArg, info.Stack, err)).
@@ -89,12 +118,30 @@ func resolveSelectedExecutable(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
+// obtainConfiguration evaluates the unit, or restores the reviewed preparation of a saved plan. The
+// rebuild is non-nil when the saved plan lost its working directory and must be re-provisioned.
+func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *reviewedRebuild, error) {
+	if !usesConfigurationPlan(info) {
+		prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+		return prepared, nil, err
+	}
+	if err := useRetainedWorkdir(config, info); err != nil {
+		return nil, nil, err
+	}
+	prepared, rebuild, err := restoreOrRebuildConfigurationPlan(ctx, config, info)
+	if err != nil || rebuild == nil {
+		return prepared, rebuild, err
+	}
+	rebuild.prepared, err = prepareForRebuild(ctx, config, info, rebuild)
+	return rebuild.prepared, rebuild, err
+}
+
+// applyPreparedConfiguration records the prepared values on the invocation.
 func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
-	// The stack's env section wins over provider environment in the metadata this invocation runs,
-	// including the apply-time metadata of a restored saved plan.
-	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)
+	info.PreparedSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
+	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)
 	info.SourceAuthorization = prepared.SourceAuthorization
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
@@ -114,21 +161,38 @@ func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.Confi
 	warnOnCacheLocalState(info, prepared)
 }
 
-func restoreOrPrepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *schema.ComponentIAM, error) {
-	if usesConfigurationPlan(info) {
-		if err := useRetainedWorkdir(config, info); err != nil {
-			return nil, nil, err
-		}
-		prepared, err := restoreConfigurationPlan(ctx, config, info)
-		return prepared, nil, err
+// prepareForRebuild evaluates the unit again for a plan restored without its working directory, the
+// way `plan` did, so the directory is regenerated from the checkout's own configuration instead of
+// from the restored record. The evaluation must reproduce the reviewed backend. The plan file already
+// embodies the inputs, so none are kept.
+//
+// The evaluation runs as the reviewed `plan` operation, so a generate block that depends on
+// get_terraform_command() writes the files that were reviewed. Its hooks, extra arguments, and error
+// policies are not used: the reviewed execution metadata is, exactly as for a retained workdir, so a
+// condition that evaluates differently on this runner cannot skip a reviewed hook. Atmos selects the
+// hooks of the actual command from that metadata.
+func prepareForRebuild(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rebuild *reviewedRebuild) (*schema.PreparedComponentConfiguration, error) {
+	fresh := *info
+	fresh.UseTerraformPlan, fresh.PlanFile, fresh.StoredPlanFile = false, "", ""
+	fresh.SubCommand, fresh.SubCommand2 = reviewedOperation, ""
+	prepared, err := config.ComponentConfigurations.Prepare(ctx, &fresh)
+	if err != nil || prepared == nil {
+		return nil, err
 	}
-	staged, err := probeAndApplyIAM(ctx, config.ComponentConfigurations, info)
+	digest, err := backendIdentityDigest(prepared.Backend)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
-	return prepared, staged, err
+	if digest != rebuild.plan.BackendDigest || prepared.BackendType != rebuild.plan.Prepared.BackendType || prepared.Workspace != rebuild.plan.Prepared.Workspace {
+		return nil, fmt.Errorf("%w: reviewed backend identity changed", errUtils.ErrPlanVerificationFailed)
+	}
+	prepared.Inputs = map[string]any{}
+	prepared.Execution = rebuild.plan.Prepared.Execution
+	return prepared, nil
 }
+
+// reviewedOperation is the command a reviewed plan was evaluated for.
+const reviewedOperation = "plan"
 
 // terragruntCacheDirectory is where Terragrunt keeps its working copies of a unit.
 const terragruntCacheDirectory = ".terragrunt-cache"
@@ -174,6 +238,20 @@ func invocationExecution(info *schema.ConfigAndStacksInfo, prepared *schema.Prep
 // useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.
 // A new process has not provisioned anything, so the path is derived the way provisioning does.
 func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	// A downloaded plan and record can be the only files in an explicit workdir.
+	// Resolve a relative override without source ownership checks here; the
+	// reviewed-plan restore verifies the exact transport set before provisioning.
+	if override := workingDirectoryOverride(info); override != "" && !filepath.IsAbs(override) {
+		clean := filepath.Clean(override)
+		if clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			base, err := filepath.Abs(config.BasePath)
+			if err != nil {
+				return err
+			}
+			info.ComponentSection[provWorkdir.WorkdirPathKey] = filepath.Join(base, clean)
+			return nil
+		}
+	}
 	fallback, err := u.GetComponentPath(config, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
@@ -371,7 +449,7 @@ func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
 // workdir sync preserves: Terraform data and workspace-state directories, Atmos metadata,
 // provider lock files at any depth, and the default local-backend state files at the root.
 var (
-	runtimeArtifactDirs  = map[string]bool{".terraform": true, "terraform.tfstate.d": true, workdir.AtmosDir: true}
+	runtimeArtifactDirs  = map[string]bool{".terraform": true, "terraform.tfstate.d": true, provWorkdir.AtmosDir: true}
 	runtimeArtifactFiles = map[string]bool{"terraform.tfstate": true, "terraform.tfstate.backup": true, ".terraform.tfstate.lock.info": true}
 )
 

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	git "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
@@ -82,6 +83,17 @@ func TestCommandArgsAndFlags_BoolFlagOnly(t *testing.T) {
 	_, _, flags := commandArgsAndFlags(plan)
 
 	assert.Equal(t, []string{"--upload-status"}, flags)
+}
+
+func TestFlagsFromCommandRedactsSensitiveValueWhenDisplayMaskingIsOff(t *testing.T) {
+	cmd := &cobra.Command{Use: "plan"}
+	secret := cmd.Flags().String("web-identity-token", "", "")
+	cmd.Flags().String("stack", "", "")
+	flag := cmd.Flags().Lookup("web-identity-token")
+	flag.Annotations = map[string][]string{flags.SensitiveMetadataAnnotation: {"true"}}
+	require.NoError(t, cmd.Flags().Parse([]string{"--web-identity-token=secret-value", "--stack=dev"}))
+	assert.Equal(t, "secret-value", *secret, "execution retains the real value")
+	assert.Equal(t, []string{"--stack", "dev", "--web-identity-token", "[REDACTED]"}, FlagsFromCommand(cmd))
 }
 
 func TestCommandArgsAndFlags_NilCommand(t *testing.T) {

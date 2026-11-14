@@ -83,7 +83,7 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 	}).Times(2)
 	prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", Command: "tofu", SubCommand: "apply", TerraformWorkspace: "stage", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvList: []string{"FROM_COMPONENT=original", "FROM_COMPONENT=override"}, ComponentEnvSection: map[string]any{"FROM_COMPONENT": "override"}})
 	require.NoError(t, err)
-	require.Equal(t, int64(9007199254740993), prepared.Inputs["large"])
+	require.Equal(t, json.Number("9007199254740993"), prepared.Inputs["large"])
 	require.Equal(t, filepath.Join(config.BasePathAbsolute, "state.tfstate"), prepared.Backend["path"])
 	require.Equal(t, "{{ literal }}", string(prepared.Files[0].Content))
 }
@@ -220,7 +220,7 @@ func TestSessionRejectsConflictingDiscovery(t *testing.T) {
 		want      error
 	}{
 		{name: "unsafe stack", change: func(c *pluginv1.DiscoveredComponent) { c.Address.Stack = "../outside" }, want: errUtils.ErrPluginProtocol},
-		{name: "unsupported engine", change: func(c *pluginv1.DiscoveredComponent) { c.Engine = "terragrunt" }, want: errUtils.ErrPluginUnsupportedExtension},
+		{name: "unsupported engine", change: func(c *pluginv1.DiscoveredComponent) { c.Engine = "pulumi" }, want: errUtils.ErrPluginUnsupportedExtension},
 		{name: "invalid values", change: func(c *pluginv1.DiscoveredComponent) { c.Configuration = &pluginv1.ComponentValue{} }, want: errUtils.ErrPluginProtocol},
 		{name: "duplicate", duplicate: true, want: errUtils.ErrDuplicatePluginExtension},
 	} {

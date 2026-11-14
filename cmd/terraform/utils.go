@@ -31,6 +31,7 @@ import (
 	citerraform "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/provideroptions"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -40,6 +41,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -178,6 +180,11 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 	finalArgs := append([]string{cmd_.Name()}, args...)
 	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, cmd_, finalArgs, compat.GetSeparated())
 	if err != nil {
+		return err
+	}
+	// The prompt discovers components, so it must see the same provider options RunE uses: a feature
+	// override can decide which dependencies an imported unit has.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(cmd_, viper.GetViper()); err != nil {
 		return err
 	}
 
@@ -359,6 +366,10 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	// Honor a component chosen interactively in PreRunE so before-hooks resolve
 	// against the selected component (the stack comes from the persisted --stack flag).
 	applyPreResolvedComponent(&info)
+	// Hooks describe the component through discovery, which must see the provider options RunE uses.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(cmd_, viper.GetViper()); err != nil {
+		return hookContext{info: info}, err
+	}
 
 	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
 		info.AuthContext = authCtx
@@ -1821,6 +1832,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
 	applyOptionsToInfo(&info, opts)
+	// Provider options are validated here, before any discovery or preparation can start a plugin.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(actualCmd, viper.GetViper()); err != nil {
+		return err
+	}
 	applyFromPlanSelection(&info, actualCmd)
 
 	// Honor a component already chosen interactively in PreRunE (runBeforeHooks) so the
@@ -1997,6 +2012,9 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	}
 
 	canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, info)
+	if workdirPath, ok := retainedWorkdirPlanfilePath(&verifyAtmosConfig, info); ok {
+		canonicalPlanPath = workdirPath
+	}
 	storedPlanPath := filepath.Join(filepath.Dir(canonicalPlanPath), planfile.StoredPlanPrefix+planfile.PlanFilename)
 	if _, statErr := os.Stat(storedPlanPath); statErr != nil {
 		// No stored planfile was downloaded. Whether that blocks the deploy is
@@ -2013,6 +2031,21 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	}
 
 	return verifyPlanfile(info, storedPlanPath, mode)
+}
+
+// retainedWorkdirPlanfilePath returns the plan file path inside the workdir of a workdir-enabled
+// component (every Terragrunt unit), where `plan` keeps its plan and the CI hooks store the
+// downloaded one. It derives the directory from configuration, so it works before anything is
+// provisioned on a fresh runner. It reports false for components without a workdir.
+func retainedWorkdirPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, bool) {
+	if !provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		return "", false
+	}
+	workdir, _, err := component.BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(workdir, filepath.Base(e.ConstructTerraformComponentPlanfilePath(atmosConfig, info))), true
 }
 
 // handleUnconfiguredPlanfileStorage resolves a verification request that cannot be
@@ -2143,11 +2176,15 @@ func handlePromptError(err error, name string) error {
 // promptForComponent delegates to shared.PromptForComponent.
 // If stack is provided, filters components to only those in that stack.
 // Declared as a var so tests can stub the interactive prompt.
-var promptForComponent = shared.PromptForComponent
+var promptForComponent = func(cmd *cobra.Command, stack string) (string, error) {
+	return shared.PromptForComponent(cmd, stack)
+}
 
 // promptForStack delegates to shared.PromptForStack.
 // Declared as a var so tests can stub the interactive prompt.
-var promptForStack = shared.PromptForStack
+var promptForStack = func(cmd *cobra.Command, component string) (string, error) {
+	return shared.PromptForStack(cmd, component)
+}
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
 // This is needed because --heatmap must be detected before flag parsing occurs.
