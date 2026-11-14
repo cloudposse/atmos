@@ -87,21 +87,7 @@ func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfigura
 	if err != nil {
 		return nil, err
 	}
-	identity, err := runtime.PlanIdentity(ctx, info, plan.Prepared.Sources)
-	if err != nil {
-		return nil, err
-	}
-	artifactMatches, err := configurationArtifactMatches(config, info, plan, path)
-	if err != nil {
-		return nil, err
-	}
-	if identity != plan.Identity || !artifactMatches {
-		return nil, fmt.Errorf("%w: plugin, source, engine, workdir, or reviewed artifact changed; create a new plan", errUtils.ErrPlanVerificationFailed)
-	}
-	if err := verifyReviewedBackendAndWorkdir(ctx, config, info, plan, path); err != nil {
-		return nil, err
-	}
-	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files); err != nil {
+	if err := verifyReviewedPlan(ctx, config, info, runtime, plan); err != nil {
 		return nil, err
 	}
 	// Terraform runs inside the workdir, so a path relative to the project would not resolve there.
@@ -113,6 +99,27 @@ func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfigura
 	info.UseTerraformPlan = true
 	info.PlanFile = absolute
 	return plan.Prepared, nil
+}
+
+// verifyReviewedPlan rejects a plan whose identity, artifact, backend, or workdir changed since review,
+// then restores the sensitive content the reviewed plan depends on.
+func verifyReviewedPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, runtime schema.ComponentConfigurationPlanRuntime, plan *configurationPlan) error {
+	path := configurationPlanPath(config, info)
+	identity, err := runtime.PlanIdentity(ctx, info, plan.Prepared.Sources)
+	if err != nil {
+		return err
+	}
+	artifactMatches, err := configurationArtifactMatches(config, info, plan, path)
+	if err != nil {
+		return err
+	}
+	if identity != plan.Identity || !artifactMatches {
+		return fmt.Errorf("%w: plugin, source, engine, workdir, or reviewed artifact changed; create a new plan", errUtils.ErrPlanVerificationFailed)
+	}
+	if err := verifyReviewedBackendAndWorkdir(ctx, config, info, plan, path); err != nil {
+		return err
+	}
+	return restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files)
 }
 
 // verifyReviewedBackendAndWorkdir rejects a changed backend identity or a changed retained working directory.

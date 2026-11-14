@@ -58,6 +58,13 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if err = applyStackOverrides(config, info, prepared); err != nil {
 		return nil, err
 	}
+	applyPreparedConfiguration(config, info, prepared, execution)
+	warnOnCacheLocalState(info, prepared)
+	return prepared, nil
+}
+
+// applyPreparedConfiguration projects the prepared configuration onto the invocation.
+func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, execution *schema.ComponentExecution) {
 	info.ComponentVarsSection = prepared.Inputs
 	// The stack's env section wins over provider environment in the metadata this invocation runs,
 	// including the apply-time metadata of a restored saved plan.
@@ -78,8 +85,6 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
 	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
-	warnOnCacheLocalState(info, prepared)
-	return prepared, nil
 }
 
 // terragruntCacheDirectory is where Terragrunt keeps its working copies of a unit.
