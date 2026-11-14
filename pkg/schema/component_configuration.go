@@ -65,6 +65,9 @@ type ComponentConfigurationFile struct {
 	Content   []byte
 	IfExists  string
 	Sensitive bool
+	// Mode carries optional POSIX permission bits. Zero selects the host default.
+	// The writer clamps it, so a provider cannot request setuid or writable-by-others files.
+	Mode uint32
 }
 
 // ConfigurationOwned reports whether a configuration provider owns a component's settings.
