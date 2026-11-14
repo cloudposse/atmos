@@ -1,14 +1,18 @@
 package terraform
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentpkg "github.com/cloudposse/atmos/pkg/component"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -21,17 +25,48 @@ func TestPrepareConfiguration(t *testing.T) {
 	binary, err := os.Executable()
 	require.NoError(t, err)
 	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
-	expected := &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "/module", Inputs: map[string]any{"fresh": "output"}, BackendType: "local", Backend: map[string]any{"path": "state.tfstate"}, Workspace: "default"}
+	expected := &schema.PreparedComponentConfiguration{Engine: "terraform", Source: filepath.Join(t.TempDir(), "module"), Inputs: map[string]any{"fresh": "output"}, BackendType: "local", Backend: map[string]any{"path": "state.tfstate"}, Workspace: "default"}
 	runtime.EXPECT().Prepare(gomock.Any(), info).Return(expected, nil)
 	result, err := prepareConfiguration(t.Context(), config, info)
 	require.NoError(t, err)
 	require.Same(t, expected, result)
 	require.True(t, filepath.IsAbs(info.Command))
 	require.Equal(t, expected.Inputs, info.ComponentVarsSection)
-	require.Equal(t, map[string]any{"uri": expected.Source}, info.ComponentSection["source"])
+	// A local module is refreshed on every run; see TestPrepareConfigurationRefreshesOnlyLocalModules.
+	require.Equal(t, map[string]any{"uri": expected.Source, "ttl": "0s"}, info.ComponentSection["source"])
 	require.Equal(t, expected.Backend, info.ComponentBackendSection)
 	require.Equal(t, "default", info.TerraformWorkspace)
 	require.True(t, config.Components.Terraform.AutoGenerateBackendFile)
+}
+
+func TestPrepareConfigurationRefreshesOnlyLocalModules(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+		ttl    any
+	}{
+		{name: "relative path", source: "./modules/unit", ttl: "0s"},
+		{name: "absolute path", source: filepath.Join(t.TempDir(), "module"), ttl: "0s"},
+		{name: "git", source: "git::https://example.invalid/modules.git//unit?ref=v1"},
+		{name: "archive", source: "https://example.invalid/unit.zip"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+			config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+			binary, err := os.Executable()
+			require.NoError(t, err)
+			info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+			runtime.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: test.source}, nil)
+
+			_, err = prepareConfiguration(t.Context(), config, info)
+
+			require.NoError(t, err)
+			source, ok := info.ComponentSection["source"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, test.source, source["uri"])
+			require.Equal(t, test.ttl, source["ttl"])
+		})
+	}
 }
 
 func TestPrepareConfigurationGuards(t *testing.T) {
@@ -156,4 +191,32 @@ func TestPreparedConfigurationSensitiveInputsNeverHitDisk(t *testing.T) {
 		require.NoError(t, err)
 		require.ElementsMatch(t, []string{`TF_VAR_credentials={"secret-input-key":""}`, `TF_VAR_empty={}`, `TF_VAR_null=null`}, env)
 	}
+}
+
+// failingStateRuntime owns the component but cannot identify its backend.
+type failingStateRuntime struct {
+	schema.ComponentConfigurationRuntime
+	err error
+}
+
+func (r failingStateRuntime) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+	return nil, r.err
+}
+
+func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
+	failure := errors.New("provider could not locate state")
+	executor := testExecutor(t)
+	executor.services.ExecuteDescribeComponent = func(params *componentpkg.ExecuteDescribeComponentParams) (map[string]any, error) {
+		assert.Equal(t, "network", params.Component)
+		assert.Equal(t, "live", params.Stack)
+		return map[string]any{
+			"settings": map[string]any{"configuration": true},
+			"backend":  map[string]any{"path": "must-not-be-read"},
+		}, nil
+	}
+	config := &schema.AtmosConfiguration{ComponentConfigurations: failingStateRuntime{err: failure}}
+
+	result, err := executor.GetTerraformState(config, "!terraform.state", "live", "network", "vpc_id", true, nil, nil)
+	require.ErrorIs(t, err, failure, "the provider's failure is returned as is, not retried against a guessed backend")
+	require.Nil(t, result)
 }

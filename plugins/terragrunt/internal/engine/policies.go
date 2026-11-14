@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/go-version"
 
@@ -85,14 +86,24 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 	if cfg.TerraformBinary != "" {
 		return fmt.Errorf("native adaptation of terraform_binary is not implemented")
 	}
-	if len(cfg.Terraform.BeforeHooks)+len(cfg.Terraform.AfterHooks)+len(cfg.Terraform.ErrorHooks)+len(cfg.Terraform.ExtraArgs) > 0 {
-		return fmt.Errorf("native adaptation of hooks/extra_arguments is not implemented")
-	}
-	if cfg.PreventDestroy != nil && *cfg.PreventDestroy {
-		return fmt.Errorf("native adaptation of prevent_destroy is not implemented")
+	// Hooks and extra arguments are adapted as execution data by unitExecution.
+	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+		return ErrPreventDestroy
 	}
 	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
 		return fmt.Errorf("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
 	}
 	return nil
+}
+
+// validateRemoteSource preserves the getter URI for Atmos's source provisioner.
+// Registry sources need Terragrunt version selection and are not interchangeable
+// with direct archive or Git sources.
+func validateRemoteSource(source string) error {
+	for _, prefix := range []string{"git::https://", "git::http://", "git::ssh://", "git::file://", "https://", "http://"} {
+		if strings.HasPrefix(source, prefix) {
+			return nil
+		}
+	}
+	return fmt.Errorf("native adapter does not support this module source transport")
 }

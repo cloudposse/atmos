@@ -3,6 +3,7 @@ on:
   workflow_call:
 permissions:
   contents: read
+  packages: read
 env:
   ATMOS_CI: 'true'
   CGO_ENABLED: '0'
@@ -47,6 +48,8 @@ jobs:
           GOCACHE: ${{ runner.temp }}/plugin-go-build
           GOMODCACHE: ${{ runner.temp }}/plugin-go-mod
           RELEASE_BASE: ${{ steps.base.outputs.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          ATMOS_GITHUB_USERNAME: ${{ github.actor }}
         run: atmos plugin release --inventory plugins/releases.yaml --check ${RELEASE_BASE:+--base "$RELEASE_BASE"}
 
   release:

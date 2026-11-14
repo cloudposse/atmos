@@ -12,7 +12,43 @@ steps:
     script: |
       affected = module.load("scripts/affected.star")
       affected.main()
+  - name: installed-release
+    type: script
+    interpreter: starlark
+    script: |
+      release = module.load("scripts/release.star")
+      release.main()
 integration:
   - name: native-lifecycle
     type: script
     source: scripts/native.star
+  - name: hooks-and-extra-arguments
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.hooks()
+  - name: saved-plan
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.saved_plan()
+  - name: state-and-output-integration
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.state_and_outputs()
+  - name: git-source-refresh
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.git_source_refresh()
+  - name: local-source-refresh
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.local_source_refresh()

@@ -14,6 +14,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if runToolchainChild() {
+		os.Exit(0)
+	}
 	if os.Getenv("ATMOS_TERRAGRUNT_VERSION_CHILD") != "" {
 		_, _ = os.Stdout.WriteString(os.Getenv("ATMOS_TERRAGRUNT_VERSION_CHILD"))
 		os.Exit(0)

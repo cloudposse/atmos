@@ -264,7 +264,7 @@ func (e *Executor) GetOutput(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true, authManager)
 	if err != nil {
 		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
@@ -362,7 +362,7 @@ func (e *Executor) GetOutputWithOptions(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions, authManager)
 	if err != nil {
 		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
@@ -447,7 +447,7 @@ func (e *Executor) fetchAndCacheOutputs(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions, authManager)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
@@ -471,6 +471,7 @@ func (e *Executor) execute(
 	authContext *schema.AuthContext,
 	opts *OutputOptions,
 	processYamlFunctions bool,
+	authManagers ...any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.execute")()
 
@@ -484,9 +485,30 @@ func (e *Executor) execute(
 	// ExtractComponentConfig uses utils.GetComponentPath internally to ensure
 	// proper path resolution that works correctly with --chdir and when running
 	// from non-project-root directories.
-	config, err := ExtractComponentConfig(atmosConfig, sections, component, stack)
+	// Plugin-owned state is located first: its reads never run in the component's execution
+	// workdir, so that workdir is neither resolved nor required.
+	state, err := ResolveConfigurationState(ctx, atmosConfig, &ConfigurationStateRequest{Sections: sections, Component: component, Stack: stack, AuthContext: authContext, AuthManagers: authManagers})
 	if err != nil {
 		return nil, err
+	}
+	var config *ComponentConfig
+	if state != nil {
+		config, err = extractConfigurationStateConfig(atmosConfig, sections, component, stack)
+	} else {
+		config, err = ExtractComponentConfig(atmosConfig, sections, component, stack)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if state != nil {
+		config.BaseEnvironment = configurationEnvironment(authManagers)
+		cleanup, err := configurationStateReader(config, state, opts, component, stack)
+		if err != nil {
+			return nil, err
+		}
+		defer cleanup()
+		// Only the scratch reader regenerates its backend; the initialized unit is read as it is.
+		processYamlFunctions = opts == nil || !opts.SkipInit
 	}
 
 	// Step 2.5: Auto-provision JIT workdir if needed before toolchain resolution and init.
