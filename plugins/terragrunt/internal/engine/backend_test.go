@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -185,13 +186,15 @@ func TestRemoteStateEncryptionChecksTheUnitExecutable(t *testing.T) {
 
 func TestGeneratedBackendIdentityRejectedAcrossPhases(t *testing.T) {
 	for _, phase := range []string{"", "backend"} {
-		for _, backend := range []string{
+		for backendIndex, backend := range []string{
 			"terraform {\n backend \"local\" { path = \"other.tfstate\" }\n}",
 			"terraform {\n backend \"s3\" {\n bucket = \"other-bucket\"\n key = \"state\"\n region = \"us-east-1\"\n }\n}",
 			"terraform {\n cloud { organization = \"example\" }\n}",
 		} {
-			for _, remote := range []string{"", "remote_state {\n backend = \"local\"\n config = { path = \"known.tfstate\" }\n}\n"} {
-				t.Run(phase+backend+remote, func(t *testing.T) {
+			for remoteIndex, remote := range []string{"", "remote_state {\n backend = \"local\"\n config = { path = \"known.tfstate\" }\n}\n"} {
+				// The subtest name becomes part of its temp directory, so it must stay free of the
+				// HCL text and its glob metacharacters.
+				t.Run(fmt.Sprintf("phase-%s-backend-%d-remote-%d", cmp.Or(phase, "default"), backendIndex, remoteIndex), func(t *testing.T) {
 					request := nativeUnit(t, remote+fmt.Sprintf("generate \"backend\" {\n path = \"custom.tf\"\n if_exists = \"skip\"\n contents = %q\n}", backend))
 					request.Phase = phase
 					owned := filepath.Join(filepath.Dir(request.Path), "custom.tf")
