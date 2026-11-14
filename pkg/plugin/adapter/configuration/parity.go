@@ -73,6 +73,14 @@ func preparedExclusion(source *pluginv1.ComponentExclude) *schema.ComponentExclu
 	return &schema.ComponentExclusion{Actions: slices.Clone(source.GetActions())}
 }
 
+// preparedIgnoredRun records that an ignore policy ended preparation of the unit.
+func preparedIgnoredRun(result *pluginv1.PrepareComponentResponse) *schema.ComponentIgnoredRun {
+	if !result.GetRunIgnored() {
+		return nil
+	}
+	return &schema.ComponentIgnoredRun{Policy: result.GetIgnoredPolicy(), Message: result.GetIgnoredMessage()}
+}
+
 // checkTerraformBinary verifies that the executable the unit selects now is the one it selected at
 // discovery, because discovery handed it to the host as the component's `command`. A difference
 // means the unit's configuration changed between the two evaluations.
