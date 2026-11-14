@@ -176,16 +176,10 @@ func (e *Executor) initFromModuleWrapper(atmosConfig *schema.AtmosConfiguration,
 // there is no source to run the command against.
 func recoveringFetch(info *schema.ConfigAndStacksInfo, target *source.Target, policy *schema.ComponentErrors, provision func(context.Context) error) func(context.Context) error {
 	return func(ctx context.Context) error {
-		moduleDir := target.Dir
-		if target.IsWorkdir {
-			var err error
-			moduleDir, err = component.ResolveConfiguredSubpath(info, target.Dir)
-			if err != nil {
-				return err
-			}
-		}
+		// An explicit source subdirectory exists only once the fetch has provisioned the source, so the
+		// directory that receives ignore signals is resolved when they are written.
 		recoverer := execution.NewRecoverer(policy, execution.WithReporter(&recoveryReporter{info: info}),
-			execution.WithSignalsFile(filepath.Join(moduleDir, execution.SignalsFileName)))
+			execution.WithSignalsPath(func() string { return fetchedSignalsFile(info, target) }))
 		ignored, err := recoverer.Run(ctx, func(ctx context.Context) (string, error) {
 			if err := provision(ctx); err != nil {
 				return err.Error(), err
@@ -200,6 +194,21 @@ func recoveringFetch(info *schema.ConfigAndStacksInfo, target *source.Target, po
 		}
 		return nil
 	}
+}
+
+// fetchedSignalsFile returns the signals file in the module directory of a fetched source, or "" when
+// that directory does not exist, which is the case for an ignored fetch that provisioned nothing.
+func fetchedSignalsFile(info *schema.ConfigAndStacksInfo, target *source.Target) string {
+	moduleDir := target.Dir
+	if target.IsWorkdir {
+		var present bool
+		var err error
+		moduleDir, present, err = component.ResolvePendingSubpath(info, target.Dir)
+		if err != nil || !present {
+			return ""
+		}
+	}
+	return filepath.Join(moduleDir, execution.SignalsFileName)
 }
 
 // hasLifecycleHooks reports whether any before, after, or error hook lists the command.

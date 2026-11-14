@@ -58,3 +58,29 @@ func TestClearStaleSignalsWrapsRemovalFailures(t *testing.T) {
 	require.True(t, errors.As(err, &pathErr), "the operating-system error is preserved: %v", err)
 	require.DirExists(t, blocked)
 }
+
+// A source subdirectory that the fetch has not created yet holds no stale signals, so preparation proceeds
+// to the fetch instead of failing on the missing directory.
+func TestClearStaleSignalsToleratesAnUnfetchedSourceSubdirectory(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	section := map[string]any{
+		"component": "example", "atmos_stack": "dev",
+		"source":    map[string]any{"uri": "git::https://example.test/repo.git"},
+		"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		"metadata":  map[string]any{"source_subdir": "modules/app"},
+	}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: section, FinalComponent: "example", Stack: "dev"}
+	require.NoError(t, clearStaleSignals(atmosConfig, info))
+
+	target, err := source.ResolveTarget(atmosConfig, "terraform", "example", section)
+	require.NoError(t, err)
+	moduleDir := filepath.Join(target.Dir, "modules", "app")
+	require.NoError(t, os.MkdirAll(moduleDir, 0o755))
+	stale := filepath.Join(moduleDir, "error-signals.json")
+	require.NoError(t, os.WriteFile(stale, []byte(`{"old":true}`), 0o644))
+	require.NoError(t, clearStaleSignals(atmosConfig, info))
+	require.NoFileExists(t, stale, "a fetched module directory is still cleared")
+
+	section["metadata"] = map[string]any{"source_subdir": "../escape"}
+	require.ErrorIs(t, clearStaleSignals(atmosConfig, info), errUtils.ErrWorkdirProvision, "an invalid subdirectory still fails")
+}
