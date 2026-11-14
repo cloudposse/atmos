@@ -206,3 +206,49 @@ func TestLegacyLiteralBackslashName(t *testing.T) {
 	assert.Equal(t, name, listed[0].Name)
 	require.NoError(t, store.Delete(ctx, name))
 }
+
+// TestAttributeLookingArtifactNamesStayIndependent covers legacy stores that hold both "a.tar" and
+// "a.tar.atmos-blob.json": the transport keeps no attribute files in this layout, so neither
+// artifact may shadow, parse, or delete the other.
+func TestAttributeLookingArtifactNamesStayIndependent(t *testing.T) {
+	const object, lookalike = "a.tar", "a.tar.atmos-blob.json"
+	root := t.TempDir()
+	store := &Store{basePath: root}
+	ctx := context.Background()
+	upload := func(name, body string) {
+		t.Helper()
+		require.NoError(t, store.Upload(ctx, name, strings.NewReader(body), int64(len(body)), nil), name)
+	}
+	download := func(name string) string {
+		t.Helper()
+		reader, _, err := store.Download(ctx, name)
+		require.NoError(t, err, name)
+		defer reader.Close()
+		data, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		return string(data)
+	}
+
+	upload(object, "tar-v1")
+	upload(lookalike, "not an attribute document")
+	upload(object, "tar-v2")
+
+	assert.Equal(t, "tar-v2", download(object), "a.tar downloads although a.tar.atmos-blob.json exists beside it")
+	assert.Equal(t, "not an attribute document", download(lookalike), "updating a.tar does not delete the second artifact")
+
+	listed, err := store.List(ctx, artifact.Query{All: true})
+	require.NoError(t, err)
+	names := make([]string, 0, len(listed))
+	for _, info := range listed {
+		names = append(names, info.Name)
+	}
+	assert.ElementsMatch(t, []string{object, lookalike}, names, "both legacy artifacts are listed")
+
+	exists, err := store.Exists(ctx, lookalike)
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	require.NoError(t, store.Delete(ctx, object))
+	assert.Equal(t, "not an attribute document", download(lookalike), "deleting a.tar does not delete the second artifact")
+	assert.Equal(t, []string{lookalike, lookalike + ".metadata.json"}, dirEntries(t, root))
+}

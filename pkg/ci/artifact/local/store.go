@@ -146,7 +146,7 @@ func (s *Store) Download(ctx context.Context, name string) (io.ReadCloser, *arti
 	}
 	key := s.key(name)
 
-	object, err := transport.Get(ctx, key, blob.GetOptions{})
+	object, err := transport.Get(ctx, key, blob.GetOptions{SkipETag: true})
 	if err != nil {
 		if blob.IsNotFound(err) {
 			if s.isDirectory(name) {
@@ -266,7 +266,7 @@ func (s *Store) Exists(ctx context.Context, name string) (bool, error) {
 		return false, fmt.Errorf("failed to check if artifact %s exists: %w", name, err)
 	}
 
-	if _, err := transport.Stat(ctx, s.key(name), blob.StatOptions{}); err != nil {
+	if _, err := transport.Stat(ctx, s.key(name), blob.StatOptions{SkipETag: true}); err != nil {
 		if blob.IsNotFound(err) {
 			return false, nil
 		}
@@ -289,7 +289,7 @@ func (s *Store) GetMetadata(ctx context.Context, name string) (*artifact.Metadat
 	key := s.key(name)
 
 	// Check if the artifact file exists.
-	info, err := transport.Stat(ctx, key, blob.StatOptions{})
+	info, err := transport.Stat(ctx, key, blob.StatOptions{SkipETag: true})
 	if err != nil {
 		if blob.IsNotFound(err) {
 			if s.isDirectory(name) {
@@ -328,7 +328,7 @@ func (s *Store) validateName(name string) error {
 
 // loadMetadata loads metadata from a JSON sidecar object. A missing sidecar yields nil metadata.
 func (s *Store) loadMetadata(ctx context.Context, transport blob.Store, metadataKey string) (*artifact.Metadata, error) {
-	object, err := transport.Get(ctx, metadataKey, blob.GetOptions{})
+	object, err := transport.Get(ctx, metadataKey, blob.GetOptions{SkipETag: true})
 	if err != nil {
 		if blob.IsNotFound(err) {
 			return nil, nil
