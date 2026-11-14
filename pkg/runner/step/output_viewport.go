@@ -64,6 +64,7 @@ type outputViewportModel struct {
 	maxWidth, maxHeight int
 	padding             int
 	spinner             spinner.Model
+	color               bool
 	done                bool
 }
 
@@ -124,18 +125,12 @@ func (m *outputViewportModel) View() string {
 	inset := strings.Repeat(" ", padding)
 	contentWidth := width - 2*padding
 	rows := max(0, height-1)
-	text := strings.ReplaceAll(ansi.Strip(m.tail.snapshot()), "\r\n", "\n")
-	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	lines := viewportLines(m.tail.snapshot(), m.color)
 	if len(lines) > rows {
 		lines = lines[len(lines)-rows:]
 	}
 	var view strings.Builder
 	for _, line := range lines {
-		// Treat carriage-return progress messages as updates to the same row.
-		if index := strings.LastIndex(line, "\r"); index >= 0 {
-			line = line[index+1:]
-		}
-		line = strings.ReplaceAll(line, "\t", "    ")
 		view.WriteString(terminal.EscResetLine + inset + ansi.Truncate(line, contentWidth, "…") + inset)
 		view.WriteByte('\n')
 	}
@@ -165,7 +160,7 @@ func (w *OutputModeWriter) executeViewportWithIO(runner func(stdout, stderr io.W
 	}
 	model := &outputViewportModel{
 		tail: tail, title: title, width: width, height: height,
-		spinner: ui.NewSpinner(),
+		spinner: ui.NewSpinner(), color: term.ColorProfileFor(terminal.Stderr) != terminal.ColorNone,
 	}
 	if w.viewport != nil {
 		model.maxWidth, model.maxHeight = w.viewport.Width, w.viewport.Height
