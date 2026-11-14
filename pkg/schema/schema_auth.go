@@ -34,7 +34,7 @@ type Provider struct {
 	URL      string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
 	Region   string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
 	Username string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
-	// Provider configuration intentionally accepts a user-supplied password.
+	// Password for the provider, supplied by the user.
 	Password                string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
 	Driver                  string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
 	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type" jsonschema_extras:"deprecated=true,x-atmos-replacement=driver"` // Deprecated: use driver.
