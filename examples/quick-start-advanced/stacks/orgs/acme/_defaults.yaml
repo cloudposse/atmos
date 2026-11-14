@@ -2,9 +2,8 @@ vars:
   namespace: acme
 
 # Pin the toolchain for every component in this org. The `tools` map is the current,
-# integrated way to declare required tooling (versions are installed/resolved by
-# `atmos toolchain` from the `toolchain:` config in atmos.yaml and recorded in
-# toolchain.lock.yaml). https://atmos.tools/cli/commands/toolchain
+# integrated way to declare required tooling. Atmos resolves and installs versions
+# using its default toolchain settings. https://atmos.tools/cli/commands/toolchain
 dependencies:
   tools:
     opentofu: 1.10.10

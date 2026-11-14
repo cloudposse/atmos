@@ -762,6 +762,54 @@ func TestParseGlobalFlags_SettingsListMergeStrategyFlag(t *testing.T) {
 	})
 }
 
+// TestParseGlobalFlags_LinksFlag verifies the --links global flag registration, default,
+// CLI value, and ATMOS_TERMINAL_LINKS environment variable handling.
+func TestParseGlobalFlags_LinksFlag(t *testing.T) {
+	t.Run("registered as persistent string flag with empty default", func(t *testing.T) {
+		rootCmd := &cobra.Command{Use: "atmos"}
+		NewGlobalOptionsBuilder().Build().RegisterPersistentFlags(rootCmd)
+
+		flag := rootCmd.PersistentFlags().Lookup("links")
+		require.NotNil(t, flag)
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "", flag.DefValue)
+		assert.Equal(t, "", flag.Shorthand)
+	})
+
+	t.Run("defaults to empty string", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		assert.Equal(t, "", ParseGlobalFlags(cmd, v).Links)
+	})
+
+	t.Run("CLI flag value is parsed", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+		require.NoError(t, cmd.ParseFlags([]string{"--links", "clipboard"}))
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+
+		assert.Equal(t, "clipboard", ParseGlobalFlags(cmd, v).Links)
+	})
+
+	t.Run("ATMOS_TERMINAL_LINKS env var is used when flag is absent", func(t *testing.T) {
+		t.Setenv("ATMOS_TERMINAL_LINKS", "raw")
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		require.NoError(t, parser.BindToViper(v))
+
+		assert.Equal(t, "raw", ParseGlobalFlags(cmd, v).Links)
+	})
+}
+
 // TestParsePagerFlag_NoFlagRegistered tests behavior when pager flag is not registered.
 func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	// Create command WITHOUT pager flag.

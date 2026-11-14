@@ -1,0 +1,82 @@
+---
+slug: gitea-actions-ci-provider
+title: "Native Atmos CI Support for Gitea Actions"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Teams running infrastructure workflows on Gitea can now use Atmos native CI to publish
+commit statuses and Terraform plan comments directly to their pull requests. Atmos detects
+Gitea Actions automatically, so the same CLI commands you run locally can report their
+results in your self-hosted Git service.
+
+<!--truncate-->
+
+## What’s Supported
+
+The new `gitea-actions` provider integrates with Gitea’s API and runner environment:
+
+- **Commit statuses:** Report CI results against the checked-out commit.
+- **Pull request comments:** Publish plan results and update an existing Atmos comment
+  instead of adding a new comment on every run. Atmos only updates comments owned by
+  the authenticated account.
+- **Affected-component detection:** Resolve a pull request’s base SHA from its event
+  payload when the checkout matches the PR head. Push runs use the event’s `before` SHA.
+- **Runner integration:** Write job outputs and environment files, group logs, and write
+  summaries when the runner supplies a summary file. Summary display depends on the runner.
+
+Gitea runners can also expose GitHub-compatible environment variables. Atmos checks
+`GITEA_ACTIONS=true` to select the Gitea provider, even when `GITHUB_ACTIONS=true` is present.
+It uses Gitea’s API for reporting.
+
+## Enable It in Your Workflow
+
+Enable native CI in `atmos.yaml`:
+
+```yaml
+ci:
+  enabled: true
+  checks:
+    enabled: true
+  comments:
+    enabled: true
+    behavior: upsert
+```
+
+Create a Gitea token with repository status and issue/PR comment access. For a scoped
+personal access token, use `write:repository`, `write:issue`, and `read:user`. Store it as
+an Actions secret named `ATMOS_CI_GITEA_TOKEN`.
+
+Once your Gitea job has checked out the repository and installed Atmos and Terraform,
+add a plan step to its workflow under `.gitea/workflows/`:
+
+```yaml
+- name: Plan infrastructure
+  env:
+    ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}
+  run: atmos terraform plan vpc -s dev
+```
+
+Replace `vpc` and `dev` with your component and stack. No provider selection is needed.
+Atmos derives the API endpoint from the runner; `ATMOS_CI_GITEA_API_URL` can override it.
+HTTPS is required by default. The local emulator can explicitly opt into HTTP with
+`ATMOS_CI_GITEA_ALLOW_INSECURE=true`.
+
+For pull request workflows, check out the event’s **head SHA**, rather than a moving
+branch. Checking out that exact revision also gives affected-component detection
+a known head and base to compare.
+
+## Plan on PR, Provision After Merge
+
+Use pull request jobs to validate and plan infrastructure changes. After merge, check
+out the push event’s commit and create a fresh plan before applying it. The Gitea provider
+does not yet resolve merged-PR plan provenance, so it cannot establish that a saved PR
+plan is the reviewed plan for the merged commit.
+
+Gitea jobs do not automatically use GitHub artifact storage. Configure a shared
+[planfile store](/ci/planfile-storage) if plans need to survive between jobs; otherwise,
+Atmos uses local storage. Remote Actions cache, GitHub Checks annotations, and commit
+comments are not supported by this provider.
+
+See the [Gitea Actions CI documentation](/integrations/gitea-actions) for provider configuration,
+credentials, and capability details.

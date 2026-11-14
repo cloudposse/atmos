@@ -1,0 +1,78 @@
+---
+title: Setup and Authentication
+slug: /integrations/gitea-actions/setup
+description: Run Atmos in Gitea Actions jobs and give it a token for commit statuses and pull request comments.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Run Atmos in Gitea Actions jobs and give it a token for commit statuses and pull request comments. Enable native CI in `atmos.yaml`, run jobs in the Atmos container, and check out the repository with Atmos itself.
+</Intro>
+
+## Enable Native CI
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  enabled: true
+  summary:
+    enabled: true
+  output:
+    enabled: true
+  checks:
+    enabled: true
+  comments:
+    enabled: true
+    behavior: upsert
+```
+</File>
+
+## Run Jobs in the Atmos Container
+
+Run each job in the [Atmos container image](https://github.com/cloudposse/atmos/pkgs/container/atmos) and pin its version with a repository variable such as `ATMOS_VERSION`. The image has no `latest` tag.
+
+The image has no Node.js, which JavaScript actions like `actions/checkout` need inside a Gitea job container. Check out the repository with `atmos git clone --ci` instead. It clones the current repository and branch from the Gitea Actions context, with full history by default.
+
+```yaml
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - name: Clone the repository
+        env:
+          GIT_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: '!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f'
+        run: atmos git clone --ci
+      - run: atmos terraform plan vpc -s prod
+        env:
+          ATMOS_CI_GITEA_TOKEN: ${{ secrets.ATMOS_CI_GITEA_TOKEN }}
+```
+
+The clone step supplies the Gitea job token to Git through a process-scoped credential helper; it is not stored in the clone URL or Git configuration. Grant the job token repository read access. The workflow guides include the same helper in every checkout job. Public repositories can also be cloned without credentials. For older Gitea versions without a suitable job token, use a read-only repository token secret instead.
+
+## Token
+
+Create a Gitea access token for an account that can write to the repository, and store it as the repository Actions secret `ATMOS_CI_GITEA_TOKEN`. Gitea reserves secret names that start with `GITEA_` or `GITHUB_`.
+
+| Feature | Token scope |
+| --- | --- |
+| Commit [status checks](/cli/configuration/ci/checks) | `write:repository` |
+| [Pull request comments](/cli/configuration/ci/comments) | `write:issue` |
+| Updating Atmos's own comments | `read:user` (identifies which comments Atmos may update) |
+| Job summaries and output variables | none required |
+
+Alternatively, export a suitable job token as `GITEA_TOKEN`; the permissions a job token has depend on your Gitea version. Atmos never uses `GITHUB_TOKEN` for Gitea API calls.
+
+## API URL
+
+Atmos calls the Gitea API at `ATMOS_CI_GITEA_API_URL`, then the runner's API URL, then its server URL plus `/api/v1`. HTTPS is required and redirects are rejected. For a local emulator only, set `ATMOS_CI_GITEA_ALLOW_INSECURE=true` to allow HTTP.
+
+## Cloud Authentication
+
+Gitea Actions cannot issue OIDC tokens, so the `github/oidc` provider is not available. Supply cloud credentials through repository secrets, or use an [identity](/cli/configuration/auth) that does not depend on OIDC.

@@ -397,7 +397,7 @@ func TestParsePodmanPortsFromContainerJSON(t *testing.T) {
 				},
 			},
 			expected: []PortBinding{
-				{ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"},
+				{Bind: "0.0.0.0", ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"},
 			},
 		},
 		{
@@ -419,6 +419,7 @@ func TestParsePodmanPortsFromContainerJSON(t *testing.T) {
 			containerJSON: map[string]interface{}{
 				"Ports": []interface{}{
 					map[string]interface{}{
+						"host_ip":        "::1",
 						"container_port": float64(4566),
 						"host_port":      float64(35853),
 						"range":          float64(2),
@@ -427,8 +428,8 @@ func TestParsePodmanPortsFromContainerJSON(t *testing.T) {
 				},
 			},
 			expected: []PortBinding{
-				{ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"},
-				{ContainerPort: 4567, HostPort: 35854, Protocol: "tcp"},
+				{Bind: "::1", ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"},
+				{Bind: "::1", ContainerPort: 4567, HostPort: 35854, Protocol: "tcp"},
 			},
 		},
 		{
@@ -498,7 +499,7 @@ func TestParsePodmanPortsFromContainerRecord(t *testing.T) {
 		}
 		ports := parsePodmanPorts(rawPorts)
 		require.Len(t, ports, 1)
-		assert.Equal(t, PortBinding{ContainerPort: 3000, HostPort: 3000, Protocol: "tcp"}, ports[0])
+		assert.Equal(t, PortBinding{Bind: "0.0.0.0", ContainerPort: 3000, HostPort: 3000, Protocol: "tcp"}, ports[0])
 	})
 
 	t.Run("auto-assigned host port is surfaced", func(t *testing.T) {

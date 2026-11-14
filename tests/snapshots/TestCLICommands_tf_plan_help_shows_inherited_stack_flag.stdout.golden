@@ -140,6 +140,9 @@ GLOBAL FLAGS
                                              center=platform,compliance=sox or --labels cost-center=platform --labels
                                              compliance=sox
 
+      --links string                         How long URLs (such as sign-in links) are shown: auto, osc8, clipboard, or
+                                             raw
+
       --logs-color                           Enable log color when available; --no-color and NO_COLOR always override
                                              (default true)
 
