@@ -78,18 +78,7 @@ func VendorSource(
 }
 
 func vendorSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, targetDir string, vendorOpts vendorSourceOptions) error {
-	if sourceSpec == nil {
-		return errUtils.Build(errUtils.ErrNilParam).
-			WithExplanation("source specification cannot be nil").
-			Err()
-	}
-
-	if sourceSpec.Uri == "" {
-		return errUtils.Build(errUtils.ErrSourceInvalidSpec).
-			WithExplanation("source URI is required").
-			Err()
-	}
-	if err := validateVendorTargetDir(targetDir); err != nil {
+	if err := validateVendorSource(sourceSpec, targetDir); err != nil {
 		return err
 	}
 
@@ -124,6 +113,22 @@ func vendorSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, s
 	}
 
 	return vendorRemoteSource(ctx, atmosConfig, sourceSpec, targetDir, vendorResolvedOptions{vendorSourceOptions: vendorOpts, uri: uri})
+}
+
+// validateVendorSource checks the source specification and the target directory before vendoring.
+func validateVendorSource(sourceSpec *schema.VendorComponentSource, targetDir string) error {
+	if sourceSpec == nil {
+		return errUtils.Build(errUtils.ErrNilParam).
+			WithExplanation("source specification cannot be nil").
+			Err()
+	}
+
+	if sourceSpec.Uri == "" {
+		return errUtils.Build(errUtils.ErrSourceInvalidSpec).
+			WithExplanation("source URI is required").
+			Err()
+	}
+	return validateVendorTargetDir(targetDir)
 }
 
 func resolveLocalSubdirURI(uri, baseDir string) (string, error) {
