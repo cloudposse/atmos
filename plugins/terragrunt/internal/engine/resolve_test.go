@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -130,6 +132,9 @@ func TestVersionConstraintsUseSelectedExecutable(t *testing.T) {
 			} else {
 				require.ErrorContains(t, err, test.want)
 			}
+			if test.want == "rejects version" {
+				require.ErrorIs(t, err, ErrVersionRejected)
+			}
 		})
 	}
 }
@@ -202,4 +207,79 @@ func TestRejectRemoteStateEncryption(t *testing.T) {
 }`)
 	_, err := Resolve(t.Context(), request)
 	require.ErrorContains(t, err, "remote_state.encryption")
+}
+
+func TestBackendResolutionHonorsConfiguredDownloadDirectory(t *testing.T) {
+	request := nativeUnit(t, `download_dir = "custom-cache"
+remote_state {
+ backend = "local"
+ config = { path = "state.tfstate" }
+}
+`)
+	full, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	request.Phase = "backend"
+	backend, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Contains(t, backend.WorkingDir, "custom-cache")
+	require.Equal(t, full.WorkingDir, backend.WorkingDir)
+	require.Equal(t, full.Backend["path"], backend.Backend["path"])
+}
+
+func TestBackendDownloadDirectoryNeverReadsDependencyOutputs(t *testing.T) {
+	request := nativeUnit(t, `download_dir = "custom-cache"
+dependency "other" {
+ config_path = "other"
+}
+inputs = { value = dependency.other.outputs.value }
+remote_state {
+ backend = "local"
+ config = { path = "state.tfstate" }
+}
+`)
+	other := filepath.Join(filepath.Dir(request.Path), "other")
+	require.NoError(t, os.MkdirAll(other, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(other, "terragrunt.hcl"), []byte("inputs = {}\n"), 0o644))
+	request.Phase = "backend"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Contains(t, result.WorkingDir, "custom-cache")
+}
+
+func TestOverlayRejectsFilesTheHostContractCannotCarry(t *testing.T) {
+	t.Run("committed dependency lock file", func(t *testing.T) {
+		request := nativeUnit(t, "")
+		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), ".terraform.lock.hcl"), []byte("# lock"), 0o644))
+		_, err := Resolve(t.Context(), request)
+		require.ErrorIs(t, err, atmosbridge.ErrUnsupportedOverlay)
+		require.ErrorContains(t, err, ".terraform.lock.hcl")
+		request.Phase = "backend"
+		_, err = Resolve(t.Context(), request)
+		require.NoError(t, err, "backend reads never export the overlay")
+		request.Phase = ""
+		data, err := os.ReadFile(request.Path)
+		require.NoError(t, err)
+		excluded := strings.Replace(string(data), "terraform { source =", "terraform {\n exclude_from_copy = [\".terraform.lock.hcl\"]\n source =", 1)
+		excluded = strings.Replace(excluded, " }", "\n}", 1)
+		require.NoError(t, os.WriteFile(request.Path, []byte(excluded), 0o644))
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.NotContains(t, result.Overlay, ".terraform.lock.hcl")
+	})
+	t.Run("executable file", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows has no executable permission bit.")
+		}
+		request := nativeUnit(t, "")
+		script := filepath.Join(filepath.Dir(request.Path), "probe.sh")
+		require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755))
+		require.NoError(t, os.Chmod(script, 0o755))
+		_, err := Resolve(t.Context(), request)
+		require.ErrorIs(t, err, atmosbridge.ErrUnsupportedOverlay)
+		require.ErrorContains(t, err, "probe.sh")
+		require.NoError(t, os.Chmod(script, 0o644))
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Contains(t, result.Overlay, "probe.sh")
+	})
 }

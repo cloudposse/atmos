@@ -44,7 +44,11 @@ func TestEvaluatorUsesScopedEnvironmentForFunctionsAndCommands(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, name), content, 0o755))
 	sourceJSON, err := json.Marshal(filepath.ToSlash(module))
 	require.NoError(t, err)
-	config := `terraform { source = ` + string(sourceJSON) + ` }
+	// Executables are parse-time helpers here; the overlay contract cannot carry their mode.
+	config := `terraform {
+  source = ` + string(sourceJSON) + `
+  exclude_from_copy = ["bin", "` + name + `"]
+}
 inputs = {
   direct = get_env("CUSTOM_VALUE")
   child = jsondecode(run_cmd("` + name + `"))

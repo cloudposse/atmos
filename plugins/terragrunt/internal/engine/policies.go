@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,10 @@ import (
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
+
+// ErrVersionRejected reports a terraform or terragrunt version that violates a
+// declared version constraint.
+var ErrVersionRejected = errors.New("version constraint rejected")
 
 func localPath(base, path string) string {
 	if filepath.IsAbs(path) {
@@ -42,7 +47,7 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 			return err
 		}
 		if !rules.Check(v) {
-			return fmt.Errorf("%s %q rejects version %s", name, constraint, actual)
+			return fmt.Errorf("%w: %s %q rejects version %s", ErrVersionRejected, name, constraint, actual)
 		}
 		return nil
 	}
@@ -94,6 +99,12 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 	if cfg.PreventDestroy != nil && *cfg.PreventDestroy {
 		return fmt.Errorf("native adaptation of prevent_destroy is not implemented")
 	}
+	return checkUnsupportedSettings(cfg)
+}
+
+// checkUnsupportedSettings rejects error handling, exclusion, feature flag and
+// IAM settings, which have no native equivalent.
+func checkUnsupportedSettings(cfg *config.TerragruntConfig) error {
 	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
 		return fmt.Errorf("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
 	}

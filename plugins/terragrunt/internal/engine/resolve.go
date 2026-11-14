@@ -15,6 +15,7 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
 	"github.com/spf13/afero"
+	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
@@ -170,9 +171,33 @@ func parsingContext(request model.Request, path string) *config.ParsingContext {
 
 func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*config.TerragruntConfig, error) {
 	if request.Phase == "backend" {
-		return config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
+		cfg, err := config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
+		if err != nil {
+			return nil, err
+		}
+		return withDownloadDir(ctx, logger, environment, pctx, request, cfg, path)
 	}
 	return config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
+}
+
+// withDownloadDir restores download_dir on a partially parsed unit. Partial
+// decoding has no section for that attribute, but the working directory (and so
+// every relative local-state path) depends on it. The extra parse skips
+// dependency output resolution (an unknown placeholder replaces every
+// dependency), so backend reads still never read outputs.
+func withDownloadDir(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*config.TerragruntConfig, error) {
+	if request.Environment["TG_DOWNLOAD_DIR"] != "" {
+		return cfg, nil
+	}
+	placeholder := cty.DynamicVal
+	probe := pctx.WithSkipOutputsResolution()
+	probe.DecodedDependencies = &placeholder
+	full, err := config.ParseConfigFile(ctx, logger, environment, probe, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	cfg.DownloadDir = full.DownloadDir
+	return cfg, nil
 }
 
 // unitResolution converts the parsed unit into its local module identity.

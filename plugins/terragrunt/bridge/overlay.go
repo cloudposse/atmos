@@ -1,6 +1,8 @@
 package atmosbridge
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -9,6 +11,10 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/spf13/afero"
 )
+
+// ErrUnsupportedOverlay reports a unit file that the Atmos preparation contract
+// cannot carry faithfully.
+var ErrUnsupportedOverlay = errors.New("unit file cannot be exported through the overlay")
 
 // UnitOverlay applies upstream default copy rules without writing to the unit or module.
 func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.TerraformConfig) (map[string][]byte, error) {
@@ -42,6 +48,9 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 		if name == ".terragrunt-module-manifest" {
 			return nil
 		}
+		if err := checkOverlayFile(name, info); err != nil {
+			return err
+		}
 		content, err := afero.ReadFile(memory, path)
 		if err != nil {
 			return err
@@ -50,4 +59,20 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 		return nil
 	})
 	return files, err
+}
+
+// checkOverlayFile rejects files whose meaning is lost by the contract. The
+// contract carries content only: a committed provider lock file belongs to
+// Atmos' per-instance lock management and the host refuses it as a runtime
+// artifact, and file modes are not carried, so an executable would be written
+// without its execute permission. Failing here reports the unit file by name
+// instead of failing later or changing behavior silently.
+func checkOverlayFile(name string, info os.FileInfo) error {
+	if filepath.Base(name) == util.TerraformLockFile {
+		return fmt.Errorf("%w: %s is a dependency lock file, which Atmos manages per component instance; list it in exclude_from_copy to proceed without the committed pins", ErrUnsupportedOverlay, filepath.ToSlash(name))
+	}
+	if info.Mode()&0o111 != 0 {
+		return fmt.Errorf("%w: %s is executable, and file modes are not preserved; list it in exclude_from_copy if only parse-time functions use it", ErrUnsupportedOverlay, filepath.ToSlash(name))
+	}
+	return nil
 }
