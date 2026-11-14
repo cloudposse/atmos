@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -43,4 +44,35 @@ func TestGitPushSharedRetryDecode(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGitPushRetryMergeOverrides(t *testing.T) {
+	for _, later := range []string{"{max_attempts: 4}", "!unset"} {
+		t.Run(later, func(t *testing.T) {
+			dir := t.TempDir()
+			createConfigFile(t, dir, "import.yaml", "git: {repositories: {deploy: {push: {retry: {}}}}}")
+			createConfigFile(t, dir, "main.yaml", "git: {repositories: {deploy: {push: {retry: "+later+" }}}}")
+			v := viper.New()
+			v.SetConfigType("yaml")
+			require.NoError(t, mergeConfigFile(filepath.Join(dir, "import.yaml"), v))
+			require.Equal(t, 1, v.GetInt("git.repositories.deploy.push.retry.max_attempts"))
+			require.NoError(t, mergeConfigFile(filepath.Join(dir, "main.yaml"), v))
+			if later == "!unset" {
+				require.False(t, v.IsSet("git.repositories.deploy.push.retry"))
+			} else {
+				require.Equal(t, 4, v.GetInt("git.repositories.deploy.push.retry.max_attempts"))
+			}
+		})
+	}
+}
+
+func TestGitPushRetryIncludedEmpty(t *testing.T) {
+	dir := t.TempDir()
+	createConfigFile(t, dir, "retry.yaml", "{}")
+	source := "git: {repositories: {deploy: {push: {retry: !include " + filepath.ToSlash(filepath.Join(dir, "retry.yaml")) + "}}}}"
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(source)))
+	require.NoError(t, preprocessAtmosYamlFunc([]byte(source), v))
+	require.Equal(t, 1, v.GetInt("git.repositories.deploy.push.retry.max_attempts"))
 }

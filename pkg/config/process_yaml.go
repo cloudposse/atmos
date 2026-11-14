@@ -153,7 +153,9 @@ func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
 // Node is the YAML node to process, v is the Viper instance to populate, and currentPath is the hierarchical key path used for setting values.
 // It returns an error if processing any directive or child node fails.
 func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
-	preserveEmptyGitPushRetry(node, v, currentPath)
+	if err := preserveEmptyGitPushRetry(node, v, currentPath); err != nil {
+		return err
+	}
 	if node == nil {
 		return nil
 	}
@@ -819,6 +821,9 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 			v.Set(currentPath, data)
 			if err := node.Encode(data); err != nil {
 				return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+			}
+			if err := preserveEmptyGitPushRetry(node, v, currentPath); err != nil {
+				return err
 			}
 		} else {
 			log.Warn(
