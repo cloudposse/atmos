@@ -164,51 +164,8 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		// External scripts receive source text or no input, never the parent's terminal.
 		writer = writer.WithStdin(nil)
 	}
-	var embedded script.Result
-	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-		if engine, ok := script.Get(invocation.interpreter); ok {
-			inputs := step.Env
-			if step.ScriptEnv != nil {
-				inputs = step.ScriptEnv
-			}
-			resolved, resolveErr := vars.ResolveStepEnvMap(step, inputs)
-			if resolveErr != nil {
-				return resolveErr
-			}
-			var runErr error
-			embedded, runErr = engine.Execute(ctx, script.Spec{
-				Steps:        NewAutomationLibrary(vars, workflow),
-				Parallel:     vars.automationParallel,
-				OwnsTerminal: scriptOwnsTerminal(writer, vars),
-				ChildEnvironment: func(env []string, stream bool) []string {
-					if !stream {
-						return terminal.ChildColorEnv(env, nil)
-					}
-					return writer.ChildEnvironment(env)
-				},
-				InstallTools: ScriptToolInstaller(vars.AtmosConfig),
-				CI:           ci.NewReporter(vars.AtmosConfig),
-				Name:         step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,
-				SourcePath: invocation.sourcePath, ProjectRoot: scriptProjectRoot(vars),
-				Env: resolved, ProcessEnv: env, Stdout: stdout, Stderr: stderr, DryRun: step.DryRun,
-				Flags: vars.ScriptFlags(), Arguments: vars.ScriptArguments(),
-				Component: ScriptComponentRef(vars), ResolveComponent: ScriptComponentResolver(vars),
-				ProcessOverrides: step.ScriptProcessOverrides,
-				Hook:             vars.ScriptHook,
-				Args:             vars.ScriptArgs,
-				Viewport:         scriptViewport(GetViewportConfig(step, workflow)),
-			})
-			return runErr
-		}
-		return process.RunScript(ctx, &process.ScriptSpec{
-			Interpreter: invocation.interpreter,
-			Script:      invocation.script,
-			Name:        step.Name,
-			Dir:         invocation.workDir,
-			Env:         env,
-			DryRun:      step.DryRun,
-		}, stdout, stderr)
-	})
+	execution, err := executeScriptWithWriter(ctx, step, vars, workflow, &scriptExecutionSpec{invocation: &invocation, env: env, writer: writer})
+	stdout, stderr := execution.stdout, execution.stderr
 	if err != nil {
 		err = deadline.Wrap(err)
 		err = WrapScriptInterpreterError(invocation.interpreter, err)
@@ -220,8 +177,8 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 	}
 
 	value := stdout
-	if embedded.HasOutput {
-		value = embedded.Value
+	if execution.embedded.HasOutput {
+		value = execution.embedded.Value
 	}
 	return NewStepResult(value).
 		WithMetadata("stdout", stdout).
@@ -394,4 +351,71 @@ func scriptInputMap(value any) map[string]any {
 	default:
 		return nil
 	}
+}
+
+func scriptChildEnvironment(writer *OutputModeWriter) func([]string, bool) []string {
+	return func(env []string, stream bool) []string {
+		if !stream {
+			return terminal.ChildColorEnv(env, nil)
+		}
+		return writer.ChildEnvironment(env)
+	}
+}
+
+type scriptExecutionOutput struct {
+	embedded script.Result
+	stdout   string
+	stderr   string
+}
+
+type scriptExecutionSpec struct {
+	invocation *scriptInvocation
+	env        []string
+	writer     *OutputModeWriter
+}
+
+// executeScriptWithWriter captures output from either embedded or external interpreters.
+func executeScriptWithWriter(ctx context.Context, step *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition, spec *scriptExecutionSpec) (*scriptExecutionOutput, error) {
+	invocation, env, writer := spec.invocation, spec.env, spec.writer
+	var embedded script.Result
+	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		if engine, ok := script.Get(invocation.interpreter); ok {
+			inputs := step.Env
+			if step.ScriptEnv != nil {
+				inputs = step.ScriptEnv
+			}
+			resolved, resolveErr := vars.ResolveStepEnvMap(step, inputs)
+			if resolveErr != nil {
+				return resolveErr
+			}
+			var runErr error
+			embedded, runErr = engine.Execute(ctx, script.Spec{
+				Steps:            NewAutomationLibrary(vars, workflow),
+				Parallel:         vars.automationParallel,
+				OwnsTerminal:     scriptOwnsTerminal(writer, vars),
+				ChildEnvironment: scriptChildEnvironment(writer),
+				InstallTools:     ScriptToolInstaller(vars.AtmosConfig),
+				CI:               ci.NewReporter(vars.AtmosConfig),
+				Name:             step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,
+				SourcePath: invocation.sourcePath, ProjectRoot: scriptProjectRoot(vars),
+				Env: resolved, ProcessEnv: env, Stdout: stdout, Stderr: stderr, DryRun: step.DryRun,
+				Flags: vars.ScriptFlags(), Arguments: vars.ScriptArguments(),
+				Component: ScriptComponentRef(vars), ResolveComponent: ScriptComponentResolver(vars),
+				ProcessOverrides: step.ScriptProcessOverrides,
+				Hook:             vars.ScriptHook,
+				Args:             vars.ScriptArgs,
+				Viewport:         scriptViewport(GetViewportConfig(step, workflow)),
+			})
+			return runErr
+		}
+		return process.RunScript(ctx, &process.ScriptSpec{
+			Interpreter: invocation.interpreter,
+			Script:      invocation.script,
+			Name:        step.Name,
+			Dir:         invocation.workDir,
+			Env:         env,
+			DryRun:      step.DryRun,
+		}, stdout, stderr)
+	})
+	return &scriptExecutionOutput{embedded: embedded, stdout: stdout, stderr: stderr}, err
 }

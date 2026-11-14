@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -73,11 +72,7 @@ func (h *WriteHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	var value string
 
 	// Create custom keymap that adds ESC to quit keys.
-	keyMap := huh.NewDefaultKeyMap()
-	keyMap.Quit = key.NewBinding(
-		key.WithKeys("ctrl+c", "esc"),
-		key.WithHelp("ctrl+c/esc", "quit"),
-	)
+	keyMap := interactiveKeyMap()
 
 	text := huh.NewText().
 		Title(prompt).

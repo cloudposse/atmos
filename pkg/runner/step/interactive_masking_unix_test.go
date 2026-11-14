@@ -68,7 +68,7 @@ func TestInteractiveMaskingShowsPromptBeforeReadingInput(t *testing.T) {
 				go func() {
 					var err error
 					if shell {
-						_, _, err = (&ShellHandler{}).runInterpreter(context.Background(), writer, shellRunSpec{
+						_, _, err = (&ShellHandler{}).runInterpreter(context.Background(), writer, &shellRunSpec{
 							command: "printf 'PROMPT> '; printf 'DIAGNOSTIC> ' >&2; read answer; printf 'ANSWER=%s\\n' \"$answer\"",
 							stdin:   os.Stdin,
 						})

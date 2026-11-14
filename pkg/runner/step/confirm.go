@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -67,11 +66,7 @@ func (h *ConfirmHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 	var confirmed bool
 
 	// Create custom keymap that adds ESC to quit keys.
-	keyMap := huh.NewDefaultKeyMap()
-	keyMap.Quit = key.NewBinding(
-		key.WithKeys("ctrl+c", "esc"),
-		key.WithHelp("ctrl+c/esc", "quit"),
-	)
+	keyMap := interactiveKeyMap()
 
 	form := huh.NewForm(
 		huh.NewGroup(
