@@ -83,7 +83,7 @@ func treeOpener(record *artifact.Record, tree string) opener {
 		}
 		file, err := os.Open(filepath.Join(tree, filepath.FromSlash(entryPath)))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: open %q: %w", errUtils.ErrArtifactPackagingInvalid, entryPath, err)
 		}
 		return newVerifyingReader(file, entry.Digest, entry.Size), nil
 	}

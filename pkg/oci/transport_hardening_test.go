@@ -19,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/partial"
 	"github.com/google/go-containerregistry/pkg/v1/random"
+	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/stream"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/opencontainers/go-digest"
@@ -278,4 +279,33 @@ func TestLegacyGraphSpoolsStreamingLayersAndCleansUp(t *testing.T) {
 	graph.close()
 	assert.NoDirExists(t, spoolDir)
 	graph.close()
+}
+
+// ORAS drops foreign and non-distributable layers from every graph copy, which is the legacy
+// remote.Write behavior; this guards that the legacy graph keeps relying on it.
+func TestLegacyCopyNeverUploadsNonDistributableLayers(t *testing.T) {
+	distributable := static.NewLayer([]byte("distributable layer"), types.OCILayer)
+	foreign := static.NewLayer([]byte("foreign layer"), types.DockerForeignLayer)
+	image, err := mutate.AppendLayers(empty.Image, distributable, foreign)
+	require.NoError(t, err)
+	rawManifest, err := image.RawManifest()
+	require.NoError(t, err)
+	foreignHash, err := foreign.Digest()
+	require.NoError(t, err)
+	distributableHash, err := distributable.Digest()
+	require.NoError(t, err)
+
+	graph, err := legacyImageGraph(t.Context(), image)
+	require.NoError(t, err)
+	defer graph.close()
+	layout, err := OpenLayout(t.Context(), t.TempDir())
+	require.NoError(t, err)
+	transferred := map[digest.Digest]bool{}
+	root, err := Copy(t.Context(), Source{Store: graph, Reference: legacyRoot}, Destination{Store: layout, Reference: "latest"},
+		WithoutSubjectTraversal(), WithCopyObserver(func(desc ocispec.Descriptor) { transferred[desc.Digest] = true }))
+	require.NoError(t, err)
+
+	assert.True(t, transferred[digest.Digest(distributableHash.String())], "distributable layers are transferred")
+	assert.False(t, transferred[digest.Digest(foreignHash.String())], "foreign layers are not uploaded, matching the legacy writer")
+	assert.Equal(t, digest.FromBytes(rawManifest), root.Digest, "the manifest bytes are unchanged")
 }

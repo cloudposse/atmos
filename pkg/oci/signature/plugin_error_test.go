@@ -24,4 +24,12 @@ func TestPluginErrorKeepsBothLegacyClassificationsForOfflineTrust(t *testing.T) 
 	err = pluginError(&sigcore.Error{Kind: errUtils.ErrSignatureConfigInvalid})
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.NotErrorIs(t, err, errUtils.ErrPluginOfflineArtifact)
+
+	// Production shape: the trust loader failure is wrapped as invalid, with offline in the cause chain.
+	err = pluginError(&sigcore.Error{Kind: errUtils.ErrSignatureInvalid, Cause: errUtils.ErrSignatureOffline})
+	require.ErrorIs(t, err, errUtils.ErrPluginOfflineArtifact)
+	require.ErrorIs(t, err, errUtils.ErrPluginSignatureInvalid)
+
+	err = pluginError(&sigcore.Error{Kind: errUtils.ErrSignatureInvalid, Cause: errors.New("bad signature")})
+	require.NotErrorIs(t, err, errUtils.ErrPluginOfflineArtifact)
 }

@@ -116,7 +116,7 @@ func (r *Repository) readBlobs(ctx context.Context, prepared *artifact.PreparedA
 		staged := &prepared.Blobs[index]
 		reader, err := staged.Open(ctx)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: open staged blob %q: %w", errUtils.ErrArtifactPackagingInvalid, staged.Path, err)
 		}
 		if index == 0 {
 			if err := r.trip(FailDuringPayload); err != nil {
@@ -127,7 +127,7 @@ func (r *Repository) readBlobs(ctx context.Context, prepared *artifact.PreparedA
 		data, readErr := io.ReadAll(reader)
 		closeErr := reader.Close()
 		if err := errors.Join(readErr, closeErr); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: read staged blob %q: %w", errUtils.ErrArtifactPackagingInvalid, staged.Path, err)
 		}
 		if int64(len(data)) != staged.Descriptor.Size || digest.FromBytes(data) != staged.Descriptor.Digest {
 			return nil, fmt.Errorf("%w: staged blob %q does not match its descriptor", errUtils.ErrArtifactIntegrityFailed, staged.Path)

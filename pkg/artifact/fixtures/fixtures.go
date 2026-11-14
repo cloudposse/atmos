@@ -60,7 +60,7 @@ func RequirePOSIXModes(t testing.TB) {
 
 	t.Helper()
 	if !POSIXModes() {
-		t.Skip("this platform does not honor Unix permission bits")
+		t.Skipf("this platform does not honor Unix permission bits")
 	}
 }
 

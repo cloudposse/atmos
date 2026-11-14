@@ -1,6 +1,7 @@
 package artifacttest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -107,7 +108,7 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.evidence[subject.Digest] = append(r.evidence[subject.Digest], artifact.EvidenceBlob{Evidence: evidence, Data: payload.Data})
+	r.evidence[subject.Digest] = append(r.evidence[subject.Digest], artifact.EvidenceBlob{Evidence: evidence, Data: bytes.Clone(payload.Data)})
 	return []artifact.SignatureEvidence{evidence}, nil
 }
 
@@ -203,7 +204,12 @@ func (r *Repository) ReadEvidence(_ context.Context, pinned *artifact.PinnedRefe
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.count("ReadEvidence")
-	return append([]artifact.EvidenceBlob(nil), r.evidence[pinned.RecordDigest]...), nil
+	held := r.evidence[pinned.RecordDigest]
+	blobs := make([]artifact.EvidenceBlob, len(held))
+	for index := range held {
+		blobs[index] = artifact.EvidenceBlob{Evidence: held[index].Evidence, Data: bytes.Clone(held[index].Data)}
+	}
+	return blobs, nil
 }
 
 // WriteEvidence implements [artifact.EvidenceWriter].
@@ -218,7 +224,7 @@ func (r *Repository) WriteEvidence(_ context.Context, pinned *artifact.PinnedRef
 	}
 	stored := make([]artifact.SignatureEvidence, 0, len(evidence))
 	for index := range evidence {
-		r.evidence[pinned.RecordDigest] = append(r.evidence[pinned.RecordDigest], evidence[index])
+		r.evidence[pinned.RecordDigest] = append(r.evidence[pinned.RecordDigest], artifact.EvidenceBlob{Evidence: evidence[index].Evidence, Data: bytes.Clone(evidence[index].Data)})
 		stored = append(stored, evidence[index].Evidence)
 	}
 	return stored, nil

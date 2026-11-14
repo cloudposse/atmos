@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -364,13 +363,18 @@ func TestList_ConcurrencyIsInjectable(t *testing.T) {
 	for _, alias := range []string{"a", "b", "c"} {
 		e.static.Repositories[alias] = gatedList(t, e.repos[alias], gate)
 	}
-	done := make(chan error, 1)
+	type listOutcome struct {
+		count int
+		err   error
+	}
+	done := make(chan listOutcome, 1)
 	go func() {
 		result, err := e.svc.List(context.Background(), artifact.ListRequest{})
-		if err == nil && len(result.Artifacts) != 3 {
-			err = fmt.Errorf("got %d artifacts", len(result.Artifacts))
+		outcome := listOutcome{err: err}
+		if err == nil {
+			outcome.count = len(result.Artifacts)
 		}
-		done <- err
+		done <- outcome
 	}()
 	select {
 	case <-gate.entered:
@@ -383,7 +387,9 @@ func TestList_ConcurrencyIsInjectable(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 	close(gate.release)
-	require.NoError(t, <-done)
+	outcome := <-done
+	require.NoError(t, outcome.err)
+	assert.Equal(t, 3, outcome.count)
 	assert.Equal(t, int32(1), gate.peak.Load())
 }
 
