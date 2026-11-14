@@ -5,9 +5,9 @@ authors: [osterman]
 tags: [feature]
 ---
 
-GitOps moves at the speed of version control. Flux and Argo CD both reconcile whatever lands on a branch, so every deployment starts as a commit, and how quickly teams can commit to Git sets how quickly they can ship. That holds for an organization with hundreds of repositories, one with a few dozen, or one with a single monorepo. The faster the teams move, the more often two of them reach the same branch at the same moment.
+GitOps ships at the speed of version control. Flux and Argo CD deploy whatever lands on a branch, so every deployment starts as a push, whether you run hundreds of repositories, a few dozen, or one monorepo.
 
-Git makes that collision unavoidable. It is a distributed version control system, and the same design that lets every clone work independently leaves the server with no lock to take and little help for concurrent writers. Two publishers that start from the same branch tip both build a commit on top of it, and only the first push wins. The second finds out when its push is rejected. Without a plan for locking or retrying, that rejection becomes a failed deployment, and failed deployments become routine. Hosting providers add a ceiling of their own by throttling pushes that arrive too quickly. Atmos now treats both outcomes as a normal part of publishing.
+Git is distributed, which is its strength and its weakness here: it has no locks, so when two teams push to the same branch, one of them is rejected. The faster teams move, the more often that happens, and without a retry story it means constantly failed deployments. Atmos now retries rejected and throttled pushes for you.
 
 <!--truncate-->
 
