@@ -741,3 +741,23 @@ func TestDeliverIntegrationPublishesToRepo(t *testing.T) {
 	commitsAfter := gitCmd(t, verify, "rev-list", "--count", "HEAD")
 	assert.Equal(t, commitsBefore, commitsAfter, "re-delivering identical artifact must be a no-op")
 }
+
+// Managed reads must not follow symlinks outside the publishing directory.
+func TestWalkManagedDirConfinesReads(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "inside"), []byte("managed"), 0o600))
+	files, err := walkManagedDir(root)
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]byte{"inside": []byte("managed")}, files)
+	outside := filepath.Join(t.TempDir(), "secret")
+	require.NoError(t, os.WriteFile(outside, []byte("private"), 0o600))
+	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink creation requires privileges: %v", err)
+		}
+		require.NoError(t, err)
+	}
+	files, err = walkManagedDir(root)
+	require.ErrorIs(t, err, errUtils.ErrGitArtifactRead)
+	assert.Nil(t, files)
+}
