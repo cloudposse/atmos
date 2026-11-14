@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"time"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -195,11 +196,13 @@ func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetr
 		// Calculate delay for next attempt
 		delay := e.calculateDelay(attempt)
 
-		// Wait for the calculated delay or until context is cancelled
+		// Start the timer before announcing backoff so observers can synchronize cancellation.
+		wait := e.clock.After(delay)
+		log.Debug("Entering retry backoff", "attempt", attempt, "delay", delay)
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled during retry: %w", ctx.Err())
-		case <-e.clock.After(delay):
+		case <-wait:
 			// Continue to next attempt
 		}
 	}

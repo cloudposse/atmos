@@ -1,0 +1,44 @@
+vars:
+  stage: prod
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: !env FIELD_BUCKET
+      key: terraform.tfstate
+      region: us-east-1
+      endpoints:
+        s3: !env AWS_ENDPOINT_URL
+      use_path_style: true
+      skip_credentials_validation: true
+      skip_requesting_account_id: true
+      skip_metadata_api_check: true
+      skip_region_validation: true
+      skip_s3_checksum: true
+  provision:
+    backend:
+      enabled: true
+components:
+  terraform:
+    producer:
+      metadata: {component: marker}
+      vars: {value: prod-real}
+      mocks: {value: mock-value}
+      hooks:
+        store-value:
+          events: [after.terraform.apply]
+          kind: store
+          name: results
+          outputs: {value: .value}
+    consumer:
+      metadata: {component: marker}
+      vars:
+        value: consumer
+        inputs:
+          state: !terraform.state producer prod value
+          output: !terraform.output producer prod value
+    disabled:
+      metadata: {component: marker}
+      vars: {value: disabled}
+      provision:
+        backend: {enabled: false}
