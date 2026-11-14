@@ -209,6 +209,28 @@ func TestLock_CanceledAcquisitionLeaksNothing(t *testing.T) {
 		assert.Empty(t, lockObjects(spec.fake), "only the holder's claim ever existed")
 	})
 
+	t.Run("canceled before the first attempt", func(t *testing.T) {
+		spec := noneSpec().fresh(t)
+		repo := newRepo(t, spec)
+		// Initialization writes its own objects; only claim creation after this point is measured.
+		_, err := repo.List(context.Background(), artifact.ListQuery{})
+		require.NoError(t, err)
+		before := len(spec.fake.RequestsFor(s3test.OpPutObject))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		handle, err := repo.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "owner-a"})
+		require.ErrorIs(t, err, context.Canceled)
+		assert.Nil(t, handle)
+		assert.Empty(t, lockObjects(spec.fake), "an acquisition that started after cancellation leaves no claim or fence")
+		assert.Len(t, spec.fake.RequestsFor(s3test.OpPutObject), before, "no claim create was even attempted")
+
+		// The next live acquisition is not blocked by a reconciliation fence.
+		handle, err = repo.Lock(context.Background(), artifact.LockRequest{Resource: lockResource, Owner: "owner-b"})
+		require.NoError(t, err)
+		require.NoError(t, handle.Release(context.Background()))
+	})
+
 	for _, lostResponse := range []bool{false, true} {
 		name := "canceled just after the claim was created"
 		if lostResponse {

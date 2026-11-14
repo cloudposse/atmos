@@ -92,6 +92,12 @@ func (r *Repository) acquire(ctx context.Context, resource, owner, operationID s
 	key := layout.LockPath(resource)
 	deadline := time.Now().Add(r.settings.lockWait)
 	for {
+		// An acquisition that starts after cancellation must not reach the claim PUT: the canceled
+		// request would be settled as ambiguous and could leave a permanent reconciliation fence.
+		// Only requests that were already in flight when the context ended are reconciled.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
 		handle, err := r.tryClaim(ctx, key, &doc, raw)
 		if handle != nil || err != nil {
 			return handle, err
