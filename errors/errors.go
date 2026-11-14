@@ -2164,6 +2164,10 @@ var (
 	// The generic blob transport fails closed instead of falling back to ambient credentials.
 	ErrBlobIdentityUnresolved = errors.New("blob identity could not be resolved")
 
+	// ErrBlobOperationFailed is the sentinel for blob failures without a more specific class, such as
+	// local I/O errors or an SDK failure with no mapped meaning. The underlying cause stays in the chain.
+	ErrBlobOperationFailed = errors.New("blob operation failed")
+
 	// ErrBlobInvalidChunkTerminator is returned by the S3 test endpoint when an aws-chunked request
 	// body has a chunk that is not followed by the required CRLF terminator.
 	ErrBlobInvalidChunkTerminator = errors.New("invalid aws-chunked chunk terminator")

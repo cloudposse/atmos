@@ -21,6 +21,7 @@ func TestErrorKindsMatchSentinelsAndCauses(t *testing.T) {
 		sentinel error
 		check    func(error) bool
 	}{
+		{KindOther, errUtils.ErrBlobOperationFailed, func(err error) bool { return errors.Is(err, errUtils.ErrBlobOperationFailed) }},
 		{KindNotFound, errUtils.ErrBlobNotFound, IsNotFound},
 		{KindPrecondition, errUtils.ErrBlobPreconditionFailed, IsPreconditionFailed},
 		{KindUnsupported, errUtils.ErrBlobConditionalUnsupported, IsConditionalUnsupported},
@@ -43,8 +44,8 @@ func TestErrorMessagesDoNotDuplicateTheSentinel(t *testing.T) {
 	err := NewError(KindNotFound, "get", "k", fmt.Errorf("%w: gone", errUtils.ErrBlobNotFound))
 	assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrBlobNotFound.Error()))
 	assert.Equal(t, `blob get "k": blob object not found`, NewError(KindNotFound, "get", "k", nil).Error())
-	assert.Equal(t, `blob list: failed`, NewError(KindOther, "list", "", nil).Error())
-	assert.Equal(t, `blob list: boom`, NewError(KindOther, "list", "", errors.New("boom")).Error())
+	assert.Equal(t, `blob list: blob operation failed`, NewError(KindOther, "list", "", nil).Error())
+	assert.Equal(t, `blob list: blob operation failed: boom`, NewError(KindOther, "list", "", errors.New("boom")).Error())
 }
 
 func TestOnlyAmbiguousErrorsAreTemporary(t *testing.T) {

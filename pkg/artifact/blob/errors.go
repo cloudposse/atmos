@@ -24,7 +24,8 @@ type Kind int
 
 // Error kinds.
 const (
-	// KindOther is any failure without a more specific class. Only the cause is reported.
+	// KindOther is any failure without a more specific class. It matches ErrBlobOperationFailed
+	// and keeps the cause visible.
 	KindOther Kind = iota
 
 	// KindNotFound means the addressed object does not exist.
@@ -46,7 +47,8 @@ const (
 	KindIdentity
 )
 
-// sentinel returns the static error for the kind, or nil for KindOther.
+// sentinel returns the static error for the kind. KindOther maps to ErrBlobOperationFailed so every
+// classified error carries a repository sentinel.
 func (k Kind) sentinel() error {
 	switch k {
 	case KindNotFound:
@@ -62,7 +64,7 @@ func (k Kind) sentinel() error {
 	case KindIdentity:
 		return errUtils.ErrBlobIdentityUnresolved
 	default:
-		return nil
+		return errUtils.ErrBlobOperationFailed
 	}
 }
 
@@ -82,7 +84,7 @@ type Error struct {
 	Err error
 }
 
-// NewError returns a classified error. A nil err is allowed for kinds that have a sentinel.
+// NewError returns a classified error. A nil err is allowed because every kind has a sentinel.
 func NewError(kind Kind, op, key string, err error) *Error {
 	defer perf.Track(nil, "blob.NewError")()
 
@@ -99,14 +101,9 @@ func (e *Error) Error() string {
 	}
 	sentinel := e.Kind.sentinel()
 	switch {
-	case sentinel == nil && e.Err == nil:
-		return subject + ": failed"
-	case sentinel == nil:
-		return fmt.Sprintf("%s: %v", subject, e.Err)
-	case e.Err == nil, errors.Is(e.Err, sentinel):
-		if e.Err == nil {
-			return fmt.Sprintf("%s: %v", subject, sentinel)
-		}
+	case e.Err == nil:
+		return fmt.Sprintf("%s: %v", subject, sentinel)
+	case errors.Is(e.Err, sentinel):
 		return fmt.Sprintf("%s: %v", subject, e.Err)
 	default:
 		return fmt.Sprintf("%s: %v: %v", subject, sentinel, e.Err)
@@ -117,10 +114,7 @@ func (e *Error) Error() string {
 func (e *Error) Unwrap() []error {
 	defer perf.Track(nil, "blob.Error.Unwrap")()
 
-	var chain []error
-	if sentinel := e.Kind.sentinel(); sentinel != nil {
-		chain = append(chain, sentinel)
-	}
+	chain := []error{e.Kind.sentinel()}
 	if e.Err != nil {
 		chain = append(chain, e.Err)
 	}
