@@ -34,5 +34,5 @@ def register_service(name):
         timeout = "5s",
         output = "none",
     )
-    request("/catalog/refresh", {"entityRef": "component:default/" + name}, token, expected = [204])
+    request("/catalog/refresh", {"entityRef": "component:default/" + name}, token, expected = [200])
     ui.success("Provisioned local bucket and registered `http://localhost:3000/catalog/default/component/" + name + "`")

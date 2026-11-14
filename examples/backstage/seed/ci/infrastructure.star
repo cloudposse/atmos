@@ -77,5 +77,5 @@ def register(name):
                expect = {"status": [200]}, retry = {"max_attempts": 60, "initial_delay": "2s", "backoff_strategy": "constant"},
                timeout = "5s", output = "none")
     steps.http(url = base + "/catalog/refresh", method = "POST", headers = headers,
-               body = json.encode({"entityRef": "component:default/" + name}), expect = {"status": [204]}, output = "none")
+               body = json.encode({"entityRef": "component:default/" + name}), expect = {"status": [200]}, output = "none")
     ui.success("Registered " + name + " in Backstage")
