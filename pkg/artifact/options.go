@@ -226,7 +226,7 @@ func (o *OCIRegistryOptions) Validate() error {
 	if o.Registry == "" {
 		errs = append(errs, fmt.Errorf("%w: option %q is required", errUtils.ErrArtifactConfigInvalid, "registry"))
 	} else if !validRegistryHost(o.Registry) {
-		errs = append(errs, fmt.Errorf("%w: registry %q must be a host with an optional port, without a scheme, path, or credentials", errUtils.ErrArtifactConfigInvalid, RedactURL(o.Registry)))
+		errs = append(errs, fmt.Errorf("%w: registry %q must be a host with an optional port, without a scheme, path, or credentials", errUtils.ErrArtifactConfigInvalid, redactRegistry(o.Registry)))
 	}
 	errs = append(errs, validatePrefix(o.Prefix))
 	if o.Prefix != "" {
@@ -241,6 +241,27 @@ func (o *OCIRegistryOptions) Validate() error {
 }
 
 const registryPortBits = 16
+
+// redactRegistry returns registry safe to repeat in a diagnostic: when its authority embeds
+// userinfo (user:password@host), the userinfo is replaced with a placeholder so a credential
+// typed into the registry option never reaches an error message.
+func redactRegistry(registry string) string {
+	rest := registry
+	prefix := ""
+	if scheme, after, found := strings.Cut(registry, "://"); found {
+		prefix, rest = scheme+"://", after
+	}
+	authority, tail, _ := strings.Cut(rest, "/")
+	at := strings.LastIndex(authority, "@")
+	if at < 0 {
+		return registry
+	}
+	redacted := prefix + "REDACTED@" + authority[at+1:]
+	if strings.Contains(rest, "/") {
+		redacted += "/" + tail
+	}
+	return redacted
+}
 
 func validRegistryHost(host string) bool {
 	if !registryHostPattern.MatchString(host) {

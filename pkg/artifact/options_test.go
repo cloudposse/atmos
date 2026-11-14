@@ -256,3 +256,28 @@ func TestValidateEndpoint_NeverEchoesCredentials(t *testing.T) {
 		})
 	}
 }
+
+// TestOCIRegistryOptionsValidate_NeverEchoesCredentials guards that a registry diagnostic repeats
+// the configured value only with any embedded userinfo redacted.
+func TestOCIRegistryOptionsValidate_NeverEchoesCredentials(t *testing.T) {
+	const secret = "s3cr3t-password"
+	tests := []struct {
+		name     string
+		registry string
+		wantErr  string
+	}{
+		{name: "userinfo only", registry: "user:" + secret + "@registry.example.com", wantErr: "registry.example.com"},
+		{name: "scheme and userinfo", registry: "https://user:" + secret + "@registry.example.com", wantErr: "https://REDACTED@registry.example.com"},
+		{name: "userinfo and path", registry: "https://user:" + secret + "@registry.example.com/acme/atmos", wantErr: "https://REDACTED@registry.example.com/acme/atmos"},
+		{name: "token without password", registry: secret + "@registry.example.com:5000", wantErr: "REDACTED@registry.example.com:5000"},
+		{name: "scheme without credentials stays visible", registry: "https://registry.example.com", wantErr: "https://registry.example.com"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := (&OCIRegistryOptions{Registry: tt.registry}).Validate()
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.NotContains(t, err.Error(), secret)
+		})
+	}
+}
