@@ -767,6 +767,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
 	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
 	bindEnv(v, "settings.terminal.help.filter", "ATMOS_HELP_FILTER")
+	bindEnv(v, "settings.terminal.links", "ATMOS_TERMINAL_LINKS")
 
 	bindEnv(v, "settings.metrics.enabled", "ATMOS_SETTINGS_METRICS_ENABLED")
 

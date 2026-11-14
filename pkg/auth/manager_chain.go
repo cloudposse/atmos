@@ -50,6 +50,9 @@ func resetProcessCredentialCache() {
 
 // chainCacheKey returns a unique cache key for the current chain and realm.
 func (m *manager) chainCacheKey() string {
+	if m.operationScope != nil {
+		return m.realm.Value + ":" + m.operationScope.realm + ":" + strings.Join(m.chain, "->")
+	}
 	return m.realm.Value + ":" + strings.Join(m.chain, "->")
 }
 

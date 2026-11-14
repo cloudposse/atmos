@@ -170,3 +170,13 @@ func TestGuardForkCheckoutWarnsOnEveryBypassSource(t *testing.T) {
 		})
 	}
 }
+
+func TestGuardForkCheckout_RefOverrideUnderElevatedForkEvent(t *testing.T) {
+	registerGitHubProviderOnly(t)
+	setForkPRTargetEnv(t)
+	t.Setenv("GITHUB_REF", "refs/pull/5/merge")
+	err := guardForkCheckout("deadbeef", "https://github.com/acme/infra.git", &cloneOptions{Ref: "deadbeef"})
+	require.ErrorIs(t, err, errUtils.ErrUnsafeForkCheckout)
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	require.NoError(t, guardForkCheckout("deadbeef", "https://github.com/acme/infra.git", &cloneOptions{Ref: "deadbeef"}))
+}

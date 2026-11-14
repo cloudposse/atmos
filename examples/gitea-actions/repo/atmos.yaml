@@ -1,0 +1,30 @@
+# The infrastructure project that Gitea Actions runs. Push this directory as the
+# root of a Gitea repository; its workflows live in .gitea/workflows.
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: tofu
+    deploy_run_init: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+# Native CI: Atmos detects GITEA_ACTIONS=true and reports through the Gitea
+# provider (commit statuses, pull request comments, job outputs, and summaries).
+ci:
+  enabled: true
+  summary:
+    enabled: true
+  output:
+    enabled: true
+  checks:
+    enabled: true
+  comments:
+    enabled: true
+    behavior: upsert

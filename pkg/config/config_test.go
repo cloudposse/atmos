@@ -1078,6 +1078,38 @@ func TestTerminalSpeedDefaultAndEnvBinding(t *testing.T) {
 	assert.Equal(t, 8.0, v.GetFloat64("settings.terminal.speed"))
 }
 
+// TestTerminalLinksConfigAndEnvBinding verifies settings.terminal.links decodes
+// from atmos.yaml into the schema and that ATMOS_TERMINAL_LINKS overrides it
+// through the real env bindings.
+func TestTerminalLinksConfigAndEnvBinding(t *testing.T) {
+	load := func(t *testing.T) schema.AtmosConfiguration {
+		t.Helper()
+		v := viper.New()
+		v.SetConfigType("yaml")
+		setDefaultConfiguration(v)
+		setEnv(v)
+		require.NoError(t, v.MergeConfig(strings.NewReader("settings:\n  terminal:\n    links: clipboard\n")))
+		var atmosConfig schema.AtmosConfiguration
+		require.NoError(t, v.Unmarshal(&atmosConfig))
+		return atmosConfig
+	}
+
+	t.Run("unset by default so the UI applies auto", func(t *testing.T) {
+		v := viper.New()
+		setDefaultConfiguration(v)
+		assert.Empty(t, v.GetString("settings.terminal.links"))
+	})
+
+	t.Run("value from atmos.yaml", func(t *testing.T) {
+		assert.Equal(t, "clipboard", load(t).Settings.Terminal.Links)
+	})
+
+	t.Run("ATMOS_TERMINAL_LINKS overrides atmos.yaml", func(t *testing.T) {
+		t.Setenv("ATMOS_TERMINAL_LINKS", "raw")
+		assert.Equal(t, "raw", load(t).Settings.Terminal.Links)
+	})
+}
+
 func TestDiagnosticsDefaultAndEnvBinding(t *testing.T) {
 	v := viper.New()
 	setDefaultConfiguration(v)

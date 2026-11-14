@@ -53,6 +53,56 @@ func TestDiscoveryColorFlags(t *testing.T) {
 	}
 }
 
+func TestDiscoveryDefersConfiguredAlias(t *testing.T) {
+	root, _, _ := discoveryTestRoot(t)
+	aws := &cobra.Command{Use: "aws"}
+	aws.AddCommand(&cobra.Command{Use: "cloudformation", Run: func(*cobra.Command, []string) {}})
+	root.AddCommand(aws)
+	root.AddCommand(&cobra.Command{
+		Use: "cft", Annotations: map[string]string{"configAlias": "aws cloudformation"},
+		DisableFlagParsing: true, Run: func(*cobra.Command, []string) {},
+	})
+	for _, args := range [][]string{
+		{"cft", "--docs"},
+		{"cft", "deploy", "--docs"},
+		{"cft", "--example"},
+	} {
+		handled, err := dispatchCommandDiscovery(root, args)
+		require.NoError(t, err)
+		assert.False(t, handled, "alias must forward %v to its target", args)
+	}
+}
+
+func TestDiscoveryRejectsUnsafeConfiguredAliases(t *testing.T) {
+	root, _, _ := discoveryTestRoot(t)
+	for name, target := range map[string]string{
+		"deploy":   "auth exec -- sh -c deploy",
+		"missing":  "--config",
+		"indirect": "deploy",
+		"self":     "self",
+		"first":    "second",
+		"second":   "first",
+		"safe":     "terraform plan",
+		"chain":    "safe",
+	} {
+		root.AddCommand(&cobra.Command{Use: name, Annotations: map[string]string{"configAlias": target}, DisableFlagParsing: true, Run: func(*cobra.Command, []string) { t.Fatal("alias executed") }})
+	}
+	for _, name := range []string{"deploy", "indirect", "self", "first", "missing"} {
+		for _, flag := range []string{"--docs", "--example"} {
+			t.Run(name+flag, func(t *testing.T) {
+				handled, err := dispatchCommandDiscovery(root, []string{name, flag})
+				require.True(t, handled)
+				require.Error(t, err)
+			})
+		}
+	}
+	for _, name := range []string{"safe", "chain"} {
+		handled, err := dispatchCommandDiscovery(root, []string{name, "--example"})
+		require.NoError(t, err)
+		assert.False(t, handled)
+	}
+}
+
 func TestCommandExampleConfirmationButtons(t *testing.T) {
 	_ = NewTestKit(t)
 	cmd := &cobra.Command{}
