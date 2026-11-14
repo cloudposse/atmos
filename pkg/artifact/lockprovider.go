@@ -12,3 +12,13 @@ type LockProvider interface {
 	// It never steals another operation's lock and never silently downgrades the scope.
 	Lock(ctx context.Context, request LockRequest) (LockHandle, error)
 }
+
+// LockNamespacer is optionally implemented by repositories to name their collection for lock keys.
+// When a repository delegates locking to another repository, the delegate's lock resource is
+// scoped by this namespace, so unrelated collections that share one coordinator never contend and
+// two aliases for the same collection always do. A repository without it is scoped by its alias.
+type LockNamespacer interface {
+	// LockNamespace returns a stable, credential-free identifier of the collection, for example a
+	// registry and prefix, a bucket and prefix, or an absolute directory.
+	LockNamespace() string
+}

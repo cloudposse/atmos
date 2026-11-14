@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/opencontainers/go-digest"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -40,13 +42,7 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	if err := checkSigningCapability(request.Repository, &info, s.signer, subject); err != nil {
 		return err
 	}
-	subjectResource := subjectLockResource(request.Ref.Name)
-	resource := subjectResource
-	targets := []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: subjectResource}}
-	if inspection.Record != nil {
-		resource = inspection.Record.Name + ":" + inspection.Record.Version
-		targets = append(targets, lockTarget{alias: request.Repository, repo: repo, info: &info, resource: resource})
-	}
+	targets, resource := signLockTargets(request, &info, repo, inspection)
 	locks, err := s.acquireLocks(ctx, op, opSign, targets)
 	if err != nil {
 		return err
@@ -61,10 +57,26 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 		return fmt.Errorf("sign %s in repository %q: %w", request.Ref, request.Repository, err)
 	}
 	result.Subject, result.Evidence = subject, evidence
+	if request.Ref.Digest != subject.Digest {
+		op.info("signed-subject", fmt.Sprintf("%s names the resolved artifact; the signed subject is the %s %s", request.Ref.Digest, subject.Kind, subject.Digest))
+	}
 	op.result.Outcome = artifact.OutcomeCreated
 	op.result.LockScope = locks.scope()
 	op.info("signed-not-verified", "the subject is signed; signing alone does not verify it against trust policy, use verify")
 	return nil
+}
+
+// signLockTargets returns the locks a signature takes and the resource whose lock guards the
+// evidence write: the subject lock, plus the canonical name:version reference when the subject
+// has a Record.
+func signLockTargets(request *artifact.SignRequest, info *RepositoryInfo, repo artifact.Repository, inspection *artifact.Inspection) ([]lockTarget, string) {
+	resource := subjectLockResource(request.Ref.Name)
+	targets := []lockTarget{{alias: request.Repository, repo: repo, info: info, resource: resource}}
+	if inspection.Record != nil {
+		resource = inspection.Record.Name + ":" + inspection.Record.Version
+		targets = append(targets, lockTarget{alias: request.Repository, repo: repo, info: info, resource: resource})
+	}
+	return targets, resource
 }
 
 func verifyLockedSubject(ctx context.Context, repo artifact.Repository, ref artifact.Ref, pinned *artifact.PinnedReference) error {
@@ -92,17 +104,30 @@ func (s *Service) validateSign(request *artifact.SignRequest) error {
 	return nil
 }
 
-// signSubject binds the digest reference to the immutable subject: the portable Record when the
-// digest names the Record (or the resolved local/S3 digest), the original OCI root otherwise.
+// signSubject binds the digest reference to the immutable subject: the portable Record for an
+// Atmos package, the original OCI root for a foreign graph. A digest reference names the artifact
+// by whichever digest the user sees, so sign accepts the subject digest itself, the digest the
+// repository resolved (the OCI manifest or envelope digest, or the Record digest for local and S3),
+// and the Record digest; all of them select the same artifact and the same signed subject. Any
+// other digest is rejected, so evidence is never attached to a subject the user did not name.
 func signSubject(pinned *artifact.PinnedReference, inspection *artifact.Inspection, ref artifact.Ref) (artifact.SignatureSubject, error) {
 	subject, err := subjectOf(inspection)
 	if err != nil {
 		return subject, err
 	}
-	if ref.Digest != subject.Digest {
-		return subject, fmt.Errorf("%w: %s does not name the signable subject %s of the resolved artifact (resolved %s)", errUtils.ErrArtifactRefInvalid, ref, subject.Digest, pinned.ResolvedDigest)
+	if !namesSubject(pinned, &subject, ref.Digest) {
+		return subject, fmt.Errorf("%w: %s names none of the digests of the resolved artifact (signable subject %s, resolved %s, record %s)",
+			errUtils.ErrArtifactRefInvalid, ref, subject.Digest, pinned.ResolvedDigest, pinned.RecordDigest)
 	}
 	return subject, subject.Validate()
+}
+
+// namesSubject reports whether the digest is one of the identities of the resolved artifact.
+func namesSubject(pinned *artifact.PinnedReference, subject *artifact.SignatureSubject, named digest.Digest) bool {
+	if named == "" {
+		return false
+	}
+	return named == subject.Digest || named == pinned.ResolvedDigest || (pinned.RecordDigest != "" && named == pinned.RecordDigest)
 }
 
 func checkSigningCapability(alias string, info *RepositoryInfo, signer artifact.Signer, subject artifact.SignatureSubject) error {

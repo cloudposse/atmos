@@ -1,0 +1,246 @@
+---
+title: Artifacts Configuration
+sidebar_label: artifacts
+sidebar_class_name: command
+id: artifacts
+description: Configure artifact repositories, authentication, packaging, write coordination, and signature verification policy in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `artifacts` section in `atmos.yaml` defines the repositories that the [`atmos artifacts`](/cli/commands/artifacts/usage) commands publish to, read from, and search. Each repository has an alias that you choose, a kind that selects its storage backend, and optional authentication, packaging, write coordination, and signature verification settings.
+</Intro>
+
+<Experimental />
+
+<KeyPoints>
+- One list of repositories, addressed by alias, covers local directories, local archives, S3 buckets, OCI registries, and OCI layouts
+- Authentication uses Atmos Auth identities; credentials never appear in repository options
+- Configuration loads without network access, credential resolution, or directory creation
+- Signature verification policy is global and per repository, and a repository can add requirements but never weaken the global ones
+- Write coordination defaults to host scope and can be delegated to a repository that coordinates across hosts
+</KeyPoints>
+
+## Basic Configuration
+
+<File title="atmos.yaml">
+```yaml
+artifacts:
+  repositories:
+    shared:
+      kind: oci/registry
+      identity: registry-publisher
+      options:
+        registry: ghcr.io
+        prefix: acme/atmos
+      defaults:
+        metadata:
+          labels:
+            team: platform
+
+    backups:
+      kind: aws/s3
+      identity: backup-writer
+      packaging: tgz
+      options:
+        bucket: acme-artifacts
+        prefix: atmos
+        region: us-east-2
+        tags:
+          purpose: backup
+
+    local:
+      kind: local/dir
+      options:
+        path: .atmos/artifacts
+
+    archives:
+      kind: local/archive
+      packaging: tgz
+      permissions: "0600"
+      options:
+        path: .atmos/backups
+
+    offline:
+      kind: oci/layout
+      options:
+        path: .atmos/oci
+```
+</File>
+
+The keys under `artifacts.repositories` (`shared`, `backups`, `local`, `archives`, `offline`) are arbitrary aliases. Commands, workflow steps, and hooks select a repository by alias, and a command that needs a repository fails when you omit it. Repository configuration follows standard Atmos deep-merge, so repositories can be defined in imported configuration and overridden per environment.
+
+## Repository Fields
+
+<dl>
+    <dt>`kind` <em>(required)</em></dt>
+    <dd>
+        Selects the backend: `local/dir`, `local/archive`, `aws/s3`, `oci/registry`, or `oci/layout`.
+    </dd>
+
+    <dt>`identity` <em>(optional)</em></dt>
+    <dd>
+        Name of an identity under [`auth.identities`](/cli/configuration/auth). Atmos resolves the identity the first time an operation needs credentials. Listing configuration, validating it, and running `--dry-run` publications never authenticate. An `aws/s3` repository needs an AWS identity, and an `oci/registry` repository binds the identity to its registry host only.
+    </dd>
+
+    <dt>`options` <em>(required for every kind)</em></dt>
+    <dd>
+        Backend settings, described below. Credential-shaped keys are rejected.
+    </dd>
+
+    <dt>`packaging` <em>(optional)</em></dt>
+    <dd>
+        How file payloads are stored: `none`, `tar`, `tgz`, or `zip`. The supported values and the default depend on the kind.
+    </dd>
+
+    <dt>`permissions` <em>(optional, `local/archive` only)</em></dt>
+    <dd>
+        Quoted octal mode of the resulting archive file, for example `"0600"`. The default is `"0600"`. The setting applies to the archive file only, not to its members, S3 access, or OCI access.
+    </dd>
+
+    <dt>`defaults.metadata` <em>(optional)</em></dt>
+    <dd>
+        A default `description` and default `labels` for newly published artifacts. Labels you pass to `atmos artifacts publish --labels` override matching keys. Labels belong to each published version, not to the repository.
+    </dd>
+
+    <dt>`verification` <em>(optional)</em></dt>
+    <dd>
+        Signature policy for this repository. See [Signature Verification](#signature-verification).
+    </dd>
+
+    <dt>`locking` <em>(optional)</em></dt>
+    <dd>
+        Write coordination for this repository. See [Write Coordination](#write-coordination).
+    </dd>
+</dl>
+
+### Options by kind
+
+<dl>
+    <dt>`local/dir` and `local/archive`</dt>
+    <dd>
+        `path` is the destination root. A relative path resolves against the directory of the configuration file that declares it, even when the file is imported. For a remote import, declare the path locally or use an absolute path. `key_pattern` overrides the path below the root with a Go template over `.Name`, `.Version`, `.Kind`, and `.CreatedAt`. The pattern is never expanded while configuration loads, must stay inside the root, and must use an extension that agrees with the packaging.
+    </dd>
+
+    <dt>`aws/s3`</dt>
+    <dd>
+        `bucket` (required), `prefix`, `region`, `tags` (S3 object tags applied to every object, separate from artifact labels), `key_pattern`, and `endpoint` for an S3-compatible service. `path_style` forces path-style addressing, which is the default whenever an `endpoint` is set.
+    </dd>
+
+    <dt>`oci/registry`</dt>
+    <dd>
+        `registry` (required) is the registry host with an optional port, and `prefix` is the collection root below it. Atmos maps a collection and an artifact name onto an OCI repository path.
+    </dd>
+
+    <dt>`oci/layout`</dt>
+    <dd>
+        `path` is the layout directory, which works offline and in air-gapped environments.
+    </dd>
+</dl>
+
+### Packaging defaults
+
+| Kind | Supported packaging | Default |
+| --- | --- | --- |
+| `local/dir` | `none` | `none` |
+| `local/archive` | `tar`, `tgz`, `zip` | `tgz` |
+| `aws/s3` | `none`, `tar`, `tgz`, `zip` | `tgz` |
+| `oci/registry`, `oci/layout` | `tar`, `tgz`, `zip` for newly packaged files | `tgz` |
+
+Existing OCI content keeps its original media types and graph; the packaging setting does not repackage it.
+
+## Signature Verification
+
+<File title="atmos.yaml">
+```yaml
+artifacts:
+  verification:
+    require_signature: true
+    trusted_identities:
+      - identity: https://github.com/acme/images/.github/workflows/release.yml@refs/heads/main
+        issuer: https://token.actions.githubusercontent.com
+    trusted_keys: []
+  repositories:
+    shared:
+      kind: oci/registry
+      options:
+        registry: ghcr.io
+        prefix: acme/images
+      verification:
+        trusted_identities:
+          - identity: release@acme.example
+            issuer: https://accounts.google.com
+```
+</File>
+
+`verification` is allowed globally and on each repository.
+
+<dl>
+    <dt>`require_signature` <em>(optional)</em></dt>
+    <dd>
+        Makes a missing or invalid signature a failure. The default is `false` for new artifacts. A repository cannot turn off a requirement the global policy sets.
+    </dd>
+
+    <dt>`trusted_identities` <em>(optional)</em></dt>
+    <dd>
+        Pairs of certificate `identity` and OIDC `issuer`. Any one signer in a trust set satisfies that set.
+    </dd>
+
+    <dt>`trusted_keys` <em>(optional)</em></dt>
+    <dd>
+        Paths to operator-managed public-key files. A relative path resolves against the configuration file that declares it. A public-key signature never satisfies an identity requirement.
+    </dd>
+</dl>
+
+When the global policy and a repository both define trust, an artifact must satisfy both sets; they are never merged into a weaker one. Pulling or copying verifies the artifact when policy requires it or supplies trust constraints, before anything is written, and without trust configuration an artifact is reported as unchecked rather than verified. [`atmos artifacts verify`](/cli/commands/artifacts/verify) always requires a trusted valid signature. A normal checksum is not a signature, and `--force` never bypasses verification.
+
+## Write Coordination
+
+Publishing, copying, signing, and deleting take a lock on the reference they change.
+
+<File title="atmos.yaml">
+```yaml
+artifacts:
+  repositories:
+    shared:
+      kind: oci/registry
+      options:
+        registry: ghcr.io
+        prefix: acme/atmos
+      locking:
+        required_scope: repository
+        repository: coordination
+
+    coordination:
+      kind: aws/s3
+      identity: lock-writer
+      options:
+        bucket: acme-artifact-coordination
+```
+</File>
+
+<dl>
+    <dt>`locking.required_scope` <em>(optional)</em></dt>
+    <dd>
+        The minimum guarantee mutations need: `host` (the default) or `repository`. A host-scope lock serializes writers on one machine. A repository-scope lock also serializes writers on different machines.
+    </dd>
+
+    <dt>`locking.repository` <em>(optional)</em></dt>
+    <dd>
+        Takes the lock from another configured repository that provides repository scope, such as an `aws/s3` coordinator. The coordinator keeps its own identity and storage root, and the lock is scoped by the collection it protects. Configuration is rejected when the coordinator does not exist, when delegation forms a cycle, or when the coordinator cannot provide the required scope.
+    </dd>
+</dl>
+
+An `aws/s3` repository coordinates across hosts by itself. Local and OCI repositories provide host scope on their own; an OCI tag is not a distributed lease, so use `locking.repository` for cross-host exclusion. S3 lock claims never expire, so a crashed writer leaves a diagnostic naming the claim to remove after you confirm that the writer has stopped. The `lock_scope` field of every mutation result reports the scope that actually coordinated it.
+
+## Environment Variables
+
+The flags of the `atmos artifacts` commands read `ATMOS_ARTIFACTS_*` environment variables, such as `ATMOS_ARTIFACTS_REPOSITORY` and `ATMOS_ARTIFACTS_FORMAT`. Command-line flags override environment variables. See the [command reference](/cli/commands/artifacts/usage) for each variable.
+
+## Related
+
+- [`atmos artifacts`](/cli/commands/artifacts/usage) - publish, pull, copy, inspect, list, search, delete, sign, and verify
+- [Authentication](/cli/configuration/auth) - identities referenced by `identity`

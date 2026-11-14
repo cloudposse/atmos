@@ -42,6 +42,7 @@ var (
 	_ artifact.Repository     = (*Repository)(nil)
 	_ artifact.EvidenceReader = (*Repository)(nil)
 	_ artifact.EvidenceWriter = (*Repository)(nil)
+	_ artifact.LockNamespacer = (*Repository)(nil)
 )
 
 // NewDir returns a local/dir repository for the configuration. It performs no I/O: the root is

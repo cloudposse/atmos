@@ -134,7 +134,7 @@ func (r *Repository) checkSubject(operation string, subject artifact.SignatureSu
 // and stores it as a detached file named by the evidence digest. Evidence lives beside the Record,
 // so signing never changes the Record, the reference, or the payload. A signature added after
 // publication covers the Record that describes the archive, not the original archive bytes.
-func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, _ artifact.SignOptions) ([]artifact.SignatureEvidence, error) {
+func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject, signer artifact.Signer, options artifact.SignOptions) (result []artifact.SignatureEvidence, err error) {
 	defer perf.Track(nil, "local.Repository.Sign")()
 
 	if err := r.checkSignRequest(subject, signer); err != nil {
@@ -145,6 +145,22 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 		return nil, r.missingRoot(err, artifact.Ref{Name: "(subject)", Digest: subject.Digest})
 	}
 	defer t.Close()
+	held, err := r.lockEvidenceReference(ctx, t, &artifact.PinnedReference{RecordDigest: subject.Digest}, options.Lock)
+	if err != nil {
+		return nil, err
+	}
+	if held != nil {
+		defer func() {
+			if releaseErr := held.Release(context.WithoutCancel(ctx)); err == nil {
+				err = releaseErr
+			}
+		}()
+	}
+	return r.signLocked(ctx, t, subject, signer)
+}
+
+// signLocked writes evidence while the reference lock is held.
+func (r *Repository) signLocked(ctx context.Context, t *tree, subject artifact.SignatureSubject, signer artifact.Signer) ([]artifact.SignatureEvidence, error) {
 	raw, err := r.requireCurrentRecord(t, subject.Digest)
 	if err != nil {
 		return nil, err
@@ -362,18 +378,22 @@ func (r *Repository) writeEvidenceLocked(t *tree, pinned *artifact.PinnedReferen
 	return stored, nil
 }
 
-// lockEvidenceReference reuses a matching caller lock or acquires the reference lock.
+// lockEvidenceReference reuses a caller lock that holds this repository's own reference lock or acquires it.
 func (r *Repository) lockEvidenceReference(ctx context.Context, t *tree, pinned *artifact.PinnedReference, lock artifact.LockHandle) (*fileLock, error) {
 	record, _, err := t.loadRecord(pinned.RecordDigest)
 	if err != nil {
 		return nil, err
 	}
 	resource := record.Name + ":" + record.Version
-	if lock != nil {
-		if lock.Resource() != resource {
+	if localLock, ok := lock.(*fileLock); ok {
+		if !r.coversReference(localLock, resource) {
 			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, resource)
 		}
-		return nil, nil
+		// Reuse the handle only when it holds this repository's own lock file; a delegate's file
+		// does not exclude direct writers of this repository.
+		if r.holdsTargetLock(localLock, resource) {
+			return nil, nil
+		}
 	}
 	return r.acquire(ctx, resource, r.settings.owner, "")
 }

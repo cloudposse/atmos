@@ -320,6 +320,17 @@ func TestPublish_UsesTheCallersLock(t *testing.T) {
 	require.NoError(t, handle.Release(context.Background()))
 }
 
+func TestLockNamespaceIncludesEndpoint(t *testing.T) {
+	base := Repository{bucket: "bucket", prefix: "prefix"}
+	assert.Equal(t, "s3://bucket/prefix", base.LockNamespace())
+	first := base
+	first.endpoint = "https://one.example"
+	second := base
+	second.endpoint = "https://two.example"
+	assert.NotEqual(t, first.LockNamespace(), second.LockNamespace())
+	assert.Equal(t, first.LockNamespace(), (&first).LockNamespace())
+}
+
 func TestSettleClaimDoesNotRetryBehindForeignOwner(t *testing.T) {
 	spec := noneSpec().fresh(t)
 	repo := newRepo(t, spec)
@@ -351,4 +362,22 @@ func TestFenceAdoptsOriginalClaimThatWonTheRace(t *testing.T) {
 	require.NotNil(t, handle)
 	assert.Equal(t, doc.Token, handle.Token())
 	require.NoError(t, handle.Release(ctx))
+}
+
+func TestPublishWithDelegatedClaimAlsoTakesTargetReferenceClaim(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec.withOpts(WithLockWait(time.Second)))
+	coordinator := newRepo(t, spec)
+	ctx := context.Background()
+	reference := testName + ":" + testVersion
+	holder, err := repo.Lock(ctx, artifact.LockRequest{Resource: reference, Owner: "direct"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Release(ctx) })
+	delegate, err := coordinator.Lock(ctx, artifact.LockRequest{Resource: "delegated/" + reference, Owner: "delegated"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = delegate.Release(ctx) })
+	wait, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	_, err = repo.Publish(wait, prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: delegate})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 }

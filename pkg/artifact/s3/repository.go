@@ -21,6 +21,7 @@ import (
 type Repository struct {
 	alias      string
 	bucket     string
+	endpoint   string
 	prefix     string
 	keyPattern string
 	packaging  artifact.Packaging
@@ -33,6 +34,7 @@ var (
 	_ artifact.Repository     = (*Repository)(nil)
 	_ artifact.EvidenceReader = (*Repository)(nil)
 	_ artifact.EvidenceWriter = (*Repository)(nil)
+	_ artifact.LockNamespacer = (*Repository)(nil)
 )
 
 // New returns an aws/s3 repository for the configuration. It performs no network access and
@@ -64,7 +66,7 @@ func newRepository(alias string, cfg *schema.ArtifactRepositoryConfig, opts []Op
 		return nil, err
 	}
 	repo := &Repository{
-		alias: alias, bucket: options.Bucket, prefix: options.Prefix, keyPattern: options.KeyPattern,
+		alias: alias, bucket: options.Bucket, endpoint: options.Endpoint, prefix: options.Prefix, keyPattern: options.KeyPattern,
 		packaging: desc.EffectivePackaging(cfg.Packaging), tags: maps.Clone(options.Tags), settings: applySettings(opts),
 	}
 	repo.store = repo.settings.store

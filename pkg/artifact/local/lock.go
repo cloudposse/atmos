@@ -69,9 +69,47 @@ func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (ar
 	return r.acquire(ctx, request.Resource, owner, request.OperationID)
 }
 
+// LockNamespace implements [artifact.LockNamespacer]: the repository root identifies the collection.
+func (r *Repository) LockNamespace() string {
+	defer perf.Track(nil, "local.Repository.LockNamespace")()
+
+	root := r.root
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	return filepath.ToSlash(root)
+}
+
+// coversReference reports whether lock protects reference (name:version) in this repository. A
+// direct lock names the reference itself. A lock taken through locking.repository delegation names
+// it scoped by this repository's collection namespace, or by its alias when it reports none, as
+// built by the service when it resolves the delegate. A lock for any other reference never matches.
+func (r *Repository) coversReference(lock *fileLock, reference string) bool {
+	resource := lock.Resource()
+	// The namespace is the symlink-resolved root once it exists and the literal root before, so a
+	// handle taken before the first publish names the literal form.
+	return resource == reference ||
+		resource == r.LockNamespace()+"/"+reference ||
+		resource == filepath.ToSlash(r.root)+"/"+reference ||
+		resource == r.alias+"/"+reference
+}
+
+// holdsTargetLock reports whether lock already holds the physical lock file this repository uses
+// for reference. A matching namespace is not enough: a delegate repository with another root
+// acquires its lock file under its own root, so direct writers of this repository would not be
+// excluded by it. Only a handle on the target's own lock file can stand in for acquiring it.
+func (r *Repository) holdsTargetLock(lock *fileLock, reference string) bool {
+	return lock.path == r.referenceLockPath(reference)
+}
+
+// referenceLockPath returns the lock file this repository uses for reference (name:version).
+func (r *Repository) referenceLockPath(reference string) string {
+	return filepath.Join(r.root, native(layout.LockPath(reference)))
+}
+
 // acquire takes the OS lock for resource.
 func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*fileLock, error) {
-	lockPath := filepath.Join(r.root, native(layout.LockPath(resource)))
+	lockPath := r.referenceLockPath(resource)
 	if err := os.MkdirAll(filepath.Dir(lockPath), dirMode); err != nil {
 		return nil, fmt.Errorf("%w: create lock directory for %q: %w", errUtils.ErrArtifactConfigInvalid, resource, err)
 	}
