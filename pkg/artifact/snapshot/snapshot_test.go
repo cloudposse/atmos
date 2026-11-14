@@ -373,3 +373,21 @@ func TestSnapshot_CloseWrapsRemovalFailure(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
 	require.ErrorIs(t, err, os.ErrPermission)
 }
+
+func TestCapture_RelativeSourceWithContainedSymlink(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "src")
+	fixtures.WriteFile(t, src, "dir/target.txt", "target", 0o644)
+	if !fixtures.Symlink(t, src, "link.txt", "dir/target.txt") {
+		t.Skipf("symlinks are unavailable on this platform")
+	}
+	t.Chdir(base)
+
+	snap, err := snapshot.Capture(context.Background(), "src", snapshot.WithStagingRoot(t.TempDir()))
+	require.NoError(t, err, "a contained link must not be rejected because the source path is relative")
+	defer snap.Close()
+	link, ok := snap.Lookup("link.txt")
+	require.True(t, ok)
+	assert.Equal(t, artifact.EntrySymlink, link.Type)
+	assert.Equal(t, "dir/target.txt", link.Target)
+}
