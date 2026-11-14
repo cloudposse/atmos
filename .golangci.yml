@@ -104,6 +104,10 @@ linters:
             # pkg/ci/artifact/s3 is the S3-backed CI artifact store; it legitimately
             # depends on the AWS SDK, same rationale as pkg/ci/planfile/s3 above.
             - "!**/pkg/ci/artifact/s3/**"
+            # pkg/artifact/blob/s3 is the shared AWS SDK object transport behind the artifact S3
+            # repository and the CI artifact S3 adapter (including its in-process S3 test fake).
+            # The provider-neutral contract is pkg/artifact/blob, which imports no SDK.
+            - "!**/pkg/artifact/blob/s3/**"
             # The S3 downloader signs source requests with request-scoped AWS credentials.
             # Only this cloud-specific leaf imports the SDK; the parent downloader stays generic.
             - "!**/pkg/downloader/s3/**"
