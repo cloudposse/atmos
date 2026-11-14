@@ -538,6 +538,26 @@ func TestToolchainPathEnvSelectsThePathToExtend(t *testing.T) {
 		})
 	}
 
+	// Windows names the variable Path or PATH interchangeably; other platforms keep them distinct.
+	for _, test := range []struct {
+		name      string
+		goos      string
+		component []string
+		sanitized []string
+		want      string
+	}{
+		{name: "windows component Path is extended", goos: "windows", component: []string{"Path=/component"}, want: join(dirs, "/component")},
+		{name: "windows identity Path is extended", goos: "windows", sanitized: []string{"Path=/identity"}, want: join(dirs, "/identity")},
+		{name: "windows last case variant wins", goos: "windows", component: []string{"PATH=/first", "Path=/last"}, want: join(dirs, "/last")},
+		{name: "windows component Path beats identity PATH", goos: "windows", component: []string{"Path=/component"}, sanitized: []string{"PATH=/identity"}, want: join(dirs, "/component")},
+		{name: "linux Path is not PATH", goos: "linux", component: []string{"Path=/component"}, want: join(dirs, ambient)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := toolchainPathEnvForGOOS(&schema.ConfigAndStacksInfo{ComponentEnvList: test.component, SanitizedEnv: test.sanitized}, tenv, test.goos)
+			require.Equal(t, []string{"PATH=" + test.want}, got)
+		})
+	}
+
 	t.Run("without toolchain directories nothing is overridden", func(t *testing.T) {
 		empty := &dependencies.ToolchainEnvironment{}
 		require.Nil(t, toolchainPathEnv(&schema.ConfigAndStacksInfo{ComponentEnvList: []string{"PATH=/component"}}, empty))
