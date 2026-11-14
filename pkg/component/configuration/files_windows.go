@@ -37,9 +37,10 @@ func openGeneratedFile(root *os.Root, file schema.ComponentConfigurationFile, ex
 	return openSensitiveGeneratedFile(root, file.Path, exists)
 }
 
+// restrictExistingGeneratedFile re-secures an existing sensitive file. Other files keep their ACLs.
 func restrictExistingGeneratedFile(root *os.Root, file schema.ComponentConfigurationFile) error {
 	if !file.Sensitive {
-		return root.Chmod(file.Path, secretMode)
+		return nil
 	}
 	output, err := openSensitiveGeneratedFile(root, file.Path, true)
 	if err != nil {

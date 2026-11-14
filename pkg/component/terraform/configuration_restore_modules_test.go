@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Compile-time sentinel for the record field these tests depend on.
@@ -136,4 +137,22 @@ func TestApplyOfRestoredPlanWithoutModulesDoesNotDownload(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Empty(t, getter.calls)
+}
+
+// The module download runs with the sanitized environment, and keeps the default one when none is set.
+func TestInstallReviewedModulesUsesSanitizedEnvironment(t *testing.T) {
+	rebuild := &reviewedRebuild{plan: &configurationPlan{Modules: true}}
+	for name, env := range map[string][]string{"sanitized": {"PATH=/sanitized", "TF_VAR_x=1"}, "unset": nil} {
+		t.Run(name, func(t *testing.T) {
+			getter := moduleGetter("# vpc", nil)
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = getter.execute
+			info := &schema.ConfigAndStacksInfo{Command: "terraform", SanitizedEnv: env}
+
+			require.NoError(t, executor.installReviewedModules(&schema.AtmosConfiguration{}, info, rebuild, t.TempDir()))
+
+			require.Len(t, getter.calls, 1)
+			require.Equal(t, env, getter.calls[0].options.ProcessEnv)
+		})
+	}
 }

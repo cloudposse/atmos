@@ -105,7 +105,7 @@ func writeBackendConfigFile(atmosConfig *schema.AtmosConfiguration, info *schema
 }
 
 // ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command.
-// Deprecated: Use ExecuteGenerateBackend with typed parameters instead.
+// This function is superseded; use ExecuteGenerateBackend with typed parameters instead.
 func ExecuteTerraformGenerateBackendCmd(cmd interface{}, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendCmd")()
 

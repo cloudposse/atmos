@@ -249,39 +249,31 @@ func fakeAssume(t *testing.T, err error) *struct {
 	return recorded
 }
 
-type stagedIAMRuntime struct {
-	iam     *schema.ComponentIAM
-	prepare func(*schema.ConfigAndStacksInfo) *schema.PreparedComponentConfiguration
-	probes  int
+// iamProbingRuntime is a configuration runtime whose provider also probes IAM before preparation.
+type iamProbingRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationIAMProbe
 }
 
-func (r *stagedIAMRuntime) Discover(context.Context) (map[string]map[string]any, error) {
-	return nil, nil
-}
+var _ iamProbingRuntime = (*MockIAMProbingRuntime)(nil)
 
-func (r *stagedIAMRuntime) ProbeIAM(_ context.Context, _ *schema.ConfigAndStacksInfo) (*schema.ComponentIAM, error) {
-	r.probes++
-	return r.iam, nil
-}
-
-func (r *stagedIAMRuntime) Prepare(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
-	return r.prepare(info), nil
-}
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_iam_probing_runtime_test.go -package=$GOPACKAGE -mock_names=iamProbingRuntime=MockIAMProbingRuntime
 
 func TestPrepareConfigurationStagesIAMForEvaluation(t *testing.T) {
 	recorded := fakeAssume(t, nil)
 	binary, err := os.Executable()
 	require.NoError(t, err)
 	iam := &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"}
-	runtime := &stagedIAMRuntime{iam: iam, prepare: func(info *schema.ConfigAndStacksInfo) *schema.PreparedComponentConfiguration {
-		require.Contains(t, info.ComponentEnvList, "AWS_ACCESS_KEY_ID=ASIASESSION")
-		return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: iam}
-	}}
+	runtime := NewMockIAMProbingRuntime(gomock.NewController(t))
+	runtime.EXPECT().ProbeIAM(gomock.Any(), gomock.Any()).Return(iam, nil).Times(1)
+	runtime.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+		require.Contains(t, info.ComponentEnvList, "AWS_ACCESS_KEY_ID=ASIASESSION", "the probed role is assumed before the unit is evaluated")
+		return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: iam}, nil
+	})
 	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"AWS_ACCESS_KEY_ID=BASE", "AWS_SECRET_ACCESS_KEY=base-secret"}}
 	_, err = prepareConfiguration(t.Context(), config, info)
 	require.NoError(t, err)
-	require.Equal(t, 1, runtime.probes)
 	require.Equal(t, 1, recorded.calls, "the staged session is reused for execution")
 	require.Contains(t, recorded.environ, "AWS_ACCESS_KEY_ID=BASE")
 }
@@ -290,9 +282,9 @@ func TestPrepareConfigurationRejectsChangedIAMAfterStaging(t *testing.T) {
 	fakeAssume(t, nil)
 	binary, err := os.Executable()
 	require.NoError(t, err)
-	runtime := &stagedIAMRuntime{iam: &schema.ComponentIAM{Role: "role-a"}, prepare: func(*schema.ConfigAndStacksInfo) *schema.PreparedComponentConfiguration {
-		return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: &schema.ComponentIAM{Role: "role-b"}}
-	}}
+	runtime := NewMockIAMProbingRuntime(gomock.NewController(t))
+	runtime.EXPECT().ProbeIAM(gomock.Any(), gomock.Any()).Return(&schema.ComponentIAM{Role: "role-a"}, nil)
+	runtime.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: &schema.ComponentIAM{Role: "role-b"}}, nil)
 	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
 	_, err = prepareConfiguration(t.Context(), &schema.AtmosConfiguration{ComponentConfigurations: runtime}, info)
 	require.ErrorContains(t, err, "changed between role and unit evaluation")
@@ -440,16 +432,6 @@ func TestPreparedConfigurationSensitiveInputsNeverHitDisk(t *testing.T) {
 	}
 }
 
-// failingStateRuntime owns the component but cannot identify its backend.
-type failingStateRuntime struct {
-	schema.ComponentConfigurationRuntime
-	err error
-}
-
-func (r failingStateRuntime) ResolveState(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-	return nil, r.err
-}
-
 func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
 	failure := errors.New("provider could not locate state")
 	executor := testExecutor(t)
@@ -461,7 +443,9 @@ func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
 			"backend":  map[string]any{"path": "must-not-be-read"},
 		}, nil
 	}
-	config := &schema.AtmosConfiguration{ComponentConfigurations: failingStateRuntime{err: failure}}
+	runtime := NewMockReviewedPlanRuntime(gomock.NewController(t))
+	runtime.EXPECT().ResolveState(gomock.Any(), gomock.Any()).Return(nil, failure)
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 
 	result, err := executor.GetTerraformState(config, "!terraform.state", "live", "network", "vpc_id", true, nil, nil)
 	require.ErrorIs(t, err, failure, "the provider's failure is returned as is, not retried against a guessed backend")

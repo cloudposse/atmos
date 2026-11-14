@@ -393,6 +393,9 @@ const (
 	tflintConfigName   = ".tflint.hcl"
 	// The host resolves this marker against the provisioned module directory when the hook runs.
 	tflintOptionalVarFilePrefix = "--atmos-optional-var-file="
+	// The host replaces this marker with one --var per input of the final prepared configuration, after it
+	// has merged the stack's variables, so that TFLint and Terraform see the same values.
+	tflintInputVariablesMarker = "--atmos-tflint-input-variables"
 	// The host searches for this config only when the selected hook executes.
 	tflintConfigSearchPrefix = "--atmos-tflint-config-search="
 	// tflintMaxParents bounds the search for .tflint.hcl, like Terragrunt's default folder limit.
@@ -408,39 +411,27 @@ func isLifecycleCommand(command string) bool {
 // finalizeExecution prepares evaluated hooks for the host: lifecycle hooks default to the unit's
 // configuration directory, as in Terragrunt, and the built-in tflint hook becomes the two tflint
 // invocations Terragrunt runs. The unit directory is where terragrunt.hcl lives.
-func finalizeExecution(execution *model.Execution, path string, inputs map[string]any) error {
+func finalizeExecution(execution *model.Execution, path string) {
 	if execution == nil {
-		return nil
+		return
 	}
-	var err error
-	if execution.BeforeHooks, err = finalizeHooks(execution.BeforeHooks, execution, path, inputs); err != nil {
-		return err
-	}
-	if execution.AfterHooks, err = finalizeHooks(execution.AfterHooks, execution, path, inputs); err != nil {
-		return err
-	}
-	if execution.ErrorHooks, err = finalizeHooks(execution.ErrorHooks, execution, path, inputs); err != nil {
-		return err
-	}
-	return nil
+	execution.BeforeHooks = finalizeHooks(execution.BeforeHooks, execution, path)
+	execution.AfterHooks = finalizeHooks(execution.AfterHooks, execution, path)
+	execution.ErrorHooks = finalizeHooks(execution.ErrorHooks, execution, path)
 }
 
-func finalizeHooks(hooks []model.Hook, execution *model.Execution, path string, inputs map[string]any) ([]model.Hook, error) {
+func finalizeHooks(hooks []model.Hook, execution *model.Execution, path string) []model.Hook {
 	var result []model.Hook
 	for i := range hooks {
 		for _, hook := range splitLifecycle(hooks[i], filepath.Dir(path)) {
 			if len(hook.Execute) > 0 && hook.Execute[0] == tflintExecutable {
-				expanded, err := expandTflint(&hook, execution, path, inputs)
-				if err != nil {
-					return nil, err
-				}
-				result = append(result, expanded...)
+				result = append(result, expandTflint(&hook, execution, path)...)
 				continue
 			}
 			result = append(result, hook)
 		}
 	}
-	return result, nil
+	return result
 }
 
 // splitLifecycle gives lifecycle commands the unit directory as working directory. A hook that
@@ -473,20 +464,16 @@ func splitLifecycle(hook model.Hook, unitDir string) []model.Hook {
 // that Terragrunt would find, with the unit's inputs and variable files passed as variables. A hook
 // that lists several commands expands once per command, so each lint sees only the extra
 // arguments of the command that is running.
-func expandTflint(hook *model.Hook, execution *model.Execution, path string, inputs map[string]any) ([]model.Hook, error) {
+func expandTflint(hook *model.Hook, execution *model.Execution, path string) []model.Hook {
 	arguments := slices.DeleteFunc(slices.Clone(hook.Execute), func(arg string) bool { return arg == tflintExternalFlag })
 	configFile := tflintConfigSearchPrefix + filepath.Dir(path)
 	if explicit, found := explicitTflintConfig(arguments, filepath.Dir(path)); found {
 		configFile = explicit
 	}
-	inputVariables, err := tflintVariables(inputs)
-	if err != nil {
-		return nil, err
-	}
 	passthrough := withoutConfigFlag(arguments[1:])
 	var result []model.Hook
 	for _, command := range hook.Commands {
-		variables := append(slices.Clone(inputVariables), tflintExtraVariables(command, execution)...)
+		variables := append([]string{tflintInputVariablesMarker}, tflintExtraVariables(command, execution)...)
 		initHook := *hook
 		initHook.Commands = []string{command}
 		initHook.Execute = []string{tflintExecutable, "--init", "--config", configFile, "--chdir", "."}
@@ -496,7 +483,7 @@ func expandTflint(hook *model.Hook, execution *model.Execution, path string, inp
 		initHook.WorkingDirectory, runHook.WorkingDirectory = "", ""
 		result = append(result, initHook, runHook)
 	}
-	return result, nil
+	return result
 }
 
 // tflintConfig returns the configuration named by --config/-c, or the nearest .tflint.hcl.
@@ -554,31 +541,6 @@ func withoutConfigFlag(arguments []string) []string {
 		}
 	}
 	return result
-}
-
-// tflintVariables passes every input as a --var, sorted so repeated runs build the same command.
-func tflintVariables(inputs map[string]any) ([]string, error) {
-	variables := make([]string, 0, len(inputs))
-	for _, name := range slices.Sorted(maps.Keys(inputs)) {
-		value, err := variableValue(inputs[name])
-		if err != nil {
-			return nil, err
-		}
-		variables = append(variables, fmt.Sprintf("--var=%s=%s", name, value))
-	}
-	return variables, nil
-}
-
-// variableValue renders a string as itself and any other value as JSON, escaping HCL templates.
-func variableValue(value any) (string, error) {
-	if text, ok := value.(string); ok {
-		return text, nil
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return "", err
-	}
-	return strings.NewReplacer("${", "$${", "%{", "%%{").Replace(string(data)), nil
 }
 
 // tflintExtraVariables mirrors the variables Terragrunt takes from extra_arguments that apply to

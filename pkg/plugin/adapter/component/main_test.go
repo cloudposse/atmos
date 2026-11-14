@@ -146,7 +146,11 @@ func (f *componentFixture) Prepare(ctx context.Context, request *pluginv1.Compon
 	case "return-logs":
 		returned = []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "returned in the response"}}
 	}
-	return &pluginv1.PrepareComponentResponse{Logs: returned, Engine: "terraform", WorkingDirectory: request.RootDirectory, ModuleSource: "./module", Inputs: request.Configuration, State: fixtureState(request.RootDirectory), Files: []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", Content: []byte("$${literal}\n%{ literal }\n"), IfExists: "error"}}}, nil
+	response := &pluginv1.PrepareComponentResponse{Logs: returned, Engine: "terraform", WorkingDirectory: request.RootDirectory, ModuleSource: "./module", Inputs: request.Configuration, State: fixtureState(request.RootDirectory), Files: []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", Content: []byte("$${literal}\n%{ literal }\n"), IfExists: "error"}}}
+	if request.GetOperation().GetCommand() == "registry-prepare" {
+		response.RegistryResolutionNanos = uint64(time.Hour)
+	}
+	return response, nil
 }
 
 func (*componentFixture) Resolve(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {

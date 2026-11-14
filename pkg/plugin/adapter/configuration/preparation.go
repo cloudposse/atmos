@@ -3,11 +3,9 @@ package configuration
 import (
 	"context"
 	"fmt"
-	"math"
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -112,9 +110,6 @@ func (s *Session) runProviderPrepare(ctx context.Context, info *schema.ConfigAnd
 	// they decode successfully, their sensitive values cannot be registered safely.
 	if err := s.renderPreparationLogs(info, selected, result); err != nil {
 		return nil, err
-	}
-	if nanos := result.GetRegistryResolutionNanos(); nanos > 0 && nanos <= uint64(math.MaxInt64) {
-		perf.ObserveExternal("atmosbridge.ResolveRegistrySource", time.Duration(nanos))
 	}
 	if err := validatePreparationResponse(info, selected.instance, result); err != nil {
 		return nil, err

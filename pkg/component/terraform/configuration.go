@@ -67,14 +67,32 @@ func prepareConfigurationForExecution(ctx context.Context, config *schema.AtmosC
 	if err != nil || prepared == nil {
 		return prepared, nil, err
 	}
-	if err = applyStackOverrides(config, info, prepared); err != nil {
+	if err = finishPreparedConfiguration(ctx, config, info, prepared, reviewedOrStagedIAM(stagedIAM, rebuild)); err != nil {
 		return nil, nil, err
 	}
-	if err = finishIAM(ctx, info, prepared, stagedIAM); err != nil {
-		return nil, nil, err
+	return prepared, rebuild, nil
+}
+
+// reviewedOrStagedIAM returns the role a rebuild already applied, or else the staged one. The reviewed
+// role is already applied, so finishIAM only checks that the fresh evaluation agrees with it.
+func reviewedOrStagedIAM(stagedIAM *schema.ComponentIAM, rebuild *reviewedRebuild) *schema.ComponentIAM {
+	if rebuild != nil && rebuild.appliedIAM != nil {
+		return rebuild.appliedIAM
+	}
+	return stagedIAM
+}
+
+// finishPreparedConfiguration applies the stack overrides and the IAM role to a fresh preparation,
+// then publishes it to the invocation.
+func finishPreparedConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, stagedIAM *schema.ComponentIAM) error {
+	if err := applyStackOverrides(config, info, prepared); err != nil {
+		return err
+	}
+	if err := finishIAM(ctx, info, prepared, stagedIAM); err != nil {
+		return err
 	}
 	applyPreparedConfiguration(config, info, prepared)
-	return prepared, rebuild, nil
+	return nil
 }
 
 func stageConfigurationIAM(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.ComponentIAM, error) {
@@ -119,7 +137,9 @@ func resolveConfigurationBinary(info *schema.ConfigAndStacksInfo) error {
 }
 
 // obtainConfiguration evaluates the unit, or restores the reviewed preparation of a saved plan. The
-// rebuild is non-nil when the saved plan lost its working directory and must be re-provisioned.
+// rebuild is non-nil when the saved plan lost its working directory and must be re-provisioned. A
+// rebuild applies the reviewed role before evaluating the unit, because the unit may read state
+// through its iam_role, and records it as appliedIAM.
 func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *reviewedRebuild, error) {
 	if !usesConfigurationPlan(info) {
 		prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
@@ -131,6 +151,13 @@ func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration,
 	prepared, rebuild, err := restoreOrRebuildConfigurationPlan(ctx, config, info)
 	if err != nil || rebuild == nil {
 		return prepared, rebuild, err
+	}
+	// An operation the provider excludes never runs, so it must not need the unit's role.
+	if reviewed := rebuild.plan.Prepared; reviewed.IAM != nil && !excludedFromOperation(info, reviewed) {
+		if err = applyIAMRole(ctx, info, reviewed.IAM); err != nil {
+			return nil, nil, err
+		}
+		rebuild.appliedIAM = reviewed.IAM
 	}
 	rebuild.prepared, err = prepareForRebuild(ctx, config, info, rebuild)
 	return rebuild.prepared, rebuild, err

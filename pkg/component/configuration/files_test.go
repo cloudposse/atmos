@@ -1,7 +1,6 @@
 package configuration
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -147,13 +146,16 @@ func TestEnsureModeWrapsPermissionFailures(t *testing.T) {
 	root, err := os.OpenRoot(t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
-	err = ensureMode(root, schema.ComponentConfigurationFile{Path: "missing.tf"})
+	err = ensureMode(root, schema.ComponentConfigurationFile{Path: "missing.tf", Sensitive: true})
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.ErrorIs(t, err, os.ErrNotExist, "the filesystem cause is preserved")
 	require.ErrorContains(t, err, "missing.tf")
 	// A file that exists is tightened without error.
 	require.NoError(t, root.WriteFile("present.tf", nil, 0o644))
-	require.NoError(t, ensureMode(root, schema.ComponentConfigurationFile{Path: "present.tf"}))
+	require.NoError(t, ensureMode(root, schema.ComponentConfigurationFile{Path: "present.tf", Sensitive: true}))
+	info, err := root.Stat("present.tf")
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
 func TestWatchPaths(t *testing.T) {
@@ -231,29 +233,112 @@ func TestWriteFilesClassifiesRemovalFailure(t *testing.T) {
 }
 
 func TestSensitiveGeneratedFileClassifiesHandleFailures(t *testing.T) {
-	for _, exists := range []bool{false, true} {
-		t.Run(map[bool]string{false: "write", true: "truncate"}[exists], func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "secret.tf")
-			require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
-			output, err := os.Open(path)
+	path := filepath.Join(t.TempDir(), "secret.tf")
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+	output, err := os.Open(path)
+	require.NoError(t, err)
+	require.NoError(t, output.Close())
+	err = writeSensitiveGeneratedFile(output, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrClosed)
+	require.ErrorContains(t, err, "generated file secret.tf")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "original", string(content))
+}
+
+// A failed replacement of a sensitive file must leave the existing destination untouched and
+// remove the temporary file it staged.
+func TestReplaceSensitiveFilePreservesDestinationOnFailure(t *testing.T) {
+	directory := t.TempDir()
+	// The destination is a non-empty directory, so the final rename cannot succeed.
+	blocked := filepath.Join(directory, "secret.tf")
+	require.NoError(t, os.MkdirAll(blocked, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(blocked, "keep"), []byte("original"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	err = replaceSensitiveWindowsFile(root, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement"), Sensitive: true}, true)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	content, err := os.ReadFile(filepath.Join(blocked, "keep"))
+	require.NoError(t, err)
+	require.Equal(t, "original", string(content))
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+}
+
+func TestReplaceSensitiveFileReplacesExistingBytes(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "secret.tf")
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	require.NoError(t, replaceSensitiveWindowsFile(root, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement"), Sensitive: true}, true))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", string(content))
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+}
+
+func TestCreateSensitiveTempClassifiesFailures(t *testing.T) {
+	_, _, err := CreateSensitiveTemp(filepath.Join(t.TempDir(), "missing"))
+	require.ErrorIs(t, err, errUtils.ErrFileOperation)
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	file, name, err := CreateSensitiveTemp(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	require.FileExists(t, name)
+}
+
+func TestWriteFilesAppliesClampedMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ignores POSIX permission bits.")
+	}
+	tests := []struct {
+		name      string
+		mode      uint32
+		sensitive bool
+		want      os.FileMode
+	}{
+		{name: "absent mode keeps the default", mode: 0, want: 0o644},
+		{name: "executable keeps the execute bit", mode: 0o755, want: 0o755},
+		{name: "owner-only executable", mode: 0o700, want: 0o700},
+		{name: "group and other write are stripped", mode: 0o777, want: 0o755},
+		{name: "setuid setgid sticky are stripped", mode: 0o7755, want: 0o755},
+		{name: "owner read-write is guaranteed", mode: 0o111, want: 0o711},
+		{name: "sensitive stays private", mode: 0o755, sensitive: true, want: 0o700},
+		{name: "sensitive without mode", mode: 0, sensitive: true, want: 0o600},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			file := schema.ComponentConfigurationFile{Path: filepath.Join("bin", "helper.sh"), Content: []byte("#!/bin/sh\n"), IfExists: "overwrite", Mode: tt.mode, Sensitive: tt.sensitive}
+			require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
+			stat, err := os.Stat(filepath.Join(root, file.Path))
 			require.NoError(t, err)
-			require.NoError(t, output.Close())
-			err = writeSensitiveGeneratedFile(output, schema.ComponentConfigurationFile{Path: "secret.tf", Content: []byte("replacement")}, exists)
-			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-			require.ErrorIs(t, err, os.ErrClosed)
-			require.ErrorContains(t, err, "generated file secret.tf")
-			var joined interface{ Unwrap() []error }
-			// The classified error wraps a join retaining the operation and close errors.
-			outer, ok := err.(interface{ Unwrap() []error })
-			require.True(t, ok)
-			require.True(t, errors.As(outer.Unwrap()[1], &joined))
-			require.Len(t, joined.Unwrap(), 2)
-			for _, cause := range joined.Unwrap() {
-				require.ErrorIs(t, cause, os.ErrClosed)
-			}
-			content, err := os.ReadFile(path)
-			require.NoError(t, err)
-			require.Equal(t, "original", string(content))
+			require.Equal(t, tt.want, stat.Mode())
 		})
 	}
+	t.Run("overwrite updates the mode of an existing file", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "run.sh")
+		require.NoError(t, os.WriteFile(path, []byte("old"), 0o644))
+		require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "run.sh", Content: []byte("new"), IfExists: "overwrite", Mode: 0o755}}))
+		stat, err := os.Stat(path)
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o755), stat.Mode())
+	})
+}
+
+func TestWriteFilesRejectsModesBeyondPermissionBits(t *testing.T) {
+	root := t.TempDir()
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "a.sh", IfExists: "error", Mode: 1 << 31}})
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	_, statErr := os.Stat(filepath.Join(root, "a.sh"))
+	require.True(t, os.IsNotExist(statErr))
 }

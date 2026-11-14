@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
@@ -162,4 +163,28 @@ func TestResolveTerragruntPathUsesInvocationEnvironment(t *testing.T) {
 	require.Equal(t, filepath.Join(ambient, "terragrunt"), got)
 	_, err = resolveTerragruntPath("terragrunt", []string{"PATH="}, nil)
 	require.ErrorIs(t, err, exec.ErrNotFound)
+}
+
+// The output of the unit's run reaches the exec-metadata report that Atmos Pro receives.
+func TestExecuteTerragruntUnitCapturesOutputForExecMetadata(t *testing.T) {
+	harness, info, _ := unitHarness(t)
+	t.Cleanup(ClearLastAuthContext)
+	run := harness.executor.services.ExecuteShellCommand
+	harness.executor.services.ExecuteShellCommand = func(config schema.AtmosConfiguration, command string, args []string, dir string, env []string, dryRun bool, redirect string, opts ...component.ExecutionOption) error {
+		var options component.ExecutionOptions
+		for _, opt := range opts {
+			opt(&options)
+		}
+		require.NotNil(t, options.ExecMetadataStdoutCapture)
+		require.NotNil(t, options.ExecMetadataStderrCapture)
+		_, err := options.ExecMetadataStdoutCapture.Write([]byte("plan output"))
+		require.NoError(t, err)
+		_, err = options.ExecMetadataStderrCapture.Write([]byte("warning output"))
+		require.NoError(t, err)
+		return run(config, command, args, dir, env, dryRun, redirect, opts...)
+	}
+
+	require.NoError(t, harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun))
+
+	require.Equal(t, "plan output\nwarning output", info.ExecMetadataRawOutput)
 }

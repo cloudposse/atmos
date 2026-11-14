@@ -25,6 +25,10 @@ func clearStaleSignals(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	if err != nil {
 		return err
 	}
+	// A module directory that the source fetch has not created yet holds no stale signals.
+	if moduleDir == "" {
+		return nil
+	}
 	path := filepath.Join(moduleDir, execution.SignalsFileName)
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("%w: clear stale error signals from %s: %w", errUtils.ErrGeneratorRemoveFailed, path, err)
@@ -32,6 +36,7 @@ func clearStaleSignals(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	return nil
 }
 
+// signalModuleDirectory returns the module directory the unit runs in, or "" when it does not exist yet.
 func signalModuleDirectory(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
 	section := info.ComponentSection
 	if source.HasSource(section) {
@@ -42,14 +47,24 @@ func signalModuleDirectory(atmosConfig *schema.AtmosConfiguration, info *schema.
 		if !target.IsWorkdir {
 			return target.Dir, nil
 		}
-		return component.ResolveConfiguredSubpath(info, target.Dir)
+		return existingSubpath(info, target.Dir)
 	}
 	if workdir.IsWorkdirEnabled(section) {
 		root, err := workdir.BuildPath(atmosConfig.BasePath, cfg.TerraformComponentType, info.FinalComponent, info.Stack, section)
 		if err != nil {
 			return "", err
 		}
-		return component.ResolveConfiguredSubpath(info, root)
+		return existingSubpath(info, root)
 	}
 	return ConstructTerraformComponentWorkingDir(atmosConfig, info), nil
+}
+
+// existingSubpath resolves the module directory under root, or "" when an explicit source subdirectory
+// has not been fetched yet.
+func existingSubpath(info *schema.ConfigAndStacksInfo, root string) (string, error) {
+	moduleDir, present, err := component.ResolvePendingSubpath(info, root)
+	if err != nil || !present {
+		return "", err
+	}
+	return moduleDir, nil
 }

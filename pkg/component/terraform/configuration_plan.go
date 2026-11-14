@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,8 +10,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math/big"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -434,7 +437,13 @@ func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurati
 
 // backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.
 func backendIdentityDigest(backend map[string]any) (string, error) {
-	data, err := json.Marshal(backend)
+	// Backend values may cross JSON/protobuf boundaries as different Go number
+	// types. Hash their exact normalized values so equivalent backends match.
+	normalized, err := normalizedBackend(backend)
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(normalized)
 	if err != nil {
 		return "", err
 	}
@@ -529,4 +538,44 @@ func finishConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Con
 	if info.PlanFile != "" {
 		removeTerraformFile(configurationPlanPath(config, info)+configurationPlanSuffix, "Failed to remove consumed plan record")
 	}
+}
+
+// equalBackendConfiguration compares JSON backend values without losing numeric precision.
+func equalBackendConfiguration(left, right map[string]any) bool {
+	a, errA := normalizedBackend(left)
+	b, errB := normalizedBackend(right)
+	return errA == nil && errB == nil && reflect.DeepEqual(a, b)
+}
+
+func normalizedBackend(value map[string]any) (any, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return nil, err
+	}
+	return normalizeBackendNumbers(decoded), nil
+}
+
+func normalizeBackendNumbers(value any) any {
+	switch typed := value.(type) {
+	case json.Number:
+		number, ok := new(big.Rat).SetString(string(typed))
+		if ok {
+			return number
+		}
+	case map[string]any:
+		for key, child := range typed {
+			typed[key] = normalizeBackendNumbers(child)
+		}
+	case []any:
+		for index, child := range typed {
+			typed[index] = normalizeBackendNumbers(child)
+		}
+	}
+	return value
 }

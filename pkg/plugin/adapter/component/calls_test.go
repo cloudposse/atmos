@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	"github.com/cloudposse/atmos/pkg/plugin/manifest"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
@@ -476,4 +477,36 @@ func TestPreparationIAMProbeResponse(t *testing.T) {
 	require.ErrorIs(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}, "iam-probe"), errUtils.ErrPluginInvalidConfig)
 	response.Files = []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", IfExists: "overwrite"}}
 	require.ErrorIs(t, checkPreparationResponse(response, "iam-probe"), errUtils.ErrPluginProtocol)
+}
+
+func TestRegistryResolutionDurationIsAttributedInsideTheProviderSpan(t *testing.T) {
+	perf.EnableTracking(true)
+	perf.UseSimpleTracking(true)
+	perf.ResetForTesting()
+	t.Cleanup(func() {
+		perf.EnableTracking(false)
+		perf.ResetForTesting()
+	})
+	p := fixtureProvider(t)
+	request := &pluginv1.ComponentRequest{
+		RootDirectory: t.TempDir(), Address: fixtureAddress(),
+		Invocation:    &pluginv1.Invocation{},
+		Operation:     &pluginv1.ComponentOperation{Command: "registry-prepare", Mode: "native"},
+		Configuration: wireValue(t, cty.EmptyObjectVal),
+	}
+
+	finish := perf.Track(nil, "host-parent")
+	time.Sleep(5 * time.Millisecond)
+	_, err := p.Prepare(t.Context(), request)
+	finish()
+	require.NoError(t, err)
+
+	self := map[string]time.Duration{}
+	for _, row := range perf.SnapshotTop("total", 100).Rows {
+		self[row.Name] = row.SelfTime
+	}
+	require.Contains(t, self, "atmosbridge.ResolveRegistrySource", "the registry duration is recorded by the provider call")
+	require.Equal(t, time.Hour, self["atmosbridge.ResolveRegistrySource"])
+	require.Zero(t, self["componentadapter.Prepare"], "the registry duration is a child of the provider span, so the span's own time excludes it")
+	require.GreaterOrEqual(t, self["host-parent"], 5*time.Millisecond, "the registry duration is not counted again in the enclosing span")
 }

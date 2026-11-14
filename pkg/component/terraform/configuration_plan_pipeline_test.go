@@ -22,6 +22,8 @@ type reviewedPlanProject struct {
 	explicitWorkdir bool
 	config          *schema.AtmosConfiguration
 	provider        *MockReviewedPlanRuntime
+	// iam is the Terragrunt role the unit prepares with, when set.
+	iam *schema.ComponentIAM
 }
 
 func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
@@ -61,7 +63,7 @@ func (p *reviewedPlanProject) info(t *testing.T, subCommand string) *schema.Conf
 }
 
 func (p *reviewedPlanProject) prepared() *schema.PreparedComponentConfiguration {
-	return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: p.module, Inputs: map[string]any{"value": "reviewed"}, BackendType: "local", Backend: map[string]any{"path": p.state}, Workspace: "default"}
+	return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: p.module, Inputs: map[string]any{"value": "reviewed"}, BackendType: "local", Backend: map[string]any{"path": p.state}, Workspace: "default", IAM: p.iam}
 }
 
 // review runs plan and records its binding, returning the plan file path.
@@ -132,6 +134,39 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 	args, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
 	require.Contains(t, strings.Split(string(args), "\n"), planPath)
+}
+
+func TestSavedPlanApplySkipsSecondComponentValidation(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	executor := testExecutor(t)
+	validations := 0
+	executor.services.ValidateComponent = func(_ *schema.AtmosConfiguration, _ string, section map[string]any, _, _ string, _ []string, _ int) (bool, error) {
+		validations++
+		vars, _ := section["vars"].(map[string]any)
+		return vars["value"] == "reviewed", nil
+	}
+	planPath := project.review(t)
+	require.Equal(t, 1, validations, "plan creation validates the component with its values")
+
+	apply := project.reviewedApply(t, planPath)
+	_, err := executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err, "a verified saved plan must not be rejected for its intentionally empty vars")
+	require.Equal(t, 1, validations, "saved-plan apply must not revalidate the redacted component")
+}
+
+func TestDirectPluginApplyStillValidatesComponent(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	apply := project.info(t, "apply")
+	project.provider.EXPECT().Prepare(gomock.Any(), apply).Return(project.prepared(), nil)
+	executor := testExecutor(t)
+	validations := 0
+	executor.services.ValidateComponent = func(_ *schema.AtmosConfiguration, _ string, _ map[string]any, _, _ string, _ []string, _ int) (bool, error) {
+		validations++
+		return false, nil
+	}
+	_, err := executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponent)
+	require.Equal(t, 1, validations, "a direct apply has no reviewed plan to replace validation")
 }
 
 // Terragrunt evaluates the configuration again for apply, so a hook enabled only for apply is
@@ -315,6 +350,45 @@ func TestApplyOfRestoredPlanRebuildsWorkdirOnAFreshRunner(t *testing.T) {
 	require.Empty(t, execution.preparedConfiguration.Inputs, "the plan file carries the inputs")
 	require.True(t, apply.UseTerraformPlan)
 	require.Equal(t, planPath, apply.PlanFile)
+}
+
+// The reviewed role is applied before the rebuild evaluates the unit, as it is for a plan, and is not
+// assumed a second time once the evaluation agrees with the reviewed role.
+func TestApplyOfRestoredPlanAppliesTheReviewedRoleBeforeTheRebuildEvaluation(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	project := newReviewedPlanProject(t)
+	project.iam = &schema.ComponentIAM{Role: "arn:aws:iam::1:role/reviewed"}
+	planPath := project.reviewInDefaultWorkdir(t)
+	project.freshRunner(t, planPath)
+	recorded.calls = 0 // The review itself assumed the role once.
+	apply := project.reviewedApply(t, planPath)
+	project.provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+			require.Contains(t, info.ComponentEnvList, "AWS_ACCESS_KEY_ID=ASIASESSION", "the unit is evaluated under the reviewed role")
+			require.Equal(t, 1, recorded.calls)
+			return project.prepared(), nil
+		},
+	).Times(1)
+
+	_, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, recorded.calls, "the role is assumed once for the whole invocation")
+	require.Equal(t, "arn:aws:iam::1:role/reviewed", recorded.role.Role)
+}
+
+// A rebuild that evaluates to a different role than the reviewed one is rejected.
+func TestApplyOfRestoredPlanRejectsARoleChangedSinceReview(t *testing.T) {
+	fakeAssume(t, nil)
+	project := newReviewedPlanProject(t)
+	project.iam = &schema.ComponentIAM{Role: "arn:aws:iam::1:role/reviewed"}
+	planPath := project.reviewInDefaultWorkdir(t)
+	project.freshRunner(t, planPath)
+	project.iam = &schema.ComponentIAM{Role: "arn:aws:iam::1:role/other"}
+
+	_, _, err := project.freshApply(t, planPath, project.prepared())
+
+	require.ErrorContains(t, err, "changed between role and unit evaluation")
 }
 
 // A plan written to a subdirectory of the workdir is restored there; its directory holds only the plan and
@@ -555,6 +629,36 @@ func TestReviewedRebuildStagesAndReturnsTheArtifacts(t *testing.T) {
 	lock, err := os.ReadFile(filepath.Join(workdir, terraformLockFile))
 	require.NoError(t, err)
 	require.Equal(t, "restored lock", string(lock))
+	holding, err := filepath.Glob(filepath.Join(filepath.Dir(workdir), ".atmos-restore-*"))
+	require.NoError(t, err)
+	require.Empty(t, holding, "the holding directory is removed")
+}
+
+// A directory that provisioning recreated keeps its own files while the staged artifacts return into it.
+func TestReviewedRebuildRestoreMergesIntoRecreatedDirectories(t *testing.T) {
+	workdir := filepath.Join(t.TempDir(), "work")
+	rebuild := &reviewedRebuild{plan: &configurationPlan{}, planPath: filepath.Join(workdir, "plans", "reviewed.planfile"), workdir: workdir}
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, "plans", "nested"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "plans", "reviewed.planfile"), []byte("plan"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "plans", "nested", "record.json"), []byte("record"), 0o600))
+	restore, err := rebuild.stage()
+	require.NoError(t, err)
+
+	// Provisioning recreates plans/ with the module's own files.
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, "plans", "nested"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "plans", ".gitkeep"), nil, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "plans", "nested", ".gitkeep"), nil, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "plans", "reviewed.planfile"), []byte("stale"), 0o600))
+
+	require.NoError(t, restore())
+	plan, err := os.ReadFile(filepath.Join(workdir, "plans", "reviewed.planfile"))
+	require.NoError(t, err)
+	require.Equal(t, "plan", string(plan), "the staged plan replaces what provisioning wrote under the same name")
+	record, err := os.ReadFile(filepath.Join(workdir, "plans", "nested", "record.json"))
+	require.NoError(t, err)
+	require.Equal(t, "record", string(record))
+	require.FileExists(t, filepath.Join(workdir, "plans", ".gitkeep"))
+	require.FileExists(t, filepath.Join(workdir, "plans", "nested", ".gitkeep"))
 	holding, err := filepath.Glob(filepath.Join(filepath.Dir(workdir), ".atmos-restore-*"))
 	require.NoError(t, err)
 	require.Empty(t, holding, "the holding directory is removed")

@@ -44,6 +44,8 @@ type Recoverer struct {
 	policy      *schema.ComponentErrors
 	reporter    Reporter
 	signalsFile string
+	// signalsPath, when set, supplies the signals file at the moment an ignore policy writes it.
+	signalsPath func() string
 	sleep       func(ctx context.Context, duration time.Duration) error
 }
 
@@ -55,6 +57,14 @@ func WithReporter(reporter Reporter) RecovererOption {
 	defer perf.Track(nil, "execution.WithReporter")()
 
 	return func(r *Recoverer) { r.reporter = reporter }
+}
+
+// WithSignalsPath sets the file an ignore policy writes its signals to, resolved when the signals are
+// written rather than when the recoverer is built. An empty path writes no signals.
+func WithSignalsPath(resolve func() string) RecovererOption {
+	defer perf.Track(nil, "execution.WithSignalsPath")()
+
+	return func(r *Recoverer) { r.signalsPath = resolve }
 }
 
 // WithSignalsFile sets the file an ignore policy writes its signals to. Without it no signals are written.
@@ -156,19 +166,23 @@ func (r *Recoverer) ignore(policy *schema.ComponentIgnorePolicy) {
 	if r.reporter != nil {
 		r.reporter.Ignored(policy.Name, policy.Message)
 	}
-	if len(policy.Signals) == 0 || r.signalsFile == "" {
+	file := r.signalsFile
+	if r.signalsPath != nil {
+		file = r.signalsPath()
+	}
+	if len(policy.Signals) == 0 || file == "" {
 		return
 	}
 	data, err := json.MarshalIndent(policy.Signals, "", "  ")
 	if err == nil {
-		err = filesystem.NewOSFileSystem().WriteFileAtomic(r.signalsFile, data, signalsFilePermissions)
+		err = filesystem.NewOSFileSystem().WriteFileAtomic(file, data, signalsFilePermissions)
 	}
 	if err != nil {
-		log.Warn("Failed to write error signals", "path", r.signalsFile, "error", err)
+		log.Warn("Failed to write error signals", "path", file, "error", err)
 		return
 	}
 	if r.reporter != nil {
-		r.reporter.SignalsWritten(r.signalsFile)
+		r.reporter.SignalsWritten(file)
 	}
 }
 

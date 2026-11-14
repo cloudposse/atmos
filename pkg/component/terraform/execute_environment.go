@@ -126,27 +126,17 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 // discarded by it, so the toolchain directories are prepended to that PATH instead. Without a
 // component-specific PATH this is exactly the toolchain PATH.
 func toolchainPathEnv(info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) []string {
-	full := tenv.PATH()
-	if full == "" {
+	if tenv.PATH() == "" {
 		return tenv.EnvVars()
 	}
 	selected, ok := lastEnvListValue(info.ComponentEnvList)
 	if !ok {
 		selected, ok = lastEnvListValue(info.SanitizedEnv)
 	}
-	ambient := os.Getenv(envPath) //nolint:forbidigo // PATH is the process search path, not an Atmos configuration variable.
-	if !ok || selected == ambient || !strings.HasSuffix(full, ambient) {
+	if !ok {
 		return tenv.EnvVars()
 	}
-	// The toolchain PATH is "<toolchain dirs><separator><ambient PATH>"; swap the ambient tail.
-	prefix := strings.TrimSuffix(strings.TrimSuffix(full, ambient), string(os.PathListSeparator))
-	if selected == "" {
-		return []string{envPath + envAssign + prefix}
-	}
-	if prefix == "" {
-		return []string{envPath + envAssign + selected}
-	}
-	return []string{envPath + envAssign + prefix + string(os.PathListSeparator) + selected}
+	return []string{envPath + envAssign + tenv.PrependToPath(selected)}
 }
 
 // lastEnvListValue returns the value of the last PATH=value entry; later entries win.
