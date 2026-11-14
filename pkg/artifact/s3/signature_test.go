@@ -259,3 +259,46 @@ func TestFinishVerificationRejectsUnchecked(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
 	assert.Equal(t, artifact.VerificationUnchecked, result.Status)
 }
+
+// Evidence that decodes cleanly but is bound to another Record is never exported with this
+// Record's evidence set: importing that set would fail at the digest check.
+func TestSignature_ExportExcludesEvidenceBoundToAnotherRecord(t *testing.T) {
+	ctx := context.Background()
+	ownSpec := signedSpec(t, noneSpec())
+	own := newRepo(t, ownSpec)
+	ownPinned := publish(t, own, &prepareSpec{files: map[string]string{"data.txt": "own"}}, artifact.PublishOptions{}).Pinned
+	ownSubject := recordSubject(t, own, &ownPinned)
+	_, err := own.Sign(ctx, ownSubject, newSigner(), artifact.SignOptions{})
+	require.NoError(t, err)
+
+	otherSpec := signedSpec(t, noneSpec())
+	other := newRepo(t, otherSpec)
+	otherPinned := publish(t, other, &prepareSpec{files: map[string]string{"data.txt": "other"}}, artifact.PublishOptions{}).Pinned
+	otherSubject := recordSubject(t, other, &otherPinned)
+	require.NotEqual(t, ownSubject.Digest, otherSubject.Digest)
+	_, err = other.Sign(ctx, otherSubject, newSigner(), artifact.SignOptions{})
+	require.NoError(t, err)
+
+	// Plant the other Record's valid evidence file in this Record's signature directory.
+	otherDir := layout.SignatureDir(artifact.SubjectRecord, otherSubject.Digest)
+	otherKeys := managedKeys(otherSpec.fake, "", otherDir)
+	require.Len(t, otherKeys, 1)
+	planted, ok := otherSpec.fake.Object(otherKeys[0])
+	require.True(t, ok)
+	ownDir := layout.SignatureDir(artifact.SubjectRecord, ownSubject.Digest)
+	plantedKey := ownDir + "/" + otherKeys[0][len(otherDir)+1:]
+	ownSpec.fake.Seed(plantedKey, planted.Data, nil)
+	require.Len(t, managedKeys(ownSpec.fake, "", ownDir), 2, "both the signed and the planted file are stored")
+
+	blobs, err := own.ReadEvidence(ctx, &ownPinned)
+	require.NoError(t, err)
+	require.Len(t, blobs, 1, "only evidence bound to this Record is exported")
+	assert.Equal(t, ownSubject.Digest, blobs[0].Evidence.Subject.Digest)
+	assert.Equal(t, artifact.SubjectRecord, blobs[0].Evidence.Subject.Kind)
+
+	// The exported set always imports cleanly into a repository that holds the same Record.
+	destination := newRepo(t, signedSpec(t, noneSpec()))
+	destPinned := publish(t, destination, &prepareSpec{files: map[string]string{"data.txt": "own"}}, artifact.PublishOptions{}).Pinned
+	_, err = destination.WriteEvidence(ctx, &destPinned, blobs, nil)
+	require.NoError(t, err)
+}

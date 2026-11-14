@@ -322,11 +322,11 @@ func (r *Repository) ReadEvidence(ctx context.Context, pinned *artifact.PinnedRe
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactDownloadFailed, diag.Message)
 		}
 	}
-	blobs := make([]artifact.EvidenceBlob, 0, len(loaded))
-	for index := range loaded {
-		blobs = append(blobs, loaded[index].evidence.Blob(loaded[index].locator))
-	}
-	return blobs, nil
+	// Evidence in this Record's directory can still be bound to another Record. Exporting it would
+	// make the whole set fail the digest check when it is imported, so it is filtered exactly as
+	// verification filters it.
+	subject := artifact.SignatureSubject{Kind: artifact.SubjectRecord, Digest: pinned.RecordDigest}
+	return evidenceBlobs(subject, loaded, &diags), nil
 }
 
 // WriteEvidence implements [artifact.EvidenceWriter]: it imports evidence for an artifact this
