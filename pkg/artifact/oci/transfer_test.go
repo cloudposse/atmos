@@ -361,3 +361,57 @@ func TestExportRejectsAnotherRootAndImportPrefersNamedRoot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, first.ResolvedDigest, root.Digest)
 }
+
+// movedTagBackend opens destination stores whose copy tag is moved by a concurrent writer the
+// moment the copy has tagged it.
+type movedTagBackend struct {
+	backend
+	tag   string
+	moved ocispec.Descriptor
+}
+
+func (b *movedTagBackend) open(ctx context.Context, name string, write bool) (store, error) {
+	opened, err := b.backend.open(ctx, name, write)
+	if err != nil || !write {
+		return opened, err
+	}
+	return &movedTagStore{store: opened, tag: b.tag, moved: b.moved}, nil
+}
+
+type movedTagStore struct {
+	store
+	tag   string
+	moved ocispec.Descriptor
+}
+
+func (s *movedTagStore) Tag(ctx context.Context, desc ocispec.Descriptor, reference string) error {
+	if err := s.store.Tag(ctx, desc, reference); err != nil {
+		return err
+	}
+	if reference == s.tag {
+		return s.store.Tag(ctx, s.moved, reference)
+	}
+	return nil
+}
+
+// The copy result describes the digest that was copied. A writer that moves the destination tag
+// after the copy must not make the result, and the lockfile pin built from it, name content this
+// operation never copied.
+func TestCopyFromResultNamesTheCopiedDigestNotTheMovedTag(t *testing.T) {
+	ctx := context.Background()
+	source := newLayoutRepo(t)
+	published := publish(t, source, publishSpec{content: "copied content"})
+	destination := newLayoutRepo(t)
+	other := publish(t, destination, publishSpec{content: "someone else's content"})
+	otherDesc, ok := destination.descriptorFor(appName, other.Pinned.ResolvedDigest)
+	require.True(t, ok)
+	require.NotEqual(t, published.Pinned.ResolvedDigest, other.Pinned.ResolvedDigest)
+
+	destination.be = &movedTagBackend{backend: destination.be, tag: destination.be.reference(appName, appVersion), moved: otherDesc}
+	result, err := destination.CopyFrom(ctx, source, published.Pinned, artifact.CopyFromOptions{ExpectedPrior: &other.Pinned, Force: true})
+	require.NoError(t, err)
+	assert.Equal(t, published.Pinned.ResolvedDigest, result.Pinned.ResolvedDigest, "the pin is the copied digest, not whatever the tag names now")
+	assert.Equal(t, published.Pinned.RecordDigest, result.Pinned.RecordDigest)
+	assert.Equal(t, published.Pinned.ContentDigest, result.Pinned.ContentDigest)
+	assert.NotEmpty(t, result.Location)
+}

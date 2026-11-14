@@ -100,16 +100,27 @@ func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphSto
 			return nil, fmt.Errorf("%w: copy %s: %w", errUtils.ErrArtifactUploadFailed, ref, err)
 		}
 	}
-	return r.transferred(ctx, ref, outcome, options)
-}
-
-// transferred builds the result by inspecting what the destination now holds.
-func (r *Repository) transferred(ctx context.Context, ref artifact.Ref, outcome artifact.Outcome, options artifact.PublishOptions) (*artifact.PublishResult, error) {
-	pinned, err := r.Pin(ctx, ref)
+	pinned, err := r.pinCopied(ctx, dst, loaded, ref)
 	if err != nil {
 		return nil, err
 	}
-	inspection, err := r.Inspect(ctx, pinned)
+	return r.transferred(ctx, &pinned, ref, outcome, options)
+}
+
+// pinCopied pins the digest that was copied, read back from the destination. The destination tag
+// is deliberately not resolved again: another writer can move it after the copy, and the pin must
+// describe the content this operation published.
+func (r *Repository) pinCopied(ctx context.Context, dst store, copied *root, ref artifact.Ref) (artifact.PinnedReference, error) {
+	landed, err := r.loadCachedRoot(ctx, dst, ref.Name, copied.desc)
+	if err != nil {
+		return artifact.PinnedReference{}, err
+	}
+	return r.pinRoot(ctx, dst, ref, landed)
+}
+
+// transferred builds the result by inspecting the pinned content the destination now holds.
+func (r *Repository) transferred(ctx context.Context, pinned *artifact.PinnedReference, ref artifact.Ref, outcome artifact.Outcome, options artifact.PublishOptions) (*artifact.PublishResult, error) {
+	inspection, err := r.Inspect(ctx, *pinned)
 	if err != nil {
 		return nil, err
 	}

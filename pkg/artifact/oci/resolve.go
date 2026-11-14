@@ -40,6 +40,13 @@ func (r *Repository) Pin(ctx context.Context, ref artifact.Ref) (artifact.Pinned
 	if err != nil {
 		return artifact.PinnedReference{}, err
 	}
+	return r.pinRoot(ctx, st, ref, loaded)
+}
+
+// pinRoot builds the pin of an already resolved root. A caller that must describe one specific
+// digest, such as a copy that just wrote it, passes that root instead of resolving the mutable tag
+// again, so a tag moved in between can never change what the pin names.
+func (r *Repository) pinRoot(ctx context.Context, st store, ref artifact.Ref, loaded *root) (artifact.PinnedReference, error) {
 	pinned := r.pinnedFor(ref, loaded)
 	if loaded.class == classAtmos {
 		record, recordErr := r.readRecord(ctx, st, ref.Name, loaded)
