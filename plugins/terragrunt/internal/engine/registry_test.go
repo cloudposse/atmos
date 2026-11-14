@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -183,6 +184,16 @@ func TestIsOpenTofu(t *testing.T) {
 	assert.False(t, IsOpenTofu(""))
 }
 
+// The host and the provider treat any executable whose name contains "tofu", in any case, as OpenTofu.
+func TestIsOpenTofuUsesTheHostDetectionRule(t *testing.T) {
+	for _, binary := range []string{"opentofu", "tofu-wrapper", "TOFU.exe", `C:\tools\OpenTofu.EXE`, "/opt/bin/tofu1.8"} {
+		assert.True(t, IsOpenTofu(binary), binary)
+	}
+	for _, binary := range []string{"terraform", "/opt/tofu/bin/terraform", "terraform-wrapper.exe"} {
+		assert.False(t, IsOpenTofu(binary), binary, "only the executable name decides, not its directories")
+	}
+}
+
 func TestUnsupportedSourceTransportsStillFail(t *testing.T) {
 	for _, source := range []string{"s3::https://bucket/module.zip", "ftp://example.test/module"} {
 		_, err := Resolve(t.Context(), registryUnit(t, `source = "`+source+`"`))
@@ -313,4 +324,36 @@ func TestIAMSettingsDoNotRunCommandsDuringDiscovery(t *testing.T) {
 	result, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
 	require.Nil(t, result.IAM, "discovery does not resolve credentials or roles")
+}
+
+// A unit that a stack generates exists only in the generation overlay on a clean checkout, and the host
+// probes IAM before the provider generates the stack.
+func TestIAMProbeSeesUnitsThatTheirStackGenerates(t *testing.T) {
+	root := stackProject(t, map[string]string{
+		"live/terragrunt.stack.hcl": "unit \"app\" {\n  source = \"../catalog/units/app\"\n  path   = \"app\"\n  no_dot_terragrunt_stack = true\n}\n",
+	})
+	module, err := json.Marshal(filepath.ToSlash(filepath.Join(root, "modules", "unit")))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "catalog", "units", "app", "terragrunt.hcl"),
+		[]byte("iam_role = \"arn:aws:iam::123456789012:role/generated\"\nterraform { source = "+string(module)+" }\n"), 0o644))
+	request := model.Request{
+		Phase: "iam", Command: "plan", BasePath: root, Environment: map[string]string{}, Tofu: "/bin/tofu",
+		Path:           filepath.Join(root, "live", "app", "terragrunt.hcl"),
+		GenerationRoot: filepath.Join(root, "live", "terragrunt.stack.hcl"),
+	}
+
+	result, err := Resolve(t.Context(), request)
+
+	require.NoError(t, err)
+	require.NotNil(t, result.IAM)
+	require.Equal(t, "arn:aws:iam::123456789012:role/generated", result.IAM.Role)
+	require.NoFileExists(t, request.Path, "the generated unit exists only in the invocation's overlay")
+}
+
+func TestIAMProbeOfAnUnknownUnitStillFails(t *testing.T) {
+	request := iamUnit(t, `iam_role = "arn:aws:iam::123456789012:role/x"`)
+	request.Phase = "iam"
+	request.Path = filepath.Join(filepath.Dir(request.Path), "missing", "terragrunt.hcl")
+	_, err := Resolve(t.Context(), request)
+	require.Error(t, err, "without a generation root the unit must exist")
 }

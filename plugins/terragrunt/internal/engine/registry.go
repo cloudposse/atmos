@@ -103,14 +103,15 @@ func registryErrorMatches(message string, patterns []string) bool {
 	return matched
 }
 
-// IsOpenTofu reports whether the selected executable is OpenTofu. The executable name decides, as it does
-// for the engine the plugin reports to the host.
+// IsOpenTofu reports whether the selected executable is OpenTofu. It is the one rule of the host and the
+// plugin: any executable whose name contains "tofu", in any case, is OpenTofu, whichever separator its
+// path uses. Everything else is Terraform.
 func IsOpenTofu(binary string) bool {
 	name := binary
 	if index := strings.LastIndexAny(name, `/\`); index >= 0 {
 		name = name[index+1:]
 	}
-	return strings.TrimSuffix(name, ".exe") == "tofu"
+	return strings.Contains(strings.ToLower(name), "tofu")
 }
 
 // normalizeGetterURL spells the host shorthands a registry may return as the explicit Git URLs that

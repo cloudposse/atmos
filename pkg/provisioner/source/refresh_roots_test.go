@@ -115,6 +115,8 @@ func TestSourceRefreshRejectsRuntimePathsOnFreshCheckout(t *testing.T) {
 		config  map[string]any
 		wantErr bool
 	}{
+		{name: "case-variant-state", file: "Terraform.tfstate", wantErr: true},
+		{name: "mixed-case-backend", file: "STATE/Custom.tfstate", config: map[string]any{"backend": map[string]any{"path": "state/custom.tfstate"}}, wantErr: true},
 		{name: "default-state", file: "terraform.tfstate", wantErr: true},
 		{name: "state-backup", file: "terraform.tfstate.backup", wantErr: true},
 		{name: "workspace-state", file: "terraform.tfstate.d/dev/terraform.tfstate", wantErr: true},
@@ -144,6 +146,11 @@ func TestSourceRefreshRejectsRuntimePathsOnFreshCheckout(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.NoError(t, statErr, "a non-runtime source file must still be installed")
+			require.NoError(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(tc.config)))
+			if tc.name == "ordinary-file" {
+				refreshWrite(t, target, tc.file, `{"version":4,"lineage":"runtime","serial":2}`)
+				require.ErrorIs(t, VendorSource(t.Context(), nil, spec, target, WithRuntimePreservation(tc.config)), errUtils.ErrSourceCopyFailed)
+			}
 		})
 	}
 }
@@ -184,4 +191,13 @@ func TestReadSourceInventoryWrapsFailures(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
 		require.ErrorContains(t, err, "read source ownership")
 	})
+}
+
+func TestProtectedRuntimePathCaseAndBoundary(t *testing.T) {
+	root := t.TempDir()
+	protected := map[string]bool{filepath.Join(root, "State"): true}
+	for _, name := range []string{"STATE", "state/child", ".ATMOS/Metadata.JSON", ".ATMOS/Source.JSON", ".Terraform.Lock.hcl"} {
+		assert.True(t, protectedRuntimePath(filepath.Join(root, filepath.FromSlash(name)), name, protected), name)
+	}
+	assert.False(t, protectedRuntimePath(filepath.Join(root, "StateOther"), "StateOther", protected))
 }

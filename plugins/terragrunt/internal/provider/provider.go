@@ -200,10 +200,9 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 	return request, nil
 }
 
+// engineName names the engine of an executable with the rule the engine package shares with the host.
 func engineName(binary string) string {
-	// Match the host's executable-name detection, which treats any basename containing
-	// "tofu", case-insensitively, as OpenTofu.
-	if strings.Contains(strings.ToLower(filepath.Base(binary)), "tofu") {
+	if engine.IsOpenTofu(binary) {
 		return "opentofu"
 	}
 	return "terraform"

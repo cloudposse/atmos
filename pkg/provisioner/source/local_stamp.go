@@ -250,13 +250,8 @@ func localSourceChanged(metadata *workdir.WorkdirMetadata, spec *schema.VendorCo
 // be read. It reports false for remote sources.
 func localSourceMissing(spec *schema.VendorComponentSource) bool {
 	uri := vendor.NormalizeURI(resolveSourceURI(spec))
-	if _, _, ok := vendor.LocalRootSubdir(uri); ok {
-		resolved, err := resolveLocalSubdirURI(uri, "")
-		if err != nil {
-			return true
-		}
-		_, present, err := localDirectorySource(resolved)
-		return err != nil || !present
+	if root, subdir, ok := vendor.LocalRootSubdir(uri); ok {
+		return localRootSubdirMissing(root, subdir, uri)
 	}
 	switch {
 	case vendor.IsFileURI(uri):
@@ -268,14 +263,32 @@ func localSourceMissing(spec *schema.VendorComponentSource) bool {
 	case !vendor.IsLocalPath(uri):
 		return false
 	}
-	if !filepath.IsAbs(uri) {
-		absolute, err := resolveLocalSourcePath(uri, "")
+	return localPathMissing(uri)
+}
+
+// localRootSubdirMissing reports whether a root//subdir local source cannot be found or read.
+func localRootSubdirMissing(root, subdir, uri string) bool {
+	if !filepath.IsAbs(root) {
+		absolute, err := resolveLocalSourcePath(root, "")
 		if err != nil {
 			return true
 		}
-		uri = absolute
+		uri = absolute + "//" + subdir
 	}
-	_, err := os.Stat(uri)
+	_, present, err := localDirectorySource(uri)
+	return err != nil || !present
+}
+
+// localPathMissing reports whether a plain local path cannot be found or read.
+func localPathMissing(path string) bool {
+	if !filepath.IsAbs(path) {
+		absolute, err := resolveLocalSourcePath(path, "")
+		if err != nil {
+			return true
+		}
+		path = absolute
+	}
+	_, err := os.Stat(path)
 	return err != nil
 }
 

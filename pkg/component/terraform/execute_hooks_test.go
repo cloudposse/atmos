@@ -1006,6 +1006,33 @@ func TestIgnoredSourceRefreshWritesSignalsInModuleDirectory(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(workdir, "error-signals.json"))
 }
 
+func TestSourceFetchResolvesAnExplicitSubdirectoryAfterProvisioning(t *testing.T) {
+	workdir := t.TempDir()
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{
+		Name: "gone", Patterns: []string{"download failed"}, Signals: map[string]any{"fetch_failed": true},
+	}}}
+	info := hookInfo("plan", &schema.ComponentExecution{Errors: policy})
+	info.ComponentSection = map[string]any{"metadata": map[string]any{"source_subdir": "modules/app"}}
+	wrapper := hookExecutor(&fakeShell{}).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	target := &source.Target{Dir: workdir, IsWorkdir: true}
+
+	// The module directory is created by the fetch, so it does not exist when the fetch starts.
+	require.NoError(t, wrapper(t.Context(), target, func(context.Context) error {
+		return os.MkdirAll(filepath.Join(workdir, "modules", "app"), 0o755)
+	}))
+
+	// A failed fetch that provisioned nothing is still ignored, and has no module directory for signals.
+	empty := t.TempDir()
+	err := wrapper(t.Context(), &source.Target{Dir: empty, IsWorkdir: true}, func(context.Context) error { return errors.New("download failed") })
+	require.ErrorIs(t, err, errUtils.ErrComponentRunIgnored)
+	require.NoDirExists(t, filepath.Join(empty, "modules"))
+
+	// An invalid subdirectory is not a pending one.
+	info.ComponentSection = map[string]any{"metadata": map[string]any{"source_subdir": "../escape"}}
+	err = wrapper(t.Context(), &source.Target{Dir: empty, IsWorkdir: true}, func(context.Context) error { return errors.New("download failed") })
+	require.ErrorIs(t, err, errUtils.ErrComponentRunIgnored, "the ignore decision does not depend on where signals would go")
+}
+
 func TestOnlyRunIgnoredKeepsIndependentHookFailures(t *testing.T) {
 	require.True(t, onlyRunIgnored(errUtils.ErrComponentRunIgnored))
 	require.True(t, onlyRunIgnored(fmt.Errorf("fetch: %w", errUtils.ErrComponentRunIgnored)))

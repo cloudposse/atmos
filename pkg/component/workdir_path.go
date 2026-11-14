@@ -86,32 +86,52 @@ func ResolveWorkdirSubpath(metadataSubpath, workdirRoot string) (string, error) 
 	return workdirRoot, nil
 }
 
-// resolveConfiguredSubpath selects the explicit module under a copied local
+// ResolveConfiguredSubpath selects the explicit module under a copied local
 // source root. Unlike the legacy metadata.component hint, an explicit source
-// subdirectory must exist and cannot silently fall back to the root.
+// subdirectory must exist and cannot silently fall back to the root. Use it for paths that are
+// resolved after the source is provisioned; callers that run before it use ResolvePendingSubpath.
 func ResolveConfiguredSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string) (string, error) {
 	defer perf.Track(nil, "component.ResolveConfiguredSubpath")()
 
+	selected, _, err := resolveConfiguredSubpath(info, workdirRoot, false)
+	return selected, err
+}
+
+// ResolvePendingSubpath is ResolveConfiguredSubpath for callers that run before the source is
+// provisioned, when an explicit source subdirectory may not exist yet. It returns the path the module
+// will have and whether it exists now; every other failure, including an invalid subdirectory, is still
+// an error.
+func ResolvePendingSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string) (string, bool, error) {
+	defer perf.Track(nil, "component.ResolvePendingSubpath")()
+
+	return resolveConfiguredSubpath(info, workdirRoot, true)
+}
+
+func resolveConfiguredSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string, allowMissing bool) (string, bool, error) {
 	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
 	subdir, _ := metadata["source_subdir"].(string)
 	if subdir == "" {
-		return ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
+		selected, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
+		return selected, err == nil, err
 	}
 	if err := validateSourceSubdir(subdir); err != nil {
-		return "", err
+		return "", false, err
 	}
 	selected := filepath.Join(workdirRoot, filepath.FromSlash(subdir))
 	selectedInfo, err := os.Stat(selected)
+	if allowMissing && errors.Is(err, os.ErrNotExist) {
+		return selected, false, nil
+	}
 	if err != nil {
-		return "", fmt.Errorf("%w: inspect source subdirectory: %w", errUtils.ErrWorkdirProvision, err)
+		return "", false, fmt.Errorf("%w: inspect source subdirectory: %w", errUtils.ErrWorkdirProvision, err)
 	}
 	if !selectedInfo.IsDir() {
-		return "", fmt.Errorf("%w: source subdirectory is not a directory", errUtils.ErrWorkdirProvision)
+		return "", false, fmt.Errorf("%w: source subdirectory is not a directory", errUtils.ErrWorkdirProvision)
 	}
 	if err := checkSourceSubdirBoundary(workdirRoot, selected); err != nil {
-		return "", err
+		return "", false, err
 	}
-	return selected, nil
+	return selected, true, nil
 }
 
 func validateSourceSubdir(subdir string) error {
@@ -363,6 +383,31 @@ func DryRunDefersMissingPath(info *schema.ConfigAndStacksInfo) bool {
 	return info != nil && info.DryRun && provSource.HasSource(info.ComponentSection)
 }
 
+// applyDryRunWorkdirSubpath resolves the workdir subpath of a dry run, which never provisions the
+// source, so an explicit source subdirectory that does not exist yet resolves to the path it will have.
+// The section is then left untouched, so a later resolution after provisioning starts from the root.
+//
+// Locating a retained workdir is not a dry run and keeps the strict resolution.
+func applyDryRunWorkdirSubpath(info *schema.ConfigAndStacksInfo) (string, error) {
+	workdirPath, _ := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if !info.DryRun || workdirPath == "" {
+		return ApplyWorkdirSubpathToSection(info)
+	}
+	if _, applied := info.ComponentSection[workdirSubpathAppliedKey].(subpathAppliedMarker); applied {
+		return workdirPath, nil
+	}
+	selected, present, err := ResolvePendingSubpath(info, workdirPath)
+	if err != nil {
+		return "", err
+	}
+	if !present {
+		return selected, nil
+	}
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = selected
+	info.ComponentSection[workdirSubpathAppliedKey] = subpathAppliedMarker{}
+	return selected, nil
+}
+
 // resolveDryRunComponentPath validates placement without downloading source or copying a workdir.
 // The existence result describes the current filesystem, not a simulated successful provision.
 // A sourced component's directory follows source target rules, which honor an explicit
@@ -382,7 +427,7 @@ func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *sc
 	if isWorkdir {
 		info.ComponentSection[provWorkdir.WorkdirPathKey] = fallback
 	}
-	path, err := ApplyWorkdirSubpathToSection(info)
+	path, err := applyDryRunWorkdirSubpath(info)
 	if err != nil {
 		return "", false, err
 	}

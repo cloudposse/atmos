@@ -35,6 +35,7 @@ func openGeneratedFile(root *os.Root, file schema.ComponentConfigurationFile, ex
 	return output, nil
 }
 
+// restrictExistingGeneratedFile applies the file's clamped permission bits to an existing file.
 func restrictExistingGeneratedFile(root *os.Root, file schema.ComponentConfigurationFile) error {
-	return root.Chmod(file.Path, secretMode)
+	return root.Chmod(file.Path, writtenMode(file))
 }

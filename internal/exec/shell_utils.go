@@ -29,7 +29,6 @@ import (
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	process "github.com/cloudposse/atmos/pkg/process"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
 	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
@@ -52,11 +51,6 @@ func WithInvokingCommand(cmd *cobra.Command) ShellCommandOption {
 	return component.WithInvokingCommand(cmd)
 }
 
-// invokingCommandFromOpts returns the invoking command supplied through shared execution options.
-func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
-	return component.InvokingCommandFromOptions(opts...)
-}
-
 // WithExecMetadataParser supplies the parser for command-specific execution results.
 func WithExecMetadataParser(fn func(string, int, string) any) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithExecMetadataParser")()
@@ -71,17 +65,9 @@ func execMetadataParserFromOpts(opts ...ShellCommandOption) func(string, int, st
 
 // WithMetricsCallback supplies the callback that receives subprocess resource-usage metrics.
 func WithMetricsCallback(fn func(*metricsprocess.ProcessMetrics)) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithMetricsCallback")()
+
 	return component.WithMetricsCallback(fn)
-}
-
-// withExecMetadataOutputCapture adds output writers scoped to the main command for metadata reporting.
-func withExecMetadataOutputCapture(stdoutW, stderrW io.Writer) ShellCommandOption {
-	return component.WithMetadataOutputCapture(stdoutW, stderrW)
-}
-
-// execMetadataOutputCaptureFromOpts retrieves the metadata writers so retries can reset their output.
-func execMetadataOutputCaptureFromOpts(opts ...ShellCommandOption) (io.Writer, io.Writer) {
-	return component.MetadataOutputCaptureFromOptions(opts...)
 }
 
 // WithStdoutCapture tees raw (unmasked) subprocess stdout to the supplied writer.
@@ -107,11 +93,15 @@ func WithStdoutOverride(w io.Writer) ShellCommandOption {
 
 // WithProcessStreams supplies stdin, stdout, and stderr through the shared component options.
 func WithProcessStreams(streams process.Streams) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithProcessStreams")()
+
 	return component.WithProcessStreams(streams)
 }
 
 // WithProcessContext supplies cancellation and deadlines for subprocess execution.
 func WithProcessContext(ctx context.Context) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithProcessContext")()
+
 	return component.WithProcessContext(ctx)
 }
 
@@ -125,18 +115,6 @@ func WithEnvironment(env []string) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithEnvironment")()
 
 	return component.WithEnvironment(env)
-}
-
-// shellCommandOutputWriters exposes explicitly supplied process writers to provisioning hooks.
-func shellCommandOutputWriters(opts ...ShellCommandOption) provisioner.OutputWriters {
-	var options component.ExecutionOptions
-	for _, opt := range opts {
-		opt(&options)
-	}
-	if options.Streams == nil {
-		return provisioner.OutputWriters{}
-	}
-	return provisioner.OutputWriters{Stdout: options.Streams.Stdout, Stderr: options.Streams.Stderr}
 }
 
 // resolveMaskingDisabled decides whether output masking should be disabled.
@@ -242,7 +220,7 @@ func ExecuteShellCommand(
 	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
 	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
 	// for workspace select so it doesn't pollute data-producing commands like output).
-	var stdoutTarget io.Writer = streams.Stdout
+	stdoutTarget := streams.Stdout
 	if cfg.StdoutOverride != nil {
 		stdoutTarget = cfg.StdoutOverride
 	}

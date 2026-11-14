@@ -110,9 +110,110 @@ func TestExplicitStackStateAndPreparation(t *testing.T) {
 	require.Equal(t, before, after)
 	require.Equal(t, filepath.Join(root, "state/dev/network.tfstate"), after["path"])
 	require.True(t, prepared.BackendGenerated)
-	require.Len(t, prepared.Files, 1)
+	require.Len(t, prepared.Files, 3)
 	require.Equal(t, "backend.tf", prepared.Files[0].Path)
 	require.Contains(t, string(prepared.Files[0].Content), `backend "local"`)
 	require.True(t, prepared.Files[0].Sensitive, "the host keeps generated backend bytes out of saved-plan records")
+	require.Equal(t, "terragrunt.hcl", prepared.Files[1].Path)
+	require.Equal(t, "terragrunt.values.hcl", prepared.Files[2].Path)
 	require.NotNil(t, prepared.Inputs)
+}
+
+func TestImportsSelectExplicitFilesAndDirectories(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "live"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "live", "terragrunt.stack.hcl"), nil, 0o600))
+	settings, err := encode(map[string]any{"enabled": true})
+	require.NoError(t, err)
+	request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: settings, Operation: &pluginv1.ComponentOperation{Mode: "native"}, Imports: []string{"terragrunt://live", "terragrunt://live/terragrunt.stack.hcl"}}
+	paths, err := importPaths(request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/**", "live/terragrunt.stack.hcl"}, paths)
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		require.Equal(t, paths, req.IncludedPaths)
+		return &model.Resolution{}, nil
+	})
+	_, err = p.Discover(t.Context(), request)
+	require.NoError(t, err)
+	for uri, want := range map[string]string{"terragrunt://.": "**", "terragrunt://./": "**", "terragrunt://live/": "live/**", "terragrunt://./live": "live/**", "terragrunt://./live/terragrunt.stack.hcl": "live/terragrunt.stack.hcl", "terragrunt://live//terragrunt.stack.hcl": "live/terragrunt.stack.hcl"} {
+		request.Imports = []string{uri}
+		got, err := importPaths(request)
+		require.NoError(t, err, uri)
+		require.Equal(t, []string{want}, got, uri)
+	}
+	for _, uri := range []string{"wrong://live", "terragrunt://../outside", "terragrunt://live?ref=main", "terragrunt://absent", "terragrunt://live/*", `terragrunt://live\child`} {
+		request.Imports = []string{uri}
+		_, err := importPaths(request)
+		require.Error(t, err)
+		_, err = p.Discover(t.Context(), request)
+		require.Error(t, err)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "live", "other.txt"), nil, 0o600))
+	request.Imports = []string{"terragrunt://live/other.txt"}
+	_, err = importPaths(request)
+	require.Error(t, err)
+	request.Imports = nil
+	_, err = importPaths(request)
+	require.Error(t, err)
+}
+
+func TestRemoteModuleSourceIsNotAFileWatch(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	path := filepath.Join(root, "live", "app", "terragrunt.hcl")
+	remote := "git::https://example.com/modules.git//app?ref=v1.0.0"
+	unit := model.DiscoveredUnit{Config: model.Resolution{Path: path, Source: remote, Files: []string{path}}}
+	addresses := map[string]*pluginv1.ComponentAddress{path: {Stack: "live", Component: "app", ComponentType: "terraform"}}
+	instance, err := discoveredUnit(model.Request{BasePath: root}, unit, addresses)
+	require.NoError(t, err)
+	var configuration map[string]any
+	require.NoError(t, decode(instance.Configuration, &configuration))
+	require.Equal(t, remote, configuration["source"])
+	require.Len(t, instance.Sources, 1)
+	require.Equal(t, "live/app/terragrunt.hcl", instance.Sources[0].Path)
+}
+
+func TestDiscoveredLocalModuleSubdirKeepsDelimiter(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	unitPath := filepath.Join(root, "live", "app", "terragrunt.hcl")
+	repository := filepath.Join(root, "repository")
+	unit := model.DiscoveredUnit{Config: model.Resolution{Path: unitPath, Source: repository + "//modules/app", Folders: []string{repository}, Files: []string{unitPath}}}
+	addresses := map[string]*pluginv1.ComponentAddress{unitPath: {Stack: "live", Component: "app", ComponentType: "terraform"}}
+	instance, err := discoveredUnit(model.Request{BasePath: root}, unit, addresses)
+	require.NoError(t, err)
+	var configuration map[string]any
+	require.NoError(t, decode(instance.Configuration, &configuration))
+	require.Equal(t, "./repository//modules/app", configuration["source"])
+	metadata := configuration["metadata"].(map[string]any)
+	require.Equal(t, "modules/app", metadata["source_subdir"])
+}
+
+func TestDerivedAddressNamesAnUnscopedUnit(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	for path, want := range map[string]*pluginv1.ComponentAddress{
+		filepath.Join(root, "live", "dev", "vpc", "terragrunt.hcl"): {Stack: "live/dev", Component: "vpc", ComponentType: "terraform"},
+		filepath.Join(root, "vpc", "terragrunt.hcl"):                {Stack: "default", Component: "vpc", ComponentType: "terraform"},
+		filepath.Join(root, "terragrunt.hcl"):                       {Stack: "default", Component: "root", ComponentType: "terraform"},
+	} {
+		got, err := derivedAddress(root, path)
+		require.NoError(t, err)
+		require.Equal(t, want.Stack, got.Stack)
+		require.Equal(t, want.Component, got.Component)
+		require.Equal(t, want.ComponentType, got.ComponentType)
+	}
+	_, err = derivedAddress(root, filepath.Join(filepath.Dir(root), "elsewhere", "terragrunt.hcl"))
+	require.ErrorIs(t, err, ErrUnsupported)
+}
+
+func TestWarningDiagnosticsNeverFailTheCommand(t *testing.T) {
+	diagnostics := warningDiagnostics([]model.Warning{{Code: model.WarningSymlinkedDirectory, Path: "live/linked", Message: "symlinked directory live/linked was not followed"}})
+	require.Len(t, diagnostics, 1)
+	require.Equal(t, pluginv1.Severity_SEVERITY_WARNING, diagnostics[0].Detail.Severity)
+	require.Equal(t, model.WarningSymlinkedDirectory, diagnostics[0].Detail.Code)
+	require.True(t, diagnostics[0].Detail.UserSafe)
+	require.Equal(t, "live/linked", diagnostics[0].Detail.Location.File)
+	require.Empty(t, warningDiagnostics(nil))
 }

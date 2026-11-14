@@ -53,6 +53,10 @@ func (e *Executor) prepareComponentExecution(
 		return nil, err
 	}
 
+	// A restored plugin plan was validated when it was created. Its binding omits
+	// variable values, so validating the reconstructed component would test empty vars.
+	restoredConfigurationPlan := isRestoredConfigurationPlan(info, execCtx.preparedConfiguration)
+
 	execCtx.componentPath, err = e.prepareComponentDirectory(ctx, writers, atmosConfig, info, execCtx)
 	if err != nil {
 		return nil, err
@@ -67,7 +71,7 @@ func (e *Executor) prepareComponentExecution(
 	}
 	execCtx.nameFiles(atmosConfig, info)
 
-	if err = e.runPreExecutionSteps(atmosConfig, info, execCtx.workingDir, execCtx.tenv); err != nil {
+	if err = e.runPreExecutionSteps(atmosConfig, info, execCtx.workingDir, execCtx.tenv, restoredConfigurationPlan); err != nil {
 		return nil, err
 	}
 	// Execution has now written its own files, so the directory is complete and must equal the reviewed one.
@@ -104,15 +108,7 @@ func (e *Executor) prepareConfigurationPhase(
 	if err != nil {
 		return nil, err
 	}
-	if excludedFromOperation(info, prepared) {
-		skipExcluded(info)
-		return nil, errUtils.ErrComponentExcluded
-	}
-	warnOverlappingRetry(info, prepared)
-	if err := clearStaleSignals(atmosConfig, info); err != nil {
-		return nil, err
-	}
-	if err = e.runReadConfigHooks(ctx, atmosConfig, info, prepared); err != nil {
+	if err = e.beginPreparedConfiguration(ctx, atmosConfig, info, prepared); err != nil {
 		return nil, err
 	}
 	return &componentExecContext{preparedConfiguration: prepared, tenv: tenv, rebuild: rebuild}, nil
@@ -176,13 +172,42 @@ func (e *Executor) prepareComponentDirectory(
 
 // nameFiles sets the variable, test variable, and plan files and the working directory of a component.
 func (c *componentExecContext) nameFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
-	c.testVarFile = ""
-	if hasTerraformTestVars(info) {
-		c.testVarFile = ConstructTerraformComponentTestVarfileName(info)
-	}
+	c.testVarFile = terraformTestVarfileName(info)
 	c.varFile = ConstructTerraformComponentVarfileName(info)
 	c.planFile = ConstructTerraformComponentPlanfileName(info)
 	c.workingDir = ConstructTerraformComponentWorkingDir(atmosConfig, info)
+}
+
+// beginPreparedConfiguration stops an excluded component before anything runs, then warns about
+// overlapping retries, clears stale signal files and runs the provider's read-configuration hooks.
+func (e *Executor) beginPreparedConfiguration(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	prepared *schema.PreparedComponentConfiguration,
+) error {
+	if excludedFromOperation(info, prepared) {
+		skipExcluded(info)
+		return errUtils.ErrComponentExcluded
+	}
+	warnOverlappingRetry(info, prepared)
+	if err := clearStaleSignals(atmosConfig, info); err != nil {
+		return err
+	}
+	return e.runReadConfigHooks(ctx, atmosConfig, info, prepared)
+}
+
+// terraformTestVarfileName returns the test var file name, or "" when the component has no test vars.
+func terraformTestVarfileName(info *schema.ConfigAndStacksInfo) string {
+	if !hasTerraformTestVars(info) {
+		return ""
+	}
+	return ConstructTerraformComponentTestVarfileName(info)
+}
+
+// isRestoredConfigurationPlan reports whether the invocation applies a provider-owned saved plan.
+func isRestoredConfigurationPlan(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) bool {
+	return prepared != nil && ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
 }
 
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
@@ -193,6 +218,7 @@ func (e *Executor) runPreExecutionSteps(
 	info *schema.ConfigAndStacksInfo,
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
+	restoredConfigurationPlan bool,
 ) error {
 	// `(computed)` is an inspection-only degradation marker. Never permit it to
 	// reach Terraform via a generated tfvars file or TF_VAR_ environment value.
@@ -209,8 +235,10 @@ func (e *Executor) runPreExecutionSteps(
 		return err
 	}
 
-	if err := e.validateTerraformComponent(atmosConfig, info); err != nil {
-		return err
+	if !restoredConfigurationPlan {
+		if err := e.validateTerraformComponent(atmosConfig, info); err != nil {
+			return err
+		}
 	}
 
 	if err := prepareExecutionAuthentication(atmosConfig, info); err != nil {
@@ -227,6 +255,12 @@ func (e *Executor) runPreExecutionSteps(
 
 	warnOnConflictingEnvVars()
 
+	return finishPreExecutionEnvironment(atmosConfig, info, tenv)
+}
+
+// finishPreExecutionEnvironment assembles the environment: provider-owned components check their
+// workspace and append secrets, every other component gets the full environment assembly.
+func finishPreExecutionEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) error {
 	if schema.ConfigurationOwned(info.ComponentSettingsSection) && !info.DryRun {
 		if err := checkConfigurationWorkspace(info); err != nil {
 			return err
@@ -252,28 +286,43 @@ func terraformPhaseLabel(info *schema.ConfigAndStacksInfo, phase string) string 
 	return strings.TrimSpace(tool + " " + phase)
 }
 
+// runGroupedInitPhase runs the init pre-step, when needed, and returns the possibly updated component path.
+func (e *Executor) runGroupedInitPhase(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	opts ...component.ExecutionOption,
+) (string, error) {
+	if !shouldRunTerraformInit(atmosConfig, info) {
+		return componentPath, nil
+	}
+	// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
+	// into its own collapsible group. A no-op unless ci.groups.mode is "auto"
+	// and this is the outermost Atmos invocation (a terraform run nested inside
+	// a workflow step stays flat inside the step's group).
+	err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
+		var phaseErr error
+		componentPath, phaseErr = e.executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
+		return phaseErr
+	})
+	if err != nil {
+		return componentPath, errUtils.AsPrerequisiteError(err)
+	}
+	return componentPath, nil
+}
+
 func (e *Executor) executeCommandPipeline(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	execCtx *componentExecContext,
 	opts ...component.ExecutionOption,
 ) error {
-	componentPath := execCtx.componentPath
 	warnConfigurationPreview(info)
 
-	if shouldRunTerraformInit(atmosConfig, info) {
-		// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
-		// into its own collapsible group. A no-op unless ci.groups.mode is "auto"
-		// and this is the outermost Atmos invocation (a terraform run nested inside
-		// a workflow step stays flat inside the step's group).
-		err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
-			var phaseErr error
-			componentPath, phaseErr = e.executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
-			return phaseErr
-		})
-		if err != nil {
-			return errUtils.AsPrerequisiteError(err)
-		}
+	componentPath, err := e.runGroupedInitPhase(atmosConfig, info, execCtx, execCtx.componentPath, opts...)
+	if err != nil {
+		return err
 	}
 
 	handleDeploySubcommand(atmosConfig, info)
@@ -351,7 +400,8 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	defer restore()
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
 	var effectiveArgs []string
-	captureCtx := context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs)
+	var ignored bool
+	captureCtx := context.WithValue(context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs), mainCommandIgnoredKey{}, &ignored)
 	captureArgs := component.WithProcessContext(captureCtx)
 	// A component with provider-supplied hooks recovers inside its main-command lifecycle, so
 	// the retry runs between the same before and after hooks instead of repeating them.
@@ -378,6 +428,10 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	}
 	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		return mainErr
+	}
+	// An ignored failure produced no plan to bind, so the run ends without recording one.
+	if ignored {
+		return nil
 	}
 	// Policy plans run against a private artifact that is removed after the guard
 	// publishes it to the original output path. The effective arguments were

@@ -2,7 +2,9 @@ package component
 
 import (
 	"context"
+	"math"
 	"path/filepath"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -90,6 +92,10 @@ func (p *Provider) Prepare(ctx context.Context, input *pluginv1.ComponentRequest
 	})
 	if err != nil {
 		return nil, err
+	}
+	// The registry time is observed while this call's span is open, so it is a child of that span.
+	if nanos := result.GetRegistryResolutionNanos(); nanos > 0 && nanos <= uint64(math.MaxInt64) {
+		perf.ObserveExternal("atmosbridge.ResolveRegistrySource", time.Duration(nanos))
 	}
 	return result, nil
 }

@@ -641,16 +641,21 @@ func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 	for _, test := range []struct {
 		name   string
+		extra  bool
 		args   []string
 		code   int
 		record bool
 	}{
 		{name: "explicit detailed exit code with changes", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 2, record: true},
+		{name: "provider detailed exit code", extra: true, args: []string{"plan", "-out", "changes.plan"}, code: 2, record: true},
 		{name: "failure with detailed exit code", args: []string{"plan", "-detailed-exitcode", "-out", "changes.plan"}, code: 1},
 		{name: "status 2 without detailed exit code", args: []string{"plan", "-out", "changes.plan"}, code: 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config, info, execCtx, _, _ := planFixture(t)
+			if test.extra {
+				info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: []string{"-detailed-exitcode"}}}}
+			}
 			shell := &fakeShell{run: func(call *shellCall) error {
 				if err := os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("changes"), 0o600); err != nil {
 					return err
@@ -667,6 +672,44 @@ func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 				return
 			}
 			require.NoFileExists(t, binding)
+		})
+	}
+}
+
+// An ignored failure of the main command ends the run successfully, without a plan to bind. A plan
+// that completed is still bound when an errors policy is present but does not match.
+func TestIgnoredPlanFailureDoesNotRecordAPlanBinding(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		ignore string
+	}{
+		{name: "ignored failure", ignore: "backend unavailable"},
+		{name: "unmatched policy", ignore: "never matches"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, _ := planFixture(t)
+			info.ComponentExecution = &schema.ComponentExecution{Errors: &schema.ComponentErrors{
+				Ignore: []schema.ComponentIgnorePolicy{{Name: "ignored", Patterns: []string{test.ignore}}},
+			}}
+			// The failed plan writes no artifact.
+			shell := &fakeShell{run: func(call *shellCall) error {
+				if call.options.StderrCapture != nil {
+					_, _ = io.WriteString(call.options.StderrCapture, "Error: backend unavailable")
+				}
+				return errUtils.ExitCodeError{Code: 1}
+			}}
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.execute
+			path := filepath.Join(execCtx.componentPath, "failed.plan")
+
+			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false)
+
+			if test.ignore == "backend unavailable" {
+				require.NoError(t, err, "the ignored failure completes the run")
+			} else {
+				require.Error(t, err, "a failure that no policy ignores still fails")
+			}
+			require.NoFileExists(t, path+configurationPlanSuffix)
 		})
 	}
 }
@@ -869,4 +912,17 @@ func TestEnvironmentPlanOutputIgnoresUnownedPlans(t *testing.T) {
 	info.SubCommand = "plan"
 	execCtx.preparedConfiguration = nil
 	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
+}
+
+func TestConfigurationPlanRoundTripNumericBackend(t *testing.T) {
+	config, info, execCtx, fixture, path := planFixture(t)
+	execCtx.preparedConfiguration.Backend["port"] = 1234
+	execCtx.preparedConfiguration.Backend["timeout"] = json.Number("1.0")
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}))
+	fixture.state.Backend["port"] = float64(1234)
+	fixture.state.Backend["timeout"] = 1
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	_, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.False(t, equalBackendConfiguration(map[string]any{"value": json.Number("9007199254740993")}, map[string]any{"value": json.Number("9007199254740992")}))
 }

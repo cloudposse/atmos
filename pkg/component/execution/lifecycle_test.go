@@ -752,3 +752,24 @@ func TestJoinFailuresKeepsLoneErrorIntact(t *testing.T) {
 	require.ErrorIs(t, joined, lone)
 	require.ErrorIs(t, joined, other)
 }
+
+// The signals file can depend on what the failed attempt left behind, so it is resolved when written.
+func TestRecovererResolvesTheSignalsFileWhenIgnoring(t *testing.T) {
+	directory := t.TempDir()
+	signalsFile := filepath.Join(directory, SignalsFileName)
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "ignore", Patterns: []string{"alpha"}, Signals: map[string]any{"x": 1}}}}
+	failing := func() *recoveryRun { return &recoveryRun{failures: []error{errExit}, texts: []string{"alpha"}} }
+
+	resolved := 0
+	ignored, err := NewRecoverer(policy, WithSignalsPath(func() string { resolved++; return signalsFile })).Run(t.Context(), failing().attempt)
+	require.NoError(t, err)
+	require.True(t, ignored)
+	require.Equal(t, 1, resolved)
+	require.FileExists(t, signalsFile)
+
+	require.NoError(t, os.Remove(signalsFile))
+	ignored, err = NewRecoverer(policy, WithSignalsPath(func() string { return "" })).Run(t.Context(), failing().attempt)
+	require.NoError(t, err)
+	require.True(t, ignored)
+	require.NoFileExists(t, signalsFile, "an empty path writes no signals")
+}

@@ -6,13 +6,16 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/internal/gcp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -143,4 +146,70 @@ func TestGetCachedAzureBlobClient_ConnectionStringIsolatesCache(t *testing.T) {
 	assert.True(t, ok, "identity-keyed cache entry must exist at key %q", connKey)
 	assert.Same(t, got2, cachedVal.(AzureBlobAPI),
 		"value stored in cache must be the same object returned by getCachedAzureBlobClient")
+}
+
+// TestGCSAuthOptions verifies the GCS reader authenticates with the target identity's
+// credentials, and never silently falls back to ambient credentials in their place.
+func TestGCSAuthOptions(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	identity := func(g *schema.GCPAuthContext) *schema.AuthContext { return &schema.AuthContext{GCP: g} }
+	credsFile := filepath.Join(t.TempDir(), "target-credentials.json")
+
+	tests := []struct {
+		name        string
+		credentials string
+		authContext *schema.AuthContext
+		want        gcp.AuthOptions
+	}{
+		{name: "no identity uses ambient", want: gcp.AuthOptions{}},
+		{name: "nil gcp identity uses ambient", authContext: &schema.AuthContext{}, want: gcp.AuthOptions{}},
+		{
+			name:        "explicit backend credentials take precedence over the identity",
+			credentials: "/backend/creds.json",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "target-token", CredentialsFile: credsFile}),
+			want:        gcp.AuthOptions{Credentials: "/backend/creds.json"},
+		},
+		{
+			name:        "identity access token is used",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "target-token", TokenExpiry: now.Add(time.Hour), CredentialsFile: credsFile}),
+			want:        gcp.AuthOptions{AccessToken: "target-token", TokenExpiry: now.Add(time.Hour)},
+		},
+		{
+			name:        "identity token without expiry is used",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "target-token"}),
+			want:        gcp.AuthOptions{AccessToken: "target-token"},
+		},
+		{
+			name:        "expired identity token falls back to the identity credentials file",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "stale", TokenExpiry: now.Add(-time.Minute), CredentialsFile: credsFile}),
+			want:        gcp.AuthOptions{Credentials: credsFile},
+		},
+		{
+			name:        "identity credentials file is used without a token",
+			authContext: identity(&schema.GCPAuthContext{CredentialsFile: credsFile}),
+			want:        gcp.AuthOptions{Credentials: credsFile},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, gcsAuthOptions(tt.credentials, tt.authContext, now))
+		})
+	}
+}
+
+// TestGCSClientCacheKey_IsolatesTargetCredentials verifies two identities never share a client.
+func TestGCSClientCacheKey_IsolatesTargetCredentials(t *testing.T) {
+	now := time.Now()
+	key := func(ac *schema.AuthContext) string {
+		opts := gcsAuthOptions("", ac, now)
+		return gcsClientCacheKey(&opts, "", "")
+	}
+	ambient := key(nil)
+	a := key(&schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "token-a"}})
+	b := key(&schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "token-b"}})
+	file := key(&schema.AuthContext{GCP: &schema.GCPAuthContext{CredentialsFile: filepath.Join(t.TempDir(), "c.json")}})
+
+	assert.Len(t, map[string]struct{}{ambient: {}, a: {}, b: {}, file: {}}, 4, "ambient and every target identity need distinct keys")
+	assert.NotContains(t, a, "token-a", "the token must not appear in the cache key")
+	assert.Equal(t, a, key(&schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "token-a"}}), "the same identity reuses its client")
 }

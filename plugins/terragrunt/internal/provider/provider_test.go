@@ -804,3 +804,43 @@ dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDepe
 		})
 	}
 }
+
+// The engine package and the provider classify executables with one rule.
+func TestEngineNameMatchesTheSharedOpenTofuRule(t *testing.T) {
+	for _, binary := range []string{"tofu", "opentofu", "tofu-wrapper", "TOFU.exe", "terraform", "", "/opt/tofu/bin/terraform"} {
+		want := "terraform"
+		if engine.IsOpenTofu(binary) {
+			want = "opentofu"
+		}
+		require.Equal(t, want, engineName(binary), binary)
+	}
+	require.Equal(t, "opentofu", engineName("TOFU.exe"))
+	require.Equal(t, "terraform", engineName("/opt/tofu/bin/terraform"))
+}
+
+func TestRPCErrorPreservesDestroyProtection(t *testing.T) {
+	err := rpcError(fmt.Errorf("private evaluator context: %w", engine.ErrPreventDestroy))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.NotContains(t, status.Convert(err).Message(), "private evaluator context")
+}
+
+func TestPreparationExportsOverlayModes(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(_ context.Context, _ model.Request) (*model.Resolution, error) {
+		return &model.Resolution{
+			Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: filepath.Join(request.RootDirectory, "cache"), Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{"path": "relative.tfstate"},
+			Overlay:      map[string][]byte{"bin/run.sh": []byte("#!/bin/sh\n"), "plain.tf": []byte("# plain"), "shadow.sh": []byte("old")},
+			OverlayModes: map[string]uint32{"bin/run.sh": 0o755, "shadow.sh": 0o755},
+			Generated:    map[string]string{"shadow.sh": "new"},
+		}, nil
+	})
+	result, err := p.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	modes := map[string]uint32{}
+	for _, file := range result.Files {
+		modes[file.Path] = file.Mode
+	}
+	require.Equal(t, map[string]uint32{"bin/run.sh": 0o755, "plain.tf": 0, "shadow.sh": 0}, modes)
+	require.Equal(t, "bin/run.sh", result.Files[0].Path)
+	require.Equal(t, "shadow.sh", result.Files[len(result.Files)-1].Path)
+}

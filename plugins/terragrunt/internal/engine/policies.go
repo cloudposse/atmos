@@ -3,10 +3,12 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,6 +18,10 @@ import (
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
+
+// ErrVersionRejected reports a terraform or terragrunt version that violates a
+// declared version constraint.
+var ErrVersionRejected = errors.New("version constraint rejected")
 
 func localPath(base, path string) string {
 	if filepath.IsAbs(path) {
@@ -78,7 +84,7 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 			return err
 		}
 		if !rules.Check(v) {
-			return fmt.Errorf("%s %q rejects version %s", name, constraint, actual)
+			return fmt.Errorf("%w: %s %q rejects version %s", ErrVersionRejected, name, constraint, actual)
 		}
 		return nil
 	}
@@ -122,7 +128,7 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 		return err
 	}
 	// Hooks and extra arguments are adapted as execution data by unitExecution.
-	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, effectivePolicyArguments(request, cfg)) {
 		return ErrPreventDestroy
 	}
 	return nil
@@ -208,4 +214,15 @@ func unitTokenFile(token, unitDir string) string {
 		return candidate
 	}
 	return token
+}
+
+// effectivePolicyArguments follows host ordering: extra arguments precede user arguments.
+func effectivePolicyArguments(request model.Request, cfg *config.TerragruntConfig) []string {
+	var args []string
+	for _, extra := range cfg.Terraform.ExtraArgs {
+		if slices.Contains(extra.Commands, request.Command) && extra.Arguments != nil {
+			args = append(args, (*extra.Arguments)...)
+		}
+	}
+	return append(args, request.Arguments...)
 }

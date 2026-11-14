@@ -65,22 +65,28 @@ func applyTimeExecution(request model.Request, path string, planned *model.Execu
 	if request.Command != "plan" || !observesCommand(filesystem, append(slices.Clone(read), path)) {
 		return planned, nil, nil
 	}
+	if err := rejectArgumentDependentExecution(filesystem, append(slices.Clone(read), path)); err != nil {
+		return nil, nil, err
+	}
 	apply := parsingContext(path, request.Tofu, "apply", nil)
 	apply.FeatureFlags = request.Features
+	// Dependency mock eligibility belongs to the plan being prepared; hook expressions see apply.
+	apply.OriginalTerraformCommand = request.Command
 	cfg, err := parse(apply)
 	if err != nil {
 		return nil, nil, err
 	}
 	// Configuration read only when evaluating for apply also shapes the reviewed plan.
 	files := apply.FilesRead.Paths()
+	if err := rejectArgumentDependentExecution(filesystem, files); err != nil {
+		return nil, nil, err
+	}
 	applied, err := executionFromConfig(cfg.Terraform)
 	if err != nil {
 		return nil, nil, err
 	}
 	// The plan-time execution is already finalized, so both are compared in the same form.
-	if err := finalizeExecution(applied, path, cfg.Inputs); err != nil {
-		return nil, nil, err
-	}
+	finalizeExecution(applied, path)
 	if applied == nil {
 		applied = &model.Execution{}
 	}
@@ -331,6 +337,17 @@ func checkExecutionBlock(block *hcl.Block) error {
 		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &patterns); !diagnostics.HasErrors() {
 			_, err := errorHooksFromConfig([]config.ErrorHook{{Name: hook.Name, Commands: hook.Commands, Execute: hook.Execute, OnErrors: patterns}})
 			return err
+		}
+	}
+	return nil
+}
+
+// rejectArgumentDependentExecution fails closed until saved apply arguments can be bound.
+func rejectArgumentDependentExecution(filesystem afero.Fs, paths []string) error {
+	for _, path := range paths {
+		content, err := afero.ReadFile(filesystem, path)
+		if err != nil || bytes.Contains(content, []byte("get_terraform_cli_args")) {
+			return fmt.Errorf("%w: argument-dependent saved-plan execution cannot be bound before apply", ErrUnsupportedExecution)
 		}
 	}
 	return nil
