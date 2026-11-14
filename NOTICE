@@ -511,7 +511,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress
     License: Apache-2.0
-    URL: https://github.com/klauspost/compress/blob/v1.19.2/LICENSE
+    URL: https://github.com/klauspost/compress/blob/v1.20.2/LICENSE
 
   - github.com/kubescape/go-git-url
     License: Apache-2.0
@@ -759,23 +759,27 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.opentelemetry.io/otel
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.46.0/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.47.0/LICENSE
+
+  - go.opentelemetry.io/otel/log
+    License: Apache-2.0
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/log/v1.47.0/log/LICENSE
 
   - go.opentelemetry.io/otel/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.46.0/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.47.0/metric/LICENSE
 
   - go.opentelemetry.io/otel/sdk
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.46.0/sdk/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.47.0/sdk/LICENSE
 
   - go.opentelemetry.io/otel/sdk/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.46.0/sdk/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.47.0/sdk/metric/LICENSE
 
   - go.opentelemetry.io/otel/trace
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.46.0/trace/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.47.0/trace/LICENSE
 
   - go.opentelemetry.io/proto/otlp
     License: Apache-2.0
@@ -938,10 +942,6 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/PuerkitoBio/goquery/blob/v1.13.0/LICENSE
 
-  - github.com/andybalholm/brotli/flate
-    License: BSD-3-Clause
-    URL: https://github.com/andybalholm/brotli/blob/v1.2.1/flate/LICENSE
-
   - github.com/andybalholm/cascadia
     License: BSD-2-Clause
     URL: https://github.com/andybalholm/cascadia/blob/v1.3.4/LICENSE
@@ -1100,7 +1100,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress/internal/snapref
     License: BSD-3-Clause
-    URL: https://github.com/klauspost/compress/blob/v1.19.2/internal/snapref/LICENSE
+    URL: https://github.com/klauspost/compress/blob/v1.20.2/internal/snapref/LICENSE
 
   - github.com/liggitt/tabwriter
     License: BSD-3-Clause
@@ -1582,7 +1582,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/andybalholm/brotli
     License: MIT
-    URL: https://github.com/andybalholm/brotli/blob/v1.2.1/LICENSE
+    URL: https://github.com/andybalholm/brotli/blob/v1.2.7/LICENSE
 
   - github.com/anthropics/anthropic-sdk-go
     License: MIT
@@ -2018,7 +2018,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress/zstd/internal/xxhash
     License: MIT
-    URL: https://github.com/klauspost/compress/blob/v1.19.2/zstd/internal/xxhash/LICENSE.txt
+    URL: https://github.com/klauspost/compress/blob/v1.20.2/zstd/internal/xxhash/LICENSE.txt
 
   - github.com/klauspost/cpuid/v2
     License: MIT
