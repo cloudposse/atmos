@@ -82,7 +82,10 @@ func TestLegacyClientKeepsAmbientFallback(t *testing.T) {
 func TestIdentityEndpointAndPathStyleRouteToTheEmulator(t *testing.T) {
 	requests := make(chan *http.Request, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests <- r.Clone(r.Context())
+		select {
+		case requests <- r.Clone(r.Context()):
+		default: // A retried request must not block the handler behind an unread channel.
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -100,7 +103,12 @@ func TestIdentityEndpointAndPathStyleRouteToTheEmulator(t *testing.T) {
 
 	_, err = s.Stat(context.Background(), "templates/stack.yaml", blob.StatOptions{})
 	require.NoError(t, err)
-	request := <-requests
+	var request *http.Request
+	select {
+	case request = <-requests:
+	default:
+		t.Fatal("the emulator endpoint received no request")
+	}
 	assert.Equal(t, endpoint.Host, request.Host, "path-style: the bucket is not in the host name")
 	assert.Equal(t, "/artifacts/templates/stack.yaml", request.URL.Path)
 }

@@ -18,7 +18,10 @@ import (
 func TestIdentityEndpointUsesBucketPath(t *testing.T) {
 	requests := make(chan *http.Request, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests <- r.Clone(r.Context())
+		select {
+		case requests <- r.Clone(r.Context()):
+		default: // A retried request must not block the handler behind an unread channel.
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -44,7 +47,10 @@ func TestIdentityEndpointUsesBucketPath(t *testing.T) {
 func TestAdapterIdentityResolverRoutesToEndpoint(t *testing.T) {
 	requests := make(chan *http.Request, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests <- r.Clone(r.Context())
+		select {
+		case requests <- r.Clone(r.Context()):
+		default: // A retried request must not block the handler behind an unread channel.
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()

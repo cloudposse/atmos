@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,11 @@ func TestProbeWaiterStopsWhenItsContextEnds(t *testing.T) {
 	api := NewMockAPI(gomock.NewController(t))
 	started := make(chan struct{})
 	release := make(chan struct{})
+	// The mocked PutObject parks on release. Free it on every exit so a failed assertion never
+	// strands the probe goroutine.
+	var freeOnce sync.Once
+	free := func() { freeOnce.Do(func() { close(release) }) }
+	t.Cleanup(free)
 	errEndpointDown := errors.New("endpoint down")
 	api.EXPECT().
 		PutObject(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -36,7 +42,13 @@ func TestProbeWaiterStopsWhenItsContextEnds(t *testing.T) {
 
 	first := make(chan error, 1)
 	go func() { first <- store.ProbeConditionalWrites(context.Background()) }()
-	<-started
+	select {
+	case <-started:
+	case err := <-first:
+		t.Fatalf("the first probe ended before it reached the endpoint: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first probe never reached the endpoint")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -50,8 +62,13 @@ func TestProbeWaiterStopsWhenItsContextEnds(t *testing.T) {
 		t.Fatal("the waiting probe stayed blocked after its context ended")
 	}
 
-	close(release)
-	require.ErrorIs(t, <-first, errEndpointDown, "the first probe still finishes and reports its own failure")
+	free()
+	select {
+	case err := <-first:
+		require.ErrorIs(t, err, errEndpointDown, "the first probe still finishes and reports its own failure")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first probe never finished after the endpoint was released")
+	}
 }
 
 func TestPutChecksContextBeforeReadingTheBody(t *testing.T) {

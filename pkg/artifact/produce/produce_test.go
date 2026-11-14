@@ -51,6 +51,7 @@ func readBlob(t *testing.T, blob *artifact.StagedBlob) []byte {
 	t.Helper()
 	reader, err := blob.Open(context.Background())
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())

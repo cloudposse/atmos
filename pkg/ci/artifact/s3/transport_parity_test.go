@@ -79,6 +79,7 @@ func TestAdapterRoundTripWithoutPrefix(t *testing.T) {
 
 	reader, got, err := store.Download(ctx, "k.tar")
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(reader)
 	require.NoError(t, err)
@@ -161,6 +162,7 @@ func TestAdapterBundledStoreChecksumAndTarSurviveTheTransport(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "plan.tfplan", got[0].Name)
+	t.Cleanup(func() { _ = got[0].Data.Close() })
 	data, err := io.ReadAll(got[0].Data)
 	require.NoError(t, err)
 	require.NoError(t, got[0].Data.Close())

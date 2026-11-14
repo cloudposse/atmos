@@ -87,7 +87,9 @@ func TestBundledStoreTarBytesAndChecksumSurviveTheTransport(t *testing.T) {
 	assert.Equal(t, "plan.tfplan", got[0].Name)
 	assert.Equal(t, "lock.hcl", got[1].Name)
 	for index, want := range []string{"plan-bytes", "lock"} {
-		data, readErr := io.ReadAll(got[index].Data)
+		body := got[index].Data
+		t.Cleanup(func() { _ = body.Close() })
+		data, readErr := io.ReadAll(body)
 		require.NoError(t, readErr)
 		require.NoError(t, got[index].Data.Close())
 		assert.Equal(t, want, string(data))
@@ -196,6 +198,7 @@ func TestLegacyLiteralBackslashName(t *testing.T) {
 	assert.FileExists(t, filepath.Join(root, name))
 	reader, _, err := store.Download(ctx, name)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())

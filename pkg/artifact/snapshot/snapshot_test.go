@@ -69,6 +69,7 @@ func TestCapture_FilePackageInventory(t *testing.T) {
 
 	reader, err := snap.Open("nested/deep/file.txt")
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
