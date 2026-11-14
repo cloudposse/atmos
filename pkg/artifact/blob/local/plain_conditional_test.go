@@ -79,8 +79,7 @@ func TestPlainFileStoreWithLockAllEnforcesConditionsAgainstUnconditionalWrites(t
 
 	t.Run("unconditional mutations wait for a held root lock", func(t *testing.T) {
 		require.NoError(t, putBody(t, s, "held", "A", blob.Condition{}))
-		release, err := s.guard(context.Background(), blob.OpPut, "held", true)
-		require.NoError(t, err)
+		release := holdGuard(t, s, "held", true)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 		defer cancel()
@@ -118,7 +117,12 @@ func TestPlainFileStoreWithLockAllEnforcesConditionsAgainstUnconditionalWrites(t
 				assert.NoError(t, putBody(t, s, key, "C", blob.Condition{}))
 			}()
 			close(start)
-			wg.Wait()
+			finished := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(finished)
+			}()
+			receive(t, finished, "both writers to finish")
 
 			if conditionalErr != nil {
 				require.ErrorIs(t, conditionalErr, errUtils.ErrBlobPreconditionFailed)

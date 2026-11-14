@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,9 +29,13 @@ func TestManagedReadWaitsForBothCommitRenames(t *testing.T) {
 	pending, err := s.stage(ctx, root, "key", bytes.NewBufferString("new"), blob.PutOptions{Size: 3, Metadata: map[string]string{"version": "new"}})
 	require.NoError(t, err)
 	defer pending.discard(root)
-	release, err := s.guard(ctx, blob.OpPut, "key", false)
-	require.NoError(t, err)
+	release := holdGuard(t, s, "key", false)
 	between, proceed := make(chan struct{}), make(chan struct{})
+	// The commit stays parked on proceed until the test releases it. Release it on every exit so an
+	// assertion that aborts the test never strands the commit goroutine holding the root lock.
+	var proceedOnce sync.Once
+	letProceed := func() { proceedOnce.Do(func() { close(proceed) }) }
+	t.Cleanup(letProceed)
 	commitDone := make(chan error, 1)
 	go func() {
 		defer release()
@@ -45,7 +50,13 @@ func TestManagedReadWaitsForBothCommitRenames(t *testing.T) {
 			return nil
 		})
 	}()
-	<-between
+	select {
+	case <-between:
+	case err := <-commitDone:
+		t.Fatalf("the commit ended before its attribute rename: %v", err)
+	case <-time.After(waitTimeout):
+		t.Fatal("timed out waiting for the commit to reach its attribute rename")
+	}
 	type result struct {
 		body string
 		info *blob.ObjectInfo
@@ -76,10 +87,10 @@ func TestManagedReadWaitsForBothCommitRenames(t *testing.T) {
 		early = true
 	case <-time.After(100 * time.Millisecond):
 	}
-	close(proceed)
-	require.NoError(t, <-commitDone)
+	letProceed()
+	require.NoError(t, receive(t, commitDone, "the commit to finish"))
 	require.False(t, early)
-	got, stat := <-getDone, <-statDone
+	got, stat := receive(t, getDone, "Get to finish"), receive(t, statDone, "Stat to finish")
 	require.NoError(t, got.err)
 	require.NoError(t, stat.err)
 	assert.Equal(t, "new", got.body)
@@ -98,8 +109,7 @@ func TestManagedCommitFailureRestoresOldAttributes(t *testing.T) {
 	pending, err := s.stage(ctx, root, "key", bytes.NewBufferString("new"), blob.PutOptions{Size: 3, Metadata: map[string]string{"version": "new"}})
 	require.NoError(t, err)
 	defer pending.discard(root)
-	release, err := s.guard(ctx, blob.OpPut, "key", false)
-	require.NoError(t, err)
+	release := holdGuard(t, s, "key", false)
 	failure := errors.New("injected data rename failure")
 	err = s.commitManaged(root, "key", pending, false, func(r *os.Root, from, to string) error {
 		if to == "key" {
@@ -128,6 +138,7 @@ func TestManagedRecoveryAfterInterruptedCommit(t *testing.T) {
 			require.NoError(t, err)
 			root, err := s.openRoot(false)
 			require.NoError(t, err)
+			closeOnCleanup(t, root)
 			pending, err := s.stage(ctx, root, "key", bytes.NewBufferString("new"), blob.PutOptions{Size: 3, Metadata: map[string]string{"version": "new"}})
 			require.NoError(t, err)
 			oldAttrs, err := rootReadFile(root, attrsPath("key"))
@@ -165,6 +176,7 @@ func TestManagedRecoveryRemovesNewAttributesWhenOldObjectHadNone(t *testing.T) {
 	require.NoError(t, err)
 	root, err := s.openRoot(false)
 	require.NoError(t, err)
+	closeOnCleanup(t, root)
 	pending, err := s.stage(ctx, root, "key", bytes.NewBufferString("new"), blob.PutOptions{Size: 3, Metadata: map[string]string{"version": "new"}})
 	require.NoError(t, err)
 	marker, err := json.Marshal(transaction{Target: "key", DataTemp: pending.tempPath, AttrsTemp: pending.attrsTemp})
