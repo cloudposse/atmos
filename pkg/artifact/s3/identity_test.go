@@ -26,10 +26,31 @@ func isolateAWS(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-test-key")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-test-secret")
 	t.Setenv("AWS_REGION", "us-east-1")
+	// An ambient profile that the temporary files do not define would fail configuration loading.
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("AWS_DEFAULT_PROFILE", "")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "credentials"), []byte("[default]\naws_access_key_id = test-key\naws_secret_access_key = test-secret\n"), 0o600))
 	t.Setenv("AWS_CONFIG_FILE", filepath.Join(dir, "config"))
 	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(dir, "credentials"))
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+}
+
+// A developer's selected profile never leaks into an isolated test: with AWS_PROFILE pointing at a
+// profile the temporary files do not define, the SDK-backed default chain must still load.
+func TestIsolateAWS_IgnoresAmbientProfiles(t *testing.T) {
+	for _, name := range []string{"AWS_PROFILE", "AWS_DEFAULT_PROFILE"} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "developer")
+			isolateAWS(t)
+			assert.Empty(t, os.Getenv("AWS_PROFILE"))
+			assert.Empty(t, os.Getenv("AWS_DEFAULT_PROFILE"))
+
+			fake := s3test.NewServer(t)
+			repo := identityRepo(t, fake, nil, "")
+			_, err := repo.List(context.Background(), artifact.ListQuery{})
+			require.NoError(t, err)
+		})
+	}
 }
 
 // resolverStub records calls and returns a canned value.
