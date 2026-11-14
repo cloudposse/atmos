@@ -1,11 +1,13 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/component"
@@ -90,7 +92,11 @@ func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schem
 	}
 	binary, lookupErr := terragruntExecutable(tenv, info)
 	request := terragruntRequest(atmosConfig, info, binary)
-	err = terragruntexec.Run(ctx, &terragruntHost{executor: e, atmosConfig: atmosConfig, info: info, opts: opts, lookupErr: lookupErr}, request)
+	// Scope the capture to this run, so the exec-metadata report carries its stdout and stderr.
+	var stdout, stderr bytes.Buffer
+	hostOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&stdout, &stderr))
+	err = terragruntexec.Run(ctx, &terragruntHost{executor: e, atmosConfig: atmosConfig, info: info, opts: hostOpts, lookupErr: lookupErr}, request)
+	info.ExecMetadataRawOutput = combineExecMetadataOutput(&stdout, &stderr)
 	info.ExecMetadataRawExitCode = resolveExitCode(err)
 	if !info.DryRun {
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
