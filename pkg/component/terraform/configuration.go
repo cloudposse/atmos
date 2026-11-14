@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -434,14 +435,16 @@ func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info 
 	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != subcommandPlan {
 		return nil
 	}
-	effective := make(map[string]string)
-	for _, entry := range planEnvironment(atmosConfig, info) {
-		if name, value, ok := strings.Cut(entry, "="); ok {
-			effective[name] = value
-		}
-	}
+	return rejectEnvironmentPlanOutput(planEnvironment(atmosConfig, info), runtime.GOOS)
+}
+
+// rejectEnvironmentPlanOutput rejects a plan output flag in the effective TF_CLI_ARGS or
+// TF_CLI_ARGS_plan of an environment listed in precedence order. Variable names are
+// case-insensitive on Windows only, where the last matching entry is the effective value.
+func rejectEnvironmentPlanOutput(entries []string, goos string) error {
 	for _, name := range []string{tfCliArgsEnvVar, tfCliArgsEnvVar + "_" + subcommandPlan} {
-		if containsOutputFlag(parseArgs(effective[name])) {
+		value, _ := lastEnvListValue(entries, name, goos)
+		if containsOutputFlag(parseArgs(value)) {
 			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
 		}
 	}
