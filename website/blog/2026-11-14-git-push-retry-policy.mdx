@@ -1,0 +1,52 @@
+---
+slug: git-push-retry-policy
+title: "Pushes That Survive Concurrent Publishers and Rate Limits"
+authors: [osterman]
+tags: [feature]
+---
+
+When several jobs publish to the same deployment branch, one of them always loses the race. The branch moves while a push is being accepted, Git reports a remote ref mismatch, and the publish fails even though a rebase and a second attempt would have succeeded. Hosted Git providers add a second failure mode on top of that: after enough pushes in a short window, they start answering with rate-limit errors, and retrying immediately only makes things worse.
+
+Atmos now handles both. A rejected push is rebased and retried under a policy you control, and a throttled push waits for the server's cooldown instead of hammering it.
+
+<!--truncate-->
+
+## The Problem
+
+GitOps publishing is a many-writers workload. Every component that finishes a plan or apply wants to commit its output to the same branch, and they finish at nearly the same moment. A fixed number of immediate retries is the wrong tool for that:
+
+- Retrying instantly collides with the same competing push again.
+- A remote cap such as HTTP `429` or a rate-limited `403` is a signal to slow down, not to try again right away.
+- Some environments need a longer budget than a single push normally gets, while others need exactly one attempt and a fast failure.
+
+## The Fix
+
+Pushes now follow a retry policy with the same settings as the rest of Atmos: attempts, backoff, jitter, an elapsed-time budget, and optional message conditions. Only a rejected push triggers a rebase, and Atmos never adds force-push options.
+
+Remote rate limits are recognized separately. Atmos honors `Retry-After` and `X-RateLimit-Reset` when the server sends them, waits at least one minute when it doesn't, and doesn't rebase while it waits, because the push never reached the branch.
+
+## How to Use It
+
+Set the policy per repository under [`git.repositories`](/cli/configuration/git):
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      push:
+        retry:
+          max_attempts: 4
+          backoff_strategy: exponential
+          initial_delay: 250ms
+          max_delay: 5s
+          random_jitter: 0.5
+          max_elapsed_time: 30s
+```
+
+Without a `push.retry` block, the existing `push.retries` count keeps working exactly as before. An explicit `retry: {}` means a single attempt, which is useful when you would rather fail fast than wait.
+
+For the full behavior, see [`atmos git push`](/cli/commands/git/push#push-contention) and its section on [remote rate limits](/cli/commands/git/push#remote-rate-limits). The [high-concurrency publishing guide](/best-practices/concurrent-git-publishing) explains how to size the budget for your pipeline.
+
+## Get Involved
+
+If a publishing pattern still loses pushes in your pipeline, open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) with the policy you used and the error Atmos reported.
