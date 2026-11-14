@@ -25,9 +25,7 @@ func (r *Repository) begin(ctx context.Context, job *publishJob, plan *publishPl
 		return nil, err
 	}
 	pending, beginErr := r.reserve(ctx, job, plan)
-	if releaseErr := claims.Release(ctx); beginErr == nil {
-		beginErr = releaseErr
-	}
+	beginErr = joinRelease(beginErr, claims.Release(ctx))
 	if beginErr != nil {
 		return nil, beginErr
 	}
@@ -129,7 +127,9 @@ func (r *Repository) collectClaims(ctx context.Context, ownKey string) ([]layout
 }
 
 // claimOf returns the claim a reference holds: its representation when completed, its journal when
-// pending. A reference whose state is missing holds no claim.
+// pending. A reference whose state is missing holds no claim. Locations that earlier attempts
+// abandoned stay claimed until a retry retires their payload, even while they hold no objects: the
+// retirement deletes by the journaled payload and does not check who owns the location by then.
 func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layout.Claim, error) {
 	base := layout.Claim{ReferenceKey: ref.Key(), Name: ref.Name, Version: ref.Version}
 	if ref.Available() {
@@ -138,6 +138,13 @@ func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layou
 			return nil, err
 		}
 		base.Paths = claimPaths(rep.Packaging, rep.Location)
+		// A completed reference keeps its journal until the cleanup that follows completion has
+		// removed everything the journal still lists.
+		journal, err := r.loadOperation(ctx, ref.OperationID)
+		if err != nil {
+			return nil, err
+		}
+		base.Paths = append(base.Paths, abandonedClaimPaths(journal)...)
 		return &base, nil
 	}
 	op, err := r.loadOperation(ctx, ref.OperationID)
@@ -145,8 +152,20 @@ func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layou
 		return nil, err
 	}
 	base.OperationID = op.OperationID
-	base.Paths = claimPaths(op.Packaging, op.Location)
+	base.Paths = append(claimPaths(op.Packaging, op.Location), abandonedClaimPaths(op)...)
 	return &base, nil
+}
+
+// abandonedClaimPaths lists the paths of every payload a journal still awaits removing.
+func abandonedClaimPaths(op *layout.Operation) []string {
+	if op == nil {
+		return nil
+	}
+	var paths []string
+	for index := range op.Abandoned {
+		paths = append(paths, claimPaths(op.Abandoned[index].Packaging, op.Abandoned[index].Location)...)
+	}
+	return paths
 }
 
 // checkUnmanaged fails when a path the publication would write already holds objects and this
