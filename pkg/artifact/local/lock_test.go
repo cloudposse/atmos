@@ -404,6 +404,76 @@ func TestLockNamespaceResolvesSymlinkAliases(t *testing.T) {
 	assert.Equal(t, (&Repository{root: root}).LockNamespace(), (&Repository{root: alias}).LockNamespace())
 }
 
+// A handle taken through one symlink alias of a root holds the same physical lock file as a
+// repository opened through another alias, so it is reused instead of being acquired a second time.
+func TestHoldsTargetLockAcrossSymlinkAliases(t *testing.T) {
+	reference := testName + ":" + testVersion
+	physical := filepath.Join(t.TempDir(), "repo")
+	require.NoError(t, os.MkdirAll(physical, 0o755))
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(physical, alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	direct := newRepo(t, dirSpec().withRoot(physical))
+	aliased := newRepo(t, dirSpec().withRoot(alias))
+	require.NotEqual(t, direct.referenceLockPath(reference), aliased.referenceLockPath(reference),
+		"the two repositories must spell their lock files differently")
+
+	held, err := direct.Lock(context.Background(), lockRequest(reference))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = held.Release(context.Background()) })
+	heldFile, ok := held.(*fileLock)
+	require.True(t, ok)
+
+	require.True(t, aliased.holdsTargetLock(heldFile, reference), "the alias names the held physical lock file")
+
+	t.Run("lockReference reuses the handle without acquiring again", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		acquired, err := aliased.lockReference(ctx, reference, held)
+		require.NoError(t, err, "acquiring a lock the caller holds through an alias would block until the context ends")
+		require.Nil(t, acquired, "a reused handle leaves nothing for the repository to release")
+	})
+}
+
+// Two genuinely different roots never share a lock file, so a handle on one is not reused by the
+// other: the repository acquires its own lock, which contends with direct writers of its root.
+func TestHoldsTargetLockRejectsDifferentRoots(t *testing.T) {
+	reference := testName + ":" + testVersion
+	first := newRepo(t, dirSpec())
+	second := newRepo(t, dirSpec())
+
+	held, err := first.Lock(context.Background(), lockRequest(reference))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = held.Release(context.Background()) })
+	heldFile, ok := held.(*fileLock)
+	require.True(t, ok)
+
+	// Make the second root's lock file exist so the comparison reaches the file identity check.
+	other, err := second.Lock(context.Background(), lockRequest(reference))
+	require.NoError(t, err)
+	require.NoError(t, other.Release(context.Background()))
+
+	require.False(t, second.holdsTargetLock(heldFile, reference), "a different root holds a different physical lock file")
+
+	t.Run("a handle whose lock file is gone is not reused", func(t *testing.T) {
+		missing := &fileLock{path: filepath.Join(t.TempDir(), "missing.lock")}
+		require.False(t, second.holdsTargetLock(missing, reference))
+	})
+
+	t.Run("lockReference acquires the repository's own lock", func(t *testing.T) {
+		// A handle for the same reference in another root covers it by alias only when the resource
+		// matches, so name the reference directly.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		acquired, err := second.lockReference(ctx, reference, held)
+		require.NoError(t, err)
+		require.NotNil(t, acquired, "a handle on another root's file must not stand in for this root's lock")
+		t.Cleanup(func() { _ = acquired.Release(context.Background()) })
+		require.Equal(t, second.referenceLockPath(reference), acquired.path)
+	})
+}
+
 // A delegated handle does not protect local writers that lock this root directly.
 type delegatedTestLock struct{ artifact.LockHandle }
 

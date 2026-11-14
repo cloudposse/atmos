@@ -98,8 +98,26 @@ func (r *Repository) coversReference(lock *fileLock, reference string) bool {
 // for reference. A matching namespace is not enough: a delegate repository with another root
 // acquires its lock file under its own root, so direct writers of this repository would not be
 // excluded by it. Only a handle on the target's own lock file can stand in for acquiring it.
+//
+// Path equality is the fast path. Two spellings of one root (a symlink alias) name the same
+// physical lock file, so a mismatch falls back to comparing file identity: acquiring a lock the
+// caller already holds through another alias would otherwise block until the context ends. A lock
+// file that cannot be inspected is treated as a different file, so the handle is never reused on a
+// guess.
 func (r *Repository) holdsTargetLock(lock *fileLock, reference string) bool {
-	return lock.path == r.referenceLockPath(reference)
+	target := r.referenceLockPath(reference)
+	if lock.path == target {
+		return true
+	}
+	held, err := os.Stat(lock.path)
+	if err != nil {
+		return false
+	}
+	want, err := os.Stat(target)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(held, want)
 }
 
 // referenceLockPath returns the lock file this repository uses for reference (name:version).
