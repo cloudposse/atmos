@@ -3,11 +3,13 @@ package oci
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"sort"
 
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -124,6 +126,9 @@ func (r *Repository) rootOf(ctx context.Context, pinned *artifact.PinnedReferenc
 	desc, known := r.descriptorFor(pinned.Ref.Name, pinned.ResolvedDigest)
 	if !known {
 		desc, err = st.Resolve(ctx, pinned.ResolvedDigest.String())
+		if err == nil {
+			desc, err = recoverRootType(ctx, st, desc)
+		}
 		if err != nil {
 			return nil, nil, resolveError(pinned.Ref, err)
 		}
@@ -133,6 +138,52 @@ func (r *Repository) rootOf(ctx context.Context, pinned *artifact.PinnedReferenc
 		return nil, nil, err
 	}
 	return st, loaded, nil
+}
+
+// recoverRootType restores the media type of a root resolved by digest alone. A layout lists the
+// media type only for roots that still hold a reference; a root whose tag has moved resolves as an
+// untyped blob, although its bytes are still there. The type is read from the manifest itself after
+// the bounded, digest-verified fetch, so a tampered blob is rejected and nothing is guessed.
+func recoverRootType(ctx context.Context, st store, desc ocispec.Descriptor) (ocispec.Descriptor, error) {
+	if isManifestMediaType(desc.MediaType) || isIndexMediaType(desc.MediaType) {
+		return desc, nil
+	}
+	raw, err := fetchBounded(ctx, st, desc, maxManifestSize)
+	if err != nil {
+		return ocispec.Descriptor{}, err
+	}
+	mediaType, err := manifestTypeOf(desc.Digest, raw)
+	if err != nil {
+		return ocispec.Descriptor{}, err
+	}
+	if mediaType != "" {
+		desc.MediaType = mediaType
+	}
+	return desc, nil
+}
+
+// manifestTypeOf reads the media type a manifest or index declares, or infers it from the shape of
+// one that declares none. It returns an empty type for anything else, which stays rejected.
+func manifestTypeOf(dgst digest.Digest, raw []byte) (string, error) {
+	var shape struct {
+		MediaType string          `json:"mediaType"`
+		Manifests json.RawMessage `json:"manifests"`
+		Config    json.RawMessage `json:"config"`
+	}
+	if err := json.Unmarshal(raw, &shape); err != nil {
+		return "", fmt.Errorf("%w: %s is not a manifest: %w", errUtils.ErrArtifactRecordInvalid, dgst, err)
+	}
+	switch {
+	case isManifestMediaType(shape.MediaType) || isIndexMediaType(shape.MediaType):
+		return shape.MediaType, nil
+	case shape.MediaType != "":
+		return "", nil
+	case shape.Manifests != nil:
+		return ocispec.MediaTypeImageIndex, nil
+	case shape.Config != nil:
+		return ocispec.MediaTypeImageManifest, nil
+	}
+	return "", nil
 }
 
 // resolveDigest resolves name@digest. A registry answers a direct manifest lookup in its

@@ -159,3 +159,62 @@ func TestRejectsMismatchedRecordForItsTag(t *testing.T) {
 	_, err = repo.Inspect(context.Background(), pinned)
 	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed, "a tag serving another version's Record is tampering")
 }
+
+// A pin taken before the tag moved stays readable from a fresh Repository: reopening drops the
+// in-memory descriptor cache, and the superseded manifest is no longer listed under any tag, so its
+// media type has to be recovered from the verified manifest itself.
+func TestMovedTagDoesNotChangeAPinnedReadAfterReopening(t *testing.T) {
+	reopened := map[string]func(t *testing.T) (first, second *Repository){
+		"registry": func(t *testing.T) (*Repository, *Repository) {
+			reg := newRegistry(t, nil)
+			return newRegistryRepo(t, reg), newRegistryRepo(t, reg)
+		},
+		"layout": func(t *testing.T) (*Repository, *Repository) {
+			path := filepath.Join(t.TempDir(), "layout")
+			return newLayoutRepoAt(t, path), newLayoutRepoAt(t, path)
+		},
+	}
+	for name, open := range reopened {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			writer, reader := open(t)
+			first := publish(t, writer, publishSpec{content: "first"})
+			pinned, err := writer.Resolve(ctx, artifact.Ref{Name: appName, Version: appVersion})
+			require.NoError(t, err)
+			_, err = writer.Publish(ctx, prepare(t, publishSpec{content: "second"}), artifact.PublishOptions{ExpectedPrior: &first.Pinned, Force: true})
+			require.NoError(t, err)
+
+			content, err := reader.Read(ctx, pinned)
+			require.NoError(t, err, "the old manifest and blobs still exist, so the pinned read works from a fresh handle")
+			defer content.Close()
+			recordDigest, err := content.Record.RecordDigest()
+			require.NoError(t, err)
+			assert.Equal(t, pinned.RecordDigest, recordDigest)
+
+			inspection, err := reader.Inspect(ctx, pinned)
+			require.NoError(t, err)
+			assert.Equal(t, pinned.ResolvedDigest, inspection.Pinned.ResolvedDigest)
+		})
+	}
+}
+
+// Recovering the type of an unlisted root never turns another blob into a root: a payload layer or
+// a Record config named as a pin stays rejected.
+func TestPinnedReadAfterReopeningNeverAcceptsANonManifest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "layout")
+	writer := newLayoutRepoAt(t, path)
+	result := publish(t, writer, publishSpec{content: "x"})
+	reader := newLayoutRepoAt(t, path)
+
+	for name, blob := range map[string]digest.Digest{
+		"payload layer": payloadDigest(t, result),
+		"record config": result.Pinned.RecordDigest,
+	} {
+		t.Run(name, func(t *testing.T) {
+			forged := result.Pinned
+			forged.ResolvedDigest = blob
+			_, _, err := reader.rootOf(context.Background(), &forged)
+			require.ErrorIs(t, err, errUtils.ErrArtifactRecordInvalid)
+		})
+	}
+}
