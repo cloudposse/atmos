@@ -58,6 +58,9 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
+	// A restored plugin plan was validated when it was created. Its binding omits
+	// variable values, so validating the reconstructed component would test empty vars.
+	restoredConfigurationPlan := prepared != nil && ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
 
 	var componentPath string
 	if prepared != nil && usesConfigurationPlan(info) {
@@ -99,7 +102,7 @@ func (e *Executor) prepareComponentExecution(
 	planFile := ConstructTerraformComponentPlanfileName(info)
 	workingDir := ConstructTerraformComponentWorkingDir(atmosConfig, info)
 
-	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv); err != nil {
+	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv, restoredConfigurationPlan); err != nil {
 		return nil, err
 	}
 
@@ -122,6 +125,7 @@ func (e *Executor) runPreExecutionSteps(
 	info *schema.ConfigAndStacksInfo,
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
+	restoredConfigurationPlan bool,
 ) error {
 	// `(computed)` is an inspection-only degradation marker. Never permit it to
 	// reach Terraform via a generated tfvars file or TF_VAR_ environment value.
@@ -138,8 +142,10 @@ func (e *Executor) runPreExecutionSteps(
 		return err
 	}
 
-	if err := e.validateTerraformComponent(atmosConfig, info); err != nil {
-		return err
+	if !restoredConfigurationPlan {
+		if err := e.validateTerraformComponent(atmosConfig, info); err != nil {
+			return err
+		}
 	}
 
 	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
