@@ -28,33 +28,41 @@ def retry(c):
                        f"os.execv({shutil.which(c.engine)!r},[{shutil.which(c.engine)!r}]+sys.argv[1:])\n")
     wrapper.chmod(0o755)
     command = [c.binary, "terraform", "plan", "producer", "-s", "dev"]
-    proc = subprocess.Popen(command, cwd=c.project, env=c.env, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, start_new_session=True)
-    start = time.time()
+    env = dict(c.env, ATMOS_LOGS_LEVEL="Debug")
     trace = c.root / "trace.jsonl"
-    while proc.poll() is None and time.time() - start < 15:
-        if trace.exists() and any(json.loads(line)["argv"][0] == "plan" for line in trace.read_text().splitlines()):
-            time.sleep(1)
-            break
-        time.sleep(.05)
-    signal_at = time.time()
-    proc.send_signal(signal.SIGINT)
+    stdout = c.root / "retry.stdout"
+    stderr = c.root / "retry.stderr"
+    backoff = False
     forced = False
-    try:
-        out, err = proc.communicate(timeout=5)
-    except subprocess.TimeoutExpired:
-        forced = True
-        os.killpg(proc.pid, signal.SIGKILL)
-        out, err = proc.communicate()
-    calls = [json.loads(line) for line in trace.read_text().splitlines()]
+    with stdout.open("wb") as out, stderr.open("wb") as err:
+        proc = subprocess.Popen(command, cwd=c.project, env=env, stdout=out,
+                                stderr=err, start_new_session=True)
+        deadline = time.monotonic() + 15
+        while proc.poll() is None and time.monotonic() < deadline:
+            if "Entering retry backoff" in stderr.read_text(errors="replace"):
+                backoff = True
+                break
+            time.sleep(.05)
+        signal_at = time.monotonic()
+        if backoff and proc.poll() is None:
+            proc.send_signal(signal.SIGINT)
+        elif proc.poll() is None:
+            forced = True
+            os.killpg(proc.pid, signal.SIGKILL)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            forced = True
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+    calls = [json.loads(line) for line in trace.read_text().splitlines()] if trace.exists() else []
     attempts = sum(call["argv"][0] == "plan" for call in calls)
-    (c.root / "retry.stdout").write_bytes(out)
-    (c.root / "retry.stderr").write_bytes(err)
-    record = {"command": command, "cwd": str(c.project), "environment_overrides": c.env,
-              "exit": proc.returncode, "seconds_after_signal": time.time()-signal_at,
-              "forced_cleanup": forced, "plan_attempts": attempts, "engine_calls": calls}
+    record = {"command": command, "cwd": str(c.project), "environment_overrides": env,
+              "exit": proc.returncode, "seconds_after_signal": time.monotonic()-signal_at,
+              "backoff_confirmed": backoff, "forced_cleanup": forced, "plan_attempts": attempts, "engine_calls": calls}
     (c.root / "retry.json").write_text(json.dumps(record, indent=2) + "\n")
-    c.check("SIGINT interrupts backoff without another attempt", proc.returncode == 130 and not forced and attempts == 1)
+    c.check("retry entered backoff before SIGINT", backoff)
+    c.check("SIGINT interrupts backoff without another attempt", backoff and proc.returncode == 130 and not forced and attempts == 1)
     c.save()
     print(c.engine, c.revision, record["exit"], "attempts", attempts, flush=True)
 

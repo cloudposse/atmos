@@ -19,6 +19,7 @@ type Request struct {
 }
 
 type Resolution struct {
+	Overlay            map[string][]byte `json:"overlay,omitempty"`
 	Inventory          []DiscoveredUnit  `json:"inventory,omitempty"`
 	Execution          *Execution        `json:"execution,omitempty"`
 	Path               string            `json:"path,omitempty"`

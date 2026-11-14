@@ -79,6 +79,12 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if err := resolveBackend(cfg, result); err != nil {
 		return nil, err
 	}
+	if request.Phase != "backend" {
+		result.Overlay, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := generatedFiles(ctx, logger, cfg, result); err != nil {
 		return nil, err
 	}
@@ -162,7 +168,11 @@ func requestParsingContext(request model.Request, path string) *config.ParsingCo
 	if command == "" || command == "discover" || command == "generate" {
 		command = "plan"
 	}
-	return parsingContext(path, request.Tofu, command, request.Arguments)
+	pctx := parsingContext(path, request.Tofu, command, request.Arguments)
+	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
+		pctx.DownloadDir = localPath(filepath.Dir(path), configured)
+	}
+	return pctx
 }
 
 // parsingContext configures Terragrunt evaluation of the unit at path as the named command.
@@ -234,7 +244,7 @@ func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *conf
 		return nil, err
 	}
 	download := pctx.DownloadDir
-	if cfg.DownloadDir != "" {
+	if cfg.DownloadDir != "" && request.Environment["TG_DOWNLOAD_DIR"] == "" {
 		download = localPath(filepath.Dir(path), cfg.DownloadDir)
 	}
 	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {

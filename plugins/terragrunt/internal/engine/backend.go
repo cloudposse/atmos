@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
@@ -16,8 +17,11 @@ func resolveBackend(cfg *config.TerragruntConfig, result *model.Resolution) erro
 	if cfg.RemoteState == nil {
 		return nil
 	}
-	if cfg.RemoteState.DisableInit || len(cfg.RemoteState.Encryption) > 0 {
+	if cfg.RemoteState.DisableInit {
 		return ErrUnsupportedRemoteState
+	}
+	if len(cfg.RemoteState.Encryption) > 0 {
+		return fmt.Errorf("%w: remote_state.encryption", ErrUnsupportedRemoteState)
 	}
 	result.BackendType = cfg.RemoteState.BackendName
 	result.Backend = atmosbridge.BackendConfig(cfg.RemoteState.Config)
