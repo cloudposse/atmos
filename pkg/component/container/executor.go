@@ -435,16 +435,16 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	if err := spinner.ExecWithSpinnerDynamic(
-		fmt.Sprintf("Starting %s", r.component),
+		fmt.Sprintf("Starting `%s`", r.component),
 		func() (string, error) {
 			named, upErr := ctr.UpWithRuntime(ctx, runtime, namedConfig)
 			if upErr != nil {
 				return "", upErr
 			}
 			if named.AlreadyRunning {
-				return fmt.Sprintf("%s is already running (%s)", r.component, named.Name()), nil
+				return fmt.Sprintf("`%s` is already running (`%s`)", r.component, named.Name()), nil
 			}
-			return fmt.Sprintf("%s is up (%s)", r.component, named.Name()), nil
+			return fmt.Sprintf("`%s` is up (`%s`)", r.component, named.Name()), nil
 		},
 	); err != nil {
 		return fmt.Errorf("%w: up %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
