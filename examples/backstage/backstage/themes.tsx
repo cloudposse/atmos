@@ -105,6 +105,53 @@ function createGeistTheme(mode: 'light' | 'dark') {
           root: { fontSize: 14, minHeight: 36, '@media (pointer: coarse)': { minHeight: 44 } },
         },
       },
+      BackstageSidebar: {
+        styleOverrides: {
+          drawer: {
+            borderRight: `1px solid ${border}`, boxSizing: 'border-box',
+            transition: 'width 180ms ease-out', paddingBottom: 8,
+            '&$drawerOpen': { width: 224, transition: 'width 180ms ease-out' },
+            '& hr': {
+              height: 1, border: 0, backgroundColor: border,
+              width: 'calc(100% - 32px)', margin: '12px 16px',
+            },
+            '@media (prefers-reduced-motion: reduce)': {
+              transition: 'none', '&$drawerOpen': { transition: 'none' },
+            },
+          },
+        },
+      },
+      BackstageSidebarPage: {
+        styleOverrides: {
+          root: {
+            transition: 'padding-left 180ms ease-out',
+            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+          },
+        },
+      },
+      BackstageSidebarItem: {
+        styleOverrides: {
+          root: {
+            height: 36, margin: '2px 8px', borderRadius: 6, boxSizing: 'border-box',
+            '& svg': { width: 20, height: 20 },
+            '@media (pointer: coarse)': { minHeight: 44 },
+          },
+          buttonItem: { margin: '2px 8px', minWidth: 0, width: 'calc(100% - 16px)' },
+          open: {
+            width: 'calc(100% - 16px)',
+            '@media (min-width: 600px)': { width: 'calc(100% - 16px)' },
+          },
+          closed: { width: 'calc(100% - 16px)' },
+          label: { fontSize: 13, fontWeight: 500, lineHeight: '20px', width: 'auto' },
+          iconContainer: { width: 56, flexShrink: 0, marginRight: 0 },
+          secondaryAction: { width: 'auto', marginRight: 12, '&:empty': { display: 'none' } },
+          selected: {
+            '&&': { borderLeft: 0, backgroundColor: hover, width: 'calc(100% - 16px)' },
+            '& $closedItemIcon': { paddingRight: 0 },
+            '& $iconContainer': { marginLeft: 0 },
+          },
+        },
+      },
       BackstageSelect: {
         styleOverrides: {
           formControl: {
