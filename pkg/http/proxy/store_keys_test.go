@@ -234,3 +234,26 @@ func TestFileStore_FilesystemRootSidecarPath(t *testing.T) {
 	_, err = store.sidecarPath("../a.zip")
 	require.ErrorIs(t, err, errUtils.ErrPathTraversal)
 }
+
+func TestFileStore_SidecarHelpersRejectUnsafeKeys(t *testing.T) {
+	store := NewFileStore(t.TempDir())
+
+	for _, tc := range unsafeKeys {
+		t.Run(tc.name, func(t *testing.T) {
+			require.ErrorIs(t, store.writeSidecar(tc.key, Meta{Kind: KindArtifact}), tc.want)
+
+			sc, ok := store.readSidecar(tc.key)
+			assert.False(t, ok, "an unsafe key never yields a sidecar")
+			assert.Equal(t, sidecar{}, sc)
+		})
+	}
+}
+
+func TestFileStore_OpenMissingKeyIsNotFoundNotTraversal(t *testing.T) {
+	store := NewFileStore(t.TempDir())
+
+	rc, _, err := store.Open("obj/missing.zip")
+	require.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
+	require.NotErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Nil(t, rc)
+}

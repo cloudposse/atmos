@@ -239,16 +239,16 @@ func (s *FileStore) Stat(key string) (Meta, bool, error) {
 func (s *FileStore) Open(key string) (io.ReadCloser, Meta, error) {
 	defer perf.Track(nil, "proxy.FileStore.Open")()
 
+	path, err := s.objectPath(key)
+	if err != nil {
+		return nil, Meta{}, err
+	}
 	meta, ok, err := s.Stat(key)
 	if err != nil {
 		return nil, Meta{}, err
 	}
 	if !ok {
 		return nil, Meta{}, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
-	}
-	path, err := s.objectPath(key)
-	if err != nil {
-		return nil, Meta{}, err
 	}
 	f, err := os.Open(path)
 	if err != nil {
