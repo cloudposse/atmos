@@ -188,13 +188,16 @@ func (s *Store) fullKey(key string) string {
 
 // transport returns the shared S3 transport over the lazily initialized client. Keys are passed
 // through untouched (fullKey already applied the legacy prefix), so the transport is created
-// without a prefix and with opaque-key validation to keep historical key patterns valid.
+// without a prefix and with opaque-key validation to keep historical key patterns valid. Uploads use
+// one PutObject at any size, as the previous adapter did, because multipart uploads need extra
+// permissions (kms:Decrypt on SSE-KMS buckets, s3:AbortMultipartUpload) that a write-only CI role
+// may not hold.
 func (s *Store) transport(ctx context.Context) (*blobs3.Store, error) {
 	if err := s.ensureClient(ctx); err != nil {
 		return nil, err
 	}
 	s.transportOnce.Do(func() {
-		s.transportStore, s.transportErr = blobs3.NewFromClient(s.client, s.bucket, blobs3.WithOpaqueKeys(), blobs3.WithSinglePutFallback())
+		s.transportStore, s.transportErr = blobs3.NewFromClient(s.client, s.bucket, blobs3.WithOpaqueKeys(), blobs3.WithSinglePutOnly())
 	})
 	return s.transportStore, s.transportErr
 }

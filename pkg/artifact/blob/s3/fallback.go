@@ -24,9 +24,14 @@ func (s *Store) putFallback(ctx context.Context, plan *putPlan, first, carry []b
 		_ = file.Close()
 		_ = os.Remove(file.Name())
 	}()
-	size, err := io.Copy(file, &ctxReader{ctx: ctx, reader: io.MultiReader(bytes.NewReader(first), bytes.NewReader(carry), body)})
+	// One byte past the limit is enough to prove the body is too large without spooling all of it.
+	source := io.LimitReader(&ctxReader{ctx: ctx, reader: io.MultiReader(bytes.NewReader(first), bytes.NewReader(carry), body)}, s.singlePutLimit()+1)
+	size, err := io.Copy(file, source)
 	if err != nil {
 		return nil, blob.NewError(blob.KindOther, blob.OpPut, plan.key, fmt.Errorf("spool upload: %w", err))
+	}
+	if size > s.singlePutLimit() {
+		return nil, tooLargeForSinglePut(plan.key, size, s.singlePutLimit())
 	}
 	if plan.opts.Size >= 0 && size != plan.opts.Size {
 		return nil, sizeMismatch(plan.key, size, plan.opts.Size)

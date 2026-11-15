@@ -49,6 +49,8 @@ type settings struct {
 	conditional    ConditionalMode
 	opaqueKeys     bool
 	singleFallback bool
+	singleOnly     bool
+	maxSinglePut   int64
 	client         ClientConfig
 	api            API
 }
@@ -184,4 +186,18 @@ func WithSinglePutFallback() Option {
 	defer perf.Track(nil, "blob.s3.WithSinglePutFallback")()
 
 	return func(s *settings) { s.singleFallback = true }
+}
+
+// MaxSinglePutSize is the largest object S3 accepts in one PutObject request.
+const MaxSinglePutSize int64 = 5 << 30
+
+// WithSinglePutOnly never uses a multipart upload. A body that fits one part goes out from memory;
+// a larger body is spooled to a temporary file and sent with one PutObject, so memory stays bounded
+// at one part. Use it when the caller's credentials may be limited to PutObject: on an SSE-KMS
+// bucket, multipart operations also need kms:Decrypt, which a write-only role lacks. Bodies above
+// [MaxSinglePutSize] fail with a clear error instead of being sent to be rejected.
+func WithSinglePutOnly() Option {
+	defer perf.Track(nil, "blob.s3.WithSinglePutOnly")()
+
+	return func(s *settings) { s.singleOnly = true }
 }

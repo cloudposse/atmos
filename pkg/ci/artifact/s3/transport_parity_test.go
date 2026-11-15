@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -169,7 +168,9 @@ func TestAdapterBundledStoreChecksumAndTarSurviveTheTransport(t *testing.T) {
 	assert.Equal(t, "plan-bytes", string(data))
 }
 
-func TestAdapterLargeUploadStreamsAsMultipartWithLegacyClient(t *testing.T) {
+// The adapter sends one PutObject at any size, as the previous adapter did, so a role limited to
+// PutObject keeps working. Memory stays bounded because the body is spooled, not buffered.
+func TestAdapterLargeUploadIsOnePutObjectWithLegacyClient(t *testing.T) {
 	store, fake := newFakeStore(t, "")
 	body := bytes.Repeat([]byte("0123456789abcdef"), (9<<20)/16)
 	require.NoError(t, store.Upload(context.Background(), "big.tar", bytes.NewReader(body), int64(len(body)), nil))
@@ -178,11 +179,10 @@ func TestAdapterLargeUploadStreamsAsMultipartWithLegacyClient(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, len(body), len(stored.Data))
 	assert.True(t, bytes.Equal(body, stored.Data))
-	assert.Equal(t, 1, fake.CompletedUploads())
+	assert.Equal(t, 0, fake.CompletedUploads())
 	assert.Empty(t, fake.OpenUploads())
-	for _, req := range fake.RequestsFor(s3test.OpUploadPart) {
-		assert.Empty(t, req.Header.Get("X-Amz-Checksum-Crc32"), "multipart requests carry no optional checksums")
-	}
+	require.Len(t, fake.Requests(), 1)
+	assert.Equal(t, s3test.OpPutObject, fake.Requests()[0].Op)
 }
 
 func TestAdapterWrapsTransportFailuresInLegacySentinels(t *testing.T) {
@@ -212,24 +212,4 @@ func TestAdapterWrapsTransportFailuresInLegacySentinels(t *testing.T) {
 	fake.ClearFaults()
 	fake.Inject(s3test.Fault{Op: s3test.OpDeleteObject, Status: 403, Code: "AccessDenied", Times: -1})
 	require.ErrorIs(t, store.Delete(ctx, "k.tar"), errUtils.ErrArtifactDeleteFailed)
-}
-
-func TestAdapterFallsBackWhenMultipartUnsupported(t *testing.T) {
-	store, fake := newFakeStore(t, "")
-	fake.Inject(s3test.Fault{Op: s3test.OpCreateMultipartUpload, Status: http.StatusNotImplemented, Code: "NotImplemented"})
-	body := bytes.Repeat([]byte("x"), 9<<20)
-	require.NoError(t, store.Upload(context.Background(), "big.tar", bytes.NewBuffer(body), int64(len(body)), nil))
-	object, ok := fake.Object("big.tar")
-	require.True(t, ok)
-	assert.Equal(t, body, object.Data)
-	assert.Len(t, fake.RequestsFor(s3test.OpCreateMultipartUpload), 1)
-	assert.Len(t, fake.RequestsFor(s3test.OpPutObject), 1)
-}
-
-func TestAdapterDoesNotFallbackForOtherMultipartErrors(t *testing.T) {
-	store, fake := newFakeStore(t, "")
-	fake.Inject(s3test.Fault{Op: s3test.OpCreateMultipartUpload, Status: http.StatusForbidden, Code: "AccessDenied"})
-	body := bytes.Repeat([]byte("x"), 9<<20)
-	require.Error(t, store.Upload(context.Background(), "big.tar", bytes.NewReader(body), int64(len(body)), nil))
-	assert.Empty(t, fake.RequestsFor(s3test.OpPutObject))
 }

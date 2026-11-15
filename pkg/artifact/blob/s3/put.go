@@ -56,6 +56,9 @@ func (s *Store) Put(ctx context.Context, key string, body io.Reader, opts blob.P
 	if len(carry) == 0 {
 		return s.putSingle(ctx, plan, first)
 	}
+	if s.cfg.singleOnly {
+		return s.putFallback(ctx, plan, first, carry, body)
+	}
 	return s.putMultipart(ctx, plan, first, carry, body)
 }
 
@@ -66,6 +69,9 @@ func (s *Store) planPut(ctx context.Context, key string, opts blob.PutOptions) (
 	}
 	if opts.Size < blob.UnknownSize {
 		return nil, blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: invalid size %d", errUtils.ErrBlobInvalid, opts.Size))
+	}
+	if s.cfg.singleOnly && opts.Size > s.singlePutLimit() {
+		return nil, tooLargeForSinglePut(key, opts.Size, s.singlePutLimit())
 	}
 	tags := blob.MergeTags(s.cfg.tags, opts.Tags)
 	if err := blob.ValidateTags(tags); err != nil {
@@ -209,4 +215,18 @@ func encodeTags(tags map[string]string) string {
 
 func sizeMismatch(key string, got, declared int64) error {
 	return blob.NewError(blob.KindInvalid, blob.OpPut, key, fmt.Errorf("%w: body is %d bytes, declared %d", errUtils.ErrBlobInvalid, got, declared))
+}
+
+// tooLargeForSinglePut reports a body that one PutObject cannot carry when multipart is off.
+func tooLargeForSinglePut(key string, size, limit int64) error {
+	return blob.NewError(blob.KindInvalid, blob.OpPut, key,
+		fmt.Errorf("%w: %d bytes exceeds the %d-byte single-request limit and multipart uploads are disabled", errUtils.ErrBlobInvalid, size, limit))
+}
+
+// singlePutLimit is the largest body one PutObject may carry.
+func (s *Store) singlePutLimit() int64 {
+	if s.cfg.maxSinglePut > 0 {
+		return s.cfg.maxSinglePut
+	}
+	return MaxSinglePutSize
 }
