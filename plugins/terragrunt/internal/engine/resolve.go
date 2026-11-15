@@ -30,14 +30,16 @@ var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
 
 // resolve evaluates one request and describes any rejection as a model.Problem the user can act on.
 func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
-	result, err := resolveUnit(ctx, request, filesystem)
+	result, err := resolveRequest(ctx, request, filesystem)
 	if err != nil {
 		return nil, problemFor(err, request.Path)
 	}
 	return result, nil
 }
 
-func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
+// resolveRequest evaluates one request: it generates any owning stack, parses the path, and
+// dispatches to the stack, inventory, or unit evaluation.
+func resolveRequest(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
@@ -65,6 +67,13 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	if discovering(request) {
 		return resolveUnitInventory(ctx, logger, environment, pctx, request, path)
 	}
+	return resolveUnit(ctx, logger, environment, pctx, request, path)
+}
+
+// resolveUnit evaluates one unit: it guards destroy, parses the unit, applies
+// policies, and assembles the resolution with its execution data, backend, overlay,
+// and generated files.
+func resolveUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*model.Resolution, error) {
 	if err := checkDestroyGuard(ctx, logger, environment, pctx, request, path); err != nil {
 		return nil, err
 	}
@@ -75,6 +84,12 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
 		return nil, err
 	}
+	return buildUnitResolution(ctx, logger, environment, pctx, request, cfg, path)
+}
+
+// buildUnitResolution assembles the resolution of a parsed unit. The execution is
+// set before the backend resolves so the backend step sees the final result.
+func buildUnitResolution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Resolution, error) {
 	execution, applyFiles, err := unitExecution(ctx, logger, environment, pctx, request, cfg, path)
 	if err != nil {
 		return nil, err

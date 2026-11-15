@@ -213,21 +213,18 @@ func verifyConfigurationPlanWorkdir(plan *configurationPlan, path string) error 
 	return nil
 }
 
-// recordConfigurationPlan stores a private companion beside the completed plan.
+// recordConfigurationPlan stores a private companion beside the completed plan. It binds the
+// configuration Terraform read, which the plan snapshot captured before any after hook ran.
 func recordConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, args []string) error {
 	path := recordedPlanPath(info, execCtx, args)
 	if path == "" {
 		return nil
 	}
-	runtime, err := planRuntime(config)
+	snapshot, err := execCtx.reviewedSnapshot(ctx, config, info, path)
 	if err != nil {
 		return err
 	}
-	identity, err := runtime.PlanIdentity(ctx, info, execCtx.preparedConfiguration.Sources)
-	if err != nil {
-		return err
-	}
-	plan, err := newConfigurationPlan(info, execCtx, identity, path)
+	plan, err := newConfigurationPlan(info, execCtx, snapshot, path)
 	if err != nil {
 		return err
 	}
@@ -240,23 +237,24 @@ func recordConfigurationPlan(ctx context.Context, config *schema.AtmosConfigurat
 
 // recordedPlanPath returns the plan file to bind, or empty when this invocation produces none.
 func recordedPlanPath(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, args []string) string {
-	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != "plan" {
+	if !bindsPlan(info, execCtx) {
 		return ""
 	}
 	return plannedOutputPath(execCtx.componentPath, args)
 }
 
-// newConfigurationPlan binds the identity to the digests of the plan, engine, and working directory.
-func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, identity, path string) (*configurationPlan, error) {
+// bindsPlan reports whether this invocation produces a plan that is bound to its configuration.
+func bindsPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) bool {
+	return execCtx.preparedConfiguration != nil && !info.DryRun && info.SubCommand == subcommandPlan
+}
+
+// newConfigurationPlan binds the snapshot to the digests of the plan and engine.
+func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, snapshot *planSnapshot, path string) (*configurationPlan, error) {
 	planDigest, err := fileDigest(path)
 	if err != nil {
 		return nil, err
 	}
 	engineDigest, err := fileDigest(info.Command)
-	if err != nil {
-		return nil, err
-	}
-	workingDigest, err := configurationWorkdirDigest(execCtx.workingDir, path)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +268,7 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: &stored}, nil
+	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: &stored}, nil
 }
 
 // withoutSensitiveContent copies files, dropping the bytes of every sensitive one.
@@ -453,7 +451,8 @@ func resolvedPath(path string) (string, error) {
 
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
 // The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
-// that even a read-only lookup of the retained directory creates), never executed content.
+// that even a read-only lookup of the retained directory creates), never executed content. The
+// private plan directory of a plan policy exists only while Terraform runs.
 // Name-based exclusions apply only outside downloaded modules: a module's own subdirectories
 // are content Terraform may execute during apply, whatever they are called.
 func skipWorkdirDirectory(root, path, name string) bool {
@@ -463,7 +462,7 @@ func skipWorkdirDirectory(root, path, name string) bool {
 	if insideTerraformCacheOutsideModules(root, path) {
 		return true
 	}
-	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-"))
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache

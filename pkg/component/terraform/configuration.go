@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/shlex"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 
@@ -429,11 +430,24 @@ func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info 
 func rejectEnvironmentPlanOutput(entries []string, goos string) error {
 	for _, name := range []string{tfCliArgsEnvVar, tfCliArgsEnvVar + "_" + subcommandPlan} {
 		value, _ := lastEnvListValue(entries, name, goos)
-		if containsOutputFlag(parseArgs(value)) {
+		args, err := tokenizeEnvironmentArgs(value)
+		if err != nil {
+			return fmt.Errorf("%w: %s cannot be parsed: %w", errUtils.ErrPlanVerificationFailed, name, err)
+		}
+		if containsOutputFlag(args) {
 			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
 		}
 	}
 	return nil
+}
+
+// tokenizeEnvironmentArgs splits a TF_CLI_ARGS value the way the engine does:
+// spaces, tabs, and newlines separate tokens outside quotes, and a malformed
+// value (for example an unterminated quote) is an error because the engine
+// refuses to run with it. The shared parseArgs only splits on spaces, so a tab
+// before -out would hide the flag from the check.
+func tokenizeEnvironmentArgs(value string) ([]string, error) {
+	return shlex.Split(value)
 }
 
 // planEnvironment lists the environment layers a plan subprocess receives, in precedence order.
@@ -488,4 +502,103 @@ func plannedOutputPath(directory string, args []string) string {
 		}
 	}
 	return ""
+}
+
+// planSnapshot is the configuration a saved plan is bound to: the provider identity and the
+// digest of the retained working directory, excluding the plan and the state Terraform writes.
+type planSnapshot struct {
+	path, identity, workingDigest string
+}
+
+// planSnapshotKey carries the plan snapshotter to the main command's subprocess.
+type planSnapshotKey struct{}
+
+// planSnapshotter observes the configuration around the Terraform subprocess, after the before
+// hooks and before the after hooks. A hook that rewrites the module after Terraform read it then
+// cannot move the binding onto the rewritten bytes.
+type planSnapshotter struct {
+	ctx      context.Context
+	config   *schema.AtmosConfiguration
+	info     *schema.ConfigAndStacksInfo
+	execCtx  *componentExecContext
+	pathFrom func(phaseArgs []string) string
+	result   *planSnapshot
+	err      error
+}
+
+// takePlanSnapshot fingerprints the configuration with the inputs the binding record uses.
+func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) (*planSnapshot, error) {
+	planProvider, err := planRuntime(config)
+	if err != nil {
+		return nil, err
+	}
+	identity, err := planProvider.PlanIdentity(ctx, info, execCtx.preparedConfiguration.Sources)
+	if err != nil {
+		return nil, err
+	}
+	digest, err := configurationWorkdirDigest(execCtx.workingDir, path)
+	if err != nil {
+		return nil, err
+	}
+	return &planSnapshot{path: path, identity: identity, workingDigest: digest}, nil
+}
+
+// around wraps one run of the Terraform subprocess. The configuration must be the same before and
+// after it; the unchanged snapshot is kept for the binding, and a changed one rejects the plan.
+func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() error {
+	return func() error {
+		s.result, s.err = nil, nil
+		path := s.pathFrom(phaseArgs)
+		if path == "" {
+			return run()
+		}
+		before, beforeErr := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
+		runErr := run()
+		if beforeErr != nil {
+			// The command still completes and its outcome is reported; the binding is what fails.
+			s.err = beforeErr
+			return runErr
+		}
+		after, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
+		switch {
+		case err != nil:
+			s.err = err
+		case *after != *before:
+			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
+		default:
+			s.result = after
+		}
+		return runErr
+	}
+}
+
+// reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
+// observed run recorded one for this plan.
+func (c *componentExecContext) reviewedSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, path string) (*planSnapshot, error) {
+	if s := c.planSnapshots; s != nil {
+		if s.err != nil {
+			return nil, s.err
+		}
+		if s.result != nil && s.result.path == path {
+			return s.result, nil
+		}
+	}
+	return takePlanSnapshot(ctx, config, info, c, path)
+}
+
+// observePlanSnapshots returns ctx carrying a snapshotter for a plan this invocation binds. Policy
+// plans publish the artifact at the original output path, so that path is the one excluded from the
+// digest. The returned context is unchanged when no plan is bound.
+func (c *componentExecContext) observePlanSnapshots(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, policyArgs []string) context.Context {
+	c.planSnapshots = nil
+	if !bindsPlan(info, c) {
+		return ctx
+	}
+	c.planSnapshots = &planSnapshotter{ctx: ctx, config: config, info: info, execCtx: c, pathFrom: func(phaseArgs []string) string {
+		if c.planPolicy != nil {
+			phaseArgs = policyArgs
+		}
+		return plannedOutputPath(c.componentPath, phaseArgs)
+	}}
+	return context.WithValue(ctx, planSnapshotKey{}, c.planSnapshots)
 }
