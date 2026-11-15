@@ -40,7 +40,7 @@ Node is only required inside the Backstage image.
 From the repository root:
 
 ```shell
-go build -o build/atmos .
+atmos build
 export PATH="$PWD/build:$PATH"
 cd examples/backstage
 atmos portal up
@@ -244,8 +244,8 @@ image:
 atmos portal up --runner-from-source
 ```
 
-This cross-compiles Atmos from this repository into `.atmos/bin/atmos` for the running
-container architecture (it requires Go) and builds the `backstage-runner-source`
+This runs `atmos build binary --target=linux` to cross-compile Atmos from this repository
+into `.atmos/bin/atmos` for the running container architecture (it requires Go) and builds the `backstage-runner-source`
 component, which uses the `runner-source` stage of `runner/Dockerfile`. It produces the
 same `atmos-backstage-runner:local` image. The flag cannot be combined with
 `--runner-image`. To go back to the release image, run `atmos container down backstage-runner -s local`

@@ -29,7 +29,7 @@ def affected_services(base):
     if base.strip("0") == "":
         # A new branch has no base commit. Describe the current configuration,
         # which also handles the seed commit before any services exist.
-        stacks = json.decode(atmos.describe("stacks", flags = {"format": "json"}, output = "capture").stdout)
+        stacks = atmos.describe("stacks").data
         affected = []
         for stack, config in stacks.items():
             for component in config.get("components", {}).get("terraform", {}):
@@ -37,9 +37,9 @@ def affected_services(base):
     else:
         # Native selection includes shared Terraform source and inherited stack
         # changes, not just edits to individual service manifest filenames.
-        affected = json.decode(atmos.describe("affected", flags = {
-            "base": base, "format": "json", "include-dependents": True,
-        }, output = "capture").stdout)
+        affected = atmos.describe("affected", flags = {
+            "base": base, "include-dependents": True,
+        }).data
     return select_services(affected)
 
 def select_services(affected):

@@ -17,8 +17,10 @@ RUN curl -fsSL "https://releases.hashicorp.com/terraform/1.13.5/terraform_1.13.5
 COPY --from=act-runner /usr/local/bin/act_runner /usr/local/bin/act_runner
 COPY runner /opt/runner
 ENV ATMOS_TELEMETRY_ENABLED=false
+# The runner's own Atmos configuration provides the `runner register` custom command.
+ENV ATMOS_CLI_CONFIG_PATH=/opt/runner
 WORKDIR /runner-data
-ENTRYPOINT ["/bin/sh", "-c", "atmos /opt/runner/register.star && exec act_runner daemon --config /opt/runner/config.yaml"]
+ENTRYPOINT ["/bin/sh", "-c", "atmos runner register && exec act_runner daemon --config /opt/runner/config.yaml"]
 
 # Development option: replace the release binary with one built from this checkout.
 # `portal up --runner-from-source` builds this stage through the backstage-runner-source

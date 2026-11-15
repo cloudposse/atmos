@@ -3,15 +3,11 @@ commands:
   # Do not include this live, stateful recording in the bulk generator.
   - name: casts generate examples backstage service-catalog
     description: Record Backstage tests and a live Gitea provisioning flow (requires portal up)
-    env:
-      PATH: '{{ env "PWD" }}/../../build:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
-      - name: build
+      - name: setup
         type: shell
-        output: none
-        env:
-          CGO_ENABLED: '0'
-        command: go build -o ../../build/atmos ../..
+        command: atmos casts setup
       - name: record
         type: script
         source: scripts/casts/backstage-service-catalog.star
