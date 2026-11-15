@@ -21,6 +21,11 @@ type configYamlDecoder struct {
 	anchors    map[*yaml.Node]*anchorEntry
 	evaluating map[*yaml.Node]bool
 
+	// aliasLimit overrides maxAliasExpansion when set; aliasExpanded is the number of values the
+	// aliases decoded so far have copied.
+	aliasLimit    int64
+	aliasExpanded int64
+
 	// nodeOrigin is the file the include or alias just decoded took its value from. The mapping
 	// entry that owns the value reads it so the setting's origin is the included file.
 	nodeOrigin *includeOrigin

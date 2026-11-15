@@ -4,7 +4,16 @@ import (
 	"fmt"
 
 	"go.yaml.in/yaml/v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+// maxAliasExpansion bounds the values that every alias in one decoded document may copy, counted as
+// mappings, sequences, and scalars. An alias copies the whole value of its anchor, so a compact
+// document of nested aliases can otherwise expand exponentially (the "billion laughs" shape).
+// A million values is far above any real configuration, which aliases a few hundred values at most,
+// and keeps the worst-case allocation of a hostile document to tens of megabytes.
+const maxAliasExpansion = 1_000_000
 
 // mergeKeyTag is the resolved tag of the YAML merge key "<<".
 const mergeKeyTag = "!!merge"
@@ -29,6 +38,8 @@ type anchorEntry struct {
 	value   any
 	origins []originRecord
 	include *includeOrigin
+	// size is the number of values an alias of this anchor copies.
+	size int64
 	// remote is the first remote include evaluated while the anchor was evaluated.
 	remote *includeOrigin
 }
@@ -55,10 +66,28 @@ func (d *configYamlDecoder) decodeAlias(node *yaml.Node, sourceFile string) (any
 	if err != nil {
 		return nil, err
 	}
+	if err := d.chargeAliasExpansion(node.Alias, entry); err != nil {
+		return nil, err
+	}
 	d.replayOrigins(entry.origins)
 	d.nodeOrigin = entry.include
 	d.noteRemote(entry.remote)
 	return cloneDecodedValue(entry.value), nil
+}
+
+// chargeAliasExpansion adds the size of an alias's copy to the decoder's budget before the copy is
+// made, so an alias that would cross the limit never allocates.
+func (d *configYamlDecoder) chargeAliasExpansion(anchor *yaml.Node, entry *anchorEntry) error {
+	limit := d.aliasLimit
+	if limit == 0 {
+		limit = maxAliasExpansion
+	}
+	if entry.size > limit-d.aliasExpanded {
+		return fmt.Errorf("%w: %w: alias %q copies %d values after %d were already copied, over the limit of %d",
+			ErrExecuteYamlFunctions, errUtils.ErrYamlAliasExpansionLimit, anchor.Anchor, entry.size, d.aliasExpanded, limit)
+	}
+	d.aliasExpanded += entry.size
+	return nil
 }
 
 // evaluateAnchor evaluates an anchored node at most once per decoder. An alias that refers back to
@@ -99,7 +128,7 @@ func (d *configYamlDecoder) evaluateAnchor(node *yaml.Node, sourceFile string) (
 	if err != nil {
 		return nil, err
 	}
-	entry := &anchorEntry{value: value, origins: records, remote: entryTaint}
+	entry := &anchorEntry{value: value, origins: records, remote: entryTaint, size: countDecodedValues(value)}
 	if node.Kind == yaml.ScalarNode && isIncludeTag(node.Tag) {
 		entry.include = d.nodeOrigin
 	}
@@ -216,6 +245,22 @@ func (d *configYamlDecoder) decodeCollectingOrigins(node *yaml.Node, sourceFile 
 	defer func() { d.origin = previous }()
 	value, err := d.decode(node, sourceFile)
 	return value, records, err
+}
+
+// countDecodedValues counts the mappings, sequences, and scalars of a decoded value.
+func countDecodedValues(value any) int64 {
+	count := int64(1)
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		for _, child := range typed {
+			count += countDecodedValues(child)
+		}
+	case []interface{}:
+		for _, child := range typed {
+			count += countDecodedValues(child)
+		}
+	}
+	return count
 }
 
 // cloneDecodedValue deep-copies the mappings and sequences of a decoded value, so an alias never
