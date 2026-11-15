@@ -69,7 +69,7 @@ do not overwrite reviewed infrastructure configuration.
 ## Start with prebuilt images
 
 When your team has published images built from this customized example, supply
-both immutable image references to skip Backstage, Go, and runner builds:
+both immutable image references to skip the Backstage and runner image builds:
 
 ```shell
 atmos portal up \
@@ -79,7 +79,8 @@ atmos portal up \
 
 Set each variable to a full registry reference ending in `@sha256:<64 hex digits>`.
 Use a matching pair built from the same reviewed checkout, for your Docker host's
-architecture. The runner must include this checkout's Atmos binary and CI support.
+architecture. The runner must include the Atmos release that provides the native CI and
+Git support this example uses (1.235.0 or later).
 The generic upstream Backstage image does not contain the Atmos actions, custom
 frontend, templates, or documentation required by this example.
 
@@ -94,12 +95,12 @@ atmos container down backstage -s local
 
 This leaves the Git/AWS emulators and deployment repository intact. Run the same
 `portal up` command with the image arguments on subsequent starts. Omitting both
-arguments explicitly uses the source build path; supplying only one is rejected
+arguments explicitly uses the local build path; supplying only one is rejected
 before starting emulators or seeding the repository.
 
 There is currently no published default image pair. Registry ownership, image
 publication, and a verified default digest pair must be established before this
-example can pull images by default. Source builds remain available with plain
+example can pull images by default. Local builds remain available with plain
 `atmos portal up`; BuildKit caches npm downloads and Yarn's global package cache
 between builds. Images still launch the development server, so prebuilt startup
 avoids image compilation but still waits for Backstage's server startup.
@@ -221,10 +222,34 @@ explicit publication through `steps.publish`.
 The native `backstage-runner` container runs Gitea's `act_runner` with the
 `atmos-local:host` label. Here “host” means execution inside that container, not
 on your workstation. No Docker socket is mounted. Runner capacity is one.
-`portal up` cross-compiles Atmos from this repository into `.atmos/bin/atmos`
-for the running container architecture and includes it in the runner image.
-This requires Go and ensures the runner has the native Git/CI features under
-development, rather than the older release used to bootstrap Backstage.
+The runner image is built on the upstream Atmos release image
+(`ghcr.io/cloudposse/atmos:1.235.0`), which provides Atmos, Git, and Python. The build adds
+`act_runner`, Terraform, and the registration script. No Go toolchain is needed, and the
+runner does not inherit the Backstage image. Atmos 1.235.0 provides the native Git/CI
+features this example uses.
+
+The base image is the `ATMOS_IMAGE` build argument in `runner/Dockerfile`. To use another
+image, uncomment `build_args` on `backstage-runner` in `stacks/deploy/local.yaml`.
+
+> **Pin the base image by digest.** The 1.235.0 image is published together with this
+> example, so its tag is not pinned yet. Once the image is published, append its digest to
+> the default in `runner/Dockerfile` (`ghcr.io/cloudposse/atmos:1.235.0@sha256:<digest>`).
+
+### Build the runner's Atmos from source
+
+For Atmos development, build the runner's Atmos from this checkout instead of the release
+image:
+
+```shell
+atmos portal up --runner-from-source
+```
+
+This cross-compiles Atmos from this repository into `.atmos/bin/atmos` for the running
+container architecture (it requires Go) and builds the `backstage-runner-source`
+component, which uses the `runner-source` stage of `runner/Dockerfile`. It produces the
+same `atmos-backstage-runner:local` image. The flag cannot be combined with
+`--runner-image`. To go back to the release image, run `atmos container down backstage-runner -s local`
+and then `atmos portal up` without the flag.
 
 The seeded `.gitea/workflows/atmos.yaml` uses `atmos git clone --ref <event SHA>`
 with full history to check out the exact PR or push revision and retain the base
@@ -367,7 +392,7 @@ fresh Git repository; update existing infrastructure through Git or reset the de
 | `scripts/modules/infrastructure.star` | Reusable scaffold, Git delivery, seed, and Terraform operations |
 | `scripts/modules/catalog.star` | Reusable Backstage HTTP and catalog registration operations |
 | `seed/` | Initial infrastructure repository, Gitea workflow, and CI Starlark modules |
-| `runner/` | Runner image, configuration, and local registration |
+| `runner/` | Runner image (Atmos release base plus `act_runner`), configuration, and local registration |
 | `catalog/techdocs/` | MkDocs handbook for the Docs tab |
 | `scripts/seed.star` | Seed the repository without overwriting later changes |
 | `scripts/plan.star`, `scripts/apply.star` | Local runner for merged requests |

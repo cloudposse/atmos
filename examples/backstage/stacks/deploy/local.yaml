@@ -35,6 +35,11 @@ components:
         context: .
         dockerfile: runner/Dockerfile
         tags: [atmos-backstage-runner:local]
+        # Uncomment to use another Atmos base image (the Dockerfile default is the
+        # 1.235.0 release image; pin it by digest once that image is published). Set it
+        # on backstage-runner-source too when building from source.
+        # build_args:
+        #   ATMOS_IMAGE: ghcr.io/cloudposse/atmos:<tag>@sha256:<digest>
       run:
         mounts:
           - source: .atmos/ci/runner
@@ -42,6 +47,17 @@ components:
           - source: .atmos/ci/state
             target: /state
         run_args: [--init]
+    # Build-only development component used by `portal up --runner-from-source`. It
+    # produces the same image tag as backstage-runner, with Atmos built from this checkout.
+    backstage-runner-source:
+      metadata:
+        component: .
+      image: atmos-backstage-runner:local
+      build:
+        context: .
+        dockerfile: runner/Dockerfile
+        target: runner-source
+        tags: [atmos-backstage-runner:local]
   emulator:
     backstage-git:
       driver: gitea

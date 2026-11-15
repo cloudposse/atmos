@@ -1,4 +1,6 @@
-# The runner exercises unreleased native CI and Git features from this checkout.
+# Development option (`portal up --runner-from-source`): the runner normally uses the
+# upstream Atmos release image. This builds Atmos from this checkout instead, to
+# exercise native CI and Git features that are not released yet. It requires Go.
 def build_binary():
     architecture = atmos.container("exec", "backstage", flags = {"stack": "local"},
                                    args = ["--", "arch"], output = "capture").stdout.strip()

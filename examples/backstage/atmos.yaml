@@ -44,6 +44,10 @@ commands:
             type: string
             default: ""
             description: Matching prebuilt runner image by digest (requires portal-image)
+          - name: runner-from-source
+            type: bool
+            default: false
+            description: Development option, build the runner's Atmos from this checkout (requires Go) instead of the release image
           - name: open
             type: bool
             default: false
@@ -53,7 +57,7 @@ commands:
             interpreter: starlark
             script: |
               images = module.load("scripts/modules/images.star")
-              images.prepare(ctx.flags["portal-image"], ctx.flags["runner-image"])
+              images.prepare(ctx.flags["portal-image"], ctx.flags["runner-image"], ctx.flags["runner-from-source"])
               atmos.validate("stacks")
               atmos.emulator("up", "backstage-git", flags = {"stack": "local"})
               atmos.emulator("up", "backstage-aws", flags = {"stack": "local"})
@@ -68,9 +72,11 @@ commands:
               if not ctx.flags["portal-image"]:
                   atmos.container("build", "backstage", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage", flags = {"stack": "local"})
-              if not ctx.flags["runner-image"]:
+              if ctx.flags["runner-from-source"]:
                   runner = module.load("scripts/modules/runner.star")
                   runner.build_binary()
+                  atmos.container("build", "backstage-runner-source", flags = {"stack": "local"}, output = "viewport")
+              elif not ctx.flags["runner-image"]:
                   atmos.container("build", "backstage-runner", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage-runner", flags = {"stack": "local"})
               ui.info("TechDocs: `http://localhost:3000/catalog/default/component/payments/docs`")

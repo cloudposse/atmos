@@ -1,5 +1,7 @@
 # Both images must come from the same reviewed example revision.
-def prepare(portal, runner):
+def prepare(portal, runner, runner_from_source = False):
+    if runner and runner_from_source:
+        fail("--runner-from-source cannot be combined with --runner-image")
     if not portal and not runner:
         return
     if not portal or not runner:
