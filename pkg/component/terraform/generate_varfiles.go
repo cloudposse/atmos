@@ -254,6 +254,11 @@ func writeComponentVarfile(
 	// secret-bearing variables are omitted (use the singular
 	// `generate varfile --with-secrets` to export them deliberately).
 	varsToWrite, secretVars := tfvars.Partition(varsSection, atmosio.ContainsSecret)
+	// Variables declared `sensitive = true` are omitted too, matching the singular
+	// generator, because a plain literal value has no registered secret to match.
+	if atmosio.MaskingEnabled() {
+		varsToWrite = varsWithoutKeys(varsToWrite, declaredSensitiveVarKeys(info, ref.terraformComponentPath))
+	}
 	if len(secretVars) > 0 {
 		log.Warn("Omitting secret-bearing variables from the generated varfile",
 			"file", fileName, "count", len(secretVars))

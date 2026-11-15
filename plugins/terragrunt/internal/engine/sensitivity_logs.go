@@ -8,6 +8,23 @@ import (
 	"github.com/spf13/afero"
 )
 
+// sensitivityScan records what the evaluation of a request told the log sink, so the files it read can be
+// scanned for sensitive values the sink never learned once the evaluation ends.
+type sensitivityScan struct {
+	// registered is set once the unit's own inputs and locals are registered with the sink.
+	registered bool
+	// applyFiles are the files read only when the unit is evaluated for apply, which can declare
+	// sensitive values too.
+	applyFiles []string
+}
+
+// unitSensitivity carries what a unit's resolution reports about its sensitive values: the input
+// paths the host masks, and the scan the deferred log check reads.
+type unitSensitivity struct {
+	inputs [][]string
+	scan   *sensitivityScan
+}
+
 // sensitiveLocals returns the paths, from the top of the unit's own locals, of the values its locals block
 // declares sensitive. Terragrunt logs a value as it evaluates it, for example the output of
 // sensitive(run_cmd(...)), even when the value never reaches the inputs, so these values are redacted too.

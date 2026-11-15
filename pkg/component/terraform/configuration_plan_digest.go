@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	ciplanfile "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // configurationWorkdirDigest binds retained module/configuration bytes, excluding mutable execution data.
@@ -98,7 +100,8 @@ func resolvedPath(path string) (string, error) {
 
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
 // The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
-// that even a read-only lookup of the retained directory creates), never executed content.
+// that even a read-only lookup of the retained directory creates), never executed content. The
+// private plan directory of a plan policy exists only while Terraform runs.
 // Name-based exclusions apply only outside downloaded modules: a module's own subdirectories
 // are content Terraform may execute during apply, whatever they are called.
 func skipWorkdirDirectory(root, path, name string) bool {
@@ -108,7 +111,7 @@ func skipWorkdirDirectory(root, path, name string) bool {
 	if insideTerraformCacheOutsideModules(root, path) {
 		return true
 	}
-	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos")
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-"))
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache
@@ -166,4 +169,114 @@ func recordWorkdirFile(root, path string, entry fs.DirEntry, files map[string]st
 	}
 	files[filepath.ToSlash(relative)] = digest
 	return nil
+}
+
+// planSnapshot is the configuration a saved plan is bound to: the provider identity and the
+// digests of the retained working directory, excluding the plan and the state Terraform writes.
+// The rebuild and lock digests let a plan restored on another runner be rebuilt and checked
+// against the bytes Terraform read, not against whatever an after hook left behind.
+type planSnapshot struct {
+	path, identity, workingDigest, rebuildDigest, lockDigest string
+	modules                                                  bool
+}
+
+// planSnapshotKey carries the plan snapshotter to the main command's subprocess.
+type planSnapshotKey struct{}
+
+// planSnapshotter observes the configuration around the Terraform subprocess, after the before
+// hooks and before the after hooks. A hook that rewrites the module after Terraform read it then
+// cannot move the binding onto the rewritten bytes.
+type planSnapshotter struct {
+	ctx      context.Context
+	config   *schema.AtmosConfiguration
+	info     *schema.ConfigAndStacksInfo
+	execCtx  *componentExecContext
+	pathFrom func(phaseArgs []string) string
+	result   *planSnapshot
+	err      error
+}
+
+// takePlanSnapshot fingerprints the configuration with the inputs the binding record uses.
+func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) (*planSnapshot, error) {
+	planProvider, err := planRuntime(config)
+	if err != nil {
+		return nil, err
+	}
+	identity, err := planProvider.PlanIdentity(ctx, info, execCtx.preparedConfiguration.Sources)
+	if err != nil {
+		return nil, err
+	}
+	digest, err := configurationWorkdirDigest(execCtx.workingDir, path)
+	if err != nil {
+		return nil, err
+	}
+	rebuild, err := configurationRebuildDigest(execCtx.workingDir, path, transientWorkdirFiles(info))
+	if err != nil {
+		return nil, err
+	}
+	lock, err := lockFileDigest(execCtx.workingDir)
+	if err != nil {
+		return nil, err
+	}
+	return &planSnapshot{path: path, identity: identity, workingDigest: digest, rebuildDigest: rebuild, lockDigest: lock, modules: hasDownloadedModules(execCtx.workingDir)}, nil
+}
+
+// around wraps one run of the Terraform subprocess. The configuration must be the same before and
+// after it; the unchanged snapshot is kept for the binding, and a changed one rejects the plan.
+func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() error {
+	return func() error {
+		s.result, s.err = nil, nil
+		path := s.pathFrom(phaseArgs)
+		if path == "" {
+			return run()
+		}
+		before, beforeErr := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
+		runErr := run()
+		if beforeErr != nil {
+			// The command still completes and its outcome is reported; the binding is what fails.
+			s.err = beforeErr
+			return runErr
+		}
+		after, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
+		switch {
+		case err != nil:
+			s.err = err
+		case *after != *before:
+			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
+		default:
+			s.result = after
+		}
+		return runErr
+	}
+}
+
+// reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
+// observed run recorded one for this plan.
+func (c *componentExecContext) reviewedSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, path string) (*planSnapshot, error) {
+	if s := c.planSnapshots; s != nil {
+		if s.err != nil {
+			return nil, s.err
+		}
+		if s.result != nil && s.result.path == path {
+			return s.result, nil
+		}
+	}
+	return takePlanSnapshot(ctx, config, info, c, path)
+}
+
+// observePlanSnapshots returns ctx carrying a snapshotter for a plan this invocation binds. Policy
+// plans publish the artifact at the original output path, so that path is the one excluded from the
+// digest. The returned context is unchanged when no plan is bound.
+func (c *componentExecContext) observePlanSnapshots(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, policyArgs []string) context.Context {
+	c.planSnapshots = nil
+	if !bindsPlan(info, c) {
+		return ctx
+	}
+	c.planSnapshots = &planSnapshotter{ctx: ctx, config: config, info: info, execCtx: c, pathFrom: func(phaseArgs []string) string {
+		if c.planPolicy != nil {
+			phaseArgs = policyArgs
+		}
+		return plannedOutputPath(c.componentPath, phaseArgs)
+	}}
+	return context.WithValue(ctx, planSnapshotKey{}, c.planSnapshots)
 }

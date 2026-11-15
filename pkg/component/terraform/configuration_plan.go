@@ -291,21 +291,18 @@ func workdirMatches(plan *configurationPlan, path string) (bool, error) {
 	return workingDigest == plan.WorkingDigest, nil
 }
 
-// recordConfigurationPlan stores a private companion beside the completed plan.
+// recordConfigurationPlan stores a private companion beside the completed plan. It binds the
+// configuration Terraform read, which the plan snapshot captured before any after hook ran.
 func recordConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, args []string) error {
 	path := recordedPlanPath(info, execCtx, args)
 	if path == "" {
 		return nil
 	}
-	runtime, err := planRuntime(config)
+	snapshot, err := execCtx.reviewedSnapshot(ctx, config, info, path)
 	if err != nil {
 		return err
 	}
-	identity, err := runtime.PlanIdentity(ctx, info, execCtx.preparedConfiguration.Sources)
-	if err != nil {
-		return err
-	}
-	plan, err := newConfigurationPlan(config, info, execCtx, identity, path)
+	plan, err := newConfigurationPlan(config, info, execCtx, snapshot, path)
 	if err != nil {
 		return err
 	}
@@ -318,14 +315,19 @@ func recordConfigurationPlan(ctx context.Context, config *schema.AtmosConfigurat
 
 // recordedPlanPath returns the plan file to bind, or empty when this invocation produces none.
 func recordedPlanPath(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, args []string) string {
-	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != "plan" {
+	if !bindsPlan(info, execCtx) {
 		return ""
 	}
 	return plannedOutputPath(execCtx.componentPath, args)
 }
 
-// newConfigurationPlan binds the identity to the digests of the plan, engine, and working directory.
-func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, identity, path string) (*configurationPlan, error) {
+// bindsPlan reports whether this invocation produces a plan that is bound to its configuration.
+func bindsPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) bool {
+	return execCtx.preparedConfiguration != nil && !info.DryRun && info.SubCommand == subcommandPlan
+}
+
+// newConfigurationPlan binds the snapshot to the digests of the plan, engine, and working directory.
+func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, snapshot *planSnapshot, path string) (*configurationPlan, error) {
 	planDigest, err := fileDigest(path)
 	if err != nil {
 		return nil, err
@@ -334,19 +336,7 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
-	workingDigest, err := configurationWorkdirDigest(execCtx.workingDir, path)
-	if err != nil {
-		return nil, err
-	}
 	backendDigest, err := backendIdentityDigest(execCtx.preparedConfiguration.Backend)
-	if err != nil {
-		return nil, err
-	}
-	rebuildDigest, err := configurationRebuildDigest(execCtx.workingDir, path, transientWorkdirFiles(info))
-	if err != nil {
-		return nil, err
-	}
-	lock, err := lockFileDigest(execCtx.workingDir)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +347,7 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: rebuildDigest, LockDigest: lock, Modules: hasDownloadedModules(execCtx.workingDir), Prepared: &stored}, nil
+	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, Prepared: &stored}, nil
 }
 
 // relativeWorkdirIdentity is set only when an explicit relative override actually resolves
