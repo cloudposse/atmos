@@ -31,6 +31,9 @@ import (
 // The provision-and-resolve component function is a seam for testing JIT provisioning context propagation.
 var provisionAndResolveTerraformComponentPath = component.ProvisionAndResolveComponentPath
 
+// redactedVarValue replaces the value of a secret variable in debug output.
+const redactedVarValue = "<redacted>"
+
 // The before-init provisioner function is a seam for testing context propagation.
 var executeBeforeInitProvisioners = provisioner.ExecuteProvisioners
 
@@ -107,7 +110,13 @@ func (e *Executor) autoGenerateComponentFiles(atmosConfig *schema.AtmosConfigura
 	if mkdirErr := os.MkdirAll(componentPath, dirPermissions); mkdirErr != nil {
 		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
 	}
-	return e.services.GenerateFilesForComponent(atmosConfig, info, componentPath)
+	if err := e.services.GenerateFilesForComponent(atmosConfig, info, componentPath); err != nil {
+		return err
+	}
+	// Generated files can declare variables, so a module stack processing inspected at this same
+	// path is stale: reload it, or sensitive declarations in the generated files would be missed.
+	loadTerraformModuleInfo(info, componentPath)
+	return nil
 }
 
 // checkComponentRestrictions returns an error when the requested subcommand is not
@@ -202,7 +211,7 @@ func terraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, erro
 func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	log.Debug("Variables for the component in the stack", logFieldComponent, info.ComponentFromArg, "stack", info.Stack)
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection); err != nil {
+		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, redactSecretVars(info, info.ComponentVarsSection)); err != nil {
 			return err
 		}
 	}
@@ -217,6 +226,27 @@ func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *sche
 		}
 	}
 	return nil
+}
+
+// redactSecretVars returns a copy of vars with the values of secret-bearing and declared-sensitive
+// keys replaced by a placeholder, so debug output never carries literals that are kept out of the
+// varfile. The input map is never modified, and it is returned as is when nothing is secret.
+func redactSecretVars(info *schema.ConfigAndStacksInfo, vars map[string]any) map[string]any {
+	declared := map[string]bool(nil)
+	if atmosio.MaskingEnabled() {
+		declared = terraformSensitiveVarKeys(info)
+	}
+	if len(info.TerraformSecretVarKeys) == 0 && len(declared) == 0 {
+		return vars
+	}
+	redacted := make(map[string]any, len(vars))
+	for k, v := range vars {
+		if info.TerraformSecretVarKeys[k] || declared[k] {
+			v = redactedVarValue
+		}
+		redacted[k] = v
+	}
+	return redacted
 }
 
 func writeTerraformTestVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
@@ -239,7 +269,7 @@ func logCliVarsOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	}
 	log.Debug("CLI variables (will override the variables defined in the stack manifests):")
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars); err != nil {
+		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, redactSecretVars(info, cliVars)); err != nil {
 			return err
 		}
 	}
@@ -378,6 +408,16 @@ func refreshTerraformModuleInfo(info *schema.ConfigAndStacksInfo, componentPath 
 	module, _ := componentInfo["terraform_config"].(*tfconfig.Module)
 	recordedPath, _ := componentInfo[cfg.ComponentPathSectionName].(string)
 	if module != nil && filepath.Clean(recordedPath) == filepath.Clean(componentPath) {
+		return
+	}
+	loadTerraformModuleInfo(info, componentPath)
+}
+
+// loadTerraformModuleInfo unconditionally reloads component_info.terraform_config from the
+// component directory. A module that cannot be inspected leaves the existing value.
+func loadTerraformModuleInfo(info *schema.ConfigAndStacksInfo, componentPath string) {
+	componentInfo, ok := info.ComponentSection["component_info"].(map[string]any)
+	if !ok {
 		return
 	}
 	refreshed, diags := tfconfig.LoadModule(componentPath)
