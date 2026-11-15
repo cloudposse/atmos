@@ -61,6 +61,8 @@ func TestValidate_RepositoryBasics(t *testing.T) {
 		{name: "credentials in options", alias: "x", mutate: func(r *schema.ArtifactRepositoryConfig) { r.Options["access_key"] = "AKIA" }, wantErr: "auth identity"},
 		{name: "identity with whitespace", alias: "x", mutate: func(r *schema.ArtifactRepositoryConfig) { r.Identity = "a b" }, wantErr: "without whitespace"},
 		{name: "identity that is a URL", alias: "x", mutate: func(r *schema.ArtifactRepositoryConfig) { r.Identity = "https://u:p@host" }, wantErr: "credential or URL"},
+		{name: "identity at the character limit", alias: "x", mutate: func(r *schema.ArtifactRepositoryConfig) { r.Identity = strings.Repeat("é", 256) }},
+		{name: "identity over the character limit", alias: "x", mutate: func(r *schema.ArtifactRepositoryConfig) { r.Identity = strings.Repeat("é", 257) }, wantErr: "exceeds 256 characters"},
 		{name: "identity with whitespace and a secret", alias: "x", mutate: func(r *schema.ArtifactRepositoryConfig) { r.Identity = "user:hunter2@host extra" }, wantErr: "without whitespace"},
 		{name: "permissions on a directory", alias: "x", mutate: func(r *schema.ArtifactRepositoryConfig) { r.Permissions = "0600" }, wantErr: "does not accept permissions"},
 		{name: "packaging outside the matrix", alias: "x", mutate: func(r *schema.ArtifactRepositoryConfig) { r.Packaging = "tgz" }, wantErr: "does not support packaging"},

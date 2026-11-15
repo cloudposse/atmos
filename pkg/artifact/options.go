@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-viper/mapstructure/v2"
 
@@ -402,11 +403,11 @@ func validateS3Tags(tags map[string]string) error {
 	var errs []error
 	for _, key := range keys {
 		switch {
-		case key == "" || len(key) > maxS3TagKeyLen:
+		case key == "" || utf8.RuneCountInString(key) > maxS3TagKeyLen:
 			errs = append(errs, fmt.Errorf("%w: S3 tag key %q must be 1-%d characters", errUtils.ErrArtifactConfigInvalid, key, maxS3TagKeyLen))
 		case strings.HasPrefix(strings.ToLower(key), reservedTagHead):
 			errs = append(errs, fmt.Errorf("%w: S3 tag key %q uses the reserved %q prefix", errUtils.ErrArtifactConfigInvalid, key, reservedTagHead))
-		case len(tags[key]) > maxS3TagValLen:
+		case utf8.RuneCountInString(tags[key]) > maxS3TagValLen:
 			errs = append(errs, fmt.Errorf("%w: S3 tag %q value exceeds %d characters", errUtils.ErrArtifactConfigInvalid, key, maxS3TagValLen))
 		}
 	}

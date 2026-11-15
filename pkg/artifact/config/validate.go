@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -146,7 +147,7 @@ func (v *Validator) validateIdentity(identity string) error {
 		return nil
 	}
 	switch {
-	case len(identity) > maxIdentityLength:
+	case utf8.RuneCountInString(identity) > maxIdentityLength:
 		return fmt.Errorf("%w: identity exceeds %d characters", errUtils.ErrArtifactConfigInvalid, maxIdentityLength)
 	case strings.IndexFunc(identity, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0:
 		return fmt.Errorf("%w: identity must be an auth identity name without whitespace or control characters", errUtils.ErrArtifactConfigInvalid)
