@@ -195,6 +195,8 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 	}
 	var err error
 	var walked bool
+	outerTaint := d.remoteTaint
+	d.remoteTaint = nil
 	if node.Tag == u.AtmosYamlFuncIncludeRaw {
 		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, value, sourceFile)
 	} else if d.origin == nil {
@@ -211,6 +213,8 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 			Source: d.remoteSource,
 		})
 	}
+	walkedRemote := d.remoteTaint
+	d.remoteTaint = outerTaint
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
@@ -229,8 +233,16 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 		if !walked {
 			d.recordIncludedOrigins(decoded, file, remote)
 		}
-		// Set last, so the outermost include of a nested chain is the one the owning key reads.
-		d.nodeOrigin = &includeOrigin{file: file, remote: remote}
+		origin := &includeOrigin{file: file, remote: remote}
+		// A local include never launders remote content: when the result is not a mapping (whose
+		// keys carry their own origins), the remote include nested inside it keeps its origin.
+		if _, isMapping := decoded.(map[string]any); !origin.remote && walkedRemote != nil && !isMapping {
+			origin = walkedRemote
+		}
+		d.noteRemote(origin)
+		// Set last, so the outermost include of a nested chain is the one the owning key reads,
+		// except that a remote origin is never replaced by a local one.
+		d.nodeOrigin = origin
 	}
 	return decoded, nil
 }

@@ -29,6 +29,8 @@ type anchorEntry struct {
 	value   any
 	origins []originRecord
 	include *includeOrigin
+	// remote is the first remote include evaluated while the anchor was evaluated.
+	remote *includeOrigin
 }
 
 // decodeAnchored evaluates an anchored node once and caches the result for its aliases.
@@ -55,6 +57,7 @@ func (d *configYamlDecoder) decodeAlias(node *yaml.Node, sourceFile string) (any
 	}
 	d.replayOrigins(entry.origins)
 	d.nodeOrigin = entry.include
+	d.noteRemote(entry.remote)
 	return cloneDecodedValue(entry.value), nil
 }
 
@@ -87,17 +90,29 @@ func (d *configYamlDecoder) evaluateAnchor(node *yaml.Node, sourceFile string) (
 		defer func() { d.origin = previous }()
 	}
 	d.nodeOrigin = nil
+	outerTaint := d.remoteTaint
+	d.remoteTaint = nil
 	value, err := d.decodeNode(node, sourceFile)
+	entryTaint := d.remoteTaint
+	d.remoteTaint = outerTaint
+	d.noteRemote(entryTaint)
 	if err != nil {
 		return nil, err
 	}
-	entry := &anchorEntry{value: value, origins: records}
+	entry := &anchorEntry{value: value, origins: records, remote: entryTaint}
 	if node.Kind == yaml.ScalarNode && isIncludeTag(node.Tag) {
 		entry.include = d.nodeOrigin
 	}
 	d.nodeOrigin = nil
 	d.anchors[node] = entry
 	return entry, nil
+}
+
+// noteRemote records the first remote include seen since the taint was last cleared.
+func (d *configYamlDecoder) noteRemote(origin *includeOrigin) {
+	if origin != nil && origin.remote && d.remoteTaint == nil {
+		d.remoteTaint = origin
+	}
 }
 
 // replayOrigins reports the origins an anchor recorded, relative to the current path.
