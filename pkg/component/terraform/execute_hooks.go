@@ -106,6 +106,9 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 				phaseOpts...,
 			)
 		}
+		if snapshots, ok := ctx.Value(planSnapshotKey{}).(*planSnapshotter); ok {
+			run = snapshots.around(phaseArgs, run)
+		}
 		err := run()
 		if err == nil || !lifecycleOwnsRecovery(info) {
 			return err

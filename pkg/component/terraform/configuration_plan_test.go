@@ -367,6 +367,73 @@ func newPlanShowRunner(t *testing.T) process.Runner {
 	return runner
 }
 
+// TestPlanBindingIgnoresChangesAfterTerraformRan keeps the binding on the configuration Terraform
+// read. An after hook runs once Terraform has written the plan, so a hook that rewrites the
+// module must leave the binding on the original bytes and make the later apply fail.
+func TestPlanBindingIgnoresChangesAfterTerraformRan(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	info.ComponentExecution = &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{execHook("after", "plan")}}
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if call.command != info.Command {
+			return os.WriteFile(filepath.Join(execCtx.workingDir, "main.tf"), []byte("rewritten by the hook"), 0o600)
+		}
+		return os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed plan"), 0o600)
+	}}
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = shell.execute
+	require.NoError(t, executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false))
+	require.Len(t, shell.calls, 2, "Terraform and the after hook both ran")
+	require.FileExists(t, path+configurationPlanSuffix)
+
+	info.SubCommand = "apply"
+	info.UseTerraformPlan = true
+	info.PlanFile = path
+	_, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+}
+
+// TestPlanBindingRejectsConfigurationChangedWhileTerraformRan covers a change made during the
+// Terraform process itself, which leaves no way to tell which bytes the plan came from.
+func TestPlanBindingRejectsConfigurationChangedWhileTerraformRan(t *testing.T) {
+	for _, change := range []string{"module", "provider identity"} {
+		t.Run(change, func(t *testing.T) {
+			config, info, execCtx, runtime, path := planFixture(t)
+			shell := &fakeShell{run: func(call *shellCall) error {
+				switch change {
+				case "module":
+					if err := os.WriteFile(filepath.Join(execCtx.workingDir, "main.tf"), []byte("changed during plan"), 0o600); err != nil {
+						return err
+					}
+				case "provider identity":
+					runtime.identity = "changed during plan"
+				}
+				return os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed plan"), 0o600)
+			}}
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.execute
+			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false)
+			require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+			require.NoFileExists(t, path+configurationPlanSuffix)
+		})
+	}
+}
+
+// TestPlanBindingAllowsFilesTerraformWrites keeps the plan and state out of the comparison,
+// so an ordinary run that writes them is not rejected.
+func TestPlanBindingAllowsFilesTerraformWrites(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if err := os.WriteFile(filepath.Join(execCtx.workingDir, "terraform.tfstate"), []byte("state"), 0o600); err != nil {
+			return err
+		}
+		return os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("new plan bytes"), 0o600)
+	}}
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = shell.execute
+	require.NoError(t, executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false))
+	require.FileExists(t, path+configurationPlanSuffix)
+}
+
 func TestPolicyPlanBindsPublishedOutput(t *testing.T) {
 	config, info, execCtx, _, _ := planFixture(t)
 	var engine policy.Engine
