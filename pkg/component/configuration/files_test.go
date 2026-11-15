@@ -87,8 +87,10 @@ func TestWriteFilesAppliesClampedMode(t *testing.T) {
 		mode      uint32
 		sensitive bool
 		want      os.FileMode
+		// umaskDefault expects the creation default (0644) as the process umask leaves it.
+		umaskDefault bool
 	}{
-		{name: "absent mode keeps the default", mode: 0, want: 0o644},
+		{name: "absent mode keeps the default", mode: 0, umaskDefault: true},
 		{name: "executable keeps the execute bit", mode: 0o755, want: 0o755},
 		{name: "owner-only executable", mode: 0o700, want: 0o700},
 		{name: "group and other write are stripped", mode: 0o777, want: 0o755},
@@ -104,7 +106,11 @@ func TestWriteFilesAppliesClampedMode(t *testing.T) {
 			require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
 			stat, err := os.Stat(filepath.Join(root, file.Path))
 			require.NoError(t, err)
-			require.Equal(t, tt.want, stat.Mode())
+			want := tt.want
+			if tt.umaskDefault {
+				want = umaskedDefaultMode(t)
+			}
+			require.Equal(t, want, stat.Mode())
 		})
 	}
 	t.Run("overwrite updates the mode of an existing file", func(t *testing.T) {
@@ -116,6 +122,20 @@ func TestWriteFilesAppliesClampedMode(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, os.FileMode(0o755), stat.Mode())
 	})
+}
+
+// umaskedDefaultMode creates an independent 0644 reference file under the current
+// process umask and returns the mode the filesystem granted it. An absent mode skips
+// chmod, so the writer must match this rather than a fixed 0644.
+func umaskedDefaultMode(t *testing.T) os.FileMode {
+	t.Helper()
+	reference := filepath.Join(t.TempDir(), "reference")
+	output, err := os.OpenFile(reference, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	require.NoError(t, err)
+	require.NoError(t, output.Close())
+	stat, err := os.Stat(reference)
+	require.NoError(t, err)
+	return stat.Mode()
 }
 
 func TestWriteFilesRejectsModesBeyondPermissionBits(t *testing.T) {
