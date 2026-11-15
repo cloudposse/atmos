@@ -133,7 +133,12 @@ func unitDiagnostic(root string, failure model.UnitFailure) *pluginv1.Diagnostic
 	address := &pluginv1.ComponentAddress{Stack: failure.Stack, Component: failure.Name, ComponentType: "terraform"}
 	var rpc *rpcFailure
 	if errors.As(scoped(rpcError(failure.Err), "discover", root, address), &rpc) {
-		return rpc.failure.Diagnostic()
+		diagnostic := rpc.failure.Diagnostic()
+		// Detail the host may not print can hold evaluated values, so a diagnostic never carries it.
+		if !diagnostic.Detail.UserSafe {
+			diagnostic.Detail.Detail = ""
+		}
+		return diagnostic
 	}
 	return component.NewFailure(model.CodeInternal, fmt.Sprintf("Terragrunt evaluation failed for %s", failure.Name)).Unit(failure.Stack, failure.Name).Operation("discover").Diagnostic()
 }

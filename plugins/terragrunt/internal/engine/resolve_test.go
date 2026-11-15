@@ -176,6 +176,35 @@ generate "disabled" {
 	}
 }
 
+// Discovery validates the module source transport, so an unsupported remote source fails before any
+// infrastructure command runs rather than only when the unit is prepared.
+func TestDiscoveryValidatesRemoteModuleSources(t *testing.T) {
+	for _, test := range []struct {
+		source  string
+		invalid bool
+	}{
+		{source: "tfr://example.invalid/repo", invalid: true},
+		{source: "git::https://example.invalid/modules.git//vpc?ref=v1.0.0"},
+		{source: "https://example.invalid/module.zip"},
+	} {
+		t.Run(test.source, func(t *testing.T) {
+			request := nativeUnit(t, "")
+			encoded, err := json.Marshal(test.source)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
+			request.Phase = "discover"
+			_, err = Resolve(t.Context(), request)
+			if !test.invalid {
+				require.NoError(t, err)
+				return
+			}
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, model.CodeInvalidSource, problem.Code)
+		})
+	}
+}
+
 func TestResolvePreservesUnitOverlay(t *testing.T) {
 	request := nativeUnit(t, "")
 	directory := filepath.Dir(request.Path)

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -102,4 +103,49 @@ func TestInputWatchesFollowNestedConfigurationReads(t *testing.T) {
 		require.Contains(t, result.Files, path, "a transitive read is watched, even before it exists")
 	}
 	require.Empty(t, result.Folders)
+}
+
+// A JSON configuration read by read_terragrunt_config cannot be inspected for nested reads, so the
+// read widens the watch to the project instead of silently missing them.
+func TestInputWatchesWidenForJSONConfigurationReads(t *testing.T) {
+	root := t.TempDir()
+	fs := afero.NewMemMapFs()
+	unit := filepath.Join(root, "terragrunt.hcl")
+	require.NoError(t, fs.MkdirAll(root, 0o700))
+	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { common = read_terragrunt_config("shared.hcl.json") }`), 0o600))
+	result := &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Equal(t, []string{root}, result.Folders)
+	require.NotContains(t, result.Files, filepath.Join(root, "data.json"))
+
+	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { common = read_terragrunt_config("shared.hcl") }`), 0o600))
+	result = &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Empty(t, result.Folders, "an HCL configuration is still inspected rather than widened")
+}
+
+// A path outside the project that is a symlink into it is watched at its canonical target.
+func TestInputWatchesKeepSymlinkTargetsInsideTheProject(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	target := filepath.Join(root, "shared", "data.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o700))
+	require.NoError(t, os.WriteFile(target, []byte("{}"), 0o600))
+	link := filepath.Join(outside, "data.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	unit := filepath.Join(root, "terragrunt.hcl")
+	outsideOnly := filepath.Join(outside, "elsewhere.json")
+	require.NoError(t, os.WriteFile(unit, []byte(`inputs = {
+  linked = file("`+filepath.ToSlash(link)+`")
+  other  = file("`+filepath.ToSlash(outsideOnly)+`")
+}`), 0o600))
+	result := &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(afero.NewOsFs(), root, result))
+	require.Contains(t, result.Files, target)
+	require.NotContains(t, result.Files, link)
+	require.NotContains(t, result.Files, outsideOnly)
 }

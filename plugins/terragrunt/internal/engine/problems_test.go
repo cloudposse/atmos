@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
@@ -168,4 +169,27 @@ func TestLocalSourceProblemDistinguishesFilesystemFailures(t *testing.T) {
 	require.ErrorIs(t, problem, fs.ErrPermission, "the filesystem cause is preserved")
 	require.True(t, problem.Safe)
 	require.NotContains(t, problem.Detail, "/project", "the safe detail names no path")
+}
+
+// A diagnostic without an expression is safe only when it points at a source range, as parser and
+// schema diagnostics do. A conversion diagnostic can lack an expression and still quote a value.
+func TestDiagnosticProblemTrustsOnlyParserAndSchemaDiagnostics(t *testing.T) {
+	located := &hcl.Range{Filename: "terragrunt.hcl", Start: hcl.Pos{Line: 3, Column: 5}}
+	for _, test := range []struct {
+		name       string
+		diagnostic *hcl.Diagnostic
+		safe       bool
+	}{
+		{"parser or schema diagnostic", &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "Unsupported argument", Detail: "An argument named \"x\" is not expected here.", Subject: located}, true},
+		{"conversion diagnostic without an expression", &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "Unsuitable value", Detail: "Unsuitable value: hunter2", Subject: located, EvalContext: &hcl.EvalContext{}}, false},
+		{"diagnostic without a source range", &hcl.Diagnostic{Severity: hcl.DiagError, Summary: "Unsuitable value", Detail: "Unsuitable value: hunter2"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			problem := diagnosticProblem(hcl.Diagnostics{test.diagnostic}, "terragrunt.hcl", test.diagnostic)
+			require.Equal(t, test.safe, problem.Safe)
+			if !test.safe {
+				require.NotEqual(t, model.CodeSyntaxError, problem.Code)
+			}
+		})
+	}
 }
