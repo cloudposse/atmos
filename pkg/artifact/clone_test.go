@@ -90,8 +90,69 @@ func TestCapabilities_CloneIsIndependentInBothDirections(t *testing.T) {
 	assert.Equal(t, sample(), original, "editing the clone leaves the original alone")
 
 	original = sample()
-	fresh := sample()
-	clone = fresh.Clone()
+	clone = original.Clone()
 	original.Packagings[1], original.SubjectKinds[0], original.EvidenceFormats[0], original.LockScopes[0] = artifact.PackagingNone, "x", "x", artifact.LockScopeRepository
 	assert.Equal(t, sample(), clone, "editing the original leaves the clone alone")
+}
+
+func TestMetadata_CloneIsIndependentInBothDirections(t *testing.T) {
+	sample := func() artifact.Metadata { return sampleRecord().Metadata }
+	mutations := map[string]func(m *artifact.Metadata){
+		"labels":            func(m *artifact.Metadata) { m.Labels["a"] = "changed" },
+		"CI provenance":     func(m *artifact.Metadata) { m.Provenance.CI.RunID = "changed" },
+		"source provenance": func(m *artifact.Metadata) { m.Provenance.Source.Commit = "changed" },
+		"provenance":        func(m *artifact.Metadata) { m.Provenance.CI = nil },
+	}
+	for name, mutate := range mutations {
+		t.Run(name+"/clone to original", func(t *testing.T) {
+			original := sample()
+			clone := original.Clone()
+			require.Equal(t, original, clone)
+			mutate(&clone)
+			assert.Equal(t, sample(), original)
+		})
+		t.Run(name+"/original to clone", func(t *testing.T) {
+			original := sample()
+			clone := original.Clone()
+			mutate(&original)
+			assert.Equal(t, sample(), clone)
+		})
+	}
+	assert.Equal(t, artifact.Metadata{}, (&artifact.Metadata{}).Clone(), "nil maps and pointers stay nil")
+}
+
+func TestVerificationPolicy_CloneIsIndependentInBothDirections(t *testing.T) {
+	sample := func() artifact.VerificationPolicy {
+		return artifact.VerificationPolicy{
+			RequireSignature: true,
+			TrustSets: []artifact.TrustSet{
+				{Identities: []artifact.TrustedIdentity{{Identity: "first", Issuer: "issuer-1"}, {Identity: "second", Issuer: "issuer-2"}}, Keys: []string{"a.pub"}},
+				{Keys: []string{"b.pub", "c.pub"}},
+			},
+			Offline: true,
+		}
+	}
+	mutations := map[string]func(p *artifact.VerificationPolicy){
+		"trust set order":      func(p *artifact.VerificationPolicy) { p.TrustSets[0], p.TrustSets[1] = p.TrustSets[1], p.TrustSets[0] },
+		"first identity":       func(p *artifact.VerificationPolicy) { p.TrustSets[0].Identities[0].Identity = "changed" },
+		"last identity issuer": func(p *artifact.VerificationPolicy) { p.TrustSets[0].Identities[1].Issuer = "changed" },
+		"first key":            func(p *artifact.VerificationPolicy) { p.TrustSets[0].Keys[0] = "changed" },
+		"last key":             func(p *artifact.VerificationPolicy) { p.TrustSets[1].Keys[1] = "changed" },
+	}
+	for name, mutate := range mutations {
+		t.Run(name+"/clone to original", func(t *testing.T) {
+			original := sample()
+			clone := original.Clone()
+			require.Equal(t, original, clone)
+			mutate(&clone)
+			assert.Equal(t, sample(), original)
+		})
+		t.Run(name+"/original to clone", func(t *testing.T) {
+			original := sample()
+			clone := original.Clone()
+			mutate(&original)
+			assert.Equal(t, sample(), clone)
+		})
+	}
+	assert.Equal(t, artifact.VerificationPolicy{}, (&artifact.VerificationPolicy{}).Clone(), "an empty policy stays empty")
 }
