@@ -76,6 +76,8 @@ commands:
                   runner = module.load("scripts/modules/runner.star")
                   runner.build_binary()
                   atmos.container("build", "backstage-runner-source", flags = {"stack": "local"}, output = "viewport")
+                  # A runner created from an older image would otherwise be reused as is.
+                  atmos.container("down", "backstage-runner", flags = {"stack": "local"})
               elif not ctx.flags["runner-image"]:
                   atmos.container("build", "backstage-runner", flags = {"stack": "local"}, output = "viewport")
               atmos.container("up", "backstage-runner", flags = {"stack": "local"})
