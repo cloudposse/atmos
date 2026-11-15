@@ -51,12 +51,14 @@ func ParseRef(s string) (Ref, error) {
 	} else {
 		index := strings.LastIndex(s, ":")
 		if index < 0 {
-			return Ref{}, fmt.Errorf("%w: %q needs a version (name:version) or digest (name@sha256:...); there is no implicit latest", errUtils.ErrArtifactRefInvalid, s)
+			return Ref{}, fmt.Errorf("%w: %q needs a version (name:version) or digest (name@sha256:...); there is no implicit latest", errUtils.ErrArtifactRefInvalid, RedactURL(s))
 		}
 		ref = Ref{Name: s[:index], Version: s[index+1:]}
 	}
 	if err := ref.Validate(); err != nil {
-		return Ref{}, err
+		// The reference is validated in pieces, so a credential split at its "@" is only visible in
+		// the whole.
+		return Ref{}, RedactError(err, s)
 	}
 	return ref, nil
 }
@@ -70,9 +72,9 @@ func (r Ref) Validate() error {
 	}
 	switch {
 	case r.Version != "" && r.Digest != "":
-		return fmt.Errorf("%w: %q sets both a version and a digest", errUtils.ErrArtifactRefInvalid, r.Name)
+		return fmt.Errorf("%w: %q sets both a version and a digest", errUtils.ErrArtifactRefInvalid, RedactURL(r.Name))
 	case r.Version == "" && r.Digest == "":
-		return fmt.Errorf("%w: %q needs a version or a digest", errUtils.ErrArtifactRefInvalid, r.Name)
+		return fmt.Errorf("%w: %q needs a version or a digest", errUtils.ErrArtifactRefInvalid, RedactURL(r.Name))
 	case r.Version != "":
 		return ValidateVersion(r.Version)
 	default:
@@ -107,17 +109,17 @@ func ValidateName(name string) error {
 		return fmt.Errorf("%w: name exceeds %d characters", errUtils.ErrArtifactRefInvalid, MaxNameLength)
 	}
 	if strings.HasPrefix(name, "/") || strings.Contains(name, `\`) {
-		return fmt.Errorf("%w: %w: %q must be relative and slash-separated", errUtils.ErrArtifactRefInvalid, errUtils.ErrArtifactUnsafePath, name)
+		return fmt.Errorf("%w: %w: %q must be relative and slash-separated", errUtils.ErrArtifactRefInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(name))
 	}
 	for _, segment := range strings.Split(name, "/") {
 		switch segment {
 		case "":
-			return fmt.Errorf("%w: %w: %q has an empty segment", errUtils.ErrArtifactRefInvalid, errUtils.ErrArtifactUnsafePath, name)
+			return fmt.Errorf("%w: %w: %q has an empty segment", errUtils.ErrArtifactRefInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(name))
 		case ".", "..":
-			return fmt.Errorf("%w: %w: %q has a %q segment", errUtils.ErrArtifactRefInvalid, errUtils.ErrArtifactUnsafePath, name, segment)
+			return fmt.Errorf("%w: %w: %q has a %q segment", errUtils.ErrArtifactRefInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(name), segment)
 		}
 		if !nameSegmentPattern.MatchString(segment) {
-			return fmt.Errorf("%w: segment %q of %q must be lowercase alphanumerics separated by '.', '_', '__', or '-'", errUtils.ErrArtifactRefInvalid, segment, name)
+			return fmt.Errorf("%w: segment %q of %q must be lowercase alphanumerics separated by '.', '_', '__', or '-'", errUtils.ErrArtifactRefInvalid, RedactURL(segment), RedactURL(name))
 		}
 	}
 	return nil
@@ -131,7 +133,7 @@ func ValidateVersion(version string) error {
 		return fmt.Errorf("%w: version is empty", errUtils.ErrArtifactRefInvalid)
 	}
 	if !versionPattern.MatchString(version) {
-		return fmt.Errorf("%w: version %q must match the OCI tag syntax [A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", errUtils.ErrArtifactRefInvalid, version)
+		return fmt.Errorf("%w: version %q must match the OCI tag syntax [A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", errUtils.ErrArtifactRefInvalid, RedactURL(version))
 	}
 	return nil
 }
@@ -141,10 +143,10 @@ func ValidateDigest(d digest.Digest) error {
 	defer perf.Track(nil, "artifact.ValidateDigest")()
 
 	if err := d.Validate(); err != nil {
-		return fmt.Errorf("%w: digest %q: %w", errUtils.ErrArtifactRefInvalid, d, err)
+		return fmt.Errorf("%w: digest %q: %w", errUtils.ErrArtifactRefInvalid, RedactURL(string(d)), err)
 	}
 	if d.Algorithm() != digest.SHA256 {
-		return fmt.Errorf("%w: digest %q must use sha256", errUtils.ErrArtifactRefInvalid, d)
+		return fmt.Errorf("%w: digest %q must use sha256", errUtils.ErrArtifactRefInvalid, RedactURL(string(d)))
 	}
 	return nil
 }
@@ -158,7 +160,7 @@ func ValidateKind(kind string) error {
 	}
 	for _, segment := range strings.Split(kind, "/") {
 		if !kindSegmentPattern.MatchString(segment) {
-			return fmt.Errorf("%w: kind %q must be slash-separated lowercase segments", errUtils.ErrArtifactRecordInvalid, kind)
+			return fmt.Errorf("%w: kind %q must be slash-separated lowercase segments", errUtils.ErrArtifactRecordInvalid, RedactURL(kind))
 		}
 	}
 	return nil

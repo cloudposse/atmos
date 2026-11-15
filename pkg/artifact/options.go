@@ -196,7 +196,7 @@ func (o *OCIRegistryOptions) Validate() error {
 	if o.Prefix != "" {
 		for _, segment := range strings.Split(o.Prefix, "/") {
 			if err := ValidateName(segment); err != nil {
-				errs = append(errs, fmt.Errorf("%w: prefix %q is not a valid OCI repository path: %w", errUtils.ErrArtifactConfigInvalid, o.Prefix, err))
+				errs = append(errs, fmt.Errorf("%w: prefix %q is not a valid OCI repository path: %w", errUtils.ErrArtifactConfigInvalid, RedactURL(o.Prefix), RedactError(err, o.Prefix)))
 				break
 			}
 		}
@@ -246,9 +246,30 @@ func DecodeOptions(raw map[string]any, out any) error {
 		return fmt.Errorf("%w: options decoder: %w", errUtils.ErrArtifactConfigInvalid, err)
 	}
 	if err := decoder.Decode(raw); err != nil {
-		return fmt.Errorf("%w: options: %w%s", errUtils.ErrArtifactConfigInvalid, err, credentialHint(raw))
+		// A decode error may quote a value, such as a mistyped number that is really a credential,
+		// so every string key and value is a credential candidate when the message is scrubbed.
+		return fmt.Errorf("%w: options: %w%s", errUtils.ErrArtifactConfigInvalid, RedactError(err, stringValues(raw)...), credentialHint(raw))
 	}
 	return nil
+}
+
+// stringValues returns every string held by raw, keys included, at any depth, in no particular order.
+func stringValues(raw any) []string {
+	var out []string
+	switch v := raw.(type) {
+	case string:
+		out = append(out, v)
+	case map[string]any:
+		for key, item := range v {
+			out = append(out, key)
+			out = append(out, stringValues(item)...)
+		}
+	case []any:
+		for _, item := range v {
+			out = append(out, stringValues(item)...)
+		}
+	}
+	return out
 }
 
 // credentialHint explains where credentials belong when an option key looks like one.
@@ -256,7 +277,7 @@ func credentialHint(raw map[string]any) string {
 	keys := make([]string, 0, len(raw))
 	for key := range raw {
 		if credentialOptionPattern.MatchString(key) {
-			keys = append(keys, key)
+			keys = append(keys, RedactURL(key))
 		}
 	}
 	if len(keys) == 0 {
@@ -292,14 +313,14 @@ func validatePrefix(prefix string) error {
 		return nil
 	}
 	if strings.HasPrefix(prefix, "/") || strings.Contains(prefix, `\`) || strings.ContainsRune(prefix, 0) {
-		return fmt.Errorf("%w: %w: prefix %q must be relative and slash-separated", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, prefix)
+		return fmt.Errorf("%w: %w: prefix %q must be relative and slash-separated", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(prefix))
 	}
 	for _, segment := range strings.Split(prefix, "/") {
 		switch segment {
 		case "", currentDirSegment, parentDirSegment:
-			return fmt.Errorf("%w: %w: prefix %q has an empty, %q, or %q segment", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, prefix, currentDirSegment, parentDirSegment)
+			return fmt.Errorf("%w: %w: prefix %q has an empty, %q, or %q segment", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(prefix), currentDirSegment, parentDirSegment)
 		case ReservedNamespace:
-			return fmt.Errorf("%w: %w: prefix %q enters the reserved %s namespace", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, prefix, ReservedNamespace)
+			return fmt.Errorf("%w: %w: prefix %q enters the reserved %s namespace", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(prefix), ReservedNamespace)
 		}
 	}
 	return nil
@@ -322,12 +343,12 @@ func validateKeyPattern(pattern string, packaging Packaging) error {
 		return nil
 	}
 	if strings.ContainsRune(pattern, 0) || strings.Contains(pattern, `\`) {
-		return fmt.Errorf("%w: %w: key_pattern %q must not contain NUL bytes or backslashes", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, pattern)
+		return fmt.Errorf("%w: %w: key_pattern %q must not contain NUL bytes or backslashes", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(pattern))
 	}
 	actions := templateActionPattern.FindAllString(pattern, -1)
 	literal := templateActionPattern.ReplaceAllString(pattern, "\x01")
 	if strings.Contains(literal, "{{") || strings.Contains(literal, "}}") {
-		return fmt.Errorf("%w: key_pattern %q has unbalanced template delimiters", errUtils.ErrArtifactConfigInvalid, pattern)
+		return fmt.Errorf("%w: key_pattern %q has unbalanced template delimiters", errUtils.ErrArtifactConfigInvalid, RedactURL(pattern))
 	}
 	if err := validateKeyPatternFields(pattern, actions); err != nil {
 		return err
@@ -343,7 +364,7 @@ func validateKeyPatternFields(pattern string, actions []string) error {
 		stripped := templateStringPattern.ReplaceAllString(action, `""`)
 		for _, match := range templateFieldPattern.FindAllStringSubmatch(stripped, -1) {
 			if !keyPatternFields[match[1]] {
-				return fmt.Errorf("%w: key_pattern %q references unknown field .%s (allowed: .Name, .Version, .Kind, .CreatedAt)", errUtils.ErrArtifactConfigInvalid, pattern, match[1])
+				return fmt.Errorf("%w: key_pattern %q references unknown field .%s (allowed: .Name, .Version, .Kind, .CreatedAt)", errUtils.ErrArtifactConfigInvalid, RedactURL(pattern), match[1])
 			}
 		}
 	}
@@ -352,14 +373,14 @@ func validateKeyPatternFields(pattern string, actions []string) error {
 
 func validateKeyPatternSegments(pattern, literal string) error {
 	if strings.HasPrefix(literal, "/") {
-		return fmt.Errorf("%w: %w: key_pattern %q must be relative to the repository root", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, pattern)
+		return fmt.Errorf("%w: %w: key_pattern %q must be relative to the repository root", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(pattern))
 	}
 	for _, segment := range strings.Split(literal, "/") {
 		switch segment {
 		case "", currentDirSegment, parentDirSegment:
-			return fmt.Errorf("%w: %w: key_pattern %q has an empty, %q, or %q segment", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, pattern, currentDirSegment, parentDirSegment)
+			return fmt.Errorf("%w: %w: key_pattern %q has an empty, %q, or %q segment", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(pattern), currentDirSegment, parentDirSegment)
 		case ReservedNamespace:
-			return fmt.Errorf("%w: %w: key_pattern %q enters the reserved %s namespace", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, pattern, ReservedNamespace)
+			return fmt.Errorf("%w: %w: key_pattern %q enters the reserved %s namespace", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactUnsafePath, RedactURL(pattern), ReservedNamespace)
 		}
 	}
 	return nil
@@ -384,7 +405,7 @@ func validateKeyPatternExtension(pattern, literal string, packaging Packaging) e
 			continue
 		}
 		if packaging != "" && candidate.packaging != packaging {
-			return fmt.Errorf("%w: key_pattern %q ends in %q, which does not match packaging %q", errUtils.ErrArtifactConfigInvalid, pattern, candidate.suffix, packaging)
+			return fmt.Errorf("%w: key_pattern %q ends in %q, which does not match packaging %q", errUtils.ErrArtifactConfigInvalid, RedactURL(pattern), candidate.suffix, packaging)
 		}
 		return nil
 	}

@@ -29,7 +29,7 @@ func validateCatalog(desc *artifact.KindDescriptor, repo *schema.ArtifactReposit
 	}
 	registry, _ := repo.Options["registry"].(string)
 	if registry != "" && !strings.EqualFold(registry, parsed.Host) {
-		return fmt.Errorf("%w: catalog host %q does not match the repository registry %q; a catalog cannot direct the repository identity to another host", errUtils.ErrArtifactConfigInvalid, parsed.Host, registry)
+		return fmt.Errorf("%w: catalog host %q does not match the repository registry %q; a catalog cannot direct the repository identity to another host", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(parsed.Host), artifact.RedactURL(registry))
 	}
 	return nil
 }
@@ -44,7 +44,7 @@ func parseCatalogURI(raw string) (*url.URL, error) {
 		return nil, fmt.Errorf("%w: catalog %q must not contain credentials, a query, or a fragment", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(raw))
 	}
 	if err := validateCatalogReference(strings.TrimPrefix(parsed.Path, "/")); err != nil {
-		return nil, fmt.Errorf("%w: catalog %q: %w", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(raw), err)
+		return nil, fmt.Errorf("%w: catalog %q: %w", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(raw), artifact.RedactError(err, raw))
 	}
 	return parsed, nil
 }

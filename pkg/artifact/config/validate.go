@@ -154,7 +154,7 @@ func (v *Validator) validateIdentity(identity string) error {
 	case strings.Contains(identity, "://"):
 		return fmt.Errorf("%w: identity looks like a credential or URL; reference an Atmos auth identity name", errUtils.ErrArtifactConfigInvalid)
 	case v.identityExists != nil && !v.identityExists(identity):
-		return fmt.Errorf("%w: identity %q is not defined under auth.identities", errUtils.ErrArtifactConfigInvalid, identity)
+		return fmt.Errorf("%w: identity %q is not defined under auth.identities", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(identity))
 	}
 	return nil
 }
