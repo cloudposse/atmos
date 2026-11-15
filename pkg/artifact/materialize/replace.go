@@ -205,13 +205,13 @@ func installStaged(ctx context.Context, stage, dest string, guard func(dest stri
 	if err := os.Chmod(stage, parentDirMode); err != nil {
 		return false, fmt.Errorf("%w: set staging mode: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
-	return replaceDestination(stage, dest, guard)
+	return replaceDestination(ctx, stage, dest, guard)
 }
 
 // replaceDestination atomically exchanges the staged and existing trees. No children are
 // removed or installed through the destination path, and a failed exchange leaves both intact.
 // The boolean preserves scratch when a concurrent replacement cannot be safely rolled back.
-func replaceDestination(stage, dest string, guard func(dest string) error) (bool, error) {
+func replaceDestination(ctx context.Context, stage, dest string, guard func(dest string) error) (bool, error) {
 	info, err := os.Lstat(dest)
 	switch {
 	case os.IsNotExist(err):
@@ -234,6 +234,10 @@ func replaceDestination(stage, dest string, guard func(dest string) error) (bool
 		}
 	}
 	if err := bound.verify(); err != nil {
+		return false, err
+	}
+	// The guard can run long on a large destination, and cancellation is final: it must not exchange.
+	if err := ctx.Err(); err != nil {
 		return false, err
 	}
 	return exchangeStagedTree(stage, dest, bound.info)

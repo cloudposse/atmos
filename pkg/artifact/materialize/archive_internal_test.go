@@ -1,9 +1,12 @@
 package materialize
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"math/rand/v2"
 	"os"
@@ -14,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 )
 
@@ -117,5 +121,91 @@ func TestApplyZipFile_StopsInflatingWhenCanceled(t *testing.T) {
 	info, statErr := os.Stat(filepath.Join(dir, "big.bin"))
 	if statErr == nil {
 		assert.Zero(t, info.Size(), "a canceled member writes no bytes")
+	}
+}
+
+// paxRecord encodes one PAX extended header record, whose leading decimal counts its own digits.
+func paxRecord(key, value string) string {
+	body := " " + key + "=" + value + "\n"
+	length := len(body) + 1
+	for len(fmt.Sprint(length))+len(body) != length {
+		length = len(fmt.Sprint(length)) + len(body)
+	}
+	return fmt.Sprintf("%d%s", length, body)
+}
+
+// rawPaxHeader hand-encodes a local PAX extended header, which archive/tar refuses to write itself.
+func rawPaxHeader(records string) []byte {
+	const block = 512
+	header := make([]byte, block)
+	copy(header[0:], "pax")
+	copy(header[100:], "0000644\x00")
+	copy(header[108:], "0000000\x00")
+	copy(header[116:], "0000000\x00")
+	copy(header[124:], fmt.Sprintf("%011o\x00", len(records)))
+	copy(header[136:], "00000000000\x00")
+	copy(header[148:], "        ")
+	header[156] = tar.TypeXHeader
+	copy(header[257:], "ustar\x0000")
+	sum := 0
+	for _, b := range header {
+		sum += int(b)
+	}
+	copy(header[148:], fmt.Sprintf("%06o\x00 ", sum))
+	padded := make([]byte, (len(records)+block-1)/block*block)
+	copy(padded, records)
+	return append(header, padded...)
+}
+
+// successivePaxTar returns a tar stream of count local PAX headers in a row that are followed by one
+// regular file. Reading the headers is metadata work that precedes any visible member.
+func successivePaxTar(t *testing.T, count int, name string, body []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	for index := range count {
+		buf.Write(rawPaxHeader(paxRecord("comment", fmt.Sprintf("header-%d", index))))
+	}
+	writer := tar.NewWriter(&buf)
+	require.NoError(t, writer.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: name, Size: int64(len(body)), Mode: 0o644}))
+	_, err := writer.Write(body)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	return buf.Bytes()
+}
+
+func TestFillTar_CancellationInterruptsMetadataReads(t *testing.T) {
+	body := []byte("payload")
+	const (
+		headers     = 2000
+		cancelAfter = 8 << 10
+		// One block of read-ahead is the most a reader may serve after the cancellation.
+		maxAfterCanceled = 4 << 10
+	)
+	tests := []struct {
+		name        string
+		preCanceled bool
+	}{
+		{"canceled before the first header", true},
+		{"canceled between successive headers", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data := successivePaxTar(t, headers, "file.txt", body)
+			require.Greater(t, len(data), 100*cancelAfter, "the headers must outlast the cancellation point")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			reader := &cancelOnBytesReader{data: data, cancel: cancel, cancelAfter: cancelAfter}
+			if tc.preCanceled {
+				cancel()
+			}
+			target, _ := newTestTree(t, "file.txt", body)
+			checker := &managedChecker{documents: map[string]artifact.Document{}, seen: map[string]bool{}}
+
+			err := fillTar(ctx, target, reader, false, checker)
+
+			require.ErrorIs(t, err, context.Canceled)
+			assert.False(t, errors.Is(err, errUtils.ErrArtifactIntegrityFailed), "cancellation is not an integrity failure")
+			assert.LessOrEqual(t, reader.afterCanceled, maxAfterCanceled, "metadata reads must stop once the context is canceled")
+		})
 	}
 }

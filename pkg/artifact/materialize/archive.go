@@ -66,13 +66,16 @@ func fillArchive(ctx context.Context, t *tree, content *artifact.Content, scratc
 }
 
 func fillTar(ctx context.Context, t *tree, reader io.Reader, gzipped bool, checker *managedChecker) error {
+	// Every read goes through the context, metadata included: Next consumes a run of local PAX
+	// headers before it returns a visible member, so the loop's own check cannot interrupt it.
+	reader = contextReader{ctx: ctx, reader: reader}
 	if gzipped {
 		gz, err := gzip.NewReader(reader)
 		if err != nil {
-			return fmt.Errorf("%w: gzip: %w", errUtils.ErrArtifactIntegrityFailed, err)
+			return archiveReadError(ctx, "gzip", err)
 		}
 		defer gz.Close()
-		reader = gz
+		reader = contextReader{ctx: ctx, reader: gz}
 	}
 	tr := tar.NewReader(reader)
 	for {
@@ -86,12 +89,21 @@ func fillTar(ctx context.Context, t *tree, reader io.Reader, gzipped bool, check
 			return err
 		}
 		if err != nil {
-			return fmt.Errorf("%w: tar: %w", errUtils.ErrArtifactIntegrityFailed, err)
+			return archiveReadError(ctx, "tar", err)
 		}
 		if err := applyTarHeader(ctx, t, tr, header, checker); err != nil {
 			return err
 		}
 	}
+}
+
+// archiveReadError reports a failed archive read. A canceled context is returned as such, because
+// the cancellation is what interrupted the read and not damage to the archive.
+func archiveReadError(ctx context.Context, format string, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return fmt.Errorf("%w: %s: %w", errUtils.ErrArtifactIntegrityFailed, format, err)
 }
 
 func applyTarHeader(ctx context.Context, t *tree, tr *tar.Reader, header *tar.Header, checker *managedChecker) error {

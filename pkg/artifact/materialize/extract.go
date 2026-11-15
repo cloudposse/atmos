@@ -23,6 +23,19 @@ type options struct {
 
 	// replaceGuard runs immediately before an existing destination is replaced.
 	replaceGuard func(dest string) error
+
+	// ownerAccess keeps owner read and traversal access on the extracted tree.
+	ownerAccess bool
+}
+
+// WithOwnerAccess keeps owner read access on files and owner read and traversal access on
+// directories, whatever modes the Record declares. It is for a temporary tree that is read back
+// before it is discarded: a valid Record can declare mode 0000, and an ordinary user could not read
+// such a tree. The Record itself is never changed.
+func WithOwnerAccess() Option {
+	defer perf.Track(nil, "materialize.WithOwnerAccess")()
+
+	return func(o *options) { o.ownerAccess = true }
 }
 
 // WithReplaceGuard registers a check that runs right before an existing destination directory is
@@ -80,11 +93,15 @@ func Extract(ctx context.Context, content *artifact.Content, stage, scratch stri
 	defer root.Close()
 
 	t := newTree(root, record)
+	t.ownerAccess = applied.ownerAccess
 	if err := fill(ctx, t, content, scratch); err != nil {
 		return err
 	}
 	// The last member may have finished after a cancellation; never report that as success.
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := t.createLinks(ctx); err != nil {
 		return err
 	}
 	if err := checkLinkContainment(stage, record); err != nil {
