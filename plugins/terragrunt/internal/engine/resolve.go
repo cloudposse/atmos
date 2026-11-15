@@ -60,8 +60,11 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	}
 	pctx := requestParsingContext(request, path)
 	redacted := false
+	// Files read only when the unit is evaluated for apply can declare sensitive values too.
+	var applyFiles []string
 	defer func() {
-		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, append(pctx.FilesRead.Paths(), path), path, redacted) {
+		files := append(append(pctx.FilesRead.Paths(), path), applyFiles...)
+		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, files, path, redacted) {
 			sink.Withhold()
 		}
 	}()

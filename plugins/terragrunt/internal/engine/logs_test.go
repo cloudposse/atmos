@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -319,6 +320,24 @@ func TestResolveWithholdsLogsWhenSensitiveValuesAreUnknown(t *testing.T) {
 			assert.Equal(t, "before tok-123", entries[0].Message)
 		})
 	}
+}
+
+// A file only read when the unit is evaluated for apply can declare sensitive values the reparse never
+// registers, such as the inputs of an included file, so the events are withheld even when the evaluation succeeds.
+func TestResolveWithholdsLogsForSensitiveValuesInApplyTimeFiles(t *testing.T) {
+	request := nativeUnit(t, "include \"extra\" {\n  path = get_terraform_command() == \"apply\" ? \"${get_terragrunt_dir()}/apply.hcl\" : \"${get_terragrunt_dir()}/plan.hcl\"\n}\n")
+	dir := filepath.Dir(request.Path)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.hcl"), []byte("inputs = { name = \"visible\" }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "apply.hcl"), []byte("inputs = { token = sensitive(\"apply-secret\") }\n"), 0o644))
+	sink := NewLogSink("debug", request.BasePath)
+	logger(t, sink).Debug("before apply-secret")
+
+	_, err := Resolve(WithLogSink(t.Context(), sink), request)
+
+	require.NoError(t, err)
+	entries := sink.Entries()
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0].Message, "withheld")
 }
 
 // A sensitive value declared where its text cannot be read back, such as in a block other than locals or in
