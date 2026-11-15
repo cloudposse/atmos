@@ -102,3 +102,16 @@ func anyShapeClaimPaths(packaging artifact.Packaging, location string) []string 
 	}
 	return paths
 }
+
+// anyShapeKeys lists the object keys of a payload whose packaging may be unrecorded.
+func (s objectSet) anyShapeKeys(packaging artifact.Packaging, location string) ([]string, error) {
+	var keys []string
+	for _, shape := range shapesOf(packaging) {
+		shapeKeys, err := s.keys(shape, location)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, shapeKeys...)
+	}
+	return keys, nil
+}

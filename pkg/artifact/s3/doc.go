@@ -37,6 +37,17 @@
 // readers, until a retry with the same intent repairs it; there is no rollback. A pending
 // operation of a different intent is never stolen.
 //
+// A completed publication keeps its journal until the cleanup that follows completion has removed
+// everything the journal lists: the replaced Record with its payload and evidence, and the payloads
+// of abandoned attempts. Until then those locations stay claimed, so no other reference can reserve
+// one, and each removal is by exact journaled key and safe to repeat. A republication with the same
+// intent finishes the cleanup; a forced replacement or a deletion finishes it before it writes
+// anything, and stops with the journal intact when it cannot.
+//
+// A reference owns the exact keys its payloads consist of, not the location as a prefix. Before it
+// writes anything, a publication refuses a key below an owned location that already holds an object
+// the reference does not own, so an object a user added there is never overwritten.
+//
 // # Locks and recovery
 //
 // Lock provides repository-scope mutation coordination through owner claim objects under the

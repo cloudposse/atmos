@@ -216,7 +216,7 @@ func (r *Repository) resolveLocation(ctx context.Context, job *publishJob, plan 
 // publication replaces. The interrupted operation's journal is read when one is pending.
 func (r *Repository) loadPendingState(ctx context.Context, plan *publishPlan, rep *layout.Representation) error {
 	if rep != nil {
-		plan.owned = append(plan.owned, ownedPayload{packaging: rep.Packaging, location: rep.Location})
+		plan.owned = append(plan.owned, ownedPayload{packaging: rep.Packaging, location: rep.Location, set: setOfDescriptors(rep.Payload, rep.Documents)})
 	}
 	if plan.current != nil && !plan.current.ref.Available() {
 		oldOp, err := r.loadOperation(ctx, plan.current.ref.OperationID)
@@ -227,11 +227,18 @@ func (r *Repository) loadPendingState(ctx context.Context, plan *publishPlan, re
 	}
 	plan.prior = priorState(plan, rep)
 	plan.owned = append(plan.owned, carriedPayloads(plan.oldOp)...)
-	if plan.oldOp != nil {
-		plan.owned = append(plan.owned, ownedPayload{packaging: plan.oldOp.Packaging, location: plan.oldOp.Location})
-		if prior := plan.oldOp.Prior; prior != nil && prior.Location != "" {
-			plan.owned = append(plan.owned, ownedPayload{packaging: prior.Packaging, location: prior.Location})
+	if plan.oldOp == nil {
+		return nil
+	}
+	plan.owned = append(plan.owned, ownedPayload{
+		packaging: plan.oldOp.Packaging, location: plan.oldOp.Location, set: setOfDescriptors(plan.oldOp.Payload, plan.oldOp.Documents),
+	})
+	if prior := plan.oldOp.Prior; prior != nil && prior.Location != "" {
+		set, err := r.priorSet(ctx, prior)
+		if err != nil {
+			return err
 		}
+		plan.owned = append(plan.owned, ownedPayload{packaging: prior.Packaging, location: prior.Location, set: set})
 	}
 	return nil
 }

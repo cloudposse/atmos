@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -85,7 +86,7 @@ func (r *Repository) checkCollision(ctx context.Context, job *publishJob, plan *
 		return fmt.Errorf("%w: location %q for %s:%s is already claimed by %s:%s%s; give the repository a key_pattern that keeps references apart",
 			errUtils.ErrArtifactConflict, job.location, job.record.Name, job.record.Version, other.Name, other.Version, pendingSuffix(other))
 	}
-	return r.checkUnmanaged(ctx, &candidate, plan)
+	return r.checkUnmanaged(ctx, job, &candidate, plan)
 }
 
 func pendingSuffix(claim *layout.Claim) string {
@@ -173,34 +174,78 @@ func journalClaimPaths(op *layout.Operation) []string {
 	return paths
 }
 
-// checkUnmanaged fails when a path the publication would write already holds objects and this
-// reference does not own it.
-func (r *Repository) checkUnmanaged(ctx context.Context, candidate *layout.Claim, plan *publishPlan) error {
-	var owned []string
-	for index := range plan.owned {
-		for _, path := range claimPaths(plan.owned[index].packaging, plan.owned[index].location) {
-			owned = append(owned, layout.FoldPath(path))
-		}
-		// A prior written before packaging was recorded may be either shape.
-		if plan.owned[index].packaging == "" {
-			for _, packaging := range []artifact.Packaging{artifact.PackagingNone, artifact.PackagingTgz} {
-				for _, path := range claimPaths(packaging, plan.owned[index].location) {
-					owned = append(owned, layout.FoldPath(path))
-				}
-			}
-		}
+// checkUnmanaged fails when an object the publication would overwrite exists and this reference
+// does not own it. A location no reference owns must hold nothing at all. An owned location is owned
+// only through the exact keys its payloads consist of, so a user's object below it is never
+// overwritten: every key the publication writes there must be one the reference already owns, or
+// be absent. It runs before the journal and any payload object are written.
+func (r *Repository) checkUnmanaged(ctx context.Context, job *publishJob, candidate *layout.Claim, plan *publishPlan) error {
+	ownedPaths, ownedKeys, err := ownership(plan.owned)
+	if err != nil {
+		return err
 	}
 	for _, path := range candidate.Paths {
-		if slices.Contains(owned, layout.FoldPath(path)) {
+		if slices.Contains(ownedPaths, layout.FoldPath(path)) {
 			continue
 		}
-		occupied, err := r.occupied(ctx, path)
-		if err != nil {
+		if err := r.requireUnoccupied(ctx, path); err != nil {
 			return err
 		}
-		if occupied {
-			return fmt.Errorf("%w: %q already holds objects that are not managed by this repository; remove them or choose another key_pattern", errUtils.ErrArtifactConflict, path)
+	}
+	return r.checkWriteKeys(ctx, job, ownedPaths, ownedKeys)
+}
+
+// ownership lists the paths the owned payloads claim, in folded form, and the exact object keys they
+// consist of.
+func ownership(owned []ownedPayload) (paths, keys []string, err error) {
+	for index := range owned {
+		for _, path := range anyShapeClaimPaths(owned[index].packaging, owned[index].location) {
+			paths = append(paths, layout.FoldPath(path))
 		}
+		payloadKeys, keyErr := owned[index].set.anyShapeKeys(owned[index].packaging, owned[index].location)
+		if keyErr != nil {
+			return nil, nil, keyErr
+		}
+		keys = append(keys, payloadKeys...)
+	}
+	return paths, keys, nil
+}
+
+// checkWriteKeys requires every key the publication writes below an owned path to be one the
+// reference owns or to be absent. Keys below a path no reference owns are covered by the whole-path
+// check.
+func (r *Repository) checkWriteKeys(ctx context.Context, job *publishJob, ownedPaths, ownedKeys []string) error {
+	items, err := job.plan()
+	if err != nil {
+		return err
+	}
+	for index := range items {
+		key := items[index].place(job.location)
+		if slices.Contains(ownedKeys, key) || !coveredBy(ownedPaths, key) {
+			continue
+		}
+		if err := r.requireUnoccupied(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// coveredBy reports whether an owned path contains the key. Owned paths are in folded form,
+// matching how claims are compared.
+func coveredBy(ownedPaths []string, key string) bool {
+	folded := layout.FoldPath(key)
+	return slices.ContainsFunc(ownedPaths, func(path string) bool { return folded == path || strings.HasPrefix(folded, path+"/") })
+}
+
+// requireUnoccupied fails with a conflict when the path holds an object, or objects below it.
+func (r *Repository) requireUnoccupied(ctx context.Context, path string) error {
+	occupied, err := r.occupied(ctx, path)
+	if err != nil {
+		return err
+	}
+	if occupied {
+		return fmt.Errorf("%w: %q already holds objects that are not managed by this repository; remove them or choose another key_pattern", errUtils.ErrArtifactConflict, path)
 	}
 	return nil
 }
