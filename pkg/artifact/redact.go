@@ -19,7 +19,9 @@ const RedactedValue = "<redacted>"
 // be proven free of a credential is replaced by [RedactedValue] as a whole: an "@" after the
 // authority that does not introduce a complete digest (a password that held "/", "?", "#" or "\"
 // may have closed there), scheme-less userinfo such as "user:secret@registry.example", a host that
-// is not shaped like a host, or an address that does not parse. The diagnostic value of an error
+// is not shaped like a host, an address that does not parse, or an address with more "@" signs
+// than a real one holds or longer than any real one (see [maxBoundaries] and [maxAddressLength]),
+// which is withheld before any work that grows with it starts. The diagnostic value of an error
 // drops for such inputs by design; a credential is never echoed. A forced-getter prefix such as
 // "git::" is kept.
 func RedactURL(raw string) string {
@@ -29,7 +31,7 @@ func RedactURL(raw string) string {
 		return raw
 	}
 	a := parseAddress(raw)
-	if len(a.stray) > 0 {
+	if a.overflow || len(a.stray) > 0 {
 		return RedactedValue
 	}
 	if len(a.inside) == 0 {
@@ -76,10 +78,19 @@ func (a *address) wellFormed(start int) bool {
 //     introduce a digest is replaced by [RedactedValue] as a whole, and so is every word that still
 //     holds an "@" when raw carried a credential.
 //  3. If any part of the password is still present, the whole text is replaced by [RedactedValue].
+//
+// A raw address with more "@" signs than a real one holds, or longer than any real one, has no
+// credential that can be listed at a bounded cost, so the whole text is replaced by [RedactedValue]
+// without taking any of the steps above.
 func RedactCredentials(text, raw string) string {
 	defer perf.Track(nil, "artifact.RedactCredentials")()
 
 	a := parseAddress(raw)
+	if a.overflow {
+		// The credential of an address that is past the bounds cannot be listed, so nothing in the
+		// text can be proven free of it.
+		return RedactedValue
+	}
 	secret := a.credential()
 	if !secret.empty() {
 		text = secret.scrub(text)

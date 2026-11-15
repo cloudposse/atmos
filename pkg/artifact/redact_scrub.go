@@ -200,7 +200,7 @@ func redactWords(text string, bearing bool) string {
 		} else if !bearing {
 			return word
 		}
-		if a := parseAddress(body); len(a.boundaries()) > 0 {
+		if a := parseAddress(body); a.overflow || len(a.boundaries()) > 0 {
 			return RedactedValue
 		}
 		return word

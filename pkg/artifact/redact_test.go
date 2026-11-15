@@ -111,6 +111,11 @@ func FuzzRedact(f *testing.F) {
 		f.Add("", separator, "")
 		f.Add("x"+separator+"y", separator, "z"+separator)
 	}
+	// Seeds past the bounds of the grammar: more "@" signs than a real address holds, and an address
+	// longer than any real one. They must be withheld whole, never expanded.
+	f.Add("A", strings.Repeat("@", maxBoundaries+8), "B")
+	f.Add("A", strings.Repeat("@x", hostileBoundaries), "B")
+	f.Add(strings.Repeat("a", maxAddressLength), "@", "B")
 	f.Fuzz(func(t *testing.T, first, separator, second string) {
 		secret := redacttest.SecretOf(first, separator, second)
 		for _, in := range redacttest.Generate(secret) {

@@ -47,12 +47,27 @@ const (
 	// text. Shorter fragments would mangle ordinary words, and they identify nothing.
 	minFragmentLength = 4
 
+	// The maximum boundaries is the most "@" signs an address may hold and still be redacted in
+	// parts. A real address holds a handful: a userinfo, perhaps a password with an "@" in it, and a
+	// digest. Every "@" is a candidate end of a credential, and each candidate expands into every
+	// form an error may quote, so the work grows with the number of them. An address with more is
+	// withheld whole.
+	maxBoundaries = 64
+
+	// The maximum address length is the longest address, in bytes, that is redacted in parts when it
+	// holds an "@". The expansion of a credential candidate is as long as the prefix it came from, so
+	// the length bounds what each of the [maxBoundaries] candidates costs.
+	maxAddressLength = 8 << 10
+
 	// The scheme separator separates a scheme from its authority.
 	schemeSeparator = "://"
 
 	// The file scheme is the only scheme whose authority may be empty.
 	fileScheme = "file://"
 )
+
+// maxDigestAlgorithmLength is the length of the longest name in [digestHexLengths].
+const maxDigestAlgorithmLength = len("sha512")
 
 // digestHexLengths holds the length in hex digits of each digest algorithm that may follow an "@".
 // Only these well-known algorithms qualify, so a host named like an algorithm is never mistaken for
@@ -82,11 +97,21 @@ type address struct {
 	// stray are the offsets in rest of every "@" after the authority that does not introduce a
 	// digest.
 	stray []int
+	// overflow is set when the address holds more "@" signs than [maxBoundaries] or is longer than
+	// [maxAddressLength]. The other fields are empty then, and the address must be withheld whole:
+	// nothing in it can be proven free of a credential at a cost that is bounded.
+	overflow bool
 }
 
-// parseAddress splits raw at the getter prefix, the scheme, the authority, and every "@".
+// parseAddress splits raw at the getter prefix, the scheme, the authority, and every "@". An
+// address that is past the bounds of the grammar is not split at all: it is marked as an overflow
+// before any work that grows with the number of its "@" signs starts.
 func parseAddress(raw string) address {
 	a := address{}
+	if ats := strings.Count(raw, "@"); ats > maxBoundaries || (ats > 0 && len(raw) > maxAddressLength) {
+		a.overflow = true
+		return a
+	}
 	a.prefix, raw = splitGetterPrefix(raw)
 	if loc := schemePattern.FindStringIndex(raw); loc != nil {
 		a.scheme, a.rest = raw[:loc[1]], raw[loc[1]:]
@@ -133,9 +158,15 @@ func (a *address) boundaries() []int {
 // digestFollows reports whether s, the text after an "@", starts with a complete digest such as
 // "sha256:<64 hex digits>" that is not continued by further letters or digits.
 func digestFollows(s string) bool {
-	algorithm, rest, found := strings.Cut(s, ":")
+	// The algorithm name ends at the first ":", which is searched for in the few bytes a name can
+	// take, not in all of s, so the check costs the same however long s is.
+	colon := strings.IndexByte(s[:min(len(s), maxDigestAlgorithmLength+1)], ':')
+	if colon < 0 {
+		return false
+	}
+	algorithm, rest := s[:colon], s[colon+1:]
 	length, known := digestHexLengths[algorithm]
-	if !found || !known || len(rest) < length {
+	if !known || len(rest) < length {
 		return false
 	}
 	for i := 0; i < length; i++ {
