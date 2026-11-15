@@ -27,6 +27,8 @@ func (s *Session) ForRevision(root string) (schema.ComponentConfigurationRuntime
 	defer s.importMu.unlock()
 	revision := &Session{ctx: s.ctx, root: root, command: s.command, loader: s.loader, done: make(chan struct{}), importResults: make(map[string][]*pluginv1.DiscoveredComponent), imported: make(map[string]*pluginv1.DiscoveredComponent), importProviders: make(map[string]*pluginv1.DiscoverComponentsRequest)}
 	revision.settingsErrs = s.settingsErrs
+	// The revision rejects the same invalid configuration as HEAD instead of discovering units HEAD would refuse.
+	revision.configErr = s.configErr
 	// Explicit imports come from the revision's YAML, not the HEAD inventory.
 	for scheme, request := range s.importProviders {
 		cloned := proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)

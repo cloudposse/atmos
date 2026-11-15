@@ -13,9 +13,11 @@ import (
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
+	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -527,4 +529,104 @@ func TestImportPathFilesystemFailuresKeepTheirCause(t *testing.T) {
 	_, _, err = session.ImportComponents(t.Context(), "terragrunt://absent")
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.ErrorContains(t, err, "does not exist")
+}
+
+// A unit imported on its own may depend on a unit beyond the imported root. The target is absent from
+// the baseline and from the recheck, so preparation accepts it and still rejects a changed edge.
+func TestImportedUnitDependencyOutsideTheImportedRoot(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		kind    pluginv1.ComponentDependency_Kind
+		changed bool
+		want    error
+	}{
+		{name: "order dependency", kind: pluginv1.ComponentDependency_ORDER},
+		{name: "output dependency", kind: pluginv1.ComponentDependency_OUTPUT},
+		{name: "changed dependency target", kind: pluginv1.ComponentDependency_ORDER, changed: true, want: errUtils.ErrPluginInvalidConfig},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+			app := unit(t, "app")
+			app.Dependencies = []*pluginv1.ComponentDependency{{Target: unit(t, "shared").Address, Kind: test.kind}}
+			recheck := proto.Clone(app).(*pluginv1.DiscoveredComponent)
+			if test.changed {
+				recheck.Dependencies[0].Target = unit(t, "other").Address
+			}
+			calls := 0
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+				calls++
+				if calls == 1 {
+					return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{app}}, nil
+				}
+				return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{recheck}}, nil
+			}).Times(2)
+			if test.want == nil {
+				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: &pluginv1.ComponentStateIdentity{BackendType: "local"}}, nil)
+			}
+			session, err := New(t.Context(), importOnlyConfig(t), "plan", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			_, _, err = session.ImportComponents(t.Context(), "terragrunt://live/app")
+			require.NoError(t, err)
+			_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "web", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": app.Source}}})
+			if test.want != nil {
+				require.ErrorIs(t, err, test.want)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// An imported dependency's prepared state is stored under the importing stack, so the dependent
+// finds it there instead of re-resolving the dependency under the discovery environment.
+func TestImportedDependencyUsesItsPreparedStateInTheImportingStack(t *testing.T) {
+	stateAt := func(path string) *pluginv1.ComponentStateIdentity {
+		backend, err := adapter.EncodeObject(map[string]any{"path": path})
+		require.NoError(t, err)
+		return &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default", WorkingDirectory: "/work"}
+	}
+	for _, test := range []struct {
+		name      string
+		dependent *pluginv1.ComponentStateIdentity
+		want      error
+	}{
+		{name: "matches prepared dependency", dependent: stateAt("network.tfstate")},
+		{name: "differs from prepared dependency", dependent: stateAt("other.tfstate"), want: errUtils.ErrPluginInvalidConfig},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+			network, app := unit(t, "network"), unit(t, "app")
+			app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil).AnyTimes()
+			provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+				require.Equal(t, "dependent", request.Invocation.Environment["IDENTITY"], "a prepared dependency must not be re-resolved")
+				return &pluginv1.ResolveComponentStateResponse{State: test.dependent}, nil
+			}).MinTimes(1)
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: stateAt("network.tfstate")}, nil)
+			if test.want == nil {
+				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: stateAt("app.tfstate")}, nil)
+			}
+			session, err := New(t.Context(), importOnlyConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			_, _, err = session.ImportComponents(t.Context(), "terragrunt://live")
+			require.NoError(t, err)
+			info := func(component string, unit *pluginv1.DiscoveredComponent, identity string) *schema.ConfigAndStacksInfo {
+				return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: component, SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": unit.Source}}, SanitizedEnv: []string{"IDENTITY=" + identity}}
+			}
+			_, err = session.Prepare(t.Context(), info("network", network, "network"))
+			require.NoError(t, err)
+			_, err = session.Prepare(t.Context(), info("app", app, "dependent"))
+			if test.want != nil {
+				require.ErrorIs(t, err, test.want)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
