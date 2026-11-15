@@ -33,6 +33,8 @@ type componentExecContext struct {
 	workingDir            string
 	tenv                  *dependencies.ToolchainEnvironment
 	planPolicy            *planfile.Guard
+	// planSnapshots observes the configuration around the main command for plan binding.
+	planSnapshots *planSnapshotter
 }
 
 // prepareComponentExecution consolidates all per-component setup into one call:
@@ -388,6 +390,7 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	var effectiveArgs []string
 	var ignored bool
 	captureCtx := context.WithValue(context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs), mainCommandIgnoredKey{}, &ignored)
+	captureCtx = execCtx.observePlanSnapshots(captureCtx, atmosConfig, info, allArgsAndFlags)
 	captureArgs := component.WithProcessContext(captureCtx)
 	// A component with provider-supplied hooks recovers inside its main-command lifecycle, so
 	// the retry runs between the same before and after hooks instead of repeating them.

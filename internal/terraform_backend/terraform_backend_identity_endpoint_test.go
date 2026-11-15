@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/gcp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -192,16 +193,55 @@ func TestGCSAuthOptions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, gcsAuthOptions(tt.credentials, tt.authContext, now))
+			got, err := gcsAuthOptions(tt.credentials, tt.authContext, now)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestGCSAuthOptions_ExpiredTokenWithoutCredentialsFileFails verifies an expired identity token
+// with no credentials file is an error rather than empty options that would use ambient credentials.
+func TestGCSAuthOptions_ExpiredTokenWithoutCredentialsFileFails(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	ac := &schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "stale", TokenExpiry: now.Add(-time.Minute)}}
+
+	opts, err := gcsAuthOptions("", ac, now)
+	require.ErrorIs(t, err, errUtils.ErrGCSIdentityTokenExpired)
+	assert.Equal(t, gcp.AuthOptions{}, opts)
+
+	t.Run("explicit backend credentials still win", func(t *testing.T) {
+		opts, err := gcsAuthOptions("/backend/creds.json", ac, now)
+		require.NoError(t, err)
+		assert.Equal(t, gcp.AuthOptions{Credentials: "/backend/creds.json"}, opts)
+	})
+
+	t.Run("client creation fails instead of using ambient credentials", func(t *testing.T) {
+		client, err := createGCSClient(context.Background(), &map[string]any{}, ac)
+		require.ErrorIs(t, err, errUtils.ErrGCSIdentityTokenExpired)
+		assert.Nil(t, client)
+
+		client, err = getCachedGCSClient(&map[string]any{}, ac)
+		require.ErrorIs(t, err, errUtils.ErrGCSIdentityTokenExpired)
+		assert.Nil(t, client)
+	})
+
+	t.Run("emulator identity is not affected", func(t *testing.T) {
+		emu := &schema.AuthContext{GCP: &schema.GCPAuthContext{
+			AccessToken: "stale", TokenExpiry: now.Add(-time.Minute), StorageEmulatorHost: "localhost:9000", WithoutAuthentication: true,
+		}}
+		client, err := createGCSClient(context.Background(), &map[string]any{}, emu)
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
 }
 
 // TestGCSClientCacheKey_IsolatesTargetCredentials verifies two identities never share a client.
 func TestGCSClientCacheKey_IsolatesTargetCredentials(t *testing.T) {
 	now := time.Now()
 	key := func(ac *schema.AuthContext) string {
-		opts := gcsAuthOptions("", ac, now)
+		opts, err := gcsAuthOptions("", ac, now)
+		require.NoError(t, err)
 		return gcsClientCacheKey(&opts, "", "")
 	}
 	ambient := key(nil)
