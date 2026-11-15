@@ -188,26 +188,9 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 		BasePath:         scope.BasePath,
 		BasePathAbsolute: scope.BasePath,
 	}
-	var err error
-	var walked bool
 	outerTaint := d.remoteTaint
 	d.remoteTaint = nil
-	if node.Tag == u.AtmosYamlFuncIncludeRaw {
-		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, value, sourceFile)
-	} else if d.origin == nil {
-		walked, err = u.ProcessIncludeTagWalked(atmosConfig, &resolved, value, sourceFile, d.evaluateInclude)
-	} else {
-		walked, err = u.ProcessIncludeTagWalkedFrom(atmosConfig, &resolved, value, sourceFile, u.IncludeWalk{
-			Local: d.evaluateInclude,
-			Remote: func(child *legacyyaml.Node, file, source string) error {
-				previous := d.remoteSource
-				d.remoteSource = source
-				defer func() { d.remoteSource = previous }()
-				return d.evaluateInclude(child, file)
-			},
-			Source: d.remoteSource,
-		})
-	}
+	walked, err := d.runInclude(atmosConfig, &resolved, node.Tag, value, sourceFile)
 	walkedRemote := d.remoteTaint
 	d.remoteTaint = outerTaint
 	if err != nil {
@@ -218,26 +201,7 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 		return nil, err
 	}
 	if d.origin != nil {
-		file, remote := include.LocalPath, false
-		if file == "" {
-			file, remote = node.Value, true
-		}
-		if d.remoteSource != "" {
-			file, remote = d.remoteSource, true
-		}
-		if !walked {
-			d.recordIncludedOrigins(decoded, file, remote)
-		}
-		origin := &includeOrigin{file: file, remote: remote}
-		// A local include never launders remote content: when the result is not a mapping (whose
-		// keys carry their own origins), the remote include nested inside it keeps its origin.
-		if _, isMapping := decoded.(map[string]any); !origin.remote && walkedRemote != nil && !isMapping {
-			origin = walkedRemote
-		}
-		d.noteRemote(origin)
-		// Set last, so the outermost include of a nested chain is the one the owning key reads,
-		// except that a remote origin is never replaced by a local one.
-		d.nodeOrigin = origin
+		d.recordIncludeOrigin(includeResult{localPath: include.LocalPath, target: node.Value, decoded: decoded, walked: walked, walkedRemote: walkedRemote})
 	}
 	return decoded, nil
 }
