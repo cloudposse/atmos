@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
 	"google.golang.org/grpc/codes"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -230,6 +231,58 @@ func TestWarnDiagnosticShowsTheSameWarningOncePerInvocation(t *testing.T) {
 	assert.Equal(t, 2, strings.Count(visible, "Encryption is not generated"), "%q", visible)
 	assert.Equal(t, 1, strings.Count(visible, "stack dev"), "%q", visible)
 	assert.Equal(t, 1, strings.Count(visible, "stack prod"), "%q", visible)
+}
+
+// A warning diagnostic can quote a sensitive input of the same response. Masking covers only registered
+// values, so the inputs are registered before any warning is printed.
+func TestPreparationWarningsMaskSensitiveInputsOfTheSameResponse(t *testing.T) {
+	captureLogs(t, charm.WarnLevel)
+	ioCtx, err := atmosio.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.ReinitFormatter)
+	var output bytes.Buffer
+	restore := atmosio.PushUIWriter(&output)
+	t.Cleanup(restore)
+
+	root := t.TempDir()
+	inputs := objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"password": cty.StringVal("warning-secret-9b2e"), "public": cty.StringVal("visible-value")}))
+	inputs.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "password"}}}}}
+	warning := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "deprecated_setting", Summary: "Deprecated setting", Detail: "password warning-secret-9b2e is deprecated", UserSafe: true, Unit: "app", Stack: "dev", Severity: pluginv1.Severity_SEVERITY_WARNING}}
+	result := &pluginv1.PrepareComponentResponse{Engine: "terraform", WorkingDirectory: root, ModuleSource: "./module", State: fixtureState(root), Inputs: inputs, Diagnostics: []*pluginv1.Diagnostic{warning}}
+
+	require.NoError(t, checkPreparationResponse(result, ""))
+
+	visible := ansi.Strip(output.String())
+	assert.Contains(t, visible, "Deprecated setting")
+	assert.Contains(t, visible, "is deprecated")
+	assert.NotContains(t, visible, "warning-secret-9b2e")
+}
+
+// Inputs that cannot be decoded register nothing, so no warning of that response is printed, while the
+// failures it carries still fail the call.
+func TestPreparationWarningsAreNotPrintedWhenTheInputsCannotBeRegistered(t *testing.T) {
+	captureLogs(t, charm.WarnLevel)
+	ioCtx, err := atmosio.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.ReinitFormatter)
+	var output bytes.Buffer
+	restore := atmosio.PushUIWriter(&output)
+	t.Cleanup(restore)
+
+	root := t.TempDir()
+	inputs := objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"pending": cty.UnknownVal(cty.String)}))
+	warning := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "deprecated_setting", Summary: "Deprecated setting", Unit: "app", Stack: "dev", Severity: pluginv1.Severity_SEVERITY_WARNING}}
+	result := &pluginv1.PrepareComponentResponse{Engine: "terraform", WorkingDirectory: root, ModuleSource: "./module", State: fixtureState(root), Inputs: inputs, Diagnostics: []*pluginv1.Diagnostic{warning}}
+
+	require.NoError(t, checkPreparationResponse(result, ""))
+	assert.Empty(t, ansi.Strip(output.String()), "the caller rejects the inputs before any warning matters")
+	assert.Len(t, result.Diagnostics, 1, "the response itself is not modified")
+
+	result.Diagnostics = append(result.Diagnostics, &pluginv1.Diagnostic{Field: "x", Message: "legacy failure"})
+	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginInvalidConfig)
+	assert.Empty(t, ansi.Strip(output.String()))
 }
 
 func TestFailureLogsRenderBeforeTheErrorAtTheAtmosLevel(t *testing.T) {

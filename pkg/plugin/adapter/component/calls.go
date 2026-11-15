@@ -136,8 +136,26 @@ func (p *Provider) ResolveState(ctx context.Context, input *pluginv1.ComponentRe
 	return result, nil
 }
 
+// registerResponseInputs registers the sensitive inputs of a preparation response for masking. A response
+// without inputs registers nothing, and a missing response is reported by the checks that follow.
+func registerResponseInputs(result *pluginv1.PrepareComponentResponse) error {
+	if result.GetInputs() == nil {
+		return nil
+	}
+	_, err := DecodeInputs(result.GetInputs())
+	return err
+}
+
 func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode string) error {
 	if mode != "iam-probe" {
+		// Warnings print while the response is checked, and masking covers only registered values, so the
+		// inputs of the same response are registered first. Inputs that cannot be decoded register nothing,
+		// so no warning is printed; the caller rejects those inputs.
+		if registerResponseInputs(result) != nil {
+			unregistered := proto.Clone(result).(*pluginv1.PrepareComponentResponse)
+			unregistered.Diagnostics = errorDiagnostics(unregistered.Diagnostics)
+			return checkPreparation(unregistered)
+		}
 		return checkPreparation(result)
 	}
 	if result == nil {
