@@ -116,10 +116,17 @@ func isMergeKey(key *yaml.Node) bool {
 	return key.Kind == yaml.ScalarNode && key.Tag == mergeKeyTag
 }
 
+// mergeSource is one decoded merge source and the origins its values were decoded with.
+type mergeSource struct {
+	value   map[string]interface{}
+	origins []originRecord
+}
+
 // expandMergeKeys copies the entries named by every "<<" key of the mapping into result. Entries
 // the mapping declares itself win over merged ones, and earlier merge sources win over later ones,
-// as the YAML merge-key rules require. The merge value is decoded at the mapping's own path, so the
-// origins of merged settings are recorded where the merged repository sees them.
+// as the YAML merge-key rules require. The origins of a merge source are held back while it is
+// decoded and reported only for the keys that are actually copied, each at the mapping's own path,
+// so a discarded default never overwrites the origin of an explicit key or of an earlier source.
 func (d *configYamlDecoder) expandMergeKeys(node *yaml.Node, result map[string]interface{}, sourceFile string) error {
 	for i := 0; i < len(node.Content); i += 2 {
 		if !isMergeKey(node.Content[i]) {
@@ -130,25 +137,40 @@ func (d *configYamlDecoder) expandMergeKeys(node *yaml.Node, result map[string]i
 			return err
 		}
 		for _, source := range sources {
-			for key, value := range source {
-				if _, exists := result[key]; !exists {
-					result[key] = value
+			for key, value := range source.value {
+				if _, exists := result[key]; exists {
+					continue
 				}
+				result[key] = value
+				d.replayKeyOrigins(source.origins, key)
 			}
 		}
 	}
 	return nil
 }
 
+// replayKeyOrigins reports the held-back origins of one merged key, relative to the current path.
+func (d *configYamlDecoder) replayKeyOrigins(records []originRecord, key string) {
+	if d.origin == nil {
+		return
+	}
+	for _, record := range records {
+		if len(record.rel) > 0 && record.rel[0] == key {
+			d.replayOrigins([]originRecord{record})
+		}
+	}
+}
+
 // mergeSources decodes the value of a merge key: a mapping, an alias of one, or a sequence of them.
-func (d *configYamlDecoder) mergeSources(value *yaml.Node, sourceFile string) ([]map[string]interface{}, error) {
+// The origins each source reports are collected on the source instead of being forwarded.
+func (d *configYamlDecoder) mergeSources(value *yaml.Node, sourceFile string) ([]mergeSource, error) {
 	nodes := []*yaml.Node{value}
 	if value.Kind == yaml.SequenceNode {
 		nodes = value.Content
 	}
-	sources := make([]map[string]interface{}, 0, len(nodes))
+	sources := make([]mergeSource, 0, len(nodes))
 	for _, child := range nodes {
-		decoded, err := d.decode(child, sourceFile)
+		decoded, records, err := d.decodeCollectingOrigins(child, sourceFile)
 		if err != nil {
 			return nil, err
 		}
@@ -156,9 +178,29 @@ func (d *configYamlDecoder) mergeSources(value *yaml.Node, sourceFile string) ([
 		if !ok {
 			return nil, fmt.Errorf("%w: merge key %q requires a mapping or a sequence of mappings, got %T", ErrExecuteYamlFunctions, "<<", decoded)
 		}
-		sources = append(sources, source)
+		sources = append(sources, mergeSource{value: source, origins: records})
 	}
 	return sources, nil
+}
+
+// decodeCollectingOrigins decodes a node and returns the origins it reported, relative to the
+// current path, without forwarding them to the decoder's origin callback.
+func (d *configYamlDecoder) decodeCollectingOrigins(node *yaml.Node, sourceFile string) (any, []originRecord, error) {
+	previous := d.origin
+	if previous == nil {
+		value, err := d.decode(node, sourceFile)
+		return value, nil, err
+	}
+	base := len(d.path)
+	var records []originRecord
+	d.origin = func(path []string, file string, remote bool) {
+		if len(path) > base {
+			records = append(records, originRecord{rel: append([]string(nil), path[base:]...), file: file, remote: remote})
+		}
+	}
+	defer func() { d.origin = previous }()
+	value, err := d.decode(node, sourceFile)
+	return value, records, err
 }
 
 // cloneDecodedValue deep-copies the mappings and sequences of a decoded value, so an alias never
