@@ -10,6 +10,7 @@
     "tsx": "4.20.6"
   },
   "overrides": {
-    "follow-redirects": "1.16.1"
+    "follow-redirects": "1.16.2",
+    "minimatch": "11.0.1"
   }
 }
