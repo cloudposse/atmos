@@ -337,6 +337,11 @@ func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool
 		return nil
 	}
 
+	return sensitiveModuleVarKeys(module)
+}
+
+// sensitiveModuleVarKeys returns the variable names a module declares `sensitive = true`.
+func sensitiveModuleVarKeys(module *tfconfig.Module) map[string]bool {
 	keys := make(map[string]bool)
 	for name, variable := range module.Variables {
 		if variable != nil && variable.Sensitive {
@@ -344,6 +349,21 @@ func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool
 		}
 	}
 	return keys
+}
+
+// declaredSensitiveVarKeys returns the sensitive variable names for a component, preferring the
+// module inspected during stack processing. Batch generation renders components from the raw stacks
+// map, which has no component_info, so it falls back to inspecting the component directory.
+func declaredSensitiveVarKeys(info *schema.ConfigAndStacksInfo, componentPath string) map[string]bool {
+	if keys := terraformSensitiveVarKeys(info); keys != nil {
+		return keys
+	}
+	module, diags := tfconfig.LoadModule(componentPath)
+	if diags.HasErrors() || module == nil {
+		log.Debug("Could not inspect the Terraform module for sensitive variables", "path", componentPath, "error", diags.Err())
+		return nil
+	}
+	return sensitiveModuleVarKeys(module)
 }
 
 // refreshTerraformModuleInfo reloads component_info.terraform_config from the provisioned
