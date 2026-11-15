@@ -35,7 +35,17 @@ func (d *configYamlDecoder) decode(node *yaml.Node, sourceFile string) (any, err
 	if node == nil {
 		return nil, nil
 	}
+	if node.Kind == yaml.AliasNode {
+		return d.decodeAlias(node, sourceFile)
+	}
+	if node.Anchor != "" {
+		return d.decodeAnchored(node, sourceFile)
+	}
+	return d.decodeNode(node, sourceFile)
+}
 
+// decodeNode evaluates one node by kind, without consulting the anchor cache.
+func (d *configYamlDecoder) decodeNode(node *yaml.Node, sourceFile string) (any, error) {
 	switch node.Kind {
 	case yaml.DocumentNode:
 		if len(node.Content) == 0 {
@@ -59,26 +69,44 @@ func (d *configYamlDecoder) decodeMappingNodeWithYamlFunctions(node *yaml.Node, 
 	for i := 0; i < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
 		valueNode := node.Content[i+1]
+		if isMergeKey(keyNode) {
+			continue
+		}
 		d.path = append(d.path, keyNode.Value)
+		d.nodeOrigin = nil
 		value, err := d.decode(valueNode, sourceFile)
 		if err == nil && d.origin != nil {
-			originFile := sourceFile
-			if d.remoteSource != "" {
-				originFile = d.remoteSource
-			}
-			d.origin(d.path, originFile, d.remoteSource != "")
+			d.recordValueOrigin(valueNode, sourceFile)
 		}
+		d.nodeOrigin = nil
 		d.path = d.path[:len(d.path)-1]
 		if err != nil {
 			return nil, err
 		}
 		result[keyNode.Value] = value
 	}
+	if err := d.expandMergeKeys(node, result, sourceFile); err != nil {
+		return nil, err
+	}
 	recordScriptSource(node, result, sourceFile)
 	if err := recordCommandFields(node, result); err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+// recordValueOrigin reports the file that declared the value just decoded at the current path. A
+// value produced by an include, or by an alias of an anchored include, belongs to the included file
+// (and is remote when that file is), not to the file that merely references it.
+func (d *configYamlDecoder) recordValueOrigin(valueNode *yaml.Node, sourceFile string) {
+	file, remote := sourceFile, false
+	if d.remoteSource != "" {
+		file, remote = d.remoteSource, true
+	}
+	if included := d.nodeOrigin; included != nil && (valueNode.Kind == yaml.AliasNode || isIncludeTag(valueNode.Tag)) {
+		file, remote = included.file, included.remote
+	}
+	d.origin(d.path, file, remote)
 }
 
 // decodeSequenceNodeWithYamlFunctions evaluates sequence elements in their original order.
@@ -179,7 +207,7 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 	if err := resolved.Decode(&decoded); err != nil {
 		return nil, err
 	}
-	if !walked && d.origin != nil {
+	if d.origin != nil {
 		file, remote := include.LocalPath, false
 		if file == "" {
 			file, remote = node.Value, true
@@ -187,7 +215,11 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 		if d.remoteSource != "" {
 			file, remote = d.remoteSource, true
 		}
-		d.recordIncludedOrigins(decoded, file, remote)
+		if !walked {
+			d.recordIncludedOrigins(decoded, file, remote)
+		}
+		// Set last, so the outermost include of a nested chain is the one the owning key reads.
+		d.nodeOrigin = &includeOrigin{file: file, remote: remote}
 	}
 	return decoded, nil
 }

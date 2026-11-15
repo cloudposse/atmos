@@ -16,6 +16,14 @@ type configYamlDecoder struct {
 	path         []string
 	origin       func([]string, string, bool)
 	remoteSource string
+
+	// anchors holds each anchored node's single evaluation; evaluating guards against alias cycles.
+	anchors    map[*yaml.Node]*anchorEntry
+	evaluating map[*yaml.Node]bool
+
+	// nodeOrigin is the file the include or alias just decoded took its value from. The mapping
+	// entry that owns the value reads it so the setting's origin is the included file.
+	nodeOrigin *includeOrigin
 }
 
 // evaluateInclude resolves an included subtree using its file context and
