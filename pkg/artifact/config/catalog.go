@@ -38,13 +38,13 @@ func validateCatalog(desc *artifact.KindDescriptor, repo *schema.ArtifactReposit
 func parseCatalogURI(raw string) (*url.URL, error) {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "oci" || parsed.Host == "" {
-		return nil, fmt.Errorf("%w: catalog %q must be an oci://<registry>/<path>:<tag> reference", errUtils.ErrArtifactConfigInvalid, sanitizedCatalog(raw))
+		return nil, fmt.Errorf("%w: catalog %q must be an oci://<registry>/<path>:<tag> reference", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(raw))
 	}
 	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return nil, fmt.Errorf("%w: catalog %q must not contain credentials, a query, or a fragment", errUtils.ErrArtifactConfigInvalid, sanitizedCatalog(raw))
+		return nil, fmt.Errorf("%w: catalog %q must not contain credentials, a query, or a fragment", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(raw))
 	}
 	if err := validateCatalogReference(strings.TrimPrefix(parsed.Path, "/")); err != nil {
-		return nil, fmt.Errorf("%w: catalog %q: %w", errUtils.ErrArtifactConfigInvalid, raw, err)
+		return nil, fmt.Errorf("%w: catalog %q: %w", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(raw), err)
 	}
 	return parsed, nil
 }
@@ -67,14 +67,4 @@ func validateCatalogReference(reference string) error {
 		return artifact.ValidateDigest(digest.Digest(dgst))
 	}
 	return artifact.ValidateVersion(tag)
-}
-
-// sanitizedCatalog hides userinfo so a mistaken credential is not echoed back in the error.
-func sanitizedCatalog(raw string) string {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.User == nil {
-		return raw
-	}
-	parsed.User = nil
-	return parsed.String()
 }

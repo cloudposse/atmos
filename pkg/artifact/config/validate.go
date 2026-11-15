@@ -149,9 +149,9 @@ func (v *Validator) validateIdentity(identity string) error {
 	case len(identity) > maxIdentityLength:
 		return fmt.Errorf("%w: identity exceeds %d characters", errUtils.ErrArtifactConfigInvalid, maxIdentityLength)
 	case strings.IndexFunc(identity, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0:
-		return fmt.Errorf("%w: identity %q must be an auth identity name without whitespace", errUtils.ErrArtifactConfigInvalid, identity)
+		return fmt.Errorf("%w: identity must be an auth identity name without whitespace or control characters", errUtils.ErrArtifactConfigInvalid)
 	case strings.Contains(identity, "://"):
-		return fmt.Errorf("%w: identity %q looks like a credential or URL; reference an Atmos auth identity name", errUtils.ErrArtifactConfigInvalid, identity)
+		return fmt.Errorf("%w: identity looks like a credential or URL; reference an Atmos auth identity name", errUtils.ErrArtifactConfigInvalid)
 	case v.identityExists != nil && !v.identityExists(identity):
 		return fmt.Errorf("%w: identity %q is not defined under auth.identities", errUtils.ErrArtifactConfigInvalid, identity)
 	}

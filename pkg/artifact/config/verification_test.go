@@ -39,6 +39,7 @@ func TestValidate_VerificationShape(t *testing.T) {
 		{name: "issuer without https", policy: &schema.ArtifactVerificationConfig{TrustedIdentities: []schema.ArtifactTrustedIdentity{{Identity: "me", Issuer: "http://issuer.example"}}}, wantErr: "https URL"},
 		{name: "missing issuer", policy: &schema.ArtifactVerificationConfig{TrustedIdentities: []schema.ArtifactTrustedIdentity{{Identity: "me"}}}, wantErr: "https URL"},
 		{name: "issuer with credentials", policy: &schema.ArtifactVerificationConfig{TrustedIdentities: []schema.ArtifactTrustedIdentity{{Identity: "me", Issuer: "https://u:p@issuer.example"}}}, wantErr: "https URL"},
+		{name: "issuer with credentials and a malformed escape", policy: &schema.ArtifactVerificationConfig{TrustedIdentities: []schema.ArtifactTrustedIdentity{{Identity: "me", Issuer: "https://u:hunter2@issuer.example/%zz"}}}, wantErr: "https URL"},
 		{name: "absolute key", policy: &schema.ArtifactVerificationConfig{TrustedKeys: []string{filepath.Join(keyDir, "cosign.pub")}}},
 		{name: "empty key path", policy: &schema.ArtifactVerificationConfig{TrustedKeys: []string{""}}, wantErr: "non-empty file path"},
 		{name: "relative key without a declaring file", policy: &schema.ArtifactVerificationConfig{TrustedKeys: []string{"cosign.pub"}}, wantErr: "no declaring configuration file"},
@@ -54,6 +55,8 @@ func TestValidate_VerificationShape(t *testing.T) {
 			}
 			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
 			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.NotContains(t, err.Error(), "u:p@", "rejected issuer credentials are never echoed")
+			assert.NotContains(t, err.Error(), "hunter2", "rejected issuer credentials are never echoed")
 		})
 	}
 }

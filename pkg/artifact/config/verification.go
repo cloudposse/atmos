@@ -42,7 +42,7 @@ func validateTrustedIdentity(trusted schema.ArtifactTrustedIdentity) error {
 	}
 	issuer, err := url.Parse(trusted.Issuer)
 	if trusted.Issuer == "" || err != nil || issuer.Scheme != "https" || issuer.Host == "" || issuer.User != nil {
-		errs = append(errs, fmt.Errorf("%w: issuer %q must be an https URL without credentials", errUtils.ErrArtifactConfigInvalid, trusted.Issuer))
+		errs = append(errs, fmt.Errorf("%w: issuer %q must be an https URL without credentials", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(trusted.Issuer)))
 	}
 	return errors.Join(errs...)
 }

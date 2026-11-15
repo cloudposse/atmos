@@ -77,6 +77,7 @@ func TestOptionsValidate(t *testing.T) {
 		{name: "registry missing", options: &OCIRegistryOptions{}, wantErr: `"registry" is required`},
 		{name: "registry with scheme", options: &OCIRegistryOptions{Registry: "https://ghcr.io"}, wantErr: "without a scheme"},
 		{name: "registry with credentials", options: &OCIRegistryOptions{Registry: "user:pw@ghcr.io"}, wantErr: "without a scheme"},
+		{name: "registry with credentials and a scheme", options: &OCIRegistryOptions{Registry: "https://user:hunter2@ghcr.io"}, wantErr: "without a scheme"},
 		{name: "registry uppercase prefix", options: &OCIRegistryOptions{Registry: "ghcr.io", Prefix: "Acme/Atmos"}, wantErr: "not a valid OCI repository path"},
 		{name: "registry prefix traversal", options: &OCIRegistryOptions{Registry: "ghcr.io", Prefix: "acme/../x"}, wantErr: "prefix"},
 	}
@@ -89,6 +90,8 @@ func TestOptionsValidate(t *testing.T) {
 			}
 			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
 			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.NotContains(t, err.Error(), "hunter2", "rejected registry credentials are never echoed")
+			assert.NotContains(t, err.Error(), "user:pw", "rejected registry credentials are never echoed")
 		})
 	}
 }

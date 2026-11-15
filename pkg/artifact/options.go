@@ -189,7 +189,7 @@ func (o *OCIRegistryOptions) Validate() error {
 	if o.Registry == "" {
 		errs = append(errs, fmt.Errorf("%w: option %q is required", errUtils.ErrArtifactConfigInvalid, "registry"))
 	} else if !validRegistryHost(o.Registry) {
-		errs = append(errs, fmt.Errorf("%w: registry %q must be a host with an optional port, without a scheme, path, or credentials", errUtils.ErrArtifactConfigInvalid, o.Registry))
+		errs = append(errs, fmt.Errorf("%w: registry %q must be a host with an optional port, without a scheme, path, or credentials", errUtils.ErrArtifactConfigInvalid, RedactURL(o.Registry)))
 	}
 	errs = append(errs, validatePrefix(o.Prefix))
 	if o.Prefix != "" {
