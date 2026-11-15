@@ -38,7 +38,7 @@ def affected_services(base):
         # Native selection includes shared Terraform source and inherited stack
         # changes, not just edits to individual service manifest filenames.
         affected = atmos.describe("affected", flags = {
-            "base": base, "include-dependents": True,
+            "base": base, "include-dependents": True, "flatten": True,
         }).data
     return select_services(affected)
 
