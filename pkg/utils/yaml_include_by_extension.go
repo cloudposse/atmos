@@ -594,16 +594,18 @@ func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile s
 	// survive. It applies ociIncludeTimeout itself, so no extra deadline is set here.
 	dl := downloader.NewGoGetterDownloader(atmosConfig).(downloader.ContextFileDownloader)
 	if _, err := dl.FetchWithMetadataContext(context.Background(), imageRef, tempDir, downloader.ClientModeDir, ociIncludeTimeout); err != nil {
-		return nil, fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionFailedStackManifest, RedactIncludeArgument(includeFile), err)
+		return nil, redactIncludeError(fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionFailedStackManifest, RedactIncludeArgument(includeFile), err), includeFile)
 	}
 
 	localFile, err := filesystem.SafeJoin(tempDir, subdir)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(includeFile), err)
+		return nil, redactIncludeError(fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(includeFile), err), includeFile)
 	}
 
 	if !FileExists(localFile) {
-		return nil, fmt.Errorf("%w: oci artifact '%s' does not contain '%s'", ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(imageRef), subdir)
+		// The subdirectory is cut from the include target at its first "//", so a password that
+		// holds one leaves a fragment of itself in it: the whole message is scrubbed against the target.
+		return nil, redactIncludeError(fmt.Errorf("%w: oci artifact '%s' does not contain '%s'", ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(imageRef), subdir), includeFile)
 	}
 
 	return processLocalFile(localFile, forceRaw)

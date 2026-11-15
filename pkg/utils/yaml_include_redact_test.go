@@ -31,6 +31,13 @@ func TestRedactIncludeArgument(t *testing.T) {
 		{name: "url with userinfo", value: "https://user:" + redactTestSecret + "@example.com/base.yaml", want: "https://example.com/base.yaml"},
 		{name: "url with userinfo and fragment", value: "https://user:" + redactTestSecret + "@example.com/base.yaml#frag", want: "https://example.com/base.yaml#frag"},
 		{name: "forced getter with userinfo", value: "git::https://user:" + redactTestSecret + "@example.com/repo.git", want: "git::https://example.com/repo.git"},
+		{name: "scheme-less userinfo", value: "user:" + redactTestSecret + "@example.com/base.yaml", want: "<redacted>"},
+		{name: "scheme-less userinfo with a query", value: "user:" + redactTestSecret + "@example.com/base.yaml .a.b | eval", want: "<redacted>"},
+		{name: "scheme-less token as user", value: "forced::user:" + redactTestSecret + "@example.com/repo.git", want: "<redacted>"},
+		{name: "scheme-relative userinfo", value: "//user:" + redactTestSecret + "@example.com/base.yaml", want: "//example.com/base.yaml"},
+		{name: "local path holding a colon", value: "./stacks/a:b.yaml", want: "./stacks/a:b.yaml"},
+		{name: "windows path holding an at sign", value: `C:\stacks\user@host\base.yaml`, want: `C:\stacks\user@host\base.yaml`},
+		{name: "local path holding an at sign", value: "./stacks/user@host/base.yaml", want: "./stacks/user@host/base.yaml"},
 		{name: "unparsable url with userinfo", value: "https://user:" + redactTestSecret + "@exa mple.com/%zz", want: "<redacted>"},
 	}
 	for _, tt := range tests {
@@ -64,6 +71,8 @@ func TestProcessInclude_ErrorsDoNotEchoCredentials(t *testing.T) {
 		include string
 		// rawOK reports that !include.raw does not parse the body, so it cannot fail on it.
 		rawOK bool
+		// also is a second secret that must not reach the error.
+		also string
 	}{
 		{name: "query evaluation failure", include: withUserinfo + "/config.yaml .a[ | eval"},
 		{name: "query evaluation failure without eval", include: withUserinfo + "/config.yaml .a["},
@@ -73,6 +82,8 @@ func TestProcessInclude_ErrorsDoNotEchoCredentials(t *testing.T) {
 		{name: "fetch failure with eval", include: closed + "/config.yaml | eval"},
 		{name: "raw fetch failure", include: closed + "/config.txt"},
 		{name: "oci include without a file path", include: "oci://user:" + redactTestSecret + "@127.0.0.1:1/org/image:tag"},
+		{name: "oci pull failure with a double slash in the password", include: "oci://user:" + redactTestSecret + "//hunter3@127.0.0.1:1/org/image:tag//file.yaml", also: "hunter3"},
+		{name: "scheme-less userinfo that is not found", include: "user:" + redactTestSecret + "@127.0.0.1:1/config.yaml"},
 		{name: "oci pull failure", include: "oci://user:" + redactTestSecret + "@127.0.0.1:1/org/image:tag//file.yaml"},
 	}
 	for _, tag := range []string{"!include", "!include.raw"} {
@@ -87,6 +98,9 @@ func TestProcessInclude_ErrorsDoNotEchoCredentials(t *testing.T) {
 				}
 				require.Error(t, err)
 				assert.NotContains(t, err.Error(), redactTestSecret, "the include credential must not reach the error text")
+				if tt.also != "" {
+					assert.NotContains(t, err.Error(), tt.also, "no part of the include credential may reach the error text")
+				}
 			})
 		}
 	}
