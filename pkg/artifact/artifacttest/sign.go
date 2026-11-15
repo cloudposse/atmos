@@ -108,6 +108,10 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// The lock was released while the signer ran, so a Delete may have removed the subject since.
+	if err := r.checkSubject(subject); err != nil {
+		return nil, err
+	}
 	r.evidence[subject.Digest] = append(r.evidence[subject.Digest], artifact.EvidenceBlob{Evidence: evidence, Data: bytes.Clone(payload.Data)})
 	return []artifact.SignatureEvidence{evidence}, nil
 }

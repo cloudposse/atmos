@@ -8,6 +8,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -307,4 +308,36 @@ func TestRepository_PublishCopiesThePreparedRecord(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"suite": "isolation"}, inspection.Record.Metadata.Labels, "the stored record is independent of the prepared one")
 	assert.Equal(t, "data.txt", inspection.Record.Inventory[0].Path)
+}
+
+// TestRepository_SignDoesNotStoreEvidenceForARecordDeletedWhileSigning proves the subject is checked
+// again once the signer returned: Sign releases the lock while the signer runs, so a concurrent
+// Delete can remove the record in between.
+func TestRepository_SignDoesNotStoreEvidenceForARecordDeletedWhileSigning(t *testing.T) {
+	caps := artifacttest.DefaultCapabilities()
+	caps.Delete = artifact.DeleteObject
+	repo := artifacttest.New(artifacttest.Options{Capabilities: &caps})
+	pinned := publishOne(t, repo)
+	inspection, err := repo.Inspect(context.Background(), pinned)
+	require.NoError(t, err)
+	canonical, err := inspection.Record.Canonical()
+	require.NoError(t, err)
+	subject := artifact.SignatureSubject{Kind: artifact.SubjectRecord, Digest: digest.FromBytes(canonical), MediaType: artifact.MediaTypeConfig, Size: int64(len(canonical))}
+
+	fake := &artifacttest.FakeSigner{Identity: "release@example.com", Issuer: "https://issuer.example.com"}
+	signer := artifact.NewMockSigner(gomock.NewController(t))
+	signer.EXPECT().Formats().Return(fake.Formats()).AnyTimes()
+	signer.EXPECT().Sign(gomock.Any(), subject).DoAndReturn(func(ctx context.Context, subject artifact.SignatureSubject) (*artifact.EvidencePayload, error) {
+		// The record disappears while the signer is still working.
+		_, err := repo.Delete(ctx, pinned, artifact.DeleteOptions{ExpectedCurrent: &pinned, Scope: artifact.DeleteObject})
+		require.NoError(t, err)
+		return fake.Sign(ctx, subject)
+	})
+
+	evidence, err := repo.Sign(context.Background(), subject, signer, artifact.SignOptions{OperationID: "sign-op"})
+
+	require.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
+	assert.Empty(t, evidence)
+	assert.False(t, recordAlive(repo, pinned.RecordDigest))
+	assert.False(t, evidenceAlive(t, repo, &pinned), "no evidence may be left for a deleted record")
 }
