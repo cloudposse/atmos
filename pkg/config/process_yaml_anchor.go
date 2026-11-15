@@ -181,28 +181,42 @@ func (d *configYamlDecoder) expandMergeKeys(node *yaml.Node, result map[string]i
 			return err
 		}
 		for _, source := range sources {
-			for key, value := range source.value {
-				if _, exists := result[key]; exists {
-					continue
-				}
-				result[key] = value
-				d.replayKeyOrigins(source.origins, key)
-			}
+			d.copyMergeSource(source, result)
 		}
 	}
 	return nil
 }
 
-// replayKeyOrigins reports the held-back origins of one merged key, relative to the current path.
-func (d *configYamlDecoder) replayKeyOrigins(records []originRecord, key string) {
-	if d.origin == nil {
-		return
+// copyMergeSource copies the entries of one merge source that result does not hold yet and reports
+// the held-back origins of each copied key. The origins are grouped by key once, so the work is
+// linear in the size of the source: replaying a key by scanning every record would be quadratic for
+// an anchored mapping that holds thousands of entries.
+func (d *configYamlDecoder) copyMergeSource(source mergeSource, result map[string]interface{}) {
+	var originsByKey map[string][]originRecord
+	if d.origin != nil {
+		originsByKey = groupOriginsByKey(source.origins)
 	}
-	for _, record := range records {
-		if len(record.rel) > 0 && record.rel[0] == key {
-			d.replayOrigins([]originRecord{record})
+	for key, value := range source.value {
+		if _, exists := result[key]; exists {
+			continue
 		}
+		result[key] = value
+		d.replayOrigins(originsByKey[key])
 	}
+}
+
+// groupOriginsByKey groups origin records by the first component of their relative path, which is
+// the key of the mapping entry that produced them. The records of one key keep their order, so the
+// precedence of the replay is the one of the original scan.
+func groupOriginsByKey(records []originRecord) map[string][]originRecord {
+	grouped := make(map[string][]originRecord)
+	for _, record := range records {
+		if len(record.rel) == 0 {
+			continue
+		}
+		grouped[record.rel[0]] = append(grouped[record.rel[0]], record)
+	}
+	return grouped
 }
 
 // mergeSources decodes the value of a merge key: a mapping, an alias of one, or a sequence of them.

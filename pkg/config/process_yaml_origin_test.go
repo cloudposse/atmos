@@ -1,9 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -162,4 +164,50 @@ func joinPath(path []string) string {
 		out += part
 	}
 	return out
+}
+
+// TestDecodeNodeWithYamlFunctions_MergeKeyOriginsAreLinear merges one large anchored mapping into
+// many mappings with origin tracking on. Replaying the origins of each copied key must not rescan
+// the whole origin list of the source, which is quadratic in the size of the anchor: with the
+// numbers below a rescan makes billions of comparisons and runs for tens of seconds.
+func TestDecodeNodeWithYamlFunctions_MergeKeyOriginsAreLinear(t *testing.T) {
+	const (
+		keys   = 20000
+		merges = 40
+	)
+	var source strings.Builder
+	source.WriteString("base: &base\n")
+	for i := 0; i < keys; i++ {
+		fmt.Fprintf(&source, "  key%d: %d\n", i, i)
+	}
+	for i := 0; i < merges; i++ {
+		fmt.Fprintf(&source, "child%d:\n  <<: *base\n", i)
+	}
+
+	document := mustParseYAML(t, source.String())
+	decoder := configYamlDecoder{includes: map[string]bool{}, aliasLimit: 100_000_000}
+	reported := map[string]int{}
+	decoder.origin = func(path []string, _ string, _ bool) {
+		if len(path) == 2 && strings.HasPrefix(path[0], "child") {
+			reported[joinPath(path)]++
+		}
+	}
+
+	start := time.Now()
+	got, err := decoder.decode(&document, filepath.Join(t.TempDir(), "atmos.yaml"))
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+
+	decoded, ok := got.(map[string]any)
+	require.True(t, ok)
+	last, ok := decoded["child39"].(map[string]any)
+	require.True(t, ok)
+	require.Len(t, last, keys)
+	assert.Equal(t, 0, last["key0"])
+	assert.Equal(t, keys-1, last[fmt.Sprintf("key%d", keys-1)])
+
+	require.Len(t, reported, keys*merges, "every copied key of every mapping reports its origin")
+	assert.Equal(t, 1, reported["child0.key0"], "each key is reported exactly once")
+	assert.Equal(t, 1, reported["child39.key19999"], "each key is reported exactly once")
+	assert.Less(t, elapsed, 15*time.Second, "origin replay for a merge must be linear in the anchor size")
 }
