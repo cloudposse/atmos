@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"go.yaml.in/yaml/v3"
 	legacyyaml "gopkg.in/yaml.v3"
 
-	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
@@ -157,10 +155,7 @@ func (d *configYamlDecoder) processScalarNodeValueForFile(node *yaml.Node, sourc
 // redactIncludeValue removes credentials from an include argument before it is echoed in an error.
 // Only URL-shaped values are touched: a local path or an SCP-style git address keeps its text.
 func redactIncludeValue(value string) string {
-	if !strings.Contains(value, "://") {
-		return value
-	}
-	return artifact.RedactURL(value)
+	return u.RedactIncludeArgument(value)
 }
 
 func isIncludeTag(tag string) bool {

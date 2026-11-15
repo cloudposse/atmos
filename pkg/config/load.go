@@ -1436,8 +1436,10 @@ func resolveDotenvMergeIncludeValue(configFile string, node *yaml.Node) (bool, e
 
 func loadDotenvIncludeAsYAMLNode(configFile, includeValue string) (*yaml.Node, error) {
 	includeFile, ok := parseDotenvIncludeFile(includeValue)
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", u.ErrIncludeYamlFunctionInvalidFile, includeValue)
+	// A dotenv include is a local file: a URL-shaped target would be joined onto the config
+	// directory and echoed, with any credential it carries, in the read error.
+	if !ok || strings.Contains(includeFile, "://") {
+		return nil, fmt.Errorf("%w: %s", u.ErrIncludeYamlFunctionInvalidFile, redactIncludeValue(includeValue))
 	}
 	if !filepath.IsAbs(includeFile) {
 		includeFile = filepath.Join(filepath.Dir(configFile), includeFile)
@@ -1460,7 +1462,7 @@ func loadDotenvIncludeAsYAMLNode(configFile, includeValue string) (*yaml.Node, e
 		return nil, err
 	}
 	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("%w: %s", u.ErrIncludeYamlFunctionInvalidFile, includeValue)
+		return nil, fmt.Errorf("%w: %s", u.ErrIncludeYamlFunctionInvalidFile, redactIncludeValue(includeValue))
 	}
 	return doc.Content[0], nil
 }
