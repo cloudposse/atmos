@@ -341,27 +341,32 @@ func TestCopy_UnchangedDestinationStillReceivesLaterSignatures(t *testing.T) {
 	assert.Len(t, held, 1)
 }
 
-// repointingRepository answers Resolve with a different digest once a publish completed, as if
-// another writer forced the reference elsewhere after the destination lock was released.
-type repointingRepository struct {
-	*artifacttest.Repository
-	published atomic.Bool
-}
-
-func (r *repointingRepository) Publish(ctx context.Context, prepared *artifact.PreparedArtifact, options artifact.PublishOptions) (*artifact.PublishResult, error) {
-	result, err := r.Repository.Publish(ctx, prepared, options)
-	if err == nil {
-		r.published.Store(true)
-	}
-	return result, err
-}
-
-func (r *repointingRepository) Resolve(ctx context.Context, ref artifact.Ref) (artifact.PinnedReference, error) {
-	pinned, err := r.Repository.Resolve(ctx, ref)
-	if err == nil && r.published.Load() {
-		pinned.ResolvedDigest = digest.FromString("another writer")
-	}
-	return pinned, err
+// repointedRepository returns a generated repository that answers Resolve with a different digest
+// once a publish completed, as if another writer forced the reference elsewhere after the
+// destination lock was released. It keeps the evidence writer of the base repository.
+func repointedRepository(t *testing.T, base *artifacttest.Repository) artifact.Repository {
+	t.Helper()
+	var published atomic.Bool
+	mock := delegatingRepository(t, base, repoHooks{
+		publish: func(ctx context.Context, prepared *artifact.PreparedArtifact, options artifact.PublishOptions) (*artifact.PublishResult, error) {
+			result, err := base.Publish(ctx, prepared, options)
+			if err == nil {
+				published.Store(true)
+			}
+			return result, err
+		},
+		resolve: func(ctx context.Context, ref artifact.Ref) (artifact.PinnedReference, error) {
+			pinned, err := base.Resolve(ctx, ref)
+			if err == nil && published.Load() {
+				pinned.ResolvedDigest = digest.FromString("another writer")
+			}
+			return pinned, err
+		},
+	})
+	return struct {
+		artifact.Repository
+		artifact.EvidenceWriter
+	}{mock, base}
 }
 
 func TestCopy_EvidenceIsNotWrittenToARepointedDestination(t *testing.T) {
@@ -382,7 +387,7 @@ func TestCopy_EvidenceIsNotWrittenToARepointedDestination(t *testing.T) {
 			require.NoError(t, err)
 			dst := e.repos["dst"]
 			if tt.repoint {
-				e.static.Repositories["dst"] = &repointingRepository{Repository: dst}
+				e.static.Repositories["dst"] = repointedRepository(t, dst)
 			}
 
 			result, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})

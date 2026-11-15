@@ -17,6 +17,7 @@ type repoHooks struct {
 	read    func(ctx context.Context, pinned artifact.PinnedReference) (*artifact.Content, error)
 	list    func(ctx context.Context, query artifact.ListQuery) (*artifact.ListPage, error)
 	lock    func(ctx context.Context, request artifact.LockRequest) (artifact.LockHandle, error)
+	publish func(ctx context.Context, prepared *artifact.PreparedArtifact, options artifact.PublishOptions) (*artifact.PublishResult, error)
 }
 
 // delegatingRepository returns a generated MockRepository whose methods forward to base, except
@@ -38,6 +39,9 @@ func delegatingRepository(t *testing.T, base artifact.Repository, hooks repoHook
 	if hooks.lock == nil {
 		hooks.lock = base.Lock
 	}
+	if hooks.publish == nil {
+		hooks.publish = base.Publish
+	}
 	mock := artifact.NewMockRepository(gomock.NewController(t))
 	mock.EXPECT().Capabilities().DoAndReturn(base.Capabilities).AnyTimes()
 	mock.EXPECT().Lock(gomock.Any(), gomock.Any()).DoAndReturn(hooks.lock).AnyTimes()
@@ -45,7 +49,7 @@ func delegatingRepository(t *testing.T, base artifact.Repository, hooks repoHook
 	mock.EXPECT().Inspect(gomock.Any(), gomock.Any()).DoAndReturn(hooks.inspect).AnyTimes()
 	mock.EXPECT().OpenDocument(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(base.OpenDocument).AnyTimes()
 	mock.EXPECT().Read(gomock.Any(), gomock.Any()).DoAndReturn(hooks.read).AnyTimes()
-	mock.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(base.Publish).AnyTimes()
+	mock.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(hooks.publish).AnyTimes()
 	mock.EXPECT().List(gomock.Any(), gomock.Any()).DoAndReturn(hooks.list).AnyTimes()
 	mock.EXPECT().Delete(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(base.Delete).AnyTimes()
 	mock.EXPECT().Pin(gomock.Any(), gomock.Any()).DoAndReturn(base.Pin).AnyTimes()
