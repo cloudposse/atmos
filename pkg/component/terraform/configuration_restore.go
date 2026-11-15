@@ -149,13 +149,20 @@ func sameDirectory(first, second string) bool {
 
 // holdsOnlyTransport reports whether the workdir is absent, empty, or contains just the restored artifacts.
 // A subdirectory is accepted only on the way to an artifact, and then holds nothing else either.
+//
+// A symlinked workdir holds nothing that was reviewed: the walk below does not descend into the link, so the
+// files in its target would pass unchecked, and a rebuild would stage and write into that target.
 func (r *reviewedRebuild) holdsOnlyTransport() (bool, error) {
-	if _, err := os.Stat(r.workdir); errors.Is(err, fs.ErrNotExist) {
+	info, err := os.Lstat(r.workdir)
+	if errors.Is(err, fs.ErrNotExist) {
 		return true, nil
+	}
+	if err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		return false, nil
 	}
 	allowed := r.transportFiles()
 	only := true
-	err := filepath.WalkDir(r.workdir, func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(r.workdir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
