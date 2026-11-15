@@ -256,3 +256,12 @@ func TestDecodeNodeWithYamlFunctions_AliasPolicy(t *testing.T) {
 		assert.Equal(t, map[string]any{"ref": map[string]any{"a": 1}}, got)
 	})
 }
+
+func TestDecodeNodeWithYamlFunctions_IncludeErrorsDoNotEchoCredentials(t *testing.T) {
+	dir := t.TempDir()
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("keys: !include https://user:hunter2@127.0.0.1:1/keys.yaml\n"), &node))
+	_, err := decodeNodeWithYamlFunctionsForFile(&node, filepath.Join(dir, "atmos.yaml"))
+	require.ErrorIs(t, err, ErrExecuteYamlFunctions)
+	assert.NotContains(t, err.Error(), "hunter2", "include URLs are redacted before they reach an error")
+}

@@ -43,7 +43,7 @@ func processIncludeTag(nodeTag, nodeValue, strFunc string) (any, error) {
 	includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", "include_data", nodeTag, nodeValue))
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
-		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, nodeValue, err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(nodeValue), err)
 	}
 	if includeValue != nil {
 		if data, ok := includeValue[includeDataKey]; ok {
@@ -327,7 +327,7 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", includeDataKey, node.Tag, node.Value))
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
-		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
 	if includeValue == nil {
 		log.Debug(emptyValueWarning, functionKey, strFunc)
@@ -344,7 +344,7 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 
 func storeIncludeValue(node *yaml.Node, v *viper.Viper, currentPath string, data any) error {
 	if err := node.Encode(data); err != nil {
-		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
 	encodeDevcontainerKeys(node, currentPath)
 	if err := node.Decode(&data); err != nil {
@@ -352,7 +352,7 @@ func storeIncludeValue(node *yaml.Node, v *viper.Viper, currentPath string, data
 	}
 	v.Set(currentPath, data)
 	if err := node.Encode(data); err != nil {
-		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
 	if err := preserveEmptyGitPushRetry(node, v, currentPath); err != nil {
 		return err

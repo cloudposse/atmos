@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 	legacyyaml "gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
@@ -152,6 +154,15 @@ func (d *configYamlDecoder) processScalarNodeValueForFile(node *yaml.Node, sourc
 	return d.processIncludeNodeValueForFile(node, sourceFile)
 }
 
+// redactIncludeValue removes credentials from an include argument before it is echoed in an error.
+// Only URL-shaped values are touched: a local path or an SCP-style git address keeps its text.
+func redactIncludeValue(value string) string {
+	if !strings.Contains(value, "://") {
+		return value
+	}
+	return artifact.RedactURL(value)
+}
+
 func isIncludeTag(tag string) bool {
 	return tag == u.AtmosYamlFuncInclude || tag == u.AtmosYamlFuncIncludeRaw
 }
@@ -174,7 +185,7 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 	}
 	key := sourceFile + "\x00" + node.Value
 	if d.includes[key] || len(d.includes) >= maxConfigIncludeDepth {
-		return nil, fmt.Errorf("%w: recursive include: %s", ErrExecuteYamlFunctions, node.Value)
+		return nil, fmt.Errorf("%w: recursive include: %s", ErrExecuteYamlFunctions, redactIncludeValue(node.Value))
 	}
 	d.includes[key] = true
 	defer delete(d.includes, key)
@@ -201,7 +212,7 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 		})
 	}
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
 	var decoded any
 	if err := resolved.Decode(&decoded); err != nil {
