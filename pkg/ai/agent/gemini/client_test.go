@@ -805,6 +805,15 @@ func TestGeminiMaxTokensVariations(t *testing.T) {
 	}
 }
 
+// Compile-time sentinels: a rename of any schema field used by the timeout tests fails the build.
+var (
+	_ = schema.AtmosConfiguration{AI: schema.AISettings{
+		Enabled:        true,
+		TimeoutSeconds: 1,
+		Providers:      map[string]*schema.AIProviderConfig{"gemini": {ApiKey: "k"}},
+	}}
+)
+
 func TestRequestTimeout(t *testing.T) {
 	assert.Equal(t, base.DefaultRequestTimeout, requestTimeout(nil))
 	assert.Equal(t, base.DefaultRequestTimeout, requestTimeout(&schema.AtmosConfiguration{}))
