@@ -507,7 +507,7 @@ func plannedOutputPath(directory string, args []string) string {
 // planSnapshot is the configuration a saved plan is bound to: the provider identity and the
 // digest of the retained working directory, excluding the plan and the state Terraform writes.
 type planSnapshot struct {
-	path, identity, workingDigest string
+	path, identity, workingDigest, sensitiveDigest string
 }
 
 // planSnapshotKey carries the plan snapshotter to the main command's subprocess.
@@ -540,7 +540,11 @@ func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, in
 	if err != nil {
 		return nil, err
 	}
-	return &planSnapshot{path: path, identity: identity, workingDigest: digest}, nil
+	sensitive, err := sensitiveDigest(execCtx.workingDir, execCtx.preparedConfiguration.Files)
+	if err != nil {
+		return nil, err
+	}
+	return &planSnapshot{path: path, identity: identity, workingDigest: digest, sensitiveDigest: sensitive}, nil
 }
 
 // around wraps one run of the Terraform subprocess. The configuration must be the same before and

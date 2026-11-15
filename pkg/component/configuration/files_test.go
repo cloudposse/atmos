@@ -225,3 +225,39 @@ func TestWriteFilesRejectsModesBeyondPermissionBits(t *testing.T) {
 	_, statErr := os.Stat(filepath.Join(root, "a.sh"))
 	require.True(t, os.IsNotExist(statErr))
 }
+
+// A manifest that cannot be written must not leave file changes without a recorded owner. The
+// update is rolled back, so retrying it and later removing the generate block still removes the file.
+func TestWriteFilesRollsBackWhenTheManifestCannotBeWritten(t *testing.T) {
+	for _, policy := range []string{"overwrite", "error"} {
+		t.Run(policy, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "generated.tf")
+			manifestPath := filepath.Join(root, filepath.FromSlash(manifestName))
+			generate := func(content string) []schema.ComponentConfigurationFile {
+				return []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte(content), IfExists: policy}}
+			}
+			require.NoError(t, WriteFiles(root, generate("A")))
+
+			require.NoError(t, os.Chmod(manifestPath, 0o400))
+			t.Cleanup(func() { _ = os.Chmod(manifestPath, 0o600) })
+			if probe, err := os.OpenFile(manifestPath, os.O_WRONLY, 0); err == nil {
+				_ = probe.Close()
+				t.Skip("the process can write a read-only manifest")
+			}
+			err := WriteFiles(root, generate("B"))
+			require.Error(t, err)
+			content, readErr := os.ReadFile(path)
+			require.NoError(t, readErr)
+			require.Equal(t, "A", string(content), "the update is rolled back with the manifest still recording A")
+
+			require.NoError(t, os.Chmod(manifestPath, 0o600))
+			require.NoError(t, WriteFiles(root, generate("B")), "the retry recognizes the file as this host's")
+			content, readErr = os.ReadFile(path)
+			require.NoError(t, readErr)
+			require.Equal(t, "B", string(content))
+			require.NoError(t, WriteFiles(root, nil))
+			require.NoFileExists(t, path, "removing the generate block removes the file the host owns")
+		})
+	}
+}

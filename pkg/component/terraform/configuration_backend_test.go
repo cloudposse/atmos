@@ -121,7 +121,9 @@ func TestPreparedConfigurationSkipSymlink(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "outside.tf")
 	content := []byte("# user-owned")
 	require.NoError(t, os.WriteFile(target, content, 0o600))
-	require.NoError(t, os.Symlink(target, filepath.Join(directory, "remote.tf")))
+	if err := os.Symlink(target, filepath.Join(directory, "remote.tf")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
 	prepared := &schema.PreparedComponentConfiguration{Files: []schema.ComponentConfigurationFile{{Path: "remote.tf", Content: content, IfExists: "skip"}}}
 	require.Error(t, writePreparedConfiguration(directory, prepared))
 	actual, err := os.ReadFile(target)
@@ -139,7 +141,7 @@ func TestRetainedFileFailuresUseStaticErrors(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 	require.ErrorContains(t, err, "backend.tf")
 
-	err = restoreSensitiveContent(missing, []schema.ComponentConfigurationFile{{Path: "secret.auto.tfvars", Sensitive: true}})
+	err = restoreSensitiveContent(missing, []schema.ComponentConfigurationFile{{Path: "secret.auto.tfvars", Sensitive: true}}, "")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorIs(t, err, os.ErrNotExist)
 }

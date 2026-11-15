@@ -2,6 +2,8 @@ package source
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -230,8 +232,24 @@ func terraformConfigurationFile(name string) bool {
 	return strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".tf.json")
 }
 
+// matchesRecordedDigest reports whether path is a regular file whose bytes hash to the digest the
+// generated-files manifest recorded.
+func matchesRecordedDigest(path, digest string) bool {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]) == digest
+}
+
 // hostGeneratedFiles returns the target-relative paths of files recorded as generated in each
-// module root. An unreadable manifest records nothing, so its files are inspected like any other.
+// module root and still holding the recorded bytes. An unreadable manifest records nothing, so its
+// files are inspected like any other.
 func hostGeneratedFiles(target string, roots []string) map[string]bool {
 	generated := map[string]bool{}
 	for _, root := range roots {
@@ -245,8 +263,14 @@ func hostGeneratedFiles(target string, roots []string) map[string]bool {
 		if json.Unmarshal(data, &recorded) != nil {
 			continue
 		}
-		for name := range recorded.Files {
-			relative, err := filepath.Rel(target, filepath.Join(root, filepath.FromSlash(name)))
+		for name, digest := range recorded.Files {
+			path := filepath.Join(root, filepath.FromSlash(name))
+			// A file that no longer holds the recorded bytes was changed after the host wrote it, so
+			// the exemption does not apply and the legacy guard inspects it like any other file.
+			if !matchesRecordedDigest(path, digest) {
+				continue
+			}
+			relative, err := filepath.Rel(target, path)
 			if err == nil && filepath.IsLocal(relative) {
 				generated[filepath.ToSlash(relative)] = true
 			}

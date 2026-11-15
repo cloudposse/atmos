@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -104,7 +106,7 @@ func fileDigest(root *os.Root, path string) (string, bool) {
 // A file is removed only while it is still what was written (matching digest) or still carries
 // the Terragrunt signature; anything a user or module changed since stays untouched. A file that
 // cannot be removed stays recorded in kept, so a later run retries it, and the error is returned.
-func removeStaleFiles(root *os.Root, previous map[string]string, current []string, kept map[string]string) error {
+func removeStaleFiles(root *os.Root, previous map[string]string, current []string, kept map[string]string, undo restorePoint) error {
 	var failures error
 	for _, path := range slices.Sorted(mapKeys(previous)) {
 		if slices.Contains(current, path) || !filepath.IsLocal(filepath.FromSlash(path)) {
@@ -115,6 +117,7 @@ func removeStaleFiles(root *os.Root, previous map[string]string, current []strin
 		if !exists || (digest != previous[path] && verifyTerragruntSignature(root, local) != nil) {
 			continue
 		}
+		undo.capture(root, path)
 		if err := root.Remove(local); err != nil && !errors.Is(err, os.ErrNotExist) {
 			kept[path] = previous[path]
 			failures = errors.Join(failures, fmt.Errorf("%w: remove stale generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err))
@@ -123,6 +126,65 @@ func removeStaleFiles(root *os.Root, previous map[string]string, current []strin
 		removeEmptyParents(root, filepath.Dir(local))
 	}
 	return failures
+}
+
+// restorePoint remembers the files a run changes, so a run whose manifest cannot be written leaves
+// the working directory as it found it instead of with changed files that nobody owns.
+type restorePoint map[string]*fileState
+
+// fileState is a file as it was before the run touched it.
+type fileState struct {
+	exists  bool
+	content []byte
+	mode    os.FileMode
+}
+
+// capture remembers a path's state the first time the run is about to change it. Only regular
+// files and absent paths are recorded; anything else is left alone by the run's policies.
+func (r restorePoint) capture(root *os.Root, path string) {
+	if _, seen := r[path]; seen {
+		return
+	}
+	local := filepath.FromSlash(path)
+	info, err := root.Lstat(local)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		r[path] = &fileState{}
+	case err != nil || !info.Mode().IsRegular():
+		return
+	default:
+		if content, readErr := root.ReadFile(local); readErr == nil {
+			r[path] = &fileState{exists: true, content: content, mode: info.Mode().Perm()}
+		}
+	}
+}
+
+// restore puts every captured file back, removing the ones the run created.
+func (r restorePoint) restore(root *os.Root) error {
+	var failures error
+	for _, path := range slices.Sorted(maps.Keys(r)) {
+		if err := r.restoreFile(root, path); err != nil {
+			failures = errors.Join(failures, fmt.Errorf("%w: restore generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err))
+		}
+	}
+	return failures
+}
+
+func (r restorePoint) restoreFile(root *os.Root, path string) error {
+	state, local := r[path], filepath.FromSlash(path)
+	if !state.exists {
+		return removeFile(root, local)
+	}
+	if err := root.MkdirAll(filepath.Dir(local), directoryMode); err != nil {
+		return err
+	}
+	if err := root.WriteFile(local, state.content, state.mode); err != nil {
+		return err
+	}
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	return root.Chmod(local, state.mode)
 }
 
 // removeEmptyParents tidies directories that only existed for a removed generated file.

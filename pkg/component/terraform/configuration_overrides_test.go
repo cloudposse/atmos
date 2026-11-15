@@ -178,3 +178,32 @@ func TestApplyStackOverridesReportsMergeFailures(t *testing.T) {
 	err := applyStackOverrides(config, overrideInfo(t), &schema.PreparedComponentConfiguration{Inputs: map[string]any{"a": 1}})
 	require.Error(t, err)
 }
+
+// A component's own settings.list_merge_strategy governs how its stack vars combine with the
+// provider's inputs, whatever the global strategy is, and the shared configuration is not modified.
+func TestApplyStackOverridesHonorsTheComponentListMergeStrategy(t *testing.T) {
+	for _, test := range []struct {
+		name, global, component string
+		want                    []any
+	}{
+		{"component append over global replace", "", "append", []any{"a", "b", "c"}},
+		{"component replace over global append", "append", "replace", []any{"c"}},
+		{"global strategy applies without a component setting", "append", "", []any{"a", "b", "c"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			config.Settings.ListMergeStrategy = test.global
+			info := overrideInfo(t)
+			info.ComponentVarsSection = map[string]any{"zones": []any{"c"}}
+			if test.component != "" {
+				info.ComponentSettingsSection["list_merge_strategy"] = test.component
+			}
+			prepared := &schema.PreparedComponentConfiguration{Inputs: map[string]any{"zones": []any{"a", "b"}}}
+
+			require.NoError(t, applyStackOverrides(config, info, prepared))
+
+			assert.Equal(t, test.want, prepared.Inputs["zones"])
+			assert.Equal(t, test.global, config.Settings.ListMergeStrategy, "the shared configuration is not modified")
+		})
+	}
+}
