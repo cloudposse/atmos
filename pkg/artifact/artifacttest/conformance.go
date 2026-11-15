@@ -128,7 +128,7 @@ func (c *conformance) publish(t *testing.T, repo artifact.Repository, sp spec, o
 func (c *conformance) requireWritable(t *testing.T, repo artifact.Repository) {
 	t.Helper()
 	if !repo.Capabilities().Write {
-		t.Skip("the repository is read-only; capability errors are asserted by the dedicated subtest")
+		t.Skipf("the repository is read-only; capability errors are asserted by the dedicated subtest")
 	}
 }
 
@@ -290,7 +290,7 @@ func (c *conformance) conditionalPublish(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
 	if !repo.Capabilities().ConditionalUpdate {
-		t.Skip("the repository does not advertise conditional updates")
+		t.Skipf("the repository does not advertise conditional updates")
 	}
 	ref := artifact.Ref{Name: appName, Version: "1.0.0"}
 	c.publish(t, repo, spec{name: ref.Name, version: ref.Version, content: "base"}, artifact.PublishOptions{})
@@ -452,7 +452,7 @@ func (c *conformance) capabilityErrors(t *testing.T) {
 	repo := c.h.New(t)
 	caps := repo.Capabilities()
 	if caps.Write {
-		t.Skip("the repository is writable; read-only behavior is not applicable")
+		t.Skipf("the repository is writable; read-only behavior is not applicable")
 	}
 	src := t.TempDir()
 	fixtures.WriteFile(t, src, "a.txt", "a", filePerm)
