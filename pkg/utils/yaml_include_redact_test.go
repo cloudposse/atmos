@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/artifact/redacttest"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -29,7 +30,7 @@ func TestRedactIncludeArgument(t *testing.T) {
 		{name: "url without credentials", value: "https://example.com/base.yaml .a", want: "https://example.com/base.yaml .a"},
 		{name: "url with userinfo", value: "https://user:" + redactTestSecret + "@example.com/base.yaml", want: "https://example.com/base.yaml"},
 		{name: "url with userinfo and fragment", value: "https://user:" + redactTestSecret + "@example.com/base.yaml#frag", want: "https://example.com/base.yaml#frag"},
-		{name: "forced getter with userinfo", value: "git::https://user:" + redactTestSecret + "@example.com/repo.git", want: "<redacted>"},
+		{name: "forced getter with userinfo", value: "git::https://user:" + redactTestSecret + "@example.com/repo.git", want: "git::https://example.com/repo.git"},
 		{name: "unparsable url with userinfo", value: "https://user:" + redactTestSecret + "@exa mple.com/%zz", want: "<redacted>"},
 	}
 	for _, tt := range tests {
@@ -105,6 +106,10 @@ func TestRedactIncludeError(t *testing.T) {
 		{name: "encoded password is also removed decoded", target: "https://user:p%40ss@example.com/a", message: "bad password p@ss", want: "bad password <redacted>"},
 		{name: "forced getter prefix", target: "git::https://user:hunter2@example.com/r.git", message: "clone https://user:hunter2@example.com/r.git failed", want: "clone https://example.com/r.git failed"},
 		{name: "user name alone is not a password", target: "ssh://git@example.com/r.git", message: "git failed", want: "git failed"},
+		{name: "double colon is part of the password", target: "https://user:pa::ss@example.com/a", message: "bad https://user:pa::ss@example.com/a", want: "bad https://example.com/a"},
+		{name: "double colon password quoted on its own", target: "https://user:pa::ss@example.com/a", message: "bad pa::ss", want: "bad <redacted>"},
+		{name: "last at sign ends the userinfo", target: "https://user:pa@ss@second@example.com/a", message: "bad https://user:pa@ss@second@example.com/a", want: "bad https://example.com/a"},
+		{name: "password with an at sign quoted on its own", target: "https://user:pa@ss@second@example.com/a", message: "bad pa@ss@second", want: "bad <redacted>"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -115,4 +120,33 @@ func TestRedactIncludeError(t *testing.T) {
 		})
 	}
 	assert.NoError(t, redactIncludeError(nil, "https://user:hunter2@example.com"))
+}
+
+// TestRedactIncludeHelpers_SharedCredentialCases feeds the table shared with artifact.RedactURL to
+// both include redaction helpers and asserts the one security property: no user or password of the
+// input survives, whether the input is echoed as an argument or quoted by a fetch error.
+func TestRedactIncludeHelpers_SharedCredentialCases(t *testing.T) {
+	cause := errors.New("pull failed")
+	for _, tc := range redacttest.Cases() {
+		t.Run(tc.Name, func(t *testing.T) {
+			if strings.Contains(tc.Raw, "://") {
+				got := RedactIncludeArgument(tc.Raw)
+				for _, secret := range tc.Secrets {
+					assert.NotContains(t, got, secret, "argument %q", tc.Raw)
+				}
+			}
+			messages := []string{"fetch " + tc.Raw + " failed"}
+			for _, quoted := range tc.Quoted {
+				messages = append(messages, "auth failed for "+quoted)
+			}
+			for _, message := range messages {
+				got := redactIncludeError(fmt.Errorf("%s: %w", message, cause), tc.Raw)
+				require.Error(t, got)
+				for _, secret := range tc.Secrets {
+					assert.NotContains(t, got.Error(), secret, "error %q", message)
+				}
+				assert.ErrorIs(t, got, cause)
+			}
+		})
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -28,25 +29,24 @@ import (
 // Exported so other config-loading packages (e.g. pkg/config/adapters) can sanitize import
 // paths before logging them.
 func SanitizeImport(s string) string {
-	// Handle go-getter style URLs with :: separator (e.g., git::https://...).
-	parts := strings.SplitN(s, "::", 2)
-	var prefix string
-	urlPart := s
+	// Handle go-getter style URLs with :: separator (e.g., git::https://...). The prefix is only
+	// recognized when a scheme follows it, so a "::" inside a password never splits the credential.
+	prefix, urlPart := artifact.SplitGetterPrefix(s)
 
-	if len(parts) == 2 {
-		prefix = parts[0] + "::"
-		urlPart = parts[1]
+	// A URL carrying userinfo is redacted structurally, by the helper every include error shares:
+	// the userinfo ends at the last "@" of the authority, whatever the password holds.
+	if strings.Contains(urlPart, "@") && (strings.Contains(urlPart, "://") || strings.HasPrefix(urlPart, "//")) {
+		urlPart = artifact.RedactURL(urlPart)
+		if urlPart == artifact.RedactedValue {
+			return urlPart
+		}
 	}
 
 	u, err := url.Parse(urlPart)
 	if err != nil {
-		// Unparsable; return as-is (might be SCP-style git).
-		return s
-	}
-
-	// Clear credentials regardless of scheme.
-	if u.User != nil {
-		u.User = nil
+		// Unparsable; keep the text (it might be SCP-style git) but never a query, which may hold tokens.
+		before, _, _ := strings.Cut(s, "?")
+		return before
 	}
 
 	// Clear query params (may contain tokens/credentials).

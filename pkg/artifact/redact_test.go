@@ -1,9 +1,12 @@
 package artifact
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/artifact/redacttest"
 )
 
 func TestRedactURL(t *testing.T) {
@@ -31,3 +34,62 @@ func TestRedactURL(t *testing.T) {
 		})
 	}
 }
+
+// TestRedactURL_SharedCredentialCases checks the one security property every redaction helper
+// shares: no user or password of a credential-bearing input survives redaction.
+func TestRedactURL_SharedCredentialCases(t *testing.T) {
+	for _, tc := range redacttest.Cases() {
+		t.Run(tc.Name, func(t *testing.T) {
+			got := RedactURL(tc.Raw)
+			for _, secret := range tc.Secrets {
+				assert.NotContains(t, got, secret, "redacted form of %q", tc.Raw)
+			}
+		})
+	}
+}
+
+// TestRedactCredentials_SharedCredentialCases quotes each shared case in an error message, as a
+// fetch error does, and checks no secret survives in the scrubbed text.
+func TestRedactCredentials_SharedCredentialCases(t *testing.T) {
+	for _, tc := range redacttest.Cases() {
+		t.Run(tc.Name, func(t *testing.T) {
+			messages := []string{"fetch " + tc.Raw + " failed: denied"}
+			for _, quoted := range tc.Quoted {
+				messages = append(messages, "authentication failed for "+quoted)
+				messages = append(messages, "could not parse reference: "+tc.Raw+" (password "+quoted+")")
+			}
+			for _, message := range messages {
+				got := RedactCredentials(message, tc.Raw)
+				for _, secret := range tc.Secrets {
+					assert.NotContains(t, got, secret, "scrubbed form of %q", message)
+				}
+			}
+		})
+	}
+}
+
+func TestRedactCredentials(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		raw  string
+		want string
+	}{
+		{name: "no credential", text: "boom at example.com", raw: "https://example.com/a.yaml", want: "boom at example.com"},
+		{name: "userinfo is cut out", text: "could not parse reference: user:hunter2@example.com/a", raw: "https://user:hunter2@example.com/a", want: "could not parse reference: example.com/a"},
+		{name: "password quoted on its own", text: "auth failed for hunter2", raw: "https://user:hunter2@example.com/a", want: "auth failed for <redacted>"},
+		{name: "encoded password is also removed decoded", text: "bad password p@ss", raw: "https://user:p%40ss@example.com/a", want: "bad password <redacted>"},
+		{name: "double colon is part of the password", text: "bad password pa::ss for https://user:pa::ss@example.com/a", raw: "https://user:pa::ss@example.com/a", want: "bad password <redacted> for https://example.com/a"},
+		{name: "last at sign ends the userinfo", text: "failed: https://user:pa@ss@second@example.com/a", raw: "https://user:pa@ss@second@example.com/a", want: "failed: https://example.com/a"},
+		{name: "forced getter prefix", text: "clone https://user:hunter2@example.com/r.git failed", raw: "git::https://user:hunter2@example.com/r.git", want: "clone https://example.com/r.git failed"},
+		{name: "user name alone is not a password", text: "git failed", raw: "ssh://git@example.com/r.git", want: "git failed"},
+		{name: "digest at sign is not userinfo", text: "pull ghcr.io/a/b@" + sha256Digest + " failed", raw: "oci://ghcr.io/a/b@" + sha256Digest, want: "pull ghcr.io/a/b@" + sha256Digest + " failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, RedactCredentials(tt.text, tt.raw))
+		})
+	}
+}
+
+var sha256Digest = "sha256:" + strings.Repeat("0f", 32)
