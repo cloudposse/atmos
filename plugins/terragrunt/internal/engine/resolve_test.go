@@ -177,7 +177,8 @@ generate "disabled" {
 }
 
 // Discovery validates the module source transport, so an unsupported remote source fails before any
-// infrastructure command runs rather than only when the unit is prepared.
+// infrastructure command runs rather than only when the unit is prepared. A local source that
+// selects a subdirectory with `//` is no remote transport and must not be rejected as one.
 func TestDiscoveryValidatesRemoteModuleSources(t *testing.T) {
 	for _, test := range []struct {
 		source  string
@@ -186,6 +187,10 @@ func TestDiscoveryValidatesRemoteModuleSources(t *testing.T) {
 		{source: "tfr://example.invalid/repo", invalid: true},
 		{source: "git::https://example.invalid/modules.git//vpc?ref=v1.0.0"},
 		{source: "https://example.invalid/module.zip"},
+		// A local module with a `//` subdirectory is not a remote source: Terragrunt copies the tree before it.
+		{source: "../../modules/sub//app"},
+		// A bare host path with `//` stays a remote shorthand that discovery cannot interpret.
+		{source: "example.invalid/org/modules//app", invalid: true},
 	} {
 		t.Run(test.source, func(t *testing.T) {
 			request := nativeUnit(t, "")

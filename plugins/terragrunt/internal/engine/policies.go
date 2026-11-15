@@ -99,10 +99,23 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 	return nil
 }
 
+// localSubdirSource reports a local module path that selects a subdirectory with `//`, such as
+// `../modules/sub//app`. Terragrunt copies the tree before `//`, so it is no remote transport. Only an
+// explicit local spelling counts: a bare `host/org/repo//dir` is a remote shorthand.
+func localSubdirSource(source string) bool {
+	if _, ok := copiedSourceRoot("", source); !ok {
+		return false
+	}
+	return filepath.IsAbs(source) || strings.HasPrefix(source, ".")
+}
+
 // validateRemoteSource preserves the getter URI for Atmos's source provisioner.
 // Registry sources need Terragrunt version selection and are not interchangeable
 // with direct archive or Git sources.
 func validateRemoteSource(source string) error {
+	if localSubdirSource(source) {
+		return nil
+	}
 	for _, prefix := range []string{"git::https://", "git::http://", "git::ssh://", "git::file://", "https://", "http://"} {
 		if strings.HasPrefix(source, prefix) {
 			return nil
