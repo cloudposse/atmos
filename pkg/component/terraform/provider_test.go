@@ -12,10 +12,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	component "github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	provisioner "github.com/cloudposse/atmos/pkg/provisioner"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	schema "github.com/cloudposse/atmos/pkg/schema"
+	tfconfig "github.com/hashicorp/terraform-config-inspect/tfconfig"
 	assert "github.com/stretchr/testify/assert"
 	require "github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
@@ -472,6 +474,80 @@ func TestValidationServicePreservesResultAndError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGenerationReloadsModuleInspectedByStackProcessing proves that a sensitive variable declared by a
+// generated file reaches the secret keys even when stack processing already inspected the same directory.
+func TestGenerationReloadsModuleInspectedByStackProcessing(t *testing.T) {
+	for _, mode := range []string{"generation enabled", "generation disabled", "dry run"} {
+		t.Run(mode, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "component")
+			require.NoError(t, os.MkdirAll(path, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(path, "main.tf"), []byte("variable \"region\" {}\n"), 0o600))
+			module, diags := tfconfig.LoadModule(path)
+			require.False(t, diags.HasErrors())
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.AutoGenerateFiles = mode != "generation disabled"
+			info := &schema.ConfigAndStacksInfo{
+				DryRun:               mode == "dry run",
+				ComponentVarsSection: map[string]any{"db_password": "unregistered-literal-value", "region": "us-east-1"},
+				ComponentSection: map[string]any{
+					"generate":       map[string]any{"sensitive.tf": "content"},
+					"component_info": map[string]any{cfg.ComponentPathSectionName: path, "terraform_config": module},
+				},
+			}
+			executor := NewExecutor(Services{GenerateFilesForComponent: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, dir string) error {
+				return os.WriteFile(filepath.Join(dir, "sensitive.tf"), []byte("variable \"db_password\" {\n  sensitive = true\n}\n"), 0o600)
+			}})
+
+			require.NoError(t, executor.autoGenerateComponentFiles(config, info, path))
+			refreshTerraformModuleInfo(info, path)
+			ComputeTerraformSecretVarKeys(info)
+
+			if mode == "generation enabled" {
+				assert.Equal(t, map[string]bool{"db_password": true}, info.TerraformSecretVarKeys)
+				return
+			}
+			assert.Empty(t, info.TerraformSecretVarKeys, "the same-path guard keeps the inspected module when nothing was generated")
+		})
+	}
+}
+
+// TestDebugVarsLogRedactsSecretVariables proves the debug dump of component variables never prints
+// literals that are kept out of the varfile because the module declares them sensitive.
+func TestDebugVarsLogRedactsSecretVariables(t *testing.T) {
+	componentPath := t.TempDir()
+	writeSensitiveModule(t, componentPath)
+	module, diags := tfconfig.LoadModule(componentPath)
+	require.False(t, diags.HasErrors())
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	config.Logs.Level = "Debug"
+	info := &schema.ConfigAndStacksInfo{
+		DryRun:               true,
+		ComponentVarsSection: map[string]any{"db_password": "unregistered-literal-value", "region": "us-east-1"},
+		ComponentSection: map[string]any{
+			"component_info":                map[string]any{cfg.ComponentPathSectionName: componentPath, "terraform_config": module},
+			cfg.TerraformCliVarsSectionName: map[string]any{"db_password": "cli-literal-value", "zone": "a"},
+		},
+	}
+	ComputeTerraformSecretVarKeys(info)
+
+	var output bytes.Buffer
+	logger := log.Default()
+	originalLevel := logger.GetLevel()
+	logger.SetLevel(log.DebugLevel)
+	logger.SetOutput(&output)
+	t.Cleanup(func() { logger.SetLevel(originalLevel); logger.SetOutput(os.Stderr) })
+
+	require.NoError(t, logAndWriteComponentVars(config, info))
+	require.NoError(t, logCliVarsOverrides(config, info))
+
+	assert.NotContains(t, output.String(), "unregistered-literal-value")
+	assert.NotContains(t, output.String(), "cli-literal-value")
+	assert.Contains(t, output.String(), "db_password")
+	assert.Contains(t, output.String(), "us-east-1")
+	assert.Contains(t, output.String(), "zone")
+	assert.Equal(t, "unregistered-literal-value", info.ComponentVarsSection["db_password"], "redaction must not mutate the real variables")
 }
 
 func TestConflictingEnvironmentWarningNamesVariablesWithoutValues(t *testing.T) {

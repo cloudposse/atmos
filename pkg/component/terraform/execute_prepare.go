@@ -8,8 +8,6 @@ import (
 	filepath "path/filepath"
 	time "time"
 
-	tfconfig "github.com/hashicorp/terraform-config-inspect/tfconfig"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	component "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -111,7 +109,13 @@ func (e *Executor) autoGenerateComponentFiles(atmosConfig *schema.AtmosConfigura
 	if mkdirErr := os.MkdirAll(componentPath, dirPermissions); mkdirErr != nil {
 		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
 	}
-	return e.services.GenerateFilesForComponent(atmosConfig, info, componentPath)
+	if err := e.services.GenerateFilesForComponent(atmosConfig, info, componentPath); err != nil {
+		return err
+	}
+	// Generated files can declare variables, so a module stack processing inspected at this same
+	// path is stale: reload it, or sensitive declarations in the generated files would be missed.
+	loadTerraformModuleInfo(info, componentPath)
+	return nil
 }
 
 // checkComponentRestrictions returns an error when the requested subcommand is not
@@ -206,7 +210,7 @@ func terraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, erro
 func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	log.Debug("Variables for the component in the stack", logFieldComponent, info.ComponentFromArg, "stack", info.Stack)
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection); err != nil {
+		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, redactSecretVars(info, info.ComponentVarsSection)); err != nil {
 			return err
 		}
 	}
@@ -243,7 +247,7 @@ func logCliVarsOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	}
 	log.Debug("CLI variables (will override the variables defined in the stack manifests):")
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars); err != nil {
+		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, redactSecretVars(info, cliVars)); err != nil {
 			return err
 		}
 	}
@@ -321,74 +325,6 @@ func ComputeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 		return
 	}
 	info.TerraformSecretVarKeys = keys
-}
-
-// terraformSensitiveVarKeys returns the root-module variable names declared
-// `sensitive = true`. Component metadata is populated during stack processing
-// with terraform-config-inspect, so this adds no extra filesystem parsing on
-// the execution hot path.
-func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool {
-	if info == nil {
-		return nil
-	}
-	componentInfo, ok := info.ComponentSection["component_info"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	module, ok := componentInfo["terraform_config"].(*tfconfig.Module)
-	if !ok || module == nil {
-		return nil
-	}
-
-	return sensitiveModuleVarKeys(module)
-}
-
-// sensitiveModuleVarKeys returns the variable names a module declares `sensitive = true`.
-func sensitiveModuleVarKeys(module *tfconfig.Module) map[string]bool {
-	keys := make(map[string]bool)
-	for name, variable := range module.Variables {
-		if variable != nil && variable.Sensitive {
-			keys[name] = true
-		}
-	}
-	return keys
-}
-
-// declaredSensitiveVarKeys returns the sensitive variable names for a component, preferring the
-// module inspected during stack processing. Batch generation renders components from the raw stacks
-// map, which has no component_info, so it falls back to inspecting the component directory.
-func declaredSensitiveVarKeys(info *schema.ConfigAndStacksInfo, componentPath string) map[string]bool {
-	if keys := terraformSensitiveVarKeys(info); keys != nil {
-		return keys
-	}
-	module, diags := tfconfig.LoadModule(componentPath)
-	if diags.HasErrors() || module == nil {
-		log.Debug("Could not inspect the Terraform module for sensitive variables", "path", componentPath, "error", diags.Err())
-		return nil
-	}
-	return sensitiveModuleVarKeys(module)
-}
-
-// refreshTerraformModuleInfo reloads component_info.terraform_config from the provisioned
-// component directory when stack processing inspected a different or missing directory, as
-// happens for JIT sources and workdirs. Sensitive-variable detection then reflects the module
-// Terraform will actually run. A module that cannot be inspected leaves the existing value.
-func refreshTerraformModuleInfo(info *schema.ConfigAndStacksInfo, componentPath string) {
-	componentInfo, ok := info.ComponentSection["component_info"].(map[string]any)
-	if !ok {
-		return
-	}
-	module, _ := componentInfo["terraform_config"].(*tfconfig.Module)
-	recordedPath, _ := componentInfo[cfg.ComponentPathSectionName].(string)
-	if module != nil && filepath.Clean(recordedPath) == filepath.Clean(componentPath) {
-		return
-	}
-	refreshed, diags := tfconfig.LoadModule(componentPath)
-	if diags.HasErrors() || refreshed == nil {
-		log.Debug("Could not inspect the provisioned Terraform module", "path", componentPath, "error", diags.Err())
-		return
-	}
-	componentInfo["terraform_config"] = refreshed
 }
 
 // RejectComputedTerraformVars ensures display-only degraded values cannot cross
