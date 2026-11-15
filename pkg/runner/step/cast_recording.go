@@ -133,12 +133,7 @@ var castUIEnvKeys = []string{"NO_COLOR", "ATMOS_FORCE_COLOR", "FORCE_COLOR", "CL
 // Returns a restore func that reverts both the environment and the
 // re-detected UI state; always call it, even on error paths.
 func forceRecordingUIEnv(env map[string]string) func() {
-	relevant := make(map[string]string, len(castUIEnvKeys))
-	for _, key := range castUIEnvKeys {
-		if value, ok := env[key]; ok {
-			relevant[key] = value
-		}
-	}
+	relevant := relevantUIEnv(env)
 	if len(relevant) == 0 {
 		return func() {}
 	}
@@ -152,19 +147,9 @@ func forceRecordingUIEnv(env map[string]string) func() {
 	// The first scope always re-detects; later scopes only when they change the env.
 	changed := castUIEnv.depth == 1
 	for key, value := range relevant {
-		old, wasSet := os.LookupEnv(key)
-		if _, captured := castUIEnv.prior[key]; !captured {
-			if wasSet {
-				oldCopy := old
-				castUIEnv.prior[key] = &oldCopy
-			} else {
-				castUIEnv.prior[key] = nil
-			}
-		}
-		if !wasSet || old != value {
+		if captureAndSetUIEnv(key, value) {
 			changed = true
 		}
-		_ = os.Setenv(key, value)
 	}
 	if changed {
 		ui.ReinitFormatter()
@@ -173,6 +158,34 @@ func forceRecordingUIEnv(env map[string]string) func() {
 	// Every call shares this one cleanup path; sync.OnceFunc keeps a repeated
 	// restore call from decrementing the depth twice.
 	return sync.OnceFunc(releaseCastUIEnv)
+}
+
+// relevantUIEnv returns the entries of env that the UI detection reads.
+func relevantUIEnv(env map[string]string) map[string]string {
+	relevant := make(map[string]string, len(castUIEnvKeys))
+	for _, key := range castUIEnvKeys {
+		if value, ok := env[key]; ok {
+			relevant[key] = value
+		}
+	}
+	return relevant
+}
+
+// captureAndSetUIEnv records the original value of key the first time any scope
+// forces it, then sets it. It reports whether the process environment changed.
+// The caller must hold castUIEnv.mu.
+func captureAndSetUIEnv(key, value string) bool {
+	old, wasSet := os.LookupEnv(key)
+	if _, captured := castUIEnv.prior[key]; !captured {
+		if wasSet {
+			original := old
+			castUIEnv.prior[key] = &original
+		} else {
+			castUIEnv.prior[key] = nil
+		}
+	}
+	_ = os.Setenv(key, value)
+	return !wasSet || old != value
 }
 
 // releaseCastUIEnv drops one forceRecordingUIEnv scope. When the last scope
