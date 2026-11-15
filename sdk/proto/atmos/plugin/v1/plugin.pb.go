@@ -3380,20 +3380,25 @@ type PrepareComponentResponse struct {
 	// Maps each input name to the authored file, line, and column that produced
 	// its value, for provenance reporting. Missing entries mean unknown origin.
 	InputOrigins map[string]*SourceLocation `protobuf:"bytes,12,rep,name=input_origins,json=inputOrigins,proto3" json:"input_origins,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Fields 13-18 are reserved for Terragrunt parity. The host does not read
-	// them yet; a plugin that cannot honor a setting must reject it with an
-	// ErrorDetail instead of returning it, and must leave these fields unset.
-	// Engine executable selected by terraform_binary.
+	// Fields 13-18 carry Terragrunt settings that decide how the host runs the unit. The host reads
+	// terraform_binary, errors, exclude, iam, and feature_flags (13-16 and 18). It does not read
+	// encryption (17) yet. A plugin that cannot honor a setting must reject it with an ErrorDetail
+	// instead of returning a value the host would silently ignore.
+	// Engine executable selected by terraform_binary. Empty means the engine of the component.
 	TerraformBinary string `protobuf:"bytes,13,opt,name=terraform_binary,json=terraformBinary,proto3" json:"terraform_binary,omitempty"`
-	// errors block: retry and ignore policies.
+	// errors block: retry and ignore policies. The host applies them around the engine subprocess.
 	Errors *ComponentErrorsConfiguration `protobuf:"bytes,14,opt,name=errors,proto3" json:"errors,omitempty"`
-	// exclude block: conditional unit exclusion.
+	// exclude block, set only when its condition holds and it applies to the current operation.
+	// The host skips the operation for the component and runs nothing. See ComponentExclude.
 	Exclude *ComponentExclude `protobuf:"bytes,15,opt,name=exclude,proto3" json:"exclude,omitempty"`
 	// iam_role, iam_assume_role_session_name, iam_assume_role_duration, iam_web_identity_token.
+	// The host assumes the role, never the plugin.
 	Iam *ComponentIam `protobuf:"bytes,16,opt,name=iam,proto3" json:"iam,omitempty"`
-	// encryption block as opaque, provider-defined data.
+	// encryption block as opaque, provider-defined data. The host ignores it.
 	Encryption *ComponentValue `protobuf:"bytes,17,opt,name=encryption,proto3" json:"encryption,omitempty"`
-	// feature flag name to its evaluated value rendered as a string.
+	// Feature flag name to its evaluated value rendered as a string. The plugin has already applied
+	// the flags while evaluating the unit, so they are reflected in every other field. The host
+	// keeps them with the prepared configuration.
 	FeatureFlags map[string]string `protobuf:"bytes,18,rep,name=feature_flags,json=featureFlags,proto3" json:"feature_flags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Authorization for an archive returned by a module registry. This value is
 	// sensitive and may be sent only to module_source_auth_origin.
@@ -3612,7 +3617,7 @@ func (x *PrepareComponentResponse) GetIgnoredMessage() string {
 	return ""
 }
 
-// ComponentErrorsConfiguration mirrors the Terragrunt errors block. Reserved; not implemented.
+// ComponentErrorsConfiguration mirrors the Terragrunt errors block.
 type ComponentErrorsConfiguration struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
 	Retry         []*ComponentRetryPolicy  `protobuf:"bytes,1,rep,name=retry,proto3" json:"retry,omitempty"`
@@ -3804,7 +3809,7 @@ func (x *ComponentIgnorePolicy) GetSignals() map[string]*ComponentValue {
 	return nil
 }
 
-// ComponentExclude mirrors the Terragrunt exclude block. Reserved; not implemented.
+// ComponentExclude mirrors the Terragrunt exclude block.
 type ComponentExclude struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Evaluated "if" condition.
@@ -3867,7 +3872,7 @@ func (x *ComponentExclude) GetExcludeDependencies() bool {
 	return false
 }
 
-// ComponentIam mirrors the Terragrunt IAM settings. Reserved; not implemented.
+// ComponentIam mirrors the Terragrunt IAM settings.
 // The web identity token is a secret and must be carried as a sensitive value.
 type ComponentIam struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
