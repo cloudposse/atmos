@@ -41,6 +41,33 @@ func TestKindDataJSONBehavior(t *testing.T) {
 		require.ErrorIs(t, json.Unmarshal([]byte(`{"a":1.5}`), &data), errUtils.ErrArtifactRecordInvalid)
 	})
 
+	t.Run("decode failures carry the artifact sentinel", func(t *testing.T) {
+		type target struct {
+			Count int `json:"count"`
+		}
+		tests := []struct {
+			name string
+			data KindData
+			want int
+		}{
+			{"string where an integer is required", KindData(`{"count":"x"}`), 0},
+			{"array where an object is required", KindData(`[1]`), 0},
+			{"matching data decodes", KindData(`{"count":7}`), 7},
+		}
+		for _, tt := range tests {
+			var got target
+			err := tt.data.Decode(&got)
+			if tt.want == 0 {
+				require.ErrorIs(t, err, errUtils.ErrArtifactRecordInvalid, tt.name)
+				var typeErr *json.UnmarshalTypeError
+				require.ErrorAs(t, err, &typeErr, "the cause is preserved")
+				continue
+			}
+			require.NoError(t, err, tt.name)
+			assert.Equal(t, tt.want, got.Count)
+		}
+	})
+
 	t.Run("marshal failure surfaces as an invalid record", func(t *testing.T) {
 		_, err := NewKindData(make(chan int))
 		require.ErrorIs(t, err, errUtils.ErrArtifactRecordInvalid)

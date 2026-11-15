@@ -2,6 +2,7 @@ package artifact
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -81,7 +83,9 @@ func (p *PreparedArtifact) Close() error {
 
 	p.closeOnce.Do(func() {
 		if p.Cleanup != nil {
-			p.closeErr = p.Cleanup()
+			if err := p.Cleanup(); err != nil {
+				p.closeErr = fmt.Errorf("%w: cleanup: %w", errUtils.ErrArtifactStreamFailed, err)
+			}
 		}
 	})
 	return p.closeErr

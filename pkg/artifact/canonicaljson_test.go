@@ -84,6 +84,12 @@ func TestReadBounded(t *testing.T) {
 	boom := errors.New("boom")
 	_, err = ReadBounded(io.MultiReader(strings.NewReader("1"), errReader{boom}), 5)
 	require.ErrorIs(t, err, boom)
+	require.ErrorIs(t, err, errUtils.ErrArtifactStreamFailed, "reader failures carry the artifact sentinel")
+	assert.NotErrorIs(t, err, errUtils.ErrArtifactTooLarge)
+
+	_, _, err = ReadRecord(io.MultiReader(strings.NewReader("{"), errReader{boom}))
+	require.ErrorIs(t, err, boom)
+	require.ErrorIs(t, err, errUtils.ErrArtifactStreamFailed, "ReadRecord surfaces the sentinel")
 }
 
 type errReader struct{ err error }

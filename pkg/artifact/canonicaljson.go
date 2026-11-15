@@ -253,7 +253,7 @@ func ReadBounded(r io.Reader, limit int64) ([]byte, error) {
 	}
 	data, err := io.ReadAll(io.LimitReader(r, limit+1))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: reading: %w", errUtils.ErrArtifactStreamFailed, err)
 	}
 	if int64(len(data)) > limit {
 		return nil, fmt.Errorf("%w: more than %d bytes", errUtils.ErrArtifactTooLarge, limit)

@@ -74,6 +74,7 @@ func TestPreparedArtifactCloseRunsCleanupOnce(t *testing.T) {
 	boom := errors.New("cleanup failed")
 	prepared := &PreparedArtifact{Cleanup: func() error { calls++; return boom }}
 	require.ErrorIs(t, prepared.Close(), boom)
+	require.ErrorIs(t, prepared.Close(), errUtils.ErrArtifactStreamFailed, "cleanup failures carry the artifact sentinel")
 	require.ErrorIs(t, prepared.Close(), boom, "later calls return the first result")
 	assert.Equal(t, 1, calls)
 
@@ -96,7 +97,9 @@ func TestContentCloseClosesEveryStream(t *testing.T) {
 		{Reader: nil},
 		{Reader: trackingCloser{Reader: strings.NewReader("b"), closed: &closed, err: errors.New("second")}},
 	}}
-	require.ErrorIs(t, content.Close(), first)
+	err := content.Close()
+	require.ErrorIs(t, err, first)
+	require.ErrorIs(t, err, errUtils.ErrArtifactStreamFailed, "close failures carry the artifact sentinel")
 	assert.Equal(t, 2, closed, "an early failure does not leak later streams")
 }
 

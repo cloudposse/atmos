@@ -2115,6 +2115,10 @@ var (
 
 	// ErrArtifactTooLarge is returned when a record, document, or evidence blob exceeds its bounded-read limit.
 	ErrArtifactTooLarge = errors.New("artifact data exceeds the size limit")
+
+	// ErrArtifactStreamFailed is returned when reading or closing an artifact stream fails. The
+	// underlying I/O error is wrapped alongside it for diagnostics.
+	ErrArtifactStreamFailed = errors.New("artifact stream failed")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

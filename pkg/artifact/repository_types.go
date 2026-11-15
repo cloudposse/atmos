@@ -2,11 +2,13 @@ package artifact
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -98,7 +100,7 @@ func (c *Content) Close() error {
 			continue
 		}
 		if err := reader.Close(); err != nil && first == nil {
-			first = err
+			first = fmt.Errorf("%w: closing stream %d: %w", errUtils.ErrArtifactStreamFailed, index, err)
 		}
 	}
 	return first

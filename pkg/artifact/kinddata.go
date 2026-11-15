@@ -44,7 +44,10 @@ func (k KindData) Decode(v any) error {
 	if len(k) == 0 {
 		return fmt.Errorf("%w: record has no kind data", errUtils.ErrArtifactRecordInvalid)
 	}
-	return json.Unmarshal(k, v)
+	if err := json.Unmarshal(k, v); err != nil {
+		return fmt.Errorf("%w: decoding kind data: %w", errUtils.ErrArtifactRecordInvalid, err)
+	}
+	return nil
 }
 
 // MarshalJSON implements json.Marshaler, emitting the canonical bytes.
