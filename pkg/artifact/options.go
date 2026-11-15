@@ -155,10 +155,10 @@ func (o *S3Options) Validate() error {
 	if o.Bucket == "" {
 		errs = append(errs, fmt.Errorf("%w: option %q is required", errUtils.ErrArtifactConfigInvalid, "bucket"))
 	} else if !s3BucketPattern.MatchString(o.Bucket) || net.ParseIP(o.Bucket) != nil {
-		errs = append(errs, fmt.Errorf("%w: bucket %q is not a valid S3 bucket name", errUtils.ErrArtifactConfigInvalid, o.Bucket))
+		errs = append(errs, fmt.Errorf("%w: bucket %q is not a valid S3 bucket name", errUtils.ErrArtifactConfigInvalid, RedactURL(o.Bucket)))
 	}
 	if o.Region != "" && !regionPattern.MatchString(o.Region) {
-		errs = append(errs, fmt.Errorf("%w: region %q is not a valid region name", errUtils.ErrArtifactConfigInvalid, o.Region))
+		errs = append(errs, fmt.Errorf("%w: region %q is not a valid region name", errUtils.ErrArtifactConfigInvalid, RedactURL(o.Region)))
 	}
 	errs = append(errs, validatePrefix(o.Prefix), validateS3Tags(o.Tags), validateKeyPattern(o.KeyPattern, ""))
 	return errors.Join(errs...)
@@ -248,7 +248,7 @@ func DecodeOptions(raw map[string]any, out any) error {
 	if err := decoder.Decode(raw); err != nil {
 		// A decode error may quote a value, such as a mistyped number that is really a credential,
 		// so every string key and value is a credential candidate when the message is scrubbed.
-		return fmt.Errorf("%w: options: %w%s", errUtils.ErrArtifactConfigInvalid, RedactError(err, stringValues(raw)...), credentialHint(raw))
+		return fmt.Errorf("%w: options: %w%s", errUtils.ErrArtifactConfigInvalid, RedactDecodeError(err, raw), credentialHint(raw))
 	}
 	return nil
 }
@@ -437,11 +437,11 @@ func validateS3Tags(tags map[string]string) error {
 	for _, key := range keys {
 		switch {
 		case key == "" || utf8.RuneCountInString(key) > maxS3TagKeyLen:
-			errs = append(errs, fmt.Errorf("%w: S3 tag key %q must be 1-%d characters", errUtils.ErrArtifactConfigInvalid, key, maxS3TagKeyLen))
+			errs = append(errs, fmt.Errorf("%w: S3 tag key %q must be 1-%d characters", errUtils.ErrArtifactConfigInvalid, RedactURL(key), maxS3TagKeyLen))
 		case strings.HasPrefix(strings.ToLower(key), reservedTagHead):
-			errs = append(errs, fmt.Errorf("%w: S3 tag key %q uses the reserved %q prefix", errUtils.ErrArtifactConfigInvalid, key, reservedTagHead))
+			errs = append(errs, fmt.Errorf("%w: S3 tag key %q uses the reserved %q prefix", errUtils.ErrArtifactConfigInvalid, RedactURL(key), reservedTagHead))
 		case utf8.RuneCountInString(tags[key]) > maxS3TagValLen:
-			errs = append(errs, fmt.Errorf("%w: S3 tag %q value exceeds %d characters", errUtils.ErrArtifactConfigInvalid, key, maxS3TagValLen))
+			errs = append(errs, fmt.Errorf("%w: S3 tag %q value exceeds %d characters", errUtils.ErrArtifactConfigInvalid, RedactURL(key), maxS3TagValLen))
 		}
 	}
 	return errors.Join(errs...)

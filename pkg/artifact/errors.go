@@ -64,13 +64,13 @@ func (e *CapabilityError) Error() string {
 
 	message := e.sentinel().Error()
 	if e.Repository != "" {
-		message = fmt.Sprintf("%s: repository %q", message, e.Repository)
+		message = fmt.Sprintf("%s: repository %q", message, RedactURL(e.Repository))
 	}
 	if e.Operation != "" {
 		message = fmt.Sprintf("%s: %s", message, e.Operation)
 	}
 	if e.Capability != "" {
-		message = fmt.Sprintf("%s: capability %s", message, e.Capability)
+		message = fmt.Sprintf("%s: capability %s", message, RedactURL(e.Capability))
 	}
 	if e.Reason != "" {
 		message = fmt.Sprintf("%s: %s", message, e.Reason)

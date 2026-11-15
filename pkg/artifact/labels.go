@@ -30,23 +30,25 @@ const (
 func ValidateLabel(key, value string) error {
 	defer perf.Track(nil, "artifact.ValidateLabel")()
 
+	// The key is echoed in every message, and a key may be a pasted credential-bearing URL.
+	shown := RedactURL(key)
 	switch {
 	case key == "":
 		return fmt.Errorf("%w: label key must not be empty", errUtils.ErrArtifactConfigInvalid)
 	case len(key) > MaxLabelKeyLength:
-		return fmt.Errorf("%w: label key %q exceeds %d bytes", errUtils.ErrArtifactConfigInvalid, key, MaxLabelKeyLength)
+		return fmt.Errorf("%w: label key %q exceeds %d bytes", errUtils.ErrArtifactConfigInvalid, shown, MaxLabelKeyLength)
 	case strings.TrimSpace(key) != key:
-		return fmt.Errorf("%w: label key %q must not have leading or trailing whitespace", errUtils.ErrArtifactConfigInvalid, key)
+		return fmt.Errorf("%w: label key %q must not have leading or trailing whitespace", errUtils.ErrArtifactConfigInvalid, shown)
 	case strings.ContainsAny(key, "=:,"):
-		return fmt.Errorf("%w: label key %q must not contain '=', ':' or ',' (they delimit --labels selectors)", errUtils.ErrArtifactConfigInvalid, key)
+		return fmt.Errorf("%w: label key %q must not contain '=', ':' or ',' (they delimit --labels selectors)", errUtils.ErrArtifactConfigInvalid, shown)
 	case strings.IndexFunc(key, unicode.IsControl) >= 0:
-		return fmt.Errorf("%w: label key %q must not contain control characters", errUtils.ErrArtifactConfigInvalid, key)
+		return fmt.Errorf("%w: label key %q must not contain control characters", errUtils.ErrArtifactConfigInvalid, shown)
 	case len(value) > MaxLabelValueLength:
-		return fmt.Errorf("%w: label %q value exceeds %d bytes", errUtils.ErrArtifactConfigInvalid, key, MaxLabelValueLength)
+		return fmt.Errorf("%w: label %q value exceeds %d bytes", errUtils.ErrArtifactConfigInvalid, shown, MaxLabelValueLength)
 	case strings.Contains(value, ","):
-		return fmt.Errorf("%w: label %q value must not contain ',' (it delimits --labels selectors)", errUtils.ErrArtifactConfigInvalid, key)
+		return fmt.Errorf("%w: label %q value must not contain ',' (it delimits --labels selectors)", errUtils.ErrArtifactConfigInvalid, shown)
 	case strings.IndexFunc(value, unicode.IsControl) >= 0:
-		return fmt.Errorf("%w: label %q value must not contain control characters", errUtils.ErrArtifactConfigInvalid, key)
+		return fmt.Errorf("%w: label %q value must not contain control characters", errUtils.ErrArtifactConfigInvalid, shown)
 	}
 	return nil
 }

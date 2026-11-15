@@ -32,7 +32,7 @@ func ResolveLockPlan(cfg *schema.ArtifactConfig, alias string) (LockPlan, error)
 
 	repo, ok := cfg.Repositories[alias]
 	if !ok {
-		return LockPlan{}, fmt.Errorf("%w: repository %q is not configured", errUtils.ErrArtifactConfigInvalid, alias)
+		return LockPlan{}, fmt.Errorf("%w: repository %q is not configured", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(alias))
 	}
 	required, err := requiredScope(repo.Locking)
 	if err != nil {
@@ -47,10 +47,10 @@ func ResolveLockPlan(cfg *schema.ArtifactConfig, alias string) (LockPlan, error)
 		}
 		next := current.Locking.Repository
 		if _, exists := cfg.Repositories[next]; !exists {
-			return LockPlan{}, fmt.Errorf("%w: repository %q delegates locking to %q, which is not configured", errUtils.ErrArtifactConfigInvalid, plan.Provider, next)
+			return LockPlan{}, fmt.Errorf("%w: repository %q delegates locking to %q, which is not configured", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(plan.Provider), artifact.RedactURL(next))
 		}
 		if visited[next] {
-			return LockPlan{}, fmt.Errorf("%w: lock delegation cycle: %s -> %s", errUtils.ErrArtifactConfigInvalid, strings.Join(plan.Chain, " -> "), next)
+			return LockPlan{}, fmt.Errorf("%w: lock delegation cycle: %s -> %s", errUtils.ErrArtifactConfigInvalid, redactedChain(plan.Chain), artifact.RedactURL(next))
 		}
 		visited[next] = true
 		plan.Chain = append(plan.Chain, next)
@@ -67,7 +67,7 @@ func requiredScope(locking *schema.ArtifactLockingConfig) (artifact.LockScope, e
 	case artifact.LockScopeHost, artifact.LockScopeRepository:
 		return scope, nil
 	default:
-		return "", fmt.Errorf("%w: locking.required_scope %q must be %q or %q", errUtils.ErrArtifactConfigInvalid, locking.RequiredScope, artifact.LockScopeHost, artifact.LockScopeRepository)
+		return "", fmt.Errorf("%w: locking.required_scope %q must be %q or %q", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(locking.RequiredScope), artifact.LockScopeHost, artifact.LockScopeRepository)
 	}
 }
 
@@ -93,8 +93,18 @@ func validateLocking(v *Validator, cfg *schema.ArtifactConfig, alias string, rep
 	return errors.Join(
 		errUtils.ErrArtifactConfigInvalid,
 		fmt.Errorf("%w: locking.required_scope %q is not provided by %q (kind %q advertises %v)%s",
-			errUtils.ErrArtifactUnsupportedCapability, plan.Required, plan.Provider, provider.Kind, desc.Capabilities.LockScopes, delegateHint(plan)),
+			errUtils.ErrArtifactUnsupportedCapability, plan.Required, artifact.RedactURL(plan.Provider), artifact.RedactURL(provider.Kind), desc.Capabilities.LockScopes, delegateHint(plan)),
 	)
+}
+
+// redactedChain joins the aliases of a delegation chain, each redacted: an alias is a name the user
+// typed, and it may be a pasted credential-bearing URL.
+func redactedChain(chain []string) string {
+	shown := make([]string, len(chain))
+	for i, alias := range chain {
+		shown[i] = artifact.RedactURL(alias)
+	}
+	return strings.Join(shown, " -> ")
 }
 
 func delegateHint(plan LockPlan) string {

@@ -126,6 +126,18 @@ func RedactError(err error, raws ...string) error {
 	return &redactedError{message: scrubbed, err: err}
 }
 
+// RedactDecodeError is [RedactError] for the error of decoding raw, a configuration value as it was
+// parsed: a decode error quotes the keys and values it rejects, so every string held by raw, keys
+// included and at any depth, is a credential candidate when the message is scrubbed.
+func RedactDecodeError(err error, raw any) error {
+	defer perf.Track(nil, "artifact.RedactDecodeError")()
+
+	if err == nil {
+		return nil
+	}
+	return RedactError(err, stringValues(raw)...)
+}
+
 // redactedError is an error whose text has had a credential removed. It keeps the original error in
 // its chain so errors.Is and errors.As still see the cause.
 type redactedError struct {

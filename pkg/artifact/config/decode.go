@@ -9,6 +9,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -41,7 +42,7 @@ func Decode(raw map[string]any) (schema.ArtifactConfig, error) {
 		return cfg, fmt.Errorf("%w: decoder: %w", errUtils.ErrArtifactConfigInvalid, err)
 	}
 	if err := decoder.Decode(raw); err != nil {
-		return cfg, fmt.Errorf("%w: artifacts: %w", errUtils.ErrArtifactConfigInvalid, err)
+		return cfg, fmt.Errorf("%w: artifacts: %w", errUtils.ErrArtifactConfigInvalid, artifact.RedactDecodeError(err, raw))
 	}
 	normalize(&cfg)
 	return cfg, nil
@@ -102,7 +103,7 @@ func checkPermissionTypes(raw map[string]any) error {
 			continue
 		}
 		if _, isString := value.(string); !isString {
-			errs = append(errs, fmt.Errorf("%w: repository %q: permissions must be a quoted octal string such as \"0600\", got %T %v (an unquoted 0600 is read by YAML as a different number)", errUtils.ErrArtifactConfigInvalid, alias, value, value))
+			errs = append(errs, fmt.Errorf("%w: repository %q: permissions must be a quoted octal string such as \"0600\", got %T %v (an unquoted 0600 is read by YAML as a different number)", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(alias), value, artifact.RedactCredentials(fmt.Sprint(value), "")))
 		}
 	}
 	return errors.Join(errs...)

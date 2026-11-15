@@ -33,15 +33,17 @@ var permissionsPattern = regexp.MustCompile(`^[0-7]{3,4}$`)
 func ParsePermissions(value string) (fs.FileMode, error) {
 	defer perf.Track(nil, "artifact.ParsePermissions")()
 
+	// The value is echoed, and it may be a pasted credential-bearing URL.
+	shown := RedactURL(value)
 	if !permissionsPattern.MatchString(value) {
-		return 0, fmt.Errorf("%w: permissions %q must be a quoted octal mode such as \"0600\"", errUtils.ErrArtifactConfigInvalid, value)
+		return 0, fmt.Errorf("%w: permissions %q must be a quoted octal mode such as \"0600\"", errUtils.ErrArtifactConfigInvalid, shown)
 	}
 	parsed, err := strconv.ParseUint(value, octalBase, permissionBitSize)
 	if err != nil {
-		return 0, fmt.Errorf("%w: permissions %q: %w", errUtils.ErrArtifactConfigInvalid, value, err)
+		return 0, fmt.Errorf("%w: permissions %q: %w", errUtils.ErrArtifactConfigInvalid, shown, err)
 	}
 	if parsed > maxPermissionBits {
-		return 0, fmt.Errorf("%w: permissions %q must not set privileged mode bits (maximum \"0777\")", errUtils.ErrArtifactConfigInvalid, value)
+		return 0, fmt.Errorf("%w: permissions %q must not set privileged mode bits (maximum \"0777\")", errUtils.ErrArtifactConfigInvalid, shown)
 	}
 	return fs.FileMode(parsed), nil
 }

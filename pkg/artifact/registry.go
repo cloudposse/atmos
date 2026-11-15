@@ -170,11 +170,11 @@ func (r *RepositoryRegistry) New(ctx context.Context, alias string, cfg *schema.
 	defer perf.Track(nil, "artifact.RepositoryRegistry.New")()
 
 	if cfg == nil {
-		return nil, fmt.Errorf("%w: repository %q has no configuration", errUtils.ErrArtifactConfigInvalid, alias)
+		return nil, fmt.Errorf("%w: repository %q has no configuration", errUtils.ErrArtifactConfigInvalid, RedactURL(alias))
 	}
 	desc, known := r.Lookup(cfg.Kind)
 	if !known {
-		return nil, fmt.Errorf("%w: repository %q has unknown kind %q (known kinds: %v)", errUtils.ErrArtifactConfigInvalid, alias, cfg.Kind, r.Kinds())
+		return nil, fmt.Errorf("%w: repository %q has unknown kind %q (known kinds: %v)", errUtils.ErrArtifactConfigInvalid, RedactURL(alias), RedactURL(cfg.Kind), r.Kinds())
 	}
 	r.mu.RLock()
 	entry, registered := r.kinds[cfg.Kind]
@@ -183,11 +183,11 @@ func (r *RepositoryRegistry) New(ctx context.Context, alias string, cfg *schema.
 		return nil, NewUnsupportedCapability(alias, "construct", "kind/"+cfg.Kind, "no backend is registered for this repository kind in this build")
 	}
 	if err := ValidateRepositoryConfig(desc, cfg); err != nil {
-		return nil, fmt.Errorf("repository %q: %w", alias, err)
+		return nil, fmt.Errorf("repository %q: %w", RedactURL(alias), err)
 	}
 	repo, err := entry.factory(ctx, alias, cfg, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("repository %q: %w", alias, err)
+		return nil, fmt.Errorf("repository %q: %w", RedactURL(alias), err)
 	}
 	return repo, nil
 }

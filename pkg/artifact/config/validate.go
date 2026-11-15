@@ -99,13 +99,13 @@ func (v *Validator) ValidateRepository(cfg *schema.ArtifactConfig, alias string)
 
 	repo, ok := cfg.Repositories[alias]
 	if !ok {
-		return fmt.Errorf("%w: repository %q is not configured (configured: %v)", errUtils.ErrArtifactConfigInvalid, alias, sortedAliases(cfg))
+		return fmt.Errorf("%w: repository %q is not configured (configured: %v)", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(alias), redactedAliases(cfg))
 	}
 	return v.validateRepository(cfg, alias, &repo)
 }
 
 func (v *Validator) validateRepository(cfg *schema.ArtifactConfig, alias string, repo *schema.ArtifactRepositoryConfig) error {
-	prefix := fmt.Sprintf("repository %q", alias)
+	prefix := fmt.Sprintf("repository %q", artifact.RedactURL(alias))
 	if !aliasPattern.MatchString(alias) {
 		return fmt.Errorf("%w: %s: alias must start with a letter or digit and contain only letters, digits, '_', '.' and '-'", errUtils.ErrArtifactConfigInvalid, prefix)
 	}
@@ -136,7 +136,7 @@ func (v *Validator) resolveKind(kind string) (*artifact.KindDescriptor, error) {
 	}
 	desc, ok := v.registry.Lookup(kind)
 	if !ok {
-		return nil, fmt.Errorf("%w: unknown kind %q (known kinds: %v)", errUtils.ErrArtifactConfigInvalid, kind, v.registry.Kinds())
+		return nil, fmt.Errorf("%w: unknown kind %q (known kinds: %v)", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(kind), v.registry.Kinds())
 	}
 	return desc, nil
 }
@@ -187,6 +187,15 @@ func validateDefaults(defaults *schema.ArtifactRepositoryDefaults) error {
 		errs = append(errs, fmt.Errorf("defaults.metadata.labels: %w", err))
 	}
 	return errors.Join(errs...)
+}
+
+// redactedAliases returns the configured aliases in order, each redacted, for an error that lists them.
+func redactedAliases(cfg *schema.ArtifactConfig) []string {
+	aliases := sortedAliases(cfg)
+	for i, alias := range aliases {
+		aliases[i] = artifact.RedactURL(alias)
+	}
+	return aliases
 }
 
 func sortedAliases(cfg *schema.ArtifactConfig) []string {
