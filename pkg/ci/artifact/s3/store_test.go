@@ -502,7 +502,7 @@ func TestStore_QueryToPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := store.queryToPrefix(tt.query)
+			result := store.queryToPrefix(&tt.query)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

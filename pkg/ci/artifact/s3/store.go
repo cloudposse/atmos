@@ -27,6 +27,9 @@ const (
 
 	// Metadata is stored as a JSON file alongside the artifact.
 	metadataSuffix = ".metadata.json"
+
+	// The wrap format joins a static sentinel error with the underlying cause so both stay in the chain.
+	wrapFormat = "%w: %w"
 )
 
 // Store implements the artifact.Backend interface using AWS S3.
@@ -96,6 +99,8 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 // registry honors this contract by calling SetAuthContext synchronously
 // before returning the backend.
 func (s *Store) SetAuthContext(resolver artifact.AuthContextResolver, identityName string) {
+	defer perf.Track(nil, "s3.Store.SetAuthContext")()
+
 	s.authResolver = resolver
 	if identityName != "" {
 		s.identityName = identityName
@@ -200,7 +205,7 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int
 
 	transport, err := s.transport(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrArtifactUploadFailed, err)
+		return fmt.Errorf(wrapFormat, errUtils.ErrArtifactUploadFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
@@ -238,7 +243,7 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *artif
 
 	transport, err := s.transport(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactDownloadFailed, err)
+		return nil, nil, fmt.Errorf(wrapFormat, errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
@@ -264,7 +269,7 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 
 	transport, err := s.transport(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrArtifactDeleteFailed, err)
+		return fmt.Errorf(wrapFormat, errUtils.ErrArtifactDeleteFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
@@ -281,16 +286,16 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 }
 
 // List lists artifacts matching the given query.
-func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) {
+func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) { //nolint:gocritic // Query is passed by value to satisfy the Backend interface.
 	defer perf.Track(nil, "s3.List")()
 
 	transport, err := s.transport(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactListFailed, err)
+		return nil, fmt.Errorf(wrapFormat, errUtils.ErrArtifactListFailed, err)
 	}
 
 	// Convert query to prefix-based S3 listing.
-	prefix := s.queryToPrefix(query)
+	prefix := s.queryToPrefix(&query)
 	fullPrefix := s.fullKey(prefix)
 
 	objects, _, err := blob.ListAll(ctx, transport, blob.ListOptions{Prefix: fullPrefix})
@@ -333,7 +338,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 
 	transport, err := s.transport(ctx)
 	if err != nil {
-		return false, fmt.Errorf("%w: %w", errUtils.ErrArtifactListFailed, err)
+		return false, fmt.Errorf(wrapFormat, errUtils.ErrArtifactListFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
@@ -354,7 +359,7 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*artifact.Metadata
 
 	transport, err := s.transport(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactMetadataFailed, err)
+		return nil, fmt.Errorf(wrapFormat, errUtils.ErrArtifactMetadataFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
@@ -397,7 +402,7 @@ func (s *Store) loadMetadata(ctx context.Context, transport blob.Store, artifact
 }
 
 // queryToPrefix converts an artifact.Query to an S3 prefix string.
-func (s *Store) queryToPrefix(query artifact.Query) string {
+func (s *Store) queryToPrefix(query *artifact.Query) string {
 	if query.All {
 		return ""
 	}

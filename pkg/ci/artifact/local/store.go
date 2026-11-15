@@ -67,6 +67,8 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 
 // Name returns the store type name.
 func (s *Store) Name() string {
+	defer perf.Track(nil, "artifact.local.Name")()
+
 	return storeName
 }
 
@@ -198,7 +200,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 // List lists artifacts matching the given query.
 // Finds metadata sidecar files with a corresponding artifact file (not dir),
 // applies Query filters, and sorts newest first.
-func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) {
+func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) { //nolint:gocritic // Query is passed by value to satisfy the Backend interface.
 	defer perf.Track(nil, "artifact.local.List")()
 
 	transport, err := s.transport()
