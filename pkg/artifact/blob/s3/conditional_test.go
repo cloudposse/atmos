@@ -387,9 +387,9 @@ func TestProbeRejectsIgnoredIfMatch(t *testing.T) {
 // operation, so its endpoint can change during the life of the store; a verdict from the old
 // endpoint must never vouch for the new one.
 func TestProbeVerdictIsBoundToTheEndpointItProbed(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
-	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	enforcing := newFake(t)
 	ignoring := newFake(t, s3test.WithConditionalBehavior(s3test.ConditionalIgnore))
 	ignoring.Seed("lock", []byte("owner-a"), nil)

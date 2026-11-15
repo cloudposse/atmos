@@ -18,21 +18,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
-// isolateAWS gives the SDK static environment credentials and no ambient profile, so a test proves
-// what the repository does with an identity rather than what the developer machine happens to have.
+// isolateAWS gives the SDK static environment credentials and none of the machine's AWS setup, so a
+// test proves what the repository does with an identity rather than what the developer machine
+// happens to have: no profile, no shared config, no other credential source.
 func isolateAWS(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := s3test.IsolateAWSConfig(t)
 	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-test-key")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-test-secret")
 	t.Setenv("AWS_REGION", "us-east-1")
-	// An ambient profile that the temporary files do not define would fail configuration loading.
-	t.Setenv("AWS_PROFILE", "")
-	t.Setenv("AWS_DEFAULT_PROFILE", "")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "credentials"), []byte("[default]\naws_access_key_id = test-key\naws_secret_access_key = test-secret\n"), 0o600))
-	t.Setenv("AWS_CONFIG_FILE", filepath.Join(dir, "config"))
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(dir, "credentials"))
-	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 }
 
 // A developer's selected profile never leaks into an isolated test: with AWS_PROFILE pointing at a

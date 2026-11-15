@@ -20,10 +20,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact/blob"
+	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
 func TestIdentityIsResolvedLazily(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	resolver := &fakeResolver{err: errors.New("sso expired")}
 	s, err := New("bucket", WithIdentity("deploy", resolver), WithRegion("us-east-1"))
 	require.NoError(t, err, "constructing the store must not touch credentials")
@@ -35,6 +37,7 @@ func TestIdentityIsResolvedLazily(t *testing.T) {
 }
 
 func TestUnresolvableIdentityFailsClosed(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-key")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")
 	t.Setenv("AWS_REGION", "us-east-1")
@@ -68,6 +71,7 @@ func TestUnresolvableIdentityFailsClosed(t *testing.T) {
 }
 
 func TestLegacyClientKeepsAmbientFallback(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	t.Setenv("AWS_REGION", "us-east-1")
 	t.Setenv("AWS_ACCESS_KEY_ID", "k")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "s")
@@ -82,6 +86,7 @@ func TestLegacyClientKeepsAmbientFallback(t *testing.T) {
 }
 
 func TestIdentityEndpointAndPathStyleRouteToTheEmulator(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	requests := make(chan *http.Request, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -186,6 +191,7 @@ func TestBuildClientOptFnsMatchesLegacyEndpointBehavior(t *testing.T) {
 }
 
 func TestHTTPClientInjectionReachesTheSDK(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	fake := newFake(t)
 	var used bool
 	client := httpClientFunc(func(r *http.Request) (*http.Response, error) {
@@ -208,19 +214,25 @@ type httpClientFunc func(*http.Request) (*http.Response, error)
 func (f httpClientFunc) Do(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestNamedIdentityReloadsRotatedCredentials(t *testing.T) {
+	isolated := s3test.IsolateAWSConfig(t)
 	headers := make(chan string, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headers <- r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	creds := filepath.Join(t.TempDir(), "credentials")
 	write := func(key string) {
 		require.NoError(t, os.WriteFile(creds, []byte("[default]\naws_access_key_id = "+key+"\naws_secret_access_key = secret\n"), 0o600))
 	}
 	write("first-key")
-	resolver := &fakeResolver{result: &store.AWSAuthConfig{CredentialsFile: creds, Profile: "default", Region: "us-east-1"}}
+	resolver := &fakeResolver{result: &store.AWSAuthConfig{
+		CredentialsFile: creds,
+		// The shared config is named too, so the developer's own default profile is never merged in.
+		ConfigFile: filepath.Join(isolated, "config"),
+		Profile:    "default",
+		Region:     "us-east-1",
+	}}
 	s, err := New("artifacts", WithIdentity("deploy", resolver), WithEndpoint(server.URL))
 	require.NoError(t, err)
 	_, err = s.Stat(context.Background(), "file", blob.StatOptions{})

@@ -12,6 +12,7 @@ import (
 	sdk "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
@@ -45,6 +46,7 @@ func TestIdentityEndpointUsesBucketPath(t *testing.T) {
 }
 
 func TestAdapterIdentityResolverRoutesToEndpoint(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	requests := make(chan *http.Request, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
