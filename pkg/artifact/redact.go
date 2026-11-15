@@ -2,8 +2,6 @@ package artifact
 
 import (
 	"net/url"
-	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -12,86 +10,130 @@ import (
 // RedactedValue replaces a value that must not be echoed because it may carry credentials.
 const RedactedValue = "<redacted>"
 
-var (
-	// The getter prefix pattern matches the forced-getter prefix of a go-getter address, such as
-	// "git::" in "git::https://example.com/repo.git". It only matches when a URL scheme follows, so
-	// a "::" inside scheme-less userinfo ("user::secret@host") is never mistaken for a prefix.
-	getterPrefixPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*::[A-Za-z][A-Za-z0-9+.-]*://`)
-
-	// The digest pattern matches a digest ("sha256:<hex>") that follows the "@" of a digest reference.
-	// Only well-known hash algorithms qualify, so a host named like an algorithm is never mistaken
-	// for one. An "@" followed by a digest introduces content, not a credential.
-	digestPattern = regexp.MustCompile(`^(?:sha1|sha224|sha256|sha384|sha512|md5|blake3):[0-9a-fA-F]+`)
-)
-
 // RedactURL returns raw with any userinfo removed, so that a mistakenly pasted credential is not
-// repeated in an error message. Strings that cannot be proven free of userinfo are replaced by
-// [RedactedValue] instead of being returned verbatim: a value that fails to parse, that carries
-// an "@" outside a URL authority (for example "user:secret@registry.example"), or whose "@" is not
-// the start of a digest, is never echoed. The last "@" of the authority ends the userinfo, as
-// RFC 3986 requires, so a password containing "@" or "::" is removed as a whole. A forced-getter
-// prefix such as "git::" is kept.
+// repeated in an error message or a log line. It is the one implementation every caller shares.
+//
+// RedactURL is fail-closed. A value without an "@" cannot hold userinfo and is returned as it is.
+// A value whose "@" signs all sit in the authority has its userinfo cut at the last one, as
+// RFC 3986 requires, and is returned when what is left is a well-formed host. A value that cannot
+// be proven free of a credential is replaced by [RedactedValue] as a whole: an "@" after the
+// authority that does not introduce a complete digest (a password that held "/", "?", "#" or "\"
+// may have closed there), scheme-less userinfo such as "user:secret@registry.example", a host that
+// is not shaped like a host, or an address that does not parse. The diagnostic value of an error
+// drops for such inputs by design; a credential is never echoed. A forced-getter prefix such as
+// "git::" is kept.
 func RedactURL(raw string) string {
 	defer perf.Track(nil, "artifact.RedactURL")()
 
 	if !strings.Contains(raw, "@") {
 		return raw
 	}
-	prefix, body := splitGetterPrefix(raw)
-	parsed, err := url.Parse(body)
-	if err != nil {
+	a := parseAddress(raw)
+	if len(a.stray) > 0 {
 		return RedactedValue
 	}
-	if parsed.User != nil {
-		parsed.User = nil
-		return prefix + parsed.String()
-	}
-	if parsed.Host == "" || len(credentialBoundaries(afterScheme(body))) > 0 {
-		// An "@" without an authority is scheme-less userinfo such as "user:secret@host", and an "@"
-		// after the authority that is not a digest may close a password holding "/", "?" or "#".
+	if len(a.inside) == 0 {
+		// Only digest introducers: the address carries no userinfo, but it is still checked.
+		if a.wellFormed(0) {
+			return raw
+		}
 		return RedactedValue
 	}
-	return raw
+	// Scheme-less userinfo cannot be told from a host and a path, so it is never cut out.
+	if a.scheme == "" {
+		return RedactedValue
+	}
+	start := a.inside[len(a.inside)-1] + 1
+	if !a.wellFormed(start) {
+		return RedactedValue
+	}
+	return a.prefix + a.scheme + a.rest[start:]
 }
 
-// RedactCredentials removes the credential carried by the URL raw from text, an error message that
-// may quote raw, its userinfo, or its password on its own. The userinfo and its trailing "@" are
-// cut out, and the password is replaced by [RedactedValue] in the form written and in the form a
-// URL parser decodes. A user name without a password is not replaced when it stands alone, since it
-// is usually a service account such as "git". The credential is found structurally, never by
-// splitting on ":" or "::", so a password holding ":", "::", "@", "/", "?" or "#" is removed whole.
+// wellFormed reports whether the address from offset start of its remainder on has a safe host and
+// parses as a URL.
+func (a *address) wellFormed(start int) bool {
+	if !a.hostIsSafe(start) {
+		return false
+	}
+	if a.scheme == "" {
+		return true
+	}
+	_, err := url.Parse(headOf(a.scheme + a.rest[start:]))
+	return err == nil
+}
+
+// RedactCredentials removes credentials from text, an error message or log line that may quote
+// raw, its userinfo, its password on its own, or any other URL. It is fail-closed, in three steps:
+//
+//  1. The credential carried by raw is cut out of text wherever it is quoted: the userinfo with its
+//     trailing "@", written as in a URL, decoded, or escaped for a quote, and the password on its
+//     own together with every fragment of it that a delimiter cut loose. The password is the part
+//     of the userinfo as written after its first ":", decoded separately. A user name without a
+//     password is not replaced when it stands alone, since it is usually a service account such as
+//     "git".
+//  2. Every other URL-shaped word of text that still holds an "@" which cannot be proven to
+//     introduce a digest is replaced by [RedactedValue] as a whole, and so is every word that still
+//     holds an "@" when raw carried a credential.
+//  3. If any part of the password is still present, the whole text is replaced by [RedactedValue].
 func RedactCredentials(text, raw string) string {
 	defer perf.Track(nil, "artifact.RedactCredentials")()
 
-	if !strings.Contains(raw, "@") {
-		return text
+	a := parseAddress(raw)
+	secret := a.credential()
+	if !secret.empty() {
+		text = secret.scrub(text)
 	}
-	_, body := splitGetterPrefix(raw)
-	rest := afterScheme(body)
-	boundaries := credentialBoundaries(rest)
-	// Longest userinfo first, so a shorter prefix never leaves the tail of a longer password behind.
-	sort.Sort(sort.Reverse(sort.IntSlice(boundaries)))
-	for _, boundary := range boundaries {
-		text = redactUserinfo(text, rest[:boundary])
+	text = redactWords(text, !secret.empty())
+	if secret.survives(text) {
+		return RedactedValue
 	}
 	return text
 }
 
-// redactUserinfo removes one userinfo, written as in a URL, from text.
-func redactUserinfo(text, userinfo string) string {
-	forms := []string{userinfo}
-	if decoded, err := url.PathUnescape(userinfo); err == nil && decoded != userinfo {
-		forms = append(forms, decoded)
+// RedactError returns err with its message scrubbed of the credentials of every address in raws
+// and of any other URL-shaped word that carries userinfo (see [RedactCredentials]). The result keeps
+// err in its chain, so errors.Is and errors.As still see the cause, and it is err itself when the
+// message needs no change.
+func RedactError(err error, raws ...string) error {
+	defer perf.Track(nil, "artifact.RedactError")()
+
+	if err == nil {
+		return nil
 	}
-	for _, form := range forms {
-		text = strings.ReplaceAll(text, form+"@", "")
+	message := err.Error()
+	scrubbed := message
+	for _, raw := range raws {
+		scrubbed = RedactCredentials(scrubbed, raw)
 	}
-	for _, form := range forms {
-		if _, password, ok := strings.Cut(form, ":"); ok && password != "" {
-			text = strings.ReplaceAll(text, password, RedactedValue)
-		}
+	if len(raws) == 0 {
+		scrubbed = RedactCredentials(scrubbed, "")
 	}
-	return text
+	if scrubbed == message {
+		return err
+	}
+	return &redactedError{message: scrubbed, err: err}
+}
+
+// redactedError is an error whose text has had a credential removed. It keeps the original error in
+// its chain so errors.Is and errors.As still see the cause.
+type redactedError struct {
+	message string
+	err     error
+}
+
+//nolint:lintroller // Trivial getter with no I/O.
+func (e *redactedError) Error() string { return e.message }
+
+//nolint:lintroller // Trivial getter with no I/O.
+func (e *redactedError) Unwrap() error { return e.err }
+
+// IsSCPAddress reports whether s is an SCP-style git address such as "git@github.com:org/repo.git".
+// Its user carries no password, so it holds no credential.
+func IsSCPAddress(s string) bool {
+	defer perf.Track(nil, "artifact.IsSCPAddress")()
+
+	return scpPattern.MatchString(s)
 }
 
 // SplitGetterPrefix separates a forced-getter prefix ("git::") from the URL that follows it. The
@@ -101,37 +143,4 @@ func SplitGetterPrefix(raw string) (prefix, body string) {
 	defer perf.Track(nil, "artifact.SplitGetterPrefix")()
 
 	return splitGetterPrefix(raw)
-}
-
-// splitGetterPrefix is [SplitGetterPrefix] without the performance tracking, for internal callers.
-func splitGetterPrefix(raw string) (prefix, body string) {
-	loc := getterPrefixPattern.FindStringIndex(raw)
-	if loc == nil {
-		return "", raw
-	}
-	cut := strings.Index(raw, "::") + len("::")
-	return raw[:cut], raw[cut:]
-}
-
-// afterScheme returns the text after the scheme separator "://", after a leading "//" of a
-// scheme-relative reference, or s itself when it has neither.
-func afterScheme(s string) string {
-	if _, rest, ok := strings.Cut(s, "://"); ok {
-		return rest
-	}
-	return strings.TrimPrefix(s, "//")
-}
-
-// credentialBoundaries returns the offset of every "@" in rest that may end a userinfo: any "@"
-// that is not the start of a digest. A userinfo is cut at the last "@" of the authority, but a
-// password may itself hold "/", "?" or "#", which would end the authority early, so every "@"
-// that cannot be proven to introduce a digest counts as a boundary.
-func credentialBoundaries(rest string) []int {
-	var boundaries []int
-	for i := 0; i < len(rest); i++ {
-		if rest[i] == '@' && !digestPattern.MatchString(rest[i+1:]) {
-			boundaries = append(boundaries, i)
-		}
-	}
-	return boundaries
 }

@@ -19,6 +19,11 @@ const (
 	SecretA = "S3cr3tA"
 	// SecretB is the second password fragment, used when a delimiter splits a password in two.
 	SecretB = "S3cr3tB"
+	// SecretC is the third password fragment, used when two delimiters split a password in three.
+	SecretC = "S3cr3tC"
+	// Marker starts every secret the generated inputs carry, so a leak of any fragment of a secret,
+	// however a delimiter cut it, is a leak of the marker.
+	Marker = "S3cr3t"
 )
 
 // Case is one credential-bearing input.
@@ -65,6 +70,20 @@ func Cases() []Case {
 		{Name: "forced getter", Raw: "git::https://usr7:S3cr3tA@example.com/r.git", Secrets: []string{User, SecretA}, Quoted: []string{SecretA}},
 		{Name: "forced getter with subdirectory and query", Raw: "git::https://usr7:S3cr3tA@example.com/r.git//sub?ref=v1", Secrets: []string{User, SecretA}, Quoted: []string{SecretA}},
 		{Name: "forced getter with a double colon password", Raw: "git::https://usr7:S3cr3tA::S3cr3tB@example.com/r.git", Secrets: []string{User, SecretA, SecretB}, Quoted: []string{"S3cr3tA::S3cr3tB"}},
+		{Name: "password with an at sign and a slash", Raw: "https://usr7:S3cr3tA@S3cr3tB/S3cr3tC@example.com/a", Secrets: []string{User, SecretA, SecretB, SecretC}, Quoted: []string{"S3cr3tA@S3cr3tB/S3cr3tC"}},
+		{Name: "escaped colon in the user name", Raw: "https://usr7%3AS3cr3tB:S3cr3tA%40S3cr3tC@example.com/a", Secrets: []string{User, SecretA, SecretB, SecretC, "S3cr3tA%40S3cr3tC"}, Quoted: []string{"S3cr3tA%40S3cr3tC", "S3cr3tA@S3cr3tC"}},
+		{Name: "escaped colon in the user name of a short password", Raw: "https://usr%3Aname:p%40ss@example.com/a", Secrets: []string{"usr%3Aname", "usr:name", "p%40ss", "p@ss"}, Quoted: []string{"p%40ss", "p@ss"}},
+		{Name: "host that looks like a digest algorithm and a port", Raw: "https://usr7:S3cr3tA@sha256:443/a", Secrets: []string{User, SecretA}, Quoted: []string{SecretA}},
+		{Name: "host that looks like a digest", Raw: "https://usr7:S3cr3tA@" + digest + "/a", Secrets: []string{User, SecretA}, Quoted: []string{SecretA}},
+		{Name: "password that ends in a digest", Raw: "https://usr7:S3cr3tA@" + digest + "@example.com/a", Secrets: []string{User, SecretA}, Quoted: []string{SecretA}},
+		{Name: "password with a slash and a digest after it", Raw: "https://usr7:S3cr3tA/S3cr3tB@" + digest + "@example.com/a", Secrets: []string{User, SecretA, SecretB}, Quoted: []string{"S3cr3tA/S3cr3tB"}},
+		{Name: "credential followed by a digest", Raw: "https://usr7:S3cr3tA@example.com/a@" + digest, Secrets: []string{User, SecretA}, Quoted: []string{SecretA}},
+		{Name: "password with a backslash", Raw: "https://usr7:S3cr3tA\\S3cr3tB@example.com/a", Secrets: []string{User, SecretA, SecretB}, Quoted: []string{"S3cr3tA\\S3cr3tB"}},
+		{Name: "password with a bracket", Raw: "https://usr7:S3cr3tA[S3cr3tB@example.com/a", Secrets: []string{User, SecretA, SecretB}, Quoted: []string{"S3cr3tA[S3cr3tB"}},
+		{Name: "password with a tab", Raw: "https://usr7:S3cr3tA\tS3cr3tB@example.com/a", Secrets: []string{User, SecretA, SecretB}, Quoted: []string{"S3cr3tA\tS3cr3tB"}},
+		{Name: "password with unicode", Raw: "https://usr7:S3cr3tA\u2713S3cr3tB@example.com/a", Secrets: []string{User, SecretA, SecretB}, Quoted: []string{"S3cr3tA\u2713S3cr3tB"}},
+		{Name: "credential repeated in the query", Raw: "https://usr7:S3cr3tA@example.com/a?next=https://usr7:S3cr3tB@other.example/b", Secrets: []string{User, SecretA, SecretB}, Quoted: []string{SecretA}},
+		{Name: "credential in the fragment", Raw: "https://usr7:S3cr3tA@example.com/a#https://usr7:S3cr3tB@other.example/b", Secrets: []string{User, SecretA, SecretB}, Quoted: []string{SecretA}},
 		{Name: "oci reference with a digest", Raw: "oci://usr7:S3cr3tA@ghcr.io/acme/catalog@" + digest, Secrets: []string{User, SecretA}, Quoted: []string{SecretA}},
 		{Name: "oci reference with a double colon password and a digest", Raw: "oci://usr7:S3cr3tA::S3cr3tB@ghcr.io/acme/catalog@" + digest, Secrets: []string{User, SecretA, SecretB}, Quoted: []string{"S3cr3tA::S3cr3tB"}},
 	}

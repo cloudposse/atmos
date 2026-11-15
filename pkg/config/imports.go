@@ -33,9 +33,11 @@ func SanitizeImport(s string) string {
 	// recognized when a scheme follows it, so a "::" inside a password never splits the credential.
 	prefix, urlPart := artifact.SplitGetterPrefix(s)
 
-	// A URL carrying userinfo is redacted structurally, by the helper every include error shares:
-	// the userinfo ends at the last "@" of the authority, whatever the password holds.
-	if strings.Contains(urlPart, "@") && (strings.Contains(urlPart, "://") || strings.HasPrefix(urlPart, "//")) {
+	// An import that holds an "@" is a credential-bearing URL unless it is provably a local path or
+	// an SCP-style git address. It is redacted by the helper every include error shares: the
+	// userinfo ends at the last "@" of the authority, and a value that cannot be proven free of a
+	// credential is replaced as a whole.
+	if strings.Contains(urlPart, "@") && !isLocalPath(urlPart) && !artifact.IsSCPAddress(urlPart) {
 		urlPart = artifact.RedactURL(urlPart)
 		if urlPart == artifact.RedactedValue {
 			return urlPart
@@ -45,7 +47,7 @@ func SanitizeImport(s string) string {
 	u, err := url.Parse(urlPart)
 	if err != nil {
 		// Unparsable; keep the text (it might be SCP-style git) but never a query, which may hold tokens.
-		before, _, _ := strings.Cut(s, "?")
+		before, _, _ := strings.Cut(prefix+urlPart, "?")
 		return before
 	}
 
@@ -55,6 +57,14 @@ func SanitizeImport(s string) string {
 	}
 
 	return prefix + u.String()
+}
+
+// isLocalPath reports whether an import is a file system path, which is never a URL.
+func isLocalPath(s string) bool {
+	if strings.Contains(s, "://") || strings.HasPrefix(s, "//") {
+		return false
+	}
+	return strings.HasPrefix(s, "/") || strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") || strings.HasPrefix(s, "~/")
 }
 
 type importTypes int
