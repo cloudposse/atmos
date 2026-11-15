@@ -425,6 +425,9 @@ func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *sc
 		return "", false, err
 	}
 	if isWorkdir {
+		// The section now holds the root again, so a subpath applied by an earlier resolution no longer
+		// describes it; clearing the marker lets this resolution select source_subdir once more.
+		delete(info.ComponentSection, workdirSubpathAppliedKey)
 		info.ComponentSection[provWorkdir.WorkdirPathKey] = fallback
 	}
 	path, err := applyDryRunWorkdirSubpath(info)
