@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -294,6 +295,33 @@ func TestConfigurationPlanRecordHoldsNoSensitiveGeneratedFiles(t *testing.T) {
 			require.Empty(t, prepared.Files[3].Content)
 		})
 	}
+}
+
+// The working directory digest skips cache directories, so a sensitive generated file there is
+// verified against its own recorded digest before apply restores it.
+func TestConfigurationPlanRejectsChangedSensitiveFileOutsideTheWorkdirDigest(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	relative := filepath.Join(".terragrunt-cache", "unit", "backend.tf")
+	reviewed := []byte(`terraform { backend "s3" { access_key = "reviewed-secret" } }`)
+	execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{{Path: filepath.ToSlash(relative), Content: reviewed, IfExists: "overwrite", Sensitive: true}}
+	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(execCtx.workingDir, relative)), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, relative), reviewed, 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+
+	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err, "the reviewed bytes are restored")
+	require.Equal(t, reviewed, prepared.Files[0].Content)
+
+	require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, relative), []byte(`terraform { backend "s3" { access_key = "tampered" } }`), 0o600))
+	_, err = restoreConfigurationPlan(t.Context(), config, info)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorContains(t, err, "reviewed generated file changed")
+
+	require.NoError(t, os.Remove(filepath.Join(execCtx.workingDir, relative)))
+	_, err = restoreConfigurationPlan(t.Context(), config, info)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, err, fs.ErrNotExist)
 }
 
 func TestConfigurationWorkdirDigestIncludesDownloadedModules(t *testing.T) {

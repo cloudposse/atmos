@@ -46,8 +46,10 @@ func problemFor(err error, file string) error {
 	}
 }
 
-// diagnosticProblem describes the first error diagnostic. Diagnostics without an expression come
-// from the parser or the block schema, so they hold no evaluated values and their detail is safe.
+// diagnosticProblem describes the first error diagnostic. A diagnostic that points at a source range
+// and carries neither an expression nor an evaluation context comes from the parser or the block
+// schema, so it holds no evaluated values and its detail is safe. A conversion diagnostic can lack
+// an expression while it quotes an evaluated value, so a missing expression alone proves nothing.
 func diagnosticProblem(diagnostics hcl.Diagnostics, file string, cause error) *model.Problem {
 	diagnostic := diagnostics[0]
 	for _, candidate := range diagnostics {
@@ -56,7 +58,7 @@ func diagnosticProblem(diagnostics hcl.Diagnostics, file string, cause error) *m
 			break
 		}
 	}
-	problem := &model.Problem{Code: model.CodeEvaluationError, Summary: "Terragrunt configuration error: " + diagnostic.Summary, File: file, Detail: diagnostic.Detail, Safe: diagnostic.Expression == nil, Err: cause}
+	problem := &model.Problem{Code: model.CodeEvaluationError, Summary: "Terragrunt configuration error: " + diagnostic.Summary, File: file, Detail: diagnostic.Detail, Safe: parserDiagnostic(diagnostic), Err: cause}
 	if diagnostic.Subject != nil {
 		if diagnostic.Subject.Filename != "" {
 			problem.File = diagnostic.Subject.Filename
@@ -68,7 +70,7 @@ func diagnosticProblem(diagnostics hcl.Diagnostics, file string, cause error) *m
 		problem.Code, problem.Safe = model.CodeEffectDenied, false
 		problem.Summary = "Terragrunt configuration runs a command, reads a secret, or uses the network during discovery"
 		problem.Hints = []string{"Discovery only reads files. Keep `run_cmd`, `sops_decrypt_file`, and other effectful functions out of the values that `terraform.source` and `dependency` blocks use; they can stay in `inputs`, which are evaluated when the unit runs."}
-	case diagnostic.Expression == nil:
+	case problem.Safe:
 		problem.Code = model.CodeSyntaxError
 		problem.Summary = "Invalid Terragrunt configuration: " + diagnostic.Summary
 		problem.Hints = []string{"Fix the HCL at the reported position, then run the command again."}
@@ -76,6 +78,13 @@ func diagnosticProblem(diagnostics hcl.Diagnostics, file string, cause error) *m
 		problem.Hints = []string{"Check the expression at the reported position."}
 	}
 	return problem
+}
+
+// parserDiagnostic reports whether a diagnostic originates from parsing or schema decoding. Those
+// diagnostics always carry the source range they describe and never an expression or evaluation
+// context, which is how a diagnostic about an evaluated value is attached.
+func parserDiagnostic(diagnostic *hcl.Diagnostic) bool {
+	return diagnostic.Expression == nil && diagnostic.EvalContext == nil && diagnostic.Subject != nil && diagnostic.Subject.Filename != ""
 }
 
 // setting builds a rejection that names a Terragrunt setting, with a custom summary and hint.

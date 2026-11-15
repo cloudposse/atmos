@@ -277,7 +277,7 @@ func TestExplicitLockGenerationReplacesAdjacentCopy(t *testing.T) {
 }
 
 // A manifest that cannot be written is reported with the configuration sentinel and keeps its
-// filesystem cause; the generated file written before it stays in place.
+// filesystem cause; the generated file written before it is rolled back, because nothing records it.
 func TestManifestWriteFailureCarriesSentinel(t *testing.T) {
 	root := t.TempDir()
 	// A regular file where the bookkeeping directory belongs makes the manifest write fail.
@@ -288,7 +288,7 @@ func TestManifestWriteFailureCarriesSentinel(t *testing.T) {
 	require.Contains(t, err.Error(), manifestName)
 	var pathErr *os.PathError
 	require.ErrorAs(t, err, &pathErr, "the filesystem cause is preserved")
-	require.Equal(t, "locals {}\n", read(t, root, "main.tf"))
+	require.NoFileExists(t, filepath.Join(root, "main.tf"), "a run whose manifest cannot be written leaves no unowned file")
 }
 
 // requireEffectiveDirectoryPermissions skips a test when the process can still create files in a

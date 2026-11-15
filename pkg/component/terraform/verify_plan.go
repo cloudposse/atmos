@@ -1,10 +1,16 @@
 package terraform
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -165,4 +171,97 @@ func finalizeVerification(info *schema.ConfigAndStacksInfo, freshPlanFile, diff 
 		log.Info("Plan verification passed: stored plan matches current state")
 	}
 	return nil
+}
+
+// withoutSensitiveContent copies files, dropping the bytes of every sensitive one.
+func withoutSensitiveContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
+	stored := slices.Clone(files)
+	for i := range stored {
+		if stored[i].Sensitive {
+			stored[i].Content = nil
+		}
+	}
+	return stored
+}
+
+// restoreSensitiveContent reads the bytes of each sensitive file back from the working directory and
+// restores them only when they are the reviewed ones. The working directory digest excludes some
+// locations, so the reviewed bytes are verified here against the digest recorded with the plan.
+func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurationFile, reviewed string) error {
+	contents, err := readSensitiveFiles(workdir, files)
+	if err != nil {
+		return err
+	}
+	if contents == nil {
+		return nil
+	}
+	for i := range files {
+		if files[i].Sensitive && contents[files[i].Path] == nil {
+			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, fs.ErrNotExist)
+		}
+	}
+	if digestSensitiveContents(contents) != reviewed {
+		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
+	}
+	for i := range files {
+		if files[i].Sensitive {
+			files[i].Content = contents[files[i].Path]
+		}
+	}
+	return nil
+}
+
+// sensitiveDigest fingerprints the sensitive generated files as they are in the working directory.
+// It is empty when no file is sensitive.
+func sensitiveDigest(workdir string, files []schema.ComponentConfigurationFile) (string, error) {
+	contents, err := readSensitiveFiles(workdir, files)
+	if err != nil || contents == nil {
+		return "", err
+	}
+	return digestSensitiveContents(contents), nil
+}
+
+// readSensitiveFiles reads every sensitive file below workdir, keyed by path. A missing file maps
+// to nil content. It returns nil when no file is sensitive.
+func readSensitiveFiles(workdir string, files []schema.ComponentConfigurationFile) (map[string][]byte, error) {
+	if !slices.ContainsFunc(files, func(file schema.ComponentConfigurationFile) bool { return file.Sensitive }) {
+		return nil, nil
+	}
+	root, err := os.OpenRoot(workdir)
+	if err != nil {
+		return nil, planIOError(err)
+	}
+	defer root.Close()
+	contents := make(map[string][]byte)
+	for i := range files {
+		if !files[i].Sensitive {
+			continue
+		}
+		content, err := root.ReadFile(files[i].Path)
+		if errors.Is(err, fs.ErrNotExist) {
+			contents[files[i].Path] = nil
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: reviewed generated file %s cannot be read: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, err)
+		}
+		if content == nil {
+			content = []byte{}
+		}
+		contents[files[i].Path] = content
+	}
+	return contents, nil
+}
+
+// digestSensitiveContents hashes the paths and bytes of the sensitive files in a stable order.
+func digestSensitiveContents(contents map[string][]byte) string {
+	hash := sha256.New()
+	for _, path := range slices.Sorted(maps.Keys(contents)) {
+		if contents[path] == nil {
+			fmt.Fprintf(hash, "%s\x00absent\n", path)
+			continue
+		}
+		fmt.Fprintf(hash, "%s\x00%x\n", path, sha256.Sum256(contents[path]))
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }

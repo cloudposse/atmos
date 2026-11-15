@@ -87,6 +87,39 @@ func TestUnitDiagnosticNamesTheUnit(t *testing.T) {
 	require.Equal(t, "Missing", diagnostic.Message)
 }
 
+// Detail text that is not marked safe can hold evaluated values, so a discovery diagnostic omits it
+// while it keeps the headline, hints, and location.
+func TestUnitDiagnosticOmitsUnsafeDetail(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	for _, test := range []struct {
+		name string
+		safe bool
+		want string
+	}{
+		{"unsafe detail is omitted", false, ""},
+		{"safe detail is kept", true, "evaluated value hunter2"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			diagnostic := unitDiagnostic(root, model.UnitFailure{Stack: "live", Name: "vpc", Err: &model.Problem{
+				Code: model.CodeEvaluationError, Summary: "Could not evaluate", Detail: "evaluated value hunter2", Safe: test.safe,
+				File: filepath.Join(root, "live", "vpc", "terragrunt.hcl"), Line: 4, Column: 2, Hints: []string{"Check the unit."},
+			}})
+			require.Equal(t, test.want, diagnostic.Detail.Detail)
+			require.Equal(t, test.safe, diagnostic.Detail.UserSafe)
+			require.Equal(t, "Could not evaluate", diagnostic.Message)
+			require.Equal(t, "live/vpc/terragrunt.hcl", diagnostic.Detail.Location.File)
+			require.Equal(t, uint32(4), diagnostic.Detail.Location.Line)
+			require.Equal(t, []string{"Check the unit."}, diagnostic.Detail.Hints)
+			if !test.safe {
+				wire, err := protojson.Marshal(diagnostic)
+				require.NoError(t, err)
+				require.NotContains(t, string(wire), "hunter2")
+			}
+		})
+	}
+}
+
 func TestDiscoveryReportsAFailedUnitAndKeepsTheHealthyOnes(t *testing.T) {
 	req := componentRequest(t)
 	healthy := model.DiscoveredUnit{Stack: "live", Name: "ok", Config: model.Resolution{Path: filepath.Join(req.RootDirectory, "live", "ok", "terragrunt.hcl"), Folders: []string{filepath.Join(req.RootDirectory, "module")}}}

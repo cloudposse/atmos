@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -24,7 +23,7 @@ import (
 const configurationPlanSuffix = ".atmos.json"
 
 // configurationPlanVersion is bumped whenever the stored binding changes shape.
-const configurationPlanVersion = 2
+const configurationPlanVersion = 3
 
 // subcommandPlan names the Terraform plan command.
 const subcommandPlan = "plan"
@@ -40,7 +39,10 @@ type configurationPlan struct {
 	Version                                                                               int
 	Stack, Component, Identity, EngineDigest, PlanDigest, WorkingDirectory, WorkingDigest string
 	BackendDigest                                                                         string
-	Prepared                                                                              *schema.PreparedComponentConfiguration
+	// SensitiveDigest binds the bytes of every sensitive generated file, including files the working
+	// directory digest excludes, such as those below a Terragrunt cache.
+	SensitiveDigest string
+	Prepared        *schema.PreparedComponentConfiguration
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -119,7 +121,7 @@ func verifyReviewedPlan(ctx context.Context, config *schema.AtmosConfiguration, 
 	if err := verifyReviewedBackendAndWorkdir(ctx, config, info, plan, path); err != nil {
 		return err
 	}
-	return restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files)
+	return restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files, plan.SensitiveDigest)
 }
 
 // verifyReviewedBackendAndWorkdir rejects a changed backend identity or a changed retained working directory.
@@ -268,41 +270,7 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: &stored}, nil
-}
-
-// withoutSensitiveContent copies files, dropping the bytes of every sensitive one.
-func withoutSensitiveContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
-	stored := slices.Clone(files)
-	for i := range stored {
-		if stored[i].Sensitive {
-			stored[i].Content = nil
-		}
-	}
-	return stored
-}
-
-// restoreSensitiveContent reads the bytes of each sensitive file back from the verified workdir.
-func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurationFile) error {
-	if !slices.ContainsFunc(files, func(file schema.ComponentConfigurationFile) bool { return file.Sensitive }) {
-		return nil
-	}
-	root, err := os.OpenRoot(workdir)
-	if err != nil {
-		return planIOError(err)
-	}
-	defer root.Close()
-	for i := range files {
-		if !files[i].Sensitive {
-			continue
-		}
-		content, err := root.ReadFile(files[i].Path)
-		if err != nil {
-			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, err)
-		}
-		files[i].Content = content
-	}
-	return nil
+	return &configurationPlan{WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: &stored}, nil
 }
 
 // backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.

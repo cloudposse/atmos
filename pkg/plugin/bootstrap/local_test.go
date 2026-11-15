@@ -191,9 +191,13 @@ func TestMissingProviderNamesTheProviderAndHowToSupplyIt(t *testing.T) {
 	err := missingProviderError([]ComponentReference{{Provider: "terragrunt", Capability: "component.discovery"}, {Provider: "terragrunt", Capability: "component.preparation"}})
 	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	details := strings.Join(errUtils.AllDetails(err), "\n")
-	assert.Contains(t, details, "components.terraform.terragrunt.enabled")
+	// A section may select a provider under another name, so the provider name is never a section name.
+	assert.NotContains(t, details, "components.terraform.terragrunt")
+	assert.Contains(t, details, "enabled section under `components.terraform`")
 	assert.Equal(t, 1, strings.Count(details, "terragrunt` configuration provider"), "a provider is named once however many capabilities were requested")
 	hints := strings.Join(errUtils.AllHints(err), "\n")
 	assert.Contains(t, hints, "plugins.packages")
 	assert.Contains(t, hints, "ATMOS_PROFILE")
+	assert.NotContains(t, hints, "components.terraform.terragrunt")
+	assert.Contains(t, hints, "section under `components.terraform`")
 }

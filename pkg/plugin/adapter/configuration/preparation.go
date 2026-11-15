@@ -276,7 +276,13 @@ func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pl
 	}
 	for _, dependency := range selected.Dependencies {
 		key := addressKey(dependency.Target)
-		if !sameDependencyUnit(baseline.units[key], current[key]) {
+		before, after := baseline.units[key], current[key]
+		// A target outside the evaluated scope, such as a dependency beyond a single imported
+		// unit's root, is absent from both inventories. The unchanged edge is already compared above.
+		if before == nil && after == nil {
+			continue
+		}
+		if !sameDependencyUnit(before, after) {
 			return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
 		}
 	}
@@ -289,6 +295,8 @@ type preparationEvidence struct {
 	request *pluginv1.DiscoverComponentsRequest
 	units   map[[3]string]*pluginv1.DiscoveredComponent
 	self    *pluginv1.DiscoveredComponent
+	// importStack is the stack that imported the unit; it is empty for a discovered unit.
+	importStack string
 }
 
 // preparationBaseline finds the evidence for a discovered unit in its provider's discovery
@@ -328,7 +336,7 @@ func (s *Session) importBaseline(instance *pluginv1.DiscoveredComponent) *prepar
 		for _, unit := range units {
 			byAddress[addressKey(unit.Address)] = unit
 		}
-		return &preparationEvidence{request: request, units: byAddress, self: reported}
+		return &preparationEvidence{request: request, units: byAddress, self: reported, importStack: instance.Address.Stack}
 	}
 	return nil
 }
@@ -356,11 +364,15 @@ func (s *Session) checkDependencyStates(ctx context.Context, baseline *preparati
 		}
 		key := addressKey(dependency.Target)
 		target := baseline.units[key]
+		if target == nil {
+			// The provider did not evaluate the target, so it has no state evidence to compare.
+			continue
+		}
 		current, err := s.dependencyState(ctx, discovery, target, env, command)
 		if err != nil {
 			return err
 		}
-		expected, err := s.referenceState(ctx, discovery, target, key, command)
+		expected, err := s.referenceState(ctx, discovery, target, preparedKey(baseline, key), command)
 		if err != nil {
 			return err
 		}
@@ -369,6 +381,16 @@ func (s *Session) checkDependencyStates(ctx context.Context, baseline *preparati
 		}
 	}
 	return nil
+}
+
+// preparedKey is the address under which a dependency's prepared state is stored: the address
+// the dependency was selected with. An imported unit's dependencies are its siblings in the
+// importing stack, so they take that stack rather than the provider's own.
+func preparedKey(baseline *preparationEvidence, key [3]string) [3]string {
+	if baseline.importStack != "" {
+		key[0] = baseline.importStack
+	}
+	return key
 }
 
 func (s *Session) referenceState(ctx context.Context, discovery *pluginv1.DiscoverComponentsRequest, target *pluginv1.DiscoveredComponent, key [3]string, command string) (*pluginv1.ComponentStateIdentity, error) {

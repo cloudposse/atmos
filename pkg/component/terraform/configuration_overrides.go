@@ -102,6 +102,19 @@ func withoutStackEnvironment(execution *schema.ComponentExecution, stackEnv map[
 	return &result
 }
 
+// componentMergeConfig returns the configuration that governs merging this component's sections.
+// A component's own `settings.list_merge_strategy` wins over the global one, as it does when the
+// stack manifests are merged. The shared configuration is copied, never modified.
+func componentMergeConfig(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) *schema.AtmosConfiguration {
+	strategy, _ := info.ComponentSettingsSection["list_merge_strategy"].(string)
+	if strategy == "" || strategy == config.Settings.ListMergeStrategy {
+		return config
+	}
+	merged := *config
+	merged.Settings.ListMergeStrategy = strategy
+	return &merged
+}
+
 // applyStackOverrides layers the stack's vars and env over what the provider prepared. A reviewed
 // saved plan already embodies its inputs, so only the environment is layered for it.
 func applyStackOverrides(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
@@ -109,7 +122,7 @@ func applyStackOverrides(config *schema.AtmosConfiguration, info *schema.ConfigA
 	if usesConfigurationPlan(info) {
 		return nil
 	}
-	inputs, err := overlayStackVars(config, prepared.Inputs, info.ComponentVarsSection)
+	inputs, err := overlayStackVars(componentMergeConfig(config, info), prepared.Inputs, info.ComponentVarsSection)
 	if err != nil {
 		return err
 	}

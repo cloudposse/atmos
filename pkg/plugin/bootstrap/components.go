@@ -210,11 +210,11 @@ func missingProviderError(references []ComponentReference) error {
 	slices.Sort(names)
 	provider := strings.Join(names, ", ")
 	return errUtils.Build(errUtils.ErrPluginUnsupportedExtension).
-		WithExplanationf("`components.terraform.%s.enabled` is true, but no installed plugin package provides the `%s` configuration provider.", names[0], provider).
+		WithExplanationf("An enabled section under `components.terraform` selects the `%s` configuration provider, but no installed plugin package provides it.", provider).
 		WithContext("provider", provider).
 		WithHint("Declare the package under `plugins.packages` with `source` and `version`, or `path` for a local build, then check it with `atmos plugin list`.").
 		WithHint("If the project ships a profile that supplies a local build, such as the Terragrunt example's `dev` profile, activate it with `--profile` or `ATMOS_PROFILE`.").
-		WithHintf("To stop using the provider, set `components.terraform.%s.enabled` to false.", names[0]).
+		WithHint("To stop using the provider, set `enabled` to false in the section under `components.terraform` that selects it.").
 		Err()
 }
 
