@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"sync"
 
@@ -62,13 +63,13 @@ func (c *ConfigRepositories) Describe(alias string) (RepositoryInfo, error) {
 	}
 	info := RepositoryInfo{
 		Alias:             alias,
-		Capabilities:      desc.Capabilities,
+		Capabilities:      desc.Capabilities.Clone(),
 		Packaging:         desc.EffectivePackaging(repoCfg.Packaging),
 		RequiredLockScope: plan.Required,
 		Policy:            policy,
 	}
 	if repoCfg.Defaults != nil && repoCfg.Defaults.Metadata != nil {
-		info.Defaults = artifact.Metadata{Description: repoCfg.Defaults.Metadata.Description, Labels: repoCfg.Defaults.Metadata.Labels}
+		info.Defaults = artifact.Metadata{Description: repoCfg.Defaults.Metadata.Description, Labels: maps.Clone(repoCfg.Defaults.Metadata.Labels)}
 	}
 	if plan.Provider != alias {
 		info.LockProvider = plan.Provider

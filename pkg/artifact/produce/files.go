@@ -156,6 +156,9 @@ func (p *Producer) prepareFrom(ctx context.Context, snap *snapshot.Snapshot, req
 		Documents: documentDescriptors(docs),
 		KindData:  id.meta.KindData,
 	}
+	// The request's provenance and the metadata source's kind data are caller-owned; the sealed
+	// Record keeps its own copies.
+	record = record.Clone()
 	if err := record.Seal(); err != nil {
 		return nil, err
 	}

@@ -120,3 +120,38 @@ func TestConfigRepositories_DrivesTheServiceEndToEnd(t *testing.T) {
 	assert.Equal(t, artifact.OutcomeCreated, result.Outcome)
 	assert.Equal(t, int64(1), constructed.Load())
 }
+
+// TestConfigRepositories_DescribeReturnsIndependentCopies proves a caller editing what Describe
+// returned cannot change the registry's capabilities or the configured defaults, which every later
+// Describe would otherwise serve.
+func TestConfigRepositories_DescribeReturnsIndependentCopies(t *testing.T) {
+	var constructed atomic.Int64
+	labels := map[string]string{"team": "platform"}
+	cfg := &schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
+		"shared": {
+			Kind:     artifact.RepositoryKindLocalDir,
+			Options:  map[string]any{"path": "/tmp/shared"},
+			Defaults: &schema.ArtifactRepositoryDefaults{Metadata: &schema.ArtifactMetadataDefaults{Labels: labels}},
+		},
+	}}
+	repos := service.FromConfig(cfg, configRegistry(t, &constructed))
+	pristine, err := repos.Describe("shared")
+	require.NoError(t, err)
+	wantPackagings := append([]artifact.Packaging(nil), pristine.Capabilities.Packagings...)
+	wantLockScopes := append([]artifact.LockScope(nil), pristine.Capabilities.LockScopes...)
+	require.NotEmpty(t, wantPackagings)
+	require.NotEmpty(t, wantLockScopes)
+
+	first, err := repos.Describe("shared")
+	require.NoError(t, err)
+	first.Capabilities.Packagings[0] = artifact.PackagingZip
+	first.Capabilities.LockScopes[0] = artifact.LockScopeRepository
+	first.Defaults.Labels["team"] = "scribble"
+
+	second, err := repos.Describe("shared")
+	require.NoError(t, err)
+	assert.Equal(t, wantPackagings, second.Capabilities.Packagings)
+	assert.Equal(t, wantLockScopes, second.Capabilities.LockScopes)
+	assert.Equal(t, map[string]string{"team": "platform"}, second.Defaults.Labels)
+	assert.Equal(t, map[string]string{"team": "platform"}, labels, "the configured defaults are untouched")
+}

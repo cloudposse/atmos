@@ -1,6 +1,7 @@
 package produce
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -47,7 +48,8 @@ func (p *Producer) Repack(ctx context.Context, request *RepackRequest) (*artifac
 	if request.OperationID == "" || request.PreparedAt.IsZero() {
 		return nil, fmt.Errorf("%w: the operation ID and preparation time are required", errUtils.ErrArtifactConfigInvalid)
 	}
-	record := request.Record
+	// The Record is copied so later edits to the request cannot reach the prepared artifact.
+	record := request.Record.Clone()
 	if err := record.Validate(); err != nil {
 		return nil, err
 	}
@@ -90,6 +92,8 @@ func treeOpener(record *artifact.Record, tree string) opener {
 }
 
 // repackDocuments pairs each Record document descriptor with its bytes and verifies the digest.
+// The bytes are copied after the check: document blobs are read lazily when the artifact is
+// published, so they must not depend on a buffer the caller still owns.
 func repackDocuments(record *artifact.Record, provided map[artifact.DocumentRole][]byte) ([]stagedDocument, error) {
 	docs := make([]stagedDocument, 0, len(record.Documents))
 	for _, descriptor := range record.Documents {
@@ -100,7 +104,7 @@ func repackDocuments(record *artifact.Record, provided map[artifact.DocumentRole
 		if int64(len(data)) != descriptor.Size || digest.FromBytes(data) != descriptor.Digest {
 			return nil, fmt.Errorf("%w: %s does not match its descriptor", errUtils.ErrArtifactIntegrityFailed, descriptor.Role)
 		}
-		docs = append(docs, stagedDocument{descriptor: descriptor, data: data})
+		docs = append(docs, stagedDocument{descriptor: descriptor, data: bytes.Clone(data)})
 	}
 	return docs, nil
 }
