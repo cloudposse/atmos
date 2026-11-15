@@ -33,6 +33,11 @@ func (r *Repository) begin(ctx context.Context, job *publishJob, plan *publishPl
 	if plan.oldOp != nil && plan.oldOp.OperationID != job.opID {
 		r.tidyOperation(ctx, plan.oldOp.OperationID)
 	}
+	if plan.settled != "" && plan.settled != job.opID {
+		// The new journal now names the replaced payload's location (Prior), so the journal that
+		// held the only other record of it has nothing left to carry.
+		r.tidyOperation(ctx, plan.settled)
+	}
 	return pending, r.settings.fault(faultBeforePayload)
 }
 
@@ -127,25 +132,13 @@ func (r *Repository) collectClaims(ctx context.Context, ownKey string) ([]layout
 	return claims, nil
 }
 
-// claimOf returns the claim a reference holds: its representation when completed, its journal when
-// pending, and in both states the locations its journal still awaits removing. A reference whose
-// state is missing holds no claim.
+// claimOf returns the claim a reference holds: its representation when completed (or its journal,
+// when that is the only record of the live payload), its journal when pending, and in both states
+// the locations its journal still awaits removing. A reference whose state is missing holds no claim.
 func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layout.Claim, error) {
 	base := layout.Claim{ReferenceKey: ref.Key(), Name: ref.Name, Version: ref.Version}
 	if ref.Available() {
-		rep, err := r.loadRepresentation(ctx, ref.Key())
-		if err != nil || rep == nil {
-			return nil, err
-		}
-		base.Paths = claimPaths(rep.Packaging, rep.Location)
-		// A completed reference keeps its journal until the cleanup that follows completion has
-		// removed everything the journal still lists.
-		journal, err := r.loadOperation(ctx, ref.OperationID)
-		if err != nil {
-			return nil, err
-		}
-		base.Paths = append(base.Paths, journalClaimPaths(journal)...)
-		return &base, nil
+		return r.completedClaim(ctx, ref, &base)
 	}
 	op, err := r.loadOperation(ctx, ref.OperationID)
 	if err != nil || op == nil {
@@ -154,6 +147,34 @@ func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layou
 	base.OperationID = op.OperationID
 	base.Paths = append(claimPaths(op.Packaging, op.Location), journalClaimPaths(op)...)
 	return &base, nil
+}
+
+// completedClaim returns the claim of a completed reference: the location its representation names,
+// the location its journal records when the representation does not name the live payload (the
+// journal is then the only record of it), and the locations the journal still awaits removing. A
+// completed reference with none of them holds no claim.
+func (r *Repository) completedClaim(ctx context.Context, ref *layout.Reference, base *layout.Claim) (*layout.Claim, error) {
+	rep, err := r.loadRepresentation(ctx, ref.Key())
+	if err != nil {
+		return nil, err
+	}
+	// A completed reference keeps its journal until the cleanup that follows completion has
+	// removed everything the journal still lists.
+	journal, err := r.loadOperation(ctx, ref.OperationID)
+	if err != nil {
+		return nil, err
+	}
+	if rep != nil {
+		base.Paths = claimPaths(rep.Packaging, rep.Location)
+	}
+	if recovered := recoveredRepresentation(ref, journal); recovered != nil && (rep == nil || rep.RecordDigest != ref.RecordDigest) {
+		base.Paths = append(base.Paths, claimPaths(recovered.Packaging, recovered.Location)...)
+	}
+	base.Paths = append(base.Paths, journalClaimPaths(journal)...)
+	if len(base.Paths) == 0 {
+		return nil, nil
+	}
+	return base, nil
 }
 
 // journalClaimPaths lists the paths of every payload a journal still awaits removing: the replaced

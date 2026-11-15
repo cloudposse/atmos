@@ -28,6 +28,11 @@ type publishPlan struct {
 	owned     []ownedPayload
 	abandoned []ownedPayload
 	oldOp     *layout.Operation
+	// settled is the completed publication's journal a replacement kept because it is the only
+	// record of the replaced payload's location (see settleReplaced). It is removed once the
+	// replacement's own journal names that location.
+	settled   string
+	recovered *layout.Representation
 	expected  *artifact.PinnedReference
 	scope     artifact.LockScope
 }
@@ -80,8 +85,12 @@ func (r *Repository) publishLocked(ctx context.Context, job *publishJob, options
 	if plan.admission == layout.AdmitReplace {
 		// The journal of the publication being replaced is dropped with it, so what it still owes
 		// is retired first.
-		if err := r.settleReplaced(ctx, plan.current.ref); err != nil {
+		recovered, err := r.settleReplaced(ctx, plan.current.ref)
+		if err != nil {
 			return nil, err
+		}
+		if recovered != nil {
+			plan.recovered, plan.settled = recovered, plan.current.ref.OperationID
 		}
 	}
 	if err := r.resolveLocation(ctx, job, plan); err != nil {
@@ -217,6 +226,15 @@ func (r *Repository) resolveLocation(ctx context.Context, job *publishJob, plan 
 func (r *Repository) loadPendingState(ctx context.Context, plan *publishPlan, rep *layout.Representation) error {
 	if rep != nil {
 		plan.owned = append(plan.owned, ownedPayload{packaging: rep.Packaging, location: rep.Location, set: setOfDescriptors(rep.Payload, rep.Documents)})
+	}
+	if plan.recovered != nil {
+		// The stored representation does not name the live payload; the settled journal did. The
+		// payload belongs to this reference, and it is the content the replacement replaces.
+		plan.owned = append(plan.owned, ownedPayload{
+			packaging: plan.recovered.Packaging, location: plan.recovered.Location,
+			set: setOfDescriptors(plan.recovered.Payload, plan.recovered.Documents),
+		})
+		rep = plan.recovered
 	}
 	if plan.current != nil && !plan.current.ref.Available() {
 		oldOp, err := r.loadOperation(ctx, plan.current.ref.OperationID)
