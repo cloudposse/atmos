@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -661,7 +662,8 @@ func TestFilesProducer_MetadataSourceFailureIsClassifiedAndKeepsItsCause(t *test
 			_, err := produce.New(produce.WithStagingRoot(t.TempDir()), produce.WithMetadataSource(source)).Prepare(t.Context(), *request(src, artifact.PackagingNone))
 			require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
 			require.ErrorIs(t, err, tc.cause)
-			assert.Contains(t, err.Error(), src, "the source path is part of the error")
+			// The path is quoted with %q, which doubles backslashes on Windows.
+			assert.Contains(t, err.Error(), fmt.Sprintf("%q", src), "the source path is part of the error")
 		})
 	}
 }
