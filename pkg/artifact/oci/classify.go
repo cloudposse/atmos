@@ -78,12 +78,24 @@ func (r *root) original() *ocispec.Descriptor {
 // isIndex reports whether the root is an index or manifest list.
 func (r *root) isIndex() bool { return isIndexMediaType(r.desc.MediaType) }
 
+// The Docker media types of a manifest and of a manifest list. Together with the OCI types they are the
+// whole set of roots the copy transport follows to their config, layers, and children.
+const (
+	mediaTypeDockerManifest     = "application/vnd.docker.distribution.manifest.v2+json"
+	mediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
+)
+
+// isIndexMediaType reports whether the media type is an OCI index or a Docker manifest list. The match
+// is exact: the copy transport follows a root's children only for these types, so a type that merely
+// ends the same way would be classified here but copied as a leaf, without its content.
 func isIndexMediaType(mediaType string) bool {
-	return mediaType == ocispec.MediaTypeImageIndex || strings.HasSuffix(mediaType, ".manifest.list.v2+json")
+	return mediaType == ocispec.MediaTypeImageIndex || mediaType == mediaTypeDockerManifestList
 }
 
+// isManifestMediaType reports whether the media type is an OCI image manifest or a Docker manifest.
+// The match is exact for the reason isIndexMediaType gives.
 func isManifestMediaType(mediaType string) bool {
-	return mediaType == ocispec.MediaTypeImageManifest || strings.HasSuffix(mediaType, ".manifest.v2+json")
+	return mediaType == ocispec.MediaTypeImageManifest || mediaType == mediaTypeDockerManifest
 }
 
 // loadRoot fetches a root by its resolved descriptor with a bounded, digest-verified read and
