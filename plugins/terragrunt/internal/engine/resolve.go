@@ -296,6 +296,12 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 		parsed, err := config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
 		if err != nil {
+			// The apply-time values are unknown, and the unit's own inputs and locals no longer count as
+			// registered: whatever Terragrunt logged before failing may carry them.
+			files := append(append(apply.FilesRead.Paths(), pctx.FilesRead.Paths()...), path)
+			if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, files, path, false) {
+				sink.Withhold()
+			}
 			return nil, err
 		}
 		// Apply-time values can differ from the ones planned, so register them before any event is returned.

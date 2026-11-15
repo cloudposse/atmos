@@ -340,6 +340,38 @@ func TestResolveWithholdsLogsForSensitiveValuesInApplyTimeFiles(t *testing.T) {
 	assert.Contains(t, entries[0].Message, "withheld")
 }
 
+// When the apply-time reparse fails, the values it would have registered are unknown, so a unit that
+// declares sensitive values has its events withheld; a unit that declares none keeps them.
+func TestResolveWithholdsLogsWhenTheApplyTimeReparseFails(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		locals   string
+		withheld bool
+	}{
+		{"sensitive", "locals { tok = sensitive(\"tok-123\") }\n", true},
+		{"plain", "locals { tok = \"tok-123\" }\n", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := nativeUnit(t, test.locals+"include \"extra\" {\n  path = get_terraform_command() == \"apply\" ? \"${get_terragrunt_dir()}/missing.hcl\" : \"${get_terragrunt_dir()}/plan.hcl\"\n}\n")
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "plan.hcl"), []byte("inputs = { name = \"visible\" }\n"), 0o644))
+			sink := NewLogSink("debug", request.BasePath)
+			logger(t, sink).Debug("before tok-123")
+
+			_, err := Resolve(WithLogSink(t.Context(), sink), request)
+
+			require.Error(t, err)
+			entries := sink.Entries()
+			require.NotEmpty(t, entries)
+			if test.withheld {
+				require.Len(t, entries, 1)
+				assert.Contains(t, entries[0].Message, "withheld")
+				return
+			}
+			assert.Equal(t, "before tok-123", entries[0].Message)
+		})
+	}
+}
+
 // A sensitive value declared where its text cannot be read back, such as in a block other than locals or in
 // an included file's locals or inputs, withholds the events even when the evaluation succeeds.
 func TestUnredactedSensitivityCountsOnlyUnknownValues(t *testing.T) {
