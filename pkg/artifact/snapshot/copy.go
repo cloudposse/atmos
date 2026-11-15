@@ -163,6 +163,25 @@ func (c *capturer) recheckFile(record *sourceRecord, now os.FileInfo) error {
 	if !sameFileState(record.info, opened) {
 		return changedError(record.rel, errSizeOrTimeChanged)
 	}
+	if err := c.rehash(file, record); err != nil {
+		return err
+	}
+	if hook := c.opts.onRehashed; hook != nil {
+		hook(record.rel)
+	}
+	// A mode change leaves the bytes and the digest alone, so the metadata is read once more.
+	final, err := file.Stat()
+	if err != nil {
+		return changedError(record.rel, err)
+	}
+	if !sameFileState(record.info, final) {
+		return changedError(record.rel, errSizeOrTimeChanged)
+	}
+	return nil
+}
+
+// rehash reads the source file again and compares its size and digest with the staged copy.
+func (c *capturer) rehash(file *os.File, record *sourceRecord) error {
 	// Read at most one byte past the recorded size so a file that grew after the stat is rejected
 	// without being read in full.
 	hasher := sha256.New()

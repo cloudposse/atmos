@@ -141,28 +141,21 @@ func readDirNames(dir string) ([]string, error) {
 	return names, nil
 }
 
-// checkLinkContainment resolves every captured symlink physically and rejects any that leaves the
-// source. A lexical target check is not enough, because a chain of links can clean to a contained
-// path yet resolve outside it. A dangling link is checked through its longest existing ancestor
-// plus the missing remainder, so it cannot escape once the missing path is created.
+// checkLinkContainment resolves every captured symlink through the captured links and rejects any
+// that leaves the source. A lexical check of each target is not enough, because a chain of links
+// can clean to a contained path yet resolve outside it. A dangling link is resolved through its
+// existing part plus the missing remainder, so it cannot escape once the missing path is created.
+// The check reads the links as captured and never the source, which may have changed since.
 func (c *capturer) checkLinkContainment() error {
-	// linkpath.Resolve reports absolute paths, so the root must be absolute too: EvalSymlinks keeps
-	// a relative source relative, which would reject every contained link.
-	absRoot, err := filepath.Abs(c.root)
-	if err != nil {
-		return fmt.Errorf("%w: resolve source: %w", errUtils.ErrArtifactPackagingInvalid, err)
-	}
-	realRoot, err := filepath.EvalSymlinks(absRoot)
-	if err != nil {
-		return fmt.Errorf("%w: resolve source: %w", errUtils.ErrArtifactPackagingInvalid, err)
+	links := make(map[string]string)
+	for index := range c.sources {
+		if record := &c.sources[index]; record.target != "" {
+			links[record.rel] = record.target
+		}
 	}
 	for index := range c.sources {
 		record := &c.sources[index]
-		if record.target == "" {
-			continue
-		}
-		resolved, reachable := linkpath.Resolve(record.abs)
-		if reachable && !linkpath.Within(realRoot, resolved) {
+		if record.target != "" && linkpath.Escapes(links, record.rel) {
 			return fmt.Errorf("%w: symlink %q resolves outside the source", errUtils.ErrArtifactUnsafePath, record.rel)
 		}
 	}

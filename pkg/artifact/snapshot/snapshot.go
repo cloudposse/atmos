@@ -47,6 +47,7 @@ type options struct {
 	stagingRoot string
 	limits      Limits
 	onCaptured  func(path string)
+	onRehashed  func(path string)
 }
 
 // WithStagingRoot sets the directory that holds the private staging directory. The default is the
@@ -159,6 +160,10 @@ func Capture(ctx context.Context, source string, opts ...Option) (*Snapshot, err
 	if applied.limits.MaxEntries <= 0 {
 		applied.limits.MaxEntries = DefaultMaxEntries
 	}
+	// Cancellation is final even when no entry would ever check it, such as an empty directory.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	root, err := os.MkdirTemp(applied.stagingRoot, stagingPattern)
 	if err != nil {
 		return nil, fmt.Errorf("%w: create staging directory: %w", errUtils.ErrArtifactPackagingInvalid, err)
@@ -193,19 +198,28 @@ func captureInto(ctx context.Context, source, root string, opts *options) (*Snap
 	if err != nil {
 		return nil, err
 	}
-	if err := c.recheck(); err != nil {
-		return nil, err
-	}
-	if info.IsDir() {
-		if err := c.checkLinkContainment(); err != nil {
-			return nil, err
-		}
-	}
-	if err := c.finish(); err != nil {
+	if err := c.verify(info.IsDir()); err != nil {
 		return nil, err
 	}
 	sort.Slice(c.entries, func(i, j int) bool { return c.entries[i].Path < c.entries[j].Path })
 	return &Snapshot{Root: root, Entries: c.entries, TotalBytes: c.total, SourceIsFile: !info.IsDir(), staged: c.staged}, nil
+}
+
+// verify checks the finished capture: the source is unchanged, no link leaves it, the inventory is
+// valid, and the capture was not canceled while it ran.
+func (c *capturer) verify(isDir bool) error {
+	if err := c.recheck(); err != nil {
+		return err
+	}
+	if isDir {
+		if err := c.checkLinkContainment(); err != nil {
+			return err
+		}
+	}
+	if err := c.finish(); err != nil {
+		return err
+	}
+	return c.ctx.Err()
 }
 
 // resolveSource resolves a user-chosen top-level source (which may itself be a symlink) and checks

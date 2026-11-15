@@ -91,3 +91,28 @@ func TestWithin(t *testing.T) {
 		})
 	}
 }
+
+func TestEscapes(t *testing.T) {
+	tests := []struct {
+		name  string
+		links map[string]string
+		from  string
+		want  bool
+	}{
+		{"link to a sibling stays inside", map[string]string{"a": "b"}, "a", false},
+		{"link above the root escapes", map[string]string{"a": ".."}, "a", true},
+		{"link to a missing path below a link to the root escapes through it", map[string]string{"d": ".", "L": "d/../outside/missing"}, "L", true},
+		{"the same link inside the root when the directory link goes deeper", map[string]string{"d": "sub", "L": "d/../outside/missing"}, "L", false},
+		{"chained links that climb out escape", map[string]string{"a/b": "..", "c": "a/b/../.."}, "c", true},
+		{"chained links that stay inside", map[string]string{"a/b": "..", "c": "a/b/x"}, "c", false},
+		{"a link inside a linked directory is read through the link", map[string]string{"d": "sub", "sub/L": "../.."}, "d/L", true},
+		{"a dangling link beyond the root escapes", map[string]string{"a": "x/../../y"}, "a", true},
+		{"a loop does not escape and terminates", map[string]string{"p": "q", "q": "p"}, "p", false},
+		{"a plain name is not a link", map[string]string{}, "plain", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, linkpath.Escapes(tc.links, tc.from))
+		})
+	}
+}

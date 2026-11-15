@@ -40,6 +40,43 @@ func Resolve(target string) (string, bool) {
 	return filepath.Join(append([]string{w.resolved}, w.missing...)...), true
 }
 
+// Escapes reports whether the symlink at from leaves the tree that links describes. The tree is
+// recorded, not read from disk: links maps the slash-separated path of every symlink, relative to
+// the tree root, to its target. Resolution follows the recorded links exactly like Resolve follows
+// physical ones (a dangling tail is resolved lexically), so the answer cannot change when the
+// files the links were read from change afterwards. A link chain that loops does not escape.
+func Escapes(links map[string]string, from string) bool {
+	defer perf.Track(nil, "linkpath.Escapes")()
+
+	pending := splitComponents(from)
+	var resolved []string
+	for hops := 0; len(pending) > 0; {
+		component := pending[0]
+		pending = pending[1:]
+		switch component {
+		case ".":
+		case parentComponent:
+			if len(resolved) == 0 {
+				return true
+			}
+			resolved = resolved[:len(resolved)-1]
+		default:
+			current := strings.Join(append(resolved, component), "/")
+			target, isLink := links[current]
+			if !isLink {
+				resolved = append(resolved, component)
+				continue
+			}
+			hops++
+			if hops > maxLinkHops {
+				return false
+			}
+			pending = append(splitComponents(target), pending...)
+		}
+	}
+	return false
+}
+
 // walker resolves a path one component at a time.
 type walker struct {
 	// base is the filesystem root, with its volume on Windows.
