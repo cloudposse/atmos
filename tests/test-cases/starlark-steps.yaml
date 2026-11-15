@@ -72,7 +72,7 @@ tests:
     expect:
       stderr:
         - "summary: 0 succeeded, 1 failed"
-        - "the child ran, but it must be skipped under --dry-run"
+        - "the child ran, but it must be skipped\\s+under --dry-run"
       exit_code: 1
 
   - name: starlark workflow templates in parallel child
