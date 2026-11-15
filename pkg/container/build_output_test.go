@@ -100,7 +100,7 @@ func TestBuildOutputCancellationStopsRunningChild(t *testing.T) {
 	require.Contains(t, string(captured), "build stage ready")
 }
 
-// copyTestBinaryAsDocker links (or, when linking is unsupported, copies) the running test binary to
+// copyTestBinaryAsDocker links (or, on Windows or when linking is unsupported, copies) the running test binary to
 // <dir>/docker so it can stand in for a docker executable without relying on shell scripts or
 // Unix-only tools. Linking avoids duplicating a large race-instrumented binary on disk.
 func copyTestBinaryAsDocker(t *testing.T, dir string) string {
@@ -112,8 +112,11 @@ func copyTestBinaryAsDocker(t *testing.T, dir string) string {
 		name += ".exe"
 	}
 	target := filepath.Join(dir, name)
-	if err := os.Link(executable, target); err == nil {
-		return target
+	// Windows cannot delete a hard link to a running executable, so TempDir cleanup would fail there.
+	if runtime.GOOS != "windows" {
+		if err := os.Link(executable, target); err == nil {
+			return target
+		}
 	}
 	content, err := os.ReadFile(executable)
 	require.NoError(t, err)
