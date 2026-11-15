@@ -116,3 +116,11 @@ func TestRedact_AddressBoundsEdges(t *testing.T) {
 		})
 	}
 }
+
+// TestCredentialCandidates checks that only distinct strings that can carry userinfo are scrubbed
+// for, in the order they were first seen.
+func TestCredentialCandidates(t *testing.T) {
+	got := credentialCandidates([]string{"plain", "a@b", "a@b", "", "c:d@e", "plain"})
+	assert.Equal(t, []string{"a@b", "c:d@e"}, got)
+	assert.Empty(t, credentialCandidates(nil))
+}

@@ -108,7 +108,7 @@ type address struct {
 // before any work that grows with the number of its "@" signs starts.
 func parseAddress(raw string) address {
 	a := address{}
-	if ats := strings.Count(raw, "@"); ats > maxBoundaries || (ats > 0 && len(raw) > maxAddressLength) {
+	if exceedsBounds(raw) {
 		a.overflow = true
 		return a
 	}
@@ -124,6 +124,20 @@ func parseAddress(raw string) address {
 	if a.authorityEnd < 0 {
 		a.authorityEnd = len(a.rest)
 	}
+	a.findBoundaries()
+	return a
+}
+
+// exceedsBounds reports whether raw holds more "@" signs than [maxBoundaries], or is longer than
+// [maxAddressLength] while holding one, so it is withheld without being split.
+func exceedsBounds(raw string) bool {
+	ats := strings.Count(raw, "@")
+	return ats > maxBoundaries || (ats > 0 && len(raw) > maxAddressLength)
+}
+
+// findBoundaries records the offset of every "@" of the remainder: those in the authority, and
+// those after it that do not introduce a digest.
+func (a *address) findBoundaries() {
 	for i := 0; i < a.authorityEnd; i++ {
 		if a.rest[i] == '@' {
 			a.inside = append(a.inside, i)
@@ -134,7 +148,6 @@ func parseAddress(raw string) address {
 			a.stray = append(a.stray, i)
 		}
 	}
-	return a
 }
 
 // introducesDigest reports whether the "@" at offset i of the remainder, after the authority,
