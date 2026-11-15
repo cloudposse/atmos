@@ -83,6 +83,10 @@ func Extract(ctx context.Context, content *artifact.Content, stage, scratch stri
 	if err := fill(ctx, t, content, scratch); err != nil {
 		return err
 	}
+	// The last member may have finished after a cancellation; never report that as success.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := checkLinkContainment(stage, record); err != nil {
 		return err
 	}

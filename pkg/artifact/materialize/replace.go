@@ -192,11 +192,20 @@ func Materialize(ctx context.Context, content *artifact.Content, dest string, op
 	if err := Extract(ctx, content, stage, scratch, opts...); err != nil {
 		return err
 	}
-	if err := os.Chmod(stage, parentDirMode); err != nil {
-		return fmt.Errorf("%w: set staging mode: %w", errUtils.ErrArtifactPackagingInvalid, err)
-	}
-	preserveScratch, err = replaceDestination(stage, dest, applyOptions(opts).replaceGuard)
+	preserveScratch, err = installStaged(ctx, stage, dest, applyOptions(opts).replaceGuard)
 	return err
+}
+
+// installStaged moves the extracted tree into place. Cancellation is final: a canceled pull never
+// installs, even when extraction had just finished.
+func installStaged(ctx context.Context, stage, dest string, guard func(dest string) error) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if err := os.Chmod(stage, parentDirMode); err != nil {
+		return false, fmt.Errorf("%w: set staging mode: %w", errUtils.ErrArtifactPackagingInvalid, err)
+	}
+	return replaceDestination(stage, dest, guard)
 }
 
 // replaceDestination atomically exchanges the staged and existing trees. No children are

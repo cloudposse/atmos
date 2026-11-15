@@ -82,27 +82,27 @@ func fillTar(ctx context.Context, t *tree, reader io.Reader, gzipped bool, check
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			// Drain so the verifying payload reader checks its full digest at end of stream.
-			_, err = io.Copy(io.Discard, reader)
+			_, err = copyContext(ctx, io.Discard, reader)
 			return err
 		}
 		if err != nil {
 			return fmt.Errorf("%w: tar: %w", errUtils.ErrArtifactIntegrityFailed, err)
 		}
-		if err := applyTarHeader(t, tr, header, checker); err != nil {
+		if err := applyTarHeader(ctx, t, tr, header, checker); err != nil {
 			return err
 		}
 	}
 }
 
-func applyTarHeader(t *tree, tr *tar.Reader, header *tar.Header, checker *managedChecker) error {
+func applyTarHeader(ctx context.Context, t *tree, tr *tar.Reader, header *tar.Header, checker *managedChecker) error {
 	name := strings.TrimSuffix(path.Clean(header.Name), "/")
 	switch header.Typeflag {
 	case tar.TypeDir:
-		return applyMember(t, checker, &archiveMember{name: name, kind: memberDir, size: header.Size})
+		return applyMember(ctx, t, checker, &archiveMember{name: name, kind: memberDir, size: header.Size})
 	case tar.TypeSymlink:
-		return applyMember(t, checker, &archiveMember{name: name, kind: memberLink, target: header.Linkname})
+		return applyMember(ctx, t, checker, &archiveMember{name: name, kind: memberLink, target: header.Linkname})
 	case tar.TypeReg:
-		return applyMember(t, checker, &archiveMember{name: name, kind: memberFile, size: header.Size, body: tr})
+		return applyMember(ctx, t, checker, &archiveMember{name: name, kind: memberFile, size: header.Size, body: tr})
 	default:
 		return fmt.Errorf("%w: archive member %q has unsupported type %q (hard links, devices, and special files are rejected)", errUtils.ErrArtifactPackagingInvalid, header.Name, header.Typeflag)
 	}
@@ -127,7 +127,7 @@ func fillZip(ctx context.Context, t *tree, payload *artifact.ContentStream, scra
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := applyZipFile(t, file, checker); err != nil {
+		if err := applyZipFile(ctx, t, file, checker); err != nil {
 			return err
 		}
 	}
@@ -153,25 +153,25 @@ func spoolBounded(ctx context.Context, spool io.Writer, payload *artifact.Conten
 	return size, nil
 }
 
-func applyZipFile(t *tree, file *zip.File, checker *managedChecker) error {
+func applyZipFile(ctx context.Context, t *tree, file *zip.File, checker *managedChecker) error {
 	name := strings.TrimSuffix(path.Clean(file.Name), "/")
 	mode := file.Mode()
 	switch {
 	case mode.IsDir():
-		return applyMember(t, checker, &archiveMember{name: name, kind: memberDir})
+		return applyMember(ctx, t, checker, &archiveMember{name: name, kind: memberDir})
 	case mode&fs.ModeSymlink != 0:
 		target, err := readZipText(file)
 		if err != nil {
 			return err
 		}
-		return applyMember(t, checker, &archiveMember{name: name, kind: memberLink, target: target})
+		return applyMember(ctx, t, checker, &archiveMember{name: name, kind: memberLink, target: target})
 	case mode.IsRegular():
 		rc, err := file.Open()
 		if err != nil {
 			return fmt.Errorf("%w: zip member %q: %w", errUtils.ErrArtifactIntegrityFailed, file.Name, err)
 		}
 		defer rc.Close()
-		return applyMember(t, checker, &archiveMember{name: name, kind: memberFile, size: file.FileInfo().Size(), body: rc})
+		return applyMember(ctx, t, checker, &archiveMember{name: name, kind: memberFile, size: file.FileInfo().Size(), body: rc})
 	default:
 		return fmt.Errorf("%w: archive member %q has an unsupported type", errUtils.ErrArtifactPackagingInvalid, file.Name)
 	}
@@ -208,10 +208,17 @@ type archiveMember struct {
 }
 
 // applyMember validates one archive member against the inventory (or the managed directory) and
-// writes it through the tree.
-func applyMember(t *tree, checker *managedChecker, m *archiveMember) error {
+// writes it through the tree. The member body is read through the context, so a cancellation stops
+// a large member mid-copy instead of after it.
+func applyMember(ctx context.Context, t *tree, checker *managedChecker, m *archiveMember) error {
 	if err := validateMemberName(m.name); err != nil {
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m.body != nil {
+		m.body = contextReader{ctx: ctx, reader: m.body}
 	}
 	if checker.owns(m.name, t) {
 		return checker.check(m)
