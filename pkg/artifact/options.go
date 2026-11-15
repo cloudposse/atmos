@@ -364,11 +364,23 @@ func validateKeyPatternFields(pattern string, actions []string) error {
 		stripped := templateStringPattern.ReplaceAllString(action, `""`)
 		for _, match := range templateFieldPattern.FindAllStringSubmatch(stripped, -1) {
 			if !keyPatternFields[match[1]] {
-				return fmt.Errorf("%w: key_pattern %q references unknown field .%s (allowed: .Name, .Version, .Kind, .CreatedAt)", errUtils.ErrArtifactConfigInvalid, RedactURL(pattern), match[1])
+				return unknownKeyPatternField(pattern, match[1])
 			}
 		}
 	}
 	return nil
+}
+
+// unknownKeyPatternField reports a template field that key_pattern may not reference. The field
+// name is a fragment of the pattern, and a pattern that carries a credential may hold it in the
+// userinfo, as in "https://user:{{.secret}}@host/", where scrubbing the pattern does not scrub the
+// fragment. The name is therefore withheld whenever the redaction changes the pattern.
+func unknownKeyPatternField(pattern, field string) error {
+	redacted := RedactURL(pattern)
+	if redacted != pattern {
+		return fmt.Errorf("%w: key_pattern %q references a field that is not allowed (allowed: .Name, .Version, .Kind, .CreatedAt)", errUtils.ErrArtifactConfigInvalid, redacted)
+	}
+	return fmt.Errorf("%w: key_pattern %q references unknown field .%s (allowed: .Name, .Version, .Kind, .CreatedAt)", errUtils.ErrArtifactConfigInvalid, redacted, field)
 }
 
 func validateKeyPatternSegments(pattern, literal string) error {

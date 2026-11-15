@@ -53,3 +53,44 @@ func TestValidationErrors_DoNotEchoCredentials(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateKeyPattern_UnknownFieldDoesNotEchoCredential checks that the field name extracted from
+// a template action is withheld when the pattern carries a credential: a field name is a fragment
+// of the pattern, so scrubbing the pattern alone does not scrub it.
+func TestValidateKeyPattern_UnknownFieldDoesNotEchoCredential(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		// secrets are what the error must not hold. A field name in the path of the pattern is
+		// echoed with the rest of the redacted pattern, so only the userinfo is a secret there.
+		secrets []string
+	}{
+		{name: "password is the field", pattern: "https://usr7:{{.S3cr3tA}}@example.com/{{.Name}}.tar", secrets: []string{"S3cr3t", "usr7"}},
+		{name: "token is the field", pattern: "https://{{.S3cr3tA}}@example.com/{{.Name}}.tar", secrets: []string{"S3cr3t"}},
+		{name: "scheme-less userinfo", pattern: "usr7:{{.S3cr3tA}}@example.com/{{.Name}}.tar", secrets: []string{"S3cr3t", "usr7"}},
+		{name: "field after a literal credential", pattern: "https://usr7:S3cr3tA@example.com/{{.Bogus}}.tar", secrets: []string{"S3cr3tA", "usr7"}},
+		{name: "second action holds the field", pattern: "https://usr7:S3cr3tA@example.com/{{.Name}}/{{.Bogus}}.tar", secrets: []string{"S3cr3tA", "usr7"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateKeyPattern(tt.pattern, PackagingTar)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			for _, secret := range tt.secrets {
+				assert.NotContains(t, err.Error(), secret)
+			}
+			assert.NotContains(t, err.Error(), "unknown field .", "the field name is withheld when the pattern carries a credential")
+		})
+	}
+}
+
+// TestValidateKeyPattern_UnknownFieldIsNamedWithoutCredential is the negative path of the test
+// above: a pattern that carries no credential still names the unknown field, because the name is
+// what lets the user fix the pattern.
+func TestValidateKeyPattern_UnknownFieldIsNamedWithoutCredential(t *testing.T) {
+	err := ValidateKeyPattern("builds/{{.Bogus}}/{{.Name}}.tar", PackagingTar)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+	assert.Contains(t, err.Error(), "unknown field .Bogus")
+	assert.Contains(t, err.Error(), "builds/{{.Bogus}}/{{.Name}}.tar")
+}
