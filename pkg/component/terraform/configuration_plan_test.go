@@ -455,6 +455,11 @@ func TestRejectEnvironmentPlanOutputNameCase(t *testing.T) {
 		{name: "linux keeps names exact", goos: "linux", entries: []string{"tf_cli_args_plan=-out=env.plan", "Tf_Cli_Args=-out"}},
 		{name: "linux exact name is rejected", goos: "linux", entries: []string{"TF_CLI_ARGS_plan=-out=env.plan"}, reject: true},
 		{name: "linux later exact name overrides", goos: "linux", entries: []string{"TF_CLI_ARGS_plan=-out=env.plan", "TF_CLI_ARGS_plan=-lock=false"}},
+		{name: "tab separates tokens", goos: "linux", entries: []string{"TF_CLI_ARGS_plan=-lock=false\t-out=hidden.plan"}, reject: true},
+		{name: "newline separates tokens", goos: "linux", entries: []string{"TF_CLI_ARGS=-lock=false\n--out hidden.plan"}, reject: true},
+		{name: "quoted flag", goos: "linux", entries: []string{"TF_CLI_ARGS_plan=-lock=false \"-out=hidden.plan\""}, reject: true},
+		{name: "quoted tab stays inside one token", goos: "linux", entries: []string{"TF_CLI_ARGS_plan=-var 'a\t-out=x'"}},
+		{name: "unterminated quote fails to parse", goos: "linux", entries: []string{"TF_CLI_ARGS_plan=-var \"a -lock=false"}, reject: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			err := rejectEnvironmentPlanOutput(test.entries, test.goos)
