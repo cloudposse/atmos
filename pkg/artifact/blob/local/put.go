@@ -93,6 +93,11 @@ func (s *Store) stage(ctx context.Context, root *os.Root, key string, body io.Re
 		return nil, s.classifyCreate(root, key, target, err)
 	}
 	pending := &staged{tempPath: name}
+	if err := keepDestinationMode(root, file, target); err != nil {
+		_ = file.Close()
+		pending.discard(root)
+		return nil, wrapIO(blob.OpPut, key, err)
+	}
 	hash := sha256.New()
 	written, copyErr := copyBody(ctx, io.MultiWriter(file, hash), body, opts.Size)
 	closeErr := file.Close()
@@ -107,6 +112,38 @@ func (s *Store) stage(ctx context.Context, root *os.Root, key string, body io.Re
 		return nil, wrapIO(blob.OpPut, key, err)
 	}
 	return pending, nil
+}
+
+// keepDestinationMode gives the staged file the permission bits of the regular file it will
+// replace, so an overwrite does not widen (or narrow) a mode that was set by hand. It runs before
+// any content is written, so restricted data is never exposed under the default mode. A missing
+// or non-regular destination keeps the store's default mode.
+func keepDestinationMode(root *os.Root, file *os.File, target string) error {
+	want, ok := destinationMode(root, target)
+	if !ok {
+		return nil
+	}
+	created, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if created.Mode().Perm() == want {
+		return nil
+	}
+	if err := file.Chmod(want); err != nil && !errors.Is(err, errors.ErrUnsupported) {
+		return err
+	}
+	return nil
+}
+
+// destinationMode returns the permission bits of the regular file at target. It reports false
+// when there is no such file; a destination that cannot be inspected fails at commit instead.
+func destinationMode(root *os.Root, target string) (os.FileMode, bool) {
+	info, err := root.Stat(target)
+	if err != nil || !info.Mode().IsRegular() {
+		return 0, false
+	}
+	return info.Mode().Perm(), true
 }
 
 // stageAttrs writes the attribute file to a temporary path when any attribute is set.
