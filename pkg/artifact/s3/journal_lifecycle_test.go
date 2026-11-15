@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -349,7 +350,9 @@ func TestRetirement_IsIdempotentOnceTheRecordIsGone(t *testing.T) {
 
 // A newcomer racing the retry that finishes a retirement either is refused while the journal owes
 // the location, or takes it once the retirement is done. It is never admitted in between, which
-// would let the retry delete the newcomer's objects under the same keys.
+// would let the retry delete the newcomer's objects under the same keys. A refusal during the
+// retirement is correct, so the newcomer's attempts are bounded by the retirement finishing, never
+// by a count, and it is published once the retirement is over.
 func TestJournalPrior_RetirementRacingANewcomerNeverDeletesTheNewcomer(t *testing.T) {
 	for _, s := range lifecycleShapes {
 		t.Run(s.name, func(t *testing.T) {
@@ -363,33 +366,66 @@ func TestJournalPrior_RetirementRacingANewcomerNeverDeletesTheNewcomer(t *testin
 			retry := prepare(t, l.repo("new"), l.spec("new", "new"))
 			incoming := prepare(t, newcomer, content)
 
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			retired := make(chan struct{})
 			var wg sync.WaitGroup
-			errs := make(chan error, 2)
+			retryErr := make(chan error, 1)
+			type raced struct {
+				admitted bool
+				err      error
+			}
+			raceResult := make(chan raced, 1)
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
-				_, err := l.repo("new").Publish(context.Background(), retry, artifact.PublishOptions{ExpectedPrior: &l.current.Pinned})
-				errs <- err
+				defer close(retired)
+				_, err := l.repo("new").Publish(ctx, retry, artifact.PublishOptions{ExpectedPrior: &l.current.Pinned})
+				retryErr <- err
 			}()
 			go func() {
 				defer wg.Done()
-				var err error
-				for range 200 {
-					if _, err = newcomer.Publish(context.Background(), incoming, artifact.PublishOptions{}); !errors.Is(err, errUtils.ErrArtifactConflict) {
-						break
-					}
-				}
-				errs <- err
+				admitted, err := raceUntilRetired(ctx, newcomer, incoming, retired)
+				raceResult <- raced{admitted: admitted, err: err}
 			}()
 			wg.Wait()
-			close(errs)
-			for err := range errs {
-				require.NoError(t, err)
+			require.NoError(t, <-retryErr)
+			race := <-raceResult
+			require.NoError(t, race.err, "a refusal while the retirement ran is correct; anything else is not")
+
+			// The retirement is over, so the location is claimable: a newcomer that was refused
+			// throughout takes it now.
+			if !race.admitted {
+				_, err := newcomer.Publish(ctx, incoming, artifact.PublishOptions{})
+				require.NoError(t, err, "a retired location is claimable again")
 			}
 
 			assertIntact(t, newcomer, ref("other/app", testVersion))
 			assertIntact(t, l.repo("new"), defaultRef())
 			assert.Empty(t, l.journals())
 		})
+	}
+}
+
+// raceUntilRetired publishes the newcomer repeatedly until it is admitted or the retirement it races
+// is over, whichever comes first. A conflict is the correct answer while the retirement still owes
+// the location, so it is not an error. The attempts end on the observable condition, not on a count.
+// It reports whether the newcomer was admitted.
+func raceUntilRetired(ctx context.Context, newcomer *Repository, incoming *artifact.PreparedArtifact, retired <-chan struct{}) (admitted bool, err error) {
+	for {
+		_, err := newcomer.Publish(ctx, incoming, artifact.PublishOptions{})
+		if err == nil {
+			return true, nil
+		}
+		if !errors.Is(err, errUtils.ErrArtifactConflict) {
+			return false, err
+		}
+		select {
+		case <-retired:
+			return false, nil
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
 	}
 }
