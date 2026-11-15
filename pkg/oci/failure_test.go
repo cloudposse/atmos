@@ -227,3 +227,28 @@ func TestVerifiedBlobChecksExactSizeAndDigest(t *testing.T) {
 		})
 	}
 }
+
+func TestBoundIdentityWithAnEmptyCredentialIsRejectedWhenUsed(t *testing.T) {
+	t.Parallel()
+	resource, err := name.NewRepository("registry.example.com/acme/plugin")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name string
+		auth authn.Authenticator
+	}{
+		{"empty config", authn.FromConfig(authn.AuthConfig{})},
+		{"blank basic credential", authn.FromConfig(authn.AuthConfig{Auth: "Og=="})},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			resolver := NewMockAuthenticationResolver(controller)
+			resolver.EXPECT().Resolve(gomock.Any(), resource).Return(tc.auth, true, nil)
+			client := NewClient(nil, WithAuthenticationResolver(resolver))
+			actual, err := client.authentication(t.Context(), resource)
+			require.NoError(t, err)
+			_, err = actual.Authorization()
+			require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+		})
+	}
+}

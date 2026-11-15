@@ -78,3 +78,54 @@ func TestLayoutPush_RecordsOnlyManifestsThatNameASubject(t *testing.T) {
 		})
 	}
 }
+
+// pushSubjectManifest pushes an image manifest that optionally names a subject and returns its descriptor.
+func pushSubjectManifest(t *testing.T, layout *oci.Layout, subject *ocispec.Descriptor, note string) ocispec.Descriptor {
+	t.Helper()
+	ctx := t.Context()
+	config := []byte("{}")
+	configDesc := oci.Descriptor("application/vnd.oci.empty.v1+json", config)
+	if exists, err := layout.Exists(ctx, configDesc); err == nil && !exists {
+		require.NoError(t, layout.Push(ctx, configDesc, strings.NewReader(string(config))))
+	}
+	manifest := ocispec.Manifest{Config: configDesc, Layers: []ocispec.Descriptor{}, Subject: subject, Annotations: map[string]string{"note": note}}
+	manifest.SchemaVersion = 2
+	manifest.MediaType = ocispec.MediaTypeImageManifest
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	desc := oci.Descriptor(ocispec.MediaTypeImageManifest, raw)
+	require.NoError(t, layout.Push(ctx, desc, strings.NewReader(string(raw))))
+	return desc
+}
+
+func TestExtendedCopyWithoutSubjectTraversalKeepsTheSelectedRootAndItsReferrers(t *testing.T) {
+	ctx := t.Context()
+	source, err := oci.OpenLayout(ctx, filepath.Join(t.TempDir(), "source"))
+	require.NoError(t, err)
+	grandSubject := pushSubjectManifest(t, source, nil, "grand-subject")
+	root := pushSubjectManifest(t, source, &grandSubject, "root")
+	signature := pushSubjectManifest(t, source, &root, "signature")
+	require.NoError(t, source.Tag(ctx, root, "1.0.0"))
+
+	dest, err := oci.OpenLayout(ctx, filepath.Join(t.TempDir(), "dest"))
+	require.NoError(t, err)
+	got, err := oci.ExtendedCopy(ctx, oci.GraphSource{Store: source, Reference: "1.0.0"}, oci.Destination{Store: dest, Reference: "1.0.0"}, oci.WithoutSubjectTraversal())
+	require.NoError(t, err)
+	assert.Equal(t, root.Digest, got.Digest)
+
+	for name, want := range map[string]struct {
+		desc   ocispec.Descriptor
+		wanted bool
+	}{
+		"the selected root":        {root, true},
+		"the referrer of the root": {signature, true},
+		"the subject of the root":  {grandSubject, false},
+	} {
+		exists, err := dest.Exists(ctx, want.desc)
+		require.NoError(t, err, name)
+		assert.Equal(t, want.wanted, exists, name)
+	}
+	resolved, err := dest.Resolve(ctx, "1.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, root.Digest, resolved.Digest)
+}

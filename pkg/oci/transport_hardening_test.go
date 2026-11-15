@@ -27,50 +27,46 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/registry/remote"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-// imageIndex is embedded under a lower-case name so the embedded field does not shadow the
-// ImageIndex method of the interface.
-type imageIndex = v1.ImageIndex
-
-// countingIndex counts how often its children are listed.
-type countingIndex struct {
-	imageIndex
-	listed *int
-}
-
-func (c countingIndex) IndexManifest() (*v1.IndexManifest, error) {
-	*c.listed++
-	return c.imageIndex.IndexManifest()
-}
-
-// sharedParent lists one nested index twice, as a subgraph shared by two parents appears.
-type sharedParent struct {
-	imageIndex
-	manifest *v1.IndexManifest
-	raw      []byte
-	child    v1.ImageIndex
-}
-
-func (p sharedParent) RawManifest() ([]byte, error)              { return p.raw, nil }
-func (p sharedParent) IndexManifest() (*v1.IndexManifest, error) { return p.manifest, nil }
-func (p sharedParent) ImageIndex(v1.Hash) (v1.ImageIndex, error) { return p.child, nil }
+//go:generate go run go.uber.org/mock/mockgen -destination mock_index_test.go -package oci github.com/google/go-containerregistry/pkg/v1 ImageIndex
 
 func TestLegacyIndexGraphVisitsASharedIndexOnceAndStopsOnCancel(t *testing.T) {
 	child, err := random.Index(64, 1, 1)
 	require.NoError(t, err)
-	listed := 0
-	shared := countingIndex{imageIndex: child, listed: &listed}
 	childDesc, err := partial.Descriptor(child)
 	require.NoError(t, err)
 	manifest := &v1.IndexManifest{SchemaVersion: 2, MediaType: types.OCIImageIndex, Manifests: []v1.Descriptor{*childDesc, *childDesc}}
 	raw, err := json.Marshal(manifest)
 	require.NoError(t, err)
-	parent := sharedParent{imageIndex: empty.Index, manifest: manifest, raw: raw, child: shared}
+
+	// The shared child counts how often its own children are listed and otherwise delegates.
+	listed := 0
+	controller := gomock.NewController(t)
+	shared := NewMockImageIndex(controller)
+	shared.EXPECT().MediaType().DoAndReturn(child.MediaType).AnyTimes()
+	shared.EXPECT().Digest().DoAndReturn(child.Digest).AnyTimes()
+	shared.EXPECT().Size().DoAndReturn(child.Size).AnyTimes()
+	shared.EXPECT().RawManifest().DoAndReturn(child.RawManifest).AnyTimes()
+	shared.EXPECT().IndexManifest().DoAndReturn(func() (*v1.IndexManifest, error) {
+		listed++
+		return child.IndexManifest()
+	}).AnyTimes()
+	shared.EXPECT().Image(gomock.Any()).DoAndReturn(child.Image).AnyTimes()
+	shared.EXPECT().ImageIndex(gomock.Any()).DoAndReturn(child.ImageIndex).AnyTimes()
+
+	// The parent lists the shared child twice, as a subgraph shared by two parents appears. Only the
+	// requested child digest is served, so selecting any other child fails the test.
+	parent := NewMockImageIndex(controller)
+	parent.EXPECT().MediaType().Return(types.OCIImageIndex, nil).AnyTimes()
+	parent.EXPECT().RawManifest().Return(raw, nil).AnyTimes()
+	parent.EXPECT().IndexManifest().Return(manifest, nil).AnyTimes()
+	parent.EXPECT().ImageIndex(childDesc.Digest).Return(shared, nil).AnyTimes()
 
 	graph, err := legacyIndexGraph(t.Context(), parent)
 	require.NoError(t, err)

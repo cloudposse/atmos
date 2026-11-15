@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/stream"
@@ -291,7 +293,8 @@ func newReferrersIndex(found []ocispec.Descriptor) (*referrersIndex, error) {
 		}
 		manifest.Manifests = append(manifest.Manifests, v1.Descriptor{
 			MediaType: types.MediaType(found[i].MediaType), Size: found[i].Size, Digest: hash,
-			Annotations: found[i].Annotations, ArtifactType: found[i].ArtifactType, URLs: found[i].URLs,
+			Annotations: maps.Clone(found[i].Annotations), ArtifactType: found[i].ArtifactType,
+			URLs: slices.Clone(found[i].URLs), Data: slices.Clone(found[i].Data), Platform: legacyPlatform(found[i].Platform),
 		})
 	}
 	raw, err := json.Marshal(manifest)
@@ -303,6 +306,18 @@ func newReferrersIndex(found []ocispec.Descriptor) (*referrersIndex, error) {
 		return nil, errors.Join(errUtils.ErrOCIIntegrity, err)
 	}
 	return &referrersIndex{manifest: manifest, raw: raw, hash: hash}, nil
+}
+
+// legacyPlatform converts an OCI platform to the legacy descriptor's, copying the feature list so
+// the index never aliases the registry response.
+func legacyPlatform(platform *ocispec.Platform) *v1.Platform {
+	if platform == nil {
+		return nil
+	}
+	return &v1.Platform{
+		Architecture: platform.Architecture, OS: platform.OS, OSVersion: platform.OSVersion,
+		OSFeatures: slices.Clone(platform.OSFeatures), Variant: platform.Variant,
+	}
 }
 
 //nolint:lintroller // Trivial getters of an in-memory value.

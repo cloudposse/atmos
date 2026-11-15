@@ -81,7 +81,8 @@ func WithCopyObserver(observe func(ocispec.Descriptor)) CopyOption {
 
 // WithoutSubjectTraversal stops the copy at the selected manifest instead of also copying the
 // manifest named by its subject field. Legacy writers (for example signature attachments)
-// publish an attachment next to a subject that already exists at the destination.
+// publish an attachment next to a subject that already exists at the destination. An extended
+// copy still reaches the selected manifest through the subject edges of its referrers.
 //
 //nolint:lintroller // Functional option only.
 func WithoutSubjectTraversal() CopyOption {
@@ -104,6 +105,26 @@ func (config copyConfig) graphOptions() oras.CopyGraphOptions {
 	if config.noSubjects {
 		options.FindSuccessors = successorsWithoutSubject
 	}
+	return config.withObserver(options)
+}
+
+// extendedGraphOptions is graphOptions for an extended copy. Extended traversal starts from the
+// outermost referrers and reaches the selected root through their subject edges, so the exclusion
+// applies to the selected root alone: a referrer still lists the root it attaches to.
+func (config copyConfig) extendedGraphOptions(selected *ocispec.Descriptor) oras.CopyGraphOptions {
+	options := oras.CopyGraphOptions{Concurrency: config.concurrency}
+	if config.noSubjects {
+		options.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+			if desc.Digest == selected.Digest {
+				return successorsWithoutSubject(ctx, fetcher, desc)
+			}
+			return content.Successors(ctx, fetcher, desc)
+		}
+	}
+	return config.withObserver(options)
+}
+
+func (config copyConfig) withObserver(options oras.CopyGraphOptions) oras.CopyGraphOptions {
 	if config.onCopied != nil {
 		options.PostCopy = func(_ context.Context, desc ocispec.Descriptor) error {
 			config.onCopied(desc)
@@ -179,7 +200,7 @@ func ExtendedCopy(ctx context.Context, src GraphSource, dst Destination, options
 	var selected ocispec.Descriptor
 	graph := guardedGraphSource{guardedSource: guardedSource{ReadOnlyStore: src.Store, selected: &selected}, graph: src.Store}
 	root, err := oras.ExtendedCopy(ctx, graph, src.Reference, guardedStore{Store: dst.Store}, dst.Reference,
-		oras.ExtendedCopyOptions{ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{CopyGraphOptions: config.graphOptions()}})
+		oras.ExtendedCopyOptions{ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{CopyGraphOptions: config.extendedGraphOptions(&selected)}})
 	if err == nil {
 		return root, nil
 	}

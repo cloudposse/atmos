@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -104,6 +105,8 @@ func TestRepositoryFailsClosedBeforeAnyRequest(t *testing.T) {
 		{"matched identity without credentials", nil, true, nil},
 		{"matched identity resolves to anonymous", authn.Anonymous, true, nil},
 		{"bound authenticator cannot authorize", failingAuthenticator{}, true, nil},
+		{"matched identity with an empty credential", authn.FromConfig(authn.AuthConfig{}), true, nil},
+		{"matched identity with an empty basic credential", authn.FromConfig(authn.AuthConfig{Auth: base64.StdEncoding.EncodeToString([]byte(":"))}), true, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
@@ -178,15 +181,24 @@ func TestNewReferrersIndexRoundTripsDescriptors(t *testing.T) {
 	found := []ocispec.Descriptor{{
 		MediaType: ocispec.MediaTypeImageManifest, Size: 10, Digest: digest.FromString("a"),
 		ArtifactType: "application/vnd.dev.sigstore.bundle.v0.3+json", Annotations: map[string]string{"k": "v"},
+		Data:     []byte("inline"),
+		Platform: &ocispec.Platform{Architecture: "arm64", OS: "linux", OSVersion: "6.1", OSFeatures: []string{"f1", "f2"}, Variant: "v8"},
 	}}
 	index, err := newReferrersIndex(found)
 	require.NoError(t, err)
+	// Mutating the registry response afterwards must not reach the index (source to result isolation).
+	found[0].Data[0] = 'X'
+	found[0].Platform.OSFeatures[0] = "changed"
+	found[0].Annotations["k"] = "changed"
 	manifest, err := index.IndexManifest()
 	require.NoError(t, err)
 	require.Len(t, manifest.Manifests, 1)
 	assert.Equal(t, found[0].Digest.String(), manifest.Manifests[0].Digest.String())
 	assert.Equal(t, found[0].ArtifactType, manifest.Manifests[0].ArtifactType)
-	assert.Equal(t, found[0].Annotations, manifest.Manifests[0].Annotations)
+	assert.Equal(t, map[string]string{"k": "v"}, manifest.Manifests[0].Annotations)
+	assert.Equal(t, []byte("inline"), manifest.Manifests[0].Data, "embedded data survives the conversion")
+	require.NotNil(t, manifest.Manifests[0].Platform, "the platform survives the conversion")
+	assert.Equal(t, &v1.Platform{Architecture: "arm64", OS: "linux", OSVersion: "6.1", OSFeatures: []string{"f1", "f2"}, Variant: "v8"}, manifest.Manifests[0].Platform)
 	size, err := index.Size()
 	require.NoError(t, err)
 	raw, err := index.RawManifest()
