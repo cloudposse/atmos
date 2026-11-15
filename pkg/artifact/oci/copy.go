@@ -63,6 +63,13 @@ func (r *Repository) destinationRef(ctx context.Context, st store, loaded *root,
 		if err != nil {
 			return artifact.Ref{}, err
 		}
+		// The source was resolved without reading its Record, so the Record is bound to the
+		// reference it was resolved by before it chooses the destination. Otherwise a tag that
+		// serves another artifact's package would pick that artifact's reference here, and the
+		// destination check would compare the Record with itself.
+		if err := requireSubjectOf(record, pinned.Ref); err != nil {
+			return artifact.Ref{}, err
+		}
 		return artifact.Ref{Name: record.Name, Version: record.Version}, nil
 	}
 	if pinned.Ref.Version == "" {
