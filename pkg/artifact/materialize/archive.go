@@ -99,11 +99,11 @@ func fillTar(ctx context.Context, t *tree, reader io.Reader, gzipped bool, check
 
 // archiveReadError reports a failed archive read. A canceled context is returned as such, because
 // the cancellation is what interrupted the read and not damage to the archive.
-func archiveReadError(ctx context.Context, format string, err error) error {
+func archiveReadError(ctx context.Context, stage string, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
-	return fmt.Errorf("%w: %s: %w", errUtils.ErrArtifactIntegrityFailed, format, err)
+	return fmt.Errorf("%w: %s: %w", errUtils.ErrArtifactIntegrityFailed, stage, err)
 }
 
 func applyTarHeader(ctx context.Context, t *tree, tr *tar.Reader, header *tar.Header, checker *managedChecker) error {
