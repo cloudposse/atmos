@@ -20,8 +20,12 @@ const waitTimeout = 10 * time.Second
 // never leave the root lock held for the next subtest.
 func holdGuard(t *testing.T, s *Store, key string, conditional bool) func() {
 	t.Helper()
-	release, err := s.guard(context.Background(), blob.OpPut, key, conditional)
-	require.NoError(t, err)
+	// Bound the acquisition so a release that failed to free the lock fails the test with a clear
+	// message instead of hanging it. The lock does not depend on the context once it is held.
+	ctx, cancel := context.WithTimeout(context.Background(), waitTimeout)
+	defer cancel()
+	release, err := s.guard(ctx, blob.OpPut, key, conditional)
+	require.NoError(t, err, "timed out or failed acquiring the put guard for %q; a previous release did not free the root lock", key)
 	return onceRelease(t, release)
 }
 
