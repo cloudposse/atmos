@@ -126,8 +126,9 @@ func (e *Entry) validateSymlink() error {
 	return nil
 }
 
-// validateInventory checks every entry, rejects duplicate paths, and rejects entries nested under
-// a file or symlink entry.
+// validateInventory checks every entry, rejects duplicate paths, rejects entries nested under
+// a file or symlink entry, and resolves every symlink target through the in-package links so a
+// target cannot escape the package or loop.
 func validateInventory(inventory []Entry) error {
 	types := make(map[string]EntryType, len(inventory))
 	for _, entry := range inventory {
@@ -146,7 +147,7 @@ func validateInventory(inventory []Entry) error {
 			}
 		}
 	}
-	return nil
+	return validateSymlinkTargets(inventory)
 }
 
 // Validate checks one document descriptor in isolation.

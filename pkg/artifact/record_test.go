@@ -58,6 +58,73 @@ func TestEntryValidate(t *testing.T) {
 	}
 }
 
+// TestValidateInventory_SymlinkResolution resolves every link target through the in-package links,
+// component by component, so a ".." after a symlinked directory cannot leave the package.
+func TestValidateInventory_SymlinkResolution(t *testing.T) {
+	file := func(p string) Entry { return Entry{Path: p, Type: EntryFile, Digest: digest.FromString(p)} }
+	dir := func(p string) Entry { return Entry{Path: p, Type: EntryDirectory} }
+	link := func(p, target string) Entry { return Entry{Path: p, Type: EntrySymlink, Target: target} }
+
+	tests := []struct {
+		name      string
+		inventory []Entry
+		wantErr   string
+	}{
+		{name: "no symlinks", inventory: []Entry{file("a"), dir("d"), file("d/b")}},
+		{name: "dangling target is allowed", inventory: []Entry{link("l", "missing/file")}},
+		{name: "chain of links to a file", inventory: []Entry{file("lib.so.1.2.3"), link("lib.so.1", "lib.so.1.2.3"), link("lib.so", "lib.so.1")}},
+		{name: "link to a directory link", inventory: []Entry{dir("real"), file("real/x"), link("alias", "real"), link("via", "alias/x")}},
+		{name: "dotdot after a symlinked directory stays inside", inventory: []Entry{dir("dir"), link("dir/up", ".."), link("l", "dir/up/inside")}},
+		{name: "dotdot through a link that resolves deeper stays inside", inventory: []Entry{dir("a"), dir("a/b"), link("deep", "a/b"), link("l", "deep/../x")}},
+		{name: "link to its own directory", inventory: []Entry{dir("d"), link("d/l", ".")}},
+		{
+			name:      "dotdot after a link to the parent escapes",
+			inventory: []Entry{dir("dir"), link("dir/up", ".."), link("link", "dir/up/../outside")},
+			wantErr:   "escapes the package",
+		},
+		{
+			name:      "escape is independent of entry order",
+			inventory: []Entry{link("link", "dir/up/../outside"), link("dir/up", ".."), dir("dir")},
+			wantErr:   "escapes the package",
+		},
+		{
+			name:      "escape through a chain of two links",
+			inventory: []Entry{dir("dir"), link("dir/up", ".."), link("l1", "dir/up"), link("l2", "l1/../out")},
+			wantErr:   "escapes the package",
+		},
+		{
+			name:      "escape from a deep link through a link to the parent",
+			inventory: []Entry{dir("a"), dir("a/b"), link("a/b/up", "../.."), link("a/b/l", "up/../out")},
+			wantErr:   "escapes the package",
+		},
+		{
+			name:      "link resolving to a link that escapes",
+			inventory: []Entry{dir("dir"), link("dir/up", ".."), link("a/l", "../dir/up/../x")},
+			wantErr:   "escapes the package",
+		},
+		{name: "absolute target", inventory: []Entry{link("l", "/etc/passwd")}, wantErr: "relative"},
+		{name: "lexical escape", inventory: []Entry{link("l", "../x")}, wantErr: "escapes the package"},
+		{name: "self loop", inventory: []Entry{link("l", "l")}, wantErr: "loop"},
+		{name: "two link loop", inventory: []Entry{link("a", "b"), link("b", "a")}, wantErr: "loop"},
+		{name: "loop through a directory component", inventory: []Entry{dir("d"), link("d/l", "../d/l")}, wantErr: "loop"},
+		{name: "loop reached through a longer path", inventory: []Entry{link("a", "b/x"), link("b", "a")}, wantErr: "loop"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateInventory(tt.inventory)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
+			assert.Contains(t, err.Error(), tt.wantErr)
+
+			_, digestErr := ComputeContentDigest(tt.inventory, nil)
+			require.ErrorIs(t, digestErr, errUtils.ErrArtifactUnsafePath, "the digest admission gate applies the same check")
+		})
+	}
+}
+
 func TestValidateInventoryStructure(t *testing.T) {
 	file := func(p string) Entry { return Entry{Path: p, Type: EntryFile, Digest: digest.FromString(p)} }
 	dir := func(p string) Entry { return Entry{Path: p, Type: EntryDirectory} }
