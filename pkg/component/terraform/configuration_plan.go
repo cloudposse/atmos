@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -56,6 +55,9 @@ type configurationPlan struct {
 	// A rebuild downloads them again before verification. Older records omit it.
 	Modules  bool `json:",omitempty"`
 	Prepared *schema.PreparedComponentConfiguration
+	// SensitiveDigest binds the bytes of every sensitive generated file, including files the working
+	// directory digest excludes, such as those below a Terragrunt cache.
+	SensitiveDigest string
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -167,7 +169,7 @@ func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configuratio
 	}
 	// The retained workdir is verified, so it holds the reviewed bytes of sensitive files. A rebuild
 	// instead writes them again from a fresh preparation.
-	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files); err != nil {
+	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files, plan.SensitiveDigest); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -347,7 +349,7 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, Prepared: &stored}, nil
+	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, Prepared: &stored}, nil
 }
 
 // relativeWorkdirIdentity is set only when an explicit relative override actually resolves
@@ -389,40 +391,6 @@ func workingDirectoryOverride(info *schema.ConfigAndStacksInfo) string {
 		}
 	}
 	return ""
-}
-
-// withoutSensitiveContent copies files, dropping the bytes of every sensitive one.
-func withoutSensitiveContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
-	stored := slices.Clone(files)
-	for i := range stored {
-		if stored[i].Sensitive {
-			stored[i].Content = nil
-		}
-	}
-	return stored
-}
-
-// restoreSensitiveContent reads the bytes of each sensitive file back from the verified workdir.
-func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurationFile) error {
-	if !slices.ContainsFunc(files, func(file schema.ComponentConfigurationFile) bool { return file.Sensitive }) {
-		return nil
-	}
-	root, err := os.OpenRoot(workdir)
-	if err != nil {
-		return planIOError(err)
-	}
-	defer root.Close()
-	for i := range files {
-		if !files[i].Sensitive {
-			continue
-		}
-		content, err := root.ReadFile(files[i].Path)
-		if err != nil {
-			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, err)
-		}
-		files[i].Content = content
-	}
-	return nil
 }
 
 // backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.

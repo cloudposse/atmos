@@ -178,6 +178,9 @@ func recordWorkdirFile(root, path string, entry fs.DirEntry, files map[string]st
 type planSnapshot struct {
 	path, identity, workingDigest, rebuildDigest, lockDigest string
 	modules                                                  bool
+	// sensitiveDigest binds the bytes of every sensitive generated file, including files the working
+	// directory digest excludes, such as those below a Terragrunt cache.
+	sensitiveDigest string
 }
 
 // planSnapshotKey carries the plan snapshotter to the main command's subprocess.
@@ -218,7 +221,11 @@ func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, in
 	if err != nil {
 		return nil, err
 	}
-	return &planSnapshot{path: path, identity: identity, workingDigest: digest, rebuildDigest: rebuild, lockDigest: lock, modules: hasDownloadedModules(execCtx.workingDir)}, nil
+	sensitive, err := sensitiveDigest(execCtx.workingDir, execCtx.preparedConfiguration.Files)
+	if err != nil {
+		return nil, err
+	}
+	return &planSnapshot{path: path, identity: identity, workingDigest: digest, rebuildDigest: rebuild, lockDigest: lock, modules: hasDownloadedModules(execCtx.workingDir), sensitiveDigest: sensitive}, nil
 }
 
 // around wraps one run of the Terraform subprocess. The configuration must be the same before and

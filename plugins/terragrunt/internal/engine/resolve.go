@@ -236,7 +236,7 @@ func requestParsingContext(request model.Request, path string) *config.ParsingCo
 // assumes it and supplies the resulting session on the second call.
 func resolveIAM(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*model.Resolution, error) {
 	flags, err := config.PartialParseConfigFile(ctx, logger, environment,
-		pctx.WithDecodeList(config.TerragruntFlags, config.ExcludeBlock), path, nil)
+		pctx.WithDecodeList(config.TerragruntFlags, config.FeatureFlagsBlock, config.ExcludeBlock), path, nil)
 	if err != nil {
 		return nil, err
 	}

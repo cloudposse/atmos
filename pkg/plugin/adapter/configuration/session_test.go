@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -424,6 +425,27 @@ func TestRevisionDiscoveryIsolated(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	_, err = revision.Discover(t.Context())
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// A revision rejects the same invalid configuration as the HEAD session instead of discovering
+// units that HEAD would refuse.
+func TestRevisionInheritsConfigurationRejection(t *testing.T) {
+	config := enabledConfig(t)
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	head, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	rejection := fmt.Errorf("%w: duplicate section", errUtils.ErrDuplicatePluginExtension)
+	head.rejectSection("terragrunt", rejection)
+	_, err = head.Discover(t.Context())
+	require.ErrorIs(t, err, errUtils.ErrDuplicatePluginExtension)
+
+	revision, err := head.ForRevision(t.TempDir())
+	require.NoError(t, err)
+	_, err = revision.Discover(t.Context())
+	require.ErrorIs(t, err, errUtils.ErrDuplicatePluginExtension)
 }
 
 func TestRevisionKeepsImportProvidersButNotImportedUnits(t *testing.T) {

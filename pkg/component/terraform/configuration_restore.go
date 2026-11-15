@@ -313,6 +313,19 @@ func (r *reviewedRebuild) verify(workdir string) error {
 			WithHint("Restore `.terraform.lock.hcl` together with the plan (`atmos terraform planfile download` does), or create a new plan.").
 			Err()
 	}
+	return r.verifySensitiveFiles(workdir)
+}
+
+// verifySensitiveFiles checks the sensitive generated files, which the rebuild digest may exclude (for
+// example files below a Terragrunt cache), against the digest recorded with the reviewed plan.
+func (r *reviewedRebuild) verifySensitiveFiles(workdir string) error {
+	sensitive, err := sensitiveDigest(workdir, r.plan.Prepared.Files)
+	if err != nil {
+		return err
+	}
+	if sensitive != r.plan.SensitiveDigest {
+		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
+	}
 	return nil
 }
 

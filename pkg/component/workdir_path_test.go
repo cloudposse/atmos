@@ -646,6 +646,33 @@ func TestResolveRetainedWorkdirRecordsPathWithoutProvisioning(t *testing.T) {
 	assert.NotContains(t, plain.ComponentSection, provWorkdir.WorkdirPathKey)
 }
 
+// A retained workdir is located again for each phase of a command. Replacing the selected path with the
+// workdir root also clears the applied marker, so the next resolution selects source_subdir again
+// instead of returning the root.
+func TestResolveRetainedWorkdirSelectsSourceSubdirOnEveryCall(t *testing.T) {
+	base := t.TempDir()
+	fallback := filepath.Join(base, "components", "vpc")
+	config := &schema.AtmosConfiguration{BasePath: base}
+	section := map[string]any{
+		"component": "vpc", "atmos_component": "vpc", "atmos_stack": "dev",
+		"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		"source":    map[string]any{"uri": "./module"},
+		"metadata":  map[string]any{"source_subdir": "modules/app"},
+	}
+	info := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: section}
+	root, err := provWorkdir.BuildPath(base, cfg.TerraformComponentType, "vpc", "dev", section)
+	require.NoError(t, err)
+	module := filepath.Join(root, "modules", "app")
+	require.NoError(t, os.MkdirAll(module, 0o755))
+
+	for call := 1; call <= 2; call++ {
+		path, err := ResolveRetainedWorkdir(config, info, cfg.TerraformComponentType, fallback)
+		require.NoError(t, err)
+		assert.Equal(t, module, path, "call %d selects the source subdirectory", call)
+		assert.Equal(t, module, section[provWorkdir.WorkdirPathKey], "call %d records the selected path", call)
+	}
+}
+
 // TestProvisionAndResolveComponentPath_NoSourceReturnsFallback verifies the
 // short-circuit when no source is configured: the orchestrator must skip
 // AutoProvisionSource entirely and report whether the fallback exists.

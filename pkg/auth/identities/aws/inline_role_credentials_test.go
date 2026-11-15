@@ -2,12 +2,16 @@ package aws
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -318,4 +322,173 @@ func TestBaseCredentialsHonorAWSDefaultProfile(t *testing.T) {
 
 	_, _, err = resolveBase(t, append(invocationHome(home), "AWS_DEFAULT_PROFILE=missing")...)
 	require.Error(t, err, "a missing profile named by AWS_DEFAULT_PROFILE is an error, not a fallback")
+}
+
+// brokerCommand returns a credential_process value that runs the test binary as the fake broker.
+func brokerCommand(t *testing.T) string {
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	if runtime.GOOS == "windows" {
+		if strings.ContainsAny(exe, " \t") {
+			return `"` + exe + `"`
+		}
+		return exe
+	}
+	return `'` + strings.ReplaceAll(exe, `'`, `'\''`) + `'`
+}
+
+// A credential_process broker runs with the invocation environment, so a selector such as BROKER_PROFILE
+// comes from the invocation and never from the process.
+func TestBaseCredentialsFromAProfileCredentialProcessRunWithTheInvocationEnvironment(t *testing.T) {
+	poisonProcessEnvironment(t)
+	t.Setenv("BROKER_PROFILE", "development")
+	// The process also acts as a broker, so a broker that wrongly inherits the process environment answers
+	// with the process value instead of re-running the whole test binary.
+	t.Setenv(testCredentialBrokerEnv, "1")
+	home := homeWithProfiles(t, "", "[profile brokered]\ncredential_process = "+brokerCommand(t)+"\n")
+	invocation := append(invocationHome(home), "AWS_PROFILE=brokered", testCredentialBrokerEnv+"=1", "BROKER_PROFILE=production")
+	if root := os.Getenv("SystemRoot"); root != "" {
+		invocation = append(invocation, "SystemRoot="+root)
+	}
+
+	key, _, err := resolveBase(t, invocation...)
+	require.NoError(t, err)
+	assert.Equal(t, "AKIABROKERproduction", key, "the broker sees the invocation's BROKER_PROFILE, not the process value")
+
+	sts := newSTSRecorder(t)
+	chained := homeWithProfiles(t, "", "[profile brokered]\ncredential_process = "+brokerCommand(t)+"\n[profile deploy]\nrole_arn = arn:aws:iam::1:role/deploy\nsource_profile = brokered\n")
+	_, _, err = resolveBase(t, append(invocationHome(chained), "AWS_PROFILE=deploy", "AWS_REGION=us-east-1", "AWS_ENDPOINT_URL_STS="+sts.server.URL,
+		testCredentialBrokerEnv+"=1", "BROKER_PROFILE=staging")...)
+	require.NoError(t, err)
+	_, authorization := sts.last(t)
+	assert.Contains(t, authorization, "Credential=AKIABROKERstaging/", "a role assumed from a broker profile is signed with the invocation's broker credentials")
+}
+
+// ssoTokenCache writes a cached SSO token for the key under the home directory.
+func ssoTokenCache(t *testing.T, home, key, token string) {
+	t.Helper()
+	sum := sha1.Sum([]byte(key))
+	dir := filepath.Join(home, ".aws", "sso", "cache")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	contents, err := json.Marshal(map[string]string{"accessToken": token, "expiresAt": "2099-01-01T00:00:00Z"})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, hex.EncodeToString(sum[:])+".json"), contents, 0o600))
+}
+
+// ssoPortal serves the SSO role credentials API and records the bearer token of each request.
+func ssoPortal(t *testing.T) *[]string {
+	t.Helper()
+	var mu sync.Mutex
+	var tokens []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		tokens = append(tokens, r.Header.Get("X-Amz-Sso_bearer_token"))
+		mu.Unlock()
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"roleCredentials": map[string]any{
+			"accessKeyId": "ASIASSOROLE", "secretAccessKey": "sso-secret", "sessionToken": "sso-token", "expiration": int64(4070908800000),
+		}}))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("AWS_ENDPOINT_URL_SSO", server.URL)
+	return &tokens
+}
+
+// An SSO profile reads its cached login from the invocation home, in both profile forms, and never from the
+// home of the process.
+func TestBaseCredentialsFromAnSSOProfileReadTheInvocationTokenCache(t *testing.T) {
+	const startURL = "https://corp.awsapps.com/start"
+	forms := map[string]struct{ config, cacheKey string }{
+		"legacy": {
+			config:   "[profile sso]\nsso_start_url = " + startURL + "\nsso_region = us-east-1\nsso_account_id = 111122223333\nsso_role_name = Admin\n",
+			cacheKey: startURL,
+		},
+		"session": {
+			config: "[profile sso]\nsso_session = corp\nsso_account_id = 111122223333\nsso_role_name = Admin\n" +
+				"[sso-session corp]\nsso_start_url = " + startURL + "\nsso_region = us-east-1\n",
+			cacheKey: "corp",
+		},
+	}
+	for name, form := range forms {
+		t.Run(name, func(t *testing.T) {
+			tokens := ssoPortal(t)
+			processHome := t.TempDir()
+			t.Setenv("HOME", processHome)
+			t.Setenv("USERPROFILE", processHome)
+			ssoTokenCache(t, processHome, form.cacheKey, "process-login")
+			home := homeWithProfiles(t, "", form.config)
+			invocation := append(invocationHome(home), "AWS_PROFILE=sso")
+
+			_, _, err := resolveBase(t, invocation...)
+			require.Error(t, err, "an invocation without a cached login fails instead of using the process login")
+			assert.Empty(t, *tokens, "the process login is never sent")
+
+			ssoTokenCache(t, home, form.cacheKey, "invocation-login")
+			key, _, err := resolveBase(t, invocation...)
+			require.NoError(t, err)
+			assert.Equal(t, "ASIASSOROLE", key)
+			assert.Equal(t, []string{"invocation-login"}, *tokens, "the invocation's cached login is used")
+		})
+	}
+}
+
+// metadataServerWithoutTokens emulates an instance whose token endpoint refuses requests, which is when
+// the IMDSv1 fallback applies, and counts the credential reads that arrive without a session token.
+func metadataServerWithoutTokens(t *testing.T) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var v1Reads atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/latest/api/token":
+			http.Error(w, "forbidden", http.StatusForbidden)
+		case r.URL.Path == "/latest/meta-data/iam/security-credentials/":
+			v1Reads.Add(1)
+			fmt.Fprint(w, "instance-role")
+		case r.URL.Path == "/latest/meta-data/iam/security-credentials/instance-role":
+			v1Reads.Add(1)
+			require.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+				"Code": "Success", "Type": "AWS-HMAC", "AccessKeyId": "AKIAIMDSV1", "SecretAccessKey": "instance-secret",
+				"Token": "instance-token", "Expiration": "2099-01-01T00:00:00Z", "LastUpdated": "2026-01-01T00:00:00Z",
+			}))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server, &v1Reads
+}
+
+// The restriction of a profile reaches the metadata client, and an invocation environment variable decides
+// over it, as it does in the SDK.
+func TestBaseCredentialsFromAProfileCredentialSourceHonorTheIMDSv1Restriction(t *testing.T) {
+	poisonProcessEnvironment(t)
+	sts := newSTSRecorder(t)
+	metadata, v1Reads := metadataServerWithoutTokens(t)
+	profile := func(restriction string) string {
+		return "[profile imds]\nrole_arn = arn:aws:iam::1:role/from-imds\ncredential_source = Ec2InstanceMetadata\n" + restriction
+	}
+	invocation := func(home string, extra ...string) []string {
+		return append(append(invocationHome(home), "AWS_PROFILE=imds", "AWS_REGION=us-east-1",
+			"AWS_ENDPOINT_URL_STS="+sts.server.URL, "AWS_EC2_METADATA_SERVICE_ENDPOINT="+metadata.URL), extra...)
+	}
+
+	restricted := homeWithProfiles(t, "", profile("ec2_metadata_v1_disabled = true\n"))
+	_, _, err := resolveBase(t, invocation(restricted)...)
+	require.Error(t, err, "a failed token request does not fall back to IMDSv1 when only the profile restricts it")
+	assert.Zero(t, v1Reads.Load(), "no credentials are read without a session token")
+
+	_, _, err = resolveBase(t, invocation(restricted, "AWS_EC2_METADATA_V1_DISABLED=false")...)
+	require.NoError(t, err, "the environment variable overrides the profile")
+	assert.Positive(t, v1Reads.Load())
+
+	unrestricted := homeWithProfiles(t, "", profile(""))
+	before := v1Reads.Load()
+	_, _, err = resolveBase(t, invocation(unrestricted)...)
+	require.NoError(t, err, "a profile without the restriction keeps the fallback")
+	assert.Greater(t, v1Reads.Load(), before)
+
+	before = v1Reads.Load()
+	_, _, err = resolveBase(t, invocation(unrestricted, "AWS_EC2_METADATA_V1_DISABLED=true")...)
+	require.Error(t, err, "the environment variable restricts a profile that does not")
+	assert.Equal(t, before, v1Reads.Load())
 }

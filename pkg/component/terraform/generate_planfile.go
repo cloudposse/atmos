@@ -5,10 +5,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
 
+	"github.com/google/shlex"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -256,4 +262,121 @@ func writePlanfile(planFilePath, format string, planJSON string) error {
 	}
 
 	return err
+}
+
+// validatePlanOutputFlags rejects ambiguous plan destinations before hooks or Terraform run.
+func validatePlanOutputFlags(command string, args []string) error {
+	if command != "plan" {
+		return nil
+	}
+	count := 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-out" || arg == "--out" {
+			count++
+			i++
+		} else if strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=") {
+			count++
+		}
+		if count > 1 {
+			return fmt.Errorf("%w: multiple plan output flags", errUtils.ErrPlanVerificationFailed)
+		}
+	}
+	return nil
+}
+
+// validateEnvironmentPlanOutput rejects plan output flags in TF_CLI_ARGS or
+// TF_CLI_ARGS_plan for a configuration-owned plan. Terraform reads these
+// variables itself, so a flag there could choose a plan file that Atmos does not
+// see and therefore does not bind. The check inspects the effective value of each
+// variable in the subprocess environment: the sanitized process environment (or
+// the inherited one when auth did not sanitize it), the global atmos.yaml
+// environment, the component environment, and provider extra-argument
+// environment, with later layers overriding earlier ones. Hooks run as child
+// processes and cannot change it.
+func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) error {
+	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != subcommandPlan {
+		return nil
+	}
+	return rejectEnvironmentPlanOutput(planEnvironment(atmosConfig, info), runtime.GOOS)
+}
+
+// rejectEnvironmentPlanOutput rejects a plan output flag in the effective TF_CLI_ARGS or
+// TF_CLI_ARGS_plan of an environment listed in precedence order. Variable names are
+// case-insensitive on Windows only, where the last matching entry is the effective value.
+func rejectEnvironmentPlanOutput(entries []string, goos string) error {
+	for _, name := range []string{tfCliArgsEnvVar, tfCliArgsEnvVar + "_" + subcommandPlan} {
+		value, _ := lastEnvListValue(entries, name, goos)
+		args, err := tokenizeEnvironmentArgs(value)
+		if err != nil {
+			return fmt.Errorf("%w: %s cannot be parsed: %w", errUtils.ErrPlanVerificationFailed, name, err)
+		}
+		if containsOutputFlag(args) {
+			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
+		}
+	}
+	return nil
+}
+
+// tokenizeEnvironmentArgs splits a TF_CLI_ARGS value the way the engine does:
+// spaces, tabs, and newlines separate tokens outside quotes, and a malformed
+// value (for example an unterminated quote) is an error because the engine
+// refuses to run with it. The shared parseArgs only splits on spaces, so a tab
+// before -out would hide the flag from the check.
+func tokenizeEnvironmentArgs(value string) ([]string, error) {
+	return shlex.Split(value)
+}
+
+// planEnvironment lists the environment layers a plan subprocess receives, in precedence order.
+func planEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) []string {
+	base := info.SanitizedEnv
+	if base == nil {
+		base = os.Environ()
+	}
+	entries := slices.Clone(base)
+	if atmosConfig != nil {
+		entries = envpkg.MergeGlobalEnv(entries, atmosConfig.Env)
+	}
+	entries = append(entries, info.ComponentEnvList...)
+	if info.ComponentExecution == nil {
+		return entries
+	}
+	for i := range info.ComponentExecution.ExtraArguments {
+		item := &info.ComponentExecution.ExtraArguments[i]
+		if !slices.Contains(item.Commands, subcommandPlan) {
+			continue
+		}
+		for name, value := range item.Environment {
+			entries = append(entries, name+"="+value)
+		}
+	}
+	return entries
+}
+
+// containsOutputFlag reports any plan output flag, with or without a value.
+func containsOutputFlag(args []string) bool {
+	return slices.ContainsFunc(args, func(arg string) bool {
+		return arg == "-out" || arg == "--out" || strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=")
+	})
+}
+
+func plannedOutputPath(directory string, args []string) string {
+	for i, arg := range args {
+		path := ""
+		switch {
+		case (arg == "-out" || arg == "--out") && i+1 < len(args):
+			path = args[i+1]
+		case strings.HasPrefix(arg, "-out="):
+			path = strings.TrimPrefix(arg, "-out=")
+		case strings.HasPrefix(arg, "--out="):
+			path = strings.TrimPrefix(arg, "--out=")
+		}
+		if path != "" {
+			if filepath.IsAbs(path) {
+				return path
+			}
+			return filepath.Join(directory, path)
+		}
+	}
+	return ""
 }
