@@ -56,6 +56,11 @@ func (r *Repository) deleteLocked(ctx context.Context, pinned *artifact.PinnedRe
 	if options.ExpectedCurrent != nil && options.ExpectedCurrent.ResolvedDigest != stored.RecordDigest {
 		return nil, fmt.Errorf("%w: %s:%s is %s but the delete expected %s", errUtils.ErrArtifactConflict, stored.Name, stored.Version, stored.RecordDigest, options.ExpectedCurrent.ResolvedDigest)
 	}
+	// The deletion journal replaces the publication's, and it lists only the current payload, so
+	// what the publication's journal still owes is retired before the deletion begins.
+	if err := r.settle(ctx, stored, v.record, v.rep, ""); err != nil {
+		return nil, deleteFailed(err)
+	}
 	claims, err := r.acquire(ctx, claimsResource, r.settings.owner, "")
 	if err != nil {
 		return nil, err

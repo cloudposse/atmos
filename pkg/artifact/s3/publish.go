@@ -77,6 +77,13 @@ func (r *Repository) publishLocked(ctx context.Context, job *publishJob, options
 	if plan.admission == layout.AdmitUnchanged {
 		return r.unchanged(ctx, job, plan)
 	}
+	if plan.admission == layout.AdmitReplace {
+		// The journal of the publication being replaced is dropped with it, so what it still owes
+		// is retired first.
+		if err := r.settleReplaced(ctx, plan.current.ref); err != nil {
+			return nil, err
+		}
+	}
 	if err := r.resolveLocation(ctx, job, plan); err != nil {
 		return nil, err
 	}
@@ -157,33 +164,11 @@ func (r *Repository) unchanged(ctx context.Context, job *publishJob, plan *publi
 	if rep == nil || rep.RecordDigest != current.RecordDigest {
 		return nil, fmt.Errorf("%w: %s:%s is completed but has no matching representation", errUtils.ErrArtifactIntegrityFailed, current.Name, current.Version)
 	}
-	journal, err := r.loadOperation(ctx, current.OperationID)
-	if err != nil {
-		return nil, err
-	}
-	if err := r.retireJournaled(ctx, job, journal, record, rep); err != nil {
+	if err := r.settle(ctx, current, record, rep, job.recordDigest); err != nil {
 		return nil, err
 	}
 	r.tidyOperation(ctx, current.OperationID)
 	return r.result(record, current.RecordDigest, rep, layout.AdmitUnchanged.Outcome(), plan.scope), nil
-}
-
-// retireJournaled removes what a completed operation's journal still lists for removal: the
-// replaced Record and its payload, and the payloads of abandoned attempts.
-func (r *Repository) retireJournaled(ctx context.Context, job *publishJob, journal *layout.Operation, record *artifact.Record, rep *layout.Representation) error {
-	if journal == nil || (journal.Prior == nil && len(journal.Abandoned) == 0) {
-		return nil
-	}
-	keep, err := setOfRecord(record).keys(rep.Packaging, rep.Location)
-	if err != nil {
-		return err
-	}
-	if journal.Prior != nil {
-		if err := r.retirePrior(ctx, journal.Prior, job, keep); err != nil {
-			return err
-		}
-	}
-	return r.removePayloads(ctx, carriedPayloads(journal), keep)
 }
 
 // tidyOperation removes the journal of a finished operation. It is best-effort: a leftover is

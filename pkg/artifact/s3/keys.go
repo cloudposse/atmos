@@ -84,3 +84,21 @@ func claimPaths(packaging artifact.Packaging, location string) []string {
 	}
 	return []string{location}
 }
+
+// shapesOf returns the packagings a recorded packaging may mean. A payload written before the
+// packaging was recorded may be either shape.
+func shapesOf(packaging artifact.Packaging) []artifact.Packaging {
+	if packaging == "" {
+		return []artifact.Packaging{artifact.PackagingNone, artifact.PackagingTgz}
+	}
+	return []artifact.Packaging{packaging}
+}
+
+// anyShapeClaimPaths lists the claim paths of a payload whose packaging may be unrecorded.
+func anyShapeClaimPaths(packaging artifact.Packaging, location string) []string {
+	var paths []string
+	for _, shape := range shapesOf(packaging) {
+		paths = append(paths, claimPaths(shape, location)...)
+	}
+	return paths
+}

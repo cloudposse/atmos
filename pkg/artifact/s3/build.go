@@ -2,10 +2,12 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"slices"
 
 	"github.com/opencontainers/go-digest"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/blob"
 	"github.com/cloudposse/atmos/pkg/artifact/layout"
@@ -81,24 +83,27 @@ func (r *Repository) retire(ctx context.Context, job *publishJob, plan *publishP
 		return
 	}
 	if plan.prior != nil {
-		if err := r.retirePrior(cleanup, plan.prior, job, keep); err != nil {
+		if err := r.retirePrior(cleanup, plan.prior, keep, job.recordDigest); err != nil {
 			return
 		}
 	}
 	_ = r.deleteObject(cleanup, layout.OperationPath(job.opID))
 }
 
-// retirePrior removes the payload, Record, and evidence of the replaced publication.
-func (r *Repository) retirePrior(ctx context.Context, prior *layout.Prior, job *publishJob, keep []string) error {
-	if prior.RecordDigest == "" || prior.RecordDigest == job.recordDigest {
+// retirePrior removes the payload, Record, and evidence of the replaced publication, never a Record
+// listed as protected. The Record goes last, so a Record that is already gone proves the payload
+// and the evidence are too: a retry after a stopped retirement then has nothing left to remove
+// instead of failing on the missing Record forever.
+func (r *Repository) retirePrior(ctx context.Context, prior *layout.Prior, keep []string, protected ...digest.Digest) error {
+	if prior.RecordDigest == "" || slices.Contains(protected, prior.RecordDigest) {
 		return nil
 	}
 	if prior.Location != "" {
-		record, _, err := r.loadRecord(ctx, prior.RecordDigest)
+		set, err := r.priorSet(ctx, prior)
 		if err != nil {
 			return err
 		}
-		if err := r.removePayload(ctx, &ownedPayload{packaging: prior.Packaging, location: prior.Location, set: setOfRecord(record)}, keep); err != nil {
+		if err := r.removePayload(ctx, &ownedPayload{packaging: prior.Packaging, location: prior.Location, set: set}, keep); err != nil {
 			return err
 		}
 	}
@@ -106,6 +111,19 @@ func (r *Repository) retirePrior(ctx context.Context, prior *layout.Prior, job *
 		return err
 	}
 	return r.deleteObject(ctx, layout.RecordPath(prior.RecordDigest))
+}
+
+// priorSet returns the objects the replaced publication wrote, from its Record. A Record that no
+// longer exists was retired together with its payload, so nothing is left to name.
+func (r *Repository) priorSet(ctx context.Context, prior *layout.Prior) (objectSet, error) {
+	record, _, err := r.loadRecord(ctx, prior.RecordDigest)
+	if errors.Is(err, errUtils.ErrArtifactNotFound) {
+		return objectSet{}, nil
+	}
+	if err != nil {
+		return objectSet{}, err
+	}
+	return setOfRecord(record), nil
 }
 
 // removePayloads deletes the objects of every listed payload that the new publication does not reuse.

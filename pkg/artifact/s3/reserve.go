@@ -127,9 +127,8 @@ func (r *Repository) collectClaims(ctx context.Context, ownKey string) ([]layout
 }
 
 // claimOf returns the claim a reference holds: its representation when completed, its journal when
-// pending. A reference whose state is missing holds no claim. Locations that earlier attempts
-// abandoned stay claimed until a retry retires their payload, even while they hold no objects: the
-// retirement deletes by the journaled payload and does not check who owns the location by then.
+// pending, and in both states the locations its journal still awaits removing. A reference whose
+// state is missing holds no claim.
 func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layout.Claim, error) {
 	base := layout.Claim{ReferenceKey: ref.Key(), Name: ref.Name, Version: ref.Version}
 	if ref.Available() {
@@ -144,7 +143,7 @@ func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layou
 		if err != nil {
 			return nil, err
 		}
-		base.Paths = append(base.Paths, abandonedClaimPaths(journal)...)
+		base.Paths = append(base.Paths, journalClaimPaths(journal)...)
 		return &base, nil
 	}
 	op, err := r.loadOperation(ctx, ref.OperationID)
@@ -152,18 +151,24 @@ func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layou
 		return nil, err
 	}
 	base.OperationID = op.OperationID
-	base.Paths = append(claimPaths(op.Packaging, op.Location), abandonedClaimPaths(op)...)
+	base.Paths = append(claimPaths(op.Packaging, op.Location), journalClaimPaths(op)...)
 	return &base, nil
 }
 
-// abandonedClaimPaths lists the paths of every payload a journal still awaits removing.
-func abandonedClaimPaths(op *layout.Operation) []string {
+// journalClaimPaths lists the paths of every payload a journal still awaits removing: the replaced
+// payload (Prior) and the payloads of abandoned attempts. They stay claimed until the journal is
+// retired, even while they hold no objects, because the retirement deletes by the journaled keys
+// and does not check who owns the location by then.
+func journalClaimPaths(op *layout.Operation) []string {
 	if op == nil {
 		return nil
 	}
 	var paths []string
+	if op.Prior != nil && op.Prior.Location != "" {
+		paths = append(paths, anyShapeClaimPaths(op.Prior.Packaging, op.Prior.Location)...)
+	}
 	for index := range op.Abandoned {
-		paths = append(paths, claimPaths(op.Abandoned[index].Packaging, op.Abandoned[index].Location)...)
+		paths = append(paths, anyShapeClaimPaths(op.Abandoned[index].Packaging, op.Abandoned[index].Location)...)
 	}
 	return paths
 }
