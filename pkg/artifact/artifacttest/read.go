@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"sort"
 
 	"github.com/opencontainers/go-digest"
@@ -67,12 +69,12 @@ func (r *Repository) Inspect(_ context.Context, pinned artifact.PinnedReference)
 	if !ok {
 		return nil, fmt.Errorf("%w: record %s", errUtils.ErrArtifactNotFound, pinned.RecordDigest)
 	}
-	record := s.record
+	record := s.record.Clone()
 	pinnedOut := r.pinnedFor(pinned.Ref, s)
 	inspection := &artifact.Inspection{Pinned: pinnedOut, Record: &record, Representation: r.representation(s)}
 	held := r.evidence[s.recordDigest]
 	for index := range held {
-		inspection.Evidence = append(inspection.Evidence, held[index].Evidence)
+		inspection.Evidence = append(inspection.Evidence, cloneEvidence(&held[index].Evidence))
 	}
 	return inspection, nil
 }
@@ -118,12 +120,12 @@ func (r *Repository) Read(_ context.Context, pinned artifact.PinnedReference) (*
 	if !ok || !s.payloadAvailable {
 		return nil, fmt.Errorf("%w: the payload of %s is no longer available", errUtils.ErrArtifactNotFound, pinned.RecordDigest)
 	}
-	record := s.record
+	record := s.record.Clone()
 	content := &artifact.Content{Record: &record, Representation: r.representation(s)}
 	for index := range s.blobs {
 		held := &s.blobs[index]
 		content.Streams = append(content.Streams, artifact.ContentStream{
-			Descriptor: held.descriptor, Role: held.role, Path: held.path, Reader: newVerifyingReader(held.data, held.descriptor.Digest),
+			Descriptor: cloneDescriptor(&held.descriptor), Role: held.role, Path: held.path, Reader: newVerifyingReader(held.data, held.descriptor.Digest),
 		})
 	}
 	return content, nil
@@ -142,7 +144,7 @@ func (r *Repository) Pin(ctx context.Context, ref artifact.Ref) (artifact.Pinned
 	r.count("Pin")
 	held := r.evidence[pinned.RecordDigest]
 	for index := range held {
-		pinned.Evidence = append(pinned.Evidence, held[index].Evidence.Descriptor)
+		pinned.Evidence = append(pinned.Evidence, cloneDescriptor(&held[index].Evidence.Descriptor))
 	}
 	return pinned, nil
 }
@@ -183,8 +185,8 @@ func (r *Repository) listEntry(s *stored) artifact.ListEntry {
 		Version:     s.record.Version,
 		Kind:        s.record.Kind,
 		Description: s.record.Metadata.Description,
-		Labels:      s.record.Metadata.Labels,
-		Documents:   s.record.Documents,
+		Labels:      maps.Clone(s.record.Metadata.Labels),
+		Documents:   slices.Clone(s.record.Documents),
 	}
 }
 

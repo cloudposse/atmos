@@ -207,7 +207,7 @@ func (r *Repository) ReadEvidence(_ context.Context, pinned *artifact.PinnedRefe
 	held := r.evidence[pinned.RecordDigest]
 	blobs := make([]artifact.EvidenceBlob, len(held))
 	for index := range held {
-		blobs[index] = artifact.EvidenceBlob{Evidence: held[index].Evidence, Data: bytes.Clone(held[index].Data)}
+		blobs[index] = artifact.EvidenceBlob{Evidence: cloneEvidence(&held[index].Evidence), Data: bytes.Clone(held[index].Data)}
 	}
 	return blobs, nil
 }
@@ -224,8 +224,8 @@ func (r *Repository) WriteEvidence(_ context.Context, pinned *artifact.PinnedRef
 	}
 	stored := make([]artifact.SignatureEvidence, 0, len(evidence))
 	for index := range evidence {
-		r.evidence[pinned.RecordDigest] = append(r.evidence[pinned.RecordDigest], artifact.EvidenceBlob{Evidence: evidence[index].Evidence, Data: bytes.Clone(evidence[index].Data)})
-		stored = append(stored, evidence[index].Evidence)
+		r.evidence[pinned.RecordDigest] = append(r.evidence[pinned.RecordDigest], artifact.EvidenceBlob{Evidence: cloneEvidence(&evidence[index].Evidence), Data: bytes.Clone(evidence[index].Data)})
+		stored = append(stored, cloneEvidence(&evidence[index].Evidence))
 	}
 	return stored, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/opencontainers/go-digest"
 
@@ -30,7 +31,7 @@ func (r *Repository) Publish(ctx context.Context, prepared *artifact.PreparedArt
 	if err := r.trip(FailBeforePayload); err != nil {
 		return nil, err
 	}
-	record := prepared.Record
+	record := prepared.Record.Clone()
 	key := refKey(record.Name, record.Version)
 	recordDigest, err := record.RecordDigest()
 	if err != nil {
@@ -114,6 +115,9 @@ func (r *Repository) readBlobs(ctx context.Context, prepared *artifact.PreparedA
 	blobs := make([]blob, 0, len(prepared.Blobs))
 	for index := range prepared.Blobs {
 		staged := &prepared.Blobs[index]
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		reader, err := staged.Open(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("%w: open staged blob %q: %w", errUtils.ErrArtifactPackagingInvalid, staged.Path, err)
@@ -132,7 +136,7 @@ func (r *Repository) readBlobs(ctx context.Context, prepared *artifact.PreparedA
 		if int64(len(data)) != staged.Descriptor.Size || digest.FromBytes(data) != staged.Descriptor.Digest {
 			return nil, fmt.Errorf("%w: staged blob %q does not match its descriptor", errUtils.ErrArtifactIntegrityFailed, staged.Path)
 		}
-		blobs = append(blobs, blob{descriptor: staged.Descriptor, role: staged.Role, documentRole: staged.DocumentRole, path: staged.Path, data: data})
+		blobs = append(blobs, blob{descriptor: cloneDescriptor(&staged.Descriptor), role: staged.Role, documentRole: staged.DocumentRole, path: staged.Path, data: data})
 	}
 	return blobs, nil
 }
@@ -191,8 +195,10 @@ func (r *Repository) checkExpectedCurrent(pinned *artifact.PinnedReference, expe
 	return nil
 }
 
-// Delete implements [artifact.Repository]. The deletion is scoped to the pinned record: the
-// references pointing at it and its exclusively owned payload.
+// Delete implements [artifact.Repository]. The requested scope decides what goes: a reference
+// scope removes only the pinned reference and keeps the record and its evidence while another
+// reference still uses them, while a manifest or object scope removes the record, its evidence,
+// and every reference to it. A scope the repository does not advertise is rejected, never widened.
 //
 //nolint:gocritic // The pinned reference is passed by value because artifact.Repository fixes the signature.
 func (r *Repository) Delete(_ context.Context, pinned artifact.PinnedReference, options artifact.DeleteOptions) (*artifact.DeleteResult, error) {
@@ -204,22 +210,63 @@ func (r *Repository) Delete(_ context.Context, pinned artifact.PinnedReference, 
 	if r.caps.Delete == artifact.DeleteNone || r.caps.Delete == "" {
 		return nil, artifact.NewUnsupportedCapability(r.opts.Alias, "delete", "delete", "the repository cannot delete")
 	}
-	s, ok := r.records[pinned.RecordDigest]
-	if !ok {
+	if options.Scope != r.caps.Delete {
+		return nil, artifact.NewUnsupportedCapability(r.opts.Alias, "delete", "delete/"+string(options.Scope), "the repository only deletes with the "+string(r.caps.Delete)+" scope")
+	}
+	if _, ok := r.records[pinned.RecordDigest]; !ok {
 		return nil, fmt.Errorf("%w: record %s", errUtils.ErrArtifactNotFound, pinned.RecordDigest)
 	}
 	if err := r.checkExpectedCurrent(&pinned, options.ExpectedCurrent); err != nil {
 		return nil, err
 	}
-	result := &artifact.DeleteResult{Digest: pinned.RecordDigest}
+	if options.Scope == artifact.DeleteReference {
+		return r.deleteReference(&pinned)
+	}
+	return r.deleteRecord(&pinned), nil
+}
+
+// deleteReference removes only the pinned reference. The record and its evidence survive while any
+// other reference still points at them; callers hold r.mu.
+func (r *Repository) deleteReference(pinned *artifact.PinnedReference) (*artifact.DeleteResult, error) {
+	if pinned.Ref.Version == "" || pinned.Ref.Digest != "" {
+		return nil, fmt.Errorf("%w: a reference-scoped delete needs a version reference, got %s", errUtils.ErrArtifactRefInvalid, pinned.Ref)
+	}
+	key := refKey(pinned.Ref.Name, pinned.Ref.Version)
+	if current, ok := r.refs[key]; !ok || current != pinned.RecordDigest {
+		return nil, fmt.Errorf("%w: %s no longer points at %s", errUtils.ErrArtifactConflict, pinned.Ref, pinned.RecordDigest)
+	}
+	delete(r.refs, key)
+	if !r.referenced(pinned.RecordDigest) {
+		delete(r.records, pinned.RecordDigest)
+		delete(r.evidence, pinned.RecordDigest)
+	}
+	return &artifact.DeleteResult{Digest: pinned.RecordDigest, Deleted: []string{r.locatorForKey(key)}}, nil
+}
+
+// deleteRecord removes the record, its evidence, and every reference to it. Each removed reference
+// is reported once by its own location, and every removed reference other than the pinned one is
+// reported as affected; callers hold r.mu.
+func (r *Repository) deleteRecord(pinned *artifact.PinnedReference) *artifact.DeleteResult {
+	pinnedKey := ""
+	if pinned.Ref.Version != "" && pinned.Ref.Digest == "" {
+		pinnedKey = refKey(pinned.Ref.Name, pinned.Ref.Version)
+	}
+	var removed []string
 	for key, d := range r.refs {
-		if d != pinned.RecordDigest {
-			continue
+		if d == pinned.RecordDigest {
+			removed = append(removed, key)
 		}
+	}
+	sort.Strings(removed)
+	result := &artifact.DeleteResult{Digest: pinned.RecordDigest}
+	for _, key := range removed {
 		delete(r.refs, key)
-		result.Deleted = append(result.Deleted, r.locator(s.record.Name, s.record.Version))
+		result.Deleted = append(result.Deleted, r.locatorForKey(key))
+		if key != pinnedKey {
+			result.Affected = append(result.Affected, refFromKey(key))
+		}
 	}
 	delete(r.records, pinned.RecordDigest)
 	delete(r.evidence, pinned.RecordDigest)
-	return result, nil
+	return result
 }

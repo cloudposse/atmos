@@ -2,6 +2,7 @@ package artifacttest
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/opencontainers/go-digest"
@@ -112,8 +113,10 @@ func New(opts Options) *Repository {
 	}
 	caps := DefaultCapabilities()
 	if opts.Capabilities != nil {
-		caps = *opts.Capabilities
+		caps = opts.Capabilities.Clone()
 	}
+	// The repository keeps its own copy of the capabilities, never the caller's pointer.
+	opts.Capabilities = nil
 	return &Repository{
 		opts:     opts,
 		caps:     caps,
@@ -150,7 +153,7 @@ func DefaultCapabilities() artifact.Capabilities {
 func (r *Repository) Capabilities() artifact.Capabilities {
 	defer perf.Track(nil, "artifacttest.Repository.Capabilities")()
 
-	return r.caps
+	return r.caps.Clone()
 }
 
 // InjectFailure arms err to be returned from Publish at point, times times (0 means once).
@@ -235,6 +238,22 @@ func refKey(name, version string) string {
 	return name + ":" + version
 }
 
+// refFromKey is the inverse of [refKey]. Names never contain a colon, so the last one separates
+// the version.
+func refFromKey(key string) artifact.Ref {
+	cut := strings.LastIndexByte(key, ':')
+	if cut < 0 {
+		return artifact.Ref{Name: key}
+	}
+	return artifact.Ref{Name: key[:cut], Version: key[cut+1:]}
+}
+
+// locatorForKey is the location of the reference stored under key.
+func (r *Repository) locatorForKey(key string) string {
+	ref := refFromKey(key)
+	return r.locator(ref.Name, ref.Version)
+}
+
 // count records a call; callers hold r.mu.
 func (r *Repository) count(method string) {
 	r.calls[method]++
@@ -273,10 +292,10 @@ func (r *Repository) representation(s *stored) artifact.Representation {
 	payloadDigests := ""
 	for index := range s.blobs {
 		if s.blobs[index].role == artifact.BlobPayload {
-			rep.Payload = append(rep.Payload, s.blobs[index].descriptor)
+			rep.Payload = append(rep.Payload, cloneDescriptor(&s.blobs[index].descriptor))
 			payloadDigests += s.blobs[index].descriptor.Digest.String() + "\n"
 		} else {
-			rep.Documents = append(rep.Documents, s.blobs[index].descriptor)
+			rep.Documents = append(rep.Documents, cloneDescriptor(&s.blobs[index].descriptor))
 		}
 	}
 	rep.RepresentationDigest = digest.FromString(payloadDigests)
