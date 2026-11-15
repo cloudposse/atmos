@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/artifacttest"
@@ -45,19 +46,20 @@ func (c *fakeClock) Set(t time.Time) {
 	c.now = t
 }
 
-// recordingJournal records lifecycle events.
-type recordingJournal struct {
+// journalLog collects the lifecycle events that the generated MockJournal receives. It is a
+// synchronized collector only; it does not implement service.Journal.
+type journalLog struct {
 	mu      sync.Mutex
 	entries []service.JournalEntry
 }
 
-func (j *recordingJournal) Record(_ context.Context, entry *service.JournalEntry) {
+func (j *journalLog) add(entry *service.JournalEntry) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.entries = append(j.entries, *entry)
 }
 
-func (j *recordingJournal) phases() []service.JournalPhase {
+func (j *journalLog) phases() []service.JournalPhase {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	phases := make([]service.JournalPhase, 0, len(j.entries))
@@ -67,10 +69,19 @@ func (j *recordingJournal) phases() []service.JournalPhase {
 	return phases
 }
 
-func (j *recordingJournal) snapshot() []service.JournalEntry {
+func (j *journalLog) snapshot() []service.JournalEntry {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return append([]service.JournalEntry(nil), j.entries...)
+}
+
+// newRecordingJournal returns a generated MockJournal that records every entry into the log.
+func newRecordingJournal(t *testing.T) (*service.MockJournal, *journalLog) {
+	t.Helper()
+	log := &journalLog{}
+	journal := service.NewMockJournal(gomock.NewController(t))
+	journal.EXPECT().Record(gomock.Any(), gomock.Any()).Do(func(_ context.Context, entry *service.JournalEntry) { log.add(entry) }).AnyTimes()
+	return journal, log
 }
 
 // temporaryError is a retryable failure.
@@ -85,7 +96,7 @@ type env struct {
 	repos   map[string]*artifacttest.Repository
 	static  *service.StaticRepositories
 	clock   *fakeClock
-	journal *recordingJournal
+	journal *journalLog
 	staging string
 	sleeps  []time.Duration
 	sleepMu sync.Mutex
@@ -105,11 +116,12 @@ func newEnv(t *testing.T, config envConfig) *env {
 	if config.repos == nil {
 		config.repos = map[string]artifacttest.Options{"dst": {Alias: "dst"}}
 	}
+	journal, log := newRecordingJournal(t)
 	e := &env{
 		t:       t,
 		repos:   map[string]*artifacttest.Repository{},
 		clock:   &fakeClock{now: startTime},
-		journal: &recordingJournal{},
+		journal: log,
 		staging: t.TempDir(),
 	}
 	e.static = &service.StaticRepositories{Repositories: map[string]artifact.Repository{}, Info: config.infos}
@@ -126,7 +138,7 @@ func newEnv(t *testing.T, config envConfig) *env {
 	options := []service.Option{
 		service.WithClock(e.clock.Now),
 		service.WithIDGenerator(func() string { return fmt.Sprintf("op-%d", counter.Add(1)) }),
-		service.WithJournal(e.journal),
+		service.WithJournal(journal),
 		service.WithSleep(func(_ context.Context, d time.Duration) error {
 			e.sleepMu.Lock()
 			e.sleeps = append(e.sleeps, d)

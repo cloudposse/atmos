@@ -214,7 +214,9 @@ func (s *Service) stageCopy(ctx context.Context, op *operation, plan *copyPlan) 
 		}
 	}
 	files := filepath.Join(tree, "files")
-	if err := materialize.Materialize(ctx, content, files); err != nil {
+	// The tree is read back by the repack and then discarded, so it keeps owner read and traversal
+	// access even when the Record declares a restrictive mode; the Record itself is repacked unchanged.
+	if err := materialize.Materialize(ctx, content, files, materialize.WithOwnerAccess()); err != nil {
 		cleanup()
 		return nil, nil, err
 	}

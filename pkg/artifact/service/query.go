@@ -213,7 +213,20 @@ func (s *Service) runEnumeration(ctx context.Context, request *enumeration, resu
 		succeeded++
 	}
 	sortEntries(result.Artifacts)
-	if explicit && len(errs) > 0 || succeeded == 0 && len(errs) > 0 {
+	return enumerationError(ctx, explicit, succeeded, errs)
+}
+
+// enumerationError decides whether the collected per-repository failures fail the listing.
+// Cancellation is never partial success: a repository that stopped because the caller canceled left
+// the listing incomplete, whatever the others returned.
+func enumerationError(ctx context.Context, explicit bool, succeeded int, errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return errors.Join(append([]error{ctxErr}, errs...)...)
+	}
+	if explicit || succeeded == 0 {
 		return errors.Join(errs...)
 	}
 	return nil

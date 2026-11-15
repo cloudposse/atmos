@@ -37,6 +37,18 @@ type RepositoryInfo struct {
 	Policy artifact.VerificationPolicy
 }
 
+// Clone returns a RepositoryInfo that shares no map, slice, or pointer with i, so a caller editing a
+// description it received cannot change the configuration that produced it.
+func (i *RepositoryInfo) Clone() RepositoryInfo {
+	defer perf.Track(nil, "service.RepositoryInfo.Clone")()
+
+	out := *i
+	out.Capabilities = i.Capabilities.Clone()
+	out.Defaults = i.Defaults.Clone()
+	out.Policy = i.Policy.Clone()
+	return out
+}
+
 // Repositories resolves repository aliases. Describe must be free of network access and
 // credential resolution so dry runs never authenticate; Open may resolve identities.
 type Repositories interface {

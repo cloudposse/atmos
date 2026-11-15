@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -329,6 +330,48 @@ func TestList_OnlyFailingRepositoriesFailTheListing(t *testing.T) {
 	e := newEnv(t, envConfig{repos: map[string]artifacttest.Options{"registry": {Capabilities: &noCollection}}})
 	_, err := e.svc.List(context.Background(), artifact.ListRequest{})
 	require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability, "when no repository can answer, the listing fails")
+}
+
+func TestEnumeration_CancellationAfterOneDefaultRepositoryCompletesIsNotSuccess(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(ctx context.Context, svc *service.Service) (*artifact.ListResult, error)
+	}{
+		{"list", func(ctx context.Context, svc *service.Service) (*artifact.ListResult, error) {
+			return svc.List(ctx, artifact.ListRequest{})
+		}},
+		{"search", func(ctx context.Context, svc *service.Service) (*artifact.ListResult, error) {
+			return svc.Search(ctx, artifact.SearchRequest{Query: "app"})
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, envConfig{repos: map[string]artifacttest.Options{"alpha": {}, "beta": {}}})
+			seedList(t, e, "alpha", map[string]string{"app/a:1": "a1"}, nil)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			// Alpha completes first; beta is canceled only after alpha returned its page.
+			alphaDone := make(chan struct{})
+			var once sync.Once
+			e.static.Repositories["alpha"] = delegatingRepository(t, e.repos["alpha"], repoHooks{list: func(ctx context.Context, query artifact.ListQuery) (*artifact.ListPage, error) {
+				page, err := e.repos["alpha"].List(ctx, query)
+				once.Do(func() { close(alphaDone) })
+				return page, err
+			}})
+			e.static.Repositories["beta"] = delegatingRepository(t, e.repos["beta"], repoHooks{list: func(ctx context.Context, _ artifact.ListQuery) (*artifact.ListPage, error) {
+				<-alphaDone
+				cancel()
+				return nil, ctx.Err()
+			}})
+
+			result, err := tc.run(ctx, e.svc)
+
+			require.ErrorIs(t, err, context.Canceled, "an incomplete listing must not be reported as a success")
+			require.NotNil(t, result)
+			assert.Len(t, result.Artifacts, 1, "what alpha returned stays visible beside the error")
+		})
+	}
 }
 
 type listGate struct {

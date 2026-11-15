@@ -20,10 +20,14 @@ func (s *StaticRepositories) Describe(alias string) (RepositoryInfo, error) {
 	if !ok {
 		return RepositoryInfo{}, fmt.Errorf("%w: repository %q is not configured", errUtils.ErrArtifactConfigInvalid, alias)
 	}
-	info := s.Info[alias]
+	// The table entry and the repository's capabilities are copied, so editing the returned
+	// description never reaches the table or the repository that every later call reads.
+	configured := s.Info[alias]
+	info := configured.Clone()
 	info.Alias = alias
 	if info.Capabilities.Packagings == nil && !info.Capabilities.Read && !info.Capabilities.Write {
-		info.Capabilities = repo.Capabilities()
+		reported := repo.Capabilities()
+		info.Capabilities = reported.Clone()
 	}
 	if info.Packaging == "" && len(info.Capabilities.Packagings) > 0 {
 		info.Packaging = info.Capabilities.Packagings[0]

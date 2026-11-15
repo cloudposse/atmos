@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -11,11 +12,13 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/artifacttest"
 	"github.com/cloudposse/atmos/pkg/artifact/materialize"
+	"github.com/cloudposse/atmos/pkg/artifact/produce"
 	"github.com/cloudposse/atmos/pkg/artifact/service"
 )
 
@@ -388,4 +391,62 @@ func TestCopy_EvidenceIsNotWrittenToARepointedDestination(t *testing.T) {
 			assert.Equal(t, tt.wantCode, slices.Contains(diagnosticCodes(result), "evidence-write-failed"))
 		})
 	}
+}
+
+// TestCopy_StagingKeepsOwnerAccessWhileRepacking proves a Record that declares mode 0000 can still
+// be repacked: the temporary tree stays readable until the repack finished, and the Record the
+// repack receives keeps the declared modes.
+func TestCopy_StagingKeepsOwnerAccessWhileRepacking(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skipf("permission bits are not enforced for this process on %s (uid %d)", runtime.GOOS, os.Geteuid())
+	}
+	var repacked bool
+	repacker := service.NewMockRepacker(gomock.NewController(t))
+	repacker.EXPECT().Repack(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *produce.RepackRequest) (*artifact.PreparedArtifact, error) {
+		repacked = true
+		data, err := os.ReadFile(filepath.Join(request.Tree, "data.txt"))
+		require.NoError(t, err, "a file declared with mode 0000 stays readable for the repack")
+		assert.Equal(t, "hello", string(data))
+		entries, err := os.ReadDir(filepath.Join(request.Tree, "bin"))
+		require.NoError(t, err, "a directory declared with mode 0000 stays traversable for the repack")
+		assert.NotEmpty(t, entries)
+		for _, entry := range request.Record.Inventory {
+			if entry.Type == artifact.EntryFile || entry.Type == artifact.EntryDirectory {
+				assert.Zero(t, entry.Mode, "the Record keeps the declared mode for %s", entry.Path)
+			}
+		}
+		return nil, errTransport
+	})
+	e := copyEnv(t, artifact.PackagingNone, artifact.PackagingTgz, service.WithRepacker(repacker))
+	e.publish("src", e.source("hello"))
+	base := e.repos["src"]
+	e.static.Repositories["src"] = delegatingRepository(t, base, repoHooks{
+		inspect: func(ctx context.Context, pinned artifact.PinnedReference) (*artifact.Inspection, error) {
+			inspection, err := base.Inspect(ctx, pinned)
+			if err != nil {
+				return nil, err
+			}
+			record := inspection.Record.Clone()
+			for index := range record.Inventory {
+				record.Inventory[index].Mode = 0
+			}
+			require.NoError(t, record.Seal(), "the content digest follows the declared modes")
+			inspection.Record = &record
+			return inspection, nil
+		},
+		read: func(ctx context.Context, pinned artifact.PinnedReference) (*artifact.Content, error) {
+			content, err := base.Read(ctx, pinned)
+			if err != nil {
+				return nil, err
+			}
+			content.Record = nil
+			return content, nil
+		},
+	})
+
+	_, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
+
+	require.ErrorIs(t, err, errTransport)
+	require.True(t, repacked, "the copy must reach the repack")
+	e.assertStagingClean()
 }
