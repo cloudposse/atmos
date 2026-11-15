@@ -16,7 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
 // terragruntTool is the tool name resolved through the toolchain; tests replace it with a test executable.
@@ -100,8 +99,8 @@ func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schem
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&stdout, &stderr)
 	info.ExecMetadataRawExitCode = resolveExitCode(err)
 	if !info.DryRun {
-		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
-		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
+		// Clear the snapshots under both the canonical stack and any alias, even after a partial apply.
+		invalidateTerraformExecutionCaches(info)
 	}
 	return e.finishMainTerraformCommand(atmosConfig, info, err, false)
 }
