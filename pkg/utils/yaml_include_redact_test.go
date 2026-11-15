@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -88,4 +89,30 @@ func TestProcessInclude_ErrorsDoNotEchoCredentials(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestRedactIncludeError(t *testing.T) {
+	cause := errors.New("pull failed")
+	tests := []struct {
+		name    string
+		target  string
+		message string
+		want    string
+	}{
+		{name: "no credential", target: "https://example.com/a.yaml", message: "boom at example.com", want: "boom at example.com"},
+		{name: "userinfo is cut out", target: "https://user:hunter2@example.com/a", message: "could not parse reference: user:hunter2@example.com/a", want: "could not parse reference: example.com/a"},
+		{name: "password quoted on its own", target: "https://user:hunter2@example.com/a", message: "auth failed for hunter2", want: "auth failed for <redacted>"},
+		{name: "encoded password is also removed decoded", target: "https://user:p%40ss@example.com/a", message: "bad password p@ss", want: "bad password <redacted>"},
+		{name: "forced getter prefix", target: "git::https://user:hunter2@example.com/r.git", message: "clone https://user:hunter2@example.com/r.git failed", want: "clone https://example.com/r.git failed"},
+		{name: "user name alone is not a password", target: "ssh://git@example.com/r.git", message: "git failed", want: "git failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := redactIncludeError(fmt.Errorf("%s: %w", tt.message, cause), tt.target)
+			require.Error(t, got)
+			assert.Equal(t, tt.want+": pull failed", got.Error())
+			assert.ErrorIs(t, got, cause, "the cause stays in the chain")
+		})
+	}
+	assert.NoError(t, redactIncludeError(nil, "https://user:hunter2@example.com"))
 }

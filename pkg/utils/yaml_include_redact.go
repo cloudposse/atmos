@@ -1,6 +1,7 @@
 package utils
 
 import (
+	neturl "net/url"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -43,8 +44,8 @@ func redactIncludeError(err error, target string) error {
 	redacted := message
 	for _, userinfo := range includeUserinfo(target) {
 		redacted = strings.ReplaceAll(redacted, userinfo.full+"@", "")
-		if userinfo.secret != "" {
-			redacted = strings.ReplaceAll(redacted, userinfo.secret, artifact.RedactedValue)
+		for _, secret := range userinfo.secrets() {
+			redacted = strings.ReplaceAll(redacted, secret, artifact.RedactedValue)
 		}
 	}
 	if redacted == message {
@@ -57,6 +58,19 @@ func redactIncludeError(err error, target string) error {
 type includeCredential struct {
 	full   string
 	secret string
+}
+
+// secrets returns the password as written and as a URL parser decodes it, since a fetch error may
+// quote either form.
+func (c includeCredential) secrets() []string {
+	if c.secret == "" {
+		return nil
+	}
+	secrets := []string{c.secret}
+	if decoded, err := neturl.PathUnescape(c.secret); err == nil && decoded != c.secret && decoded != "" {
+		secrets = append(secrets, decoded)
+	}
+	return secrets
 }
 
 // includeUserinfo extracts the userinfo of every URL in an include target, including the URL that
