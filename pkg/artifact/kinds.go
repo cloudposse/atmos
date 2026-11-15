@@ -170,11 +170,16 @@ func ValidateRepositoryConfig(desc *KindDescriptor, cfg *schema.ArtifactReposito
 // validatePackagingFor checks the packaging against the kind's matrix and returns the effective packaging.
 func validatePackagingFor(desc *KindDescriptor, configured string) (Packaging, error) {
 	packaging := desc.EffectivePackaging(configured)
-	if configured == "" {
+	if configured == "" && packaging == "" {
+		// A descriptor without a default has nothing to check until the user chooses one.
 		return packaging, nil
 	}
 	if !desc.Capabilities.HasPackaging(packaging) {
-		return packaging, fmt.Errorf("%w: %w: kind %q does not support packaging %q (supported: %v)", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactPackagingInvalid, desc.Kind, configured, desc.Capabilities.Packagings)
+		source := "packaging"
+		if configured == "" {
+			source = "default packaging"
+		}
+		return packaging, fmt.Errorf("%w: %w: kind %q does not support %s %q (supported: %v)", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactPackagingInvalid, desc.Kind, source, packaging, desc.Capabilities.Packagings)
 	}
 	return packaging, nil
 }

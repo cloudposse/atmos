@@ -97,6 +97,9 @@ func (r *RepositoryRegistry) Register(desc *KindDescriptor, factory RepositoryFa
 	if factory == nil {
 		return fmt.Errorf("%w: factory for repository kind %q must not be nil", errUtils.ErrArtifactConfigInvalid, desc.Kind)
 	}
+	if desc.DefaultPackaging != "" && !desc.Capabilities.HasPackaging(desc.DefaultPackaging) {
+		return fmt.Errorf("%w: %w: repository kind %q default packaging %q is not in its supported packagings %v", errUtils.ErrArtifactConfigInvalid, errUtils.ErrArtifactPackagingInvalid, desc.Kind, desc.DefaultPackaging, desc.Capabilities.Packagings)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.kinds[desc.Kind]; exists {

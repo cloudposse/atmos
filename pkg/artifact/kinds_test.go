@@ -54,6 +54,45 @@ func TestValidateRepositoryConfig_PackagingMatrix(t *testing.T) {
 	}
 }
 
+// TestValidateRepositoryConfig_DefaultPackagingMustBeSupported covers a registered descriptor whose
+// default packaging is outside its own capability matrix: an omitted packaging must be rejected
+// exactly like the same value written explicitly.
+func TestValidateRepositoryConfig_DefaultPackagingMustBeSupported(t *testing.T) {
+	builtin, ok := BuiltinKind(RepositoryKindLocalArchive)
+	require.True(t, ok)
+	zipOnly := *builtin
+	zipOnly.Capabilities.Packagings = []Packaging{PackagingZip}
+	zipOnly.DefaultPackaging = PackagingTgz
+
+	noDefault := zipOnly
+	noDefault.DefaultPackaging = ""
+
+	tests := []struct {
+		name      string
+		desc      KindDescriptor
+		packaging string
+		valid     bool
+	}{
+		{name: "default outside the matrix is rejected", desc: zipOnly, packaging: ""},
+		{name: "explicit value outside the matrix is rejected", desc: zipOnly, packaging: "tgz"},
+		{name: "explicit supported value overrides a bad default", desc: zipOnly, packaging: "zip", valid: true},
+		{name: "descriptor without a default accepts an omitted packaging", desc: noDefault, packaging: "", valid: true},
+		{name: "built-in default is supported", desc: *builtin, packaging: "", valid: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &schema.ArtifactRepositoryConfig{Kind: tt.desc.Kind, Packaging: tt.packaging, Options: validOptionsFor(tt.desc.Kind)}
+			err := ValidateRepositoryConfig(&tt.desc, cfg)
+			if tt.valid {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+		})
+	}
+}
+
 func validOptionsFor(kind string) map[string]any {
 	switch kind {
 	case RepositoryKindS3:

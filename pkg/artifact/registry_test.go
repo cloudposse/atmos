@@ -87,6 +87,32 @@ func TestRepositoryRegistry_LookupFallsBackToBuiltinAndPrefersRegistered(t *test
 	assert.True(t, registry.IsRegistered(RepositoryKindS3))
 }
 
+func TestRepositoryRegistry_RegisterRejectsDefaultPackagingOutsideTheMatrix(t *testing.T) {
+	tests := []struct {
+		name string
+		desc KindDescriptor
+		want bool
+	}{
+		{name: "default outside the matrix", desc: KindDescriptor{Kind: "gcp/gcs", DefaultPackaging: PackagingTgz, Capabilities: Capabilities{Packagings: []Packaging{PackagingZip}}}},
+		{name: "default with an empty matrix", desc: KindDescriptor{Kind: "gcp/gcs", DefaultPackaging: PackagingTgz}},
+		{name: "default inside the matrix", desc: KindDescriptor{Kind: "gcp/gcs", DefaultPackaging: PackagingZip, Capabilities: Capabilities{Packagings: []Packaging{PackagingZip}}}, want: true},
+		{name: "no default", desc: KindDescriptor{Kind: "gcp/gcs"}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := NewRepositoryRegistry()
+			err := registry.Register(&tt.desc, (&fakeKind{}).factory)
+			if tt.want {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+			assert.False(t, registry.IsRegistered("gcp/gcs"), "a rejected descriptor is not registered")
+		})
+	}
+}
+
 func TestRepositoryRegistry_KindsListsBuiltinAndRegisteredSorted(t *testing.T) {
 	registry := NewRepositoryRegistry()
 	require.NoError(t, registry.Register(&KindDescriptor{Kind: "gcp/gcs"}, (&fakeKind{}).factory))
