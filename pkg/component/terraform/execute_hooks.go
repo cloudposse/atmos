@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,10 +13,12 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/execution"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -128,6 +131,9 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 				return err
 			}
 			return changesPresent
+		}
+		if snapshots, ok := ctx.Value(planSnapshotKey{}).(*planSnapshotter); ok {
+			run = snapshots.around(phaseArgs, run)
 		}
 		err := run()
 		// A plan that reports changes completed; only a real failure is given to init recovery.
@@ -523,3 +529,115 @@ func (r *hookRunner) hookStdout(hook *schema.ComponentHook) io.Writer {
 }
 
 const hookFlagPrefix = "-"
+
+// recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command
+// just failed, it classifies the captured output for a known "init is required" diagnostic
+// (autoinit.Classify) and, if Atmos's own recovery policy says to (autoinit.ShouldRecover),
+// forces exactly one `terraform init` re-run with the flag(s) the diagnostic asked for, then
+// retries the main command exactly once more. This is the correction for a smart-init bet gone
+// wrong: skipping init looked safe based on the fingerprint, but terraform/tofu itself now
+// disagrees.
+//
+// No recovery is attempted for the init subcommand itself (there is no "init required" fallback
+// for init) or when ShouldRecover reports a policy error (e.g. the user explicitly disabled
+// implicit init) — that error is joined with the original failure and returned as-is.
+func (e *Executor) recoverFromInitRequired( //nolint:revive // argument-limit: every parameter is load-bearing context from runMainCommandPhase.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	allArgsAndFlags []string,
+	componentPath string,
+	uploadStatusFlag bool,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	opts ...component.ExecutionOption,
+) error {
+	retry, err := e.runInitRecovery(atmosConfig, info, execCtx, componentPath, mainErr, stdoutBuf, stderrBuf, opts...)
+	if !retry {
+		return err
+	}
+	return e.retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, opts...)
+}
+
+// runInitRecovery classifies a failed main command and, when smart init's recovery policy
+// allows it, runs the forced init the diagnostic asked for. It reports whether the main command
+// should now be retried; otherwise it returns the error to propagate.
+func (e *Executor) runInitRecovery( //nolint:revive // argument-limit: every parameter is load-bearing context from the recovering caller.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	opts ...component.ExecutionOption,
+) (bool, error) {
+	if info.SubCommand == subcommandInit {
+		return false, mainErr
+	}
+
+	combined := stdoutBuf.String() + "\n" + stderrBuf.String() + "\n" + mainErr.Error()
+	rec, policyErr := classifyInitRecovery(atmosConfig, info, combined)
+	if policyErr != nil {
+		return false, errors.Join(mainErr, policyErr)
+	}
+	if !rec.Run {
+		return false, mainErr
+	}
+
+	ui.Warning(fmt.Sprintf("Terraform requires initialization; running init and retrying '%s'", info.SubCommand))
+
+	initErr := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
+		return e.executeTerraformInitForcedFn(atmosConfig, info, componentPath, execCtx.varFile, rec.WithReconfigure, rec.WithUpgrade, opts...)
+	})
+	if initErr != nil {
+		return false, errors.Join(mainErr, initErr)
+	}
+	return true, nil
+}
+
+// recoverWithinLifecycle is recoverFromInitRequired for a main command wrapped by provider
+// hooks. It runs inside that command's lifecycle and retries only the Terraform subprocess, so
+// before and after hooks run once for the user command. The exec-metadata capture is reset so
+// it reflects only the retry's own output, as retryMainCommand does.
+func (e *Executor) recoverWithinLifecycle( //nolint:revive // argument-limit: every parameter is load-bearing context from runMainCommandPhase.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	retry func() error,
+	opts ...component.ExecutionOption,
+) error {
+	again, err := e.runInitRecovery(atmosConfig, info, execCtx, componentPath, mainErr, stdoutBuf, stderrBuf, opts...)
+	if !again {
+		return err
+	}
+	stdoutBuf.Reset()
+	stderrBuf.Reset()
+	return retry()
+}
+
+// retryMainCommand re-runs the main subcommand once after a forced init recovery, resetting the
+// exec-metadata capture so info.ExecMetadataRawOutput reflects only the retry's own output.
+func (e *Executor) retryMainCommand( //nolint:revive // argument-limit: every parameter is load-bearing context passed straight through to executeMainTerraformCommandFn.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	allArgsAndFlags []string,
+	componentPath string,
+	uploadStatusFlag bool,
+	gate *planfile.Guard,
+	opts ...component.ExecutionOption,
+) error {
+	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
+	mainOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
+
+	err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
+		if gate != nil {
+			return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, gate, mainOpts...)
+		}
+		return e.executeMainTerraformCommandFn(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
+	})
+	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
+	return err
+}

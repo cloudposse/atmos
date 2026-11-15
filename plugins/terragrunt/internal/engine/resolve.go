@@ -30,14 +30,16 @@ var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
 
 // resolve evaluates one request and describes any rejection as a model.Problem the user can act on.
 func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
-	result, err := resolveUnit(ctx, request, filesystem)
+	result, err := resolveRequest(ctx, request, filesystem)
 	if err != nil {
 		return nil, problemFor(err, request.Path)
 	}
 	return result, nil
 }
 
-func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
+// resolveRequest evaluates one request: it generates any owning stack, parses the path, and
+// dispatches to the stack, inventory, or unit evaluation.
+func resolveRequest(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
@@ -63,9 +65,10 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		return nil, err
 	}
 	pctx := requestParsingContext(request, path)
-	redacted := false
+	scan := &sensitivityScan{}
 	defer func() {
-		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, append(pctx.FilesRead.Paths(), path), path, redacted) {
+		files := append(append(pctx.FilesRead.Paths(), path), scan.applyFiles...)
+		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, files, path, scan.registered) {
 			sink.Withhold()
 		}
 	}()
@@ -81,6 +84,13 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	if discovering(request) {
 		return resolveUnitInventory(ctx, logger, environment, pctx, request, path)
 	}
+	return resolveUnit(ctx, logger, environment, pctx, request, path, scan)
+}
+
+// resolveUnit evaluates one unit: it guards destroy, parses the unit, applies
+// policies, and assembles the resolution with its execution data, backend, overlay,
+// and generated files.
+func resolveUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string, scan *sensitivityScan) (*model.Resolution, error) {
 	if err := checkDestroyGuard(ctx, logger, environment, pctx, request, path); err != nil {
 		return nil, err
 	}
@@ -93,12 +103,19 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		sensitiveInputs = SensitiveInputs(environment.FS, append(pctx.FilesRead.Paths(), path), cfg.Inputs)
 		redactInputs(logSinkFrom(ctx), cfg.Inputs, sensitiveInputs)
 		redactInputs(logSinkFrom(ctx), cfg.Locals, sensitiveLocals(environment.FS, path, cfg.Locals))
-		redacted = true
+		scan.registered = true
 	}
 	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
 		return nil, err
 	}
+	return buildUnitResolution(ctx, logger, environment, pctx, request, cfg, path, &unitSensitivity{inputs: sensitiveInputs, scan: scan})
+}
+
+// buildUnitResolution assembles the resolution of a parsed unit. The execution is
+// set before the backend resolves so the backend step sees the final result.
+func buildUnitResolution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string, sensitivity *unitSensitivity) (*model.Resolution, error) {
 	execution, applyFiles, err := unitExecution(ctx, logger, environment, pctx, request, cfg, path)
+	sensitivity.scan.applyFiles = applyFiles
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +124,7 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		return nil, err
 	}
 	result.Execution = execution
-	result.SensitiveInputs = sensitiveInputs
+	result.SensitiveInputs = sensitivity.inputs
 	result.Files = append(result.Files, applyFiles...)
 	if err := resolveBackend(cfg, result, &request); err != nil {
 		return nil, err
@@ -297,6 +314,12 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 		parsed, err := config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
 		if err != nil {
+			// The apply-time values are unknown, and the unit's own inputs and locals no longer count as
+			// registered: whatever Terragrunt logged before failing may carry them.
+			files := append(append(apply.FilesRead.Paths(), pctx.FilesRead.Paths()...), path)
+			if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, files, path, false) {
+				sink.Withhold()
+			}
 			return nil, err
 		}
 		// Apply-time values can differ from the ones planned, so register them before any event is returned.

@@ -96,17 +96,31 @@ func TestExecuteTerragruntUnitInvalidatesStateAfterFailure(t *testing.T) {
 			harness, info, _ := unitHarness(t)
 			info.DryRun = dryRun
 			info.ComponentEnvSection[testEnvProbeExit] = "1"
-			key := refcache.NewKey(nil, info.Stack, info.ComponentFromArg)
-			terraformStateCache.Store(key, terraformStateStaticCacheEntry{outputs: map[string]any{"value": "stale"}})
-			t.Cleanup(func() { terraformStateCache.Delete(key); ClearLastAuthContext() })
+			// A stack alias caches under its own key, and a failed run can still apply part of the change.
+			info.StackFromArg = "alias-" + info.Stack
+			keys := []refcache.Key{
+				refcache.NewKey(nil, info.Stack, info.ComponentFromArg),
+				refcache.NewKey(nil, info.StackFromArg, info.ComponentFromArg),
+			}
+			for _, key := range keys {
+				terraformStateCache.Store(key, terraformStateStaticCacheEntry{outputs: map[string]any{"value": "stale"}})
+			}
+			t.Cleanup(func() {
+				for _, key := range keys {
+					terraformStateCache.Delete(key)
+				}
+				ClearLastAuthContext()
+			})
 			err := harness.executor.executeTerragruntUnit(t.Context(), harness.config, info, unitRun)
 			if dryRun {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
 			}
-			_, found := terraformStateCache.Load(key)
-			require.Equal(t, dryRun, found)
+			for _, key := range keys {
+				_, found := terraformStateCache.Load(key)
+				require.Equal(t, dryRun, found)
+			}
 		})
 	}
 }

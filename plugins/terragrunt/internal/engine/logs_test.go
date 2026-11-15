@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -369,6 +370,56 @@ func TestResolveWithholdsLogsWhenSensitiveValuesAreUnknown(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := nativeUnit(t, test.hcl)
+			sink := NewLogSink("debug", request.BasePath)
+			logger(t, sink).Debug("before tok-123")
+
+			_, err := Resolve(WithLogSink(t.Context(), sink), request)
+
+			require.Error(t, err)
+			entries := sink.Entries()
+			require.NotEmpty(t, entries)
+			if test.withheld {
+				require.Len(t, entries, 1)
+				assert.Contains(t, entries[0].Message, "withheld")
+				return
+			}
+			assert.Equal(t, "before tok-123", entries[0].Message)
+		})
+	}
+}
+
+// A file only read when the unit is evaluated for apply can declare sensitive values the reparse never
+// registers, such as the inputs of an included file, so the events are withheld even when the evaluation succeeds.
+func TestResolveWithholdsLogsForSensitiveValuesInApplyTimeFiles(t *testing.T) {
+	request := nativeUnit(t, "include \"extra\" {\n  path = get_terraform_command() == \"apply\" ? \"${get_terragrunt_dir()}/apply.hcl\" : \"${get_terragrunt_dir()}/plan.hcl\"\n}\n")
+	dir := filepath.Dir(request.Path)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.hcl"), []byte("inputs = { name = \"visible\" }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "apply.hcl"), []byte("inputs = { token = sensitive(\"apply-secret\") }\n"), 0o644))
+	sink := NewLogSink("debug", request.BasePath)
+	logger(t, sink).Debug("before apply-secret")
+
+	_, err := Resolve(WithLogSink(t.Context(), sink), request)
+
+	require.NoError(t, err)
+	entries := sink.Entries()
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0].Message, "withheld")
+}
+
+// When the apply-time reparse fails, the values it would have registered are unknown, so a unit that
+// declares sensitive values has its events withheld; a unit that declares none keeps them.
+func TestResolveWithholdsLogsWhenTheApplyTimeReparseFails(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		locals   string
+		withheld bool
+	}{
+		{"sensitive", "locals { tok = sensitive(\"tok-123\") }\n", true},
+		{"plain", "locals { tok = \"tok-123\" }\n", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := nativeUnit(t, test.locals+"include \"extra\" {\n  path = get_terraform_command() == \"apply\" ? \"${get_terragrunt_dir()}/missing.hcl\" : \"${get_terragrunt_dir()}/plan.hcl\"\n}\n")
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "plan.hcl"), []byte("inputs = { name = \"visible\" }\n"), 0o644))
 			sink := NewLogSink("debug", request.BasePath)
 			logger(t, sink).Debug("before tok-123")
 

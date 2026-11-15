@@ -576,6 +576,33 @@ func TestReviewedRebuildAcceptsOnlyTheRestoredArtifacts(t *testing.T) {
 	require.False(t, only)
 }
 
+// A symlinked workdir is never an empty transport directory: the walk does not descend into the link, so
+// the files in its target would pass without being reviewed, and a rebuild would write into that target.
+func TestReviewedRebuildRejectsASymlinkedWorkdir(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	require.NoError(t, os.MkdirAll(target, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(target, "unreviewed.tf"), []byte("# not reviewed"), 0o600))
+	workdir := filepath.Join(dir, "work")
+	if err := os.Symlink(target, workdir); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	rebuild := &reviewedRebuild{plan: &configurationPlan{RebuildDigest: "digest", WorkingDirectory: workdir}, planPath: filepath.Join(dir, "reviewed.planfile"), workdir: workdir}
+
+	only, err := rebuild.holdsOnlyTransport()
+	require.NoError(t, err)
+	require.False(t, only, "files behind a symlinked workdir were not reviewed")
+
+	_, err = newReviewedRebuild(&schema.ConfigAndStacksInfo{}, rebuild.plan, rebuild.planPath)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+
+	// A link whose target is gone is just as unverifiable.
+	require.NoError(t, os.RemoveAll(target))
+	only, err = rebuild.holdsOnlyTransport()
+	require.NoError(t, err)
+	require.False(t, only, "a dangling symlinked workdir is not an absent one")
+}
+
 // A plan in a subdirectory of the workdir is part of the restored set, and so are the directories on the way
 // to it, but only while they hold nothing else.
 func TestReviewedRebuildAcceptsARestoredPlanInASubdirectory(t *testing.T) {

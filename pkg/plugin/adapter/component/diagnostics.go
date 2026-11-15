@@ -164,6 +164,17 @@ func DiagnosticError(diagnostic *pluginv1.Diagnostic) error {
 	return DetailError(detail, codes.InvalidArgument)
 }
 
+// errorDiagnostics keeps the diagnostics that fail a call and drops the warnings, which only print.
+func errorDiagnostics(diagnostics []*pluginv1.Diagnostic) []*pluginv1.Diagnostic {
+	kept := make([]*pluginv1.Diagnostic, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		if DiagnosticError(diagnostic) != nil {
+			kept = append(kept, diagnostic)
+		}
+	}
+	return kept
+}
+
 // firstDiagnosticError returns the first error-severity diagnostic as an error. Warnings are
 // shown on the UI channel and never fail the call.
 func firstDiagnosticError(diagnostics []*pluginv1.Diagnostic) error {

@@ -499,4 +499,21 @@ func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 		require.Equal(t, uint32(0o755), result.OverlayModes["probe.sh"])
 		require.NotContains(t, result.OverlayModes, "plain.tf", "default modes are not exported")
 	})
+	t.Run("private file keeps its restrictive mode", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows ignores POSIX permission bits.")
+		}
+		request := nativeUnit(t, "")
+		dir := filepath.Dir(request.Path)
+		for name, mode := range map[string]os.FileMode{"private_key.pem": 0o600, "group.pem": 0o640, "plain.tf": 0o644} {
+			path := filepath.Join(dir, name)
+			require.NoError(t, os.WriteFile(path, []byte("# "+name), mode))
+			require.NoError(t, os.Chmod(path, mode))
+		}
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Equal(t, uint32(0o600), result.OverlayModes["private_key.pem"], "a nonexecutable 0600 key must not widen to the 0644 default")
+		require.Equal(t, uint32(0o640), result.OverlayModes["group.pem"])
+		require.NotContains(t, result.OverlayModes, "plain.tf", "default modes are not exported")
+	})
 }

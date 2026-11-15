@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/shlex"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 
@@ -549,11 +550,24 @@ func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info 
 func rejectEnvironmentPlanOutput(entries []string, goos string) error {
 	for _, name := range []string{tfCliArgsEnvVar, tfCliArgsEnvVar + "_" + subcommandPlan} {
 		value, _ := lastEnvListValue(entries, name, goos)
-		if containsOutputFlag(parseArgs(value)) {
+		args, err := tokenizeEnvironmentArgs(value)
+		if err != nil {
+			return fmt.Errorf("%w: %s cannot be parsed: %w", errUtils.ErrPlanVerificationFailed, name, err)
+		}
+		if containsOutputFlag(args) {
 			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
 		}
 	}
 	return nil
+}
+
+// tokenizeEnvironmentArgs splits a TF_CLI_ARGS value the way the engine does:
+// spaces, tabs, and newlines separate tokens outside quotes, and a malformed
+// value (for example an unterminated quote) is an error because the engine
+// refuses to run with it. The shared parseArgs only splits on spaces, so a tab
+// before -out would hide the flag from the check.
+func tokenizeEnvironmentArgs(value string) ([]string, error) {
+	return shlex.Split(value)
 }
 
 // planEnvironment lists the environment layers a plan subprocess receives, in precedence order.
