@@ -25,19 +25,27 @@ func TestManagedReadWaitsForBothCommitRenames(t *testing.T) {
 	require.NoError(t, err)
 	root, err := s.openRoot(false)
 	require.NoError(t, err)
-	defer root.Close()
 	pending, err := s.stage(ctx, root, "key", bytes.NewBufferString("new"), blob.PutOptions{Size: 3, Metadata: map[string]string{"version": "new"}})
 	require.NoError(t, err)
-	defer pending.discard(root)
+	// commitJoined reports whether the commit goroutine ended. The root and staging area are torn
+	// down only after it did, so a commit that is still running never sees a closed root.
+	commitJoined := true
+	t.Cleanup(func() {
+		if !commitJoined {
+			return
+		}
+		pending.discard(root)
+		_ = root.Close()
+	})
 	release := holdGuard(t, s, "key", false)
 	between, proceed := make(chan struct{}), make(chan struct{})
 	// The commit stays parked on proceed until the test releases it. Release it on every exit so an
 	// assertion that aborts the test never strands the commit goroutine holding the root lock.
 	var proceedOnce sync.Once
 	letProceed := func() { proceedOnce.Do(func() { close(proceed) }) }
-	t.Cleanup(letProceed)
-	commitDone := make(chan error, 1)
+	commitDone, commitFinished := make(chan error, 1), make(chan struct{})
 	go func() {
+		defer close(commitFinished)
 		defer release()
 		commitDone <- s.commitManaged(root, "key", pending, false, func(r *os.Root, from, to string) error {
 			if err := rootRenameReplace(r, from, to); err != nil {
@@ -50,6 +58,18 @@ func TestManagedReadWaitsForBothCommitRenames(t *testing.T) {
 			return nil
 		})
 	}()
+	// Registered after the goroutine starts, so it runs before the root teardown above: open the
+	// gate, then wait for the commit to finish within a bound.
+	commitJoined = false
+	t.Cleanup(func() {
+		letProceed()
+		select {
+		case <-commitFinished:
+			commitJoined = true
+		case <-time.After(waitTimeout):
+			t.Errorf("timed out waiting for the commit goroutine to finish; leaving its root open")
+		}
+	})
 	select {
 	case <-between:
 	case err := <-commitDone:
