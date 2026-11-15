@@ -128,6 +128,11 @@ func (v KeyVerifier) keyRounds() ([]root.TrustedMaterial, error) {
 		if err != nil {
 			return nil, fail(errUtils.ErrSignatureConfigInvalid, err)
 		}
+		// Message signatures made with Ed25519 can only be verified against the full artifact, and
+		// this path holds only its digest, so the key would pass here and then reject every bundle.
+		if _, pure := loaded.(*sigstore.ED25519Verifier); pure {
+			return nil, fail(errUtils.ErrSignatureConfigInvalid, fmt.Errorf("%w: ed25519 signatures need the full artifact", errUtils.ErrSignatureKeyUnsupported))
+		}
 		round := seen[key.Hint]
 		seen[key.Hint]++
 		if round == len(rounds) {

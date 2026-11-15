@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"strings"
@@ -147,4 +148,31 @@ func TestKeyVerifierTriesEveryKeyThatSharesAHint(t *testing.T) {
 	require.NoError(t, err)
 	_, err = KeyVerifier{Keys: []TrustedKey{wrong, {Hint: signed.Hint, PublicKey: &other.PublicKey}}, LoadRoot: logsOnly(authority)}.Verify(t.Context(), signed.Bundle, digestOf(artifact), true)
 	require.ErrorIs(t, err, errUtils.ErrSignatureInvalid)
+}
+
+// Ed25519 message signatures can only be verified against the full artifact, which the digest-based
+// verification path never has, so such a key is a configuration error rather than a key that
+// validates and then fails every bundle.
+func TestKeyVerifierRejectsEd25519KeysAtConfiguration(t *testing.T) {
+	authority := signaturetest.New(t)
+	artifact := []byte("key-signed release")
+	signed := authority.SignWithKey(t, artifact)
+	edPublic, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name string
+		keys []TrustedKey
+	}{
+		{"ed25519 key alone", []TrustedKey{{Hint: signed.Hint, PublicKey: edPublic}}},
+		{"ed25519 key beside a supported key", []TrustedKey{{Hint: signed.Hint, PublicKey: signed.PublicKey}, {Hint: "ed", PublicKey: edPublic}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			verifier := KeyVerifier{Keys: tc.keys, LoadRoot: logsOnly(authority)}
+			result, err := verifier.Verify(t.Context(), signed.Bundle, digestOf(artifact), true)
+			require.ErrorIs(t, err, errUtils.ErrSignatureConfigInvalid)
+			assert.Contains(t, err.Error(), "ed25519")
+			assert.Nil(t, result)
+		})
+	}
 }

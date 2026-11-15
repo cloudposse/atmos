@@ -11,6 +11,9 @@ var (
 	// ErrSignatureConfigInvalid indicates the verification policy itself is unusable (for example an empty identity).
 	ErrSignatureConfigInvalid = errors.New("invalid signature verification configuration")
 
+	// ErrSignatureKeyUnsupported indicates a configured trusted key cannot verify bundles by subject digest alone.
+	ErrSignatureKeyUnsupported = errors.New("signature key type cannot verify by digest")
+
 	// ErrSignatureOffline indicates trust material cannot be fetched while verifying offline.
 	ErrSignatureOffline = errors.New("signature trust material is unavailable offline")
 
