@@ -91,25 +91,26 @@ func (r *Repository) acquire(ctx context.Context, resource, owner, operationID s
 	}
 	key := layout.LockPath(resource)
 	deadline := time.Now().Add(r.settings.lockWait)
+	contended := false
 	for {
 		// An acquisition that starts after cancellation must not reach the claim PUT: the canceled
 		// request would be settled as ambiguous and could leave a permanent reconciliation fence.
 		// Only requests that were already in flight when the context ended are reconciled.
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			if contended {
+				// The context ended between two attempts, after a claim was found held: keep that
+				// conflict visible beside the context error, as the wait-expiry path does.
+				return nil, r.heldError(ctx, key, resource, ctxErr)
+			}
 			return nil, ctxErr
 		}
 		handle, err := r.tryClaim(ctx, key, &doc, raw)
 		if handle != nil || err != nil {
 			return handle, err
 		}
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, r.heldError(ctx, key, resource, ctxErr)
-		}
-		if !time.Now().Before(deadline) {
-			return nil, r.heldError(ctx, key, resource, nil)
-		}
-		if err := sleep(ctx, r.settings.lockPoll); err != nil {
-			return nil, r.heldError(ctx, key, resource, err)
+		contended = true
+		if err := r.awaitRetry(ctx, key, resource, deadline); err != nil {
+			return nil, err
 		}
 	}
 }
