@@ -163,9 +163,15 @@ func TestLock_WaitIsBoundedByTheContext(t *testing.T) {
 	_, err := holder.Lock(context.Background(), artifact.LockRequest{Resource: lockResource, Owner: "owner-a"})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	// Build the peer before starting the clock: under load, repository setup must not consume the
+	// deadline, or Lock would reject the already-expired context before ever contending for the claim.
+	peer := peerOf(t, spec)
+	// The deadline must outlast the first claim attempt on a loaded machine: an attempt that starts
+	// after the context ended returns the context error alone, without the held-claim conflict this
+	// test asserts. Two seconds is far longer than one attempt and far shorter than the default wait.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_, err = peerOf(t, spec).Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "owner-b"})
+	_, err = peer.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "owner-b"})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
 }
@@ -240,7 +246,7 @@ func TestLock_CanceledAcquisitionLeaksNothing(t *testing.T) {
 		require.NoError(t, err)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, err = peerOf(t, spec).Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "owner-b"})
+		_, err = peer.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "owner-b"})
 		require.ErrorIs(t, err, context.Canceled)
 		require.NoError(t, held.Release(context.Background()))
 		assert.Empty(t, lockObjects(spec.fake), "only the holder's claim ever existed")
