@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -207,25 +208,10 @@ func validateHook(kind string, hook *model.Hook) error {
 // a Terragrunt evaluation context. Dynamic values (including dependency outputs and
 // run_cmd) are validated by executionFromConfig during preparation.
 func checkExecutionSyntax(filesystem afero.Fs, cfg *config.TerragruntConfig, path string) error {
-	// Included files come first and the unit last, so a later same-named declaration replaces an
-	// earlier one, as Terragrunt merges hooks and extra_arguments by name.
-	var paths []string
-	for _, name := range slices.Sorted(maps.Keys(cfg.ProcessedIncludes)) {
-		include := cfg.ProcessedIncludes[name]
-		strategy, err := include.GetMergeStrategy()
-		if err != nil {
-			return err
-		}
-		if strategy == config.NoMerge {
-			continue
-		}
-		included := include.Path
-		if !filepath.IsAbs(included) {
-			included = filepath.Join(filepath.Dir(path), included)
-		}
-		paths = append(paths, included)
+	paths, err := includedExecutionPaths(filesystem, cfg, path)
+	if err != nil {
+		return err
 	}
-	paths = append(paths, path)
 	effective, err := effectiveExecutionBlocks(filesystem, paths)
 	if err != nil {
 		return err
@@ -237,6 +223,87 @@ func checkExecutionSyntax(filesystem afero.Fs, cfg *config.TerragruntConfig, pat
 		}
 	}
 	return nil
+}
+
+// includedExecutionPaths lists the files whose execution blocks apply to a unit, in merge order.
+// Included files come first, in the order the unit declares its includes, and the unit comes last,
+// so a later same-named declaration replaces an earlier one, as Terragrunt merges hooks and
+// extra_arguments by name.
+func includedExecutionPaths(filesystem afero.Fs, cfg *config.TerragruntConfig, path string) ([]string, error) {
+	var paths []string
+	for _, name := range includeDeclarationOrder(filesystem, path, cfg.ProcessedIncludes) {
+		include := cfg.ProcessedIncludes[name]
+		strategy, err := include.GetMergeStrategy()
+		if err != nil {
+			return nil, err
+		}
+		if strategy == config.NoMerge {
+			continue
+		}
+		included := include.Path
+		if !filepath.IsAbs(included) {
+			included = filepath.Join(filepath.Dir(path), included)
+		}
+		paths = append(paths, included)
+	}
+	return append(paths, path), nil
+}
+
+// includeDeclarationOrder returns the names of the processed includes in the order the unit declares
+// them. The processed map has no order, and a later include takes precedence over an earlier one.
+// An include the unit file does not declare by name keeps a deterministic place after the others.
+func includeDeclarationOrder(filesystem afero.Fs, path string, processed config.IncludeConfigsMap) []string {
+	var ordered []string
+	for _, name := range declaredIncludeNames(filesystem, path) {
+		if _, ok := processed[name]; ok && !slices.Contains(ordered, name) {
+			ordered = append(ordered, name)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(processed)) {
+		if !slices.Contains(ordered, name) {
+			ordered = append(ordered, name)
+		}
+	}
+	return ordered
+}
+
+// declaredIncludeNames reads the `include` blocks of a unit file in declaration order. A bare
+// `include` has the empty name. An unreadable or unparseable file yields none, because the
+// execution blocks of the same file are parsed and reported afterwards.
+func declaredIncludeNames(filesystem afero.Fs, path string) []string {
+	data, err := afero.ReadFile(filesystem, path)
+	if err != nil {
+		return nil
+	}
+	parser := hclparse.NewParser()
+	var file *hcl.File
+	var diagnostics hcl.Diagnostics
+	if strings.HasSuffix(path, ".json") {
+		file, diagnostics = parser.ParseJSON(data, path)
+	} else {
+		file, diagnostics = parser.ParseHCL(data, path)
+	}
+	if diagnostics.HasErrors() {
+		return nil
+	}
+	var names []string
+	if body, ok := file.Body.(*hclsyntax.Body); ok {
+		for _, block := range body.Blocks {
+			if block.Type == "include" {
+				names = append(names, strings.Join(block.Labels, ""))
+			}
+		}
+		return names
+	}
+	// JSON bodies name every include, so the labelled schema reads them in order.
+	content, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "include", LabelNames: []string{"name"}}}})
+	if diagnostics.HasErrors() {
+		return nil
+	}
+	for _, block := range content.Blocks {
+		names = append(names, block.Labels[0])
+	}
+	return names
 }
 
 // executionDeclaration is one execution block and the file that declares it.
@@ -293,15 +360,8 @@ func effectiveExecutionBlocks(filesystem afero.Fs, paths []string) ([]executionD
 }
 
 func checkExecutionBlock(block *hcl.Block) error {
-	var target any
-	switch block.Type {
-	case "extra_arguments":
-		target = &config.TerraformExtraArguments{}
-	case "before_hook", "after_hook":
-		target = &config.Hook{}
-	case "error_hook":
-		target = &config.ErrorHook{}
-	default:
+	target := executionBlockTarget(block.Type)
+	if target == nil {
 		return nil
 	}
 	schema, _ := gohcl.ImpliedBodySchema(target)
@@ -309,40 +369,64 @@ func checkExecutionBlock(block *hcl.Block) error {
 	if diagnostics.HasErrors() {
 		return diagnostics
 	}
-	if block.Type == "extra_arguments" {
+	if block.Type == "extra_arguments" || !hookMayRun(content) {
 		return nil
 	}
-	// A dynamic condition may disable the hook. Decide only during preparation.
-	if condition, ok := content.Attributes["if"]; ok {
-		var enabled bool
-		if diagnostics := gohcl.DecodeExpression(condition.Expr, nil, &enabled); diagnostics.HasErrors() || !enabled {
-			return nil
-		}
-	}
 	hook := model.Hook{Name: block.Labels[0], Execute: []string{"deferred"}}
-	if attribute, ok := content.Attributes["commands"]; ok {
-		var commands []string
-		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &commands); !diagnostics.HasErrors() {
-			hook.Commands = commands
-		}
+	if commands, ok := literalStringList(content, "commands"); ok {
+		hook.Commands = commands
 	}
-	if attribute, ok := content.Attributes["execute"]; ok {
-		var execute []string
-		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &execute); !diagnostics.HasErrors() {
-			hook.Execute = execute
-		}
+	if execute, ok := literalStringList(content, "execute"); ok {
+		hook.Execute = execute
 	}
 	if err := validateHook(block.Type, &hook); err != nil {
 		return err
 	}
-	if attribute, ok := content.Attributes["on_errors"]; ok {
-		var patterns []string
-		if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &patterns); !diagnostics.HasErrors() {
-			_, err := errorHooksFromConfig([]config.ErrorHook{{Name: hook.Name, Commands: hook.Commands, Execute: hook.Execute, OnErrors: patterns}})
-			return err
-		}
+	if patterns, ok := literalStringList(content, "on_errors"); ok {
+		_, err := errorHooksFromConfig([]config.ErrorHook{{Name: hook.Name, Commands: hook.Commands, Execute: hook.Execute, OnErrors: patterns}})
+		return err
 	}
 	return nil
+}
+
+// executionBlockTarget returns the configuration type that declares a block, or nil for a block that
+// holds no execution settings.
+func executionBlockTarget(blockType string) any {
+	switch blockType {
+	case "extra_arguments":
+		return &config.TerraformExtraArguments{}
+	case "before_hook", "after_hook":
+		return &config.Hook{}
+	case "error_hook":
+		return &config.ErrorHook{}
+	}
+	return nil
+}
+
+// hookMayRun reports false when a literal `if = false` disables the hook. A dynamic condition may
+// disable it too, but that is decided only during preparation.
+func hookMayRun(content *hcl.BodyContent) bool {
+	condition, ok := content.Attributes["if"]
+	if !ok {
+		return true
+	}
+	var enabled bool
+	diagnostics := gohcl.DecodeExpression(condition.Expr, nil, &enabled)
+	return !diagnostics.HasErrors() && enabled
+}
+
+// literalStringList decodes an attribute that is a literal list of strings. It reports false when
+// the attribute is absent or dynamic, which preparation validates once values are known.
+func literalStringList(content *hcl.BodyContent, name string) ([]string, bool) {
+	attribute, ok := content.Attributes[name]
+	if !ok {
+		return nil, false
+	}
+	var values []string
+	if diagnostics := gohcl.DecodeExpression(attribute.Expr, nil, &values); diagnostics.HasErrors() {
+		return nil, false
+	}
+	return values, true
 }
 
 // rejectArgumentDependentExecution fails closed until saved apply arguments can be bound.

@@ -76,12 +76,13 @@ func retryRegistryResolution(ctx context.Context, policies *model.Errors, resolv
 		if err == nil || policies == nil || ctx.Err() != nil {
 			return resolved, nil, err
 		}
-		if ignore := matchingRegistryIgnore(policies.Ignore, err.Error()); ignore != nil {
+		text := cleanRegistryError(err.Error())
+		if ignore := matchingRegistryIgnore(policies.Ignore, text); ignore != nil {
 			return "", ignore, err
 		}
 		var retry *model.RetryPolicy
 		for i := range policies.Retry {
-			if registryErrorMatches(err.Error(), policies.Retry[i].Patterns) {
+			if registryErrorMatches(text, policies.Retry[i].Patterns) {
 				retry = &policies.Retry[i]
 				break
 			}
@@ -103,9 +104,15 @@ func retryRegistryResolution(ctx context.Context, policies *model.Errors, resolv
 // the text of a failed source fetch the same way before matching, so one pattern behaves alike in both.
 var registryErrorNoise = regexp.MustCompile(`[^a-zA-Z0-9./'"():=\- ]+`)
 
+// cleanRegistryError reduces a failure to the readable text that ignore and retry patterns match. The
+// cleaning is idempotent, so text that is already clean passes through unchanged.
+func cleanRegistryError(message string) string {
+	return strings.Join(strings.Fields(registryErrorNoise.ReplaceAllString(message, " ")), " ")
+}
+
 // matchingRegistryIgnore returns the first ignore policy, in declaration order, that matches the failure.
 func matchingRegistryIgnore(policies []model.IgnorePolicy, message string) *model.IgnorePolicy {
-	text := strings.Join(strings.Fields(registryErrorNoise.ReplaceAllString(message, " ")), " ")
+	text := cleanRegistryError(message)
 	for i := range policies {
 		if registryErrorMatches(text, policies[i].Patterns) {
 			return &policies[i]

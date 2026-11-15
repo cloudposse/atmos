@@ -3,14 +3,19 @@ package aws
 import (
 	"cmp"
 	"context"
+	"crypto/sha1" //nolint:gosec // The SDK and the AWS CLI name SSO token cache files after the SHA-1 of the cache key.
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +24,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go-v2/credentials/endpointcreds"
+	"github.com/aws/aws-sdk-go-v2/credentials/processcreds"
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -32,8 +39,9 @@ import (
 // environment, and changing the process environment would leak into concurrent invocations. So the chain is
 // assembled here, in the SDK's order, from the invocation environment alone: static keys, a web identity
 // token file, the shared profile, container credentials, then instance metadata. Only the profile sources
-// that the shared files fully describe (keys, web identity, SSO, login, and credential_process) are left to
-// the SDK, with every input that selects them passed as an explicit option.
+// that the shared files fully describe (keys, web identity, SSO, and login) are left to the SDK, with every
+// input that selects them passed as an explicit option, including the SSO token cache of the invocation home.
+// A credential_process runs from here too, because the SDK starts it with the environment of the process.
 
 const (
 	credentialSourceEnvironment = "Environment"
@@ -89,13 +97,13 @@ func baseCredentialsProvider(ctx context.Context, env map[string]string, region 
 		return nil, "", err
 	}
 	if profile == nil {
-		provider, err := containerOrInstanceCredentials(env)
+		provider, err := containerOrInstanceCredentials(env, nil)
 		return provider, "", err
 	}
 	region = cmp.Or(region, profile.Region)
 	chain := profileChain(profile)
 	if root := chain[len(chain)-1]; !profileSourceNeedsEnvironment(root) {
-		provider, err := sdkProfileCredentials(ctx, env, profile.Profile, region, profileSourceUsesSTSOnly(root))
+		provider, err := sdkProfileCredentials(ctx, env, profile.Profile, region, root)
 		return provider, profile.Region, err
 	}
 	provider, err := envProfileCredentials(env, chain, region)
@@ -142,10 +150,7 @@ func loadInvocationProfile(ctx context.Context, env map[string]string) (*config.
 // the files in the home directory that the environment names.
 func invocationSharedFiles(env map[string]string) (configFile, credentialsFile string) {
 	configFile, credentialsFile = env["AWS_CONFIG_FILE"], env["AWS_SHARED_CREDENTIALS_FILE"]
-	home := env["HOME"]
-	if runtime.GOOS == "windows" {
-		home = cmp.Or(env["USERPROFILE"], home)
-	}
+	home := invocationHomeDir(env)
 	if configFile == "" {
 		configFile = config.DefaultSharedConfigFilename()
 		if home != "" {
@@ -161,6 +166,14 @@ func invocationSharedFiles(env map[string]string) (configFile, credentialsFile s
 	return configFile, credentialsFile
 }
 
+// invocationHomeDir returns the home directory that the environment names, or "".
+func invocationHomeDir(env map[string]string) string {
+	if runtime.GOOS == "windows" {
+		return cmp.Or(env["USERPROFILE"], env["HOME"])
+	}
+	return env["HOME"]
+}
+
 // profileChain lists a profile and its source profiles, ending with the profile that holds the source.
 func profileChain(profile *config.SharedConfig) []*config.SharedConfig {
 	chain := []*config.SharedConfig{profile}
@@ -170,11 +183,12 @@ func profileChain(profile *config.SharedConfig) []*config.SharedConfig {
 	return chain
 }
 
-// profileSourceNeedsEnvironment reports whether the SDK would take the profile's starting credentials from
-// the environment: a credential_source, or no source at all so that container and instance credentials apply.
+// profileSourceNeedsEnvironment reports whether the profile's starting credentials come from the invocation
+// environment rather than from the shared files alone: a credential_source, a credential_process that runs
+// with that environment, or no source at all so that container and instance credentials apply.
 func profileSourceNeedsEnvironment(root *config.SharedConfig) bool {
 	switch {
-	case root.Credentials.HasKeys(), root.WebIdentityTokenFile != "", root.CredentialProcess != "", root.LoginSession != "":
+	case root.Credentials.HasKeys(), root.WebIdentityTokenFile != "", root.LoginSession != "":
 		return false
 	case root.SSOSessionName != "", root.SSORegion != "", root.SSOAccountID != "", root.SSOStartURL != "", root.SSORoleName != "":
 		return false
@@ -191,8 +205,9 @@ func profileSourceUsesSTSOnly(root *config.SharedConfig) bool {
 }
 
 // sdkProfileCredentials lets the SDK resolve a profile whose source the shared files describe. The profile,
-// files, and region are explicit, so the SDK does not consult the process environment to choose them.
-func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, region string, stsOnly bool) (aws.CredentialsProvider, error) {
+// files, region, and SSO token cache are explicit, so the SDK does not consult the process environment to
+// choose them. The root is the profile that holds the source of the chain.
+func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, region string, root *config.SharedConfig) (aws.CredentialsProvider, error) {
 	configFile, credentialsFile := invocationSharedFiles(env)
 	options := []func(*config.LoadOptions) error{
 		config.WithSharedConfigProfile(profile),
@@ -205,11 +220,12 @@ func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, 
 	if region != "" {
 		options = append(options, config.WithRegion(region))
 	}
+	options = append(options, ssoTokenCacheOptions(env, root)...)
 	// The SDK builds the STS client of a role_arn and source_profile chain itself, so the invocation STS
 	// endpoint is set as the endpoint of the loaded configuration. Only STS clients are built from it when
 	// the chain starts from keys, a web identity, or a credential process; SSO and login chains also build
 	// clients of other services, which this endpoint must not reach.
-	if endpoint := invocationSTSEndpoint(env); endpoint != "" && stsOnly {
+	if endpoint := invocationSTSEndpoint(env); endpoint != "" && profileSourceUsesSTSOnly(root) {
 		options = append(options, config.WithBaseEndpoint(endpoint))
 	}
 	cfg, err := config.LoadDefaultConfig(ctx, options...)
@@ -219,10 +235,40 @@ func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, 
 	return cfg.Credentials, nil
 }
 
+// ssoTokenCacheOptions points the SDK at the SSO token cache of the invocation home. The SDK derives the
+// cache path from the home directory of the process, and a session profile and a legacy profile each have
+// an option for it: a session's token provider is keyed by the session name, a legacy profile by its start
+// URL, as in the AWS CLI. Anything else leaves the SDK's own resolution untouched.
+func ssoTokenCacheOptions(env map[string]string, root *config.SharedConfig) []func(*config.LoadOptions) error {
+	home := invocationHomeDir(env)
+	switch {
+	case home == "":
+		return nil
+	case root.SSOSessionName != "":
+		path := ssoCachedTokenPath(home, root.SSOSessionName)
+		return []func(*config.LoadOptions) error{config.WithSSOTokenProviderOptions(func(o *ssocreds.SSOTokenProviderOptions) {
+			o.CachedTokenFilepath = path
+		})}
+	case root.SSOStartURL != "":
+		path := ssoCachedTokenPath(home, root.SSOStartURL)
+		return []func(*config.LoadOptions) error{config.WithSSOProviderOptions(func(o *ssocreds.Options) {
+			o.CachedTokenFilepath = path
+		})}
+	default:
+		return nil
+	}
+}
+
+// ssoCachedTokenPath is the cache file of an SSO login: ~/.aws/sso/cache/<sha1-hex of the key>.json.
+func ssoCachedTokenPath(home, key string) string {
+	sum := sha1.Sum([]byte(key)) //nolint:gosec // The cache file name is defined by the AWS CLI, not chosen for security.
+	return filepath.Join(home, ".aws", "sso", "cache", hex.EncodeToString(sum[:])+".json")
+}
+
 // envProfileCredentials resolves the source of a profile from the environment, then assumes each role of
 // the chain from the source profile outward, as the SDK does.
 func envProfileCredentials(env map[string]string, chain []*config.SharedConfig, region string) (aws.CredentialsProvider, error) {
-	provider, err := profileSourceCredentials(env, chain[len(chain)-1])
+	provider, err := profileSourceCredentials(env, chain)
 	if err != nil {
 		return nil, err
 	}
@@ -250,11 +296,14 @@ func applyProfileRoleOptions(options *stscreds.AssumeRoleOptions, profile *confi
 	}
 }
 
-// profileSourceCredentials resolves a credential_source, or the container and instance fallback.
-func profileSourceCredentials(env map[string]string, root *config.SharedConfig) (aws.CredentialsProvider, error) {
+// profileSourceCredentials resolves a credential_source, a credential_process, or the container and instance
+// fallback, for the source at the end of the profile chain. The first profile of the chain is the one that
+// the invocation selected, and it supplies the instance metadata settings, as in the SDK.
+func profileSourceCredentials(env map[string]string, chain []*config.SharedConfig) (aws.CredentialsProvider, error) {
+	root, selected := chain[len(chain)-1], chain[0]
 	switch root.CredentialSource {
 	case "":
-		return containerOrInstanceCredentials(env)
+		return unnamedSourceCredentials(env, root, selected)
 	case credentialSourceEnvironment:
 		if env["AWS_ACCESS_KEY_ID"] == "" || env["AWS_SECRET_ACCESS_KEY"] == "" {
 			return nil, fmt.Errorf("%w: credential_source %s", errNoInvocationCredentials, credentialSourceEnvironment)
@@ -268,19 +317,47 @@ func profileSourceCredentials(env map[string]string, root *config.SharedConfig) 
 		}
 		return provider, err
 	case credentialSourceIMDS:
-		return instanceCredentials(env), nil
+		return instanceCredentials(env, selected), nil
 	default:
 		return nil, fmt.Errorf("%w: credential_source values must be %s, %s, or %s", errUtils.ErrInvalidAuthConfig,
 			credentialSourceContainer, credentialSourceIMDS, credentialSourceEnvironment)
 	}
 }
 
-func containerOrInstanceCredentials(env map[string]string) (aws.CredentialsProvider, error) {
+// unnamedSourceCredentials resolves a profile source that names no credential_source: its credential_process
+// when it has one, and the container and instance credentials otherwise.
+func unnamedSourceCredentials(env map[string]string, root, selected *config.SharedConfig) (aws.CredentialsProvider, error) {
+	if root.CredentialProcess != "" {
+		return processCredentials(env, root.CredentialProcess), nil
+	}
+	return containerOrInstanceCredentials(env, selected)
+}
+
+func containerOrInstanceCredentials(env map[string]string, profile *config.SharedConfig) (aws.CredentialsProvider, error) {
 	provider, ok, err := containerCredentials(env)
 	if err != nil || ok {
 		return provider, err
 	}
-	return instanceCredentials(env), nil
+	return instanceCredentials(env, profile), nil
+}
+
+// processCredentials runs a profile's credential_process with the invocation environment. The SDK starts it
+// with the environment of the process, so the command is built here; the SDK's builder still supplies the
+// shell, stderr, and stdin, and its provider the output parsing, timeout, and expiry.
+func processCredentials(env map[string]string, command string) aws.CredentialsProvider {
+	environ := make([]string, 0, len(env))
+	for _, key := range slices.Sorted(maps.Keys(env)) {
+		environ = append(environ, key+"="+env[key])
+	}
+	builder := processcreds.NewCommandBuilderFunc(func(ctx context.Context) (*exec.Cmd, error) {
+		cmd, err := processcreds.DefaultNewCommandBuilder{Args: []string{command}}.NewCommand(ctx)
+		if err != nil {
+			return nil, err
+		}
+		cmd.Env = environ
+		return cmd, nil
+	})
+	return aws.NewCredentialsCache(processcreds.NewProviderCommand(builder))
 }
 
 // containerCredentials returns the container credential endpoint that the environment names, if any. Like
@@ -341,22 +418,46 @@ func containerHostAllowed(ip net.IP) bool {
 }
 
 // instanceCredentials reads the instance role credentials. Every client setting is explicit, because the
-// metadata client otherwise falls back to the process environment.
-func instanceCredentials(env map[string]string) aws.CredentialsProvider {
-	options := imds.Options{ClientEnableState: imds.ClientEnabled, Endpoint: env["AWS_EC2_METADATA_SERVICE_ENDPOINT"]}
+// metadata client otherwise falls back to the process environment. The invocation environment decides over
+// the selected profile, which may be nil, as in the SDK.
+func instanceCredentials(env map[string]string, profile *config.SharedConfig) aws.CredentialsProvider {
+	options := imds.Options{ClientEnableState: imds.ClientEnabled, Endpoint: imdsEndpoint(env, profile)}
 	if strings.EqualFold(env["AWS_EC2_METADATA_DISABLED"], "true") {
 		options.ClientEnableState = imds.ClientDisabled
 	}
-	if options.Endpoint == "" {
-		options.Endpoint = imdsDefaultIPv4Endpoint
-		if strings.EqualFold(env["AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE"], "IPv6") {
-			options.Endpoint = imdsDefaultIPv6Endpoint
-		}
-	}
-	if strings.EqualFold(env["AWS_EC2_METADATA_V1_DISABLED"], "true") {
+	if imdsV1Disabled(env, profile) {
 		options.EnableFallback = aws.FalseTernary
 	}
 	return aws.NewCredentialsCache(ec2rolecreds.New(func(o *ec2rolecreds.Options) { o.Client = imds.New(options) }))
+}
+
+// imdsEndpoint returns the metadata endpoint: an explicit endpoint wins over an endpoint mode, and the
+// invocation environment wins over the profile at each step.
+func imdsEndpoint(env map[string]string, profile *config.SharedConfig) string {
+	profileEndpoint, profileMode := "", imds.EndpointModeStateUnset
+	if profile != nil {
+		profileEndpoint, profileMode = profile.EC2IMDSEndpoint, profile.EC2IMDSEndpointMode
+	}
+	if endpoint := cmp.Or(env["AWS_EC2_METADATA_SERVICE_ENDPOINT"], profileEndpoint); endpoint != "" {
+		return endpoint
+	}
+	ipv6 := profileMode == imds.EndpointModeStateIPv6
+	if mode := env["AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE"]; mode != "" {
+		ipv6 = strings.EqualFold(mode, "IPv6")
+	}
+	if ipv6 {
+		return imdsDefaultIPv6Endpoint
+	}
+	return imdsDefaultIPv4Endpoint
+}
+
+// imdsV1Disabled reports whether the fallback to IMDSv1 is restricted: a boolean in the invocation
+// environment decides, and the selected profile's ec2_metadata_v1_disabled applies otherwise.
+func imdsV1Disabled(env map[string]string, profile *config.SharedConfig) bool {
+	if disabled, err := strconv.ParseBool(env["AWS_EC2_METADATA_V1_DISABLED"]); err == nil {
+		return disabled
+	}
+	return profile != nil && profile.EC2IMDSv1Disabled != nil && *profile.EC2IMDSv1Disabled
 }
 
 // invocationSTSClient builds an STS client from the environment's region and STS endpoint only.

@@ -1052,6 +1052,39 @@ func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
 	}
 }
 
+// Includes merge in declaration order, so a later declaration replaces an earlier one whatever the
+// include names sort to. Here the invalid hook, which has no command to run, is replaced only when its
+// include is first.
+func TestDiscoveryUsesIncludeDeclarationOrderForHookOverrides(t *testing.T) {
+	for _, test := range []struct {
+		name, first, second, want string
+	}{
+		{"later declaration replaces an earlier one", "zeta", "alpha", ""},
+		{"earlier declaration is replaced by the later one", "alpha", "zeta", "has no command to run"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := executionUnit(t, "")
+			hook := func(execute string) []byte {
+				return []byte("terraform {\n before_hook \"lint\" {\n  commands = [\"plan\"]\n  execute = [" + execute + "]\n }\n}\n")
+			}
+			// The invalid hook is declared by the "zeta" include, the wrapper by "alpha".
+			require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "zeta.hcl"), hook(`""`), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "alpha.hcl"), hook(`"./wrapper.sh"`), 0o644))
+			body, err := os.ReadFile(request.Path)
+			require.NoError(t, err)
+			includes := "include \"" + test.first + "\" { path = \"./" + test.first + ".hcl\" }\ninclude \"" + test.second + "\" { path = \"./" + test.second + ".hcl\" }\n"
+			require.NoError(t, os.WriteFile(request.Path, append([]byte(includes), body...), 0o644))
+			request.Phase = "discover"
+			_, err = Resolve(t.Context(), request)
+			if test.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, test.want)
+		})
+	}
+}
+
 func TestPlanRejectsArgumentDependentSavedHooks(t *testing.T) {
 	request := executionUnit(t, `before_hook "args" {
  commands = ["apply"]

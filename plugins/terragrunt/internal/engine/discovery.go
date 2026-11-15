@@ -433,6 +433,27 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 	return result, nil
 }
 
+// inventorySource records the module a unit names. A local module must exist, so a bulk run stops
+// before any unit runs, and a remote source must use a supported transport.
+func inventorySource(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string, result *model.Resolution) error {
+	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
+		return nil
+	}
+	result.Source = *cfg.Terraform.Source
+	// The active filesystem also sees modules that a generated stack unit names in the overlay.
+	resolved, root, local, problem := resolveLocalModuleSource(environment.FS, path, result.Source)
+	if problem != nil {
+		return problem
+	}
+	if !local {
+		// An unsupported remote transport fails discovery too, before any unit runs.
+		return validateRemoteSource(result.Source)
+	}
+	result.Source = resolved
+	result.Folders = []string{root}
+	return nil
+}
+
 // resolveUnitInventory reads only the source and dependency blocks of a unit.
 func resolveUnitInventory(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*model.Resolution, error) {
 	cfg, err := config.PartialParseConfigFile(ctx, logger, environment,
@@ -455,15 +476,8 @@ func resolveUnitInventory(ctx context.Context, logger log.Logger, environment *a
 	if workspace := request.Environment["TF_WORKSPACE"]; workspace != "" && workspace != "default" && len(cfg.TerragruntDependencies) > 0 && cfg.Dependencies != nil && len(cfg.Dependencies.Paths) > 0 {
 		return nil, workspaceDependencyProblem(path, workspace)
 	}
-	if cfg.Terraform != nil && cfg.Terraform.Source != nil {
-		result.Source = *cfg.Terraform.Source
-		if resolved, root, local, problem := resolveLocalModuleSource(environment.FS, path, result.Source); problem != nil {
-			return nil, problem
-		} else if local {
-			// A missing local module fails discovery before any unit runs.
-			result.Source = resolved
-			result.Folders = []string{root}
-		}
+	if err := inventorySource(environment, cfg, path, result); err != nil {
+		return nil, err
 	}
 	if result.OutputDependencies, err = outputDependencies(environment, cfg, path); err != nil {
 		return nil, err

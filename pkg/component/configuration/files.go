@@ -72,15 +72,17 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		}
 	}
 	previous := readManifest(root)
+	undo := make(restorePoint)
 	current := make(map[string]string, len(files))
 	names := make([]string, 0, len(files))
 	for _, file := range files {
 		// Clean the key, so ./provider.tf and provider.tf name the same recorded file.
 		key := filepath.ToSlash(filepath.Clean(file.Path))
 		names = append(names, key)
+		undo.capture(root, key)
 		digest, err := writeFile(root, file, previous[key])
 		if err != nil {
-			return errors.Join(err, keepRecordsAfterFailure(root, previous, current))
+			return errors.Join(err, keepRecordsAfterFailure(root, previous, current, undo))
 		}
 		if digest != "" {
 			current[key] = digest
@@ -88,20 +90,30 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 	}
 	// Record the manifest even when a stale file cannot be removed, so the files written above stay
 	// owned and the stale file is retried; then report the removal failure.
-	staleErr := removeStaleFiles(root, previous, names, current)
-	return errors.Join(writeManifest(root, current), staleErr)
+	staleErr := removeStaleFiles(root, previous, names, current, undo)
+	return errors.Join(recordManifest(root, current, undo), staleErr)
+}
+
+// recordManifest writes the manifest. When it cannot be written, the run's file changes would have
+// no recorded owner, so they are rolled back and the failure is reported with any rollback problem.
+func recordManifest(root *os.Root, current map[string]string, undo restorePoint) error {
+	err := writeManifest(root, current)
+	if err == nil {
+		return nil
+	}
+	return errors.Join(err, undo.restore(root))
 }
 
 // keepRecordsAfterFailure writes the manifest when a batch stops early: the files this run already
 // wrote keep their new digests, and every other file keeps its earlier record, so a retry after the
 // conflict is fixed still recognizes them as this host's.
-func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string) error {
+func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string, undo restorePoint) error {
 	for key, digest := range previous {
 		if _, written := current[key]; !written {
 			current[key] = digest
 		}
 	}
-	return writeManifest(root, current)
+	return recordManifest(root, current, undo)
 }
 
 func validateFile(file schema.ComponentConfigurationFile) error {
@@ -141,9 +153,18 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded s
 	return digest, replaceFile(root, file, exists)
 }
 
-// removeGeneratedFile treats an already absent file as successfully removed.
+// removeFile deletes a provider-owned file, treating an already absent file as removed.
+func removeFile(root *os.Root, path string) error {
+	err := root.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// removeGeneratedFile removes a generated file and classifies a failure as invalid configuration.
 func removeGeneratedFile(root *os.Root, path string) error {
-	if err := root.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := removeFile(root, path); err != nil {
 		return generatedFileError(path, err)
 	}
 	return nil

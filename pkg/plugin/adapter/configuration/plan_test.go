@@ -390,3 +390,37 @@ func TestSourceLinkResolutionFailuresAreReported(t *testing.T) {
 	require.NoError(t, os.Chmod(locked, 0o755))
 	require.NoError(t, checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "watched"}}), "a dangling link is left for the first read")
 }
+
+// Filesystem failures from the source preflight carry the same classification as fingerprint
+// read failures, and a cancelled context is reported as itself.
+func TestSourcePreflightWrapsFilesystemFailures(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "absent-root")
+	err := checkSourcesInRoot(t.Context(), missing, []schema.ComponentConfigurationSource{{Path: "watched"}})
+	require.ErrorIs(t, err, errUtils.ErrReadFile)
+	require.ErrorIs(t, err, fs.ErrNotExist)
+
+	if runtime.GOOS != "windows" {
+		root, evalErr := filepath.EvalSymlinks(t.TempDir())
+		require.NoError(t, evalErr)
+		locked := filepath.Join(root, "watched", "locked")
+		require.NoError(t, os.MkdirAll(locked, 0o755))
+		require.NoError(t, os.Chmod(locked, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+		if _, readErr := os.ReadDir(locked); readErr == nil {
+			t.Log("the process bypasses directory permissions")
+		} else {
+			err = checkSourcesInRoot(t.Context(), root, []schema.ComponentConfigurationSource{{Path: "watched", Directory: true}})
+			require.ErrorIs(t, err, errUtils.ErrReadFile)
+			require.ErrorIs(t, err, fs.ErrPermission)
+		}
+	}
+
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "watched"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "watched", "a.tf"), nil, 0o644))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err = checkSourcesInRoot(ctx, root, []schema.ComponentConfigurationSource{{Path: "watched", Directory: true}})
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, errUtils.ErrReadFile)
+}

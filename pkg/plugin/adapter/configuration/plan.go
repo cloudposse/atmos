@@ -204,7 +204,7 @@ func sourceOutsideRoot(root, path, real string) error {
 func checkSourcesInRoot(ctx context.Context, root string, sources []schema.ComponentConfigurationSource) error {
 	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return err
+		return sourceReadError(err)
 	}
 	for _, source := range sources {
 		if !filepath.IsLocal(source.Path) {
@@ -243,7 +243,7 @@ func checkSourcePath(root, top string) error {
 func checkSourceTree(ctx context.Context, root, top string) error {
 	err := filepath.WalkDir(top, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			return sourceReadError(walkErr)
 		}
 		if err := ctx.Err(); err != nil {
 			return err
@@ -256,7 +256,7 @@ func checkSourceTree(ctx context.Context, root, top string) error {
 		}
 		return checkSourceLink(root, path, entry)
 	})
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	return nil

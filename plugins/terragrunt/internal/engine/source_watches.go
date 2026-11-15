@@ -211,8 +211,16 @@ func (t *watchTracker) trackFile(scan fileScan, call *hclsyntax.FunctionCallExpr
 		return
 	}
 	t.add(t.files, path)
-	if call.Name == "read_terragrunt_config" && strings.HasSuffix(path, ".hcl") {
+	if call.Name != "read_terragrunt_config" {
+		return
+	}
+	switch {
+	case strings.HasSuffix(path, ".hcl"):
 		t.queue = append(t.queue, queuedFile{path: path})
+	case strings.HasSuffix(path, ".json"):
+		// A JSON configuration holds its expressions in strings the HCL syntax walk cannot
+		// inspect, so any file it reads could be anywhere in the project.
+		t.fallback()
 	}
 }
 
@@ -367,10 +375,16 @@ func hookWords(scan fileScan, expression hclsyntax.Expression) ([]string, bool) 
 }
 
 // add records a watch inside the project; paths outside it cannot appear in the
-// project's change set and would make the whole inventory unreportable.
+// project's change set and would make the whole inventory unreportable, unless a symlink leads back in.
 func (t *watchTracker) add(set map[string]struct{}, path string) {
 	if within(path, t.root) {
 		set[path] = struct{}{}
+		return
+	}
+	// A link outside the project can lead into it. Git reports changes by the target's path, so the
+	// canonical target is the watch.
+	if resolved, err := canonicalPath(path); err == nil && resolved != path && within(resolved, t.root) {
+		set[resolved] = struct{}{}
 	}
 }
 

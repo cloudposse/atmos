@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -150,6 +151,23 @@ func TestRegistryResolutionFailureNotIgnoredIsStillRetried(t *testing.T) {
 	require.ErrorAs(t, err, &problem)
 	assert.Equal(t, model.CodeInvalidSource, problem.Code)
 	assert.EqualValues(t, 3, discoveryCalls.Load(), "a failure that no ignore policy matches is retried up to max_attempts")
+}
+
+// Retry patterns match the same cleaned text as ignore patterns, so one pattern behaves alike in both
+// lists, like a source fetch: a message split across lines, or with characters outside the readable
+// set, still matches a pattern written for its readable form.
+func TestRetryRegistryResolutionMatchesRetryPatternsAgainstCleanedText(t *testing.T) {
+	policies := &model.Errors{Retry: []model.RetryPolicy{{
+		Name: "registry", Patterns: []string{"status code 503"}, MaxAttempts: 3,
+	}}}
+	attempts := 0
+	_, ignore, err := retryRegistryResolution(t.Context(), policies, func() (string, error) {
+		attempts++
+		return "", errors.New("GET https://reg/acme: [status code\n503]")
+	})
+	require.Error(t, err)
+	assert.Nil(t, ignore)
+	assert.Equal(t, 3, attempts, "a pattern that matches the cleaned text retries up to max_attempts")
 }
 
 func TestMatchingRegistryIgnore(t *testing.T) {
@@ -342,6 +360,35 @@ exclude {
 	result, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
 	require.Nil(t, result.IAM)
+}
+
+// An exclude block that reads a feature must see the unit's feature declarations during the IAM probe, with
+// the declared default and with an override, or the probe fails for a unit that has no IAM problem.
+func TestIAMProbeEvaluatesFeatureDependentExclude(t *testing.T) {
+	unit := `feature "skip" {
+  default = false
+}
+iam_role = "arn:aws:iam::123456789012:role/x"
+exclude {
+  if = feature.skip.value
+  actions = ["plan"]
+}`
+	t.Run("default applies without an override", func(t *testing.T) {
+		request := iamUnit(t, unit)
+		request.Phase = "iam"
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.NotNil(t, result.IAM)
+		assert.Equal(t, "arn:aws:iam::123456789012:role/x", result.IAM.Role)
+	})
+	t.Run("override excludes the operation", func(t *testing.T) {
+		request := iamUnit(t, unit)
+		request.Phase = "iam"
+		request.Features = map[string]string{"skip": "true"}
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		assert.Nil(t, result.IAM, "an excluded operation resolves no role")
+	})
 }
 
 func TestAWSFunctionUsesStagedSessionCredentials(t *testing.T) {

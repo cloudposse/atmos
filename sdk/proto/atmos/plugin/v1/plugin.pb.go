@@ -3608,8 +3608,9 @@ type PrepareComponentResponse struct {
 	// its value, for provenance reporting. Missing entries mean unknown origin.
 	InputOrigins map[string]*SourceLocation `protobuf:"bytes,12,rep,name=input_origins,json=inputOrigins,proto3" json:"input_origins,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Fields 13-18 carry Terragrunt settings that decide how the host runs the unit. The host reads
-	// 13 to 17. A plugin that cannot honor a setting must reject it with an ErrorDetail instead of
-	// returning a value the host would silently ignore.
+	// terraform_binary, errors, exclude, iam, and feature_flags (13-16 and 18). It does not read
+	// encryption (17) yet. A plugin that cannot honor a setting must reject it with an ErrorDetail
+	// instead of returning a value the host would silently ignore.
 	// Engine executable selected by terraform_binary. Empty means the engine of the component.
 	TerraformBinary string `protobuf:"bytes,13,opt,name=terraform_binary,json=terraformBinary,proto3" json:"terraform_binary,omitempty"`
 	// errors block: retry and ignore policies. The host applies them around the engine subprocess.
@@ -3620,12 +3621,12 @@ type PrepareComponentResponse struct {
 	// iam_role, iam_assume_role_session_name, iam_assume_role_duration, iam_web_identity_token.
 	// The host assumes the role, never the plugin.
 	Iam *ComponentIam `protobuf:"bytes,16,opt,name=iam,proto3" json:"iam,omitempty"`
-	// encryption block as opaque, provider-defined data (state and plan encryption settings).
+	// encryption block as opaque, provider-defined data. The host ignores it.
 	Encryption *ComponentValue `protobuf:"bytes,17,opt,name=encryption,proto3" json:"encryption,omitempty"`
-	// Feature flag name to its evaluated value rendered as a string. Informational: the plugin has
-	// already applied the flags while evaluating the unit, so they are reflected in every other field.
-	// The host keeps them with the prepared configuration for display and no host behavior depends on
-	// them. A plugin may leave this field unset.
+	// Feature flag name to its evaluated value rendered as a string. The plugin has already applied
+	// the flags while evaluating the unit, so they are reflected in every other field. The host keeps
+	// them with the prepared configuration for display and no host behavior depends on them. A plugin
+	// may leave this field unset.
 	FeatureFlags map[string]string `protobuf:"bytes,18,rep,name=feature_flags,json=featureFlags,proto3" json:"feature_flags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Engine log events produced while preparing. See LogEntry.
 	Logs []*LogEntry `protobuf:"bytes,22,rep,name=logs,proto3" json:"logs,omitempty"`

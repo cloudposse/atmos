@@ -85,14 +85,19 @@ func (c *WorktreeSignalCleanups) watch(watcher *worktreeSignalWatcher) {
 
 // terminate runs the cleanups still registered and exits with the signal's status. Normal release
 // may already have retired this watcher and run every cleanup; the received signal still ends the
-// process with its documented status instead of letting the command report success.
+// process with its documented status instead of letting the command report success. A signal
+// queued for a retired watcher can arrive after another registration started a new watcher, so the
+// cleanups that are active now run too, or their worktrees and Git registrations would leak when
+// the process exits.
 func (c *WorktreeSignalCleanups) terminate(watcher *worktreeSignalWatcher, received os.Signal) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.watcher == watcher {
-		for cleanup := range watcher.cleanups {
-			cleanup.run()
-		}
+	active := c.watcher
+	if active == nil {
+		active = watcher
+	}
+	for cleanup := range active.cleanups {
+		cleanup.run()
 	}
 	code := 1
 	if number, ok := received.(syscall.Signal); ok {

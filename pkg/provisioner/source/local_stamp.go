@@ -223,8 +223,8 @@ func stampFileContents(hash io.Writer, path string) error {
 
 // localSourceChanged reports whether a local directory source was edited, or removed, since the
 // workdir recorded its stamp. An explicit TTL stays authoritative. A local workdir without a stamp
-// (provisioned before stamps existed, or a failed stamp write) is refreshed once so it records one;
-// a remote source never has a stamp, and URI, version, and TTL decide for it.
+// (provisioned before stamps existed, or a failed stamp write) is refreshed once so it records one, and so is one whose source cannot be
+// stamped; a remote source never has a stamp, and URI, version, and TTL decide for it.
 func localSourceChanged(metadata *workdir.WorkdirMetadata, spec *schema.VendorComponentSource) (bool, string) {
 	if spec.TTL != "" {
 		return false, ""
@@ -237,6 +237,11 @@ func localSourceChanged(metadata *workdir.WorkdirMetadata, spec *schema.VendorCo
 		if localSourceMissing(spec) {
 			// Reusing the copy would hide that the source is gone; refreshing reports it by name.
 			return true, "Local source is missing or unreadable, refreshing the working directory"
+		}
+		if _, local := localSourceRoot(spec); local {
+			// The directory exists but a file in it could not be read, so no stamp exists to compare.
+			// Reusing the copy would hide that; refreshing reports the read failure by name.
+			return true, "Local source could not be stamped, refreshing the working directory"
 		}
 		return false, ""
 	}
