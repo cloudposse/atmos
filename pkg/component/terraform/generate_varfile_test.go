@@ -496,3 +496,59 @@ func TestTerraformTestVarsKeepSensitiveRootVariablesOutOfVarfile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"TF_VAR_db_password=unregistered-test-value"}, env)
 }
+
+func TestWriteComponentVarfileOmitsDeclaredSensitiveVariables(t *testing.T) {
+	componentPath := t.TempDir()
+	writeSensitiveModule(t, componentPath)
+	require.True(t, iolib.MaskingEnabled(), "masking must be enabled for declaration-aware partitioning")
+
+	vars := map[string]any{"db_password": "unregistered-literal-value", "region": "us-east-1"}
+	// Batch generation renders components from the raw stacks map, so the section carries no
+	// component_info and the module must be inspected from the component path.
+	newRun := func(dir string) *generateRun {
+		return &generateRun{
+			atmosConfig:  &schema.AtmosConfiguration{},
+			fileTemplate: filepath.Join(dir, "out.tfvars.json"),
+			format:       varfileFormatJSON,
+		}
+	}
+	ref := componentRef{terraformComponentPath: componentPath}
+
+	t.Run("masking enabled drops declared-sensitive keys", func(t *testing.T) {
+		dir := t.TempDir()
+		info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+
+		require.NoError(t, writeComponentVarfile(newRun(dir), info, vars, ref))
+
+		written, err := os.ReadFile(filepath.Join(dir, "out.tfvars.json"))
+		require.NoError(t, err)
+		assert.NotContains(t, string(written), "unregistered-literal-value")
+		assert.Contains(t, string(written), "us-east-1")
+	})
+
+	t.Run("module inspected during stack processing is reused", func(t *testing.T) {
+		dir := t.TempDir()
+		module, diags := tfconfig.LoadModule(componentPath)
+		require.False(t, diags.HasErrors())
+		info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+			"component_info": map[string]any{"terraform_config": module},
+		}}
+
+		require.NoError(t, writeComponentVarfile(newRun(dir), info, vars, componentRef{terraformComponentPath: filepath.Join(dir, "missing")}))
+
+		written, err := os.ReadFile(filepath.Join(dir, "out.tfvars.json"))
+		require.NoError(t, err)
+		assert.NotContains(t, string(written), "unregistered-literal-value")
+	})
+
+	t.Run("component without a module keeps every variable", func(t *testing.T) {
+		dir := t.TempDir()
+		info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+
+		require.NoError(t, writeComponentVarfile(newRun(dir), info, vars, componentRef{terraformComponentPath: filepath.Join(dir, "missing")}))
+
+		written, err := os.ReadFile(filepath.Join(dir, "out.tfvars.json"))
+		require.NoError(t, err)
+		assert.Contains(t, string(written), "unregistered-literal-value")
+	})
+}
