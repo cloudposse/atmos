@@ -121,7 +121,11 @@ func (p *Producer) producerMetadata(ctx context.Context, source string) (Produce
 	if p.metadata == nil {
 		return ProducerMetadata{}, nil
 	}
-	return p.metadata(ctx, source)
+	meta, err := p.metadata(ctx, source)
+	if err != nil {
+		return ProducerMetadata{}, fmt.Errorf("%w: read producer metadata for %q: %w", errUtils.ErrArtifactPackagingInvalid, source, err)
+	}
+	return meta, nil
 }
 
 // identity is the resolved name, version, and producer metadata of one preparation.

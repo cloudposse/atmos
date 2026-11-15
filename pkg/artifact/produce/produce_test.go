@@ -641,3 +641,56 @@ func TestRegisterAddsFilesProducer(t *testing.T) {
 	require.ErrorIs(t, produce.Register(registry), errUtils.ErrArtifactConflict)
 	assert.Equal(t, []string{artifact.KindFiles}, registry.Kinds())
 }
+
+func TestFilesProducer_MetadataSourceFailureIsClassifiedAndKeepsItsCause(t *testing.T) {
+	cause := errors.New("provider unavailable")
+	tests := []struct {
+		name  string
+		cause error
+	}{
+		{"a provider failure", cause},
+		{"a canceled lookup", context.Canceled},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := t.TempDir()
+			fixtures.WriteFilePackage(t, src)
+			source := func(context.Context, string) (produce.ProducerMetadata, error) {
+				return produce.ProducerMetadata{}, tc.cause
+			}
+			_, err := produce.New(produce.WithStagingRoot(t.TempDir()), produce.WithMetadataSource(source)).Prepare(t.Context(), *request(src, artifact.PackagingNone))
+			require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+			require.ErrorIs(t, err, tc.cause)
+			assert.Contains(t, err.Error(), src, "the source path is part of the error")
+		})
+	}
+}
+
+func TestFilesProducer_ArchivePayloadOpenFailureIsClassified(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFilePackage(t, src)
+	prepared, staging := prepare(t, request(src, artifact.PackagingTgz))
+
+	var removed int
+	require.NoError(t, filepath.WalkDir(staging, func(path string, entry os.DirEntry, err error) error {
+		if err == nil && !entry.IsDir() && filepath.Base(path) == "payload.tgz" {
+			removed++
+			return os.Remove(path)
+		}
+		return err
+	}))
+	require.Equal(t, 1, removed, "exactly one staged archive must exist")
+
+	var checked int
+	for index := range prepared.Blobs {
+		blob := &prepared.Blobs[index]
+		if blob.Role != artifact.BlobPayload {
+			continue
+		}
+		checked++
+		_, err := blob.Open(t.Context())
+		require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
+	require.Equal(t, 1, checked)
+}

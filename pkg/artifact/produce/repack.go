@@ -132,12 +132,19 @@ func (v *verifyingReader) Read(p []byte) (int, error) {
 		if v.read != v.size || digest.NewDigest(digest.SHA256, v.hasher) != v.expected {
 			return n, fmt.Errorf("%w: file content does not match its inventory digest", errUtils.ErrArtifactIntegrityFailed)
 		}
+		return n, err
 	}
-	return n, err
+	if err != nil {
+		return n, fmt.Errorf("%w: read staged file: %w", errUtils.ErrArtifactPackagingInvalid, err)
+	}
+	return n, nil
 }
 
 func (v *verifyingReader) Close() error {
 	defer perf.Track(nil, "produce.verifyingReader.Close")()
 
-	return v.rc.Close()
+	if err := v.rc.Close(); err != nil {
+		return fmt.Errorf("%w: close staged file: %w", errUtils.ErrArtifactPackagingInvalid, err)
+	}
+	return nil
 }

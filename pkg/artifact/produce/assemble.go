@@ -121,7 +121,13 @@ func (a *assembly) archiveBlob(ctx context.Context, packaging artifact.Packaging
 	return artifact.StagedBlob{
 		Descriptor: ocispec.Descriptor{MediaType: mediaType, Digest: digest.NewDigest(digest.SHA256, hasher), Size: info.Size()},
 		Role:       artifact.BlobPayload,
-		Open:       func(context.Context) (io.ReadCloser, error) { return os.Open(path) },
+		Open: func(context.Context) (io.ReadCloser, error) {
+			file, err := os.Open(path)
+			if err != nil {
+				return nil, fmt.Errorf("%w: open staged archive: %w", errUtils.ErrArtifactPackagingInvalid, err)
+			}
+			return file, nil
+		},
 	}, nil
 }
 
