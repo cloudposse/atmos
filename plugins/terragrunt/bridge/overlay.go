@@ -18,7 +18,10 @@ var ErrUnsupportedOverlay = errors.New("unit file cannot be exported through the
 
 // UnitOverlay applies upstream default copy rules without writing to the unit or module.
 // It returns file contents and, for files whose permission bits differ from the
-// default, the unit file's mode so executables keep their execute bit.
+// default, the unit file's mode so executables keep their execute bit and
+// owner-only or otherwise unreadable-by-others files, such as copied keys, stay
+// private. The host ignores modes on Windows, so the exported modes only take
+// effect on platforms with POSIX permission bits.
 func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.TerraformConfig) (map[string][]byte, map[string]uint32, error) {
 	memory := afero.NewMemMapFs()
 	fsys := afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(env.FS), memory)
@@ -59,12 +62,20 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 			return err
 		}
 		files[filepath.ToSlash(name)] = content
-		if perm := info.Mode().Perm(); perm&0o111 != 0 {
+		if perm := info.Mode().Perm(); exportsMode(perm) {
 			modes[filepath.ToSlash(name)] = uint32(perm)
 		}
 		return nil
 	})
 	return files, modes, err
+}
+
+// exportsMode reports whether a unit file's permission bits differ from the
+// default the host applies to files without a mode (0644): it is executable, or
+// group or other lacks read access.
+func exportsMode(perm os.FileMode) bool {
+	const groupAndOtherRead = 0o044
+	return perm&0o111 != 0 || perm&groupAndOtherRead != groupAndOtherRead
 }
 
 // checkOverlayFile rejects a committed provider lock file. Atmos manages the

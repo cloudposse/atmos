@@ -95,6 +95,8 @@ func TestWriteFilesAppliesClampedMode(t *testing.T) {
 		{name: "owner-only executable", mode: 0o700, want: 0o700},
 		{name: "group and other write are stripped", mode: 0o777, want: 0o755},
 		{name: "setuid setgid sticky are stripped", mode: 0o7755, want: 0o755},
+		{name: "owner-only file stays private", mode: 0o600, want: 0o600},
+		{name: "group-readable file is not widened", mode: 0o640, want: 0o640},
 		{name: "owner read-write is guaranteed", mode: 0o111, want: 0o711},
 		{name: "sensitive stays private", mode: 0o755, sensitive: true, want: 0o700},
 		{name: "sensitive without mode", mode: 0, sensitive: true, want: 0o600},
