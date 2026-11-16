@@ -47,3 +47,30 @@ func TestLocalModuleSubdirRejectsTraversal(t *testing.T) {
 		require.ErrorContains(t, err, "subdirectory")
 	}
 }
+
+func TestLocalModuleSubdirAcceptsExistingRootWithDotInName(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		create bool
+		valid  bool
+	}{
+		{name: "existing directory", create: true, valid: true},
+		{name: "missing directory", create: false, valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := nativeUnit(t, "")
+			if test.create {
+				require.NoError(t, os.MkdirAll(filepath.Join(filepath.Dir(request.Path), "acme.modules", "app"), 0o755))
+			}
+			require.NoError(t, os.WriteFile(request.Path, []byte(`terraform { source = "acme.modules//app" }`), 0o644))
+
+			_, err := Resolve(t.Context(), request)
+
+			if test.valid {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err, "a dotted bare path that names no local directory stays a remote shorthand")
+		})
+	}
+}

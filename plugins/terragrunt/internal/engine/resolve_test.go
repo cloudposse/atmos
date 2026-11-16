@@ -194,7 +194,8 @@ func TestDiscoveryValidatesRemoteModuleSources(t *testing.T) {
 		{source: "example.invalid/org/modules//app", invalid: true},
 	} {
 		t.Run(test.source, func(t *testing.T) {
-			request := nativeUnit(t, "")
+			// The unit sits two levels below the temp root, so ../../modules/... stays inside it.
+			request := nativeUnitAt(t, filepath.Join(t.TempDir(), "live", "unit"), "")
 			encoded, err := json.Marshal(test.source)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
@@ -349,4 +350,14 @@ func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 		require.Equal(t, uint32(0o640), result.OverlayModes["group.pem"])
 		require.NotContains(t, result.OverlayModes, "plain.tf", "default modes are not exported")
 	})
+}
+
+func TestValidateEngineProbesTheUnitsExecutable(t *testing.T) {
+	request := nativeUnit(t, "")
+	// request.Tofu is the host's command and must not be the executable that the probe runs.
+	err := validateEngine(t.Context(), request, filepath.Join(t.TempDir(), "no-such-terraform-binary"), request.Path)
+
+	var problem *model.Problem
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, "terraform_binary", problem.Key)
 }

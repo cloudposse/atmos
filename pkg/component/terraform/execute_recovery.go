@@ -246,7 +246,14 @@ func (e *Executor) withInitFromModule(ctx context.Context, atmosConfig *schema.A
 func (e *Executor) runLifecycle(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, stage lifecycleStage, action func(context.Context) error) error {
 	phase := &executionPhase{command: stage.command}
 	hookOpts := hookOptions([]component.ExecutionOption{component.WithProcessContext(ctx), component.WithEnvironment(info.SanitizedEnv)})
-	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: info, phase: phase, opts: hookOpts}
+	// Error hooks match on the output of the hooks that ran before them, so their output is recorded for as
+	// long as the lifecycle runs, including the matching.
+	var capture *phaseCapture
+	if stage.config != nil && len(stage.config.ErrorHooks) > 0 {
+		capture = &phaseCapture{}
+		defer capture.cleanup()
+	}
+	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: info, phase: phase, opts: hookOpts, capture: capture}
 	return execution.Run(ctx, stage.config, stage.command, runner, func() (execution.Output, error) {
 		err := action(ctx)
 		if err == nil {
