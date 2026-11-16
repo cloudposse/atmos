@@ -45,7 +45,7 @@ precedence (`--from-manifest` → `--against` → deployed release):
 
 <dl>
   <dt>Deployed release <em>(default)</em></dt>
-  <dd>The manifest of the currently installed release, read from the cluster. A release that does not exist yet shows every object as added. This is the only mode that needs cluster access.</dd>
+  <dd>The manifest of the currently installed release, read from the cluster. A release that does not exist yet shows its template resources and any missing install-only CRDs as added. This is the only mode that needs cluster access.</dd>
 
   <dt>`--from-manifest=<path>`</dt>
   <dd>A local baseline manifest file. Fully offline — no cluster, no git.</dd>
@@ -53,6 +53,21 @@ precedence (`--from-manifest` → `--against` → deployed release):
   <dt>`--against=target[:<name>]`</dt>
   <dd>The manifests currently published in a non-cluster <a href="/cli/commands/helm/apply">provision target</a> (e.g. a git deployment repository). Reads the target's current state and diffs against it — the producer side of a GitOps workflow. Offline (git access only). Without <code>:&lt;name&gt;</code> the <code>provision.default</code> target is used.</dd>
 </dl>
+
+## Custom resource definitions
+
+Release-based `diff` and `plan` follow Helm's handling of the chart's `crds/`
+directory, including enabled subcharts:
+
+- For an existing release, these install-only CRDs are omitted from the diff.
+  Helm does not upgrade them or store them in the release manifest.
+- For a new release, Atmos checks each CRD by name and shows only those missing
+  from the cluster. This requires permission to get the chart's CRDs; lookup
+  errors fail the plan rather than treating the CRDs as missing.
+
+CRDs declared in `templates/` remain part of the normal diff because Helm manages
+those resources. `helm template`, local-file comparisons, and GitOps target
+comparisons continue to include the chart's full CRD manifests.
 
 ## Flags
 
