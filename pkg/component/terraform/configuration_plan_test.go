@@ -1143,3 +1143,29 @@ func TestConfigurationWorkdirDigestSeparatesStateFromConfigurationNamedLikeState
 		baseline = changed
 	}
 }
+
+func TestConfigurationWorkdirDigestResolvesRelativePaths(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "work")
+	require.NoError(t, os.Mkdir(root, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "main.tf"), []byte("source"), 0o600))
+	t.Chdir(base)
+	absolute, err := configurationWorkdirDigest(root, filepath.Join(root, "reviewed.plan"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "reviewed.plan"), []byte("plan"), 0o600))
+	for name, plan := range map[string]string{
+		"relative root absolute plan": filepath.Join(root, "reviewed.plan"),
+		"relative root relative plan": filepath.Join("work", "reviewed.plan"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			digest, err := configurationWorkdirDigest("work", plan)
+			require.NoError(t, err)
+			require.Equal(t, absolute, digest, "the plan file must be excluded")
+		})
+	}
+	t.Run("a different file is not excluded", func(t *testing.T) {
+		digest, err := configurationWorkdirDigest("work", filepath.Join("work", "other.plan"))
+		require.NoError(t, err)
+		require.NotEqual(t, absolute, digest)
+	})
+}
