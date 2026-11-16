@@ -152,3 +152,37 @@ func TestDiagnosticProblemTrustsOnlyParserAndSchemaDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+// A local `dir//subdir` module source is checked during discovery like a plain local source: both the
+// copied tree and the requested subdirectory must exist, and an existing pair passes.
+func TestLocalSubdirectorySourceMustExistDuringDiscovery(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+		valid  bool
+	}{
+		{"missing copied tree", "./absent//app", false},
+		{"missing subdirectory", "./modules//absent", false},
+		{"subdirectory is a file", "./modules//file.tf", false},
+		{"existing subdirectory", "./modules//app", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := nativeUnit(t, "")
+			root := filepath.Dir(request.Path)
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "app"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "file.tf"), nil, 0o644))
+			require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = \""+test.source+"\" }\n"), 0o644))
+			request.Phase = "discover"
+			_, err := Resolve(t.Context(), request)
+			if test.valid {
+				require.NoError(t, err)
+				return
+			}
+			problem := asProblem(t, err)
+			require.Equal(t, model.CodeInvalidSource, problem.Code)
+			require.Equal(t, "The module `source` is not an existing local directory", problem.Summary)
+			require.True(t, problem.Safe)
+			require.ErrorIs(t, err, ErrUnsupportedExecution)
+		})
+	}
+}

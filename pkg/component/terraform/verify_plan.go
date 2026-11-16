@@ -195,7 +195,8 @@ func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurati
 		return nil
 	}
 	for i := range files {
-		if files[i].Sensitive && contents[files[i].Path] == nil {
+		// A file the entry removes is absent by design, and the digest still binds that absence.
+		if files[i].Sensitive && contents[files[i].Path] == nil && !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists) {
 			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, fs.ErrNotExist)
 		}
 	}

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -22,6 +23,8 @@ const lockFileName = ".terraform.lock.hcl"
 type fileScan struct {
 	// base resolves relative paths named by file functions in this file.
 	base string
+	// unit is the directory get_terragrunt_dir() reports while this file is evaluated.
+	unit string
 	ctx  *hcl.EvalContext
 }
 
@@ -30,6 +33,9 @@ type fileScan struct {
 type queuedFile struct {
 	path     string
 	required bool
+	// unit overrides the evaluation directory of an optional file. A configuration included by a
+	// file read through read_terragrunt_config evaluates in the including file's scope.
+	unit string
 }
 
 // watchTracker collects everything a unit reads that partial discovery does not
@@ -134,10 +140,10 @@ func (t *watchTracker) scanFile(next queuedFile) error {
 	// The unit's own files and includes keep the unit's directory.
 	evaluator := t.watchEvaluator
 	if !next.required {
-		evaluator.unit = filepath.Dir(next.path)
+		evaluator.unit = cmp.Or(next.unit, filepath.Dir(next.path))
 		evaluator.parent = evaluator.includeParent(body)
 	}
-	scan := fileScan{base: filepath.Dir(next.path), ctx: evaluator.context(evaluator.locals(body))}
+	scan := fileScan{base: filepath.Dir(next.path), unit: evaluator.unit, ctx: evaluator.context(evaluator.locals(body))}
 	if inputs := body.Attributes["inputs"]; inputs != nil {
 		t.visit(scan, inputs.Expr)
 	}
@@ -162,6 +168,12 @@ func (t *watchTracker) scanBlock(scan fileScan, block *hclsyntax.Block, required
 		t.visit(scan, block)
 	case "terraform":
 		t.scanTerraform(scan, block)
+	case "include":
+		// Discovery already followed the unit's own includes; the includes of a file reached
+		// through read_terragrunt_config are followed here.
+		if !required {
+			t.followInclude(scan, block)
+		}
 	case "locals":
 		// Discovery already evaluated the unit's own locals; files reached through
 		// read_terragrunt_config are only inspected here.
@@ -210,6 +222,9 @@ func (t *watchTracker) trackFile(scan fileScan, call *hclsyntax.FunctionCallExpr
 		t.fallback()
 		return
 	}
+	if call.Name == "read_terragrunt_config" && t.followConfigurationDirectory(path) {
+		return
+	}
 	t.add(t.files, path)
 	if call.Name != "read_terragrunt_config" {
 		return
@@ -220,6 +235,42 @@ func (t *watchTracker) trackFile(scan fileScan, call *hclsyntax.FunctionCallExpr
 	case strings.HasSuffix(path, ".json"):
 		// A JSON configuration holds its expressions in strings the HCL syntax walk cannot
 		// inspect, so any file it reads could be anywhere in the project.
+		t.fallback()
+	}
+}
+
+// followConfigurationDirectory handles a directory passed to read_terragrunt_config. Terragrunt
+// reads the default configuration inside it, so the directory is watched, which also covers a
+// configuration created later, and the default configuration is inspected when it exists.
+func (t *watchTracker) followConfigurationDirectory(path string) bool {
+	if info, err := t.fs.Stat(path); err != nil || !info.IsDir() {
+		return false
+	}
+	t.add(t.folders, path)
+	t.queue = append(t.queue, queuedFile{path: filepath.Join(path, "terragrunt.hcl")})
+	return true
+}
+
+// followInclude watches the configuration an include block names and inspects it in the scope of
+// the file that includes it. An include whose path cannot be resolved may name any file, so the
+// watch widens to the project.
+func (t *watchTracker) followInclude(scan fileScan, block *hclsyntax.Block) {
+	attribute := block.Body.Attributes["path"]
+	if attribute == nil {
+		t.fallback()
+		return
+	}
+	value, ok := stringOf(attribute.Expr, scan.ctx)
+	if !ok {
+		t.fallback()
+		return
+	}
+	path := localPath(scan.unit, value)
+	t.add(t.files, path)
+	switch {
+	case strings.HasSuffix(path, ".hcl"):
+		t.queue = append(t.queue, queuedFile{path: path, unit: scan.unit})
+	case strings.HasSuffix(path, ".json"):
 		t.fallback()
 	}
 }

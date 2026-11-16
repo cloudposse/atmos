@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -294,11 +295,11 @@ func validatePlanOutputFlags(command string, args []string) error {
 // environment, the component environment, and provider extra-argument
 // environment, with later layers overriding earlier ones. Hooks run as child
 // processes and cannot change it.
-func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) error {
+func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, opts ...component.ExecutionOption) error {
 	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != subcommandPlan {
 		return nil
 	}
-	return rejectEnvironmentPlanOutput(planEnvironment(atmosConfig, info), runtime.GOOS)
+	return rejectEnvironmentPlanOutput(planEnvironment(atmosConfig, info, opts), runtime.GOOS)
 }
 
 // rejectEnvironmentPlanOutput rejects a plan output flag in the effective TF_CLI_ARGS or
@@ -328,12 +329,8 @@ func tokenizeEnvironmentArgs(value string) ([]string, error) {
 }
 
 // planEnvironment lists the environment layers a plan subprocess receives, in precedence order.
-func planEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) []string {
-	base := info.SanitizedEnv
-	if base == nil {
-		base = os.Environ()
-	}
-	entries := slices.Clone(base)
+func planEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts []component.ExecutionOption) []string {
+	entries := slices.Clone(planBaseEnvironment(info, opts))
 	if atmosConfig != nil {
 		entries = envpkg.MergeGlobalEnv(entries, atmosConfig.Env)
 	}
