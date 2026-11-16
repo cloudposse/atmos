@@ -194,8 +194,13 @@ func TestDiscoveryValidatesRemoteModuleSources(t *testing.T) {
 		{source: "example.invalid/org/modules//app", invalid: true},
 	} {
 		t.Run(test.source, func(t *testing.T) {
-			// The unit sits two levels below the temp root, so ../../modules/... stays inside it.
-			request := nativeUnitAt(t, filepath.Join(t.TempDir(), "live", "unit"), "")
+			// The unit sits two levels below the test's own root, so the relative local source resolves
+			// inside that root, and the module it names exists there.
+			top := t.TempDir()
+			unit := filepath.Join(top, "stack", "unit")
+			require.NoError(t, os.MkdirAll(unit, 0o755))
+			require.NoError(t, os.MkdirAll(filepath.Join(top, "modules", "sub", "app"), 0o755))
+			request := nativeUnitAt(t, unit, "")
 			encoded, err := json.Marshal(test.source)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
