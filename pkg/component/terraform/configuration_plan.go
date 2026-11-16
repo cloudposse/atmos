@@ -368,6 +368,8 @@ func excludedWorkdirFile(root, path, planPath, name string) bool {
 }
 
 // configurationWorkdirDigest binds retained module/configuration bytes, excluding mutable execution data.
+// Root and a non-empty planPath are resolved to absolute paths first, so a relative root never
+// fails to exclude the plan file; an empty planPath stays empty and excludes nothing.
 func configurationWorkdirDigest(root, planPath string) (string, error) {
 	// An explicit plan path may be absolute while the directory is relative, or the reverse.
 	// Both must compare equal, or the plan file itself would be hashed into the directory digest.
