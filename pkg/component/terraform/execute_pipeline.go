@@ -327,6 +327,9 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 // digest of the retained working directory, excluding the plan and the state Terraform writes.
 type planSnapshot struct {
 	path, identity, workingDigest string
+	// planDigest is the digest of the plan file Terraform wrote, taken before any after hook runs. It is
+	// empty when no digest was observed, and it is not part of the before-and-after comparison.
+	planDigest string
 }
 
 // planSnapshotKey carries the plan snapshotter to the main command's subprocess.
@@ -383,6 +386,13 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 		case *after != *before:
 			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
 		default:
+			// Terraform writes the plan itself unless a policy gate publishes it later, so the plan is
+			// fingerprinted now and an after hook cannot move the binding onto rewritten bytes.
+			if s.execCtx.planPolicy == nil {
+				if digest, digestErr := fileDigest(path); digestErr == nil {
+					after.planDigest = digest
+				}
+			}
 			s.result = after
 		}
 		return runErr

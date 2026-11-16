@@ -202,6 +202,12 @@ func (e *Executor) finishMainTerraformCommand(
 		}
 	}
 
+	// A failed hook is never remapped: its exit status is not a plan result, so a hook that exits with 2
+	// must not be read as "changes detected" and then mapped to success.
+	if errors.Is(err, errUtils.ErrComponentHookFailed) {
+		return err
+	}
+
 	// Apply CI exit code mapping: remap terraform exit codes for CI runners.
 	// This is independent of upload — it only affects what the caller sees.
 	if mappedCode := e.services.MapCIExitCode(atmosConfig, exitCode); mappedCode == 0 {
