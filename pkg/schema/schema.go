@@ -1799,10 +1799,8 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.CloudFormation, true
 	default:
 		// Check plugin types.
-		if config, ok := c.Plugins[componentType]; ok {
-			return config, true
-		}
-		return nil, false
+		config, ok := c.Plugins[componentType]
+		return config, ok
 	}
 }
 
@@ -2084,7 +2082,7 @@ type GCPAuthContext struct {
 	// ServiceAccountEmail is the service account being used (when impersonating).
 	ServiceAccountEmail string `json:"service_account_email,omitempty" yaml:"service_account_email,omitempty" mapstructure:"service_account_email"`
 	// AccessToken is the OAuth2 access token.
-	//nolint:gosec // This runtime context intentionally carries a token for SDK authentication.
+	// This runtime context intentionally carries a token for SDK authentication.
 	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty" mapstructure:"access_token"`
 	// TokenExpiry is when the token expires.
 	TokenExpiry time.Time `json:"token_expiry,omitempty" yaml:"token_expiry,omitempty" mapstructure:"token_expiry"`

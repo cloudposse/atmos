@@ -643,3 +643,11 @@ func TestProviderContextUnknownForkOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestGiteaIsNotGitHub(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITEA_ACTIONS", "true")
+	if NewProvider().Detect() {
+		t.Fatal("Gitea must not select GitHub")
+	}
+}
