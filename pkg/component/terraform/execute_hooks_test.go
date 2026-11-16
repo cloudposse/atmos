@@ -879,6 +879,11 @@ func TestDetailedExitCodeEnabledFollowsTerraformPrecedence(t *testing.T) {
 		{"single-quoted environment value", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-input=false -detailed-exitcode='true'"}, true},
 		{"double-quoted global value", []string{"plan"}, []string{`TF_CLI_ARGS=-detailed-exitcode="true"`}, true},
 		{"quoted false disables", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS=-detailed-exitcode='false'"}, false},
+		{"tab separates flags", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-input=false\t-detailed-exitcode"}, true},
+		{"newline separates global flags", []string{"plan"}, []string{"TF_CLI_ARGS=-input=false\n-detailed-exitcode"}, true},
+		{"tab separated false disables", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-detailed-exitcode", "TF_CLI_ARGS=-lock=false\t-detailed-exitcode=false"}, false},
+		{"quoted tab stays inside one word", []string{"plan"}, []string{"TF_CLI_ARGS_plan=-var 'a\t-detailed-exitcode'"}, false},
+		{"malformed value contributes no flags", []string{"plan"}, []string{`TF_CLI_ARGS_plan=-detailed-exitcode "unterminated`}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.want, detailedExitCodeEnabled("plan", test.args, test.env))

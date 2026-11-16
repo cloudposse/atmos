@@ -272,12 +272,14 @@ func isDetailedExitCodeChanges(command string, args, env []string, err error, op
 // detailedExitCodeEnabled reports whether -detailed-exitcode is in effect for the command.
 // Terraform inserts TF_CLI_ARGS_<command>, then TF_CLI_ARGS, before the command-line arguments,
 // and the last setting of a flag wins, so an explicit command-line setting takes precedence.
-// Terraform reads the variables as shell words, so quoted values are unquoted the same way.
+// Terraform reads the variables as shell words, so they are tokenized like the engine does: quoted
+// values are unquoted and tabs and newlines separate flags. A value that cannot be tokenized makes
+// the engine refuse to run, so it contributes no flags here.
 func detailedExitCodeEnabled(command string, args, env []string, opts ...component.ExecutionOption) bool {
 	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(command)
 	words := slices.Concat(
-		parseArgs(environmentValue(env, "TF_CLI_ARGS_"+suffix, opts...)),
-		parseArgs(environmentValue(env, "TF_CLI_ARGS", opts...)),
+		environmentWords(environmentValue(env, "TF_CLI_ARGS_"+suffix, opts...)),
+		environmentWords(environmentValue(env, "TF_CLI_ARGS", opts...)),
 		args,
 	)
 	enabled := false
@@ -295,6 +297,33 @@ func detailedExitCodeEnabled(command string, args, env []string, opts ...compone
 		}
 	}
 	return enabled
+}
+
+// environmentWords tokenizes a TF_CLI_ARGS value like the engine. A malformed value is refused by
+// the engine, so it yields no words.
+func environmentWords(value string) []string {
+	words, err := tokenizeEnvironmentArgs(value)
+	if err != nil {
+		return nil
+	}
+	return words
+}
+
+// planBaseEnvironment is the process environment layer of a plan subprocess: the environment
+// chosen for the execution when there is one, otherwise the sanitized environment, otherwise the
+// inherited one.
+func planBaseEnvironment(info *schema.ConfigAndStacksInfo, opts []component.ExecutionOption) []string {
+	var options component.ExecutionOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	switch {
+	case options.ProcessEnv != nil:
+		return options.ProcessEnv
+	case info.SanitizedEnv != nil:
+		return info.SanitizedEnv
+	}
+	return os.Environ()
 }
 
 // environmentValue returns the value of key the subprocess sees: the component environment is

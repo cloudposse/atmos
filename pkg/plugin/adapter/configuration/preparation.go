@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -341,6 +342,28 @@ func (s *Session) importBaseline(instance *pluginv1.DiscoveredComponent) *prepar
 	return nil
 }
 
+// otherImportTarget finds a dependency target among the units of the cached imports, with the
+// discovery request that evaluated it. It returns nil when no import evaluated the target.
+func (s *Session) otherImportTarget(key [3]string) (*pluginv1.DiscoveredComponent, *pluginv1.DiscoverComponentsRequest) {
+	s.importMu.lock()
+	defer s.importMu.unlock()
+	for _, importKey := range slices.Sorted(maps.Keys(s.importResults)) {
+		for _, unit := range s.importResults[importKey] {
+			if addressKey(unit.Address) != key {
+				continue
+			}
+			template := s.importTemplate(unit.Provider)
+			if template == nil {
+				return nil, nil
+			}
+			request := proto.Clone(template).(*pluginv1.DiscoverComponentsRequest)
+			request.IncludePaths, request.ExcludePaths, request.Imports = nil, nil, []string{importKey}
+			return unit, request
+		}
+	}
+	return nil, nil
+}
+
 // importTemplate returns the import request template of a provider, under any configured alias.
 func (s *Session) importTemplate(provider string) *pluginv1.DiscoverComponentsRequest {
 	for _, template := range s.importProviders {
@@ -357,15 +380,18 @@ func (s *Session) importTemplate(provider string) *pluginv1.DiscoverComponentsRe
 // The reference is the identity the dependency was prepared with in this
 // invocation, or else its identity under the discovery environment.
 func (s *Session) checkDependencyStates(ctx context.Context, baseline *preparationEvidence, dependencies []*pluginv1.ComponentDependency, env map[string]string, command string) error {
-	discovery := baseline.request
 	for _, dependency := range dependencies {
 		if dependency.Kind != pluginv1.ComponentDependency_OUTPUT {
 			continue
 		}
 		key := addressKey(dependency.Target)
-		target := baseline.units[key]
+		target, discovery := baseline.units[key], baseline.request
 		if target == nil {
-			// The provider did not evaluate the target, so it has no state evidence to compare.
+			// The dependent's own request did not evaluate the target, but a separate import may have.
+			target, discovery = s.otherImportTarget(key)
+		}
+		if target == nil {
+			// No evidence evaluated the target, so there is no state to compare.
 			continue
 		}
 		current, err := s.dependencyState(ctx, discovery, target, env, command)
