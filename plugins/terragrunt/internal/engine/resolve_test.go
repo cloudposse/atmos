@@ -226,6 +226,33 @@ remote_state {
 	require.Equal(t, full.Backend["path"], backend.Backend["path"])
 }
 
+func TestBackendResolutionNeverEvaluatesUnrelatedInputs(t *testing.T) {
+	configuration := `download_dir = "custom-cache"
+remote_state {
+ backend = "local"
+ config = { path = "state.tfstate" }
+}
+inputs = { value = run_cmd("atmos-missing-command-that-must-not-run") }
+`
+	request := nativeUnit(t, configuration)
+	_, err := Resolve(t.Context(), request)
+	require.Error(t, err, "a full read evaluates the command-valued input")
+	request.Phase = "backend"
+	backend, err := Resolve(t.Context(), request)
+	require.NoError(t, err, "a backend read never evaluates unrelated inputs")
+	require.Equal(t, "local", backend.BackendType)
+	require.Contains(t, backend.WorkingDir, "custom-cache")
+	t.Run("included inputs", func(t *testing.T) {
+		request := nativeUnit(t, "include \"root\" {\n path = \"root.hcl\"\n}\n")
+		dir := filepath.Dir(request.Path)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "root.hcl"), []byte(configuration), 0o644))
+		request.Phase = "backend"
+		backend, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Contains(t, backend.WorkingDir, "custom-cache")
+	})
+}
+
 func TestBackendDownloadDirectoryNeverReadsDependencyOutputs(t *testing.T) {
 	request := nativeUnit(t, `download_dir = "custom-cache"
 dependency "other" {
