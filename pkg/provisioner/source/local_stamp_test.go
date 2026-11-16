@@ -203,9 +203,7 @@ func TestLocalSourceStampFollowsASymlinkedRoot(t *testing.T) {
 	target := filepath.Join(root, "modules", "unit")
 	writeStampFile(t, filepath.Join(target, "main.tf"), "# one")
 	link := filepath.Join(root, "linked")
-	if err := os.Symlink(target, link); err != nil {
-		t.Skipf("symlinks are unavailable: %v", err)
-	}
+	trySymlink(t, target, link)
 	spec := &schema.VendorComponentSource{Uri: link}
 	before := localSourceStamp(spec)
 	require.NotEmpty(t, before)
@@ -262,7 +260,7 @@ func TestLocalSourceStampCopiedDirectoryLinks(t *testing.T) {
 			root := t.TempDir()
 			file := filepath.Join(root, dir, "nested", "main.tf")
 			writeStampFile(t, file, "# before")
-			require.NoError(t, os.Symlink(dir, filepath.Join(root, "linked")))
+			trySymlink(t, dir, filepath.Join(root, "linked"))
 			spec := &schema.VendorComponentSource{Uri: root}
 			before := localSourceStamp(spec)
 			require.NotEmpty(t, before)
@@ -312,7 +310,7 @@ func TestLocalSourceStampDirectoryLinkExclusions(t *testing.T) {
 			}
 			file := filepath.Join(target, "nested", "main.tf")
 			writeStampFile(t, file, "# before")
-			require.NoError(t, os.Symlink(target, filepath.Join(root, "linked")))
+			trySymlink(t, target, filepath.Join(root, "linked"))
 			spec := &schema.VendorComponentSource{Uri: root, ExcludedPaths: tc.excludes, IncludedPaths: tc.includes}
 			before := localSourceStamp(spec)
 			require.NotEmpty(t, before)
@@ -330,10 +328,10 @@ func TestLocalSourceStampDirectoryLinkCycles(t *testing.T) {
 	cache := filepath.Join(root, ".terraform")
 	file := filepath.Join(cache, "main.tf")
 	writeStampFile(t, file, "# before")
-	require.NoError(t, os.Symlink(cache, filepath.Join(root, "linked")))
-	require.NoError(t, os.Symlink(cache, filepath.Join(root, "alias")))
-	require.NoError(t, os.Symlink(root, filepath.Join(cache, "back")))
-	require.NoError(t, os.Symlink("missing", filepath.Join(cache, "dangling")))
+	trySymlink(t, cache, filepath.Join(root, "linked"))
+	trySymlink(t, cache, filepath.Join(root, "alias"))
+	trySymlink(t, root, filepath.Join(cache, "back"))
+	trySymlink(t, "missing", filepath.Join(cache, "dangling"))
 	spec := &schema.VendorComponentSource{Uri: root}
 	before := localSourceStamp(spec)
 	require.NotEmpty(t, before)
@@ -366,9 +364,9 @@ func TestLocalSourceStampEqualMetadataContents(t *testing.T) {
 			writeStampFile(t, path, "# one")
 			switch kind {
 			case "file link":
-				require.NoError(t, os.Symlink(path, filepath.Join(root, "main.tf")))
+				trySymlink(t, path, filepath.Join(root, "main.tf"))
 			case "directory link":
-				require.NoError(t, os.Symlink(filepath.Dir(path), filepath.Join(root, "module")))
+				trySymlink(t, filepath.Dir(path), filepath.Join(root, "module"))
 			}
 			spec := &schema.VendorComponentSource{Uri: root}
 			before := localSourceStamp(spec)
@@ -401,7 +399,7 @@ func TestLocalSourceStampExcludedContents(t *testing.T) {
 				path = filepath.Join(root, ".terraform", "main.tf")
 			case "external link":
 				path = filepath.Join(t.TempDir(), "main.tf")
-				require.NoError(t, os.Symlink(path, filepath.Join(root, "main.tf")))
+				trySymlink(t, path, filepath.Join(root, "main.tf"))
 			}
 			writeStampFile(t, path, "# one")
 			before := localSourceStamp(spec)
