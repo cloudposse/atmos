@@ -13,6 +13,7 @@ import (
 	"go.starlark.net/syntax"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
@@ -146,7 +147,8 @@ func fenced(text string) string {
 }
 
 // scriptError is the single place where ErrStarlark joins the chain. EvalErrors contribute
-// their one-line message plus the backtrace as a fenced explanation; cancellation and
+// their one-line message plus a fenced backtrace for interpreter errors. Deliberate
+// rejections keep their native diagnostics and log the trace at debug level. Cancellation and
 // deadline errors stay reachable through errors.Is. Paths under projectRoot are shown relative
 // to it (display only).
 func scriptError(ctx context.Context, err error, projectRoot string) error {
@@ -166,9 +168,8 @@ func scriptError(ctx context.Context, err error, projectRoot string) error {
 		builder = errUtils.Build(displayError(projectRoot, cause))
 	}
 	script.EnrichDiagnostics(builder, cause)
-	var eval *starlark.EvalError
-	if errors.As(err, &eval) {
-		builder.WithExplanation(fenced(backtraceText(eval, projectRoot)))
+	if detail := evalDetail(err, projectRoot); detail != "" {
+		builder.WithExplanation(detail)
 	}
 	if recursion {
 		builder.WithHint(recursionHint)
@@ -260,11 +261,15 @@ func evalMessage(err error) string {
 	return err.Error()
 }
 
-// evalDetail returns the backtrace explanation of err, if it carries one. Paths under projectRoot
-// are shown relative to it.
+// evalDetail returns an interpreter error's backtrace explanation. Deliberately raised
+// failures log their trace at debug level instead. Paths under projectRoot are relative.
 func evalDetail(err error, projectRoot string) string {
 	var eval *starlark.EvalError
 	if errors.As(err, &eval) {
+		if raised(err) {
+			log.Debug("Starlark failure traceback", "traceback", backtraceText(eval, projectRoot))
+			return ""
+		}
 		return fenced(backtraceText(eval, projectRoot))
 	}
 	return ""

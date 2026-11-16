@@ -115,6 +115,7 @@ var (
 	ErrInvalidCastShellInit                  = errors.New("invalid cast session shell_init")
 	ErrInvalidCastShell                      = errors.New("invalid cast session shell")
 	ErrCastSessionShellExited                = errors.New("cast session shell exited")
+	ErrCastRecordingActive                   = errors.New("another cast recording is already in progress")
 	ErrWriteActionRequiresText               = errors.New("write action requires text")
 	ErrKeyActionRequiresKey                  = errors.New("key action requires key")
 	ErrPauseActionRequiresDuration           = errors.New("pause action requires duration")

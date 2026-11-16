@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	cockroach "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -142,8 +144,7 @@ steps.parallel(tasks = [steps.task(name = "a", function = boom, args = ["a"]), s
 	assert.Contains(t, message, `task "a": broken a`)
 	assert.Contains(t, message, `task "b": broken b`)
 	joined := strings.Join(cockroach.GetAllDetails(err), "\n")
-	assert.Contains(t, joined, `Traceback for task "a"`)
-	assert.Contains(t, joined, `Traceback for task "b"`)
+	assert.NotContains(t, joined, "Traceback")
 }
 
 func TestSingleFailedTaskMessage(t *testing.T) {
@@ -157,10 +158,73 @@ steps.parallel(functions = [boom])
 	assert.Equal(t, `task "boom[0]": nope`, err.Error())
 }
 
+// gatedDeadlineContext reports context.DeadlineExceeded once its timeout elapses, counting from the
+// moment the started channel closes instead of from creation. It lets a test assert that a running
+// process is canceled by a task deadline without racing the deadline against process startup.
+type gatedDeadlineContext struct {
+	context.Context
+	done chan struct{}
+	mu   sync.Mutex
+	err  error
+}
+
+func (c *gatedDeadlineContext) Done() <-chan struct{} { return c.done }
+
+func (c *gatedDeadlineContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+
+func (c *gatedDeadlineContext) Err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.err
+}
+
+func (c *gatedDeadlineContext) finish(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err == nil {
+		c.err = err
+		close(c.done)
+	}
+}
+
+// withDeadlineStartingAfter arms every task timeout only once started is closed.
+func withDeadlineStartingAfter(started <-chan struct{}) Option {
+	return func(e *Engine) {
+		e.taskDeadline = func(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+			ctx := &gatedDeadlineContext{Context: parent, done: make(chan struct{})}
+			stop := make(chan struct{})
+			go func() {
+				select {
+				case <-started:
+					timer, cancel := context.WithTimeout(parent, timeout)
+					defer cancel()
+					select {
+					case <-timer.Done():
+						ctx.finish(timer.Err())
+					case <-stop:
+						ctx.finish(context.Canceled)
+					}
+				case <-parent.Done():
+					ctx.finish(parent.Err())
+				case <-stop:
+					ctx.finish(context.Canceled)
+				}
+			}()
+			var once sync.Once
+			return ctx, func() { once.Do(func() { close(stop) }) }
+		}
+	}
+}
+
 func TestTaskTimeout(t *testing.T) {
 	t.Parallel()
+	started := make(chan struct{})
+	var startOnce sync.Once
 	runner := NewMockRunner(gomock.NewController(t))
+	// The mock signals readiness; the task deadline starts counting only after that, so the
+	// runner is always reached and the 50ms limit is spent waiting inside it.
 	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ process.TaskSpec) process.Result {
+		startOnce.Do(func() { close(started) })
 		<-ctx.Done()
 		return process.Result{Started: true, ExitCode: -1, Canceled: true, Signaled: true, Err: ctx.Err()}
 	})
@@ -168,11 +232,45 @@ func TestTaskTimeout(t *testing.T) {
 def slow():
     exec.run(["sleep"])
 steps.parallel(tasks = [steps.task(name = "slow", function = slow, timeout = "50ms")])
-`, WithProcessRunner(runner))
+`, WithProcessRunner(runner), withDeadlineStartingAfter(started))
 	require.ErrorIs(t, err, errUtils.ErrStarlarkTaskTimeout)
 	require.ErrorIs(t, err, errUtils.ErrStarlark)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Equal(t, prefixText+`: task "slow" timed out after 50ms`, err.Error())
+	select {
+	case <-started:
+	default:
+		t.Fatal("the runner must have started before the task deadline expired")
+	}
+}
+
+// TestTaskTimeoutDoesNotFireBeforeGate proves the gate holds the deadline back: with the gate never
+// opened, a running task outlives its own timeout many times over and ends only when the parent
+// context is canceled.
+func TestTaskTimeoutDoesNotFireBeforeGate(t *testing.T) {
+	t.Parallel()
+	never := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(runCtx context.Context, _ process.TaskSpec) process.Result {
+		// The 10ms task timeout would have expired ten times over during this wait if it were armed.
+		select {
+		case <-runCtx.Done():
+			t.Error("the task context ended before the gate opened")
+		case <-time.After(100 * time.Millisecond):
+		}
+		cancel()
+		<-runCtx.Done()
+		return process.Result{Started: true, ExitCode: -1, Canceled: true, Err: runCtx.Err()}
+	})
+	_, err := New(WithProcessRunner(runner), withDeadlineStartingAfter(never)).Execute(ctx, script.Spec{Source: `
+def slow():
+    exec.run(["sleep"])
+steps.parallel(tasks = [steps.task(name = "slow", function = slow, timeout = "10ms")])
+`})
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, errUtils.ErrStarlarkTaskTimeout, "the task timeout must not fire while gated")
 }
 
 func TestCanceledContextStaysReachableThroughErrors(t *testing.T) {
