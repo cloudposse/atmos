@@ -146,7 +146,7 @@ func stackNameForCompletion(atmosConfig *schema.AtmosConfiguration, stackFileNam
 	if pattern := e.GetStackNamePattern(atmosConfig); pattern != "" {
 		vars, _ := stackMap[cfg.VarsSectionName].(map[string]any)
 		context := cfg.GetContextFromVars(vars)
-		name, err := cfg.GetContextPrefix(stackFileName, context, pattern, stackFileName)
+		name, err := cfg.GetContextPrefix(stackFileName, &context, pattern, stackFileName)
 		if err == nil && name != "" {
 			return name, true
 		}

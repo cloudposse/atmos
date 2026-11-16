@@ -289,6 +289,14 @@ commands:
             command: |
               set -eu
               pact_lib_dir="$(cd "$PACT_LIBRARY_DIR" && pwd)"
+              # pact-go hardcodes `-L/tmp` in its #cgo LDFLAGS. Since Go 1.26.11,
+              # cmd/go walks every -L directory under the temp dir and rejects
+              # non-native files, which includes its own `go-build*/_pkg_.a`
+              # work files when TMPDIR is /tmp (Linux runners). Give Go a private
+              # temp dir so `/tmp` is no longer a build-local linker path.
+              pact_tmp="$(mktemp -d "${TMPDIR:-/tmp}/atmos-pact.XXXXXX")"
+              trap 'rm -rf "$pact_tmp"' EXIT
+              export TMPDIR="$pact_tmp"
               export CGO_LDFLAGS="\"-L$pact_lib_dir\" ${CGO_LDFLAGS:-}"
               export LD_LIBRARY_PATH="$pact_lib_dir"
               export DYLD_LIBRARY_PATH="$pact_lib_dir"

@@ -28,7 +28,7 @@ func TestClusterNamePattern(t *testing.T) {
 
 	// Build EKS cluster name using the `components.helmfile.cluster_name_pattern` config from `atmos.yaml`
 	// cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-{attributes}-eks-cluster"
-	clusterName := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
+	clusterName := cfg.ReplaceContextTokens(&context, atmosConfig.Components.Helmfile.ClusterNamePattern)
 	assert.Equal(t, "cp-plat-ue2-dev-blue-eks-cluster", clusterName)
 }
 
