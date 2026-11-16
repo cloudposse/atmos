@@ -141,6 +141,10 @@ var (
 	ErrWorkdirSourceKeyInvalid               = errors.New("workdir source map keys must be strings")
 	ErrUnsafeVendorTarget                    = errors.New("unsafe vendor target directory")
 	ErrInvalidConfig                         = errors.New("invalid configuration")
+	ErrStackBasePathMissing                  = errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
+	ErrStackIncludedPathsMissing             = errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
+	ErrSpecifiedConfigNotFound               = errors.New("specified config file not found")
+	ErrImportMatchNotFound                   = errors.New("failed to find a match for the import")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrRefuseWriteThroughSymlink             = errors.New("refusing to write through symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
@@ -1572,6 +1576,8 @@ var (
 	ErrCIMaskFailed               = errors.New("failed to register CI mask value")
 	ErrCIPullRequestUnknown       = errors.New("CI pull request number is unknown")
 	ErrCITemplateNotFound         = errors.New("CI report template not found")
+	ErrGiteaTokenNotFound         = errors.New("gitea token not found")
+	ErrGiteaAPIFailed             = errors.New("gitea API request failed")
 	ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
 
 	// Planfile storage errors.

@@ -58,7 +58,11 @@ jobs:
           #   is the contributor DCO text and "MIT" covers bundled schema tooling (see
           #   https://github.com/opencontainers/image-spec/blob/main/LICENSE).
           #   Transitive dependency of Terragrunt in plugins/terragrunt (and of the root module).
-          allow-dependencies-licenses: "pkg:golang/github.com/antlr4-go/antlr/v4, pkg:golang/github.com/google/cel-go, pkg:golang/golang.org/x/image, pkg:golang/modernc.org/libc, pkg:golang/github.com/opencontainers/go-digest, pkg:golang/github.com/opencontainers/image-spec, pkg:npm/pako, pkg:npm/sax"
+          # minimatch and @isaacs/nonrecursive-glob-match: BlueOak-1.0.0 is a permissive license,
+          #   approved for these two packages only (BlueOak-1.0.0 is deliberately not added to
+          #   allow-licenses). They come from the website docs tooling (pnpm override of minimatch
+          #   to v11) and the cdk-terraform example lockfile; neither ships in the atmos binary.
+          allow-dependencies-licenses: "pkg:golang/github.com/antlr4-go/antlr/v4, pkg:golang/github.com/google/cel-go, pkg:golang/golang.org/x/image, pkg:golang/modernc.org/libc, pkg:golang/github.com/opencontainers/go-digest, pkg:golang/github.com/opencontainers/image-spec, pkg:npm/pako, pkg:npm/sax, pkg:npm/minimatch, pkg:npm/%40isaacs/nonrecursive-glob-match"
 
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate
