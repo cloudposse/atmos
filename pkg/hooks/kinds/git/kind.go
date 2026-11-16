@@ -12,11 +12,10 @@
 package git
 
 import (
-	"github.com/cloudposse/atmos/pkg/hooks"
-
 	// Register the default "cli" Git provider so the kind works wherever the
 	// hooks engine runs, independent of the cmd/git command wiring.
 	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
+	"github.com/cloudposse/atmos/pkg/hooks"
 )
 
 // kindName is the registered identifier users select with `kind: git`.

@@ -342,7 +342,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "API key for the provider, typically supplied with the !env YAML function."
         },
         "max_tokens": {
           "anyOf": [
@@ -9431,7 +9432,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Password for the provider, supplied by the user."
         },
         "driver": {
           "anyOf": [
