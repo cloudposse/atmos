@@ -181,7 +181,7 @@ func (s *Operations) resolveGeneratorStackName(
 	if atmosConfig.Stacks.NameTemplate != "" {
 		stackName, err = s.host.ProcessTmpl(atmosConfig, templateName, atmosConfig.Stacks.NameTemplate, info.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 	} else {
-		stackName, err = cfg.GetContextPrefix(stackFileName, info.Context, atmosConfig.Stacks.NamePattern, stackFileName)
+		stackName, err = cfg.GetContextPrefix(stackFileName, &info.Context, atmosConfig.Stacks.NamePattern, stackFileName)
 	}
 	if err != nil {
 		return "", err
@@ -489,7 +489,7 @@ func resolveBackendFilePath(run *generateRun, info *schema.ConfigAndStacksInfo, 
 	// If '--file-template' is specified, replace the tokens in the file template.
 	// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 	if run.fileTemplate != "" {
-		return cfg.ReplaceContextTokens(info.Context, run.fileTemplate), false
+		return cfg.ReplaceContextTokens(&info.Context, run.fileTemplate), false
 	}
 
 	// If '--file-template' is not specified, don't check if we've already processed the terraform component,
