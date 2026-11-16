@@ -216,6 +216,33 @@ remote_state {
 	require.Equal(t, full.Backend["path"], backend.Backend["path"])
 }
 
+func TestBackendResolutionNeverEvaluatesUnrelatedInputs(t *testing.T) {
+	configuration := `download_dir = "custom-cache"
+remote_state {
+ backend = "local"
+ config = { path = "state.tfstate" }
+}
+inputs = { value = run_cmd("atmos-missing-command-that-must-not-run") }
+`
+	request := nativeUnit(t, configuration)
+	_, err := Resolve(t.Context(), request)
+	require.Error(t, err, "a full read evaluates the command-valued input")
+	request.Phase = "backend"
+	backend, err := Resolve(t.Context(), request)
+	require.NoError(t, err, "a backend read never evaluates unrelated inputs")
+	require.Equal(t, "local", backend.BackendType)
+	require.Contains(t, backend.WorkingDir, "custom-cache")
+	t.Run("included inputs", func(t *testing.T) {
+		request := nativeUnit(t, "include \"root\" {\n path = \"root.hcl\"\n}\n")
+		dir := filepath.Dir(request.Path)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "root.hcl"), []byte(configuration), 0o644))
+		request.Phase = "backend"
+		backend, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Contains(t, backend.WorkingDir, "custom-cache")
+	})
+}
+
 func TestBackendDownloadDirectoryNeverReadsDependencyOutputs(t *testing.T) {
 	request := nativeUnit(t, `download_dir = "custom-cache"
 dependency "other" {
@@ -289,5 +316,25 @@ func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 		require.Equal(t, uint32(0o600), result.OverlayModes["private_key.pem"], "a nonexecutable 0600 key must not widen to the 0644 default")
 		require.Equal(t, uint32(0o640), result.OverlayModes["group.pem"])
 		require.NotContains(t, result.OverlayModes, "plain.tf", "default modes are not exported")
+	})
+	t.Run("readable file in a private directory is restricted", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows ignores POSIX permission bits.")
+		}
+		request := nativeUnit(t, "")
+		dir := filepath.Dir(request.Path)
+		for name, mode := range map[string]os.FileMode{"private": 0o700, "shared": 0o755, "group": 0o750} {
+			require.NoError(t, os.MkdirAll(filepath.Join(dir, name, "nested"), 0o755))
+			require.NoError(t, os.Chmod(filepath.Join(dir, name), mode))
+			for _, file := range []string{filepath.Join(name, "credential.pem"), filepath.Join(name, "nested", "deep.pem")} {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte("# secret"), 0o644))
+			}
+		}
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Equal(t, uint32(0o600), result.OverlayModes["private/credential.pem"], "a 0644 credential in a 0700 directory must not be exposed")
+		require.Equal(t, uint32(0o600), result.OverlayModes["private/nested/deep.pem"], "a private ancestor restricts descendants")
+		require.Equal(t, uint32(0o640), result.OverlayModes["group/credential.pem"], "a 0750 directory hides the file from other")
+		require.NotContains(t, result.OverlayModes, "shared/credential.pem", "a traversable directory keeps the default mode")
 	})
 }

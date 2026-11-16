@@ -62,12 +62,36 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 			return err
 		}
 		files[filepath.ToSlash(name)] = content
-		if perm := info.Mode().Perm(); exportsMode(perm) {
+		perm := restrictByDirectories(env.FS, unit, filepath.Dir(name), info.Mode().Perm())
+		if exportsMode(perm) {
 			modes[filepath.ToSlash(name)] = uint32(perm)
 		}
 		return nil
 	})
 	return files, modes, err
+}
+
+// restrictByDirectories conservatively narrows a file's permission bits by the
+// subdirectories that contain it. The overlay carries file modes only, so a
+// readable file inside a private directory (for example 0644 under 0700) would
+// otherwise become readable once the directory is recreated with default modes.
+// A group or other class that cannot traverse a containing directory loses all
+// access to the file. The unit directory itself is not considered because the
+// host owns the working directory's mode.
+func restrictByDirectories(fsys afero.Fs, unit, dir string, perm os.FileMode) os.FileMode {
+	for dir != "." && dir != string(filepath.Separator) && dir != "" {
+		if info, err := fsys.Stat(filepath.Join(unit, dir)); err == nil {
+			mode := info.Mode().Perm()
+			if mode&0o010 == 0 {
+				perm &^= 0o070
+			}
+			if mode&0o001 == 0 {
+				perm &^= 0o007
+			}
+		}
+		dir = filepath.Dir(dir)
+	}
+	return perm
 }
 
 // exportsMode reports whether a unit file's permission bits differ from the
