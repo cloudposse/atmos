@@ -718,3 +718,48 @@ func TestNewReviewedRebuildRequiresAnOldEnoughRecord(t *testing.T) {
 	_, err := newReviewedRebuild(info, &configurationPlan{WorkingDirectory: t.TempDir()}, "plan")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "a record without a rebuild digest cannot prove a rebuilt workdir")
 }
+
+// TestPlanSnapshotterFingerprintsThePlanBeforeAfterHooksRun verifies that the plan Terraform wrote is
+// fingerprinted when the subprocess returns, so an after hook that rewrites it cannot be bound.
+func TestPlanSnapshotterFingerprintsThePlanBeforeAfterHooksRun(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		afterHook  func(t *testing.T, planPath string)
+		wantRecord bool
+	}{
+		{name: "plan unchanged by after hooks", afterHook: func(*testing.T, string) {}, wantRecord: true},
+		{name: "plan rewritten by an after hook", afterHook: func(t *testing.T, planPath string) {
+			require.NoError(t, os.WriteFile(planPath, []byte("rewritten by an after hook"), 0o600))
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			project := newReviewedPlanProject(t)
+			info := project.info(t, "plan")
+			project.provider.EXPECT().Prepare(gomock.Any(), info).Return(project.prepared(), nil)
+			execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+			require.NoError(t, err)
+			planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
+			snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
+			execution.planSnapshots = snapshotter
+
+			// Terraform writes the plan.
+			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) })
+			require.NoError(t, terraform())
+			written, err := fileDigest(planPath)
+			require.NoError(t, err)
+			require.NotNil(t, snapshotter.result)
+			require.Equal(t, written, snapshotter.result.planDigest, "the digest is taken when the subprocess returns")
+
+			test.afterHook(t, planPath)
+			err = recordConfigurationPlan(t.Context(), project.config, info, execution, []string{"-out=" + planPath})
+
+			if test.wantRecord {
+				require.NoError(t, err)
+				require.FileExists(t, planPath+configurationPlanSuffix)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+			require.NoFileExists(t, planPath+configurationPlanSuffix, "a rewritten plan is never bound")
+		})
+	}
+}

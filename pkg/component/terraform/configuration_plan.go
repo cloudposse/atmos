@@ -334,6 +334,9 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
+	if snapshot.planDigest != "" && snapshot.planDigest != planDigest {
+		return nil, fmt.Errorf("%w: plan file changed after Terraform wrote it", errUtils.ErrPlanVerificationFailed)
+	}
 	engineDigest, err := fileDigest(info.Command)
 	if err != nil {
 		return nil, err

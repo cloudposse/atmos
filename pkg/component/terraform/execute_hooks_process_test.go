@@ -484,6 +484,38 @@ func TestSmartInitDistrustsUnresolvableProviderInitSettings(t *testing.T) {
 	require.Nil(t, newAutoInitInputs(&schema.AtmosConfiguration{}, info, t.TempDir(), ""))
 }
 
+// TestFinishMainTerraformCommandKeepsHookFailuresUnderPermissiveCIMapping verifies that the CI exit-code mapping
+// only remaps Terraform's own status: a hook that fails with status 2 is still a failure.
+func TestFinishMainTerraformCommandKeepsHookFailuresUnderPermissiveCIMapping(t *testing.T) {
+	pipeline := newProcessPipeline(t, &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{toolHook("plan-after", []string{"plan"}, "exit=2")},
+	})
+	hookErr := pipeline.run(t)
+	require.ErrorIs(t, hookErr, errUtils.ErrComponentHookFailed)
+	require.Equal(t, 2, resolveExitCode(hookErr), "the hook's own status is 2")
+
+	permissive := func(_ *schema.AtmosConfiguration, code int) int {
+		if code == 0 || code == 2 {
+			return 0
+		}
+		return code
+	}
+	executor := NewExecutor(Services{MapCIExitCode: permissive})
+	config := &schema.AtmosConfiguration{}
+
+	// The same status from Terraform itself is a plan result, so the mapping still applies.
+	require.NoError(t, executor.finishMainTerraformCommand(config, pipeline.info, errUtils.ExitCodeError{Code: 2}, false))
+
+	err := executor.finishMainTerraformCommand(config, pipeline.info, hookErr, false)
+	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+	require.Equal(t, 2, resolveExitCode(err))
+
+	// Neither does the neutralization of a -detailed-exitcode that exec-metadata added hide it.
+	pipeline.info.ExecMetadataDetailedExitCodeAdded = true
+	err = executor.finishMainTerraformCommand(config, pipeline.info, hookErr, false)
+	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+}
+
 // TestLifecycleCapturesBeforeHookOutputForErrorHooks verifies that a lifecycle stage with error hooks records
 // the output of its before hooks, so an error hook can match a before hook's failure, and removes the
 // capture files once the lifecycle has finished.

@@ -1063,3 +1063,29 @@ func TestConfigurationPlanRoundTripNumericBackend(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, equalBackendConfiguration(map[string]any{"value": json.Number("9007199254740993")}, map[string]any{"value": json.Number("9007199254740992")}))
 }
+
+func TestNewConfigurationPlanRejectsAPlanRewrittenAfterTerraformWroteIt(t *testing.T) {
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(path, []byte("reviewed plan"), 0o600))
+	captured, err := fileDigest(path)
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Command: binary, Stack: "dev", ComponentFromArg: "app"}
+	execCtx := &componentExecContext{workingDir: dir, preparedConfiguration: &schema.PreparedComponentConfiguration{Engine: "terraform"}}
+	snapshot := &planSnapshot{path: path, identity: "identity", workingDigest: "working", planDigest: captured}
+
+	plan, err := newConfigurationPlan(&schema.AtmosConfiguration{}, info, execCtx, snapshot, path)
+	require.NoError(t, err)
+	require.Equal(t, captured, plan.PlanDigest, "an unchanged plan keeps the existing binding flow")
+
+	require.NoError(t, os.WriteFile(path, []byte("rewritten by an after hook"), 0o600))
+	_, err = newConfigurationPlan(&schema.AtmosConfiguration{}, info, execCtx, snapshot, path)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+
+	snapshot.planDigest = ""
+	plan, err = newConfigurationPlan(&schema.AtmosConfiguration{}, info, execCtx, snapshot, path)
+	require.NoError(t, err, "a snapshot without an observed digest binds the plan as it is")
+	require.NotEqual(t, captured, plan.PlanDigest)
+}
