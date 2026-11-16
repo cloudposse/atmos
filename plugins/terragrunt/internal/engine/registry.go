@@ -193,14 +193,25 @@ func registryProblem(source string, err error) *model.Problem {
 	}
 }
 
+// urlUserinfo matches the credentials in front of the host of a URL, also inside a getter-prefixed URL such as
+// git::https://user:token@host/repo.
+var urlUserinfo = regexp.MustCompile(`(://)[^/@\s]*@`)
+
+// redactURLCredentials removes the userinfo from every URL in text, so a credential a registry embedded in a
+// getter URL cannot reach a diagnostic that is shown to the user.
+func redactURLCredentials(text string) string {
+	return urlUserinfo.ReplaceAllString(text, "$1")
+}
+
 // rejectedResolvedSource names both the registry source a unit was written with and the getter URL the
-// registry returned for it, so a rejected result can be traced to the source that produced it.
+// registry returned for it, so a rejected result can be traced to the source that produced it. The detail may be
+// shown as safe, so credentials in the resolved URL are removed first.
 func rejectedResolvedSource(original, resolved string, err error) error {
 	var problem *model.Problem
 	if !errors.As(err, &problem) {
 		return err
 	}
 	annotated := *problem
-	annotated.Detail = fmt.Sprintf("%s The registry source %q resolved to %q.", problem.Detail, original, resolved)
+	annotated.Detail = fmt.Sprintf("%s The registry source %q resolved to %q.", problem.Detail, original, redactURLCredentials(resolved))
 	return &annotated
 }

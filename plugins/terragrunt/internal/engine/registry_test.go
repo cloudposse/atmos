@@ -494,3 +494,29 @@ func TestRejectedResolvedSourceNamesBothSources(t *testing.T) {
 	plain := errors.New("not a problem")
 	assert.Same(t, plain, rejectedResolvedSource("tfr:///a/b/c", "x", plain))
 }
+
+func TestRejectedResolvedSourceOmitsURLCredentials(t *testing.T) {
+	tests := []struct {
+		name     string
+		resolved string
+		want     string
+	}{
+		{"user and token", "ftp://alice:s3cret@example.invalid/vpc.zip", "ftp://example.invalid/vpc.zip"},
+		{"token only", "git::https://ghp_token@github.com/org/repo.git?ref=v1", "git::https://github.com/org/repo.git?ref=v1"},
+		{"no credentials", "ftp://example.invalid/vpc.zip", "ftp://example.invalid/vpc.zip"},
+		{"at sign in the path", "ftp://example.invalid/a@b.zip", "ftp://example.invalid/a@b.zip"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			problem := &model.Problem{Code: model.CodeInvalidSource, Summary: "Unsupported", Detail: "Not supported.", Safe: true}
+			err := rejectedResolvedSource("tfr:///a/b/c", test.resolved, problem)
+
+			var annotated *model.Problem
+			require.ErrorAs(t, err, &annotated)
+			assert.Contains(t, annotated.Detail, test.want)
+			assert.NotContains(t, annotated.Detail, "s3cret")
+			assert.NotContains(t, annotated.Detail, "ghp_token")
+			assert.NotContains(t, annotated.Detail, "alice")
+		})
+	}
+}
