@@ -1248,3 +1248,24 @@ func TestInitRecoveryInsideLifecycleRunsOnlyWhenDiagnosed(t *testing.T) {
 	require.Equal(t, 1, resolveExitCode(err))
 	require.Equal(t, []string{"terraform apply", "hook-after arg"}, shell.names())
 }
+
+func TestInitFileArgumentsAcceptSingleAndDoubleDashForms(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		arguments []string
+		want      []string
+	}{
+		{name: "single dash inline", arguments: []string{"-backend-config=backend.hcl"}, want: []string{"backend.hcl"}},
+		{name: "double dash inline", arguments: []string{"--backend-config=backend.hcl"}, want: []string{"backend.hcl"}},
+		{name: "single dash separate", arguments: []string{"-var-file", "vars.tfvars"}, want: []string{"vars.tfvars"}},
+		{name: "double dash separate", arguments: []string{"--var-file", "vars.tfvars"}, want: []string{"vars.tfvars"}},
+		{name: "both forms mixed", arguments: []string{"--backend-config=a.hcl", "-backend-config", "b.hcl", "--var-file=c.tfvars"}, want: []string{"a.hcl", "b.hcl", "c.tfvars"}},
+		{name: "inline setting is not a file", arguments: []string{"--backend-config=bucket=state", "-backend-config", "key=value"}},
+		{name: "unrelated flags", arguments: []string{"--reconfigure", "-input=false", "--upgrade"}},
+		{name: "flag at the end without a value", arguments: []string{"--backend-config"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, initFileArguments(test.arguments))
+		})
+	}
+}
