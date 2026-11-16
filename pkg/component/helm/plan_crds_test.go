@@ -202,3 +202,28 @@ func TestCRDPlanRespectsSubchartCondition(t *testing.T) {
 		assert.Equal(t, enabled, strings.Contains(rendered, "childwidgets.example.com"))
 	}
 }
+
+func TestMissingCRDList(t *testing.T) {
+	for _, nested := range []bool{false, true} {
+		t.Run(fmt.Sprintf("nested=%t", nested), func(t *testing.T) {
+			items := "apiVersion: v1\nkind: List\nitems:\n"
+			for _, name := range []string{"widgets", "gadgets"} {
+				items += "- " + strings.ReplaceAll(strings.TrimSpace(strings.ReplaceAll(planTestCRD, "widgets", name)), "\n", "\n  ") + "\n"
+			}
+			if nested {
+				items = "apiVersion: v1\nkind: List\nitems:\n- " + strings.ReplaceAll(strings.TrimSpace(items), "\n", "\n  ") + "\n"
+			}
+			chart := &chartv2.Chart{Metadata: &chartv2.Metadata{Name: "lists"}, Files: []*common.File{{Name: "crds/list.yaml", Data: []byte(items)}}}
+			var names []string
+			rendered, err := missingCRDManifests(context.Background(), chart, func(_ context.Context, name string) (bool, error) {
+				names = append(names, name)
+				return name == "widgets.example.com", nil
+			})
+			require.NoError(t, err)
+			assert.Equal(t, []string{"widgets.example.com", "gadgets.example.com"}, names)
+			assert.NotContains(t, rendered, "widgets.example.com")
+			assert.Contains(t, rendered, "gadgets.example.com")
+			assert.NotContains(t, rendered, `"kind":"List"`)
+		})
+	}
+}

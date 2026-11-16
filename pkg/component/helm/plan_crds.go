@@ -116,15 +116,43 @@ func missingCRDFile(ctx context.Context, crd chartv2.CRD,
 		} else if err != nil {
 			return "", fmt.Errorf("decode CRD file %q: %w", crd.Filename, err)
 		}
-		content, err := missingCRDObject(ctx, &object, exists)
+		content, err := missingCRDDocument(ctx, &object, crd.Filename, exists)
 		if err != nil {
 			return "", fmt.Errorf("plan CRD file %q: %w", crd.Filename, err)
 		}
-		if len(content) > 0 {
-			fmt.Fprintf(&out, "---\n# Source: %s\n%s\n", crd.Filename, content)
-		}
+		out.WriteString(content)
 	}
 	return out.String(), nil
+}
+
+// missingCRDDocument expands Lists just as Helm's Kubernetes resource builder
+// does, including nested Lists, before checking individual CRDs.
+func missingCRDDocument(ctx context.Context, object *unstructured.Unstructured, source string,
+	exists func(context.Context, string) (bool, error),
+) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if object.IsList() {
+		list, err := object.ToList()
+		if err != nil {
+			return "", err
+		}
+		var out bytes.Buffer
+		for i := range list.Items {
+			content, err := missingCRDDocument(ctx, &list.Items[i], source, exists)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(content)
+		}
+		return out.String(), nil
+	}
+	content, err := missingCRDObject(ctx, object, exists)
+	if err != nil || len(content) == 0 {
+		return "", err
+	}
+	return fmt.Sprintf("---\n# Source: %s\n%s\n", source, content), nil
 }
 
 func missingCRDObject(ctx context.Context, object *unstructured.Unstructured,
