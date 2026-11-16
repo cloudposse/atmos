@@ -2,6 +2,7 @@ package artifacttest_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -269,6 +270,7 @@ func TestRepository_StoredStateIsIsolatedFromCallers(t *testing.T) {
 			require.NoError(t, err)
 			wantPath := before.Record.Inventory[0].Path
 			wantDocs := len(before.Record.Documents)
+			wantPayload := slices.Clone(before.Representation.Payload)
 
 			tt.tamper(t, repo, pinned)
 
@@ -277,7 +279,7 @@ func TestRepository_StoredStateIsIsolatedFromCallers(t *testing.T) {
 			assert.Equal(t, map[string]string{"suite": "isolation"}, after.Record.Metadata.Labels)
 			assert.Equal(t, wantPath, after.Record.Inventory[0].Path)
 			assert.Len(t, after.Record.Documents, wantDocs)
-			assert.Equal(t, before.Representation.Payload, after.Representation.Payload)
+			assert.Equal(t, wantPayload, after.Representation.Payload)
 			_, err = repo.Resolve(ctx, ref)
 			require.NoError(t, err)
 		})

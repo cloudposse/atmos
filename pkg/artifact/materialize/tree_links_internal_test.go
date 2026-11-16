@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 )
 
@@ -37,6 +38,10 @@ func TestOrderLinks_CreatesALinkAfterTheLinkItsTargetPassesThrough(t *testing.T)
 		{"a chain is created from its end", []*artifact.Entry{linkEntry("a", "b"), linkEntry("b", "c"), linkEntry("c", "dir")}, []string{"c", "b", "a"}},
 		{"a target below a link", []*artifact.Entry{linkEntry("x", "y/sub"), linkEntry("y", "dir")}, []string{"y", "x"}},
 		{"a relative target in a subdirectory", []*artifact.Entry{linkEntry("d/a", "../e"), linkEntry("e", "dir")}, []string{"e", "d/a"}},
+		// "m" reaches deep/c only after "z" is expanded, because the parent component applies to z's target.
+		{"a parent component after a link", []*artifact.Entry{linkEntry("m", "z/../c"), linkEntry("z", "deep/b"), linkEntry("deep/c", "dir")}, []string{"deep/c", "z", "m"}},
+		// "t" passes through "r" (a link to "s"), and "s" is a link that no prefix of t's target names.
+		{"every link met while expanding the target", []*artifact.Entry{linkEntry("t", "r/f"), linkEntry("r", "s/sub"), linkEntry("s", "dir")}, []string{"s", "r", "t"}},
 		{"a cycle keeps path order and terminates", []*artifact.Entry{linkEntry("q", "p"), linkEntry("p", "q")}, []string{"p", "q"}},
 		{"a link to itself terminates", []*artifact.Entry{linkEntry("s", "s")}, []string{"s"}},
 		{"no links", nil, []string{}},
@@ -65,9 +70,8 @@ func TestTree_CreatesSymlinksOnlyAfterEveryOtherMemberExists(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist, "recording a link must not create it yet")
 
 	require.NoError(t, target.mkdir(zdir))
-	if err := target.createLinks(t.Context()); err != nil {
-		t.Skipf("this platform cannot create symlinks: %v", err)
-	}
+	requireSymlinkSupport(t)
+	require.NoError(t, target.createLinks(t.Context()))
 	info, err := os.Lstat(filepath.Join(dir, "alias"))
 	require.NoError(t, err)
 	assert.NotZero(t, info.Mode()&os.ModeSymlink)
@@ -132,6 +136,51 @@ func TestTree_OwnerAccessKeepsATemporaryTreeReadable(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, body, data)
 			}
+		})
+	}
+}
+
+// requireSymlinkSupport skips the test only when the platform cannot create symlinks at all. It runs
+// its own probe so a failure of the operation under test fails the test instead of skipping it.
+func requireSymlinkSupport(t *testing.T) {
+	t.Helper()
+	probe := t.TempDir()
+	if err := os.WriteFile(filepath.Join(probe, "target.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatalf("write the symlink probe target: %v", err)
+	}
+	if err := os.Symlink("target.txt", filepath.Join(probe, "link")); err != nil {
+		t.Skipf("this platform cannot create symlinks: %v", err)
+	}
+}
+
+// A link whose target cannot be resolved for a reason other than a loop is rejected, because an unknown
+// target cannot be shown to stay inside the package; a loop never leaves the root, so it is accepted.
+func TestCheckLinkContainment_ResolutionFailures(t *testing.T) {
+	requireSymlinkSupport(t)
+	tests := []struct {
+		name    string
+		links   map[string]string
+		wantErr bool
+	}{
+		{name: "through a regular file", links: map[string]string{"bad": "file.txt/child"}, wantErr: true},
+		{name: "loop", links: map[string]string{"a": "b", "b": "a"}},
+		{name: "inside the root", links: map[string]string{"ok": "file.txt"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stage := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(stage, "file.txt"), []byte("x"), 0o600))
+			record := &artifact.Record{}
+			for name, target := range tt.links {
+				require.NoError(t, os.Symlink(target, filepath.Join(stage, name)))
+				record.Inventory = append(record.Inventory, artifact.Entry{Path: name, Type: artifact.EntrySymlink})
+			}
+			err := checkLinkContainment(stage, record)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }

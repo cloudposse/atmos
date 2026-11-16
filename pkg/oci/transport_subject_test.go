@@ -10,6 +10,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/errdef"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/oci"
@@ -96,6 +97,59 @@ func pushSubjectManifest(t *testing.T, layout *oci.Layout, subject *ocispec.Desc
 	desc := oci.Descriptor(ocispec.MediaTypeImageManifest, raw)
 	require.NoError(t, layout.Push(ctx, desc, strings.NewReader(string(raw))))
 	return desc
+}
+
+// Moving a tag off an attachment manifest must not drop the attachment from the layout: it stays an
+// unnamed root, so reopening the layout still finds it as a referrer of its subject.
+func TestTagMovePreservesTheDisplacedAttachmentRoot(t *testing.T) {
+	ctx := t.Context()
+	directory := filepath.Join(t.TempDir(), "layout")
+	layout, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	subject := pushSubjectManifest(t, layout, nil, "subject")
+	attachment := pushSubjectManifest(t, layout, &subject, "attachment")
+	replacement := pushSubjectManifest(t, layout, nil, "replacement")
+	require.NoError(t, layout.Tag(ctx, attachment, "moving"))
+
+	require.NoError(t, layout.Tag(ctx, replacement, "moving"))
+
+	reopened, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	resolved, err := reopened.Resolve(ctx, "moving")
+	require.NoError(t, err)
+	assert.Equal(t, replacement.Digest, resolved.Digest, "the tag moved to the new manifest")
+	referrers, err := reopened.Predecessors(ctx, subject)
+	require.NoError(t, err)
+	digests := make([]string, 0, len(referrers))
+	for _, referrer := range referrers {
+		digests = append(digests, referrer.Digest.String())
+	}
+	assert.Contains(t, digests, attachment.Digest.String(), "the displaced attachment is still discoverable after reopening")
+	assert.Contains(t, layoutRoots(t, directory), attachment.Digest.String())
+}
+
+// A tag that could not be written to index.json would vanish when the layout is reopened, so it must not
+// resolve: otherwise a recovery check would report success for a tag that was never persisted.
+func TestResolveDoesNotTrustATagThatWasNotPersisted(t *testing.T) {
+	ctx := t.Context()
+	directory := filepath.Join(t.TempDir(), "layout")
+	layout, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	root := pushSubjectManifest(t, layout, nil, "root")
+
+	// Replace index.json with a non-empty directory so the atomic write cannot land on any platform.
+	indexPath := filepath.Join(directory, "index.json")
+	require.NoError(t, os.Remove(indexPath))
+	require.NoError(t, os.MkdirAll(filepath.Join(indexPath, "blocker"), 0o755))
+
+	require.Error(t, layout.Tag(ctx, root, "1.0.0"), "the index write fails")
+	_, err = layout.Resolve(ctx, "1.0.0")
+	require.Error(t, err, "an unpersisted tag does not resolve")
+	require.ErrorIs(t, err, errdef.ErrNotFound)
+
+	resolved, err := layout.Resolve(ctx, root.Digest.String())
+	require.NoError(t, err, "a digest reference still resolves")
+	assert.Equal(t, root.Digest, resolved.Digest)
 }
 
 func TestExtendedCopyWithoutSubjectTraversalKeepsTheSelectedRootAndItsReferrers(t *testing.T) {

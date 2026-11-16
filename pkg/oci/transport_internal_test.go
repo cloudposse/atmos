@@ -107,6 +107,9 @@ func TestRepositoryFailsClosedBeforeAnyRequest(t *testing.T) {
 		{"bound authenticator cannot authorize", failingAuthenticator{}, true, nil},
 		{"matched identity with an empty credential", authn.FromConfig(authn.AuthConfig{}), true, nil},
 		{"matched identity with an empty basic credential", authn.FromConfig(authn.AuthConfig{Auth: base64.StdEncoding.EncodeToString([]byte(":"))}), true, nil},
+		{"matched identity with a username only", authn.FromConfig(authn.AuthConfig{Username: "identity"}), true, nil},
+		{"matched identity with a password only", authn.FromConfig(authn.AuthConfig{Password: "bound"}), true, nil},
+		{"matched identity with a username-only basic credential", authn.FromConfig(authn.AuthConfig{Auth: base64.StdEncoding.EncodeToString([]byte("identity:"))}), true, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
@@ -124,6 +127,30 @@ func TestRepositoryFailsClosedBeforeAnyRequest(t *testing.T) {
 		})
 	}
 	assert.Zero(t, requests.Load(), "no request may reach the registry when the identity cannot be resolved")
+}
+
+// A bound identity must be able to produce an Authorization header: a token, or a username with a
+// password. These shapes are accepted.
+func TestNonEmptyCredentialAcceptsSendableCredentials(t *testing.T) {
+	for name, config := range map[string]authn.AuthConfig{
+		"username and password": {Username: "identity", Password: "bound"},
+		"access token":          {RegistryToken: "token"},
+		"refresh token":         {IdentityToken: "refresh"},
+		"encoded basic":         {Auth: base64.StdEncoding.EncodeToString([]byte("identity:bound"))},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := nonEmptyCredential{Authenticator: authn.FromConfig(config)}.Authorization()
+			require.NoError(t, err)
+			assert.NotNil(t, got)
+		})
+	}
+}
+
+// An authorization failure from the bound identity carries the registry sentinel and its cause.
+func TestNonEmptyCredentialClassifiesAuthorizationFailures(t *testing.T) {
+	_, err := nonEmptyCredential{Authenticator: failingAuthenticator{}}.Authorization()
+	require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+	assert.ErrorIs(t, err, os.ErrPermission)
 }
 
 func TestBoundIdentityTakesPrecedenceOverAmbientCredentials(t *testing.T) {

@@ -75,7 +75,7 @@ func (n nonEmptyCredential) Authorization() (*authn.AuthConfig, error) {
 
 	config, err := n.Authenticator.Authorization()
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(errUtils.ErrOCIRegistry, err)
 	}
 	if config == nil {
 		return nil, fmt.Errorf("%w: the bound identity resolved to no credential", errUtils.ErrOCIRegistry)
@@ -87,5 +87,15 @@ func (n nonEmptyCredential) Authorization() (*authn.AuthConfig, error) {
 	if credential == orasauth.EmptyCredential {
 		return nil, fmt.Errorf("%w: the bound identity resolved to an empty credential", errUtils.ErrOCIRegistry)
 	}
+	if !canSend(credential) {
+		return nil, fmt.Errorf("%w: the bound identity resolved to an incomplete credential: a token, or both a username and a password, is required", errUtils.ErrOCIRegistry)
+	}
 	return config, nil
+}
+
+// canSend reports whether the registry client can turn the credential into an Authorization header: a
+// token, or a username together with a password. A username or password on its own is rejected
+// instead of letting the request go out unauthenticated.
+func canSend(credential orasauth.Credential) bool {
+	return credential.AccessToken != "" || credential.RefreshToken != "" || (credential.Username != "" && credential.Password != "")
 }

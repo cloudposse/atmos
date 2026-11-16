@@ -213,11 +213,14 @@ func TestLocks_ReleaseFailureIsReportedForOperatorRecovery(t *testing.T) {
 	handle.EXPECT().Release(gomock.Any()).Return(errTransport)
 	repos := &service.StaticRepositories{Repositories: map[string]artifact.Repository{"dst": repo}, Info: map[string]service.RepositoryInfo{"dst": {Capabilities: caps, Packaging: artifact.PackagingNone}}}
 	e := newEnv(t, envConfig{})
-	svc, err := service.New(repos, nil, service.WithStagingRoot(e.staging))
+	journal, log := newRecordingJournal(t)
+	svc, err := service.New(repos, nil, service.WithStagingRoot(e.staging), service.WithJournal(journal))
 	require.NoError(t, err)
 
 	result, err := svc.Publish(context.Background(), e.publishRequest("dst", e.source("hello")))
 	require.NoError(t, err, "the publication itself succeeded")
+	assert.Contains(t, log.phases(), service.PhaseCommitted)
+	assert.NotContains(t, log.phases(), service.PhaseReleased, "a failed release must not be journaled as released")
 	var warning artifact.Diagnostic
 	for _, diagnostic := range result.Diagnostics {
 		if diagnostic.Code == "lock-release-failed" {

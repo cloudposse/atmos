@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -162,7 +163,7 @@ func Capture(ctx context.Context, source string, opts ...Option) (*Snapshot, err
 	}
 	// Cancellation is final even when no entry would ever check it, such as an empty directory.
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, classifyInterruption(err)
 	}
 	root, err := os.MkdirTemp(applied.stagingRoot, stagingPattern)
 	if err != nil {
@@ -171,9 +172,22 @@ func Capture(ctx context.Context, source string, opts ...Option) (*Snapshot, err
 	snap, err := captureInto(ctx, source, root, &applied)
 	if err != nil {
 		_ = os.RemoveAll(root)
-		return nil, err
+		return nil, classifyInterruption(err)
 	}
 	return snap, nil
+}
+
+// classifyInterruption gives a cancellation or deadline error the packaging sentinel so callers see
+// a classified artifact error, and keeps the context error in the chain. Every other error, and one
+// that already carries a sentinel, is returned unchanged.
+func classifyInterruption(err error) error {
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if errors.Is(err, errUtils.ErrArtifactPackagingInvalid) {
+		return err
+	}
+	return fmt.Errorf("%w: capture interrupted: %w", errUtils.ErrArtifactPackagingInvalid, err)
 }
 
 func captureInto(ctx context.Context, source, root string, opts *options) (*Snapshot, error) {

@@ -4,40 +4,61 @@ package linkpath
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // maxLinkHops bounds the symlinks followed while resolving one path, so a loop terminates.
-const maxLinkHops = 255
+const (
+	maxLinkHops     = 255
+	parentComponent = ".."
+)
 
 // Resolve returns the physical absolute path that target refers to. It follows every symlink it
 // meets, like filepath.EvalSymlinks. Unlike EvalSymlinks, it also resolves a path whose tail does
 // not exist: the longest existing prefix is resolved physically, and the missing remainder is
 // joined lexically. A dangling link therefore still reports where it would land once the missing
-// path is created. Resolve reports false when the path loops, passes through a non-directory, or
-// cannot be inspected.
-func Resolve(target string) (string, bool) {
+// path is created. Parent components are applied only after the symlinks before them are resolved,
+// so "link/../x" is not collapsed to a sibling of "link".
+//
+// Resolve fails with [errUtils.ErrSymlinkLoop] when the links form a loop, and with another error
+// when the path passes through a non-directory or cannot be inspected. Callers decide separately
+// what each failure means.
+func Resolve(target string) (string, error) {
 	defer perf.Track(nil, "linkpath.Resolve")()
 
-	absolute, err := filepath.Abs(target)
+	absolute, err := absolutePath(target)
 	if err != nil {
-		return "", false
+		return "", fmt.Errorf("%w: make %q absolute: %w", errUtils.ErrArtifactUnsafePath, target, err)
 	}
 	volume := filepath.VolumeName(absolute)
 	w := &walker{base: volume + string(filepath.Separator), pending: splitComponents(absolute[len(volume):])}
 	w.resolved = w.base
 	for len(w.pending) > 0 {
-		done, ok := w.step()
-		if done {
-			return filepath.Join(append([]string{w.resolved}, w.missing...)...), ok
+		if err := w.step(); err != nil {
+			return "", err
 		}
 	}
-	return filepath.Join(append([]string{w.resolved}, w.missing...)...), true
+	return filepath.Join(append([]string{w.resolved}, w.missing...)...), nil
+}
+
+// absolutePath makes target absolute without cleaning it: filepath.Abs would collapse parent
+// components lexically, before any symlink in front of them has been resolved.
+func absolutePath(target string) (string, error) {
+	if filepath.IsAbs(target) {
+		return target, nil
+	}
+	working, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return working + string(filepath.Separator) + target, nil
 }
 
 // Escapes reports whether the symlink at from leaves the tree that links describes. The tree is
@@ -95,60 +116,68 @@ type walker struct {
 	hops int
 }
 
-// step consumes one component. It reports done when resolution ended, and ok when it succeeded.
-func (w *walker) step() (done, ok bool) {
+// step consumes one component. It returns nil to continue and an error when resolution failed.
+func (w *walker) step() error {
 	component := w.pending[0]
 	w.pending = w.pending[1:]
 	if len(w.missing) > 0 {
-		switch component {
-		case ".":
-		case "..":
-			w.missing = w.missing[:len(w.missing)-1]
-		default:
-			w.missing = append(w.missing, component)
-		}
-		return false, true
+		w.stepMissing(component)
+		return nil
 	}
-	if component == "." || component == ".." {
+	if component == "." || component == parentComponent {
 		w.resolved = stepDot(w.resolved, component)
-		return false, true
+		return nil
 	}
 	next := filepath.Join(w.resolved, component)
 	info, err := os.Lstat(next)
 	if errors.Is(err, fs.ErrNotExist) {
 		w.missing = append(w.missing, component)
-		return false, true
+		return nil
 	}
 	if err != nil {
-		return true, false
+		return fmt.Errorf("%w: inspect %q: %w", errUtils.ErrArtifactUnsafePath, next, err)
 	}
 	if info.Mode()&fs.ModeSymlink == 0 {
 		if !info.IsDir() && len(w.pending) > 0 {
-			return true, false
+			return fmt.Errorf("%w: %q is not a directory", errUtils.ErrArtifactUnsafePath, next)
 		}
 		w.resolved = next
-		return false, true
+		return nil
 	}
 	return w.follow(next)
 }
 
+// stepMissing resolves the missing tail lexically until it returns to an existing directory.
+func (w *walker) stepMissing(component string) {
+	switch component {
+	case ".":
+	case parentComponent:
+		w.missing = w.missing[:len(w.missing)-1]
+	default:
+		w.missing = append(w.missing, component)
+	}
+}
+
 // follow splices the target of the symlink at link in front of the pending components.
-func (w *walker) follow(link string) (done, ok bool) {
+func (w *walker) follow(link string) error {
 	w.hops++
+	if w.hops > maxLinkHops {
+		return fmt.Errorf("%w: more than %d links followed at %q", errUtils.ErrSymlinkLoop, maxLinkHops, link)
+	}
 	components, absolute, err := linkComponents(link)
-	if err != nil || w.hops > maxLinkHops {
-		return true, false
+	if err != nil {
+		return fmt.Errorf("%w: read link %q: %w", errUtils.ErrArtifactUnsafePath, link, err)
 	}
 	if absolute {
 		w.resolved = w.base
 	}
 	w.pending = append(components, w.pending...)
-	return false, true
+	return nil
 }
 
-// stepDot applies a "." or ".." component to a fully resolved directory.
+// stepDot applies a current or parent directory component to a fully resolved directory.
 func stepDot(resolved, component string) string {
-	if component == ".." {
+	if component == parentComponent {
 		return filepath.Dir(resolved)
 	}
 	return resolved
@@ -170,7 +199,7 @@ func Within(root, target string) bool {
 	defer perf.Track(nil, "linkpath.Within")()
 
 	relative, err := filepath.Rel(root, target)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+	return err == nil && relative != parentComponent && !strings.HasPrefix(relative, parentComponent+string(filepath.Separator))
 }
 
 // splitComponents splits a path into its non-empty components.

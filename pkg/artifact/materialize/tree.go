@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 
@@ -164,7 +165,7 @@ func linkDependencies(sorted []*artifact.Entry) (pending []int, dependents [][]i
 	pending = make([]int, len(sorted))
 	dependents = make([][]int, len(sorted))
 	for index, link := range sorted {
-		if dep, ok := linkThrough(link, byPath); ok && dep != index {
+		for _, dep := range linksThrough(link, index, sorted, byPath) {
 			pending[index]++
 			dependents[dep] = append(dependents[dep], index)
 		}
@@ -185,17 +186,57 @@ func releaseDependents(waiting []int, pending []int) []int {
 	return ready
 }
 
-// linkThrough finds the nearest link that the target of link passes through, given the cleaned
-// target path relative to the archive root.
-func linkThrough(link *artifact.Entry, byPath map[string]int) (int, bool) {
-	target := path.Clean(path.Dir(link.Path) + "/" + link.Target)
-	for target != "." && target != "/" && target != "" {
-		if index, ok := byPath[target]; ok {
-			return index, true
+// maxLinkExpansion bounds the links followed while expanding one target, so a cycle terminates.
+const maxLinkExpansion = 255
+
+// linksThrough lists every other link that the target of link passes through. The target is expanded
+// the way the filesystem resolves it: a link met on the way is replaced by its own target, and a
+// parent component applies to the directory reached after that replacement, never to the name before
+// it. Cleaning the path lexically first would drop a link that a parent component follows.
+func linksThrough(link *artifact.Entry, self int, links []*artifact.Entry, byPath map[string]int) []int {
+	pending := splitSlash(path.Dir(link.Path) + "/" + link.Target)
+	var deps []int
+	var directory []string
+	seen := make(map[int]bool)
+	for hops := 0; len(pending) > 0; {
+		component := pending[0]
+		pending = pending[1:]
+		switch component {
+		case "", ".":
+			continue
+		case "..":
+			if len(directory) > 0 {
+				directory = directory[:len(directory)-1]
+			}
+			continue
 		}
-		target = path.Dir(target)
+		current := strings.Join(append(slices.Clone(directory), component), "/")
+		index, isLink := byPath[current]
+		if !isLink {
+			directory = append(directory, component)
+			continue
+		}
+		if index != self && !seen[index] {
+			seen[index] = true
+			deps = append(deps, index)
+		}
+		hops++
+		if hops > maxLinkExpansion {
+			break
+		}
+		target := links[index].Target
+		if path.IsAbs(target) {
+			directory = nil
+		}
+		pending = append(splitSlash(target), pending...)
 	}
-	return 0, false
+	return deps
+}
+
+// splitSlash splits a slash-separated path into its components, keeping empty and dot components so
+// the caller decides what they mean.
+func splitSlash(value string) []string {
+	return strings.Split(value, "/")
 }
 
 // complete checks that every inventory entry was produced and applies final modes: files first,

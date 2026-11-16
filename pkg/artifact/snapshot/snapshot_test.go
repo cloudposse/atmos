@@ -315,6 +315,35 @@ func TestCapture_CancellationRemovesStaging(t *testing.T) {
 	assertEmptyDir(t, staging)
 }
 
+// Cancellation and deadline errors carry the packaging sentinel and keep the context error in the chain,
+// whether the context ended before capture began or while it ran.
+func TestCapture_CancellationIsClassifiedAndKeepsItsCause(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "a.txt", "a", 0o644)
+	fixtures.WriteFile(t, src, "b.txt", "b", 0o644)
+
+	t.Run("canceled before capture", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := snapshot.Capture(ctx, src, snapshot.WithStagingRoot(t.TempDir()))
+		require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+	t.Run("canceled during capture", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		_, err := snapshot.Capture(ctx, src, snapshot.WithStagingRoot(t.TempDir()), snapshot.WithCaptureHook(func(string) { cancel() }))
+		require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+	t.Run("deadline exceeded", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		_, err := snapshot.Capture(ctx, src, snapshot.WithStagingRoot(t.TempDir()))
+		require.ErrorIs(t, err, errUtils.ErrArtifactPackagingInvalid)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+}
+
 func TestSnapshot_CloseRemovesStagingAndIsIdempotent(t *testing.T) {
 	src := t.TempDir()
 	fixtures.WriteFile(t, src, "a.txt", "a", 0o644)

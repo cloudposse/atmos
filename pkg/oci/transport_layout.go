@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/errdef"
@@ -189,7 +190,32 @@ func (l *Layout) Resolve(ctx context.Context, reference string) (ocispec.Descrip
 	defer perf.Track(nil, "oci.Layout.Resolve")()
 
 	resolved, err := l.store.Resolve(ctx, reference)
-	return resolved, layoutError(err)
+	if err != nil {
+		return resolved, layoutError(err)
+	}
+	if !l.persisted(reference, resolved.Digest) {
+		// The resolver is updated before index.json is written, so a failed write leaves a tag that
+		// resolves now and disappears when the layout is reopened. Never report such a tag as published.
+		return ocispec.Descriptor{}, layoutError(errdef.ErrNotFound)
+	}
+	return resolved, nil
+}
+
+// persisted reports whether a reference is backed by index.json. A digest reference always is, because
+// it names content, not a tag; a named reference is only when the persisted index lists it for the
+// digest it resolved to.
+func (l *Layout) persisted(reference string, resolved digest.Digest) bool {
+	if _, err := digest.Parse(reference); err == nil {
+		return true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := range l.index {
+		if l.index[i].Annotations[ocispec.AnnotationRefName] == reference && l.index[i].Digest == resolved {
+			return true
+		}
+	}
+	return false
 }
 
 // Predecessors lists manifests in the layout that reference the node.
@@ -222,7 +248,49 @@ func (l *Layout) Tag(ctx context.Context, desc ocispec.Descriptor, reference str
 	named.Annotations = make(map[string]string, len(desc.Annotations)+1)
 	maps.Copy(named.Annotations, desc.Annotations)
 	named.Annotations[ocispec.AnnotationRefName] = reference
-	return l.commitIndex(withReference(slices.Clone(l.index), named))
+	displaced, moved := displacedByReference(l.index, reference, desc.Digest)
+	entries := withReference(slices.Clone(l.index), named)
+	if moved {
+		var err error
+		if entries, err = l.keepDisplacedAttachment(ctx, entries, displaced); err != nil {
+			return err
+		}
+	}
+	return l.commitIndex(entries)
+}
+
+// displacedByReference returns the root that reference names when it points at a different digest than
+// the one about to be tagged: moving the tag replaces that root's entry in index.json.
+func displacedByReference(entries []ocispec.Descriptor, reference string, tagged digest.Digest) (ocispec.Descriptor, bool) {
+	for i := range entries {
+		if entries[i].Annotations[ocispec.AnnotationRefName] == reference && entries[i].Digest != tagged {
+			return entries[i], true
+		}
+	}
+	return ocispec.Descriptor{}, false
+}
+
+// keepDisplacedAttachment lists a root that lost its tag as an unnamed root when it is an attachment,
+// a manifest with a subject. Without its own entry the manifest would no longer be reachable from
+// index.json, and reopening the layout would lose it as a referrer of its subject. A manifest without
+// a subject, or one that is still listed, needs nothing.
+func (l *Layout) keepDisplacedAttachment(ctx context.Context, entries []ocispec.Descriptor, displaced ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	if displaced.MediaType != ocispec.MediaTypeImageManifest && displaced.MediaType != ocispec.MediaTypeImageIndex {
+		return entries, nil
+	}
+	for i := range entries {
+		if entries[i].Digest == displaced.Digest {
+			return entries, nil
+		}
+	}
+	subject, err := readSubject(ctx, l.store, &displaced)
+	if err != nil {
+		return nil, layoutError(err)
+	}
+	if subject == nil {
+		return entries, nil
+	}
+	return append(entries, ocispec.Descriptor{MediaType: displaced.MediaType, Digest: displaced.Digest, Size: displaced.Size}), nil
 }
 
 func withReference(entries []ocispec.Descriptor, named ocispec.Descriptor) []ocispec.Descriptor {

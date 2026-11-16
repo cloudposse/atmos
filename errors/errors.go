@@ -2129,6 +2129,10 @@ var (
 	// reconciled: the completed reference could not be proven to hold, or to lack, the expected content.
 	ErrArtifactPublicationAmbiguous = errors.New("artifact publication outcome is ambiguous")
 
+	// ErrSymlinkLoop is returned when resolving a path follows more symlinks than the bound allows, which
+	// means the links form a loop.
+	ErrSymlinkLoop = errors.New("symlink loop")
+
 	// ErrArtifactStreamFailed is returned when reading or closing an artifact stream fails. The
 	// underlying I/O error is wrapped alongside it for diagnostics.
 	ErrArtifactStreamFailed = errors.New("artifact stream failed")

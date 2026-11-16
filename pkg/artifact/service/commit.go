@@ -97,8 +97,11 @@ func (s *Service) commit(ctx context.Context, pub *publication) (err error) {
 	}
 	s.event(ctx, pub, PhaseLocked, 0, nil)
 	defer func() {
-		_ = locks.release(ctx, pub.op)
-		s.event(ctx, pub, PhaseReleased, 0, nil)
+		// A failed release already raised its recovery warning with the owner and resource; the
+		// journal must not claim the lock was released, and the committed outcome is unchanged.
+		if releaseErr := locks.release(ctx, pub.op); releaseErr == nil {
+			s.event(ctx, pub, PhaseReleased, 0, nil)
+		}
 		if err != nil {
 			s.event(ctx, pub, PhaseFailed, 0, err)
 		}

@@ -1,6 +1,7 @@
 package materialize
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -23,8 +24,15 @@ func checkLinkContainment(stage string, record *artifact.Record) error {
 		if entry.Type != artifact.EntrySymlink {
 			continue
 		}
-		resolved, reachable := linkpath.Resolve(filepath.Join(stage, filepath.FromSlash(entry.Path)))
-		if reachable && !linkpath.Within(realRoot, resolved) {
+		resolved, err := linkpath.Resolve(filepath.Join(stage, filepath.FromSlash(entry.Path)))
+		switch {
+		case errors.Is(err, errUtils.ErrSymlinkLoop):
+			// A loop never reaches a path outside the root, so it is not an escape.
+			continue
+		case err != nil:
+			// Any other failure leaves the target unknown, and an unknown target cannot be shown to stay inside.
+			return fmt.Errorf("%w: symlink %q cannot be resolved: %w", errUtils.ErrArtifactUnsafePath, entry.Path, err)
+		case !linkpath.Within(realRoot, resolved):
 			return fmt.Errorf("%w: symlink %q resolves outside the package", errUtils.ErrArtifactUnsafePath, entry.Path)
 		}
 	}
