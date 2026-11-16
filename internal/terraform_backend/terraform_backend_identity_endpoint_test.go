@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -155,6 +156,7 @@ func TestGCSAuthOptions(t *testing.T) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	identity := func(g *schema.GCPAuthContext) *schema.AuthContext { return &schema.AuthContext{GCP: g} }
 	credsFile := filepath.Join(t.TempDir(), "target-credentials.json")
+	refreshableFile := writeGCSCredsFile(t, `{"type":"service_account"}`)
 
 	tests := []struct {
 		name        string
@@ -181,9 +183,9 @@ func TestGCSAuthOptions(t *testing.T) {
 			want:        gcp.AuthOptions{AccessToken: "target-token"},
 		},
 		{
-			name:        "expired identity token falls back to the identity credentials file",
-			authContext: identity(&schema.GCPAuthContext{AccessToken: "stale", TokenExpiry: now.Add(-time.Minute), CredentialsFile: credsFile}),
-			want:        gcp.AuthOptions{Credentials: credsFile},
+			name:        "expired identity token falls back to a refreshable credentials file",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "stale", TokenExpiry: now.Add(-time.Minute), CredentialsFile: refreshableFile}),
+			want:        gcp.AuthOptions{Credentials: refreshableFile},
 		},
 		{
 			name:        "identity credentials file is used without a token",
@@ -198,6 +200,56 @@ func TestGCSAuthOptions(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// writeGCSCredsFile writes a credentials file with the given JSON content and returns its path.
+func writeGCSCredsFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "creds.json")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
+}
+
+// TestGCSAuthOptions_ExpiredTokenWithUnrefreshableCredentialsFileFails verifies an expired token
+// is an error when the credentials file only replays that token, and that refreshable files are kept.
+func TestGCSAuthOptions_ExpiredTokenWithUnrefreshableCredentialsFileFails(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	expired := func(file string) *schema.AuthContext {
+		return &schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "stale", TokenExpiry: now.Add(-time.Minute), CredentialsFile: file}}
+	}
+
+	tests := []struct {
+		name    string
+		file    string
+		wantErr bool
+	}{
+		{name: "authorized_user with only an access token", file: writeGCSCredsFile(t, `{"type":"authorized_user","access_token":"stale","client_id":"c","client_secret":"s"}`), wantErr: true},
+		{name: "missing file", file: filepath.Join(t.TempDir(), "missing.json"), wantErr: true},
+		{name: "malformed file", file: writeGCSCredsFile(t, `not json`), wantErr: true},
+		{name: "authorized_user with a refresh token", file: writeGCSCredsFile(t, `{"type":"authorized_user","refresh_token":"r"}`)},
+		{name: "service account key", file: writeGCSCredsFile(t, `{"type":"service_account"}`)},
+		{name: "external account", file: writeGCSCredsFile(t, `{"type":"external_account"}`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := gcsAuthOptions("", expired(tt.file), now)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrGCSIdentityTokenExpired)
+				assert.Equal(t, gcp.AuthOptions{}, opts)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, gcp.AuthOptions{Credentials: tt.file}, opts)
+		})
+	}
+
+	t.Run("valid token is unaffected by an unrefreshable file", func(t *testing.T) {
+		file := writeGCSCredsFile(t, `{"type":"authorized_user","access_token":"t"}`)
+		ac := &schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "t", TokenExpiry: now.Add(time.Hour), CredentialsFile: file}}
+		opts, err := gcsAuthOptions("", ac, now)
+		require.NoError(t, err)
+		assert.Equal(t, gcp.AuthOptions{AccessToken: "t", TokenExpiry: now.Add(time.Hour)}, opts)
+	})
 }
 
 // TestGCSAuthOptions_ExpiredTokenWithoutCredentialsFileFails verifies an expired identity token

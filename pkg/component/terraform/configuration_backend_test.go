@@ -186,3 +186,32 @@ func TestRetainedFileFailuresUseStaticErrors(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
+
+// A sensitive file that its entry removes is absent at apply by design, and restoring it succeeds
+// while the digest still binds the reviewed state: a different reviewed digest, a file that
+// reappears, or a missing file under any other policy is rejected.
+func TestRestoreSensitiveContentAcceptsRemovedFiles(t *testing.T) {
+	for _, policy := range []string{"remove", "remove_terragrunt"} {
+		t.Run(policy, func(t *testing.T) {
+			directory := t.TempDir()
+			files := []schema.ComponentConfigurationFile{{Path: "secret.auto.tfvars", Sensitive: true, IfExists: policy}}
+			reviewed, err := sensitiveDigest(directory, files)
+			require.NoError(t, err)
+			require.NoError(t, restoreSensitiveContent(directory, files, reviewed))
+			require.Nil(t, files[0].Content)
+
+			require.ErrorIs(t, restoreSensitiveContent(directory, files, "different"), errUtils.ErrPlanVerificationFailed)
+
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "secret.auto.tfvars"), []byte("token=1"), 0o600))
+			require.ErrorIs(t, restoreSensitiveContent(directory, files, reviewed), errUtils.ErrPlanVerificationFailed, "a file that appeared after review changes the digest")
+		})
+	}
+
+	directory := t.TempDir()
+	files := []schema.ComponentConfigurationFile{{Path: "secret.auto.tfvars", Sensitive: true, IfExists: "overwrite"}}
+	reviewed, err := sensitiveDigest(directory, files)
+	require.NoError(t, err)
+	err = restoreSensitiveContent(directory, files, reviewed)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}

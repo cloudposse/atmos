@@ -341,6 +341,13 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
+	// The engine that produced the plan is the one observed around the subprocess, not the one present now.
+	if snapshot.engineDigest != "" {
+		if snapshot.engineDigest != engineDigest {
+			return nil, fmt.Errorf("%w: engine changed after Terraform ran", errUtils.ErrPlanVerificationFailed)
+		}
+		engineDigest = snapshot.engineDigest
+	}
 	backendDigest, err := backendIdentityDigest(execCtx.preparedConfiguration.Backend)
 	if err != nil {
 		return nil, err

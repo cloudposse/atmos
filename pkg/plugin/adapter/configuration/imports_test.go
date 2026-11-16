@@ -630,3 +630,71 @@ func TestImportedDependencyUsesItsPreparedStateInTheImportingStack(t *testing.T)
 		})
 	}
 }
+
+// An output dependency whose target was evaluated by a separate import is still checked: the
+// dependent's state under its own environment must equal the target's prepared state. A target that
+// no import evaluated has no state evidence and is skipped.
+func TestDependencyPreparedStateIsComparedAcrossSeparateImports(t *testing.T) {
+	stateAt := func(path string) *pluginv1.ComponentStateIdentity {
+		backend, err := adapter.EncodeObject(map[string]any{"path": path})
+		require.NoError(t, err)
+		return &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, Workspace: "default", WorkingDirectory: "/work"}
+	}
+	for _, test := range []struct {
+		name      string
+		imports   []string
+		dependent *pluginv1.ComponentStateIdentity
+		want      error
+	}{
+		{name: "matches prepared dependency", imports: []string{"network", "app"}, dependent: stateAt("network.tfstate")},
+		{name: "differs from prepared dependency", imports: []string{"network", "app"}, dependent: stateAt("other.tfstate"), want: errUtils.ErrPluginInvalidConfig},
+		{name: "unimported target is skipped", imports: []string{"app"}, dependent: stateAt("other.tfstate")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+			network, app := unit(t, "network"), unit(t, "app")
+			app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+				require.Len(t, request.Imports, 1)
+				if request.Imports[0] == "terragrunt://live/network" {
+					return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network}}, nil
+				}
+				return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{app}}, nil
+			}).AnyTimes()
+			resolved := 0
+			provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+				resolved++
+				require.Equal(t, "dependent", request.Invocation.Environment["IDENTITY"], "a prepared dependency must not be re-resolved")
+				return &pluginv1.ResolveComponentStateResponse{State: test.dependent}, nil
+			}).AnyTimes()
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: stateAt("network.tfstate")}, nil).AnyTimes()
+			config := importOnlyConfig(t)
+			directories(t, config.BasePathAbsolute, "live/network")
+			session, err := New(t.Context(), config, "apply", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			for _, name := range test.imports {
+				_, _, err = session.ImportComponents(t.Context(), "terragrunt://live/"+name)
+				require.NoError(t, err)
+			}
+			info := func(component string, unit *pluginv1.DiscoveredComponent, identity string) *schema.ConfigAndStacksInfo {
+				return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: component, SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": unit.Source}}, SanitizedEnv: []string{"IDENTITY=" + identity}}
+			}
+			if len(test.imports) > 1 {
+				_, err = session.Prepare(t.Context(), info("network", network, "network"))
+				require.NoError(t, err)
+			}
+			_, err = session.Prepare(t.Context(), info("app", app, "dependent"))
+			if test.want != nil {
+				require.ErrorIs(t, err, test.want)
+				return
+			}
+			require.NoError(t, err)
+			if len(test.imports) == 1 {
+				require.Zero(t, resolved, "a target no import evaluated has no state to compare")
+			}
+		})
+	}
+}

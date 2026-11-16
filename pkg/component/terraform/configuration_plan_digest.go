@@ -181,6 +181,10 @@ type planSnapshot struct {
 	// sensitiveDigest binds the bytes of every sensitive generated file, including files the working
 	// directory digest excludes, such as those below a Terragrunt cache.
 	sensitiveDigest string
+	// engineDigest is the digest of the Terraform executable observed around the subprocess, so a hook
+	// that replaces the binary afterwards cannot move the binding onto the replacement. It is empty when
+	// the executable could not be read, and the binding then falls back to its own observation.
+	engineDigest string
 	// planDigest is the digest of the plan file Terraform wrote, taken before any after hook runs. It is
 	// empty when no digest was observed, and it is not part of the before-and-after comparison.
 	planDigest string
@@ -228,7 +232,8 @@ func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, in
 	if err != nil {
 		return nil, err
 	}
-	return &planSnapshot{path: path, identity: identity, workingDigest: digest, rebuildDigest: rebuild, lockDigest: lock, modules: hasDownloadedModules(execCtx.workingDir), sensitiveDigest: sensitive}, nil
+	engineDigest, _ := fileDigest(info.Command)
+	return &planSnapshot{path: path, identity: identity, workingDigest: digest, rebuildDigest: rebuild, lockDigest: lock, modules: hasDownloadedModules(execCtx.workingDir), sensitiveDigest: sensitive, engineDigest: engineDigest}, nil
 }
 
 // around wraps one run of the Terraform subprocess. The configuration must be the same before and

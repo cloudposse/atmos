@@ -149,3 +149,69 @@ func TestInputWatchesKeepSymlinkTargetsInsideTheProject(t *testing.T) {
 	require.NotContains(t, result.Files, link)
 	require.NotContains(t, result.Files, outsideOnly)
 }
+
+// A directory passed to read_terragrunt_config selects its default configuration, so the directory
+// is watched rather than recorded as a file, while a file path stays a file watch.
+func TestInputWatchesResolveDirectoryConfigurationReads(t *testing.T) {
+	root := t.TempDir()
+	fs := afero.NewMemMapFs()
+	require.NoError(t, fs.MkdirAll(filepath.Join(root, "shared"), 0o700))
+	unit := filepath.Join(root, "terragrunt.hcl")
+	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { common = read_terragrunt_config("shared") }`), 0o600))
+	require.NoError(t, afero.WriteFile(fs, filepath.Join(root, "shared", "terragrunt.hcl"), []byte(`inputs = { nested = read_terragrunt_config("../other.hcl") }`), 0o600))
+	result := &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Equal(t, []string{filepath.Join(root, "shared")}, result.Folders)
+	require.NotContains(t, result.Files, filepath.Join(root, "shared"), "a directory is not a file watch")
+	require.Contains(t, result.Files, filepath.Join(root, "other.hcl"), "the default configuration in the directory is followed")
+
+	// A path that is not a directory stays a file watch without widening to a folder.
+	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { common = read_terragrunt_config("shared/terragrunt.hcl") }`), 0o600))
+	result = &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Empty(t, result.Folders)
+	require.Contains(t, result.Files, filepath.Join(root, "shared", "terragrunt.hcl"))
+}
+
+// Includes in a configuration read through inputs are followed in the including file's scope, and an
+// include that cannot be resolved widens the watch instead of hiding included reads.
+func TestInputWatchesFollowIncludesOfConfigurationReads(t *testing.T) {
+	root := t.TempDir()
+	fs := afero.NewMemMapFs()
+	require.NoError(t, fs.MkdirAll(filepath.Join(root, "shared", "base"), 0o700))
+	unit := filepath.Join(root, "terragrunt.hcl")
+	write := func(path, contents string) {
+		t.Helper()
+		require.NoError(t, afero.WriteFile(fs, path, []byte(contents), 0o600))
+	}
+	write(unit, `inputs = { common = read_terragrunt_config("shared/common.hcl") }`)
+	write(filepath.Join(root, "shared", "common.hcl"), `include "base" { path = "base/base.hcl" }`)
+	write(filepath.Join(root, "shared", "base", "base.hcl"), `inputs = {
+  local  = file("local.json")
+  scoped = file("${get_terragrunt_dir()}/scoped.json")
+}`)
+	result := &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	for _, path := range []string{
+		filepath.Join(root, "shared", "base", "base.hcl"),
+		filepath.Join(root, "shared", "base", "local.json"),
+		filepath.Join(root, "shared", "scoped.json"),
+	} {
+		require.Contains(t, result.Files, path)
+	}
+	require.NotContains(t, result.Files, filepath.Join(root, "shared", "base", "scoped.json"), "the included file evaluates in the including scope")
+	require.Empty(t, result.Folders, "a resolvable include does not widen the watch")
+
+	for name, include := range map[string]string{
+		"unresolved path": `include "base" { path = get_env("BASE") }`,
+		"missing path":    `include "base" {}`,
+		"json include":    `include "base" { path = "base.hcl.json" }`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			write(filepath.Join(root, "shared", "common.hcl"), include)
+			result := &model.Resolution{Files: []string{unit}}
+			require.NoError(t, trackInputSources(fs, root, result))
+			require.Equal(t, []string{root}, result.Folders)
+		})
+	}
+}
