@@ -319,3 +319,31 @@ func TestReadSubjectSkipsLongStringsAndFindsSubject(t *testing.T) {
 		})
 	}
 }
+
+func TestReadSubjectVerifiesTheWholeBodyBeforeAcceptingEitherResult(t *testing.T) {
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	declared := `{"subject":` + subject + `,"annotations":{"k":"v"}}`
+	tampered := `{"subject":` + subject + `,"annotations":{"k":"w"}}`
+	tests := []struct {
+		name string
+		desc ocispec.Descriptor
+		body string
+	}{
+		{"subject found early but the tail is tampered", Descriptor(ocispec.MediaTypeImageManifest, []byte(declared)), tampered},
+		{"subject found early but the body is longer", Descriptor(ocispec.MediaTypeImageManifest, []byte(declared)), declared + " "},
+		{"no subject and the digest differs", Descriptor(ocispec.MediaTypeImageManifest, []byte(`{"a":1}`)), `{"a":2}`},
+		{"no subject and the body is shorter than declared", ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: digest.FromString(`{"a":1}   `), Size: 10}, `{"a":1}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := NewMockStore(ctrl)
+			store.EXPECT().Fetch(gomock.Any(), tc.desc).Return(io.NopCloser(strings.NewReader(tc.body)), nil)
+
+			got, err := readSubject(t.Context(), store, &tc.desc)
+
+			require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+			assert.Nil(t, got)
+		})
+	}
+}

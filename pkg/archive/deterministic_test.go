@@ -204,3 +204,26 @@ func TestWriteDeterministic_PropagatesWriterFailures(t *testing.T) {
 		})
 	}
 }
+
+var errTestSourceClose = errors.New("source close failed")
+
+type closeFailReader struct {
+	io.Reader
+}
+
+func (closeFailReader) Close() error { return errTestSourceClose }
+
+func TestWriteDeterministic_SurfacesSourceCloseFailure(t *testing.T) {
+	for _, format := range []string{FormatTar, FormatZip} {
+		t.Run(format, func(t *testing.T) {
+			member := Member{
+				Path: "a", Kind: MemberFile, Size: 2,
+				Open: func() (io.ReadCloser, error) { return closeFailReader{strings.NewReader("ab")}, nil },
+			}
+			err := WriteDeterministic(io.Discard, format, []Member{member})
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrArchiveWriteFailed)
+			assert.ErrorIs(t, err, errTestSourceClose)
+		})
+	}
+}

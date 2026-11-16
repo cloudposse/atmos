@@ -232,3 +232,33 @@ func TestFillTar_ClassifiesACorruptGzipTrailer(t *testing.T) {
 
 	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
 }
+
+// The context never cancels here: the metadata budget alone must stop a run of PAX headers that
+// outgrows it, before Next returns a visible member.
+func TestFillTar_BoundsSuccessiveMetadataHeaders(t *testing.T) {
+	body := []byte("payload")
+	tests := []struct {
+		name    string
+		headers int
+		wantErr bool
+	}{
+		{"headers within the budget", 100, false},
+		{"headers beyond the budget", 2000, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data := successivePaxTar(t, tc.headers, "file.txt", body)
+			target, _ := newTestTree(t, "file.txt", body)
+			checker := &managedChecker{documents: map[string]artifact.Document{}, seen: map[string]bool{}}
+
+			err := fillTar(t.Context(), target, bytes.NewReader(data), false, checker)
+
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrArtifactTooLarge)
+			assert.NotErrorIs(t, err, context.Canceled)
+		})
+	}
+}

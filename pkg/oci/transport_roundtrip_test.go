@@ -268,6 +268,36 @@ func TestLayoutHoldsSeveralReferencesWithoutWeakeningLoadIndex(t *testing.T) {
 	assert.Equal(t, []string{"plugin-1.2.3", "two-platform"}, reopened.References())
 }
 
+func TestLayoutMovingATagOntoAnUnnamedRootLeavesASingleEntry(t *testing.T) {
+	ctx := t.Context()
+	twoPlatformDirectory, twoPlatformDigest := twoPlatformLayout(t)
+	releaseStore, err := oci.OpenLayoutReadOnly(ctx, pluginFixtureDirectory())
+	require.NoError(t, err)
+	otherStore, err := oci.OpenLayoutReadOnly(ctx, twoPlatformDirectory)
+	require.NoError(t, err)
+
+	directory := filepath.Join(t.TempDir(), "layout")
+	layout, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	_, err = oci.Copy(ctx, oci.Source{Store: releaseStore, Reference: pluginReleaseIndexDigest}, oci.Destination{Store: layout, Reference: "release"})
+	require.NoError(t, err)
+	// The second index is listed as an unnamed root first, then the tag moves onto it.
+	_, err = oci.Copy(ctx, oci.Source{Store: otherStore, Reference: twoPlatformDigest}, oci.Destination{Store: layout, Reference: twoPlatformDigest})
+	require.NoError(t, err)
+	moved, err := otherStore.Resolve(ctx, twoPlatformDigest)
+	require.NoError(t, err)
+	require.NoError(t, layout.Tag(ctx, moved, "release"))
+
+	index, err := oci.LoadIndex(directory, twoPlatformDigest)
+	require.NoError(t, err, "the moved tag leaves exactly one root entry")
+	require.NotNil(t, index)
+
+	server, client := authenticatedRegistry(t, "secret")
+	ref, err := name.NewTag(server.Host + "/acme/plugin:moved")
+	require.NoError(t, err)
+	require.NoError(t, oci.ImportIndex(ctx, client, directory, ref))
+}
+
 // TestLegacyWriteIndexPublishesTheExistingReleaseBytes proves the bridge serializes a legacy
 // index's raw bytes: publishing the committed plugin release through the old Registry API must yield
 // byte-identical blobs and the pinned digest, never a rebuilt release.

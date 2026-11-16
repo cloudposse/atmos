@@ -744,3 +744,48 @@ func TestMaterialize_TrailingSeparatorDestination(t *testing.T) {
 		assertNoScratch(t, existing)
 	})
 }
+
+func TestInspectDestination_EmptyRecordMatchesAnEmptyDestination(t *testing.T) {
+	p := prepared(t, t.TempDir(), artifact.PackagingNone)
+	require.Empty(t, p.Record.Inventory, "the sealed Record is empty")
+	out := dest(t)
+
+	require.NoError(t, materialize.Materialize(context.Background(), contentOf(t, p), out))
+	state, err := materialize.InspectDestination(out, &p.Record)
+
+	require.NoError(t, err)
+	assert.Equal(t, materialize.DestinationMatches, state, "a repeat pull of an empty Record is recognized as a match")
+
+	fixtures.WriteFile(t, out, "stray.txt", "x", 0o644)
+	state, err = materialize.InspectDestination(out, &p.Record)
+	require.NoError(t, err)
+	assert.Equal(t, materialize.DestinationDiffers, state, "content under an empty Record is a difference")
+}
+
+func TestInspectDestination_AllowsAnUnrecordedAncestorDirectory(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "sub/a.txt", "a", 0o644)
+	p := prepared(t, src, artifact.PackagingNone)
+	record := p.Record
+	record.Inventory = nil
+	for _, entry := range p.Record.Inventory {
+		if entry.Type != artifact.EntryDirectory {
+			record.Inventory = append(record.Inventory, entry)
+		}
+	}
+	require.Len(t, record.Inventory, 1, "the inventory names the file but not its directory")
+
+	root := t.TempDir()
+	matching := filepath.Join(root, "matching")
+	fixtures.WriteFile(t, matching, "sub/a.txt", "a", 0o644)
+	state, err := materialize.InspectDestination(matching, &record)
+	require.NoError(t, err)
+	assert.Equal(t, materialize.DestinationMatches, state, "a directory that only holds recorded entries is not a difference")
+
+	unrelated := filepath.Join(root, "unrelated")
+	fixtures.WriteFile(t, unrelated, "sub/a.txt", "a", 0o644)
+	require.NoError(t, os.Mkdir(filepath.Join(unrelated, "other"), 0o755))
+	state, err = materialize.InspectDestination(unrelated, &record)
+	require.NoError(t, err)
+	assert.Equal(t, materialize.DestinationDiffers, state, "an unrelated extra directory is still a difference")
+}

@@ -409,6 +409,9 @@ func unsupportedSigner(t *testing.T) artifact.Signer {
 	return signer
 }
 
+// leakCheckTimeout bounds the second acquisition so a leaked claim fails the test instead of hanging it.
+const leakCheckTimeout = 5 * time.Second
+
 func (c *conformance) lock(t *testing.T) {
 	repo := c.h.New(t)
 	ctx := context.Background()
@@ -443,7 +446,9 @@ func (c *conformance) lock(t *testing.T) {
 		// Such a claim is left for deliberate operator recovery, so leak-freedom is not promised.
 		return
 	}
-	again, err := repo.Lock(ctx, second)
+	retry, retryCancel := context.WithTimeout(ctx, leakCheckTimeout)
+	defer retryCancel()
+	again, err := repo.Lock(retry, second)
 	require.NoError(t, err, "a canceled acquisition leaked no ownership")
 	require.NoError(t, again.Release(ctx))
 }

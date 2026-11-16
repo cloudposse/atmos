@@ -215,7 +215,7 @@ func writeZipMember(zw *zip.Writer, member *Member) error {
 
 // copyMemberContent copies exactly member.Size bytes and fails if the source is shorter or longer,
 // so an archive never describes bytes other than the ones it carries.
-func copyMemberContent(dst io.Writer, member *Member) error {
+func copyMemberContent(dst io.Writer, member *Member) (err error) {
 	if member.Open == nil {
 		return memberError(member.Path, errUtils.ErrArchiveWriteFailed)
 	}
@@ -223,7 +223,12 @@ func copyMemberContent(dst io.Writer, member *Member) error {
 	if err != nil {
 		return writeFailedError(member.Path, err)
 	}
-	defer src.Close()
+	// A failed close can mean the source did not verify, so it is kept alongside any copy error.
+	defer func() {
+		if closeErr := src.Close(); closeErr != nil {
+			err = errors.Join(err, writeFailedError(member.Path, closeErr))
+		}
+	}()
 
 	written, err := io.Copy(dst, io.LimitReader(src, member.Size))
 	if err != nil {

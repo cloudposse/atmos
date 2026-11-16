@@ -307,7 +307,10 @@ func withReference(entries []ocispec.Descriptor, named ocispec.Descriptor) []oci
 	for i := range entries {
 		if entries[i].Annotations[ocispec.AnnotationRefName] == reference {
 			entries[i] = named
-			return entries
+			// An unnamed root for the same index would leave two entries for it, so the tag takes its place.
+			return slices.DeleteFunc(entries, func(entry ocispec.Descriptor) bool {
+				return entry.Digest == named.Digest && entry.Annotations[ocispec.AnnotationRefName] == ""
+			})
 		}
 	}
 	for i := range entries {

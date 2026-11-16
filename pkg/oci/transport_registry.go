@@ -223,8 +223,8 @@ func (s *registryStore) Tag(ctx context.Context, desc ocispec.Descriptor, refere
 }
 
 func (s *registryStore) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-	found, err := s.repo.Predecessors(ctx, node)
-	return found, wrapRegistry(err)
+	// Referrers applies the 400/406 tag-schema fallback, so discovery works without a prior Referrers call.
+	return s.Referrers(ctx, node, "")
 }
 
 func (s *registryStore) Tags(ctx context.Context) ([]string, error) {
@@ -248,7 +248,17 @@ func (s *registryStore) Delete(ctx context.Context, target ocispec.Descriptor) e
 	if target.MediaType == "" {
 		return wrapRegistry(s.repo.Manifests().Delete(ctx, target))
 	}
-	return wrapRegistry(s.repo.Delete(ctx, target))
+	err := s.repo.Delete(ctx, target)
+	if err != nil && referrersProbeUnavailable(err) {
+		// Deleting an attachment first probes the referrers API to decide whether the tag-schema index needs
+		// updating. A 400 or 406 on that probe fails the call before any DELETE is sent, so settling the
+		// capability as unsupported and calling again never repeats a DELETE. If the capability was already
+		// settled the first answer stands.
+		if capabilityErr := s.repo.SetReferrersCapability(false); capabilityErr == nil {
+			err = s.repo.Delete(ctx, target)
+		}
+	}
+	return wrapRegistry(err)
 }
 
 func (s *registryStore) Referrers(ctx context.Context, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error) {
@@ -284,6 +294,16 @@ func referrersAPIUnavailable(err error) bool {
 		return false
 	}
 	return response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusNotAcceptable
+}
+
+// referrersProbeUnavailable reports whether err is a referrers API answer of 400 or 406 to a read of the
+// referrers endpoint. A response to any other request, a DELETE included, never qualifies.
+func referrersProbeUnavailable(err error) bool {
+	var response *errcode.ErrorResponse
+	if !errors.As(err, &response) || !referrersAPIUnavailable(err) {
+		return false
+	}
+	return response.Method == http.MethodGet && response.URL != nil && strings.Contains(response.URL.Path, "/referrers/")
 }
 
 var (

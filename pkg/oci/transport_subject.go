@@ -10,9 +10,11 @@ import (
 	"io"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // maxManifestKeyBytes bounds how much of an object key the subject scan retains. A longer key can
@@ -20,24 +22,78 @@ import (
 const maxManifestKeyBytes = 64
 
 // readSubject streams a stored manifest or index and returns its subject, or nil when it has none.
-// The blob was digest-verified when it was pushed, so the scan is bounded by the descriptor size
-// and keeps constant memory: every other top-level field, including arbitrarily long strings, is
-// skipped byte by byte without being buffered. A large manifest without a subject is therefore
-// never rejected.
+// The scan is bounded by the descriptor size and the whole body is verified against its size and
+// digest before any result is returned. It keeps constant memory: every other top-level field,
+// including arbitrarily long strings, is skipped byte by byte without being buffered. A large
+// manifest without a subject is therefore never rejected.
 func readSubject(ctx context.Context, store Fetcher, desc *ocispec.Descriptor) (*ocispec.Descriptor, error) {
 	if desc.Size < 0 {
 		return nil, errUtils.ErrOCIIntegrity
+	}
+	if err := desc.Digest.Validate(); err != nil {
+		return nil, wrapIntegrity(err)
 	}
 	reader, err := store.Fetch(ctx, *desc)
 	if err != nil {
 		return nil, err
 	}
 	defer reader.Close()
-	scanner := bufio.NewReader(io.LimitReader(reader, desc.Size))
+	check := &bodyCheck{verifier: desc.Digest.Verifier()}
+	scanner := bufio.NewReader(io.TeeReader(io.LimitReader(reader, desc.Size), check))
 	if err := expectByte(scanner, '{'); err != nil {
 		return nil, integrityError(err)
 	}
-	return scanForSubject(scanner)
+	subject, err := scanForSubject(scanner)
+	if err != nil {
+		return nil, err
+	}
+	// The scan may stop at the subject or at the closing brace; either way the rest of the body is read
+	// so the size and digest cover every byte before the result is trusted.
+	if _, err := io.Copy(io.Discard, scanner); err != nil {
+		return nil, integrityError(err)
+	}
+	if err := check.finish(reader, desc.Size); err != nil {
+		return nil, err
+	}
+	return subject, nil
+}
+
+// bodyCheck accumulates the size and digest of the bytes a scan consumed.
+type bodyCheck struct {
+	verifier digest.Verifier
+	size     int64
+}
+
+func (b *bodyCheck) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "oci.bodyCheck.Write")()
+
+	b.size += int64(len(p))
+	return b.verifier.Write(p)
+}
+
+// finish reports an integrity failure unless exactly want bytes were read, nothing follows them in
+// source, and they match the descriptor digest.
+func (b *bodyCheck) finish(source io.Reader, want int64) error {
+	if b.size != want {
+		return fmt.Errorf("%w: the manifest has %d bytes but %d were declared", errUtils.ErrOCIIntegrity, b.size, want)
+	}
+	var extra [1]byte
+	for {
+		n, err := source.Read(extra[:])
+		if n > 0 {
+			return fmt.Errorf("%w: the manifest is longer than the declared %d bytes", errUtils.ErrOCIIntegrity, want)
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return integrityError(err)
+		}
+	}
+	if !b.verifier.Verified() {
+		return fmt.Errorf("%w: the manifest does not match its digest", errUtils.ErrOCIIntegrity)
+	}
+	return nil
 }
 
 // scanForSubject reads the members of a manifest object, after its opening brace, until it finds

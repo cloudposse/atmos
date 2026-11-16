@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 
@@ -73,6 +74,10 @@ func InspectDestination(dest string, record *artifact.Record) (DestinationState,
 		return DestinationDiffers, fmt.Errorf("%w: destination %q: %w", errUtils.ErrArtifactPackagingInvalid, dest, err)
 	}
 	if len(children) == 0 {
+		// An empty Record is satisfied by an empty directory, so a repeat pull of it is a match.
+		if len(record.Inventory) == 0 {
+			return DestinationMatches, nil
+		}
 		return DestinationEmpty, nil
 	}
 	if treeMatches(dest, record) {
@@ -89,6 +94,7 @@ func treeMatches(dir string, record *artifact.Record) bool {
 	for _, entry := range record.Inventory {
 		want[entry.Path] = entry
 	}
+	ancestors := requiredAncestors(want)
 	matched := 0
 	walkErr := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -101,14 +107,33 @@ func treeMatches(dir string, record *artifact.Record) bool {
 		if err != nil {
 			return err
 		}
-		entry, ok := want[filepath.ToSlash(relative)]
-		if !ok || !entryMatches(p, d, &entry) {
+		key := filepath.ToSlash(relative)
+		entry, ok := want[key]
+		if !ok {
+			// A directory the inventory does not record is still required when an entry lives under it.
+			if d.IsDir() && ancestors[key] {
+				return nil
+			}
+			return errMismatch
+		}
+		if !entryMatches(p, d, &entry) {
 			return errMismatch
 		}
 		matched++
 		return nil
 	})
 	return walkErr == nil && matched == len(want)
+}
+
+// requiredAncestors returns the directories that hold at least one inventory entry.
+func requiredAncestors(want map[string]artifact.Entry) map[string]bool {
+	ancestors := make(map[string]bool)
+	for name := range want {
+		for dir := path.Dir(name); dir != "." && dir != "/" && !ancestors[dir]; dir = path.Dir(dir) {
+			ancestors[dir] = true
+		}
+	}
+	return ancestors
 }
 
 func entryMatches(p string, d fs.DirEntry, entry *artifact.Entry) bool {

@@ -19,6 +19,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Names of the distribution members generated inside a packaged representation.
@@ -37,6 +38,11 @@ const (
 
 	// The chunk size of context-aware copies.
 	copyChunkSize = 32 * 1024
+
+	// The most decompressed bytes one call to the tar reader's Next may consume before it returns a
+	// visible member. Successive local PAX headers are consumed inside a single call, so this bounds
+	// the metadata a hostile archive can make the extractor read without producing a member.
+	maxTarMetadataBytes = 1 << 20
 )
 
 // fillArchive extracts the single payload stream of a tar, tgz, or zip representation.
@@ -77,12 +83,15 @@ func fillTar(ctx context.Context, t *tree, reader io.Reader, gzipped bool, check
 		defer gz.Close()
 		reader = contextReader{ctx: ctx, reader: gz}
 	}
-	tr := tar.NewReader(reader)
+	budget := &metadataBudget{reader: reader}
+	tr := tar.NewReader(budget)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		budget.arm(maxTarMetadataBytes)
 		header, err := tr.Next()
+		budget.disarm()
 		if errors.Is(err, io.EOF) {
 			// Drain so the verifying payload reader checks its full digest at end of stream.
 			if _, err = copyContext(ctx, io.Discard, reader); err != nil {
@@ -97,6 +106,40 @@ func fillTar(ctx context.Context, t *tree, reader io.Reader, gzipped bool, check
 			return err
 		}
 	}
+}
+
+// metadataBudget bounds the bytes read while it is armed. The tar reader is armed only inside Next, so
+// member bodies, which are bounded by their own declared sizes, do not count against it.
+type metadataBudget struct {
+	reader    io.Reader
+	remaining int64
+	armed     bool
+}
+
+func (b *metadataBudget) arm(limit int64) {
+	b.remaining = limit
+	b.armed = true
+}
+
+func (b *metadataBudget) disarm() {
+	b.armed = false
+}
+
+func (b *metadataBudget) Read(p []byte) (int, error) {
+	defer perf.Track(nil, "materialize.metadataBudget.Read")()
+
+	if !b.armed {
+		return b.reader.Read(p)
+	}
+	if b.remaining <= 0 {
+		return 0, fmt.Errorf("%w: tar metadata exceeds %d bytes before a member", errUtils.ErrArtifactTooLarge, int64(maxTarMetadataBytes))
+	}
+	if int64(len(p)) > b.remaining {
+		p = p[:b.remaining]
+	}
+	n, err := b.reader.Read(p)
+	b.remaining -= int64(n)
+	return n, err
 }
 
 // archiveReadError reports a failed archive read. A canceled context is returned as such, because

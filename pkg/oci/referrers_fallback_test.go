@@ -6,11 +6,14 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -136,4 +139,87 @@ func TestReferrersKeepOtherStatusesAsErrors(t *testing.T) {
 	_, err = store.Referrers(t.Context(), oci.Descriptor(ocispec.MediaTypeImageManifest, []byte("x")), "")
 
 	require.Error(t, err)
+}
+
+// Predecessor discovery during an extended copy uses the same fallback as Referrers, so a registry that
+// answers the referrers API with 400 still yields its attachments without a prior Referrers call.
+func TestExtendedCopyDiscoversAttachmentsThroughTheReferrersFallback(t *testing.T) {
+	var refuse atomic.Bool
+	backing := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if refuse.Load() && strings.Contains(r.URL.Path, "/referrers/") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		backing.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := registryClient(t, host, nil)
+	store, err := client.Repository(t.Context(), oci.Repository{Registry: host, Path: "acme/plugin"})
+	require.NoError(t, err)
+	subject, attachment := pushAttachment(t, store)
+	require.NoError(t, store.Tag(t.Context(), subject, "1.0.0"))
+	refuse.Store(true)
+	fresh, err := client.Repository(t.Context(), oci.Repository{Registry: host, Path: "acme/plugin"})
+	require.NoError(t, err)
+	layout, err := oci.OpenLayout(t.Context(), filepath.Join(t.TempDir(), "layout"))
+	require.NoError(t, err)
+
+	_, err = oci.ExtendedCopy(t.Context(), oci.GraphSource{Store: fresh, Reference: "1.0.0"}, oci.Destination{Store: layout, Reference: "1.0.0"})
+
+	require.NoError(t, err)
+	copied, err := layout.Exists(t.Context(), attachment)
+	require.NoError(t, err)
+	assert.True(t, copied, "the attachment was discovered through the tag-schema fallback")
+}
+
+// Deleting an attachment needs the registry's referrers capability to keep the tag-schema index current.
+// A 400 on the capability probe settles it through the fallback; the DELETE itself is sent exactly once.
+func TestDeleteAttachmentSettlesTheReferrersCapabilityThroughTheFallback(t *testing.T) {
+	// The registry first answers the referrers API with 404, so pushes maintain the tag-schema index, and
+	// then with 400, the way a registry that rejects the endpoint does.
+	var referrersStatus atomic.Int32
+	referrersStatus.Store(http.StatusNotFound)
+	var mu sync.Mutex
+	var deletes []string
+	backing := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/referrers/") {
+			w.WriteHeader(int(referrersStatus.Load()))
+			return
+		}
+		if r.Method == http.MethodDelete {
+			mu.Lock()
+			deletes = append(deletes, r.URL.Path)
+			mu.Unlock()
+		}
+		backing.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "http://")
+	client := registryClient(t, host, nil)
+	store, err := client.Repository(t.Context(), oci.Repository{Registry: host, Path: "acme/plugin"})
+	require.NoError(t, err)
+	_, attachment := pushAttachment(t, store)
+	referrersStatus.Store(http.StatusBadRequest)
+	ref, err := name.NewDigest(host + "/acme/plugin@" + attachment.Digest.String())
+	require.NoError(t, err)
+
+	require.NoError(t, client.Delete(t.Context(), ref))
+
+	mu.Lock()
+	defer mu.Unlock()
+	attachmentDeletes := 0
+	for _, deleted := range deletes {
+		if strings.HasSuffix(deleted, "/manifests/"+attachment.Digest.String()) {
+			attachmentDeletes++
+		}
+	}
+	assert.Equal(t, 1, attachmentDeletes, "the DELETE of the attachment is sent exactly once")
+	fresh, err := client.Repository(t.Context(), oci.Repository{Registry: host, Path: "acme/plugin"})
+	require.NoError(t, err)
+	exists, err := fresh.Exists(t.Context(), attachment)
+	require.NoError(t, err)
+	assert.False(t, exists, "the attachment is deleted")
 }
