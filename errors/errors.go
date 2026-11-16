@@ -316,7 +316,7 @@ var (
 	ErrS3BucketAccessDenied      = errors.New("access denied to S3 bucket")
 	ErrInvalidSSECustomerKey     = errors.New("invalid SSE-C customer encryption key")
 	ErrCreateGCSClient           = errors.New("failed to create GCS client")
-	ErrGCSIdentityTokenExpired   = errors.New("GCP identity access token is expired and the identity has no credentials file to refresh it")
+	ErrGCSIdentityTokenExpired   = errors.New("GCP identity access token is expired and the identity has no credentials file that can refresh it")
 	ErrGetObjectFromGCS          = errors.New("failed to get object from GCS")
 	ErrReadGCSObjectBody         = errors.New("failed to read GCS object body")
 	ErrGCSBucketRequired         = errors.New("bucket is required for gcs backend")
