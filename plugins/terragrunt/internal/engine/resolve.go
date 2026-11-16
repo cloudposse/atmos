@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
@@ -268,7 +271,9 @@ func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.
 // decoding has no section for that attribute, but the working directory (and so
 // every relative local-state path) depends on it. The extra parse skips
 // dependency output resolution (an unknown placeholder replaces every
-// dependency), so backend reads still never read outputs.
+// dependency), so backend reads still never read outputs, and it reads every
+// configuration file without its top-level inputs attribute so unrelated input
+// expressions, such as command calls, are never evaluated.
 func withDownloadDir(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*config.TerragruntConfig, error) {
 	if request.Environment["TG_DOWNLOAD_DIR"] != "" || !mentionsDownloadDir(environment.FS, append(pctx.FilesRead.Paths(), path)) {
 		return cfg, nil
@@ -276,7 +281,8 @@ func withDownloadDir(ctx context.Context, logger log.Logger, environment *atmosb
 	placeholder := cty.DynamicVal
 	probe := pctx.WithSkipOutputsResolution()
 	probe.DecodedDependencies = &placeholder
-	full, err := config.ParseConfigFile(ctx, logger, environment, probe, path, nil)
+	// Fresh caches keep the stripped files apart from the partial parse's cached ones.
+	full, err := config.ParseConfigFile(config.WithCaches(ctx), logger, environment.WithFS(withoutInputsFS{Fs: environment.FS}), probe, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +300,50 @@ func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
 		}
 	}
 	return false
+}
+
+// withoutInputsFS serves HCL configuration files without their top-level inputs
+// attribute. Reading download_dir needs the locals, includes and functions that
+// attribute might use, but never the inputs themselves.
+type withoutInputsFS struct {
+	afero.Fs
+}
+
+// Open reads through OpenFile so every read path strips inputs.
+func (f withoutInputsFS) Open(name string) (afero.File, error) {
+	return f.OpenFile(name, os.O_RDONLY, 0)
+}
+
+// OpenFile returns the stripped content for read-only opens of HCL files.
+func (f withoutInputsFS) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
+	file, err := f.Fs.OpenFile(name, flag, perm)
+	if err != nil || flag != os.O_RDONLY || !strings.HasSuffix(name, ".hcl") {
+		return file, err
+	}
+	if info, err := file.Stat(); err != nil || info.IsDir() {
+		return file, nil
+	}
+	data, err := io.ReadAll(file)
+	_ = file.Close()
+	if err != nil {
+		return nil, err
+	}
+	memory := afero.NewMemMapFs()
+	if err := afero.WriteFile(memory, name, withoutInputs(name, data), 0o644); err != nil {
+		return nil, err
+	}
+	return memory.Open(name)
+}
+
+// withoutInputs removes the top-level inputs attribute. Content that does not
+// parse is returned unchanged so upstream reports its own syntax errors.
+func withoutInputs(name string, data []byte) []byte {
+	file, diags := hclwrite.ParseConfig(data, name, hcl.InitialPos)
+	if diags.HasErrors() {
+		return data
+	}
+	file.Body().RemoveAttribute("inputs")
+	return file.Bytes()
 }
 
 // unitResolution converts the parsed unit into its module identity. Local sources

@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -138,8 +140,10 @@ func getCachedGCSClient(backend *map[string]any, authContext *schema.AuthContext
 // gcsAuthOptions selects the credentials the GCS reader authenticates with. Explicit backend
 // credentials win. Otherwise the target identity's unexpired access token is used, then its
 // credentials file, so a state read uses the target's credentials instead of the ambient ones.
-// Nothing is read from or written to the process environment. An expired identity token with no
-// credentials file to fall back on is an error, so the read never runs as the ambient identity.
+// Nothing is read from or written to the process environment. An expired identity token is an
+// error unless the credentials file can mint a new token on its own (service account key,
+// external account, or a refresh token), so the read never runs as the ambient identity or with
+// a file that only replays the expired token.
 func gcsAuthOptions(credentials string, authContext *schema.AuthContext, now time.Time) (gcp.AuthOptions, error) {
 	opts := gcp.AuthOptions{Credentials: credentials}
 	if credentials != "" || authContext == nil || authContext.GCP == nil {
@@ -151,12 +155,36 @@ func gcsAuthOptions(credentials string, authContext *schema.AuthContext, now tim
 			opts.AccessToken, opts.TokenExpiry = identity.AccessToken, identity.TokenExpiry
 			return opts, nil
 		}
-		if identity.CredentialsFile == "" {
+		if !gcsCredentialsFileCanRefresh(identity.CredentialsFile) {
 			return gcp.AuthOptions{}, fmt.Errorf("%w: expired at %s", errUtils.ErrGCSIdentityTokenExpired, identity.TokenExpiry.Format(time.RFC3339))
 		}
 	}
 	opts.Credentials = identity.CredentialsFile
 	return opts, nil
+}
+
+// gcsCredentialsFileCanRefresh reports whether the credentials file can obtain a fresh access
+// token without the identity's stored one. An unreadable or unrecognized file cannot.
+func gcsCredentialsFileCanRefresh(path string) bool {
+	if path == "" {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var content struct {
+		Type         string `json:"type"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.Unmarshal(data, &content); err != nil {
+		return false
+	}
+	switch content.Type {
+	case "service_account", "external_account", "impersonated_service_account":
+		return true
+	}
+	return content.RefreshToken != ""
 }
 
 // gcsClientCacheKey builds a deterministic cache key. Credentials and tokens are hashed so no
