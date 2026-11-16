@@ -41,7 +41,7 @@ func pluginFixtureDirectory() string {
 // that can only present that identity.
 func authenticatedRegistry(t *testing.T, password string) (*ocitest.Server, *oci.Client) {
 	t.Helper()
-	server := ocitest.NewServer(t, &ocitest.Credential{Username: "publisher", Password: password})
+	server := ocitest.NewServerWithoutReferrers(t, &ocitest.Credential{Username: "publisher", Password: password})
 	store, err := keyring.New(keyring.Config{Type: keyring.TypeMemory})
 	require.NoError(t, err)
 	chain := oci.CredentialKeychain{Store: store}

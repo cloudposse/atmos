@@ -162,7 +162,10 @@ func TestCheckLinkContainment_ResolutionFailures(t *testing.T) {
 		links   map[string]string
 		wantErr bool
 	}{
-		{name: "through a regular file", links: map[string]string{"bad": "file.txt/child"}, wantErr: true},
+		// Capture accepts a link whose target runs through a regular file while its recorded path stays inside
+		// the tree, so materialization accepts it too; one that leaves the tree is rejected.
+		{name: "through a regular file, inside the tree", links: map[string]string{"dangling": "file.txt/child"}},
+		{name: "through a regular file, leaving the tree", links: map[string]string{"bad": "file.txt/../../outside"}, wantErr: true},
 		{name: "loop", links: map[string]string{"a": "b", "b": "a"}},
 		{name: "inside the root", links: map[string]string{"ok": "file.txt"}},
 	}
@@ -173,7 +176,7 @@ func TestCheckLinkContainment_ResolutionFailures(t *testing.T) {
 			record := &artifact.Record{}
 			for name, target := range tt.links {
 				require.NoError(t, os.Symlink(target, filepath.Join(stage, name)))
-				record.Inventory = append(record.Inventory, artifact.Entry{Path: name, Type: artifact.EntrySymlink})
+				record.Inventory = append(record.Inventory, artifact.Entry{Path: name, Type: artifact.EntrySymlink, Target: target})
 			}
 			err := checkLinkContainment(stage, record)
 			if tt.wantErr {

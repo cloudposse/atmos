@@ -136,7 +136,8 @@ func (c *Client) Tags(ctx context.Context, repo name.Repository) ([]string, erro
 
 // WriteImage uploads an image and its blobs, preserving the image's existing raw bytes.
 // Rejected writes never retry anonymously, and an unknown outcome is reconciled by
-// resolving the destination rather than writing again.
+// resolving the destination rather than writing again. Only OCI and Docker schema 2 images
+// are supported: a schema 1 image is refused with an integrity error before any layer is read.
 func (c *Client) WriteImage(ctx context.Context, ref name.Reference, img v1.Image) error {
 	defer perf.Track(c.config, "oci.Client.WriteImage")()
 

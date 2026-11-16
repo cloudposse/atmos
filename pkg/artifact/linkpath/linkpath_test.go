@@ -47,7 +47,7 @@ func TestResolve(t *testing.T) {
 		{"missing path is lexical", filepath.Join(root, "tree", "absent", "..", "other"), filepath.Join(root, "tree", "other"), nil},
 		{"missing tail returns to physical resolution", filepath.Join(root, "tree", "missing-return"), filepath.Join(filepath.Dir(root), "outside"), nil},
 		{"loop", filepath.Join(root, "tree", "loop-a"), "", errUtils.ErrSymlinkLoop},
-		{"through a regular file", filepath.Join(root, "tree", "real", "file.txt", "child"), "", errUtils.ErrArtifactUnsafePath},
+		{"through a regular file", filepath.Join(root, "tree", "real", "file.txt", "child"), "", errUtils.ErrPathThroughNonDirectory},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

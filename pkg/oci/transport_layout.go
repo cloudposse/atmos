@@ -51,14 +51,21 @@ var (
 func OpenLayout(ctx context.Context, directory string) (*Layout, error) {
 	defer perf.Track(nil, "oci.OpenLayout")()
 
-	store, err := oci.NewWithContext(ctx, directory)
+	// Resolve the root once and give the same absolute path to the store and the layout: the store
+	// anchors itself, so a relative root here would let a later working-directory change send index
+	// commits to a different directory than the blobs.
+	root, err := filepath.Abs(directory)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrOCILayout, err)
+	}
+	store, err := oci.NewWithContext(ctx, root)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrOCILayout, err)
 	}
 	// The ORAS store would otherwise list every pushed manifest in index.json.
 	store.AutoSaveIndex = false
 	store.AutoGC = false
-	layout := &Layout{root: filepath.Clean(directory), store: store}
+	layout := &Layout{root: root, store: store}
 	if err := layout.loadIndex(); err != nil {
 		return nil, err
 	}
@@ -189,11 +196,15 @@ func (l *Layout) recordRootLocked(desc ocispec.Descriptor) error {
 func (l *Layout) Resolve(ctx context.Context, reference string) (ocispec.Descriptor, error) {
 	defer perf.Track(nil, "oci.Layout.Resolve")()
 
+	// The resolver and the committed index are observed under one lock, so a concurrent Tag cannot move the
+	// reference between the two reads and make an existing tag look unpersisted.
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	resolved, err := l.store.Resolve(ctx, reference)
 	if err != nil {
 		return resolved, layoutError(err)
 	}
-	if !l.persisted(reference, resolved.Digest) {
+	if !l.persistedLocked(reference, resolved.Digest) {
 		// The resolver is updated before index.json is written, so a failed write leaves a tag that
 		// resolves now and disappears when the layout is reopened. Never report such a tag as published.
 		return ocispec.Descriptor{}, layoutError(errdef.ErrNotFound)
@@ -201,15 +212,13 @@ func (l *Layout) Resolve(ctx context.Context, reference string) (ocispec.Descrip
 	return resolved, nil
 }
 
-// persisted reports whether a reference is backed by index.json. A digest reference always is, because
-// it names content, not a tag; a named reference is only when the persisted index lists it for the
-// digest it resolved to.
-func (l *Layout) persisted(reference string, resolved digest.Digest) bool {
+// persistedLocked reports whether a reference is backed by index.json. A digest reference always is,
+// because it names content, not a tag; a named reference is only when the persisted index lists it for
+// the digest it resolved to. The caller holds l.mu.
+func (l *Layout) persistedLocked(reference string, resolved digest.Digest) bool {
 	if _, err := digest.Parse(reference); err == nil {
 		return true
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	for i := range l.index {
 		if l.index[i].Annotations[ocispec.AnnotationRefName] == reference && l.index[i].Digest == resolved {
 			return true

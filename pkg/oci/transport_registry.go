@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
+	"oras.land/oras-go/v2/registry/remote/errcode"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -123,18 +125,34 @@ func credentialFrom(authenticator authn.Authenticator) (auth.Credential, error) 
 		RefreshToken: config.IdentityToken,
 		AccessToken:  config.RegistryToken,
 	}
-	if config.Auth != "" && credential.Username == "" && credential.Password == "" {
-		decoded, err := base64.StdEncoding.DecodeString(config.Auth)
-		if err != nil {
-			return auth.EmptyCredential, wrapRegistry(err)
+	// An encoded Auth fills whichever of the username and password is missing, the way the registry
+	// transport does; a username or password given explicitly keeps its value.
+	if config.Auth != "" && (credential.Username == "" || credential.Password == "") {
+		if err := fillFromEncodedAuth(&credential, config.Auth); err != nil {
+			return auth.EmptyCredential, err
 		}
-		user, password, found := strings.Cut(string(decoded), ":")
-		if !found {
-			return auth.EmptyCredential, errUtils.ErrOCIRegistry
-		}
-		credential.Username, credential.Password = user, password
 	}
 	return credential, nil
+}
+
+// fillFromEncodedAuth decodes a base64 "user:password" value and fills the username and password the
+// credential does not already carry.
+func fillFromEncodedAuth(credential *auth.Credential, encoded string) error {
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return wrapRegistry(err)
+	}
+	user, password, found := strings.Cut(string(decoded), ":")
+	if !found {
+		return errUtils.ErrOCIRegistry
+	}
+	if credential.Username == "" {
+		credential.Username = user
+	}
+	if credential.Password == "" {
+		credential.Password = password
+	}
+	return nil
 }
 
 // registryTransport retries only idempotent reads. Mutations are sent exactly once;
@@ -234,15 +252,38 @@ func (s *registryStore) Delete(ctx context.Context, target ocispec.Descriptor) e
 }
 
 func (s *registryStore) Referrers(ctx context.Context, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error) {
+	found, err := s.listReferrers(ctx, subject, artifactType)
+	if err != nil && referrersAPIUnavailable(err) {
+		// The registry answered the referrers API with 400 or 406 instead of 404: the API is not available
+		// there. Mark it unsupported, which switches this repository to the tag schema, and list again. If the
+		// capability was already settled the first answer stands.
+		if capabilityErr := s.repo.SetReferrersCapability(false); capabilityErr == nil {
+			found, err = s.listReferrers(ctx, subject, artifactType)
+		}
+	}
+	if err != nil {
+		return nil, wrapRegistry(err)
+	}
+	return found, nil
+}
+
+func (s *registryStore) listReferrers(ctx context.Context, subject ocispec.Descriptor, artifactType string) ([]ocispec.Descriptor, error) {
 	var found []ocispec.Descriptor
 	err := s.repo.Referrers(ctx, subject, artifactType, func(page []ocispec.Descriptor) error {
 		found = append(found, page...)
 		return nil
 	})
-	if err != nil {
-		return nil, wrapRegistry(err)
+	return found, err
+}
+
+// referrersAPIUnavailable reports whether err is a registry response that says the referrers API is not
+// available: 400 Bad Request or 406 Not Acceptable. Every other error, including other statuses, is a failure.
+func referrersAPIUnavailable(err error) bool {
+	var response *errcode.ErrorResponse
+	if !errors.As(err, &response) {
+		return false
 	}
-	return found, nil
+	return response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusNotAcceptable
 }
 
 var (

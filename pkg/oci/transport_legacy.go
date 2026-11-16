@@ -13,6 +13,7 @@ import (
 	"slices"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/partial"
 	"github.com/google/go-containerregistry/pkg/v1/stream"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/opencontainers/go-digest"
@@ -148,14 +149,19 @@ func (g *legacyGraph) addBytes(mediaType string, raw []byte) ocispec.Descriptor 
 }
 
 func (g *legacyGraph) addImage(ctx context.Context, image v1.Image) (ocispec.Descriptor, error) {
+	mediaType, err := image.MediaType()
+	if err != nil {
+		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	// A schema 1 manifest has no config or layer descriptors in the shape this graph serves, so it is
+	// refused up front instead of failing later in Manifest() or after its layers were already read.
+	if mediaType == types.DockerManifestSchema1 || mediaType == types.DockerManifestSchema1Signed {
+		return ocispec.Descriptor{}, fmt.Errorf("%w: schema 1 images are not supported; convert the image to OCI or Docker schema 2", errUtils.ErrOCIIntegrity)
+	}
 	if err := g.spoolStreamingLayers(ctx, image); err != nil {
 		return ocispec.Descriptor{}, err
 	}
 	raw, err := image.RawManifest()
-	if err != nil {
-		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
-	}
-	mediaType, err := image.MediaType()
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
 	}
@@ -189,9 +195,31 @@ func (g *legacyGraph) addImage(ctx context.Context, image v1.Image) (ocispec.Des
 
 // addIndex records an index and, once per distinct index digest, every child below it. Cancellation
 // is checked before each accessor call and child, so a canceled write stops preparing the graph.
+//
+// A child can be an image with a streaming layer, whose digest, and so the index manifest that lists
+// it, exists only after the stream was read once. The children are therefore prepared first, through
+// [partial.Manifests], which evaluates them lazily, and the index manifest is read afterwards. An index
+// whose manifest is already computable is recognized beforehand, so a shared subgraph is traversed once.
 func (g *legacyGraph) addIndex(ctx context.Context, index v1.ImageIndex) (ocispec.Descriptor, error) {
 	if err := ctx.Err(); err != nil {
 		return ocispec.Descriptor{}, err
+	}
+	if raw, err := index.RawManifest(); err == nil {
+		if done, found := g.indexes[digest.FromBytes(raw)]; found {
+			return done, nil
+		}
+	}
+	children, err := partial.Manifests(index)
+	if err != nil {
+		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	for _, child := range children {
+		if err := ctx.Err(); err != nil {
+			return ocispec.Descriptor{}, err
+		}
+		if err := g.addChild(ctx, child); err != nil {
+			return ocispec.Descriptor{}, err
+		}
 	}
 	raw, err := index.RawManifest()
 	if err != nil {
@@ -204,47 +232,50 @@ func (g *legacyGraph) addIndex(ctx context.Context, index v1.ImageIndex) (ocispe
 	if done, found := g.indexes[digest.FromBytes(raw)]; found {
 		return done, nil
 	}
-	if err := ctx.Err(); err != nil {
-		return ocispec.Descriptor{}, err
-	}
-	manifest, err := index.IndexManifest()
-	if err != nil {
-		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
-	}
-	for i := range manifest.Manifests {
-		if err := ctx.Err(); err != nil {
-			return ocispec.Descriptor{}, err
-		}
-		if err := g.addChild(ctx, index, &manifest.Manifests[i]); err != nil {
-			return ocispec.Descriptor{}, err
-		}
-	}
 	// The index is marked complete only after every child was added successfully.
 	desc := g.addBytes(string(mediaType), raw)
 	g.indexes[desc.Digest] = desc
 	return desc, nil
 }
 
-// addChild records one child manifest or nested index of a legacy index.
-func (g *legacyGraph) addChild(ctx context.Context, index v1.ImageIndex, child *v1.Descriptor) error {
-	switch {
-	case child.MediaType.IsIndex():
-		nested, err := index.ImageIndex(child.Digest)
-		if err != nil {
-			return errors.Join(errUtils.ErrOCIIntegrity, err)
-		}
-		_, err = g.addIndex(ctx, nested)
+// addChild records one child of a legacy index: an image, a nested index, or a layer that is a blob in
+// its own right.
+func (g *legacyGraph) addChild(ctx context.Context, child partial.Describable) error {
+	switch typed := child.(type) {
+	case v1.ImageIndex:
+		_, err := g.addIndex(ctx, typed)
 		return err
-	case child.MediaType.IsImage():
-		nested, err := index.Image(child.Digest)
-		if err != nil {
-			return errors.Join(errUtils.ErrOCIIntegrity, err)
-		}
-		_, err = g.addImage(ctx, nested)
+	case v1.Image:
+		_, err := g.addImage(ctx, typed)
 		return err
+	case v1.Layer:
+		return g.addLayer(ctx, typed)
 	default:
-		return fmt.Errorf("%w: unsupported child media type %q", errUtils.ErrOCIIntegrity, child.MediaType)
+		mediaType, _ := child.MediaType()
+		return fmt.Errorf("%w: unsupported child media type %q", errUtils.ErrOCIIntegrity, mediaType)
 	}
+}
+
+// addLayer serves a layer that an index lists as a child. A streaming layer is spooled first, because
+// its digest exists only after it was read.
+func (g *legacyGraph) addLayer(ctx context.Context, layer v1.Layer) error {
+	hash, err := layer.Digest()
+	if errors.Is(err, stream.ErrNotComputed) {
+		if err := g.spoolLayer(ctx, layer); err != nil {
+			return err
+		}
+		hash, err = layer.Digest()
+	}
+	if err != nil {
+		return errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	key := digest.Digest(hash.String())
+	if path, found := g.spooled[key]; found {
+		g.blobs[key] = func() (io.ReadCloser, error) { return os.Open(path) }
+		return nil
+	}
+	g.blobs[key] = layer.Compressed
+	return nil
 }
 
 // Fetch streams a known blob.

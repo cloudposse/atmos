@@ -19,6 +19,12 @@ func checkLinkContainment(stage string, record *artifact.Record) error {
 	if err != nil {
 		return fmt.Errorf("%w: resolve staging root: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
+	recorded := make(map[string]string)
+	for index := range record.Inventory {
+		if entry := &record.Inventory[index]; entry.Type == artifact.EntrySymlink {
+			recorded[entry.Path] = entry.Target
+		}
+	}
 	for index := range record.Inventory {
 		entry := &record.Inventory[index]
 		if entry.Type != artifact.EntrySymlink {
@@ -28,6 +34,14 @@ func checkLinkContainment(stage string, record *artifact.Record) error {
 		switch {
 		case errors.Is(err, errUtils.ErrSymlinkLoop):
 			// A loop never reaches a path outside the root, so it is not an escape.
+			continue
+		case errors.Is(err, errUtils.ErrPathThroughNonDirectory):
+			// The target runs through a regular file, so it can never resolve to anything. Capture accepts
+			// such a link when its recorded path stays inside the tree, and so does materialization: the
+			// same lexical check, over the recorded links, decides.
+			if linkpath.Escapes(recorded, entry.Path) {
+				return fmt.Errorf("%w: symlink %q resolves outside the package", errUtils.ErrArtifactUnsafePath, entry.Path)
+			}
 			continue
 		case err != nil:
 			// Any other failure leaves the target unknown, and an unknown target cannot be shown to stay inside.

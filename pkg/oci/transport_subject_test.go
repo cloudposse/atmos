@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -150,6 +151,69 @@ func TestResolveDoesNotTrustATagThatWasNotPersisted(t *testing.T) {
 	resolved, err := layout.Resolve(ctx, root.Digest.String())
 	require.NoError(t, err, "a digest reference still resolves")
 	assert.Equal(t, root.Digest, resolved.Digest)
+}
+
+// A relative layout root is anchored when the layout is opened: changing the working directory afterwards
+// must not send index commits to a different directory than the one holding the blobs.
+func TestOpenLayoutAnchorsARelativeRoot(t *testing.T) {
+	ctx := t.Context()
+	base := t.TempDir()
+	other := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(other, "layout"), 0o755))
+	t.Chdir(base)
+	layout, err := oci.OpenLayout(ctx, "layout")
+	require.NoError(t, err)
+	root := pushSubjectManifest(t, layout, nil, "root")
+
+	t.Chdir(other)
+	require.NoError(t, layout.Tag(ctx, root, "1.0.0"))
+
+	assert.Contains(t, layoutRoots(t, filepath.Join(base, "layout")), root.Digest.String(), "the tag landed in the layout that was opened")
+	_, err = os.Stat(filepath.Join(other, "layout", "index.json"))
+	assert.ErrorIs(t, err, os.ErrNotExist, "an unrelated layout in the new working directory is untouched")
+}
+
+// A reference that exists throughout a concurrent Tag keeps resolving: the resolver and the committed index
+// are read under one lock, so the tag moving between two digests never looks unpersisted.
+func TestResolveIsAtomicWithConcurrentTags(t *testing.T) {
+	ctx := t.Context()
+	layout, err := oci.OpenLayout(ctx, filepath.Join(t.TempDir(), "layout"))
+	require.NoError(t, err)
+	first := pushSubjectManifest(t, layout, nil, "first")
+	second := pushSubjectManifest(t, layout, nil, "second")
+	require.NoError(t, layout.Tag(ctx, first, "moving"))
+
+	const rounds = 300
+	var wg sync.WaitGroup
+	failures := make(chan error, rounds)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := range rounds {
+			target := first
+			if i%2 == 0 {
+				target = second
+			}
+			if err := layout.Tag(ctx, target, "moving"); err != nil {
+				failures <- err
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range rounds {
+			if _, err := layout.Resolve(ctx, "moving"); err != nil {
+				failures <- err
+				return
+			}
+		}
+	}()
+	wg.Wait()
+	close(failures)
+	for err := range failures {
+		require.NoError(t, err)
+	}
 }
 
 func TestExtendedCopyWithoutSubjectTraversalKeepsTheSelectedRootAndItsReferrers(t *testing.T) {

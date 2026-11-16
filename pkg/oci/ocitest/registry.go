@@ -164,8 +164,8 @@ type Server struct {
 	server *httptest.Server
 }
 
-// NewServer starts an empty in-process OCI registry (OCI 1.1 referrers included). When
-// credential is non-nil, every request must carry exactly that Basic identity; any other
+// NewServer starts an empty in-process OCI registry with the native OCI 1.1 referrers API enabled.
+// When credential is non-nil, every request must carry exactly that Basic identity; any other
 // request receives a 401 challenge, so a client that downgraded to anonymous or reused
 // another registry's credentials fails visibly.
 func NewServer(t *testing.T, credential *Credential) *Server {
@@ -173,7 +173,23 @@ func NewServer(t *testing.T, credential *Credential) *Server {
 
 	t.Helper()
 
-	handler := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	return newServer(t, credential, true)
+}
+
+// NewServerWithoutReferrers is NewServer for a registry without the OCI 1.1 referrers API, so attachment
+// discovery has to use the referrers tag-schema fallback. Use it for fallback-only tests.
+func NewServerWithoutReferrers(t *testing.T, credential *Credential) *Server {
+	defer perf.Track(nil, "ocitest.NewServerWithoutReferrers")()
+
+	t.Helper()
+
+	return newServer(t, credential, false)
+}
+
+func newServer(t *testing.T, credential *Credential, referrers bool) *Server {
+	t.Helper()
+
+	handler := registry.New(registry.Logger(log.New(io.Discard, "", 0)), registry.WithReferrersSupport(referrers))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if credential != nil {
 			user, password, ok := r.BasicAuth()

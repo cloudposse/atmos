@@ -21,6 +21,9 @@ import (
 func (r *Repository) Resolve(_ context.Context, ref artifact.Ref) (artifact.PinnedReference, error) {
 	defer perf.Track(nil, "artifacttest.Repository.Resolve")()
 
+	if err := r.requireRead("resolve"); err != nil {
+		return artifact.PinnedReference{}, err
+	}
 	pinned, err := r.resolve(ref)
 	r.mu.Lock()
 	hook := r.opts.OnResolved
@@ -65,6 +68,9 @@ func (r *Repository) Inspect(_ context.Context, pinned artifact.PinnedReference)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.count("Inspect")
+	if err := r.requireRead("inspect"); err != nil {
+		return nil, err
+	}
 	s, ok := r.records[pinned.RecordDigest]
 	if !ok {
 		return nil, fmt.Errorf("%w: record %s", errUtils.ErrArtifactNotFound, pinned.RecordDigest)
@@ -88,6 +94,9 @@ func (r *Repository) OpenDocument(_ context.Context, pinned artifact.PinnedRefer
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.count("OpenDocument")
+	if err := r.requireRead("open-document"); err != nil {
+		return nil, err
+	}
 	s, ok := r.records[pinned.RecordDigest]
 	if !ok {
 		return nil, fmt.Errorf("%w: record %s", errUtils.ErrArtifactNotFound, pinned.RecordDigest)
@@ -116,6 +125,9 @@ func (r *Repository) Read(_ context.Context, pinned artifact.PinnedReference) (*
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.count("Read")
+	if err := r.requireRead("read"); err != nil {
+		return nil, err
+	}
 	s, ok := r.records[pinned.RecordDigest]
 	if !ok || !s.payloadAvailable {
 		return nil, fmt.Errorf("%w: the payload of %s is no longer available", errUtils.ErrArtifactNotFound, pinned.RecordDigest)
@@ -252,5 +264,14 @@ func (v *verifyingReader) Read(p []byte) (int, error) {
 func (v *verifyingReader) Close() error {
 	defer perf.Track(nil, "artifacttest.verifyingReader.Close")()
 
+	return nil
+}
+
+// requireRead rejects a read operation when the repository does not advertise the read capability, even
+// if writes are enabled: a write-only repository must not serve reads.
+func (r *Repository) requireRead(operation string) error {
+	if !r.caps.Read {
+		return artifact.NewUnsupportedCapability(r.opts.Alias, operation, "read", "the repository is not readable")
+	}
 	return nil
 }

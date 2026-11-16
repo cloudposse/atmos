@@ -1608,6 +1608,8 @@ var (
 	ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
 	ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
 	ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
+	ErrArtifactSigningFailed    = errors.New("failed to sign artifact")
+	ErrPathThroughNonDirectory  = errors.New("path passes through a non-directory")
 
 	// CI cache errors.
 	ErrCacheUnavailable     = errors.New("CI cache is not available in this environment")

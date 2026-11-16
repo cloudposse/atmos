@@ -165,8 +165,12 @@ func Materialize(ctx context.Context, content *artifact.Content, dest string, op
 	if dest == "" {
 		return fmt.Errorf("%w: the destination is empty", errUtils.ErrArtifactConfigInvalid)
 	}
-	// Normalize first so a trailing separator ("out/") cannot make the parent the destination itself.
-	dest = filepath.Clean(dest)
+	// Normalize first so a trailing separator ("out/") cannot make the parent the destination itself,
+	// and make the path absolute so a relative destination such as "." has a real parent directory.
+	dest, err := filepath.Abs(dest)
+	if err != nil {
+		return fmt.Errorf("%w: resolve destination: %w", errUtils.ErrArtifactPackagingInvalid, err)
+	}
 	parent := filepath.Dir(dest)
 	if err := os.MkdirAll(parent, parentDirMode); err != nil {
 		return fmt.Errorf("%w: create %q: %w", errUtils.ErrArtifactPackagingInvalid, parent, err)

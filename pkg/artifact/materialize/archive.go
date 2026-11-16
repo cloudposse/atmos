@@ -85,8 +85,10 @@ func fillTar(ctx context.Context, t *tree, reader io.Reader, gzipped bool, check
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			// Drain so the verifying payload reader checks its full digest at end of stream.
-			_, err = copyContext(ctx, io.Discard, reader)
-			return err
+			if _, err = copyContext(ctx, io.Discard, reader); err != nil {
+				return archiveReadError(ctx, "tar trailer", err)
+			}
+			return nil
 		}
 		if err != nil {
 			return archiveReadError(ctx, "tar", err)

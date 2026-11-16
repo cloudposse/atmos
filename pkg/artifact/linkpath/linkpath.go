@@ -27,8 +27,9 @@ const (
 // path is created. Parent components are applied only after the symlinks before them are resolved,
 // so "link/../x" is not collapsed to a sibling of "link".
 //
-// Resolve fails with [errUtils.ErrSymlinkLoop] when the links form a loop, and with another error
-// when the path passes through a non-directory or cannot be inspected. Callers decide separately
+// Resolve fails with [errUtils.ErrSymlinkLoop] when the links form a loop, with
+// [errUtils.ErrPathThroughNonDirectory] when the path passes through a non-directory, and with another
+// error when it cannot be inspected. Callers decide separately
 // what each failure means.
 func Resolve(target string) (string, error) {
 	defer perf.Track(nil, "linkpath.Resolve")()
@@ -139,7 +140,7 @@ func (w *walker) step() error {
 	}
 	if info.Mode()&fs.ModeSymlink == 0 {
 		if !info.IsDir() && len(w.pending) > 0 {
-			return fmt.Errorf("%w: %q is not a directory", errUtils.ErrArtifactUnsafePath, next)
+			return fmt.Errorf("%w: %w: %q is not a directory", errUtils.ErrArtifactUnsafePath, errUtils.ErrPathThroughNonDirectory, next)
 		}
 		w.resolved = next
 		return nil

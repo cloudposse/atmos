@@ -133,10 +133,11 @@ func TestRepositoryFailsClosedBeforeAnyRequest(t *testing.T) {
 // password. These shapes are accepted.
 func TestNonEmptyCredentialAcceptsSendableCredentials(t *testing.T) {
 	for name, config := range map[string]authn.AuthConfig{
-		"username and password": {Username: "identity", Password: "bound"},
-		"access token":          {RegistryToken: "token"},
-		"refresh token":         {IdentityToken: "refresh"},
-		"encoded basic":         {Auth: base64.StdEncoding.EncodeToString([]byte("identity:bound"))},
+		"username and password":      {Username: "identity", Password: "bound"},
+		"access token":               {RegistryToken: "token"},
+		"refresh token":              {IdentityToken: "refresh"},
+		"encoded basic":              {Auth: base64.StdEncoding.EncodeToString([]byte("identity:bound"))},
+		"username with encoded auth": {Username: "publisher", Auth: base64.StdEncoding.EncodeToString([]byte("publisher:secret"))},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got, err := nonEmptyCredential{Authenticator: authn.FromConfig(config)}.Authorization()

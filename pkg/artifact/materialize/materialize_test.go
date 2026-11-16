@@ -150,6 +150,30 @@ func TestMaterialize_ReplacesWithoutMergingAndStaysInsideDestination(t *testing.
 	_ = linkOK
 }
 
+// A destination of "." names the working directory, whose parent is not ".": the destination is made
+// absolute before its parent is derived, so an empty working directory is replaced without force.
+func TestMaterialize_ReplacesAnEmptyWorkingDirectoryNamedByDot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the working directory cannot be replaced while it is in use on Windows")
+	}
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "new.txt", "new", 0o644)
+	p := prepared(t, src, artifact.PackagingTgz)
+	work := filepath.Join(t.TempDir(), "work")
+	require.NoError(t, os.Mkdir(work, 0o755))
+	t.Chdir(work)
+
+	state, err := materialize.InspectDestination(".", &p.Record)
+	require.NoError(t, err)
+	require.Equal(t, materialize.DestinationEmpty, state)
+	require.NoError(t, materialize.Materialize(context.Background(), contentOf(t, p), "."))
+
+	data, err := os.ReadFile(filepath.Join(work, "new.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "new", string(data))
+	assertNoScratch(t, work)
+}
+
 func TestMaterialize_ReplacesRestrictiveDestination(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("atomic directory replacement is unavailable on Windows")

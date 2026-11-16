@@ -2,6 +2,7 @@ package artifacttest_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -342,4 +343,51 @@ func TestRepository_SignDoesNotStoreEvidenceForARecordDeletedWhileSigning(t *tes
 	assert.Empty(t, evidence)
 	assert.False(t, recordAlive(repo, pinned.RecordDigest))
 	assert.False(t, evidenceAlive(t, repo, &pinned), "no evidence may be left for a deleted record")
+}
+
+// A repository that does not advertise the read capability rejects every read entrypoint, even when
+// writes are enabled.
+func TestRepository_ReadsAreRejectedWithoutTheReadCapability(t *testing.T) {
+	caps := artifacttest.DefaultCapabilities()
+	caps.Read = false
+	repo := artifacttest.New(artifacttest.Options{Capabilities: &caps})
+	ctx := context.Background()
+
+	checks := map[string]func() error{
+		"Resolve": func() error { _, err := repo.Resolve(ctx, artifact.Ref{Name: testName, Version: "1.0.0"}); return err },
+		"Inspect": func() error { _, err := repo.Inspect(ctx, artifact.PinnedReference{}); return err },
+		"OpenDocument": func() error {
+			_, err := repo.OpenDocument(ctx, artifact.PinnedReference{}, artifact.DocumentRole("readme"))
+			return err
+		},
+		"Read": func() error { _, err := repo.Read(ctx, artifact.PinnedReference{}); return err },
+	}
+	for name, call := range checks {
+		t.Run(name, func(t *testing.T) {
+			var capability *artifact.CapabilityError
+			require.ErrorAs(t, call(), &capability)
+			assert.Equal(t, "read", capability.Capability)
+		})
+	}
+}
+
+// A failure from the signer carries the signing sentinel and keeps its cause.
+func TestRepository_SignClassifiesSignerFailures(t *testing.T) {
+	repo := artifacttest.New(artifacttest.Options{})
+	pinned := publishOne(t, repo)
+	inspection, err := repo.Inspect(context.Background(), pinned)
+	require.NoError(t, err)
+	canonical, err := inspection.Record.Canonical()
+	require.NoError(t, err)
+	subject := artifact.SignatureSubject{Kind: artifact.SubjectRecord, Digest: digest.FromBytes(canonical), MediaType: artifact.MediaTypeConfig, Size: int64(len(canonical))}
+	cause := errors.New("the signing service refused the request")
+	fake := &artifacttest.FakeSigner{Identity: "release@example.com", Issuer: "https://issuer.example.com"}
+	signer := artifact.NewMockSigner(gomock.NewController(t))
+	signer.EXPECT().Formats().Return(fake.Formats()).AnyTimes()
+	signer.EXPECT().Sign(gomock.Any(), subject).Return(nil, cause)
+
+	_, err = repo.Sign(context.Background(), subject, signer, artifact.SignOptions{OperationID: "sign-op"})
+
+	require.ErrorIs(t, err, errUtils.ErrArtifactSigningFailed)
+	assert.ErrorIs(t, err, cause)
 }

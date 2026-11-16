@@ -93,7 +93,7 @@ func (r *Repository) Sign(ctx context.Context, subject artifact.SignatureSubject
 	}
 	payload, err := signer.Sign(ctx, subject)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactSigningFailed, err)
 	}
 	if !r.caps.HasEvidenceFormat(payload.Format) {
 		return nil, artifact.NewUnsupportedCapability(r.opts.Alias, "sign", "evidence/"+string(payload.Format), "the repository cannot store this evidence format")

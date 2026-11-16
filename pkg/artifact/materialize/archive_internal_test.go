@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -208,4 +209,26 @@ func TestFillTar_CancellationInterruptsMetadataReads(t *testing.T) {
 			assert.LessOrEqual(t, reader.afterCanceled, maxAfterCanceled, "metadata reads must stop once the context is canceled")
 		})
 	}
+}
+
+// A gzip trailer that fails its checksum is only noticed while the tail of the stream is drained after
+// the last tar member; it must still be reported as an integrity failure, not as a bare gzip error.
+func TestFillTar_ClassifiesACorruptGzipTrailer(t *testing.T) {
+	body := []byte("payload")
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "file.txt", Typeflag: tar.TypeReg, Size: int64(len(body)), Mode: 0o644}))
+	_, err := tw.Write(body)
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	data := archive.Bytes()
+	data[len(data)-8] ^= 0xff // The CRC32 in the gzip trailer.
+
+	target, _ := newTestTree(t, "file.txt", body)
+	checker := &managedChecker{documents: map[string]artifact.Document{}, seen: map[string]bool{}}
+	err = fillTar(t.Context(), target, bytes.NewReader(data), true, checker)
+
+	require.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
 }
