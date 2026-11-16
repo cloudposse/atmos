@@ -148,15 +148,18 @@ func registerResponseInputs(result *pluginv1.PrepareComponentResponse) error {
 
 func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode string) error {
 	if mode != "iam-probe" {
-		// Warnings print while the response is checked, and masking covers only registered values, so the
-		// inputs of the same response are registered first. Inputs that cannot be decoded register nothing,
-		// so no warning is printed; the caller rejects those inputs.
-		if registerResponseInputs(result) != nil {
-			unregistered := proto.Clone(result).(*pluginv1.PrepareComponentResponse)
-			unregistered.Diagnostics = errorDiagnostics(unregistered.Diagnostics)
-			return checkPreparation(unregistered)
+		// The sensitive inputs are registered for masking before anything else touches the response.
+		// Warnings are not printed while the response is checked: the configuration session prints
+		// them once per invocation through its deduper, and printing them here as well would repeat
+		// every warning, on the first preparation and on each later one. Inputs that cannot be
+		// decoded register nothing, and the caller rejects those inputs.
+		if result == nil {
+			return errUtils.ErrPluginProtocol
 		}
-		return checkPreparation(result)
+		_ = registerResponseInputs(result)
+		failures := proto.Clone(result).(*pluginv1.PrepareComponentResponse)
+		failures.Diagnostics = errorDiagnostics(failures.Diagnostics)
+		return checkPreparation(failures)
 	}
 	if result == nil {
 		return errUtils.ErrPluginProtocol

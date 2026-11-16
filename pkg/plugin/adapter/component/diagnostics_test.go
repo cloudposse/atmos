@@ -233,9 +233,10 @@ func TestWarnDiagnosticShowsTheSameWarningOncePerInvocation(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(visible, "stack prod"), "%q", visible)
 }
 
-// A warning diagnostic can quote a sensitive input of the same response. Masking covers only registered
-// values, so the inputs are registered before any warning is printed.
-func TestPreparationWarningsMaskSensitiveInputsOfTheSameResponse(t *testing.T) {
+// The configuration session prints preparation warnings once through its deduper, so checking the
+// response must not print them as well. The inputs are still registered, so the session's own
+// rendering of the same response masks them.
+func TestPreparationCheckRegistersInputsAndLeavesWarningsToTheCaller(t *testing.T) {
 	captureLogs(t, charm.WarnLevel)
 	ioCtx, err := atmosio.NewContext()
 	require.NoError(t, err)
@@ -251,12 +252,26 @@ func TestPreparationWarningsMaskSensitiveInputsOfTheSameResponse(t *testing.T) {
 	warning := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "deprecated_setting", Summary: "Deprecated setting", Detail: "password warning-secret-9b2e is deprecated", UserSafe: true, Unit: "app", Stack: "dev", Severity: pluginv1.Severity_SEVERITY_WARNING}}
 	result := &pluginv1.PrepareComponentResponse{Engine: "terraform", WorkingDirectory: root, ModuleSource: "./module", State: fixtureState(root), Inputs: inputs, Diagnostics: []*pluginv1.Diagnostic{warning}}
 
-	require.NoError(t, checkPreparationResponse(result, ""))
+	// The first and every later preparation print nothing from the check.
+	for range 3 {
+		require.NoError(t, checkPreparationResponse(result, ""))
+	}
+	assert.Empty(t, ansi.Strip(output.String()), "the caller prints warnings, once")
+	assert.NotContains(t, mask("password warning-secret-9b2e is deprecated"), "warning-secret-9b2e", "the inputs were registered for masking")
 
+	// The caller's deduped print still shows the warning exactly once and masked.
+	warnings := &WarningDeduper{}
+	for range 3 {
+		WarnDiagnostic(warning, warnings)
+	}
 	visible := ansi.Strip(output.String())
-	assert.Contains(t, visible, "Deprecated setting")
-	assert.Contains(t, visible, "is deprecated")
+	assert.Equal(t, 1, strings.Count(visible, "Deprecated setting"), "%q", visible)
 	assert.NotContains(t, visible, "warning-secret-9b2e")
+
+	// An error diagnostic still fails the check, and still prints nothing by itself.
+	result.Diagnostics = append(result.Diagnostics, &pluginv1.Diagnostic{Field: "x", Message: "legacy failure"})
+	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, checkPreparationResponse(nil, ""), errUtils.ErrPluginProtocol)
 }
 
 // Inputs that cannot be decoded register nothing, so no warning of that response is printed, while the
