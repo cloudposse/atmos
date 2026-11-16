@@ -63,6 +63,8 @@ exclude = [
   "^https://github\\.com/cloudposse/atmos/security/(code-scanning|dependabot)/[0-9]+/?$",
   "slack\\.cloudposse\\.com",
   "wttr\\.in",
+  # Cursor marketplace returned HTTP/2 protocol errors twice in CI; verified 200 over HTTP/2 locally.
+  "^https://cursor\\.com/marketplace/?$",
   # GNU.org (rate limits and connection resets)
   "gnu\\.org",
   # The Linux Documentation Project (intermittent 502 Bad Gateway in CI)
