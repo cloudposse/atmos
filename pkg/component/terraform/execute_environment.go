@@ -460,11 +460,17 @@ func secretEnvForDeclaredTypes(componentSection map[string]any, secret map[strin
 	plain := make(map[string]any, len(secret))
 	var quoted []string
 	for name, value := range secret {
-		if text, isString := value.(string); isString {
-			if typeText, declared := TerraformDeclaredVarType(componentSection, name); declared && terraformParsesAsHCL(typeText) {
-				quoted = append(quoted, terraformVarEnvPrefix+name+"="+quoteHCLString(text))
-				continue
+		typeText, declared := TerraformDeclaredVarType(componentSection, name)
+		if text, isString := value.(string); isString && declared && terraformParsesAsHCL(typeText) {
+			quoted = append(quoted, terraformVarEnvPrefix+name+"="+quoteHCLString(text))
+			continue
+		}
+		if _, isString := value.(string); !isString && declared && terraformParsesAsHCL(typeText) {
+			escaped, err := escapeHCLTemplateSequences(value)
+			if err != nil {
+				return nil, fmt.Errorf("encoding secret variable %q for TF_VAR_ injection: %w", name, err)
 			}
+			value = escaped
 		}
 		plain[name] = value
 	}
@@ -491,6 +497,52 @@ func terraformParsesAsHCL(typeText string) bool {
 func quoteHCLString(text string) string {
 	encoded, _ := json.Marshal(text) //nolint:errchkjson // A string always encodes.
 	quoted := string(encoded)
-	quoted = strings.ReplaceAll(quoted, "${", "$${")
-	return strings.ReplaceAll(quoted, "%{", "%%{")
+	return escapeHCLTemplateText(quoted)
+}
+
+// escapeHCLTemplateSequences recursively escapes `${` and `%{` in every string inside a collection value, both
+// object values and object keys, so that Terraform parsing the JSON-encoded environment value as HCL keeps the
+// text literal. Scalars other than strings are returned unchanged.
+func escapeHCLTemplateSequences(value any) (any, error) {
+	switch value.(type) {
+	case nil, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		return value, nil
+	}
+	// Normalize typed maps and slices to generic JSON values so the walk sees every nested string.
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var generic any
+	if err := json.Unmarshal(encoded, &generic); err != nil {
+		return nil, err
+	}
+	return walkEscapeHCLTemplateSequences(generic), nil
+}
+
+// walkEscapeHCLTemplateSequences escapes template introducers in the strings of an already generic value.
+func walkEscapeHCLTemplateSequences(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return escapeHCLTemplateText(typed)
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, child := range typed {
+			out[escapeHCLTemplateText(key)] = walkEscapeHCLTemplateSequences(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, child := range typed {
+			out[i] = walkEscapeHCLTemplateSequences(child)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+// escapeHCLTemplateText doubles `${` and `%{` so HCL does not start a template interpolation or directive.
+func escapeHCLTemplateText(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "${", "$${"), "%{", "%%{")
 }

@@ -19,9 +19,12 @@ import (
 	schema "github.com/cloudposse/atmos/pkg/schema"
 	store "github.com/cloudposse/atmos/pkg/store"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	hcl "github.com/hashicorp/hcl/v2"
+	hclsyntax "github.com/hashicorp/hcl/v2/hclsyntax"
 	tfconfig "github.com/hashicorp/terraform-config-inspect/tfconfig"
 	assert "github.com/stretchr/testify/assert"
 	require "github.com/stretchr/testify/require"
+	cty "github.com/zclconf/go-cty/cty"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -662,4 +665,66 @@ func TestSecretEnvForDeclaredTypesWithoutAModuleKeepsStringsVerbatim(t *testing.
 
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"TF_VAR_a=plain", `TF_VAR_b=has "quotes"`}, env)
+}
+
+// TestSecretEnvForDeclaredTypesCollectionsRoundTripThroughHCL parses the environment value the way Terraform does
+// and verifies that interpolation-like text in nested strings and object keys is unchanged.
+func TestSecretEnvForDeclaredTypesCollectionsRoundTripThroughHCL(t *testing.T) {
+	module := &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+		"typed_object": {Name: "typed_object", Type: "map(any)"},
+		"typed_list":   {Name: "typed_list", Type: "list(any)"},
+		"typed_any":    {Name: "typed_any", Type: "any"},
+		"typed_typed":  {Name: "typed_typed", Type: "map(list(string))"},
+	}}
+	section := map[string]any{"component_info": map[string]any{"terraform_config": module}}
+
+	for _, test := range []struct {
+		name  string
+		value any
+		want  any
+	}{
+		{name: "typed_object", value: map[string]any{"k": "a${b}", "c%{if x}": "%{if y}z%{endif}"}, want: map[string]any{"k": "a${b}", "c%{if x}": "%{if y}z%{endif}"}},
+		{name: "typed_list", value: []any{"${first}", "plain", "%{for x in y}"}, want: []any{"${first}", "plain", "%{for x in y}"}},
+		{name: "typed_any", value: map[string]any{"outer": map[string]any{"${key}": []any{"x${y}", "$${already}"}}}, want: map[string]any{"outer": map[string]any{"${key}": []any{"x${y}", "$${already}"}}}},
+		{name: "typed_typed", value: map[string][]string{"%{k}": {"${v}"}}, want: map[string]any{"%{k}": []any{"${v}"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			env, err := secretEnvForDeclaredTypes(section, map[string]any{test.name: test.value})
+			require.NoError(t, err)
+			require.Len(t, env, 1)
+
+			text := strings.TrimPrefix(env[0], "TF_VAR_"+test.name+"=")
+			expr, diags := hclsyntax.ParseExpression([]byte(text), "env", hcl.InitialPos)
+			require.False(t, diags.HasErrors(), diags.Error())
+			got, diags := expr.Value(nil)
+			require.False(t, diags.HasErrors(), diags.Error())
+
+			// Render the evaluated value back to generic Go values for comparison.
+			assert.Equal(t, test.want, ctyToGeneric(t, got))
+		})
+	}
+}
+
+// ctyToGeneric converts an evaluated HCL value into maps, slices, and strings.
+func ctyToGeneric(t *testing.T, value cty.Value) any {
+	t.Helper()
+	switch {
+	case value.Type() == cty.String:
+		return value.AsString()
+	case value.Type().IsObjectType() || value.Type().IsMapType():
+		out := map[string]any{}
+		for key, child := range value.AsValueMap() {
+			out[key] = ctyToGeneric(t, child)
+		}
+		return out
+	case value.Type().IsTupleType() || value.Type().IsListType():
+		out := []any{}
+		for _, child := range value.AsValueSlice() {
+			out = append(out, ctyToGeneric(t, child))
+		}
+		return out
+	default:
+		t.Fatalf("unsupported value type %s", value.Type().FriendlyName())
+		return nil
+	}
 }
