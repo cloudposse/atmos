@@ -291,6 +291,49 @@ func TestResolveRedactsSensitiveLocalsFromLogs(t *testing.T) {
 	assert.Equal(t, "before <MASKED> <MASKED> visible", entries[0].Message)
 }
 
+// The sink learns only the final value of a local. A sensitive local that transforms the output of a call
+// leaves the raw output, which may already be logged, unredacted, so those events are withheld. A local that
+// keeps the raw value stays redacted, and a transformation outside sensitive locals changes nothing.
+func TestResolveWithholdsLogsForSensitiveLocalsThatTransformCallOutput(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		locals   string
+		withheld bool
+	}{
+		{"direct call output", `tok = sensitive(get_env("TG_UNSET_RAW", "raw-123"))`, false},
+		{"literal", `tok = sensitive("raw-123")`, false},
+		{"object of sensitive values", `tok = { key = sensitive(get_env("TG_UNSET_RAW", "raw-123")), name = "visible" }`, false},
+		{"transformed sibling in a sensitive object", `tok = { key = sensitive(get_env("TG_UNSET_RAW", "raw-123")), name = upper("visible") }`, true},
+		{"reference keeps the raw value", "raw = sensitive(get_env(\"TG_UNSET_RAW\", \"raw-123\"))\n  tok = local.raw", false},
+		{"transform outside sensitive", "plain = upper(get_env(\"TG_UNSET_RAW\", \"raw-123\"))\n  tok = sensitive(\"raw-123\")", false},
+		{"transform inside sensitive", `tok = sensitive(upper(get_env("TG_UNSET_RAW", "raw-123")))`, true},
+		{"transform around sensitive", `tok = upper(sensitive(get_env("TG_UNSET_RAW", "raw-123")))`, true},
+		{"template around the call", `tok = sensitive("${get_env("TG_UNSET_RAW", "raw-123")}-suffix")`, true},
+		{"sensitive wraps a transformed local", "raw = upper(get_env(\"TG_UNSET_RAW\", \"raw-123\"))\n  tok = sensitive(local.raw)", true},
+		{"transform through a reference", "raw = sensitive(get_env(\"TG_UNSET_RAW\", \"raw-123\"))\n  tok = upper(local.raw)", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := nativeUnit(t, "locals {\n  "+test.locals+"\n}\ninputs = { name = \"visible\" }\n")
+			sink := NewLogSink("debug", request.BasePath)
+			logger(t, sink).Debug("before raw-123 visible")
+
+			_, err := Resolve(WithLogSink(t.Context(), sink), request)
+
+			require.NoError(t, err)
+			entries := sink.Entries()
+			require.NotEmpty(t, entries)
+			if test.withheld {
+				require.Len(t, entries, 1)
+				assert.Contains(t, entries[0].Message, "withheld")
+				assert.NotContains(t, entries[0].Message, "raw-123")
+				return
+			}
+			assert.NotContains(t, entries[0].Message, "withheld")
+			assert.Equal(t, "before <MASKED> visible", entries[0].Message)
+		})
+	}
+}
+
 // When the evaluation fails before the sensitive values are known, the events are withheld; a unit that
 // declares nothing sensitive keeps them.
 func TestResolveWithholdsLogsWhenSensitiveValuesAreUnknown(t *testing.T) {
