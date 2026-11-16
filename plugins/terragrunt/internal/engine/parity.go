@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -349,17 +351,20 @@ func lifecycleWarnings(terraform *config.TerraformConfig, path string) []model.W
 // `version -json` the way Terraform and OpenTofu do, so a wrong path fails with the unit's name
 // instead of as an obscure error from the first command that runs.
 func validateEngine(ctx context.Context, request model.Request, binary, path string) error {
-	command := exec.CommandContext(ctx, binary, "version", "-json")
-	command.Env = make([]string, 0, len(request.Environment))
-	for key, value := range request.Environment {
-		command.Env = append(command.Env, key+"="+value)
-	}
-	data, err := command.Output()
 	var version struct {
 		Version string `json:"terraform_version"`
 	}
+	executable, err := resolveOnInvocationPath(binary, request.Environment)
 	if err == nil {
-		err = json.Unmarshal(data, &version)
+		command := exec.CommandContext(ctx, executable, "version", "-json")
+		command.Env = make([]string, 0, len(request.Environment))
+		for key, value := range request.Environment {
+			command.Env = append(command.Env, key+"="+value)
+		}
+		var data []byte
+		if data, err = command.Output(); err == nil {
+			err = json.Unmarshal(data, &version)
+		}
 	}
 	if err == nil && version.Version != "" {
 		return nil
@@ -368,6 +373,46 @@ func validateEngine(ctx context.Context, request model.Request, binary, path str
 		"`terraform_binary` is not a Terraform or OpenTofu executable",
 		"The selected executable does not answer `version -json` the way Terraform and OpenTofu do.",
 		"Point `terraform_binary` at `tofu`, `terraform`, or a wrapper that forwards to one of them, or remove it to use `components.terraform.command`.")
+}
+
+// resolveOnInvocationPath resolves a bare executable name against the PATH of the invocation, which
+// is not the PATH of this process. A name with a path separator, and any name when the invocation
+// has no PATH, is returned as it is. On Windows the extensions of the invocation's PATHEXT apply.
+func resolveOnInvocationPath(binary string, environment map[string]string) (string, error) {
+	search := environmentValue(environment, "PATH")
+	if search == "" || filepath.IsAbs(binary) || strings.ContainsAny(binary, `/\`) {
+		return binary, nil
+	}
+	extensions := []string{""}
+	if runtime.GOOS == "windows" {
+		pathext := cmp.Or(environmentValue(environment, "PATHEXT"), ".COM;.EXE;.BAT;.CMD")
+		extensions = strings.Split(strings.ToLower(pathext), ";")
+		if slices.Contains(extensions, strings.ToLower(filepath.Ext(binary))) {
+			extensions = []string{""}
+		}
+	}
+	for _, directory := range filepath.SplitList(search) {
+		for _, extension := range extensions {
+			candidate := filepath.Join(cmp.Or(directory, "."), binary+extension)
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0) {
+				return candidate, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("%w: %q is not on the invocation PATH", exec.ErrNotFound, binary)
+}
+
+// environmentValue reads a variable of the invocation, ignoring case on Windows where names have none.
+func environmentValue(environment map[string]string, name string) string {
+	if value, found := environment[name]; found || runtime.GOOS != "windows" {
+		return value
+	}
+	for key, value := range environment {
+		if strings.EqualFold(key, name) {
+			return value
+		}
+	}
+	return ""
 }
 
 // checkFeatureOverrides rejects an override the unit's feature declarations cannot accept, naming

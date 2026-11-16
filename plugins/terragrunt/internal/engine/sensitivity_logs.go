@@ -40,6 +40,112 @@ func sensitiveLocals(fsys afero.Fs, unit string, locals map[string]any) [][]stri
 	return existingPaths(uniquePaths(scanner.paths), locals)
 }
 
+// redactLocals registers the values of the unit's sensitive locals with the sink. The sink learns only the
+// final value of a local, so a sensitive local built by transforming the output of a call, such as
+// sensitive(upper(run_cmd(...))), leaves the raw output, which Terragrunt may already have logged,
+// unredacted. The raw value cannot be recovered from the final one, so the events are withheld instead.
+func redactLocals(sink *LogSink, fsys afero.Fs, unit string, locals map[string]any) {
+	redactInputs(sink, locals, sensitiveLocals(fsys, unit, locals))
+	if sink.collecting() && transformsSensitiveLocal(fsys, unit) {
+		sink.Withhold()
+	}
+}
+
+// transformsSensitiveLocal reports whether any sensitive local of the unit derives its value from another
+// value, so that the registered final value differs from the raw value. A local that is only
+// sensitive(<call>), an object, or a reference to such a local keeps its raw value, and the sink masks it.
+func transformsSensitiveLocal(fsys afero.Fs, unit string) bool {
+	body, ok := parseBody(fsys, unit)
+	if !ok {
+		return false
+	}
+	scanner := &sensitivityScanner{locals: localExpressions(body)}
+	for name, expression := range scanner.locals {
+		before := len(scanner.paths)
+		scanner.walk(expression, []string{name}, 0)
+		if len(scanner.paths) > before && scanner.transformsRaw(expression, 0) {
+			return true
+		}
+	}
+	return false
+}
+
+// transformsRaw reports whether the value of expression is derived from other values by anything other than
+// selecting them: a function that is not sensitive(...) or merge(...) and does not directly wrap the value, a
+// template, a for expression, or an operator. It follows local references, and fails closed on a reference
+// it cannot follow and at the depth bound.
+func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, depth int) bool {
+	if depth >= maxLocalDepth {
+		return true
+	}
+	wrapped := map[hclsyntax.Node]bool{}
+	transformed := false
+	_ = hclsyntax.VisitAll(expression, func(node hclsyntax.Node) hcl.Diagnostics {
+		if transformed {
+			return nil
+		}
+		switch typed := node.(type) {
+		case *hclsyntax.FunctionCallExpr:
+			switch typed.Name {
+			case "sensitive":
+				for _, argument := range typed.Args {
+					wrapped[unwrapParentheses(argument)] = true
+				}
+			case "merge":
+			default:
+				transformed = !wrapped[typed]
+			}
+		case *hclsyntax.TemplateExpr:
+			transformed = !isLiteralTemplate(typed)
+		case *hclsyntax.ForExpr, *hclsyntax.BinaryOpExpr, *hclsyntax.UnaryOpExpr:
+			transformed = true
+		case *hclsyntax.ScopeTraversalExpr:
+			transformed = s.referenceTransformsRaw(typed, depth)
+		}
+		return nil
+	})
+	return transformed
+}
+
+// referenceTransformsRaw follows a local reference to the expression that defines it.
+func (s *sensitivityScanner) referenceTransformsRaw(traversal *hclsyntax.ScopeTraversalExpr, depth int) bool {
+	switch traversal.Traversal.RootName() {
+	case localName, "include":
+	default:
+		return false
+	}
+	current, locals, _, found := s.reference(traversal.Traversal)
+	if !found {
+		// A local of an included file, or an unknown one, cannot be inspected.
+		return true
+	}
+	previous := s.locals
+	s.locals = locals
+	defer func() { s.locals = previous }()
+	return s.transformsRaw(current, depth+1)
+}
+
+// unwrapParentheses returns the expression inside any number of parentheses.
+func unwrapParentheses(expression hclsyntax.Expression) hclsyntax.Expression {
+	for {
+		parenthesized, ok := expression.(*hclsyntax.ParenthesesExpr)
+		if !ok {
+			return expression
+		}
+		expression = parenthesized.Expression
+	}
+}
+
+// isLiteralTemplate reports whether a template only spells out literal text.
+func isLiteralTemplate(template *hclsyntax.TemplateExpr) bool {
+	for _, part := range template.Parts {
+		if _, ok := part.(*hclsyntax.LiteralValueExpr); !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // unredactedSensitivity reports whether any of the files calls sensitive(...) where the sink cannot learn
 // the value. When the unit was resolved, the values of its inputs and of its own locals are known and
 // registered, so only calls elsewhere count: the locals or inputs of an included file, or another attribute

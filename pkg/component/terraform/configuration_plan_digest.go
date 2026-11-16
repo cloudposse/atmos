@@ -111,7 +111,7 @@ func skipWorkdirDirectory(root, path, name string) bool {
 	if insideTerraformCacheOutsideModules(root, path) {
 		return true
 	}
-	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-"))
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || name == stateWorkspaceDir || strings.HasPrefix(name, ".atmos-policy-plan-"))
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache
@@ -151,7 +151,33 @@ func insideTerraformModules(root, path string) bool {
 func ignoredWorkdirFile(path, planPath, name string) bool {
 	return path == planPath || strings.HasSuffix(name, planBindingSuffix) || strings.HasSuffix(name, ".planfile") ||
 		name == ciplanfile.StoredPlanPrefix+ciplanfile.PlanFilename || name == freshPlanName ||
-		strings.HasPrefix(name, ".atmos-plan-") || strings.HasPrefix(name, "terraform.tfstate")
+		strings.HasPrefix(name, ".atmos-plan-") || mutableStateFile(name)
+}
+
+// stateWorkspaceDir is the directory Terraform keeps the state of its non-default workspaces in.
+const stateWorkspaceDir = "terraform.tfstate.d"
+
+// mutableStateFile reports whether a file name is state Terraform writes: the state file, its backup, or a
+// timestamped backup. A prefix match would also drop configuration such as terraform.tfstate.tf or
+// terraform.tfstate.tofu.json, which a saved plan must stay bound to.
+func mutableStateFile(name string) bool {
+	if name == "terraform.tfstate" || name == "terraform.tfstate.backup" {
+		return true
+	}
+	stamp, found := strings.CutPrefix(name, "terraform.tfstate.")
+	if !found {
+		return false
+	}
+	stamp, found = strings.CutSuffix(stamp, ".backup")
+	if !found || stamp == "" {
+		return false
+	}
+	for _, r := range stamp {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // recordWorkdirFile digests one retained file by its slash-separated path relative to the root.

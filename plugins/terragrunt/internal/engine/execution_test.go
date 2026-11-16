@@ -229,6 +229,43 @@ func TestResolveReturnsTerraformBinaryAndValidatesTheEngine(t *testing.T) {
 	require.Contains(t, problem.Summary, "not a Terraform or OpenTofu executable")
 }
 
+func TestBareTerraformBinaryIsResolvedOnTheInvocationPath(t *testing.T) {
+	bin := t.TempDir()
+	installFixtureExecutable(t, bin, toolchainTofuName)
+	empty := t.TempDir()
+
+	t.Run("a name found on the invocation PATH is probed", func(t *testing.T) {
+		request := nativeUnit(t, `terraform_binary = "`+toolchainTofuName+`"`)
+		request.Environment = map[string]string{toolchainChildEnv: "1", "PATH": bin}
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Equal(t, toolchainTofuName, result.TerraformBinary, "the unit's name is returned as written")
+	})
+
+	t.Run("a name missing from the invocation PATH fails even when this process could find it", func(t *testing.T) {
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		request := nativeUnit(t, `terraform_binary = "`+toolchainTofuName+`"`)
+		request.Environment = map[string]string{toolchainChildEnv: "1", "PATH": empty}
+		_, err := Resolve(t.Context(), request)
+		problem := asProblem(t, err)
+		require.Equal(t, "terraform_binary", problem.Key)
+		require.Contains(t, problem.Summary, "not a Terraform or OpenTofu executable")
+	})
+
+	t.Run("an invocation without PATH leaves the name to the executor", func(t *testing.T) {
+		executable, err := resolveOnInvocationPath("tofu", map[string]string{})
+		require.NoError(t, err)
+		require.Equal(t, "tofu", executable)
+	})
+
+	t.Run("an explicit path is not searched", func(t *testing.T) {
+		explicit := filepath.Join(empty, "bin", "tofu")
+		executable, err := resolveOnInvocationPath(explicit, map[string]string{"PATH": bin})
+		require.NoError(t, err)
+		require.Equal(t, explicit, executable)
+	})
+}
+
 func TestDiscoveryReadsTerraformBinaryWithoutRunningIt(t *testing.T) {
 	request := nativeUnit(t, `terraform_binary = "./bin/tofu"`)
 	request.Phase = "discover"

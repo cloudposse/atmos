@@ -1112,3 +1112,34 @@ func TestNewConfigurationPlanRejectsAPlanRewrittenAfterTerraformWroteIt(t *testi
 	require.NoError(t, err, "a snapshot without an observed digest binds the plan as it is")
 	require.NotEqual(t, captured, plan.PlanDigest)
 }
+
+// Configuration that merely starts with the state file's name stays bound to the saved plan, while the
+// state file, its backups, and the workspace state directory stay out of the digest.
+func TestConfigurationWorkdirDigestSeparatesStateFromConfigurationNamedLikeState(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.plan")
+	write := func(name string) {
+		t.Helper()
+		path := filepath.Join(root, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(name), 0o600))
+	}
+	write("main.tf")
+	baseline, err := configurationWorkdirDigest(root, plan)
+	require.NoError(t, err)
+
+	for _, state := range []string{"terraform.tfstate", "terraform.tfstate.backup", "terraform.tfstate.1700000000.backup", "terraform.tfstate.d/stage/terraform.tfstate", "terraform.tfstate.d/stage/terraform.tfstate.backup", "terraform.tfstate.d/stage/notes.txt"} {
+		write(state)
+		same, err := configurationWorkdirDigest(root, plan)
+		require.NoError(t, err)
+		require.Equal(t, baseline, same, "%s is mutable state", state)
+	}
+
+	for _, configuration := range []string{"terraform.tfstate.tf", "terraform.tfstate.tf.json", "terraform.tfstate.tofu", "terraform.tfstate.tofu.json", "terraform.tfstate.x.backup", "terraform.tfstate..backup", "terraform.tfstate.backup.tf", "terraform.tfstated"} {
+		write(configuration)
+		changed, err := configurationWorkdirDigest(root, plan)
+		require.NoError(t, err)
+		require.NotEqual(t, baseline, changed, "%s is retained configuration", configuration)
+		baseline = changed
+	}
+}

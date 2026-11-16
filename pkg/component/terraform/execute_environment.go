@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"encoding/json"
 	errors "errors"
 	fmt "fmt"
@@ -8,6 +9,8 @@ import (
 	filepath "path/filepath"
 	runtime "runtime"
 	slices "slices"
+	sort "sort"
+	strconv "strconv"
 	strings "strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -505,27 +508,24 @@ func (e *Executor) SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfigurati
 // terraformVarEnvPrefix is the prefix Terraform and OpenTofu read variable values from the environment with.
 const terraformVarEnvPrefix = "TF_VAR_"
 
-// secretEnvForDeclaredTypes renders secret variables as TF_VAR_ entries, encoding each string for the way
+// secretEnvForDeclaredTypes renders secret variables as TF_VAR_ entries, encoding each value for the way
 // Terraform reads it. Terraform parses a TF_VAR_ value as HCL when the variable is declared `any` or with a
 // complex type, and uses it as a literal when the variable is declared string, number, or bool, or has no
-// type. A string for an HCL-parsed variable is therefore written as a quoted HCL string, with template
-// sequences escaped so that the value is never interpreted as an interpolation. Every other value is
-// encoded by tfvars.SecretEnv.
+// type. A value for an HCL-parsed variable is therefore written as an HCL literal whose strings use only HCL
+// escapes, with template sequences escaped so that the value is never interpreted as an interpolation, and
+// whose numbers keep their exact digits. Every other value is encoded by tfvars.SecretEnv.
 func secretEnvForDeclaredTypes(componentSection map[string]any, secret map[string]any) ([]string, error) {
 	plain := make(map[string]any, len(secret))
-	var quoted []string
+	var literals []string
 	for name, value := range secret {
 		typeText, declared := TerraformDeclaredVarType(componentSection, name)
-		if text, isString := value.(string); isString && declared && terraformParsesAsHCL(typeText) {
-			quoted = append(quoted, terraformVarEnvPrefix+name+"="+quoteHCLString(text))
-			continue
-		}
-		if _, isString := value.(string); !isString && declared && terraformParsesAsHCL(typeText) {
-			escaped, err := escapeHCLTemplateSequences(value)
+		if declared && terraformParsesAsHCL(typeText) {
+			literal, err := encodeHCLLiteral(value)
 			if err != nil {
 				return nil, fmt.Errorf("encoding secret variable %q for TF_VAR_ injection: %w", name, err)
 			}
-			value = escaped
+			literals = append(literals, terraformVarEnvPrefix+name+"="+literal)
+			continue
 		}
 		plain[name] = value
 	}
@@ -533,7 +533,7 @@ func secretEnvForDeclaredTypes(componentSection map[string]any, secret map[strin
 	if err != nil {
 		return nil, err
 	}
-	return append(env, quoted...), nil
+	return append(env, literals...), nil
 }
 
 // terraformParsesAsHCL reports whether Terraform parses a TF_VAR_ value for a variable declared with this type
@@ -547,54 +547,111 @@ func terraformParsesAsHCL(typeText string) bool {
 	}
 }
 
-// quoteHCLString renders text as a quoted HCL string literal. The JSON string escapes are valid HCL escapes,
-// and `${` and `%{` are doubled so that the value cannot start a template interpolation or directive.
+const (
+	// The value of asciiControlLimit is the first printable ASCII code point; lower code points are control characters.
+	asciiControlLimit = 0x20
+	// The value of asciiDelete is the ASCII DEL control character.
+	asciiDelete = 0x7f
+)
+
+// quoteHCLString renders text as a quoted HCL string literal. Only the escapes HCL defines are used (JSON
+// also allows \b and \f, which HCL string literals do not), and `${` and `%{` are doubled so that the value
+// cannot start a template interpolation or directive.
 func quoteHCLString(text string) string {
-	encoded, _ := json.Marshal(text) //nolint:errchkjson // A string always encodes.
-	quoted := string(encoded)
-	return escapeHCLTemplateText(quoted)
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range escapeHCLTemplateText(text) {
+		switch {
+		case r == '"':
+			b.WriteString(`\"`)
+		case r == '\\':
+			b.WriteString(`\\`)
+		case r == '\n':
+			b.WriteString(`\n`)
+		case r == '\r':
+			b.WriteString(`\r`)
+		case r == '\t':
+			b.WriteString(`\t`)
+		case r < asciiControlLimit || r == asciiDelete:
+			fmt.Fprintf(&b, `\u%04X`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
-// escapeHCLTemplateSequences recursively escapes `${` and `%{` in every string inside a collection value, both
-// object values and object keys, so that Terraform parsing the JSON-encoded environment value as HCL keeps the
-// text literal. Scalars other than strings are returned unchanged.
-func escapeHCLTemplateSequences(value any) (any, error) {
-	switch value.(type) {
-	case nil, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
-		return value, nil
+// encodeHCLLiteral renders any secret value as an HCL expression that Terraform can parse from a TF_VAR_
+// environment value. Typed maps and slices are first normalized to generic JSON values, keeping numbers as
+// their exact text so that integers beyond 2^53 are not rounded through float64. Strings and object keys are
+// quoted with quoteHCLString.
+func encodeHCLLiteral(value any) (string, error) {
+	if text, isString := value.(string); isString {
+		return quoteHCLString(text), nil
 	}
-	// Normalize typed maps and slices to generic JSON values so the walk sees every nested string.
 	encoded, err := json.Marshal(value)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
 	var generic any
-	if err := json.Unmarshal(encoded, &generic); err != nil {
-		return nil, err
+	if err := decoder.Decode(&generic); err != nil {
+		return "", err
 	}
-	return walkEscapeHCLTemplateSequences(generic), nil
+	var b strings.Builder
+	writeHCLLiteral(&b, generic)
+	return b.String(), nil
 }
 
-// walkEscapeHCLTemplateSequences escapes template introducers in the strings of an already generic value.
-func walkEscapeHCLTemplateSequences(value any) any {
+// writeHCLLiteral writes an already generic JSON value as an HCL expression with sorted object keys.
+func writeHCLLiteral(b *strings.Builder, value any) {
 	switch typed := value.(type) {
+	case nil:
+		b.WriteString("null")
+	case bool:
+		b.WriteString(strconv.FormatBool(typed))
+	case json.Number:
+		b.WriteString(typed.String())
 	case string:
-		return escapeHCLTemplateText(typed)
+		b.WriteString(quoteHCLString(typed))
 	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, child := range typed {
-			out[escapeHCLTemplateText(key)] = walkEscapeHCLTemplateSequences(child)
-		}
-		return out
+		writeHCLObject(b, typed)
 	case []any:
-		out := make([]any, len(typed))
-		for i, child := range typed {
-			out[i] = walkEscapeHCLTemplateSequences(child)
-		}
-		return out
-	default:
-		return value
+		writeHCLTuple(b, typed)
 	}
+}
+
+// writeHCLObject writes a generic JSON object as an HCL object with sorted keys.
+func writeHCLObject(b *strings.Builder, object map[string]any) {
+	keys := make([]string, 0, len(object))
+	for key := range object {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	b.WriteByte('{')
+	for i, key := range keys {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(quoteHCLString(key))
+		b.WriteByte(':')
+		writeHCLLiteral(b, object[key])
+	}
+	b.WriteByte('}')
+}
+
+// writeHCLTuple writes a generic JSON array as an HCL tuple.
+func writeHCLTuple(b *strings.Builder, items []any) {
+	b.WriteByte('[')
+	for i, child := range items {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		writeHCLLiteral(b, child)
+	}
+	b.WriteByte(']')
 }
 
 // escapeHCLTemplateText doubles `${` and `%{` so HCL does not start a template interpolation or directive.
