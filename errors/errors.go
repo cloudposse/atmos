@@ -396,6 +396,7 @@ var (
 	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
 	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
 	ErrGitRepositoryNotFound       = errors.New("git repository not configured")
+	ErrGitRateLimited              = errors.New("git remote rate limit exceeded")
 	ErrGitAuthFailed               = errors.New("git authentication failed")
 	ErrGitPushRejected             = errors.New("git push rejected: non-fast-forward")
 	ErrGitDirtyUnmanagedFiles      = errors.New("unmanaged dirty files detected outside commit paths")

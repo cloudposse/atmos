@@ -2,6 +2,7 @@ package schema
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -165,6 +166,40 @@ func TestRetryNodeValidatesMergedFields(t *testing.T) {
 			assert.Equal(t, 3, *document.Step.Retry.MaxAttempts)
 			require.NotNil(t, document.Step.Retry.InitialDelay)
 			assert.Equal(t, 2*time.Second, *document.Step.Retry.InitialDelay)
+		})
+	}
+}
+
+// TestRetryConfigDecodeHook covers the mapstructure hook that validates and decodes shared retry
+// maps during configuration decoding, and leaves every other source or target type untouched.
+func TestRetryConfigDecodeHook(t *testing.T) {
+	mapType := reflect.TypeOf(map[string]any{})
+	retryType := reflect.TypeOf(RetryConfig{})
+
+	tests := []struct {
+		name    string
+		from    reflect.Type
+		to      reflect.Type
+		data    any
+		want    any
+		wantErr error
+	}{
+		{name: "non-map source is passed through", from: reflect.TypeOf(""), to: retryType, data: "3s", want: "3s"},
+		{name: "non-retry target is passed through", from: mapType, to: reflect.TypeOf(struct{}{}), data: map[string]any{"max_attempts": 2}, want: map[string]any{"max_attempts": 2}},
+		{name: "empty map becomes empty config", from: mapType, to: retryType, data: map[string]any{}, want: RetryConfig{}},
+		{name: "valid map is decoded", from: mapType, to: retryType, data: map[string]any{"max_attempts": 4, "initial_delay": "250ms"}, want: RetryConfig{MaxAttempts: new(4), InitialDelay: new(250 * time.Millisecond)}},
+		{name: "unknown field is rejected", from: mapType, to: retryType, data: map[string]any{"delay": "1s"}, wantErr: ErrInvalidRetryConfig},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := RetryConfigDecodeHook()(tt.from, tt.to, tt.data)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
