@@ -1177,3 +1177,62 @@ inputs = { value = dependency.upstream.outputs.value }
 	require.Equal(t, "planned", result.Inputs["value"])
 	require.NotNil(t, result.Execution.Apply)
 }
+
+func TestUnitBinaryOverriddenByTheStackIsNotProbed(t *testing.T) {
+	bin := t.TempDir()
+	unitBinary := installFixtureExecutable(t, bin, toolchainTofuName)
+	// A copy, not a hard link: hard links of the fixture are the same file.
+	other := filepath.Join(t.TempDir(), "other-"+filepath.Base(unitBinary))
+	content, err := os.ReadFile(unitBinary)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(other, content, 0o755))
+	missing := filepath.Join(t.TempDir(), "absent", "tofu")
+	notEngine := installFixtureExecutable(t, t.TempDir(), toolchainToolName)
+
+	link := filepath.Join(t.TempDir(), "link-"+filepath.Base(unitBinary))
+	linked := os.Symlink(unitBinary, link) == nil
+
+	tests := []struct {
+		name         string
+		unitBinary   string
+		effective    string
+		wantProblem  bool
+		wantWarnings int
+		needsLink    bool
+	}{
+		{name: "same path probes without a warning", unitBinary: unitBinary, effective: unitBinary},
+		{name: "same file through a symlink probes without a warning", unitBinary: unitBinary, effective: link, needsLink: true},
+		{name: "unset effective binary probes as before", unitBinary: unitBinary},
+		{name: "unset effective binary still fails a bad unit binary", unitBinary: missing, wantProblem: true},
+		{name: "bad unit binary without an override fails", unitBinary: notEngine, wantProblem: true, effective: notEngine},
+		{name: "another executable skips the probe and warns", unitBinary: notEngine, effective: other, wantWarnings: 1},
+		{name: "missing unit binary with another effective one warns", unitBinary: missing, effective: other, wantWarnings: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.needsLink && !linked {
+				t.Skip("symlinks are not available on this platform")
+			}
+			request := nativeUnit(t, `terraform_binary = "`+filepath.ToSlash(tt.unitBinary)+`"`)
+			request.Environment = map[string]string{toolchainChildEnv: "1", "PATH": bin}
+			if tt.effective != "" {
+				request.Environment["ATMOS_TERRAFORM_BINARY"] = tt.effective
+			}
+			result, err := Resolve(t.Context(), request)
+			if tt.wantProblem {
+				problem := asProblem(t, err)
+				require.Equal(t, "terraform_binary", problem.Key)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, result.Warnings, tt.wantWarnings)
+			if tt.wantWarnings == 0 {
+				return
+			}
+			warning := result.Warnings[0]
+			require.Equal(t, WarningTerraformBinaryOverridden, warning.Code)
+			require.Contains(t, warning.Message, tt.effective)
+			require.Contains(t, warning.Message, filepath.ToSlash(tt.unitBinary))
+		})
+	}
+}
