@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -137,5 +139,42 @@ func TestLoginSessionIsResolvedFromTheInvocationEnvironment(t *testing.T) {
 		_, err = provider.Retrieve(t.Context())
 
 		require.Error(t, err)
+	})
+}
+
+func TestContainerEndpointClientBoundsRequests(t *testing.T) {
+	release := make(chan struct{})
+	hanging := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case <-release:
+		case <-time.After(30 * time.Second):
+		}
+	}))
+	// The handler is released before Close, which waits for outstanding requests.
+	t.Cleanup(hanging.Close)
+	t.Cleanup(func() { close(release) })
+
+	answering := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(answering.Close)
+
+	t.Run("an endpoint that never answers is abandoned after the timeout", func(t *testing.T) {
+		client := containerEndpointClient(200 * time.Millisecond)
+		start := time.Now()
+		resp, err := client.Get(hanging.URL)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		require.Error(t, err)
+		assert.Less(t, time.Since(start), 10*time.Second)
+	})
+
+	t.Run("an endpoint that answers within the timeout still works", func(t *testing.T) {
+		client := containerEndpointClient(5 * time.Second)
+		resp, err := client.Get(answering.URL)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
 }

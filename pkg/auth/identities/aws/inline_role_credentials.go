@@ -56,6 +56,10 @@ const (
 	imdsDefaultIPv4Endpoint   = "http://169.254.169.254"
 	imdsDefaultIPv6Endpoint   = "http://[fd00:ec2::254]"
 	containerCredentialExpiry = 5 * time.Minute
+	// Bounds on a container credential request, so an endpoint that accepts a connection and never answers
+	// cannot block the caller after its own deadline has passed.
+	containerCredentialDialTimeout    = 3 * time.Second
+	containerCredentialRequestTimeout = 10 * time.Second
 	// The SDK passes duration_seconds on only when it exceeds 15 whole minutes; shorter values use the STS default.
 	minimumProfileRoleDuration = 16 * time.Minute
 )
@@ -410,7 +414,7 @@ func containerCredentials(env map[string]string) (aws.CredentialsProvider, bool,
 	token, tokenFile := env["AWS_CONTAINER_AUTHORIZATION_TOKEN"], env["AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE"]
 	provider := endpointcreds.New(endpoint, func(o *endpointcreds.Options) {
 		if strings.HasPrefix(endpoint, "http://") {
-			o.HTTPClient = containerEndpointClient()
+			o.HTTPClient = containerEndpointClient(containerCredentialRequestTimeout)
 		}
 		o.AuthorizationToken = token
 		if tokenFile != "" {
@@ -428,13 +432,19 @@ func containerCredentials(env map[string]string) (aws.CredentialsProvider, bool,
 
 // containerEndpointClient is the HTTP client for a plain-HTTP container credential endpoint. It dials only an
 // address that passed the same allowlist as the endpoint URL, and it never uses a proxy, so a host name that
-// resolves differently after the early check cannot redirect the request.
-func containerEndpointClient() *http.Client {
-	dialer := &net.Dialer{}
-	return &http.Client{Transport: &http.Transport{
-		Proxy:       nil,
-		DialContext: validatedContainerDialer(net.DefaultResolver.LookupHost, dialer.DialContext),
-	}}
+// resolves differently after the early check cannot redirect the request. The request as a whole is bounded by
+// timeout, and establishing the connection by containerCredentialDialTimeout.
+func containerEndpointClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: containerCredentialDialTimeout}
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			Proxy:                 nil,
+			DialContext:           validatedContainerDialer(net.DefaultResolver.LookupHost, dialer.DialContext),
+			TLSHandshakeTimeout:   containerCredentialDialTimeout,
+			ResponseHeaderTimeout: timeout,
+		},
+	}
 }
 
 // dialFunc opens a network connection.
