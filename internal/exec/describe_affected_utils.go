@@ -192,8 +192,8 @@ func executeDescribeAffected(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	remoteStackConfigFilesAbsolutePaths, _, _, err := cfg.FindAllStackConfigsInPathsForStack(
-		*atmosConfig,
+	remoteStackFiles, err := cfg.FindAllStackConfigsInPathsForStack(
+		atmosConfig,
 		stack, // Apply the same stack filter if provided.
 		remoteIncludeStackAbsPaths,
 		remoteExcludeStackAbsPaths,
@@ -214,9 +214,9 @@ func executeDescribeAffected(
 				"error", err,
 			)
 		}
-		remoteStackConfigFilesAbsolutePaths = []string{}
+		remoteStackFiles.AbsolutePaths = []string{}
 	}
-	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths
+	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackFiles.AbsolutePaths
 
 	remoteStacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,

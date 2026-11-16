@@ -205,10 +205,13 @@ func TestTerraformBinaryAnchorsRelativePaths(t *testing.T) {
 }
 
 func TestResolveReturnsTerraformBinaryAndValidatesTheEngine(t *testing.T) {
-	request := fixtureEngine(t, nativeUnit(t, `terraform_binary = "tofu"`))
+	// The probe runs the executable the unit selected, not the host's command.
+	tofu := filepath.ToSlash(installFixtureExecutable(t, t.TempDir(), toolchainTofuName))
+	request := nativeUnit(t, `terraform_binary = "`+tofu+`"`)
+	request.Environment = map[string]string{toolchainChildEnv: "1"}
 	result, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
-	require.Equal(t, "tofu", result.TerraformBinary)
+	require.Equal(t, filepath.FromSlash(tofu), result.TerraformBinary)
 
 	// A unit without terraform_binary never probes the executable.
 	plain := nativeUnit(t, "")
@@ -217,8 +220,8 @@ func TestResolveReturnsTerraformBinaryAndValidatesTheEngine(t *testing.T) {
 	require.Empty(t, result.TerraformBinary)
 
 	// An executable that is not Terraform or OpenTofu is rejected with the setting named.
-	wrong := nativeUnit(t, `terraform_binary = "tool"`)
-	wrong.Tofu = installFixtureExecutable(t, t.TempDir(), toolchainToolName)
+	tool := filepath.ToSlash(installFixtureExecutable(t, t.TempDir(), toolchainToolName))
+	wrong := nativeUnit(t, `terraform_binary = "`+tool+`"`)
 	wrong.Environment = map[string]string{toolchainChildEnv: "1"}
 	_, err = Resolve(t.Context(), wrong)
 	problem := asProblem(t, err)

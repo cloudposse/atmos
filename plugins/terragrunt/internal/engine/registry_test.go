@@ -477,3 +477,20 @@ func TestIAMProbeOfAnUnknownUnitStillFails(t *testing.T) {
 	_, err := Resolve(t.Context(), request)
 	require.Error(t, err, "without a generation root the unit must exist")
 }
+
+func TestRejectedResolvedSourceNamesBothSources(t *testing.T) {
+	problem := &model.Problem{Code: model.CodeInvalidSource, Summary: "Unsupported module source transport", Detail: "The module source scheme \"ftp\" is not supported."}
+
+	err := rejectedResolvedSource("tfr:///terraform-aws-modules/vpc/aws?version=5.0.0", "ftp://example.invalid/vpc.zip", problem)
+
+	var annotated *model.Problem
+	require.ErrorAs(t, err, &annotated)
+	assert.Equal(t, model.CodeInvalidSource, annotated.Code)
+	assert.Contains(t, annotated.Detail, "ftp\" is not supported")
+	assert.Contains(t, annotated.Detail, "tfr:///terraform-aws-modules/vpc/aws?version=5.0.0")
+	assert.Contains(t, annotated.Detail, "ftp://example.invalid/vpc.zip")
+	assert.NotContains(t, problem.Detail, "resolved to", "the original problem is not modified")
+
+	plain := errors.New("not a problem")
+	assert.Same(t, plain, rejectedResolvedSource("tfr:///a/b/c", "x", plain))
+}

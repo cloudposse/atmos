@@ -36,9 +36,9 @@ func TestComponentConfigurationOptIn(t *testing.T) {
 	require.Equal(t, []string{"live/**"}, provider.Discovery.IncludedPaths)
 	require.Equal(t, []string{"live/archive/**"}, provider.Discovery.ExcludedPaths)
 	require.Equal(t, map[string]any{"download_dir": ".cache"}, provider.Options)
-	require.NoError(t, checkConfig(config, true))
+	require.NoError(t, checkConfig(&config, true))
 	provider.Discovery.Enabled = false
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = provider
 	require.False(t, config.HasComponentDiscovery())
-	require.Error(t, checkConfig(config, true))
+	require.Error(t, checkConfig(&config, true))
 }

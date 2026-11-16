@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -57,9 +58,10 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 		return registryProblem(result.Source, err)
 	}
 	result.RegistryResolutionNanos = uint64(time.Since(started))
+	original := result.Source
 	resolved = normalizeGetterURL(resolved)
 	if err := validateRemoteSource(resolved); err != nil {
-		return err
+		return rejectedResolvedSource(original, resolved, err)
 	}
 	result.Source = resolved
 	result.RegistryAuth = auth
@@ -189,4 +191,16 @@ func registryProblem(source string, err error) *model.Problem {
 		},
 		Key: "terraform.source", Err: err,
 	}
+}
+
+// rejectedResolvedSource names both the registry source a unit was written with and the getter URL the
+// registry returned for it, so a rejected result can be traced to the source that produced it.
+func rejectedResolvedSource(original, resolved string, err error) error {
+	var problem *model.Problem
+	if !errors.As(err, &problem) {
+		return err
+	}
+	annotated := *problem
+	annotated.Detail = fmt.Sprintf("%s The registry source %q resolved to %q.", problem.Detail, original, resolved)
+	return &annotated
 }

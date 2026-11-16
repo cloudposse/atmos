@@ -281,6 +281,11 @@ type ResourceCounts struct {
 
 	// Destroy is the number of resources to destroy.
 	Destroy int
+
+	// Import is the number of resources to import. It comes from the plan or
+	// apply summary when present, so it stays accurate even when no import
+	// addresses could be extracted from the output.
+	Import int
 }
 
 // HelmfileOutputData contains helmfile-specific output data.
