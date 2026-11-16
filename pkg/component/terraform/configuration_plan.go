@@ -395,9 +395,20 @@ func excludedWorkdirFile(root, path, planPath, name string) bool {
 }
 
 // configurationWorkdirDigest binds retained module/configuration bytes, excluding mutable execution data.
+// Root and a non-empty planPath are resolved to absolute paths first, so a relative root never
+// fails to exclude the plan file; an empty planPath stays empty and excludes nothing.
 func configurationWorkdirDigest(root, planPath string) (string, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return "", planIOError(err)
+	}
+	if planPath != "" {
+		if planPath, err = filepath.Abs(planPath); err != nil {
+			return "", planIOError(err)
+		}
+	}
 	files := make(map[string]string)
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
