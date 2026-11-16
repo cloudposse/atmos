@@ -43,6 +43,11 @@
 .formContainer {
   position: relative;
 }
+.unavailable {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--ifm-color-emphasis-700);
+}
 .loading {
   position: absolute;
   inset: 0;
