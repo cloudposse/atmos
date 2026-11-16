@@ -2,8 +2,10 @@ package service_test
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -154,4 +156,120 @@ func TestConfigRepositories_DescribeReturnsIndependentCopies(t *testing.T) {
 	assert.Equal(t, wantLockScopes, second.Capabilities.LockScopes)
 	assert.Equal(t, map[string]string{"team": "platform"}, second.Defaults.Labels)
 	assert.Equal(t, map[string]string{"team": "platform"}, labels, "the configured defaults are untouched")
+}
+
+// blockingRegistry builds repositories like configRegistry, but the construction of "slow" waits for
+// release, so a test can hold one alias mid-construction.
+func blockingRegistry(t *testing.T, started chan<- struct{}, release <-chan struct{}, constructed *atomic.Int64) *artifact.RepositoryRegistry {
+	t.Helper()
+	registry := artifact.NewRepositoryRegistry()
+	desc, ok := artifact.BuiltinKind(artifact.RepositoryKindLocalDir)
+	require.True(t, ok)
+	require.NoError(t, registry.Register(desc, func(_ context.Context, alias string, _ *schema.ArtifactRepositoryConfig, _ ...artifact.RepositoryOption) (artifact.Repository, error) {
+		constructed.Add(1)
+		if alias == "slow" {
+			started <- struct{}{}
+			<-release
+		}
+		return artifacttest.New(artifacttest.Options{Alias: alias}), nil
+	}))
+	return registry
+}
+
+func blockingConfig() *schema.ArtifactConfig {
+	return &schema.ArtifactConfig{Repositories: map[string]schema.ArtifactRepositoryConfig{
+		"fast": {Kind: artifact.RepositoryKindLocalDir, Options: map[string]any{"path": "/tmp/fast"}},
+		"slow": {Kind: artifact.RepositoryKindLocalDir, Options: map[string]any{"path": "/tmp/slow"}},
+	}}
+}
+
+// While one repository is being constructed (it may be resolving credentials), opening an already
+// cached repository must not wait for it.
+func TestConfigRepositories_OpenOfACachedRepositoryIsNotBlockedByAnotherConstruction(t *testing.T) {
+	var constructed atomic.Int64
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	repos := service.FromConfig(blockingConfig(), blockingRegistry(t, started, release, &constructed))
+	cached, err := repos.Open(context.Background(), "fast")
+	require.NoError(t, err)
+
+	slowDone := make(chan error, 1)
+	go func() {
+		_, openErr := repos.Open(context.Background(), "slow")
+		slowDone <- openErr
+	}()
+	<-started
+
+	again := make(chan artifact.Repository, 1)
+	go func() {
+		repo, _ := repos.Open(context.Background(), "fast")
+		again <- repo
+	}()
+	select {
+	case repo := <-again:
+		assert.Same(t, cached, repo)
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("opening a cached repository waited for another repository's construction")
+	}
+	close(release)
+	require.NoError(t, <-slowDone)
+}
+
+// A caller waiting for a repository that another caller is constructing stops waiting when its own
+// context ends, and the construction still completes for everyone else.
+func TestConfigRepositories_AWaitingOpenHonorsItsContext(t *testing.T) {
+	var constructed atomic.Int64
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	repos := service.FromConfig(blockingConfig(), blockingRegistry(t, started, release, &constructed))
+
+	firstDone := make(chan artifact.Repository, 1)
+	go func() {
+		repo, _ := repos.Open(context.Background(), "slow")
+		firstDone <- repo
+	}()
+	<-started
+
+	ctx, cancel := context.WithCancel(context.Background())
+	waiter := make(chan error, 1)
+	go func() {
+		_, err := repos.Open(ctx, "slow")
+		waiter <- err
+	}()
+	cancel()
+	select {
+	case err := <-waiter:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("a canceled waiter kept waiting for the construction")
+	}
+	close(release)
+	require.NotNil(t, <-firstDone)
+	assert.Equal(t, int64(1), constructed.Load(), "the waiter did not start a second construction")
+}
+
+// Callers that race for the same alias share one construction and one repository.
+func TestConfigRepositories_ConcurrentOpensOfOneAliasConstructOnce(t *testing.T) {
+	var constructed atomic.Int64
+	started, release := make(chan struct{}, 8), make(chan struct{})
+	repos := service.FromConfig(blockingConfig(), blockingRegistry(t, started, release, &constructed))
+
+	const callers = 8
+	results := make([]artifact.Repository, callers)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i], _ = repos.Open(context.Background(), "slow")
+		}()
+	}
+	<-started
+	close(release)
+	wg.Wait()
+	for _, repo := range results {
+		require.NotNil(t, repo)
+		assert.Same(t, results[0], repo)
+	}
+	assert.Equal(t, int64(1), constructed.Load())
 }

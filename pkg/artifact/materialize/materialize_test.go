@@ -169,6 +169,31 @@ func TestMaterialize_ReplacesRestrictiveDestination(t *testing.T) {
 	assertNoScratch(t, out)
 }
 
+// A trailing separator makes the filesystem resolve a symlink as a directory, so the destination is
+// normalized before it is inspected: a symlink destination is rejected whether or not it ends in one.
+func TestInspectDestination_RejectsASymlinkWithATrailingSeparator(t *testing.T) {
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "a.txt", "a", 0o644)
+	p := prepared(t, src, artifact.PackagingNone)
+	root := t.TempDir()
+	// The target holds exactly the inventory, so following the link would report a match.
+	fixtures.WriteFile(t, root, "target/a.txt", "a", 0o644)
+	if !fixtures.Symlink(t, root, "linked", "target") {
+		t.Skip("this platform cannot create symlinks")
+	}
+	link := filepath.Join(root, "linked")
+
+	for name, dest := range map[string]string{
+		"plain":              link,
+		"trailing separator": link + string(filepath.Separator),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := materialize.InspectDestination(dest, &p.Record)
+			require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
+		})
+	}
+}
+
 func TestInspectDestination_States(t *testing.T) {
 	src := t.TempDir()
 	fixtures.WriteFile(t, src, "a.txt", "a", 0o644)

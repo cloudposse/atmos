@@ -49,6 +49,7 @@ type options struct {
 	limits      Limits
 	onCaptured  func(path string)
 	onRehashed  func(path string)
+	onResolved  func(path string)
 }
 
 // WithStagingRoot sets the directory that holds the private staging directory. The default is the
@@ -199,11 +200,14 @@ func captureInto(ctx context.Context, source, root string, opts *options) (*Snap
 	if err != nil {
 		return nil, err
 	}
+	if hook := opts.onResolved; hook != nil {
+		hook(resolved)
+	}
 	staging, err := os.Lstat(root)
 	if err != nil {
 		return nil, fmt.Errorf("%w: inspect staging directory: %w", errUtils.ErrArtifactPackagingInvalid, err)
 	}
-	c := &capturer{staging: staging, ctx: ctx, opts: opts, root: resolved, dataDir: dataDir, staged: make(map[string]string), dirs: make(map[string][]string)}
+	c := &capturer{staging: staging, ctx: ctx, opts: opts, root: resolved, rootInfo: info, dataDir: dataDir, staged: make(map[string]string), dirs: make(map[string][]string)}
 	if info.IsDir() {
 		err = c.walkDir(resolved, "")
 	} else {

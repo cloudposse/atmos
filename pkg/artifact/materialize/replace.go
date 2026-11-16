@@ -52,6 +52,11 @@ const (
 func InspectDestination(dest string, record *artifact.Record) (DestinationState, error) {
 	defer perf.Track(nil, "materialize.InspectDestination")()
 
+	// A trailing separator makes the filesystem resolve a symlink as a directory, which would let a
+	// matching link target pass the symlink check below. Inspect the cleaned path instead.
+	if dest != "" {
+		dest = filepath.Clean(dest)
+	}
 	info, err := os.Lstat(dest)
 	switch {
 	case os.IsNotExist(err):

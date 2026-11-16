@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sort"
@@ -23,7 +24,17 @@ type ConfigRepositories struct {
 	registry *artifact.RepositoryRegistry
 	options  []artifact.RepositoryOption
 	mu       sync.Mutex
-	opened   map[string]artifact.Repository
+	opened   map[string]*openedRepository
+}
+
+// An openedRepository is the construction state of one alias. Its done channel closes when
+// construction ends, and the repository and error are valid after that. The shared mutex guards only
+// the map of these entries, never a construction: building a repository may resolve credentials and
+// wait on a user.
+type openedRepository struct {
+	done chan struct{}
+	repo artifact.Repository
+	err  error
 }
 
 var _ Repositories = (*ConfigRepositories)(nil)
@@ -36,7 +47,7 @@ func FromConfig(cfg *schema.ArtifactConfig, registry *artifact.RepositoryRegistr
 	if registry == nil {
 		registry = artifact.DefaultRepositoryRegistry()
 	}
-	return &ConfigRepositories{cfg: cfg, registry: registry, options: opts, opened: map[string]artifact.Repository{}}
+	return &ConfigRepositories{cfg: cfg, registry: registry, options: opts, opened: map[string]*openedRepository{}}
 }
 
 // Describe implements [Repositories]. For a repository that delegates locking, the lock scopes of
@@ -106,25 +117,61 @@ func containsScope(scopes []artifact.LockScope, scope artifact.LockScope) bool {
 	return false
 }
 
-// Open implements [Repositories]. Each repository is constructed once.
+// Open implements [Repositories]. Each repository is constructed once, and constructing one does not
+// block opening another: callers waiting for the same alias share its construction and stop waiting
+// when their own context ends. A failed construction is not cached, so a later Open retries it.
 func (c *ConfigRepositories) Open(ctx context.Context, alias string) (artifact.Repository, error) {
 	defer perf.Track(nil, "service.ConfigRepositories.Open")()
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if repo, ok := c.opened[alias]; ok {
-		return repo, nil
+	for {
+		c.mu.Lock()
+		if entry, ok := c.opened[alias]; ok {
+			c.mu.Unlock()
+			repo, retry, err := c.await(ctx, entry)
+			if retry {
+				continue
+			}
+			return repo, err
+		}
+		repoCfg, ok := c.cfg.Repositories[alias]
+		if !ok {
+			c.mu.Unlock()
+			return nil, fmt.Errorf("%w: repository %q is not configured", errUtils.ErrArtifactConfigInvalid, alias)
+		}
+		entry := &openedRepository{done: make(chan struct{})}
+		c.opened[alias] = entry
+		c.mu.Unlock()
+		return c.construct(ctx, alias, &repoCfg, entry)
 	}
-	repoCfg, ok := c.cfg.Repositories[alias]
-	if !ok {
-		return nil, fmt.Errorf("%w: repository %q is not configured", errUtils.ErrArtifactConfigInvalid, alias)
+}
+
+// construct builds the repository outside the shared mutex and publishes the outcome to every caller
+// waiting on entry. A failure removes the entry so a later Open can try again.
+func (c *ConfigRepositories) construct(ctx context.Context, alias string, repoCfg *schema.ArtifactRepositoryConfig, entry *openedRepository) (artifact.Repository, error) {
+	entry.repo, entry.err = c.registry.New(ctx, alias, repoCfg, c.options...)
+	if entry.err != nil {
+		c.mu.Lock()
+		if c.opened[alias] == entry {
+			delete(c.opened, alias)
+		}
+		c.mu.Unlock()
 	}
-	repo, err := c.registry.New(ctx, alias, &repoCfg, c.options...)
-	if err != nil {
-		return nil, err
+	close(entry.done)
+	return entry.repo, entry.err
+}
+
+// await waits for another caller's construction of entry, or for ctx to end. It reports retry when that
+// construction ended because the other caller's own context did, which says nothing about this caller.
+func (c *ConfigRepositories) await(ctx context.Context, entry *openedRepository) (artifact.Repository, bool, error) {
+	select {
+	case <-entry.done:
+	case <-ctx.Done():
+		return nil, false, ctx.Err()
 	}
-	c.opened[alias] = repo
-	return repo, nil
+	if entry.err != nil && ctx.Err() == nil && (errors.Is(entry.err, context.Canceled) || errors.Is(entry.err, context.DeadlineExceeded)) {
+		return nil, true, nil
+	}
+	return entry.repo, false, entry.err
 }
 
 // Aliases implements [Repositories].

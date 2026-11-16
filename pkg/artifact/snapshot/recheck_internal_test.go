@@ -39,6 +39,39 @@ func TestCapture_RejectsAModeChangeDuringTheFinalHash(t *testing.T) {
 	assert.Nil(t, snap)
 }
 
+// withResolvedHook registers a callback invoked once the source has been resolved and before it is read.
+func withResolvedHook(hook func(path string)) Option {
+	return func(o *options) { o.onResolved = hook }
+}
+
+// A source directory replaced by a symlink to another directory after it was resolved would be read
+// through the link: every child record describes the link's target, so the per-file checks agree with
+// each other. The root's own identity is retained and verified, so the capture is rejected.
+func TestCapture_RejectsReplacementOfTheSourceRootBeforeItIsRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("a directory cannot be swapped for a symlink portably on %s", runtime.GOOS)
+	}
+	parent := t.TempDir()
+	src := filepath.Join(parent, "src")
+	require.NoError(t, os.Mkdir(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "a.txt"), []byte("selected"), 0o644))
+	outside := filepath.Join(parent, "outside")
+	require.NoError(t, os.Mkdir(outside, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("not selected"), 0o644))
+
+	swapped := false
+	hook := func(string) {
+		swapped = true
+		require.NoError(t, os.Rename(src, filepath.Join(parent, "moved")))
+		require.NoError(t, os.Symlink(outside, src))
+	}
+	snap, err := Capture(t.Context(), src, WithStagingRoot(t.TempDir()), withResolvedHook(hook))
+
+	require.True(t, swapped, "the hook ran")
+	require.ErrorIs(t, err, errUtils.ErrArtifactSourceChanged)
+	assert.Nil(t, snap)
+}
+
 func TestCapture_StaysQuietWhenNothingChangesDuringTheFinalHash(t *testing.T) {
 	src := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0o644))

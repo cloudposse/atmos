@@ -30,12 +30,15 @@ type capturer struct {
 	opts    *options
 	root    string
 	dataDir string
-	entries []artifact.Entry
-	staged  map[string]string
-	dirs    map[string][]string
-	sources []sourceRecord
-	total   int64
-	counter int
+
+	// rootInfo identifies the source root as it was resolved, so a replacement is detected.
+	rootInfo os.FileInfo
+	entries  []artifact.Entry
+	staged   map[string]string
+	dirs     map[string][]string
+	sources  []sourceRecord
+	total    int64
+	counter  int
 
 	// staging identifies the private staging directory, which is skipped when it lies inside the source.
 	staging os.FileInfo

@@ -103,6 +103,9 @@ func sameFileState(a, b os.FileInfo) bool {
 // recheck verifies every captured source entry still matches what was staged: type, size,
 // modification time, directory listing, link target, and file digest.
 func (c *capturer) recheck() error {
+	if err := c.recheckRoot(); err != nil {
+		return err
+	}
 	for index := range c.sources {
 		if err := c.ctx.Err(); err != nil {
 			return err
@@ -119,6 +122,20 @@ func (c *capturer) recheck() error {
 		if !slices.Equal(current, names) {
 			return fmt.Errorf("%w: directory %q gained or lost entries while it was being captured", errUtils.ErrArtifactSourceChanged, abs)
 		}
+	}
+	return nil
+}
+
+// recheckRoot verifies that the source root is still the directory or file that was resolved. If another
+// process replaced it, for example with a symlink, the children would have been read from the replacement
+// and every per-entry check would agree with them, so the root's own identity is compared.
+func (c *capturer) recheckRoot() error {
+	now, err := os.Lstat(c.root)
+	if err != nil {
+		return changedError(c.root, err)
+	}
+	if !os.SameFile(c.rootInfo, now) {
+		return fmt.Errorf("%w: the source %q was replaced while it was being captured", errUtils.ErrArtifactSourceChanged, c.root)
 	}
 	return nil
 }
