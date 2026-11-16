@@ -638,5 +638,9 @@ func applyUnitSettings(ctx context.Context, cfg *config.TerragruntConfig, reques
 	if result.TerraformBinary == "" {
 		return nil
 	}
+	if warning, overridden := binaryOverrideWarning(request, result.TerraformBinary, path); overridden {
+		result.Warnings = append(result.Warnings, warning)
+		return nil
+	}
 	return validateEngine(ctx, request, result.TerraformBinary, path)
 }

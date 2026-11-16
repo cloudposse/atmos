@@ -250,3 +250,57 @@ func localSubdirSourceProblem(filesystem afero.Fs, path, source string) *model.P
 	}
 	return localSourceProblem(filesystem, path, source, filepath.Join(root, filepath.FromSlash(subdirectory)))
 }
+
+// WarningTerraformBinaryOverridden is reported for a unit whose terraform_binary is not the
+// executable Atmos will run because a stack `command` or the command line selected another one.
+const WarningTerraformBinaryOverridden = "terraform_binary_overridden"
+
+// effectiveBinaryEnvironment carries the executable the host resolved for the component, after
+// applying the stack `command` and command-line overrides.
+const effectiveBinaryEnvironment = "ATMOS_TERRAFORM_BINARY"
+
+// binaryOverrideWarning reports whether the stack or the command line replaced the unit's
+// terraform_binary with another executable of the same engine. The unit's binary never runs then,
+// so probing it would fail a unit on an executable that is not used; the caller skips the probe and
+// reports the returned warning instead.
+//
+// A string comparison cannot tell an override from the default, so the resolved files are compared:
+// the unit's binary on the invocation PATH against the host's effective binary, both with symlinks
+// evaluated. A unit binary that cannot be resolved while the effective one differs counts as an
+// override, because the host already refused to run when the unit's binary was the effective one and
+// was missing. The host and this plugin may see different PATHs; a false "override" only skips an
+// advisory probe and adds a warning, so the check fails open.
+func binaryOverrideWarning(request model.Request, binary, path string) (model.Warning, bool) {
+	effective := environmentValue(request.Environment, effectiveBinaryEnvironment)
+	if effective == "" {
+		return model.Warning{}, false
+	}
+	if resolved, err := resolveOnInvocationPath(binary, request.Environment); err == nil && sameExecutable(resolved, effective) {
+		return model.Warning{}, false
+	}
+	return model.Warning{
+		Code: WarningTerraformBinaryOverridden, Path: path,
+		Message: fmt.Sprintf("The stack `command` %s overrides this unit's `terraform_binary` %s; the unit's binary is not used. "+
+			"Remove `terraform_binary` from the unit or the `command` override from the stack to make them agree.", effective, binary),
+	}, true
+}
+
+// sameExecutable reports whether two paths name the same file, following symlinks. A path that
+// cannot be inspected is compared by its cleaned spelling.
+func sameExecutable(a, b string) bool {
+	a, b = evalSymlinksOrClean(a), evalSymlinksOrClean(b)
+	infoA, errA := os.Stat(a)
+	infoB, errB := os.Stat(b)
+	if errA == nil && errB == nil {
+		return os.SameFile(infoA, infoB)
+	}
+	return a == b
+}
+
+// evalSymlinksOrClean resolves symlinks where the path exists and cleans it otherwise.
+func evalSymlinksOrClean(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolved)
+	}
+	return filepath.Clean(path)
+}
