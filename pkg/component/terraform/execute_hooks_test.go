@@ -679,3 +679,40 @@ func TestInitFileArgumentsAcceptSingleAndDoubleDashForms(t *testing.T) {
 		})
 	}
 }
+
+// TestDetailedExitCodeEnabled covers the bare flag, explicit boolean forms, and last-wins ordering.
+func TestDetailedExitCodeEnabled(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "absent", args: []string{"-out=plan"}, want: false},
+		{name: "bare", args: []string{"-detailed-exitcode"}, want: true},
+		{name: "double dash bare", args: []string{"--detailed-exitcode"}, want: true},
+		{name: "explicit true", args: []string{"-detailed-exitcode=true"}, want: true},
+		{name: "explicit 1", args: []string{"-detailed-exitcode=1"}, want: true},
+		{name: "explicit false", args: []string{"-detailed-exitcode=false"}, want: false},
+		{name: "explicit 0 double dash", args: []string{"--detailed-exitcode=0"}, want: false},
+		{name: "unparsable", args: []string{"-detailed-exitcode=maybe"}, want: false},
+		{name: "empty value", args: []string{"-detailed-exitcode="}, want: false},
+		{name: "last wins disabled", args: []string{"-detailed-exitcode", "-detailed-exitcode=false"}, want: false},
+		{name: "last wins enabled", args: []string{"-detailed-exitcode=false", "-detailed-exitcode=true"}, want: true},
+		{name: "unparsable after enabled", args: []string{"-detailed-exitcode", "-detailed-exitcode=x"}, want: false},
+		{name: "similar flag", args: []string{"-detailed-exitcode-extra=true"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, detailedExitCodeEnabled(tt.args))
+		})
+	}
+}
+
+// TestIsExplicitDetailedPlanChangesHonorsExplicitValue checks the plan predicate end to end.
+func TestIsExplicitDetailedPlanChangesHonorsExplicitValue(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{SubCommand: subcommandPlan}
+	err := errUtils.ExitCodeError{Code: detailedExitCodeChangesDetected}
+	require.True(t, isExplicitDetailedPlanChanges(info, []string{"-detailed-exitcode=true"}, err))
+	require.False(t, isExplicitDetailedPlanChanges(info, []string{"-detailed-exitcode=false"}, err))
+	require.False(t, isExplicitDetailedPlanChanges(info, []string{"-detailed-exitcode", "-detailed-exitcode=false"}, err))
+}

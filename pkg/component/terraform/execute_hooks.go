@@ -210,7 +210,7 @@ func runPhaseAction(info *schema.ConfigAndStacksInfo, args []string, opts []comp
 
 // isDetailedPlanChanges reports whether err is plan's "-detailed-exitcode" status for changes present.
 func isDetailedPlanChanges(phase *executionPhase, args []string, err error) bool {
-	return err != nil && phase.command == "plan" && slices.Contains(args, "-detailed-exitcode") && resolveExitCode(err) == detailedExitCodeChangesDetected
+	return err != nil && phase.command == "plan" && detailedExitCodeEnabled(args) && resolveExitCode(err) == detailedExitCodeChangesDetected
 }
 
 // hookOptions carries over only what a hook shares with the command: cancellation, the process

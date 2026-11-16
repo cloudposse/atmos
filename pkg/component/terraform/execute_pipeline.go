@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -441,7 +442,27 @@ func isExplicitDetailedPlanChanges(info *schema.ConfigAndStacksInfo, args []stri
 	if errors.Is(err, errUtils.ErrComponentHookFailed) {
 		return false
 	}
-	return info.SubCommand == subcommandPlan && slices.Contains(args, detailedExitCodeFlag) && resolveExitCode(err) == detailedExitCodeChangesDetected
+	return info.SubCommand == subcommandPlan && detailedExitCodeEnabled(args) && resolveExitCode(err) == detailedExitCodeChangesDetected
+}
+
+// detailedExitCodeEnabled reports whether args enable -detailed-exitcode. It accepts the bare flag
+// and the explicit boolean forms (-detailed-exitcode=true, --detailed-exitcode=false), and the last
+// occurrence wins, matching Go flag semantics. An unparsable value counts as not enabled.
+func detailedExitCodeEnabled(args []string) bool {
+	enabled := false
+	for _, arg := range args {
+		name, value, hasValue := strings.Cut(arg, "=")
+		if name != detailedExitCodeFlag && name != "-"+detailedExitCodeFlag {
+			continue
+		}
+		if !hasValue {
+			enabled = true
+			continue
+		}
+		parsed, err := strconv.ParseBool(value)
+		enabled = err == nil && parsed
+	}
+	return enabled
 }
 
 // recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command
