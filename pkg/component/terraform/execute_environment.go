@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"encoding/json"
 	errors "errors"
 	fmt "fmt"
 	os "os"
@@ -20,6 +21,7 @@ import (
 	authbridge "github.com/cloudposse/atmos/pkg/store/authbridge"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	rc "github.com/cloudposse/atmos/pkg/terraform/rc"
+	tfvars "github.com/cloudposse/atmos/pkg/terraform/tfvars"
 )
 
 // warnOnConflictingEnvVars inspects the current process environment for variables
@@ -437,4 +439,52 @@ func (e *Executor) SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfigurati
 	defer perf.Track(atmosConfig, "exec.SetupComponentAuthForCLI")()
 
 	return e.setupTerraformAuth(atmosConfig, info)
+}
+
+// terraformVarEnvPrefix is the prefix Terraform and OpenTofu read variable values from the environment with.
+const terraformVarEnvPrefix = "TF_VAR_"
+
+// secretEnvForDeclaredTypes renders secret variables as TF_VAR_ entries, encoding each string for the way
+// Terraform reads it. Terraform parses a TF_VAR_ value as HCL when the variable is declared `any` or with a
+// complex type, and uses it as a literal when the variable is declared string, number, or bool, or has no
+// type. A string for an HCL-parsed variable is therefore written as a quoted HCL string, with template
+// sequences escaped so that the value is never interpreted as an interpolation. Every other value is
+// encoded by tfvars.SecretEnv.
+func secretEnvForDeclaredTypes(componentSection map[string]any, secret map[string]any) ([]string, error) {
+	plain := make(map[string]any, len(secret))
+	var quoted []string
+	for name, value := range secret {
+		if text, isString := value.(string); isString {
+			if typeText, declared := TerraformDeclaredVarType(componentSection, name); declared && terraformParsesAsHCL(typeText) {
+				quoted = append(quoted, terraformVarEnvPrefix+name+"="+quoteHCLString(text))
+				continue
+			}
+		}
+		plain[name] = value
+	}
+	env, err := tfvars.SecretEnv(plain)
+	if err != nil {
+		return nil, err
+	}
+	return append(env, quoted...), nil
+}
+
+// terraformParsesAsHCL reports whether Terraform parses a TF_VAR_ value for a variable declared with this type
+// as HCL rather than as a literal: every type except the primitives string, number, and bool.
+func terraformParsesAsHCL(typeText string) bool {
+	switch strings.TrimSpace(typeText) {
+	case "string", "number", "bool":
+		return false
+	default:
+		return true
+	}
+}
+
+// quoteHCLString renders text as a quoted HCL string literal. The JSON string escapes are valid HCL escapes,
+// and `${` and `%{` are doubled so that the value cannot start a template interpolation or directive.
+func quoteHCLString(text string) string {
+	encoded, _ := json.Marshal(text) //nolint:errchkjson // A string always encodes.
+	quoted := string(encoded)
+	quoted = strings.ReplaceAll(quoted, "${", "$${")
+	return strings.ReplaceAll(quoted, "%{", "%%{")
 }
