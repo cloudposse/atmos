@@ -187,7 +187,7 @@ func (r *RepositoryRegistry) New(ctx context.Context, alias string, cfg *schema.
 	}
 	repo, err := entry.factory(ctx, alias, cfg, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("repository %q: %w", RedactURL(alias), err)
+		return nil, fmt.Errorf("repository %q: %w", RedactURL(alias), RedactError(err, alias))
 	}
 	return repo, nil
 }

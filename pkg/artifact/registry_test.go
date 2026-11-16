@@ -268,3 +268,21 @@ func TestRepositoryRegistryDescriptorIsolation(t *testing.T) {
 	assert.Equal(t, PackagingNone, again.Capabilities.Packagings[0])
 	assert.NotEqual(t, LockScope("changed"), again.Capabilities.LockScopes[0])
 }
+
+// A factory error that quotes the raw alias must not carry its credential to the caller, and the
+// scrubbed error keeps the cause in its chain.
+func TestRepositoryRegistryNew_ScrubsFactoryErrorsOfTheAlias(t *testing.T) {
+	const alias = "https://usr7:S3cr3tA@example.com/repo"
+	cause := errors.New("dial " + alias + " failed")
+	r := NewRepositoryRegistry()
+	desc, _ := BuiltinKind(RepositoryKindLocalDir)
+	require.NoError(t, r.Register(desc, func(context.Context, string, *schema.ArtifactRepositoryConfig, ...RepositoryOption) (Repository, error) {
+		return nil, cause
+	}))
+
+	_, err := r.New(context.Background(), alias, localDirConfig(t.TempDir()))
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "S3cr3tA")
+	assert.NotContains(t, err.Error(), "usr7")
+	assert.ErrorIs(t, err, cause, "the cause stays in the chain")
+}

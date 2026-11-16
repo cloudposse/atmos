@@ -73,6 +73,7 @@ func TestDecode_ErrorsDoNotEchoCredentials(t *testing.T) {
 		{name: "unknown top-level field", raw: map[string]any{credential: "x"}},
 		{name: "credential-like unknown field", raw: map[string]any{"repositories": map[string]any{"a": map[string]any{"usr7:S3cr3tA@password": "x"}}}},
 		{name: "permissions holding a credential", raw: map[string]any{"repositories": map[string]any{credential: map[string]any{"kind": "local/archive", "permissions": map[string]any{"k": credential}}}}},
+		{name: "permissions holding a scheme-less credential", raw: map[string]any{"repositories": map[string]any{"a": map[string]any{"kind": "local/archive", "permissions": map[string]any{"k": "usr7:S3cr3tA@example.com"}}}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

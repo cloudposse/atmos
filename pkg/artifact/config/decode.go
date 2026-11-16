@@ -103,7 +103,7 @@ func checkPermissionTypes(raw map[string]any) error {
 			continue
 		}
 		if _, isString := value.(string); !isString {
-			errs = append(errs, fmt.Errorf("%w: repository %q: permissions must be a quoted octal string such as \"0600\", got %T %v (an unquoted 0600 is read by YAML as a different number)", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(alias), value, artifact.RedactCredentials(fmt.Sprint(value), "")))
+			errs = append(errs, fmt.Errorf("%w: repository %q: permissions must be a quoted octal string such as \"0600\", got %T (an unquoted 0600 is read by YAML as a different number)", errUtils.ErrArtifactConfigInvalid, artifact.RedactURL(alias), value))
 		}
 	}
 	return errors.Join(errs...)
