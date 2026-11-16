@@ -1,10 +1,16 @@
 # Endpoint groups for the local harden-runner composite.
 # Select one or more groups with its policies input; their union is allowed.
 # Keep groups scoped to services. Add workload-specific destinations here,
-# not to a broad shared group. Empty `none` adds only upstream implicit hosts.
+# not to a broad shared group. `none` permits only upstream implicit hosts.
 # runner-os restricts background-service groups to their operating system.
 # DNS repair does not add endpoints or widen firewall rules.
-none: []
+# A non-empty allowlist selects allowlist enforcement in Harden Runner.
+# Harden Runner resolves every allowed endpoint as a DNS name when it starts,
+# so an IP literal (for example 127.0.0.1) makes its agent revert. Port 9
+# (discard) on github.com is resolvable, which GitHub hosts do not serve, and
+# the host is already reachable on its real port through the implicit hosts.
+none:
+  - github.com:9
 github:
   - api.github.com:443
   - github.com:443

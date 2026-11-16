@@ -1,14 +1,15 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -223,12 +224,11 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string, dirs configSo
 		err := mergeConfig(v, confDirPath, CliConfigFileName, true)
 		if err != nil {
 			log.Debug("Failed to find atmos config", "path", confDirPath, "error", err)
-			switch err.(type) {
-			case viper.ConfigFileNotFoundError:
-				log.Debug("Failed to found atmos config", "file", filepath.Join(confDirPath, CliConfigFileName))
-			default:
+			var notFound viper.ConfigFileNotFoundError
+			if !errors.As(err, &notFound) {
 				return nil, configSourceDirs{}, err
 			}
+			log.Debug("Failed to found atmos config", "file", filepath.Join(confDirPath, CliConfigFileName))
 			err = mergeConfig(v, confDirPath, DotCliConfigFileName, true)
 			if err != nil {
 				log.Debug("Failed to found .atmos config", "path", filepath.Join(confDirPath, CliConfigFileName), "error", err)
@@ -288,7 +288,7 @@ func validatedIsFiles(files []string) error {
 				return fmt.Errorf("%w: --config file '%s' does not exist", errUtils.ErrFileNotFound, filePath)
 			}
 			// Other stat errors (permission denied, etc.)
-			return fmt.Errorf("%w: cannot access --config file '%s': %v", errUtils.ErrFileAccessDenied, filePath, err)
+			return fmt.Errorf("%w: cannot access --config file '%s': %w", errUtils.ErrFileAccessDenied, filePath, err)
 		}
 		if stat.IsDir() {
 			log.Debug("--config expected file found directory", "path", filePath)

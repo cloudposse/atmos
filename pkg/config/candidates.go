@@ -149,9 +149,7 @@ func ResolveConfigCandidates(opts ...CandidateOption) ([]ConfigCandidate, error)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.addProfiles(&o); err != nil {
-		return nil, err
-	}
+	r.addProfiles(&o)
 	return dedupeCandidates(r.candidates), nil
 }
 
@@ -329,26 +327,22 @@ func (r *candidateResolver) addAtmosDDirs(dir, suffix string) {
 }
 
 // addProfiles mirrors loadProfiles for the active profiles only.
-func (r *candidateResolver) addProfiles(o *candidateOptions) error {
+func (r *candidateResolver) addProfiles(o *candidateOptions) {
 	if len(o.profiles) == 0 {
-		return nil
+		return
 	}
 	cfg := &schema.AtmosConfiguration{
 		CliConfigPath:             r.profileConfigPath(),
 		ProfilesBasePathConfigDir: o.profilesBasePathConfigDir,
 	}
 	cfg.Profiles.BasePath = o.profilesBasePath
-	locations, err := discoverProfileLocations(cfg)
-	if err != nil {
-		return err
-	}
+	locations := discoverProfileLocations(cfg)
 	for _, name := range o.profiles {
 		if name == "" || name == ProfileFlagSelectValue {
 			continue
 		}
 		r.addProfile(name, locations)
 	}
-	return nil
 }
 
 // addProfile adds the files of one profile, or a single non-existent candidate when it cannot be found.
