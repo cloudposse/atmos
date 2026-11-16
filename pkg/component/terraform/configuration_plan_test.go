@@ -999,6 +999,29 @@ func TestEnvironmentPlanOutputIgnoresUnownedPlans(t *testing.T) {
 	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
 }
 
+// The plan output check inspects the process environment the subprocess receives: an environment
+// chosen for the execution replaces the sanitized one, including when it is empty.
+func TestEnvironmentPlanOutputUsesExecutionEnvironment(t *testing.T) {
+	t.Setenv("TF_CLI_ARGS_plan", "")
+	t.Setenv("TF_CLI_ARGS", "")
+	config, info, execCtx, _, _ := planFixture(t)
+	flag := "TF_CLI_ARGS_plan=-out=env.plan"
+
+	info.SanitizedEnv = []string{"OTHER=value"}
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx))
+	require.ErrorIs(t, validateEnvironmentPlanOutput(config, info, execCtx, component.WithEnvironment([]string{flag})), errUtils.ErrPlanVerificationFailed)
+
+	info.SanitizedEnv = []string{flag}
+	require.ErrorIs(t, validateEnvironmentPlanOutput(config, info, execCtx), errUtils.ErrPlanVerificationFailed)
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx, component.WithEnvironment([]string{})), "an empty execution environment replaces the sanitized one")
+	require.NoError(t, validateEnvironmentPlanOutput(config, info, execCtx, component.WithEnvironment([]string{"OTHER=value"})))
+	require.ErrorIs(t, validateEnvironmentPlanOutput(config, info, execCtx, component.WithEnvironment(nil)), errUtils.ErrPlanVerificationFailed, "a nil environment keeps the sanitized one")
+
+	info.SanitizedEnv = nil
+	info.ComponentEnvList = []string{flag}
+	require.ErrorIs(t, validateEnvironmentPlanOutput(config, info, execCtx, component.WithEnvironment([]string{})), errUtils.ErrPlanVerificationFailed, "component layers still apply")
+}
+
 func TestConfigurationPlanRoundTripNumericBackend(t *testing.T) {
 	config, info, execCtx, fixture, path := planFixture(t)
 	execCtx.preparedConfiguration.Backend["port"] = 1234
