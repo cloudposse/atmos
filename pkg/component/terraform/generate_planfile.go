@@ -377,30 +377,3 @@ func plannedOutputPath(directory string, args []string) string {
 	}
 	return ""
 }
-
-// environmentWords tokenizes a TF_CLI_ARGS value like the engine. A malformed value is refused by
-// the engine, so it yields no words.
-func environmentWords(value string) []string {
-	words, err := tokenizeEnvironmentArgs(value)
-	if err != nil {
-		return nil
-	}
-	return words
-}
-
-// planBaseEnvironment is the process environment layer of a plan subprocess: the environment
-// chosen for the execution when there is one, otherwise the sanitized environment, otherwise the
-// inherited one.
-func planBaseEnvironment(info *schema.ConfigAndStacksInfo, opts []component.ExecutionOption) []string {
-	var options component.ExecutionOptions
-	for _, opt := range opts {
-		opt(&options)
-	}
-	switch {
-	case options.ProcessEnv != nil:
-		return options.ProcessEnv
-	case info.SanitizedEnv != nil:
-		return info.SanitizedEnv
-	}
-	return os.Environ()
-}
