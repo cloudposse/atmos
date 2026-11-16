@@ -97,3 +97,114 @@ func TestCapture_RejectsExcludedTypeChange(t *testing.T) {
 	}))
 	require.ErrorIs(t, err, errUtils.ErrArtifactSourceChanged)
 }
+
+// Containment and exclusion are both decided from the links as they were captured. Each case builds
+// a source, optionally changes it while the capture runs in a way the final recheck cannot see (below
+// an excluded directory, which is never walked), and states the one outcome the capture may have.
+func TestCapture_LinkTargetsAreJudgedFromTheCapturedLinks(t *testing.T) {
+	tests := []struct {
+		name    string
+		files   []string
+		links   [][2]string
+		mutate  func(t *testing.T, dir string)
+		wantErr error
+		wantMsg string
+		want    []string
+	}{
+		{
+			name:    "a link to an excluded file is rejected",
+			files:   []string{"keep.txt", "scratch.tmp"},
+			links:   [][2]string{{"link", "scratch.tmp"}},
+			wantErr: errUtils.ErrArtifactUnsafePath,
+			wantMsg: `symlink "link" targets excluded path "scratch.tmp"`,
+		},
+		{
+			name:    "a chain of two links that ends below an excluded directory is rejected",
+			files:   []string{"keep.txt", "cache/a"},
+			links:   [][2]string{{"first", "second"}, {"second", "cache/a"}},
+			wantErr: errUtils.ErrArtifactUnsafePath,
+			wantMsg: `symlink "first" targets excluded path "cache"`,
+		},
+		{
+			name:    "a chain that climbs out of the source is rejected as an escape",
+			files:   []string{"keep.txt", "sub/keep.txt"},
+			links:   [][2]string{{"sub/up", ".."}, {"out", "sub/up/../gone"}},
+			wantErr: errUtils.ErrArtifactUnsafePath,
+			wantMsg: `symlink "out" resolves outside the source`,
+		},
+		{
+			name:  "a link to an allowed path is captured",
+			files: []string{"keep.txt", "cache/a"},
+			links: [][2]string{{"link", "keep.txt"}},
+			want:  []string{"keep.txt", "link"},
+		},
+		{
+			// The filesystem looks up cache/p before it processes "..", so excluding cache turns this
+			// link into a broken one even though it reduces to keep.txt. A later change below the
+			// excluded directory (cache/p becoming a link to cache/q/r) cannot change the answer.
+			name:  "a link that passes through an excluded directory is rejected even when it reduces to an allowed path",
+			files: []string{"keep.txt", "cache/p/a", "cache/q/r/a"},
+			links: [][2]string{{"link", "cache/p/../../keep.txt"}},
+			mutate: func(t *testing.T, dir string) {
+				require.NoError(t, os.RemoveAll(filepath.Join(dir, "cache", "p")))
+				require.NoError(t, os.Symlink(filepath.Join("q", "r"), filepath.Join(dir, "cache", "p")))
+			},
+			wantErr: errUtils.ErrArtifactUnsafePath,
+			wantMsg: `symlink "link" targets excluded path "cache"`,
+		},
+		{
+			name:  "a link that only passes through allowed directories is captured",
+			files: []string{"keep.txt", "sub/a"},
+			links: [][2]string{{"link", "sub/../keep.txt"}},
+			want:  []string{"keep.txt", "link", "sub", "sub/a"},
+		},
+		{
+			name:  "removing the target below an excluded directory cannot turn a rejected link into an allowed one",
+			files: []string{"keep.txt", "cache/a"},
+			links: [][2]string{{"link", "cache/a"}},
+			mutate: func(t *testing.T, dir string) {
+				require.NoError(t, os.Remove(filepath.Join(dir, "cache", "a")))
+			},
+			wantErr: errUtils.ErrArtifactUnsafePath,
+			wantMsg: `symlink "link" targets excluded path "cache"`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, file := range tc.files {
+				fixtures.WriteFile(t, dir, file, "x", 0o644)
+			}
+			for _, link := range tc.links {
+				if !fixtures.Symlink(t, dir, link[0], link[1]) {
+					t.Skip("symlinks are unavailable on this platform")
+				}
+			}
+			mutated := false
+			opts := []snapshot.Option{snapshot.WithStagingRoot(t.TempDir()), snapshot.WithExcluder(byName)}
+			if tc.mutate != nil {
+				// The hook runs after a regular file was copied. By then the walk has classified
+				// "cache", which sorts before every captured file in these sources.
+				opts = append(opts, snapshot.WithCaptureHook(func(string) {
+					if !mutated {
+						mutated = true
+						tc.mutate(t, dir)
+					}
+				}))
+			}
+
+			snap, err := snapshot.Capture(context.Background(), dir, opts...)
+
+			require.Equal(t, tc.mutate != nil, mutated, "the source is changed exactly when the case asks for it")
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				assert.Contains(t, err.Error(), tc.wantMsg)
+				return
+			}
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = snap.Close() })
+			require.NotEmpty(t, snap.Entries)
+			assert.Equal(t, tc.want, entryPaths(snap.Entries))
+		})
+	}
+}

@@ -70,6 +70,57 @@ func absolutePath(target string) (string, error) {
 func Escapes(links map[string]string, from string) bool {
 	defer perf.Track(nil, "linkpath.Escapes")()
 
+	_, outcome := followRecorded(links, from, ignoreVisit)
+	return outcome == recordedEscaped
+}
+
+// ResolveRecorded returns the slash-separated path, relative to the tree root, that from refers to
+// once every recorded link on the way is followed. Like Escapes it reads only links, never the
+// disk, so a caller can test where a captured link lands without looking at the source again. The
+// root itself resolves to the empty path. ResolveRecorded reports false when the chain leaves the
+// tree or loops, because neither names a path inside the tree.
+func ResolveRecorded(links map[string]string, from string) (string, bool) {
+	defer perf.Track(nil, "linkpath.ResolveRecorded")()
+
+	resolved, outcome := followRecorded(links, from, ignoreVisit)
+	if outcome != recordedInside {
+		return "", false
+	}
+	return strings.Join(resolved, "/"), true
+}
+
+// TraversedRecorded returns, in the order the filesystem looks them up, the slash-separated path of
+// every entry that resolving from through the recorded links passes through, relative to the tree
+// root. A parent component is applied only after the directory before it was looked up, so
+// "cache/p/../x" traverses "cache" and "cache/p" even though it reduces to "x". Paths reached
+// through a recorded link are reported by the physical location they resolve to. It reports false
+// when the chain leaves the tree or loops.
+func TraversedRecorded(links map[string]string, from string) ([]string, bool) {
+	defer perf.Track(nil, "linkpath.TraversedRecorded")()
+
+	var traversed []string
+	_, outcome := followRecorded(links, from, func(visited string) { traversed = append(traversed, visited) })
+	return traversed, outcome == recordedInside
+}
+
+// ignoreVisit is the visitor of callers that only need where a path ends up.
+func ignoreVisit(string) {}
+
+// recordedOutcome is how the resolution of a path through recorded links ended.
+type recordedOutcome int
+
+const (
+	// The path resolved to a location inside the tree.
+	recordedInside recordedOutcome = iota
+	// The path climbed above the tree root.
+	recordedEscaped
+	// The link chain did not terminate.
+	recordedLooped
+)
+
+// followRecorded resolves from through the recorded links and returns the components reached. It
+// calls visit with the path of each entry it looks up that is not itself a recorded link.
+func followRecorded(links map[string]string, from string, visit func(string)) ([]string, recordedOutcome) {
 	pending := splitComponents(from)
 	var resolved []string
 	for hops := 0; len(pending) > 0; {
@@ -87,6 +138,7 @@ func Escapes(links map[string]string, from string) bool {
 			target, isLink := links[current]
 			if !isLink {
 				resolved = append(resolved, component)
+				visit(current)
 				continue
 			}
 			hops++

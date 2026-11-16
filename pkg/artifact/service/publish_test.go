@@ -482,3 +482,49 @@ func inventoryPathsOf(record *artifact.Record) []string {
 	}
 	return paths
 }
+
+// Clone promises a copy that shares nothing mutable with the original, in both directions.
+func TestRepositoryInfo_CloneIsolatesDiscoveryOptions(t *testing.T) {
+	newInfo := func() service.RepositoryInfo {
+		return service.RepositoryInfo{
+			Alias: "repo",
+			Discovery: service.DiscoveryInfo{
+				Kind: "s3",
+				Options: map[string]any{
+					"prefix": "base",
+					"nested": map[string]any{"region": "us-east-1"},
+					"list":   []any{"a", map[string]any{"k": "v"}},
+				},
+			},
+		}
+	}
+
+	t.Run("mutating the clone leaves the original unchanged", func(t *testing.T) {
+		info := newInfo()
+		cloned := info.Clone()
+
+		cloned.Discovery.Options["prefix"] = "other"
+		cloned.Discovery.Options["nested"].(map[string]any)["region"] = "eu-west-1"
+		cloned.Discovery.Options["list"].([]any)[0] = "changed"
+		cloned.Discovery.Options["list"].([]any)[1].(map[string]any)["k"] = "changed"
+
+		assert.Equal(t, newInfo().Discovery.Options, info.Discovery.Options)
+	})
+
+	t.Run("mutating the original after cloning leaves the clone unchanged", func(t *testing.T) {
+		info := newInfo()
+		cloned := info.Clone()
+
+		info.Discovery.Options["prefix"] = "other"
+		info.Discovery.Options["nested"].(map[string]any)["region"] = "eu-west-1"
+		info.Discovery.Options["list"].([]any)[0] = "changed"
+		info.Discovery.Options["list"].([]any)[1].(map[string]any)["k"] = "changed"
+
+		assert.Equal(t, newInfo().Discovery.Options, cloned.Discovery.Options)
+	})
+
+	t.Run("a nil options map stays nil", func(t *testing.T) {
+		info := service.RepositoryInfo{Alias: "repo"}
+		assert.Nil(t, info.Clone().Discovery.Options)
+	})
+}
