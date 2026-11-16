@@ -327,4 +327,24 @@ func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 		require.Equal(t, uint32(0o640), result.OverlayModes["group.pem"])
 		require.NotContains(t, result.OverlayModes, "plain.tf", "default modes are not exported")
 	})
+	t.Run("readable file in a private directory is restricted", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows ignores POSIX permission bits.")
+		}
+		request := nativeUnit(t, "")
+		dir := filepath.Dir(request.Path)
+		for name, mode := range map[string]os.FileMode{"private": 0o700, "shared": 0o755, "group": 0o750} {
+			require.NoError(t, os.MkdirAll(filepath.Join(dir, name, "nested"), 0o755))
+			require.NoError(t, os.Chmod(filepath.Join(dir, name), mode))
+			for _, file := range []string{filepath.Join(name, "credential.pem"), filepath.Join(name, "nested", "deep.pem")} {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte("# secret"), 0o644))
+			}
+		}
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Equal(t, uint32(0o600), result.OverlayModes["private/credential.pem"], "a 0644 credential in a 0700 directory must not be exposed")
+		require.Equal(t, uint32(0o600), result.OverlayModes["private/nested/deep.pem"], "a private ancestor restricts descendants")
+		require.Equal(t, uint32(0o640), result.OverlayModes["group/credential.pem"], "a 0750 directory hides the file from other")
+		require.NotContains(t, result.OverlayModes, "shared/credential.pem", "a traversable directory keeps the default mode")
+	})
 }
