@@ -153,10 +153,8 @@ func (g *legacyGraph) addImage(ctx context.Context, image v1.Image) (ocispec.Des
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
 	}
-	// A schema 1 manifest has no config or layer descriptors in the shape this graph serves, so it is
-	// refused up front instead of failing later in Manifest() or after its layers were already read.
-	if mediaType == types.DockerManifestSchema1 || mediaType == types.DockerManifestSchema1Signed {
-		return ocispec.Descriptor{}, fmt.Errorf("%w: schema 1 images are not supported; convert the image to OCI or Docker schema 2", errUtils.ErrOCIIntegrity)
+	if err := refuseSchema1(mediaType); err != nil {
+		return ocispec.Descriptor{}, err
 	}
 	if err := g.spoolStreamingLayers(ctx, image); err != nil {
 		return ocispec.Descriptor{}, err
@@ -176,6 +174,23 @@ func (g *legacyGraph) addImage(ctx context.Context, image v1.Image) (ocispec.Des
 	g.blobs[digest.Digest(manifest.Config.Digest.String())] = func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(rawConfig)), nil
 	}
+	g.registerLayers(image, manifest)
+	return g.addBytes(string(mediaType), raw), nil
+}
+
+// refuseSchema1 rejects a schema 1 manifest. It has no config or layer descriptors in the shape this
+// graph serves, so it is refused up front instead of failing later in Manifest() or after its layers
+// were already read.
+func refuseSchema1(mediaType types.MediaType) error {
+	if mediaType == types.DockerManifestSchema1 || mediaType == types.DockerManifestSchema1Signed {
+		return fmt.Errorf("%w: schema 1 images are not supported; convert the image to OCI or Docker schema 2", errUtils.ErrOCIIntegrity)
+	}
+	return nil
+}
+
+// registerLayers serves each layer of an image, from its spool file when it was spooled and from the
+// image otherwise.
+func (g *legacyGraph) registerLayers(image v1.Image, manifest *v1.Manifest) {
 	for i := range manifest.Layers {
 		hash := manifest.Layers[i].Digest
 		if path, found := g.spooled[digest.Digest(hash.String())]; found {
@@ -190,7 +205,6 @@ func (g *legacyGraph) addImage(ctx context.Context, image v1.Image) (ocispec.Des
 			return layer.Compressed()
 		}
 	}
-	return g.addBytes(string(mediaType), raw), nil
 }
 
 // addIndex records an index and, once per distinct index digest, every child below it. Cancellation
@@ -204,22 +218,11 @@ func (g *legacyGraph) addIndex(ctx context.Context, index v1.ImageIndex) (ocispe
 	if err := ctx.Err(); err != nil {
 		return ocispec.Descriptor{}, err
 	}
-	if raw, err := index.RawManifest(); err == nil {
-		if done, found := g.indexes[digest.FromBytes(raw)]; found {
-			return done, nil
-		}
+	if done, found := g.completedIndex(index); found {
+		return done, nil
 	}
-	children, err := partial.Manifests(index)
-	if err != nil {
-		return ocispec.Descriptor{}, errors.Join(errUtils.ErrOCIIntegrity, err)
-	}
-	for _, child := range children {
-		if err := ctx.Err(); err != nil {
-			return ocispec.Descriptor{}, err
-		}
-		if err := g.addChild(ctx, child); err != nil {
-			return ocispec.Descriptor{}, err
-		}
+	if err := g.addChildren(ctx, index); err != nil {
+		return ocispec.Descriptor{}, err
 	}
 	raw, err := index.RawManifest()
 	if err != nil {
@@ -236,6 +239,34 @@ func (g *legacyGraph) addIndex(ctx context.Context, index v1.ImageIndex) (ocispe
 	desc := g.addBytes(string(mediaType), raw)
 	g.indexes[desc.Digest] = desc
 	return desc, nil
+}
+
+// completedIndex returns the descriptor of an index that was already added, when its manifest is
+// computable beforehand.
+func (g *legacyGraph) completedIndex(index v1.ImageIndex) (ocispec.Descriptor, bool) {
+	raw, err := index.RawManifest()
+	if err != nil {
+		return ocispec.Descriptor{}, false
+	}
+	done, found := g.indexes[digest.FromBytes(raw)]
+	return done, found
+}
+
+// addChildren prepares every child of an index, checking cancellation before each one.
+func (g *legacyGraph) addChildren(ctx context.Context, index v1.ImageIndex) error {
+	children, err := partial.Manifests(index)
+	if err != nil {
+		return errors.Join(errUtils.ErrOCIIntegrity, err)
+	}
+	for _, child := range children {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := g.addChild(ctx, child); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // addChild records one child of a legacy index: an image, a nested index, or a layer that is a blob in
