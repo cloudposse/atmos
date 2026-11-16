@@ -205,6 +205,13 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	if err != nil {
 		return nil, err
 	}
+	// The engine that produced the plan is the one observed around the subprocess, not the one present now.
+	if snapshot.engineDigest != "" {
+		if snapshot.engineDigest != engineDigest {
+			return nil, fmt.Errorf("%w: engine changed after Terraform ran", errUtils.ErrPlanVerificationFailed)
+		}
+		engineDigest = snapshot.engineDigest
+	}
 	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: 1, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), Prepared: execCtx.preparedConfiguration}, nil
 }
 

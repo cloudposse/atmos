@@ -280,3 +280,54 @@ func TestPlanSnapshotterFingerprintsThePlanBeforeAfterHooksRun(t *testing.T) {
 		})
 	}
 }
+
+// TestPlanSnapshotterBindsTheEngineThatRanTerraform verifies that the engine digest is captured around
+// the subprocess, so an engine replaced before the binding is written is rejected.
+func TestPlanSnapshotterBindsTheEngineThatRanTerraform(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		replace bool
+	}{
+		{name: "engine unchanged binds the digest of the engine that ran"},
+		{name: "engine replaced after Terraform finished is rejected", replace: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			project := newReviewedPlanProject(t)
+			info := project.info(t, "plan")
+			original, err := os.ReadFile(info.Command)
+			require.NoError(t, err)
+			engine := filepath.Join(t.TempDir(), "engine")
+			require.NoError(t, os.WriteFile(engine, original, 0o700))
+			info.Command = engine
+			ran, err := fileDigest(engine)
+			require.NoError(t, err)
+
+			project.provider.EXPECT().Prepare(gomock.Any(), info).Return(project.prepared(), nil)
+			execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+			require.NoError(t, err)
+			planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
+			snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
+			execution.planSnapshots = snapshotter
+
+			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) })
+			require.NoError(t, terraform())
+			require.NotNil(t, snapshotter.result)
+			require.Equal(t, ran, snapshotter.result.engineDigest, "the engine digest is taken around the subprocess")
+
+			if test.replace {
+				require.NoError(t, os.WriteFile(engine, append(original, []byte("replaced by an after hook")...), 0o700))
+			}
+			err = recordConfigurationPlan(t.Context(), project.config, info, execution, []string{"-out=" + planPath})
+
+			if test.replace {
+				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+				require.NoFileExists(t, planPath+configurationPlanSuffix, "a replaced engine is never bound")
+				return
+			}
+			require.NoError(t, err)
+			data, err := os.ReadFile(planPath + configurationPlanSuffix)
+			require.NoError(t, err)
+			require.Contains(t, string(data), ran)
+		})
+	}
+}
