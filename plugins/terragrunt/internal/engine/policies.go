@@ -39,8 +39,9 @@ func plainLocalSource(source string) bool {
 
 // localModuleSubdir separates Terragrunt's local root//module spelling without
 // cleaning away the delimiter. A subdirectory may descend within the root,
-// but must never select a parent or an absolute path.
-func localModuleSubdir(source string) (root, subdir string, ok bool) {
+// but must never select a parent or an absolute path. A bare relative root whose first segment looks like
+// a hostname is a remote shorthand unless existingRoot reports that it names a local directory.
+func localModuleSubdir(source string, existingRoot func(root string) bool) (root, subdir string, ok bool) {
 	volume := filepath.VolumeName(source)
 	rest := source[len(volume):]
 	if strings.ContainsAny(rest, "?:") {
@@ -52,7 +53,7 @@ func localModuleSubdir(source string) (root, subdir string, ok bool) {
 	}
 	root, subdir = volume+rest[:index], rest[index+2:]
 	first := strings.SplitN(strings.TrimPrefix(root, "./"), "/", 2)[0]
-	if strings.Contains(first, ".") && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) {
+	if strings.Contains(first, ".") && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) && (existingRoot == nil || !existingRoot(root)) {
 		return "", "", false
 	}
 	return root, subdir, true

@@ -348,8 +348,8 @@ func lifecycleWarnings(terraform *config.TerraformConfig, path string) []model.W
 // validateEngine checks that the executable a unit selected with terraform_binary answers
 // `version -json` the way Terraform and OpenTofu do, so a wrong path fails with the unit's name
 // instead of as an obscure error from the first command that runs.
-func validateEngine(ctx context.Context, request model.Request, path string) error {
-	command := exec.CommandContext(ctx, request.Tofu, "version", "-json")
+func validateEngine(ctx context.Context, request model.Request, binary, path string) error {
+	command := exec.CommandContext(ctx, binary, "version", "-json")
 	command.Env = make([]string, 0, len(request.Environment))
 	for key, value := range request.Environment {
 		command.Env = append(command.Env, key+"="+value)
@@ -593,5 +593,5 @@ func applyUnitSettings(ctx context.Context, cfg *config.TerragruntConfig, reques
 	if result.TerraformBinary == "" {
 		return nil
 	}
-	return validateEngine(ctx, request, path)
+	return validateEngine(ctx, request, result.TerraformBinary, path)
 }

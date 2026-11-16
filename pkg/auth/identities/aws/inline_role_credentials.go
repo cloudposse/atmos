@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -24,10 +25,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go-v2/credentials/endpointcreds"
+	"github.com/aws/aws-sdk-go-v2/credentials/logincreds"
 	"github.com/aws/aws-sdk-go-v2/credentials/processcreds"
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+	"github.com/aws/aws-sdk-go-v2/service/signin"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -56,6 +59,9 @@ const (
 	// The SDK passes duration_seconds on only when it exceeds 15 whole minutes; shorter values use the STS default.
 	minimumProfileRoleDuration = 16 * time.Minute
 )
+
+// awsConfigDirName is the directory of the AWS shared files and caches below a home directory.
+const awsConfigDirName = ".aws"
 
 // containerHosts are the ECS and EKS container credential hosts that plain HTTP may reach.
 var containerHosts = []net.IP{net.ParseIP("169.254.170.2"), net.ParseIP("169.254.170.23"), net.ParseIP("fd00:ec2::23")}
@@ -154,13 +160,13 @@ func invocationSharedFiles(env map[string]string) (configFile, credentialsFile s
 	if configFile == "" {
 		configFile = config.DefaultSharedConfigFilename()
 		if home != "" {
-			configFile = filepath.Join(home, ".aws", "config")
+			configFile = filepath.Join(home, awsConfigDirName, "config")
 		}
 	}
 	if credentialsFile == "" {
 		credentialsFile = config.DefaultSharedCredentialsFilename()
 		if home != "" {
-			credentialsFile = filepath.Join(home, ".aws", "credentials")
+			credentialsFile = filepath.Join(home, awsConfigDirName, "credentials")
 		}
 	}
 	return configFile, credentialsFile
@@ -188,8 +194,12 @@ func profileChain(profile *config.SharedConfig) []*config.SharedConfig {
 // with that environment, or no source at all so that container and instance credentials apply.
 func profileSourceNeedsEnvironment(root *config.SharedConfig) bool {
 	switch {
-	case root.Credentials.HasKeys(), root.WebIdentityTokenFile != "", root.LoginSession != "":
+	case root.Credentials.HasKeys(), root.WebIdentityTokenFile != "":
 		return false
+	case root.LoginSession != "":
+		// The SDK reads the login cache directory from the process environment, so the invocation's own
+		// AWS_LOGIN_CACHE_DIRECTORY and home would be ignored.
+		return true
 	case root.SSOSessionName != "", root.SSORegion != "", root.SSOAccountID != "", root.SSOStartURL != "", root.SSORoleName != "":
 		return false
 	default:
@@ -262,13 +272,13 @@ func ssoTokenCacheOptions(env map[string]string, root *config.SharedConfig) []fu
 // ssoCachedTokenPath is the cache file of an SSO login: ~/.aws/sso/cache/<sha1-hex of the key>.json.
 func ssoCachedTokenPath(home, key string) string {
 	sum := sha1.Sum([]byte(key)) //nolint:gosec // The cache file name is defined by the AWS CLI, not chosen for security.
-	return filepath.Join(home, ".aws", "sso", "cache", hex.EncodeToString(sum[:])+".json")
+	return filepath.Join(home, awsConfigDirName, "sso", "cache", hex.EncodeToString(sum[:])+".json")
 }
 
 // envProfileCredentials resolves the source of a profile from the environment, then assumes each role of
 // the chain from the source profile outward, as the SDK does.
 func envProfileCredentials(env map[string]string, chain []*config.SharedConfig, region string) (aws.CredentialsProvider, error) {
-	provider, err := profileSourceCredentials(env, chain)
+	provider, err := profileSourceCredentials(env, chain, region)
 	if err != nil {
 		return nil, err
 	}
@@ -299,11 +309,22 @@ func applyProfileRoleOptions(options *stscreds.AssumeRoleOptions, profile *confi
 // profileSourceCredentials resolves a credential_source, a credential_process, or the container and instance
 // fallback, for the source at the end of the profile chain. The first profile of the chain is the one that
 // the invocation selected, and it supplies the instance metadata settings, as in the SDK.
-func profileSourceCredentials(env map[string]string, chain []*config.SharedConfig) (aws.CredentialsProvider, error) {
+func profileSourceCredentials(env map[string]string, chain []*config.SharedConfig, region string) (aws.CredentialsProvider, error) {
 	root, selected := chain[len(chain)-1], chain[0]
-	switch root.CredentialSource {
-	case "":
+	switch {
+	case root.LoginSession != "":
+		return loginSessionCredentials(env, root, region)
+	case root.CredentialSource == "":
 		return unnamedSourceCredentials(env, root, selected)
+	default:
+		return namedSourceCredentials(env, root.CredentialSource, selected)
+	}
+}
+
+// namedSourceCredentials resolves the credential_source of a profile source: the invocation environment, a
+// container endpoint, or the instance metadata service.
+func namedSourceCredentials(env map[string]string, source string, selected *config.SharedConfig) (aws.CredentialsProvider, error) {
+	switch source {
 	case credentialSourceEnvironment:
 		if env["AWS_ACCESS_KEY_ID"] == "" || env["AWS_SECRET_ACCESS_KEY"] == "" {
 			return nil, fmt.Errorf("%w: credential_source %s", errNoInvocationCredentials, credentialSourceEnvironment)
@@ -322,6 +343,21 @@ func profileSourceCredentials(env map[string]string, chain []*config.SharedConfi
 		return nil, fmt.Errorf("%w: credential_source values must be %s, %s, or %s", errUtils.ErrInvalidAuthConfig,
 			credentialSourceContainer, credentialSourceIMDS, credentialSourceEnvironment)
 	}
+}
+
+// loginSessionCredentials resolves an `aws login` session from the invocation environment: the token cache is
+// the directory that AWS_LOGIN_CACHE_DIRECTORY names, or the login cache below the invocation home.
+func loginSessionCredentials(env map[string]string, root *config.SharedConfig, region string) (aws.CredentialsProvider, error) {
+	dir := env["AWS_LOGIN_CACHE_DIRECTORY"]
+	if home := invocationHomeDir(env); dir == "" && home != "" {
+		dir = filepath.Join(home, awsConfigDirName, "login", "cache")
+	}
+	path, err := logincreds.StandardCachedTokenFilepath(root.LoginSession, dir)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
+	}
+	client := signin.New(signin.Options{Region: cmp.Or(region, root.Region)})
+	return aws.NewCredentialsCache(logincreds.New(client, path)), nil
 }
 
 // unnamedSourceCredentials resolves a profile source that names no credential_source: its credential_process
@@ -373,6 +409,9 @@ func containerCredentials(env map[string]string) (aws.CredentialsProvider, bool,
 	}
 	token, tokenFile := env["AWS_CONTAINER_AUTHORIZATION_TOKEN"], env["AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE"]
 	provider := endpointcreds.New(endpoint, func(o *endpointcreds.Options) {
+		if strings.HasPrefix(endpoint, "http://") {
+			o.HTTPClient = containerEndpointClient()
+		}
 		o.AuthorizationToken = token
 		if tokenFile != "" {
 			o.AuthorizationTokenProvider = endpointcreds.TokenProviderFunc(func() (string, error) {
@@ -385,6 +424,51 @@ func containerCredentials(env map[string]string) (aws.CredentialsProvider, bool,
 		}
 	})
 	return aws.NewCredentialsCache(provider, func(o *aws.CredentialsCacheOptions) { o.ExpiryWindow = containerCredentialExpiry }), true, nil
+}
+
+// containerEndpointClient is the HTTP client for a plain-HTTP container credential endpoint. It dials only an
+// address that passed the same allowlist as the endpoint URL, and it never uses a proxy, so a host name that
+// resolves differently after the early check cannot redirect the request.
+func containerEndpointClient() *http.Client {
+	dialer := &net.Dialer{}
+	return &http.Client{Transport: &http.Transport{
+		Proxy:       nil,
+		DialContext: validatedContainerDialer(net.DefaultResolver.LookupHost, dialer.DialContext),
+	}}
+}
+
+// dialFunc opens a network connection.
+type dialFunc func(ctx context.Context, network, address string) (net.Conn, error)
+
+// validatedContainerDialer resolves the host when it connects and dials one of the validated addresses itself,
+// rather than handing the name to the network stack to resolve again.
+func validatedContainerDialer(lookup func(ctx context.Context, host string) ([]string, error), dial dialFunc) dialFunc {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, fmt.Errorf("%w: container credentials address %q: %w", errUtils.ErrInvalidAuthConfig, address, err)
+		}
+		addresses := []string{host}
+		if net.ParseIP(host) == nil {
+			if addresses, err = lookup(ctx, host); err != nil {
+				return nil, fmt.Errorf("%w: resolve container credentials host %q: %w", errUtils.ErrInvalidAuthConfig, host, err)
+			}
+		}
+		for _, candidate := range addresses {
+			if ip := net.ParseIP(candidate); ip == nil || !containerHostAllowed(ip) {
+				return nil, fmt.Errorf("%w: container credentials host %q is not a loopback, ECS, or EKS host", errUtils.ErrInvalidAuthConfig, host)
+			}
+		}
+		var dialErr error
+		for _, candidate := range addresses {
+			conn, err := dial(ctx, network, net.JoinHostPort(candidate, port))
+			if err == nil {
+				return conn, nil
+			}
+			dialErr = err
+		}
+		return nil, dialErr
+	}
 }
 
 func checkContainerEndpoint(endpoint string) error {

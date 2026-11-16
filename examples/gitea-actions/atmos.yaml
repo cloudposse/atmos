@@ -1,0 +1,29 @@
+# The local Gitea Actions harness: a Gitea server emulator plus a Gitea runner
+# container. It runs on your machine and is NOT pushed to Gitea. The project that
+# Gitea Actions runs lives in ./repo (its own atmos.yaml, stacks, and workflows).
+base_path: "./"
+
+components:
+  container:
+    base_path: "components/container"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+commands:
+  - name: "gitea"
+    description: "Run a local Gitea Actions server and runner (use the up/down subcommands)"
+    commands:
+      - name: "up"
+        description: "Start the Gitea emulator, then a runner that registers with it"
+        steps:
+          - atmos emulator up gitea -s local
+          - atmos container up gitea-runner -s local
+      - name: "down"
+        description: "Stop and remove the runner and the Gitea emulator"
+        steps:
+          - atmos container down gitea-runner -s local
+          - atmos emulator down gitea -s local

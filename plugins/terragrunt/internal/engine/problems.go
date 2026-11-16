@@ -174,7 +174,10 @@ func localSourceProblem(filesystem afero.Fs, path, source, resolved string) *mod
 // resolveLocalModuleSource validates both the repository root and selected
 // module while retaining // in the source identity passed to the provisioner.
 func resolveLocalModuleSource(filesystem afero.Fs, unit, source string) (resolved, root string, handled bool, problem *model.Problem) {
-	base, subdir, hasSubdir := localModuleSubdir(source)
+	base, subdir, hasSubdir := localModuleSubdir(source, func(candidate string) bool {
+		exists, err := afero.DirExists(filesystem, localPath(filepath.Dir(unit), candidate))
+		return err == nil && exists
+	})
 	if !hasSubdir && !plainLocalSource(source) {
 		return "", "", false, nil
 	}
