@@ -1,6 +1,7 @@
 package oci
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -346,4 +347,66 @@ func TestReadSubjectVerifiesTheWholeBodyBeforeAcceptingEitherResult(t *testing.T
 			assert.Nil(t, got)
 		})
 	}
+}
+
+// cancelAfterFirstReadReader serves a body and cancels the context once the first chunk was read. It
+// ignores the context otherwise, like ORAS local storage, and counts the bytes it served.
+type cancelAfterFirstReadReader struct {
+	reader io.Reader
+	cancel context.CancelFunc
+	served int64
+}
+
+func (c *cancelAfterFirstReadReader) Read(p []byte) (int, error) {
+	n, err := c.reader.Read(p)
+	c.served += int64(n)
+	c.cancel()
+	return n, err
+}
+
+func (c *cancelAfterFirstReadReader) Close() error { return nil }
+
+func TestReadSubjectStopsReadingWhenTheContextIsCanceled(t *testing.T) {
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	padding := strings.Repeat("p", 4<<20)
+	tests := []struct {
+		name     string
+		manifest string
+	}{
+		{"subject found early with a large tail", `{"subject":` + subject + `,"annotations":{"k":"` + padding + `"}}`},
+		{"no subject and a large body", `{"annotations":{"k":"` + padding + `"}}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := NewMockStore(ctrl)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			desc := Descriptor(ocispec.MediaTypeImageManifest, []byte(tc.manifest))
+			body := &cancelAfterFirstReadReader{reader: strings.NewReader(tc.manifest), cancel: cancel}
+			store.EXPECT().Fetch(gomock.Any(), desc).Return(body, nil)
+
+			got, err := readSubject(ctx, store, &desc)
+
+			require.ErrorIs(t, err, context.Canceled)
+			assert.NotErrorIs(t, err, errUtils.ErrOCIIntegrity)
+			assert.Nil(t, got)
+			assert.Less(t, body.served, int64(len(tc.manifest)), "the canceled read must not consume the whole body")
+		})
+	}
+}
+
+func TestReadSubjectStillRejectsAWrongDigestWhenTheContextStaysActive(t *testing.T) {
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	declared := `{"subject":` + subject + `,"annotations":{"k":"v"}}`
+	tampered := `{"subject":` + subject + `,"annotations":{"k":"w"}}`
+	ctrl := gomock.NewController(t)
+	store := NewMockStore(ctrl)
+	desc := Descriptor(ocispec.MediaTypeImageManifest, []byte(declared))
+	store.EXPECT().Fetch(gomock.Any(), desc).Return(io.NopCloser(strings.NewReader(tampered)), nil)
+
+	got, err := readSubject(t.Context(), store, &desc)
+
+	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+	assert.Nil(t, got)
 }

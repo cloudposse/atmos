@@ -38,6 +38,21 @@ func readSubject(ctx context.Context, store Fetcher, desc *ocispec.Descriptor) (
 		return nil, err
 	}
 	defer reader.Close()
+	// Some stores, such as ORAS local storage, ignore the fetch context, so every read is guarded here.
+	subject, err := verifySubject(ctx, contextReader{ctx: ctx, reader: reader}, desc)
+	if err != nil {
+		return nil, canceledOr(ctx, err)
+	}
+	// A cancellation that raced the final reads must not be reported as a verified result.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return subject, nil
+}
+
+// verifySubject scans the body for the subject and then reads the remainder so the size and digest
+// cover every byte.
+func verifySubject(ctx context.Context, reader io.Reader, desc *ocispec.Descriptor) (*ocispec.Descriptor, error) {
 	check := &bodyCheck{verifier: desc.Digest.Verifier()}
 	scanner := bufio.NewReader(io.TeeReader(io.LimitReader(reader, desc.Size), check))
 	if err := expectByte(scanner, '{'); err != nil {
@@ -52,10 +67,37 @@ func readSubject(ctx context.Context, store Fetcher, desc *ocispec.Descriptor) (
 	if _, err := io.Copy(io.Discard, scanner); err != nil {
 		return nil, integrityError(err)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := check.finish(reader, desc.Size); err != nil {
 		return nil, err
 	}
 	return subject, nil
+}
+
+// canceledOr returns the context error when the context ended, since a canceled read is not an
+// integrity failure; otherwise it returns err unchanged.
+func canceledOr(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return fmt.Errorf("reading the manifest subject: %w", ctxErr)
+	}
+	return err
+}
+
+// contextReader fails a read as soon as the context is done.
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (c contextReader) Read(p []byte) (int, error) {
+	defer perf.Track(nil, "oci.contextReader.Read")()
+
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.reader.Read(p)
 }
 
 // bodyCheck accumulates the size and digest of the bytes a scan consumed.
