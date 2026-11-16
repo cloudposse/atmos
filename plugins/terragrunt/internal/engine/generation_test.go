@@ -122,3 +122,45 @@ func TestPreventDestroyGuardFailsClosedWhenConfigCannotBeParsed(t *testing.T) {
 	require.Nil(t, result)
 	require.NotContains(t, err.Error(), "protected by prevent_destroy", "the failure is a parse error, not a protection verdict")
 }
+
+func TestPreventDestroyGuardWithCommandLocals(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		extra   string
+		blocked bool
+	}{
+		{"unprotected unit with run_cmd local", "locals { value = run_cmd(\"must-not-execute\") }\ninputs = { value = local.value }", false},
+		{"protected unit with run_cmd local", "prevent_destroy = true\nlocals { value = run_cmd(\"must-not-execute\") }\ninputs = { value = local.value }", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := nativeUnit(t, test.extra)
+			request.Command = "destroy"
+			_, err := Resolve(t.Context(), request)
+			if test.blocked {
+				require.ErrorIs(t, err, ErrPreventDestroy)
+				require.NotContains(t, err.Error(), "must-not-execute")
+				return
+			}
+			require.NotErrorIs(t, err, ErrPreventDestroy)
+			if err != nil {
+				require.NotContains(t, err.Error(), "read-only discovery cannot execute")
+			}
+		})
+	}
+}
+
+func TestPreventDestroyGuardStaysClosedWhenSyntaxCannotDecide(t *testing.T) {
+	for name, extra := range map[string]string{
+		"expression depends on a command local": "locals { flag = run_cmd(\"must-not-execute\") }\nprevent_destroy = local.flag == \"x\"",
+		"include may set the flag":              "locals { value = run_cmd(\"must-not-execute\") }\ninclude \"root\" { path = \"parent.hcl\" }",
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := nativeUnit(t, extra)
+			request.Command = "destroy"
+			result, err := Resolve(t.Context(), request)
+			require.Error(t, err)
+			require.Nil(t, result)
+			require.NotErrorIs(t, err, ErrPreventDestroy)
+		})
+	}
+}
