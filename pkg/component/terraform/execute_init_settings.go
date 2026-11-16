@@ -75,12 +75,12 @@ func overlayEnvironment(entries []string, base func(string) (string, bool)) func
 }
 
 // initFileArguments returns the file paths named by -backend-config and -var-file options, in
-// both the "-flag=value" and "-flag value" forms. A -backend-config value holding "=" sets one
+// the "-flag=value" and "-flag value" forms, each with a single or double dash. A -backend-config value holding "=" sets one
 // setting instead of naming a file; it is already part of the arguments.
 func initFileArguments(arguments []string) []string {
 	var paths []string
 	for i := 0; i < len(arguments); i++ {
-		name, value, inline := strings.Cut(strings.TrimPrefix(arguments[i], "-"), "=")
+		name, value, inline := strings.Cut(strings.TrimLeft(arguments[i], "-"), "=")
 		name = "-" + name
 		if !slices.Contains(initFileFlags, name) {
 			continue

@@ -253,6 +253,11 @@ func writeTerraformTestVars(atmosConfig *schema.AtmosConfiguration, info *schema
 	if !hasTerraformTestVars(info) {
 		return nil
 	}
+	// Display-only computed placeholders must not be serialized as inputs, in the varfile or through the
+	// environment that carries the secret test variables.
+	if err := rejectComputedTerraformVars(TerraformTestVars(info)); err != nil {
+		return err
+	}
 	varFilePath := ConstructTerraformComponentTestVarfilePath(atmosConfig, info)
 	log.Debug("Writing Terraform test variables", "file", varFilePath)
 	if info.DryRun {
@@ -517,7 +522,7 @@ func SecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
 			secret[k] = v
 		}
 	}
-	return tfvars.SecretEnv(secret)
+	return secretEnvForDeclaredTypes(info.ComponentSection, secret)
 }
 
 // TerraformTestVars returns test.vars for the test subcommand, or nil for other commands and absent values.
@@ -589,7 +594,7 @@ func TerraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, erro
 	if len(secret) == 0 {
 		return nil, nil
 	}
-	return tfvars.SecretEnv(secret)
+	return secretEnvForDeclaredTypes(info.ComponentSection, secret)
 }
 
 // ConstructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
