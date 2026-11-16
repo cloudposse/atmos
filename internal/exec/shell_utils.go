@@ -67,7 +67,7 @@ type shellCommandConfig struct {
 	// import cycle (research.md Decision 18). The output parameter is the
 	// scoped exec-metadata output text executeCommandPipeline captured for
 	// just the main plan/apply/deploy subprocess (FR-006f).
-	execMetadataParser func(subCommand string, exitCode int, output string) any
+	execMetadataParser func(subCommand, component string, exitCode int, output string) any
 
 	// execMetadataStdoutCapture/execMetadataStderrCapture, when set, additionally
 	// tee this specific ExecuteShellCommand call's stdout/stderr into these
@@ -113,7 +113,8 @@ func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
 }
 
 // WithExecMetadataParser provides a closure that, given the invoking
-// subcommand name and the command's own exit code, returns command-specific
+// subcommand name, the resolved component name (after any path-style CLI
+// argument has been resolved) and the command's own exit code, returns command-specific
 // structured data (FR-006) for the execution record — or nil if there is
 // none to report. The exitCode parameter is the terraform/tofu subprocess's
 // own exit code (research.md Decision 27), supplied by
@@ -122,7 +123,7 @@ func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
 // supplies this closure so ExecuteTerraform's exec-metadata sync capture can
 // obtain parsed terraform plan/apply/deploy output without internal/exec
 // itself importing the CI plugin's parser (research.md Decision 18).
-func WithExecMetadataParser(fn func(subCommand string, exitCode int, output string) any) ShellCommandOption {
+func WithExecMetadataParser(fn func(subCommand, component string, exitCode int, output string) any) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithExecMetadataParser")()
 
 	return func(c *shellCommandConfig) {
@@ -132,7 +133,7 @@ func WithExecMetadataParser(fn func(subCommand string, exitCode int, output stri
 
 // execMetadataParserFromOpts extracts the parser closure (if any) set via
 // WithExecMetadataParser among opts.
-func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string, exitCode int, output string) any {
+func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand, component string, exitCode int, output string) any {
 	var cfg shellCommandConfig
 	for _, opt := range opts {
 		opt(&cfg)
