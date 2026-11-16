@@ -80,7 +80,14 @@ func brokenDependency(instance *pluginv1.DiscoveredComponent, instances map[[3]s
 				WithHintf("Fix `%s` first; run `atmos terraform plan %s -s %s` to see its error.", target, dep.Target.Component, dep.Target.Stack).
 				Err()
 		}
-		if _, exists := instances[addressKey(dep.Target)]; !exists {
+		owner, exists := instances[addressKey(dep.Target)]
+		if exists && owner.Provider != instance.Provider {
+			return errUtils.Build(errUtils.ErrPluginProtocol).
+				WithExplanationf("Component `%s` in stack `%s` (provider `%s`) depends on `%s`, which is owned by provider `%s`.", instance.Address.Component, instance.Address.Stack, instance.Provider, target, owner.Provider).
+				WithHint("A provider may depend only on its own components.").
+				Err()
+		}
+		if !exists {
 			return errUtils.Build(errUtils.ErrPluginInvalidConfig).
 				WithExplanationf("Component `%s` in stack `%s` (%s) depends on `%s`, which is not part of the discovered components.", instance.Address.Component, instance.Address.Stack, instance.Source, target).
 				WithHint("Include the dependency in `discovery.included_paths` and keep it out of `discovery.excluded_paths`.").

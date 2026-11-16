@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -561,4 +562,47 @@ func TestDiscoveryConfiguredEnvironment(t *testing.T) {
 	require.Equal(t, "configured", request.Invocation.Environment["DISCOVERY_SETTING"])
 	require.Equal(t, "ambient", request.Invocation.Environment["DISCOVERY_AMBIENT"])
 	require.Equal(t, "tofu", request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
+}
+
+// A provider may depend only on its own components: a target owned by another provider is a protocol violation.
+func TestDependencyOnAnotherProvidersUnitIsRejected(t *testing.T) {
+	foreign := unit(t, "network")
+	foreign.Provider = "other"
+	own := unit(t, "db")
+	tests := []struct {
+		name    string
+		target  *pluginv1.DiscoveredComponent
+		address *pluginv1.ComponentAddress
+		wantErr error
+		hints   []string
+		details []string
+	}{
+		{name: "foreign provider", target: foreign, address: foreign.Address, wantErr: errUtils.ErrPluginProtocol, hints: []string{"A provider may depend only on its own components."}, details: []string{"`terragrunt`", "`other`", "`live/network`", "`app`"}},
+		{name: "same provider", target: own, address: own.Address},
+		{name: "missing target", address: &pluginv1.ComponentAddress{Stack: "live", Component: "ghost", ComponentType: "terraform"}, wantErr: errUtils.ErrPluginInvalidConfig},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := unit(t, "app")
+			app.Dependencies = []*pluginv1.ComponentDependency{{Target: tt.address}}
+			instances := map[[3]string]*pluginv1.DiscoveredComponent{addressKey(app.Address): app}
+			if tt.target != nil {
+				instances[addressKey(tt.target.Address)] = tt.target
+			}
+			err := brokenDependency(app, instances, map[failedKey]*failedUnit{})
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tt.wantErr)
+			if tt.target == nil {
+				return
+			}
+			require.Equal(t, tt.hints, errUtils.AllHints(err))
+			joined := strings.Join(errUtils.AllDetails(err), "\n")
+			for _, want := range tt.details {
+				require.Contains(t, joined, want)
+			}
+		})
+	}
 }
