@@ -153,6 +153,31 @@ func TestResolveDoesNotTrustATagThatWasNotPersisted(t *testing.T) {
 	assert.Equal(t, root.Digest, resolved.Digest)
 }
 
+// Removing an attachment's last name must not drop the attachment from the layout: it stays an unnamed
+// root, so reopening the layout still finds it as a referrer of its subject.
+func TestUntagPreservesTheAttachmentRoot(t *testing.T) {
+	ctx := t.Context()
+	directory := filepath.Join(t.TempDir(), "layout")
+	layout, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	subject := pushSubjectManifest(t, layout, nil, "subject")
+	attachment := pushSubjectManifest(t, layout, &subject, "attachment")
+	require.NoError(t, layout.Tag(ctx, attachment, "named"))
+
+	require.NoError(t, layout.Untag(ctx, "named"))
+
+	reopened, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	assert.NotContains(t, reopened.References(), "named", "the name is gone")
+	referrers, err := reopened.Predecessors(ctx, subject)
+	require.NoError(t, err)
+	digests := make([]string, 0, len(referrers))
+	for _, referrer := range referrers {
+		digests = append(digests, referrer.Digest.String())
+	}
+	assert.Contains(t, digests, attachment.Digest.String(), "the attachment is still discoverable after reopening")
+}
+
 // A relative layout root is anchored when the layout is opened: changing the working directory afterwards
 // must not send index commits to a different directory than the one holding the blobs.
 func TestOpenLayoutAnchorsARelativeRoot(t *testing.T) {

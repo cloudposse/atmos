@@ -273,6 +273,37 @@ func TestDelete_PartialFailureLeavesGarbageNotADanglingReference(t *testing.T) {
 	assert.False(t, exists, "recovery deletes leftovers at the old location")
 }
 
+// A reference listed as pending whose journal is gone may have completed in the meantime: its current state
+// decides, so the completed reference still claims its location and blocks an overlapping reservation.
+func TestClaimOf_ReloadsAPendingReferenceWhoseJournalIsGone(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
+	state, err := repo.loadReference(context.Background(), layout.ReferenceKey(testName, testVersion))
+	require.NoError(t, err)
+	stale := *state.ref
+	stale.State = layout.StatePending
+	require.NoError(t, repo.deleteObject(context.Background(), layout.OperationPath(stale.OperationID)))
+
+	claim, err := repo.claimOf(context.Background(), &stale)
+
+	require.NoError(t, err)
+	require.NotNil(t, claim, "the completed reference still holds its location")
+	assert.Contains(t, claim.Paths, "team/app/1.0.0")
+}
+
+// A reference that no longer exists at all holds no claim.
+func TestClaimOf_AVanishedReferenceHoldsNoClaim(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	gone := layout.Reference{Name: "gone/app", Version: "1.0.0", State: layout.StatePending, OperationID: "op-gone"}
+
+	claim, err := repo.claimOf(context.Background(), &gone)
+
+	require.NoError(t, err)
+	assert.Nil(t, claim)
+}
+
 // A lost response to the reference delete is settled by reading the reference.
 func TestDelete_LostResponseIsReconciled(t *testing.T) {
 	spec := noneSpec().fresh(t)

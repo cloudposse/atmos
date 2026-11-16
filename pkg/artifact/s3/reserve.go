@@ -141,12 +141,28 @@ func (r *Repository) claimOf(ctx context.Context, ref *layout.Reference) (*layou
 		return r.completedClaim(ctx, ref, &base)
 	}
 	op, err := r.loadOperation(ctx, ref.OperationID)
-	if err != nil || op == nil {
+	if err != nil {
 		return nil, err
+	}
+	if op == nil {
+		// The reference was listed as pending, but a missing journal is also what a completed reference
+		// leaves behind once its cleanup finished. Its current state decides: a completed reference still
+		// claims its location, so an overlapping reservation cannot take it.
+		return r.claimOfCurrent(ctx, ref, &base)
 	}
 	base.OperationID = op.OperationID
 	base.Paths = append(claimPaths(op.Packaging, op.Location), journalClaimPaths(op)...)
 	return &base, nil
+}
+
+// claimOfCurrent reloads a reference whose journal is missing and derives its claim from the state it has
+// now. A reference that is gone, or still pending without a journal, holds no claim.
+func (r *Repository) claimOfCurrent(ctx context.Context, listed *layout.Reference, base *layout.Claim) (*layout.Claim, error) {
+	current, err := r.loadReference(ctx, listed.Key())
+	if err != nil || current == nil || !current.ref.Available() {
+		return nil, err
+	}
+	return r.completedClaim(ctx, current.ref, base)
 }
 
 // completedClaim returns the claim of a completed reference: the location its representation names,

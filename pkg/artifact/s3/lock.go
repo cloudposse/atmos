@@ -89,6 +89,11 @@ func (r *Repository) acquire(ctx context.Context, resource, owner, operationID s
 	if err != nil {
 		return nil, fmt.Errorf("%w: encode lock claim: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
+	// readClaim refuses a claim object larger than maxClaimBytes, so a larger one would be created and then
+	// be impossible to read, diagnose, or recover. Refuse it before the conditional PUT.
+	if int64(len(raw)) > maxClaimBytes {
+		return nil, fmt.Errorf("%w: the lock claim for %q is %d bytes, over the %d byte limit", errUtils.ErrArtifactTooLarge, resource, len(raw), maxClaimBytes)
+	}
 	key := layout.LockPath(resource)
 	deadline := time.Now().Add(r.settings.lockWait)
 	contended := false

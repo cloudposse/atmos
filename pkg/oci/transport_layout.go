@@ -335,9 +335,20 @@ func (l *Layout) Untag(ctx context.Context, reference string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	kept := l.index[:0:0]
+	var removed []ocispec.Descriptor
 	for i := range l.index {
 		if l.index[i].Annotations[ocispec.AnnotationRefName] != reference {
 			kept = append(kept, l.index[i])
+		} else {
+			removed = append(removed, l.index[i])
+		}
+	}
+	// A root that loses its only name stays listed when it is an attachment, as when a tag moves away
+	// from it: without its own entry it would no longer be a referrer of its subject after a reopen.
+	for i := range removed {
+		var err error
+		if kept, err = l.keepDisplacedAttachment(ctx, kept, removed[i]); err != nil {
+			return err
 		}
 	}
 	// Persist index.json before touching the store: a failed write leaves the handle and the file

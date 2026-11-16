@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -416,4 +417,16 @@ func TestFenceAdoptsOriginalClaimThatWonTheRace(t *testing.T) {
 	require.NotNil(t, handle)
 	assert.Equal(t, doc.Token, handle.Token())
 	require.NoError(t, handle.Release(ctx))
+}
+
+// A claim that readClaim would refuse as too large is refused before it is written, so every claim that is
+// created can be read back and recovered.
+func TestLock_RefusesAClaimLargerThanItCanBeRead(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+
+	_, err := repo.Lock(context.Background(), artifact.LockRequest{Resource: lockResource, Owner: strings.Repeat("o", int(maxClaimBytes)+1)})
+
+	require.ErrorIs(t, err, errUtils.ErrArtifactTooLarge)
+	assert.Empty(t, lockObjects(spec.fake), "no claim object was created")
 }
