@@ -238,7 +238,7 @@ func writeComponentVarfile(
 ) error {
 	// Replace the tokens in the file template
 	// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
-	fileName := cfg.ReplaceContextTokens(info.Context, run.fileTemplate)
+	fileName := cfg.ReplaceContextTokens(&info.Context, run.fileTemplate)
 	fileAbsolutePath, err := filepath.Abs(fileName)
 	if err != nil {
 		return err

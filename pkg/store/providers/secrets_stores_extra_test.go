@@ -131,7 +131,13 @@ func TestNewVaultStore(t *testing.T) {
 func TestIsGitHubActionsRunner(t *testing.T) {
 	t.Run("true inside runner", func(t *testing.T) {
 		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITEA_ACTIONS", "")
 		assert.True(t, isGitHubActionsRunner())
+	})
+	t.Run("false inside Gitea runner", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITEA_ACTIONS", "true")
+		assert.False(t, isGitHubActionsRunner())
 	})
 	t.Run("false otherwise", func(t *testing.T) {
 		t.Setenv("GITHUB_ACTIONS", "")

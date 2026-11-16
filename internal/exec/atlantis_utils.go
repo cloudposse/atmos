@@ -39,7 +39,7 @@ func BuildAtlantisProjectNameFromComponentConfig(
 		if !reflect.ValueOf(atlantisProjectTemplate).IsZero() && atlantisProjectTemplate.Name != "" {
 			context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 			context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
-			atlantisProjectName = cfg.ReplaceContextTokens(context, atlantisProjectTemplate.Name)
+			atlantisProjectName = cfg.ReplaceContextTokens(&context, atlantisProjectTemplate.Name)
 		}
 	}
 
