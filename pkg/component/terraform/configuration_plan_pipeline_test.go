@@ -331,7 +331,8 @@ func TestPlanSnapshotterBindsTheEngineThatRanTerraform(t *testing.T) {
 			info := project.info(t, "plan")
 			original, err := os.ReadFile(info.Command)
 			require.NoError(t, err)
-			engine := filepath.Join(t.TempDir(), "engine")
+			// The copy keeps the original's extension, because Windows runs only files that have one.
+			engine := filepath.Join(t.TempDir(), "engine"+filepath.Ext(info.Command))
 			require.NoError(t, os.WriteFile(engine, original, 0o700))
 			info.Command = engine
 			ran, err := fileDigest(engine)
