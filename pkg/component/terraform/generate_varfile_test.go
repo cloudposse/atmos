@@ -764,6 +764,30 @@ func TestSecretEnvForDeclaredTypesUsesOnlyHCLEscapes(t *testing.T) {
 	})
 }
 
+// TestSecretEnvForDeclaredTypesKeepsLargeIntegersExact verifies that integers beyond 2^53 are not rounded
+// through float64 inside nested collections, while other nested scalars are unchanged.
+func TestSecretEnvForDeclaredTypesKeepsLargeIntegersExact(t *testing.T) {
+	module := &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+		"typed_any": {Name: "typed_any", Type: "any"},
+	}}
+	section := map[string]any{"component_info": map[string]any{"terraform_config": module}}
+
+	env, err := secretEnvForDeclaredTypes(section, map[string]any{"typed_any": map[string]any{
+		"id":     int64(9007199254740993),
+		"nested": []any{map[string]any{"big": uint64(18446744073709551615), "small": 7, "ok": true, "none": nil, "ratio": 0.5}},
+	}})
+	require.NoError(t, err)
+	require.Len(t, env, 1)
+	assert.Contains(t, env[0], `"id":9007199254740993`)
+	assert.Contains(t, env[0], `"big":18446744073709551615`)
+
+	got := evalHCLEnvValue(t, env[0], "typed_any")
+	id := got.GetAttr("id").AsBigFloat()
+	assert.Equal(t, "9007199254740993", id.Text('f', 0))
+	big := got.GetAttr("nested").AsValueSlice()[0].GetAttr("big").AsBigFloat()
+	assert.Equal(t, "18446744073709551615", big.Text('f', 0))
+}
+
 // ctyToGeneric converts an evaluated HCL value into maps, slices, and strings.
 func ctyToGeneric(t *testing.T, value cty.Value) any {
 	t.Helper()

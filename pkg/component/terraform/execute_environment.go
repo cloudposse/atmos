@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"encoding/json"
 	errors "errors"
 	fmt "fmt"
@@ -490,8 +491,6 @@ const (
 	asciiControlLimit = 0x20
 	// The value of asciiDelete is the ASCII DEL control character.
 	asciiDelete = 0x7f
-	// The value of float64Bits is the bit size of a float64.
-	float64Bits = 64
 )
 
 // quoteHCLString renders text as a quoted HCL string literal. Only the escapes HCL defines are used (JSON
@@ -524,7 +523,7 @@ func quoteHCLString(text string) string {
 
 // encodeHCLLiteral renders any secret value as an HCL expression that Terraform can parse from a TF_VAR_
 // environment value. Typed maps and slices are first normalized to generic JSON values, keeping numbers as
-// generic values. Strings and object keys are
+// their exact text so that integers beyond 2^53 are not rounded through float64. Strings and object keys are
 // quoted with quoteHCLString.
 func encodeHCLLiteral(value any) (string, error) {
 	if text, isString := value.(string); isString {
@@ -534,8 +533,10 @@ func encodeHCLLiteral(value any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
 	var generic any
-	if err := json.Unmarshal(encoded, &generic); err != nil {
+	if err := decoder.Decode(&generic); err != nil {
 		return "", err
 	}
 	var b strings.Builder
@@ -550,8 +551,8 @@ func writeHCLLiteral(b *strings.Builder, value any) {
 		b.WriteString("null")
 	case bool:
 		b.WriteString(strconv.FormatBool(typed))
-	case float64:
-		b.WriteString(strconv.FormatFloat(typed, 'g', -1, float64Bits))
+	case json.Number:
+		b.WriteString(typed.String())
 	case string:
 		b.WriteString(quoteHCLString(typed))
 	case map[string]any:
