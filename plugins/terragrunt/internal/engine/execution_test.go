@@ -211,7 +211,7 @@ func TestResolveReturnsTerraformBinaryAndValidatesTheEngine(t *testing.T) {
 	request.Environment = map[string]string{toolchainChildEnv: "1"}
 	result, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
-	require.Equal(t, filepath.FromSlash(tofu), result.TerraformBinary)
+	require.Equal(t, tofu, result.TerraformBinary, "an absolute path is returned as the unit wrote it")
 
 	// A unit without terraform_binary never probes the executable.
 	plain := nativeUnit(t, "")
