@@ -705,6 +705,89 @@ func TestSecretEnvForDeclaredTypesCollectionsRoundTripThroughHCL(t *testing.T) {
 	}
 }
 
+// evalHCLEnvValue parses a TF_VAR_ environment entry the way Terraform does for an HCL-typed variable.
+func evalHCLEnvValue(t *testing.T, entry, name string) cty.Value {
+	t.Helper()
+	text := strings.TrimPrefix(entry, "TF_VAR_"+name+"=")
+	expr, diags := hclsyntax.ParseExpression([]byte(text), "env", hcl.InitialPos)
+	require.False(t, diags.HasErrors(), diags.Error())
+	got, diags := expr.Value(nil)
+	require.False(t, diags.HasErrors(), diags.Error())
+	return got
+}
+
+// TestSecretEnvForDeclaredTypesUsesOnlyHCLEscapes verifies that characters JSON escapes in ways HCL string
+// literals do not accept (backspace and form feed) survive the round trip, for scalars, collection values, and
+// object keys, and that primitive-typed and untyped variables stay verbatim.
+func TestSecretEnvForDeclaredTypesUsesOnlyHCLEscapes(t *testing.T) {
+	module := &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+		"typed_any":    {Name: "typed_any", Type: "any"},
+		"typed_map":    {Name: "typed_map", Type: "map(string)"},
+		"typed_list":   {Name: "typed_list", Type: "list(string)"},
+		"typed_string": {Name: "typed_string", Type: "string"},
+	}}
+	section := map[string]any{"component_info": map[string]any{"terraform_config": module}}
+	const special = "a\bb\fc\x00d\x1fe\x7ff\ng\rh\ti\"j\\k${l}%{m}"
+
+	t.Run("scalar", func(t *testing.T) {
+		env, err := secretEnvForDeclaredTypes(section, map[string]any{"typed_any": special})
+		require.NoError(t, err)
+		require.Len(t, env, 1)
+		assert.Equal(t, special, evalHCLEnvValue(t, env[0], "typed_any").AsString())
+	})
+
+	t.Run("collections with keys", func(t *testing.T) {
+		env, err := secretEnvForDeclaredTypes(section, map[string]any{
+			"typed_map":  map[string]string{"k\b\f": "v\f\b", special: special},
+			"typed_list": []string{"\b", "\f", special},
+		})
+		require.NoError(t, err)
+		require.Len(t, env, 2)
+		for _, entry := range env {
+			name := "typed_map"
+			if strings.HasPrefix(entry, "TF_VAR_typed_list=") {
+				name = "typed_list"
+			}
+			got := ctyToGeneric(t, evalHCLEnvValue(t, entry, name))
+			if name == "typed_map" {
+				assert.Equal(t, map[string]any{"k\b\f": "v\f\b", special: special}, got)
+			} else {
+				assert.Equal(t, []any{"\b", "\f", special}, got)
+			}
+		}
+	})
+
+	t.Run("primitive typed and untyped stay verbatim", func(t *testing.T) {
+		env, err := secretEnvForDeclaredTypes(section, map[string]any{"typed_string": "a\bb\f", "untyped": "a\bb\f"})
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"TF_VAR_typed_string=a\bb\f", "TF_VAR_untyped=a\bb\f"}, env)
+	})
+}
+
+// TestSecretEnvForDeclaredTypesKeepsLargeIntegersExact verifies that integers beyond 2^53 are not rounded
+// through float64 inside nested collections, while other nested scalars are unchanged.
+func TestSecretEnvForDeclaredTypesKeepsLargeIntegersExact(t *testing.T) {
+	module := &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+		"typed_any": {Name: "typed_any", Type: "any"},
+	}}
+	section := map[string]any{"component_info": map[string]any{"terraform_config": module}}
+
+	env, err := secretEnvForDeclaredTypes(section, map[string]any{"typed_any": map[string]any{
+		"id":     int64(9007199254740993),
+		"nested": []any{map[string]any{"big": uint64(18446744073709551615), "small": 7, "ok": true, "none": nil, "ratio": 0.5}},
+	}})
+	require.NoError(t, err)
+	require.Len(t, env, 1)
+	assert.Contains(t, env[0], `"id":9007199254740993`)
+	assert.Contains(t, env[0], `"big":18446744073709551615`)
+
+	got := evalHCLEnvValue(t, env[0], "typed_any")
+	id := got.GetAttr("id").AsBigFloat()
+	assert.Equal(t, "9007199254740993", id.Text('f', 0))
+	big := got.GetAttr("nested").AsValueSlice()[0].GetAttr("big").AsBigFloat()
+	assert.Equal(t, "18446744073709551615", big.Text('f', 0))
+}
+
 // ctyToGeneric converts an evaluated HCL value into maps, slices, and strings.
 func ctyToGeneric(t *testing.T, value cty.Value) any {
 	t.Helper()
