@@ -16,6 +16,7 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
@@ -294,9 +295,44 @@ func checkDestroyGuard(ctx context.Context, logger log.Logger, environment *atmo
 	guard, err := config.PartialParseConfigFile(ctx, logger, atmosbridge.Discovery(environment, false),
 		pctx.WithDecodeList(config.TerragruntFlags), path, nil)
 	if err != nil {
-		return err
+		return staticDestroyGuard(environment.FS, path, err)
 	}
 	if guard.PreventDestroy != nil && *guard.PreventDestroy {
+		return ErrPreventDestroy
+	}
+	return nil
+}
+
+// staticDestroyGuard decides prevent_destroy from the unit's own syntax when the evaluated guard
+// parse failed, for example because a local calls run_cmd and guard parsing never executes
+// commands. It evaluates no function and reads no other file. A literal prevent_destroy decides the
+// verdict, and a unit that sets none without an include block is unprotected, so the destroy
+// continues to the ordinary parse. Anything the syntax cannot settle (an expression, an include, an
+// unreadable or invalid file) keeps the original error, so the guard still fails closed.
+func staticDestroyGuard(fs afero.Fs, path string, parseErr error) error {
+	data, err := afero.ReadFile(fs, path)
+	if err != nil {
+		return parseErr
+	}
+	file, diagnostics := hclsyntax.ParseConfig(data, path, hcl.InitialPos)
+	body, ok := file.Body.(*hclsyntax.Body)
+	if diagnostics.HasErrors() || !ok {
+		return parseErr
+	}
+	for _, block := range body.Blocks {
+		if block.Type == "include" {
+			return parseErr
+		}
+	}
+	attribute, found := body.Attributes["prevent_destroy"]
+	if !found {
+		return nil
+	}
+	value, diagnostics := attribute.Expr.Value(nil)
+	if diagnostics.HasErrors() || value.IsNull() || !value.IsKnown() || value.Type() != cty.Bool {
+		return parseErr
+	}
+	if value.True() {
 		return ErrPreventDestroy
 	}
 	return nil
