@@ -151,7 +151,8 @@ func TestSendMessageWithToolsAndHistory_NoSystemField(t *testing.T) {
 	assert.NotContains(t, *requestBody, "system")
 }
 
-// TestParseBedrockResponse_CacheUsage checks cache read and creation token counts are read from the response.
+// TestParseBedrockResponse_CacheUsage checks cache read and creation token counts are read from the response
+// and counted in InputTokens, because Claude on Bedrock reports them outside input_tokens.
 func TestParseBedrockResponse_CacheUsage(t *testing.T) {
 	responseBody := `{
 		"content": [{"type": "text", "text": "ok"}],
@@ -163,11 +164,29 @@ func TestParseBedrockResponse_CacheUsage(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result.Usage)
-	assert.Equal(t, int64(90), result.Usage.InputTokens)
+	assert.Equal(t, int64(5916), result.Usage.InputTokens)
 	assert.Equal(t, int64(12), result.Usage.OutputTokens)
-	assert.Equal(t, int64(102), result.Usage.TotalTokens)
+	assert.Equal(t, int64(5928), result.Usage.TotalTokens)
 	assert.Equal(t, int64(5526), result.Usage.CacheReadTokens)
 	assert.Equal(t, int64(300), result.Usage.CacheCreationTokens)
+}
+
+// TestParseBedrockResponse_OnlyCacheReadUsage checks that usage is kept when the whole prompt was read
+// from the cache and input_tokens is 0.
+func TestParseBedrockResponse_OnlyCacheReadUsage(t *testing.T) {
+	responseBody := `{
+		"content": [{"type": "text", "text": "ok"}],
+		"stop_reason": "end_turn",
+		"usage": {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 2048}
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(2048), result.Usage.InputTokens)
+	assert.Equal(t, int64(2048), result.Usage.TotalTokens)
+	assert.Equal(t, int64(2048), result.Usage.CacheReadTokens)
 }
 
 // TestExtractCacheConfig checks the cache settings match the Anthropic provider's defaults and overrides.
