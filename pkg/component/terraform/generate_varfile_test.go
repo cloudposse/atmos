@@ -552,3 +552,114 @@ func TestWriteComponentVarfileOmitsDeclaredSensitiveVariables(t *testing.T) {
 		assert.Contains(t, string(written), "unregistered-literal-value")
 	})
 }
+
+func TestWriteTerraformTestVars_RejectsComputedValues(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		vars   map[string]any
+		dryRun bool
+		reject bool
+	}{
+		{name: "computed placeholder", vars: map[string]any{"fixture": degradation.AtmosComputedValue{}}, reject: true},
+		{name: "computed placeholder nested", vars: map[string]any{"fixture": []any{map[string]any{"id": degradation.AtmosComputedValue{}}}}, reject: true},
+		{name: "computed placeholder in a dry run", vars: map[string]any{"fixture": degradation.AtmosComputedValue{}}, dryRun: true, reject: true},
+		{name: "resolved values", vars: map[string]any{"fixture": "vpc-123"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir()}
+			info := schema.ConfigAndStacksInfo{
+				SubCommand:    "test",
+				ContextPrefix: "ctx",
+				Component:     "mycomp",
+				DryRun:        test.dryRun,
+				ComponentSection: map[string]any{
+					cfg.TestSectionName: map[string]any{cfg.VarsSectionName: test.vars},
+				},
+			}
+			varfile := ConstructTerraformComponentTestVarfilePath(&atmosConfig, &info)
+			require.NoError(t, os.MkdirAll(filepath.Dir(varfile), 0o755))
+
+			err := writeTerraformTestVars(&atmosConfig, &info)
+
+			if test.reject {
+				require.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
+				assert.NoFileExists(t, varfile, "a rejected computed value is never written")
+				return
+			}
+			require.NoError(t, err)
+			assert.FileExists(t, varfile)
+		})
+	}
+}
+
+func TestSecretVarEnv_QuotesStringsForVariablesTerraformParsesAsHCL(t *testing.T) {
+	secret := "declared-type-secret-${value}-5b3e"
+	iolib.RegisterSecret(secret)
+	module := &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+		"any_token":    {Name: "any_token", Type: "any"},
+		"string_token": {Name: "string_token", Type: "string"},
+	}}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{"any_token": secret, "string_token": secret, "untyped_token": secret},
+		ComponentSection: map[string]any{
+			"component_info": map[string]any{"terraform_config": module},
+		},
+	}
+	ComputeTerraformSecretVarKeys(info)
+
+	env, err := SecretVarEnv(info)
+
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{
+		`TF_VAR_any_token="declared-type-secret-$${value}-5b3e"`,
+		"TF_VAR_string_token=" + secret,
+		"TF_VAR_untyped_token=" + secret,
+	}, env)
+}
+
+func TestSecretEnvForDeclaredTypesEncodesStringsForTheDeclaredType(t *testing.T) {
+	module := &tfconfig.Module{Variables: map[string]*tfconfig.Variable{}}
+	for name, typeText := range map[string]string{
+		"typed_string": "string", "typed_number": "number", "typed_any": "any", "typed_list": "list(string)",
+		"typed_object": "object({ token = string })", "spaced_any": "  any ",
+	} {
+		module.Variables[name] = &tfconfig.Variable{Name: name, Type: typeText}
+	}
+	section := map[string]any{"component_info": map[string]any{"terraform_config": module}}
+
+	for _, test := range []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{name: "typed_string", value: "plain", want: "plain"},
+		{name: "typed_number", value: "42", want: "42"},
+		{name: "undeclared", value: "plain", want: "plain"},
+		{name: "typed_any", value: "plain", want: `"plain"`},
+		{name: "spaced_any", value: "plain", want: `"plain"`},
+		{name: "typed_list", value: "plain", want: `"plain"`},
+		{name: "typed_object", value: "plain", want: `"plain"`},
+		{name: "typed_any", value: `say "hi"\n`, want: `"say \"hi\"\\n"`},
+		{name: "typed_any", value: "token-${secret}", want: `"token-$${secret}"`},
+		{name: "typed_any", value: "token-%{if x}", want: `"token-%%{if x}"`},
+		{name: "typed_any", value: "line1\nline2", want: `"line1\nline2"`},
+		{name: "typed_object", value: map[string]any{"token": "s"}, want: `{"token":"s"}`},
+		{name: "typed_list", value: []any{"a", "b"}, want: `["a","b"]`},
+		{name: "typed_number", value: 7, want: "7"},
+		{name: "undeclared", value: true, want: "true"},
+	} {
+		t.Run(test.name+"/"+test.want, func(t *testing.T) {
+			env, err := secretEnvForDeclaredTypes(section, map[string]any{test.name: test.value})
+
+			require.NoError(t, err)
+			require.Equal(t, []string{"TF_VAR_" + test.name + "=" + test.want}, env)
+		})
+	}
+}
+
+func TestSecretEnvForDeclaredTypesWithoutAModuleKeepsStringsVerbatim(t *testing.T) {
+	env, err := secretEnvForDeclaredTypes(nil, map[string]any{"a": "plain", "b": `has "quotes"`})
+
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"TF_VAR_a=plain", `TF_VAR_b=has "quotes"`}, env)
+}
