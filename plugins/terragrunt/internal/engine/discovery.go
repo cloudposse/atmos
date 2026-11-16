@@ -440,6 +440,12 @@ func inventorySource(environment *atmosbridge.Venv, cfg *config.TerragruntConfig
 	}
 	result.Source = *cfg.Terraform.Source
 	if !plainLocalSource(result.Source) {
+		// A local `dir//subdir` source must exist, like a plain local source.
+		if localSubdirSource(result.Source) {
+			if problem := localSubdirSourceProblem(environment.FS, path, result.Source); problem != nil {
+				return problem
+			}
+		}
 		// An unsupported remote transport fails discovery too, before any unit runs.
 		return validateRemoteSource(result.Source)
 	}
