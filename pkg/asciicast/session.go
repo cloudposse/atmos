@@ -553,6 +553,11 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 	select {
 	case err := <-done:
 		waitErr := waitForSessionProcess(proc, defaultProcessExitMaxWait)
+		// Completion can win when cancellation is also ready, or the deadline
+		// can expire while reaping. Preserve that cause in either case.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return errors.Join(ctxErr, err, waitErr)
+		}
 		if err == nil {
 			return waitErr
 		}
