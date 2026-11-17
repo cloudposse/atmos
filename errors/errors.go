@@ -1608,6 +1608,8 @@ var (
 	ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
 	ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
 	ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
+	ErrArtifactSigningFailed    = errors.New("failed to sign artifact")
+	ErrPathThroughNonDirectory  = errors.New("path passes through a non-directory")
 
 	// CI cache errors.
 	ErrCacheUnavailable     = errors.New("CI cache is not available in this environment")
@@ -2116,6 +2118,22 @@ var (
 
 	// ErrArtifactTooLarge is returned when a record, document, or evidence blob exceeds its bounded-read limit.
 	ErrArtifactTooLarge = errors.New("artifact data exceeds the size limit")
+
+	// ErrArtifactSourceChanged is returned when source content changed while it was being captured,
+	// so an inventory would describe different bytes than the ones staged.
+	ErrArtifactSourceChanged = errors.New("artifact source changed during capture")
+
+	// ErrArtifactVerificationFailed is returned when no permitted signature satisfies a required
+	// trust set. It is a policy error raised before any consumption or destination publication.
+	ErrArtifactVerificationFailed = errors.New("artifact signature verification failed")
+
+	// ErrArtifactPublicationAmbiguous is returned when a mutation failed in a way that could not be
+	// reconciled: the completed reference could not be proven to hold, or to lack, the expected content.
+	ErrArtifactPublicationAmbiguous = errors.New("artifact publication outcome is ambiguous")
+
+	// ErrSymlinkLoop is returned when resolving a path follows more symlinks than the bound allows, which
+	// means the links form a loop.
+	ErrSymlinkLoop = errors.New("symlink loop")
 
 	// ErrArtifactStreamFailed is returned when reading or closing an artifact stream fails. The
 	// underlying I/O error is wrapped alongside it for diagnostics.
