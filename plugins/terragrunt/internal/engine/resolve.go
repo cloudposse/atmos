@@ -84,13 +84,24 @@ func resolveRequest(ctx context.Context, request model.Request, filesystem afero
 	if discovering(request) {
 		return resolveUnitInventory(ctx, logger, environment, pctx, request, path)
 	}
-	return resolveUnit(ctx, logger, environment, pctx, request, path, scan)
+	unit := unitEvaluator{logger: logger, environment: environment, pctx: pctx, request: request, path: path}
+	return unit.resolve(ctx, scan)
 }
 
-// resolveUnit evaluates one unit: it guards destroy, parses the unit, applies
+// unitEvaluator carries the parser dependencies shared by unit resolution stages.
+type unitEvaluator struct {
+	logger      log.Logger
+	environment *atmosbridge.Venv
+	pctx        *config.ParsingContext
+	request     model.Request
+	path        string
+}
+
+// resolve evaluates one unit: it guards destroy, parses the unit, applies
 // policies, and assembles the resolution with its execution data, backend, overlay,
 // and generated files.
-func resolveUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string, scan *sensitivityScan) (*model.Resolution, error) {
+func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
+	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, u.request, u.path
 	if err := checkDestroyGuard(ctx, logger, environment, pctx, request, path); err != nil {
 		return nil, err
 	}
@@ -108,12 +119,13 @@ func resolveUnit(ctx context.Context, logger log.Logger, environment *atmosbridg
 	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
 		return nil, err
 	}
-	return buildUnitResolution(ctx, logger, environment, pctx, request, cfg, path, &unitSensitivity{inputs: sensitiveInputs, scan: scan})
+	return u.buildResolution(ctx, cfg, &unitSensitivity{inputs: sensitiveInputs, scan: scan})
 }
 
-// buildUnitResolution assembles the resolution of a parsed unit. The execution is
+// buildResolution assembles the resolution of a parsed unit. The execution is
 // set before the backend resolves so the backend step sees the final result.
-func buildUnitResolution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string, sensitivity *unitSensitivity) (*model.Resolution, error) {
+func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.TerragruntConfig, sensitivity *unitSensitivity) (*model.Resolution, error) {
+	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, u.request, u.path
 	execution, applyFiles, err := unitExecution(ctx, logger, environment, pctx, request, cfg, path)
 	sensitivity.scan.applyFiles = applyFiles
 	if err != nil {

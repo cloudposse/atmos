@@ -70,8 +70,8 @@ func transformsSensitiveLocal(fsys afero.Fs, unit string) bool {
 	return false
 }
 
-// transformsRaw reports whether the value of expression is derived from other values by anything other than
-// selecting them: a function that is not sensitive(...) or merge(...) and does not directly wrap the value, a
+// TransformsRaw reports whether the value of expression is derived from other values by anything other than
+// selecting them: a function that is not `sensitive` or `merge` and does not directly wrap the value, a
 // template, a for expression, or an operator. It follows local references, and fails closed on a reference
 // it cannot follow and at the depth bound.
 func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, depth int) bool {
@@ -86,15 +86,7 @@ func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, dept
 		}
 		switch typed := node.(type) {
 		case *hclsyntax.FunctionCallExpr:
-			switch typed.Name {
-			case "sensitive":
-				for _, argument := range typed.Args {
-					wrapped[unwrapParentheses(argument)] = true
-				}
-			case "merge":
-			default:
-				transformed = !wrapped[typed]
-			}
+			transformed = callTransformsRaw(typed, wrapped)
 		case *hclsyntax.TemplateExpr:
 			transformed = !isLiteralTemplate(typed)
 		case *hclsyntax.ForExpr, *hclsyntax.BinaryOpExpr, *hclsyntax.UnaryOpExpr:
@@ -107,6 +99,20 @@ func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, dept
 	return transformed
 }
 
+// callTransformsRaw records sensitive wrappers and identifies transforming calls.
+func callTransformsRaw(call *hclsyntax.FunctionCallExpr, wrapped map[hclsyntax.Node]bool) bool {
+	switch call.Name {
+	case "sensitive":
+		for _, argument := range call.Args {
+			wrapped[unwrapParentheses(argument)] = true
+		}
+	case "merge":
+	default:
+		return !wrapped[call]
+	}
+	return false
+}
+
 // referenceTransformsRaw follows a local reference to the expression that defines it.
 func (s *sensitivityScanner) referenceTransformsRaw(traversal *hclsyntax.ScopeTraversalExpr, depth int) bool {
 	switch traversal.Traversal.RootName() {
@@ -114,15 +120,15 @@ func (s *sensitivityScanner) referenceTransformsRaw(traversal *hclsyntax.ScopeTr
 	default:
 		return false
 	}
-	current, locals, _, found := s.reference(traversal.Traversal)
+	reference, found := s.reference(traversal.Traversal)
 	if !found {
 		// A local of an included file, or an unknown one, cannot be inspected.
 		return true
 	}
 	previous := s.locals
-	s.locals = locals
+	s.locals = reference.locals
 	defer func() { s.locals = previous }()
-	return s.transformsRaw(current, depth+1)
+	return s.transformsRaw(reference.expression, depth+1)
 }
 
 // unwrapParentheses returns the expression inside any number of parentheses.
@@ -146,7 +152,7 @@ func isLiteralTemplate(template *hclsyntax.TemplateExpr) bool {
 	return true
 }
 
-// unredactedSensitivity reports whether any of the files calls sensitive(...) where the sink cannot learn
+// UnredactedSensitivity reports whether any of the files calls `sensitive` where the sink cannot learn
 // the value. When the unit was resolved, the values of its inputs and of its own locals are known and
 // registered, so only calls elsewhere count: the locals or inputs of an included file, or another attribute
 // or block. An included file's inputs count because a child can override them, so only the merged value is
@@ -165,21 +171,29 @@ func unredactedSensitivity(fsys afero.Fs, files []string, unit string, resolved 
 		if !ok {
 			return true
 		}
-		for name, attribute := range body.Attributes {
-			if resolved && name == inputsName && file == unit {
-				continue
-			}
-			if callsSensitive(attribute.Expr) {
-				return true
-			}
+		if bodyHasUnredactedSensitivity(body, resolved && file == unit) {
+			return true
 		}
-		for _, block := range body.Blocks {
-			if resolved && block.Type == "locals" && file == unit {
-				continue
-			}
-			if callsSensitive(block.Body) {
-				return true
-			}
+	}
+	return false
+}
+
+// bodyHasUnredactedSensitivity skips only the resolved unit's registered values.
+func bodyHasUnredactedSensitivity(body *hclsyntax.Body, registered bool) bool {
+	for name, attribute := range body.Attributes {
+		if registered && name == inputsName {
+			continue
+		}
+		if callsSensitive(attribute.Expr) {
+			return true
+		}
+	}
+	for _, block := range body.Blocks {
+		if registered && block.Type == "locals" {
+			continue
+		}
+		if callsSensitive(block.Body) {
+			return true
 		}
 	}
 	return false
@@ -199,7 +213,7 @@ func parseBody(fsys afero.Fs, file string) (*hclsyntax.Body, bool) {
 	return body, ok
 }
 
-// callsSensitive reports whether node calls sensitive(...) anywhere below it.
+// CallsSensitive reports whether node calls `sensitive` anywhere below it.
 func callsSensitive(node hclsyntax.Node) bool {
 	found := false
 	_ = hclsyntax.VisitAll(node, func(node hclsyntax.Node) hcl.Diagnostics {
