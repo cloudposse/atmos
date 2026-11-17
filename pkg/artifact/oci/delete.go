@@ -25,7 +25,7 @@ import (
 func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference, options artifact.DeleteOptions) (*artifact.DeleteResult, error) {
 	defer perf.Track(nil, "oci.Repository.Delete")()
 
-	if options.Scope == artifact.DeleteReference && r.be.deleteScope() != artifact.DeleteReference {
+	if referenceScopeUnsupported(options.Scope, r.be.deleteScope()) {
 		return nil, artifact.NewUnsupportedCapability(r.alias, "delete", "delete/tag", "the registry can only delete a manifest")
 	}
 	name := pinned.Ref.Name
@@ -67,6 +67,10 @@ func (r *Repository) recheckHolders(ctx context.Context, st store, name string, 
 		return holders, nil
 	}
 	return r.referencesTo(ctx, st, name, target)
+}
+
+func referenceScopeUnsupported(requested, supported artifact.DeleteSemantics) bool {
+	return requested == artifact.DeleteReference && supported != artifact.DeleteReference
 }
 
 // deleteTag removes one tag, refusing when that would also remove a sibling reference.

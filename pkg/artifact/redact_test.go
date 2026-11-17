@@ -38,12 +38,22 @@ func TestRedactURL(t *testing.T) {
 		{name: "scheme-less userinfo", raw: "user:hunter2@ghcr.io", want: RedactedValue},
 		{name: "scheme-less userinfo and port", raw: "user:hunter2@ghcr.io:5000", want: RedactedValue},
 		{name: "malformed without an at sign is not credential bearing", raw: "oci://ghcr.io/%zz", want: "oci://ghcr.io/%zz"},
+		{name: "scheme and userinfo", raw: "https://svc-deploy:hunter2@registry.example.com", want: "https://registry.example.com"},
+		{name: "scheme and userinfo with path", raw: "https://svc-deploy:hunter2@registry.example.com/acme/atmos", want: "https://registry.example.com/acme/atmos"},
+		{name: "scheme-relative userinfo", raw: "//svc-deploy:hunter2@registry.example.com", want: "//registry.example.com"},
+		{name: "scheme-relative userinfo with path", raw: "//svc-deploy:hunter2@registry.example.com/acme/atmos", want: "//registry.example.com/acme/atmos"},
+		{name: "scheme-relative token without password", raw: "//hunter2@registry.example.com:5000", want: "//registry.example.com:5000"},
+		{name: "token without password and port", raw: "hunter2@registry.example.com:5000", want: RedactedValue},
+		{name: "malformed escape with scheme-relative userinfo", raw: "//svc-deploy:hunter2@registry.example.com/%zz", want: RedactedValue},
+		{name: "unparsable host with userinfo", raw: "https://svc-deploy:hunter2@exa mple.com", want: RedactedValue},
+		{name: "scheme-relative without credentials", raw: "//registry.example.com", want: "//registry.example.com"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := RedactURL(tt.raw)
 			assert.Equal(t, tt.want, got)
 			assert.NotContains(t, got, "hunter2")
+			assert.NotContains(t, got, "svc-deploy")
 		})
 	}
 }

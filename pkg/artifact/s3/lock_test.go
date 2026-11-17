@@ -247,7 +247,7 @@ func TestLock_CanceledAcquisitionLeaksNothing(t *testing.T) {
 		require.NoError(t, err)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, err = peer.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "owner-b"})
+		_, err = peerOf(t, spec).Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "owner-b"})
 		require.ErrorIs(t, err, context.Canceled)
 		require.NoError(t, held.Release(context.Background()))
 		assert.Empty(t, lockObjects(spec.fake), "only the holder's claim ever existed")

@@ -177,7 +177,7 @@ func (r *Repository) listEntry(ctx context.Context, candidate *listCandidate, la
 	if err != nil {
 		return artifact.ListEntry{}, false, err
 	}
-	if current == nil || !current.ref.Available() || current.ref.Generation != candidate.generation || current.ref.RecordDigest != candidate.digest {
+	if !candidateCurrent(current, candidate) {
 		return artifact.ListEntry{}, false, nil
 	}
 	if recordErr != nil {
@@ -201,6 +201,10 @@ func (r *Repository) listEntry(ctx context.Context, candidate *listCandidate, la
 		Labels:      record.Metadata.Labels,
 		Documents:   record.Documents,
 	}, true, nil
+}
+
+func candidateCurrent(current *refState, candidate *listCandidate) bool {
+	return current != nil && current.ref.Available() && current.ref.Generation == candidate.generation && current.ref.RecordDigest == candidate.digest
 }
 
 // descriptorsOf lists evidence descriptors.

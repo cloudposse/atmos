@@ -13,14 +13,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/artifact"
 )
 
-// alias tags an existing manifest with another version, creating a sibling reference.
-func alias(t *testing.T, repo *Repository, pinned artifact.PinnedReference, version string) {
+// aliasStable tags an existing manifest as "stable", creating a sibling reference.
+func aliasStable(t *testing.T, repo *Repository, pinned artifact.PinnedReference) {
 	t.Helper()
 	st, err := repo.be.open(context.Background(), pinned.Ref.Name, true)
 	require.NoError(t, err)
 	desc, ok := repo.descriptorFor(pinned.Ref.Name, pinned.ResolvedDigest)
 	require.True(t, ok)
-	require.NoError(t, st.Tag(context.Background(), desc, repo.be.reference(pinned.Ref.Name, version)))
+	require.NoError(t, st.Tag(context.Background(), desc, repo.be.reference(pinned.Ref.Name, "stable")))
 }
 
 func resolves(repo *Repository, name, version string) bool {
@@ -31,7 +31,7 @@ func resolves(repo *Repository, name, version string) bool {
 func TestRegistryTagDeleteRefusesWhenItWouldRemoveASiblingTag(t *testing.T) {
 	repo := newRegistryRepo(t, newRegistry(t, nil))
 	first := publish(t, repo, publishSpec{content: "shared manifest"})
-	alias(t, repo, first.Pinned, "stable")
+	aliasStable(t, repo, first.Pinned)
 	pinned, err := repo.Resolve(context.Background(), artifact.Ref{Name: appName, Version: appVersion})
 	require.NoError(t, err)
 
@@ -45,7 +45,7 @@ func TestRegistryTagDeleteRefusesWhenItWouldRemoveASiblingTag(t *testing.T) {
 func TestRegistryDigestDeleteIsManifestScopedAndReportsAffectedReferences(t *testing.T) {
 	repo := newRegistryRepo(t, newRegistry(t, nil))
 	first := publish(t, repo, publishSpec{content: "shared manifest"})
-	alias(t, repo, first.Pinned, "stable")
+	aliasStable(t, repo, first.Pinned)
 	publish(t, repo, publishSpec{version: "2.0.0", content: "unrelated"})
 
 	byDigest := artifact.PinnedReference{Ref: artifact.Ref{Name: appName, Digest: first.Pinned.ResolvedDigest}, ResolvedDigest: first.Pinned.ResolvedDigest}
@@ -87,7 +87,7 @@ func mustResolve(t *testing.T, repo *Repository, version string) artifact.Pinned
 func TestLayoutTagDeleteRemovesOnlyTheNamedReference(t *testing.T) {
 	repo := newLayoutRepo(t)
 	first := publish(t, repo, publishSpec{content: "shared"})
-	alias(t, repo, first.Pinned, "stable")
+	aliasStable(t, repo, first.Pinned)
 	pinned := mustResolve(t, repo, appVersion)
 
 	result, err := repo.Delete(context.Background(), pinned, artifact.DeleteOptions{ExpectedCurrent: &pinned, Scope: artifact.DeleteReference})
@@ -168,7 +168,7 @@ func TestRegistryTagDeleteRechecksSiblingsRightBeforeRemoving(t *testing.T) {
 	repo.be = hooked
 	hooked.after = func(scan int) {
 		if scan == 1 {
-			alias(t, repo, first.Pinned, "stable")
+			aliasStable(t, repo, first.Pinned)
 		}
 	}
 
@@ -188,7 +188,7 @@ func TestRegistryDigestDeleteReportsTagsAddedAfterTheFirstScan(t *testing.T) {
 	repo.be = hooked
 	hooked.after = func(scan int) {
 		if scan == 1 {
-			alias(t, repo, first.Pinned, "stable")
+			aliasStable(t, repo, first.Pinned)
 		}
 	}
 

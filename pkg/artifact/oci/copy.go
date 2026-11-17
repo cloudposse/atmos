@@ -89,17 +89,12 @@ func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphSto
 	if err := r.requireImportable(ctx, src, loaded, ref); err != nil {
 		return nil, err
 	}
-	release, err := r.guardLayout(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	releaseReference, err := r.guardReference(ctx, ref, options.Lock)
+	release, err := r.lockTransfer(ctx, ref, options.Lock)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if releaseErr := releaseReference(); releaseErr != nil {
+		if releaseErr := release(); releaseErr != nil {
 			err = errors.Join(err, releaseErr)
 		}
 	}()
@@ -116,20 +111,45 @@ func (r *Repository) transfer(ctx context.Context, src atmosoci.ReadOnlyGraphSto
 	if err != nil {
 		return nil, err
 	}
-	{
-		_, err = atmosoci.ExtendedCopy(ctx,
-			atmosoci.GraphSource{Store: src, Reference: loaded.desc.Digest.String()},
-			atmosoci.Destination{Store: dst, Reference: reference},
-			atmosoci.WithCopyConcurrency(r.settings.concurrency))
-		if err != nil {
-			return nil, fmt.Errorf("%w: copy %s: %w", errUtils.ErrArtifactUploadFailed, ref, err)
-		}
+	if err := r.copyGraph(ctx, src, dst, loaded, ref); err != nil {
+		return nil, err
 	}
 	pinned, err := r.pinCopied(ctx, dst, loaded, ref)
 	if err != nil {
 		return nil, err
 	}
 	return r.transferred(ctx, &pinned, ref, outcome, options)
+}
+
+// lockTransfer takes the layout write guard and then the reference lock, and returns one release
+// that frees them in the reverse order. When the reference lock cannot be taken the layout guard
+// is released before the error is returned.
+func (r *Repository) lockTransfer(ctx context.Context, ref artifact.Ref, held artifact.LockHandle) (func() error, error) {
+	releaseLayout, err := r.guardLayout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	releaseReference, err := r.guardReference(ctx, ref, held)
+	if err != nil {
+		releaseLayout()
+		return nil, err
+	}
+	return func() error {
+		defer releaseLayout()
+		return releaseReference()
+	}, nil
+}
+
+// copyGraph copies the root and its referrers from src into dst under ref.
+func (r *Repository) copyGraph(ctx context.Context, src atmosoci.ReadOnlyGraphStore, dst store, loaded *root, ref artifact.Ref) error {
+	_, err := atmosoci.ExtendedCopy(ctx,
+		atmosoci.GraphSource{Store: src, Reference: loaded.desc.Digest.String()},
+		atmosoci.Destination{Store: dst, Reference: r.be.reference(ref.Name, ref.Version)},
+		atmosoci.WithCopyConcurrency(r.settings.concurrency))
+	if err != nil {
+		return fmt.Errorf("%w: copy %s: %w", errUtils.ErrArtifactUploadFailed, ref, err)
+	}
+	return nil
 }
 
 // guardReference keeps the registry copy's read-decide-write sequence under one lock. A registry
@@ -332,4 +352,12 @@ func layoutRoot(directory, selector string) (ocispec.Descriptor, error) {
 		return ocispec.Descriptor{}, fmt.Errorf("%w: %d roots in %q match %q; select exactly one by reference name or digest", errUtils.ErrArtifactRefInvalid, len(matches), directory, selector)
 	}
 	return ocispec.Descriptor{MediaType: matches[0].MediaType, Digest: matches[0].Digest, Size: matches[0].Size}, nil
+}
+
+func matchesLayoutSelector(entry ocispec.Descriptor, selector string) bool {
+	name := entry.Annotations[ocispec.AnnotationRefName]
+	if selector == "" {
+		return name != ""
+	}
+	return entry.Digest.String() == selector || name == selector
 }

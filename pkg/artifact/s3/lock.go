@@ -85,14 +85,9 @@ func (r *Repository) acquire(ctx context.Context, resource, owner, operationID s
 		SchemaVersion: layout.SchemaVersion, Resource: resource, Owner: owner, OperationID: operationID,
 		Token: uuid.NewString(), AcquiredAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	raw, err := json.Marshal(&doc)
+	raw, err := encodeClaim(resource, &doc)
 	if err != nil {
-		return nil, fmt.Errorf("%w: encode lock claim: %w", errUtils.ErrArtifactUploadFailed, err)
-	}
-	// readClaim refuses a claim object larger than maxClaimBytes, so a larger one would be created and then
-	// be impossible to read, diagnose, or recover. Refuse it before the conditional PUT.
-	if int64(len(raw)) > maxClaimBytes {
-		return nil, fmt.Errorf("%w: the lock claim for %q is %d bytes, over the %d byte limit", errUtils.ErrArtifactTooLarge, resource, len(raw), maxClaimBytes)
+		return nil, err
 	}
 	key := layout.LockPath(resource)
 	deadline := time.Now().Add(r.settings.lockWait)
@@ -241,6 +236,19 @@ func (r *Repository) adopt(ctx context.Context, key string, doc *claimDoc) (*cla
 		return nil, err
 	}
 	return handle, nil
+}
+
+// encodeClaim serializes a claim. The reader (readClaim) refuses a claim object larger than maxClaimBytes, so a larger one
+// would be created and then be impossible to read, diagnose, or recover. Such a claim is refused before the conditional PUT.
+func encodeClaim(resource string, doc *claimDoc) ([]byte, error) {
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		return nil, fmt.Errorf("%w: encode lock claim: %w", errUtils.ErrArtifactUploadFailed, err)
+	}
+	if int64(len(raw)) > maxClaimBytes {
+		return nil, fmt.Errorf("%w: the lock claim for %q is %d bytes, over the %d byte limit", errUtils.ErrArtifactTooLarge, resource, len(raw), maxClaimBytes)
+	}
+	return raw, nil
 }
 
 // readClaim reads a claim object. A missing claim returns (nil, "", nil); an unreadable one is

@@ -113,34 +113,50 @@ func classify(desc ocispec.Descriptor, raw []byte) (*root, error) {
 	loaded := &root{desc: desc, raw: raw}
 	switch {
 	case isIndexMediaType(desc.MediaType):
-		if err := json.Unmarshal(raw, &loaded.index); err != nil {
-			return nil, fmt.Errorf("%w: index %s: %w", errUtils.ErrArtifactIntegrityFailed, desc.Digest, err)
-		}
-		if err := requireDescriptorDigests(desc, loaded.index.Manifests); err != nil {
+		if err := classifyIndex(loaded); err != nil {
 			return nil, err
-		}
-		loaded.class = classIndex
-		if hasPluginAnnotations(loaded.index.Annotations) {
-			loaded.class = classPlugin
 		}
 	case isManifestMediaType(desc.MediaType):
-		if err := json.Unmarshal(raw, &loaded.manifest); err != nil {
-			return nil, fmt.Errorf("%w: manifest %s: %w", errUtils.ErrArtifactIntegrityFailed, desc.Digest, err)
-		}
-		if err := requireDescriptorDigests(desc, []ocispec.Descriptor{loaded.manifest.Config}, loaded.manifest.Layers); err != nil {
+		if err := classifyManifest(loaded); err != nil {
 			return nil, err
-		}
-		loaded.class = classImage
-		switch loaded.manifest.Config.MediaType {
-		case artifact.MediaTypeConfig:
-			loaded.class = classAtmos
-		case pluginConfigMediaType:
-			loaded.class = classPlugin
 		}
 	default:
 		return nil, fmt.Errorf("%w: %s has unsupported media type %q", errUtils.ErrArtifactRecordInvalid, desc.Digest, desc.MediaType)
 	}
 	return loaded, nil
+}
+
+// classifyIndex decodes an index root and sets its class from the release annotations.
+func classifyIndex(loaded *root) error {
+	if err := json.Unmarshal(loaded.raw, &loaded.index); err != nil {
+		return fmt.Errorf("%w: index %s: %w", errUtils.ErrArtifactIntegrityFailed, loaded.desc.Digest, err)
+	}
+	if err := requireDescriptorDigests(loaded.desc, loaded.index.Manifests); err != nil {
+		return err
+	}
+	loaded.class = classIndex
+	if hasPluginAnnotations(loaded.index.Annotations) {
+		loaded.class = classPlugin
+	}
+	return nil
+}
+
+// classifyManifest decodes an image manifest root and sets its class from the config media type.
+func classifyManifest(loaded *root) error {
+	if err := json.Unmarshal(loaded.raw, &loaded.manifest); err != nil {
+		return fmt.Errorf("%w: manifest %s: %w", errUtils.ErrArtifactIntegrityFailed, loaded.desc.Digest, err)
+	}
+	if err := requireDescriptorDigests(loaded.desc, []ocispec.Descriptor{loaded.manifest.Config}, loaded.manifest.Layers); err != nil {
+		return err
+	}
+	loaded.class = classImage
+	switch loaded.manifest.Config.MediaType {
+	case artifact.MediaTypeConfig:
+		loaded.class = classAtmos
+	case pluginConfigMediaType:
+		loaded.class = classPlugin
+	}
+	return nil
 }
 
 // requireDescriptorDigests rejects a root that references a descriptor whose digest is malformed. A
