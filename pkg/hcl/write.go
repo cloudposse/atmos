@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 
@@ -46,6 +47,9 @@ func EncodeAttributes(data any) ([]byte, error) {
 	file := hclwrite.NewEmptyFile()
 	body := file.Body()
 	for _, name := range names {
+		if !hclsyntax.ValidIdentifier(name) {
+			return nil, fmt.Errorf("%w: invalid attribute name %q", ErrHCLEncodeFailed, name)
+		}
 		body.SetAttributeValue(name, value.GetAttr(name))
 	}
 

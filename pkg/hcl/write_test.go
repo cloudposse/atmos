@@ -79,6 +79,8 @@ func TestEncodeAttributesErrors(t *testing.T) {
 		{name: "list", data: []any{"a", "b"}},
 		{name: "scalar", data: "a"},
 		{name: "unsupported value", data: map[string]any{"ch": make(chan int)}},
+		{name: "invalid attribute name", data: map[string]any{"bad.key": "x"}},
+		{name: "attribute name with a space", data: map[string]any{"bad key": "x"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
