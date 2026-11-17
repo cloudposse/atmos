@@ -1913,10 +1913,10 @@ func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExec
 		command = terraformDefaultCommand
 	}
 	writeGroupedOutputMarker(stderr, "\n["+label+"] "+command+" output "+status+"\n")
-	stdout := ioLayer.NewLinePrefixWriter(label, os.Stdout, &o.outputMu)
+	stdout := ioLayer.NewLinePrefixWriter(label, ioLayer.MaskWriter(os.Stdout), &o.outputMu)
 	replayGroupedOutput(ioLayer.MaskWriter(stdout), result.Stdout)
 	_ = stdout.Flush()
-	stderrOutput := ioLayer.NewLinePrefixWriter(label, os.Stderr, &o.outputMu)
+	stderrOutput := ioLayer.NewLinePrefixWriter(label, stderr, &o.outputMu)
 	replayGroupedOutput(ioLayer.MaskWriter(stderrOutput), result.Stderr)
 	_ = stderrOutput.Flush()
 	writeGroupedOutputMarker(stderr, "["+label+"] end "+command+" output\n")
