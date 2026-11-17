@@ -33,8 +33,8 @@ type artifactSession struct {
 	collector      report.Collector
 	operations     map[string]*artifactOperation
 	inputs         map[string]invoke.Params
-	fingerprintKey [32]byte
 	root           *artifactScope
+	fingerprintKey [32]byte
 }
 
 // artifactScope numbers the logical operations of one sequential flow, and positions the parallel
@@ -89,7 +89,6 @@ func newArtifactSession() *artifactSession {
 		panic("generate artifact session fingerprint key: " + err.Error())
 	}
 	return session
-
 }
 
 // Clocks and ID generation are variables so tests can pin them.
@@ -247,7 +246,7 @@ func (s *artifactSession) fingerprint(domain string, encoded []byte) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// operationKey identifies a logical operation by the step and its fully resolved input.
+// operationKey identifies a logical operation by its scheduling scope, step, and resolved input.
 // Explicit user metadata participates in the identity; the execution fields do not.
 func (s *artifactSession) operationKey(scope *artifactScope, stepName string, params *invoke.Params) string {
 	identity := *params
