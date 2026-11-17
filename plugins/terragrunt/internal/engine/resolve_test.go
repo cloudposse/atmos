@@ -44,7 +44,7 @@ inputs = { large = 9007199254740993, nested = { nullable = null, enabled = false
 `)
 	result, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
-	require.Equal(t, filepath.Join(result.WorkingDir, "relative/state.tfstate"), result.Backend["path"])
+	require.Equal(t, filepath.Join(result.WorkingDir, "relative", "state.tfstate"), result.Backend["path"])
 	require.Equal(t, "# {{ keep }} ${literal}\n", result.Generated["literal.tf"])
 	require.Equal(t, json.Number("9007199254740993"), result.Inputs["large"])
 	require.NoFileExists(t, filepath.Join(filepath.Dir(request.Path), "literal.tf"))
@@ -129,7 +129,7 @@ func TestVersionConstraintsUseSelectedExecutable(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := model.Request{Tofu: executable, Environment: map[string]string{"ATMOS_TERRAGRUNT_VERSION_CHILD": test.actual}}
-			err := checkVersions(t.Context(), request, test.constraint, "")
+			err := checkVersions(t.Context(), &request, test.constraint, "")
 			if test.want == "" {
 				require.NoError(t, err)
 			} else {
@@ -452,4 +452,14 @@ func TestBackendProbePreservesDirectoryHandle(t *testing.T) {
 	info, err := file.Stat()
 	require.NoError(t, err)
 	require.True(t, info.IsDir())
+}
+
+func TestBackendGenerationOverlayPreservesCallerRequest(t *testing.T) {
+	request := nativeUnit(t, "")
+	request.Phase = phaseBackend
+	request.GenerationRoot = filepath.Join(request.BasePath, "missing", stackFile)
+	original := request
+	_, err := backendGenerationOverlay(t.Context(), &request, nil)
+	require.Error(t, err)
+	require.Equal(t, original, request)
 }

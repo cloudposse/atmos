@@ -9,6 +9,8 @@ import (
 )
 
 // Discover expands local stacks in an isolated overlay without preparing units.
+//
+//nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
 	req, err := operation(request.GetRootDirectory(), request.GetProvider(), request.GetOperation(), request.GetInvocation())
 	if err != nil {
@@ -26,12 +28,14 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 		return nil, rpcError(err)
 	}
 	addresses := map[string]*pluginv1.ComponentAddress{}
-	for _, unit := range result.Inventory {
+	for i := range result.Inventory {
+		unit := &result.Inventory[i]
 		addresses[unit.Config.Path] = &pluginv1.ComponentAddress{Stack: unit.Stack, Component: unit.Name, ComponentType: "terraform"}
 	}
 	response := &pluginv1.DiscoverComponentsResponse{}
-	for _, unit := range result.Inventory {
-		discovered, err := discoveredUnit(req, unit, addresses)
+	for i := range result.Inventory {
+		unit := &result.Inventory[i]
+		discovered, err := discoveredUnit(&req, unit, addresses)
 		if err != nil {
 			return nil, rpcError(err)
 		}
@@ -40,7 +44,7 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 	return response, nil
 }
 
-func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[string]*pluginv1.ComponentAddress) (*pluginv1.DiscoveredComponent, error) {
+func discoveredUnit(req *model.Request, unit *model.DiscoveredUnit, addresses map[string]*pluginv1.ComponentAddress) (*pluginv1.DiscoveredComponent, error) {
 	source, err := relative(req.BasePath, unit.Config.Path)
 	if err != nil {
 		return nil, err
@@ -78,16 +82,26 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 		return nil, err
 	}
 	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: engineName(req.Tofu), Source: source, Configuration: config, Sources: watched}
-	for _, path := range unit.Config.Dependencies {
+	instance.Dependencies, err = discoveredDependencies(&unit.Config, addresses)
+	if err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
+// discoveredDependencies preserves the evaluated dependency order and kinds.
+func discoveredDependencies(cfg *model.Resolution, addresses map[string]*pluginv1.ComponentAddress) ([]*pluginv1.ComponentDependency, error) {
+	var dependencies []*pluginv1.ComponentDependency
+	for _, path := range cfg.Dependencies {
 		target := addresses[path]
 		if target == nil {
 			return nil, ErrUnsupported
 		}
 		kind := pluginv1.ComponentDependency_ORDER
-		if slices.Contains(unit.Config.OutputDependencies, path) {
+		if slices.Contains(cfg.OutputDependencies, path) {
 			kind = pluginv1.ComponentDependency_OUTPUT
 		}
-		instance.Dependencies = append(instance.Dependencies, &pluginv1.ComponentDependency{Target: target, Kind: kind})
+		dependencies = append(dependencies, &pluginv1.ComponentDependency{Target: target, Kind: kind})
 	}
-	return instance, nil
+	return dependencies, nil
 }

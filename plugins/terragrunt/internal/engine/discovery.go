@@ -18,6 +18,18 @@ import (
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
+var (
+	errDiscoveryDepth       = errors.New("nested-stack discovery depth exceeded at")
+	errLocalDiscoverySource = errors.New("discovery requires local sources")
+	errInlineModuleSource   = errors.New("inline Terraform modules require terraform.source")
+	errIdentityCollision    = errors.New("discovered instance collision")
+	errGenerationDepth      = errors.New("nested-stack generation depth exceeded at")
+	errExpansionKey         = errors.New("unsupported")
+	errDuplicateUnit        = errors.New("duplicate unit instance")
+	errDuplicateStack       = errors.New("duplicate stack instance")
+	errDependencyWorkspace  = errors.New("native output dependencies with non-default workspaces require a dependency backend adapter")
+)
+
 // DiscoveryError carries only a filesystem identity and a fixed category across
 // the RPC boundary. Cause remains local for debugging and cancellation checks.
 type DiscoveryError struct {
@@ -26,7 +38,10 @@ type DiscoveryError struct {
 	Cause    error
 }
 
+//nolint:lintroller // Pure error delegation in a standalone plugin; no host tracker dependency.
 func (e *DiscoveryError) Error() string { return e.Cause.Error() }
+
+//nolint:lintroller // Preserve the original cause without introducing the host tracker dependency.
 func (e *DiscoveryError) Unwrap() error { return e.Cause }
 
 func discoveryError(root, path, category string, cause error) error {
@@ -72,7 +87,7 @@ func within(path, directory string) bool {
 // are moved or written.
 type projectDiscovery struct {
 	ctx       context.Context
-	request   model.Request
+	request   *model.Request
 	root      string
 	overlay   afero.Fs
 	result    *model.Resolution
@@ -84,7 +99,7 @@ type projectDiscovery struct {
 
 // discoverProject discovers live stacks first, then standalone units that no
 // stack owns, and rejects colliding Atmos identities.
-func discoverProject(ctx context.Context, request model.Request) (*model.Resolution, error) {
+func discoverProject(ctx context.Context, request *model.Request) (*model.Resolution, error) {
 	root, err := canonicalPath(request.BasePath)
 	if err != nil {
 		return nil, err
@@ -132,12 +147,12 @@ func (d *projectDiscovery) nameFor(dir string) string {
 }
 
 func (d *projectDiscovery) parse(path string, generate bool) (*model.Resolution, error) {
-	req := d.request
+	req := *d.request
 	req.Path, req.Phase = path, "discover"
 	if generate {
 		req.Command = "generate"
 	}
-	resolved, err := resolve(d.ctx, req, d.overlay)
+	resolved, err := resolve(d.ctx, &req, d.overlay)
 	if err != nil {
 		return nil, discoveryError(d.root, path, "EVALUATION_FAILED", err)
 	}
@@ -157,7 +172,7 @@ func (d *projectDiscovery) discoverStacks(stacks []string) error {
 			failures[path] = err
 			continue
 		}
-		if err := d.visit(path, unitPlacement{stack: d.nameFor(filepath.Dir(path)), generationRoot: path}, 0); err != nil {
+		if err := d.visit(path, &unitPlacement{stack: d.nameFor(filepath.Dir(path)), generationRoot: path}, 0); err != nil {
 			failures[path] = err
 		}
 	}
@@ -184,7 +199,7 @@ func (d *projectDiscovery) discoverStandaloneUnits(units []string) error {
 		if dir == d.root {
 			stack, name = "default", "root"
 		}
-		if err := d.visit(path, unitPlacement{stack: stack, name: name}, 0); err != nil {
+		if err := d.visit(path, &unitPlacement{stack: stack, name: name}, 0); err != nil {
 			return fmt.Errorf("discover %s: %w", path, err)
 		}
 	}
@@ -197,16 +212,16 @@ type unitPlacement struct {
 	files, folders              []string
 }
 
-func (p unitPlacement) child(name, source string, files []string) unitPlacement {
-	return unitPlacement{
+func (p *unitPlacement) child(name, source string, files []string) *unitPlacement {
+	return &unitPlacement{
 		stack: p.stack, name: filepath.Join(p.name, name), generationRoot: p.generationRoot,
 		files: files, folders: append(slices.Clone(p.folders), source),
 	}
 }
 
-func (d *projectDiscovery) visit(path string, placement unitPlacement, depth int) error {
+func (d *projectDiscovery) visit(path string, placement *unitPlacement, depth int) error {
 	if depth > maxStackDepth {
-		return fmt.Errorf("nested-stack discovery depth exceeded at %s", path)
+		return fmt.Errorf("%w %s", errDiscoveryDepth, path)
 	}
 	resolved, err := d.parse(path, false)
 	if err != nil {
@@ -218,7 +233,7 @@ func (d *projectDiscovery) visit(path string, placement unitPlacement, depth int
 	return d.visitUnit(path, resolved, placement)
 }
 
-func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement unitPlacement, depth int) error {
+func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *unitPlacement, depth int) error {
 	files := append(slices.Clone(placement.files), resolved.Files...)
 	for _, child := range slices.Sorted(maps.Keys(resolved.StackConfigs)) {
 		source := resolved.StackSources[child]
@@ -240,13 +255,13 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement unit
 	return nil
 }
 
-func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, placement unitPlacement) error {
+func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, placement *unitPlacement) error {
 	if len(resolved.Folders) == 0 {
 		// Shared include, not a runnable local-source unit.
 		return d.checkInlineModule(path)
 	}
 	if !plainLocalSource(resolved.Folders[0]) {
-		return discoveryError(d.root, path, "NONLOCAL_SOURCE", fmt.Errorf("discovery requires local sources"))
+		return discoveryError(d.root, path, "NONLOCAL_SOURCE", errLocalDiscoverySource)
 	}
 	resolved.Files = append(resolved.Files, placement.files...)
 	resolved.Folders = append(resolved.Folders, placement.folders...)
@@ -261,7 +276,7 @@ func (d *projectDiscovery) checkInlineModule(path string) error {
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), ".tf.json")) {
-			return discoveryError(d.root, path, "MISSING_TERRAFORM_SOURCE", fmt.Errorf("inline Terraform modules require terraform.source"))
+			return discoveryError(d.root, path, "MISSING_TERRAFORM_SOURCE", errInlineModuleSource)
 		}
 	}
 	return nil
@@ -269,10 +284,11 @@ func (d *projectDiscovery) checkInlineModule(path string) error {
 
 func checkIdentityCollisions(inventory []model.DiscoveredUnit) error {
 	identities := map[string]string{}
-	for _, unit := range inventory {
+	for i := range inventory {
+		unit := &inventory[i]
 		key := unit.Stack + "\x00" + unit.Name
 		if previous, exists := identities[key]; exists {
-			return fmt.Errorf("discovered instance collision %s/%s: %s and %s", unit.Stack, unit.Name, previous, unit.Config.Path)
+			return fmt.Errorf("%w %s/%s: %s and %s", errIdentityCollision, unit.Stack, unit.Name, previous, unit.Config.Path)
 		}
 		identities[key] = unit.Config.Path
 	}
@@ -282,17 +298,17 @@ func checkIdentityCollisions(inventory []model.DiscoveredUnit) error {
 // resolveStack reads the units and nested stacks one stack file declares. With
 // generation, only this file and the nested stacks it declares are generated;
 // other stack files under the same directory are never listed or generated.
-func resolveStack(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*model.Resolution, error) {
-	if generating(request) {
-		if err := generateStack(ctx, logger, environment, request, path, 0); err != nil {
+func (e *unitEvaluator) resolveStack(ctx context.Context) (*model.Resolution, error) {
+	if generating(e.request) {
+		if err := e.generateStack(ctx, e.path, 0); err != nil {
 			return nil, err
 		}
 	}
-	stack, err := readStack(ctx, logger, environment, pctx, path)
+	stack, err := readStack(ctx, e.logger, e.environment, e.pctx, e.path)
 	if err != nil {
 		return nil, err
 	}
-	return stackResolution(pctx, stack, path)
+	return stackResolution(e.pctx, stack, e.path)
 }
 
 func readStack(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, path string) (*config.StackConfig, error) {
@@ -305,14 +321,14 @@ func readStack(ctx context.Context, logger log.Logger, environment *atmosbridge.
 
 // generateStack generates path and then, recursively, each enabled nested stack
 // it declares. Units are generated by their declaring stack file.
-func generateStack(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, request model.Request, path string, depth int) error {
+func (e *unitEvaluator) generateStack(ctx context.Context, path string, depth int) error {
 	if depth > maxStackDepth {
-		return fmt.Errorf("nested-stack generation depth exceeded at %s", path)
+		return fmt.Errorf("%w %s", errGenerationDepth, path)
 	}
-	if err := atmosbridge.GenerateStack(ctx, logger, environment, path, request.Tofu); err != nil {
+	if err := atmosbridge.GenerateStack(ctx, e.logger, e.environment, path, e.request.Tofu); err != nil {
 		return err
 	}
-	stack, err := readStack(ctx, logger, environment, parsingContext(request, path), path)
+	stack, err := readStack(ctx, e.logger, e.environment, parsingContext(e.request, path), path)
 	if err != nil {
 		return err
 	}
@@ -320,7 +336,7 @@ func generateStack(ctx context.Context, logger log.Logger, environment *atmosbri
 		if !child.IsEnabled() {
 			continue
 		}
-		if err := generateStack(ctx, logger, environment, request, filepath.Join(child.GeneratedPath(filepath.Dir(path)), stackFile), depth+1); err != nil {
+		if err := e.generateStack(ctx, filepath.Join(child.GeneratedPath(filepath.Dir(path)), stackFile), depth+1); err != nil {
 			return err
 		}
 	}
@@ -334,7 +350,7 @@ func instanceIdentity(kind, name, key string, expanded bool) (string, error) {
 		return name, nil
 	}
 	if key == "" || key == "." || key == ".." || strings.ContainsAny(key, `/\`) {
-		return "", fmt.Errorf("unsupported %s expansion key %q in %s", kind, key, name)
+		return "", fmt.Errorf("%w %s expansion key %q in %s", errExpansionKey, kind, key, name)
 	}
 	return name + "/" + key, nil
 }
@@ -356,7 +372,7 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 			return nil, err
 		}
 		if _, exists := result.Units[id]; exists {
-			return nil, fmt.Errorf("duplicate unit instance %s in %s", id, path)
+			return nil, fmt.Errorf("%w %s in %s", errDuplicateUnit, id, path)
 		}
 		result.Units[id] = unit.Path
 		result.UnitSources[id] = localPath(dir, unit.Source)
@@ -372,7 +388,7 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 			return nil, err
 		}
 		if _, exists := result.Stacks[id]; exists {
-			return nil, fmt.Errorf("duplicate stack instance %s in %s", id, path)
+			return nil, fmt.Errorf("%w %s in %s", errDuplicateStack, id, path)
 		}
 		result.Stacks[id] = child.Path
 		result.StackSources[id] = localPath(dir, child.Source)
@@ -382,23 +398,23 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 }
 
 // resolveUnitInventory reads only the source and dependency blocks of a unit.
-func resolveUnitInventory(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*model.Resolution, error) {
-	cfg, err := config.PartialParseConfigFile(ctx, logger, environment,
-		pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource), path, nil)
+func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolution, error) {
+	cfg, err := config.PartialParseConfigFile(ctx, e.logger, e.environment,
+		e.pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource), e.path, nil)
 	if err != nil {
 		return nil, err
 	}
-	result := &model.Resolution{Path: path, Files: append(pctx.FilesRead.Paths(), path)}
-	if workspace := request.Environment["TF_WORKSPACE"]; workspace != "" && workspace != "default" && len(cfg.TerragruntDependencies) > 0 && cfg.Dependencies != nil && len(cfg.Dependencies.Paths) > 0 {
-		return nil, fmt.Errorf("native output dependencies with non-default workspaces require a dependency backend adapter: %s", path)
+	result := &model.Resolution{Path: e.path, Files: append(e.pctx.FilesRead.Paths(), e.path)}
+	if unsupportedDependencyWorkspace(e.request, cfg) {
+		return nil, fmt.Errorf("%w: %s", errDependencyWorkspace, e.path)
 	}
 	if cfg.Terraform != nil && cfg.Terraform.Source != nil {
-		result.Folders = []string{localPath(filepath.Dir(path), *cfg.Terraform.Source)}
+		result.Folders = []string{localPath(filepath.Dir(e.path), *cfg.Terraform.Source)}
 	}
-	if result.OutputDependencies, err = outputDependencies(cfg, path); err != nil {
+	if result.OutputDependencies, err = outputDependencies(cfg, e.path); err != nil {
 		return nil, err
 	}
-	if result.Dependencies, err = orderDependencies(environment, cfg, path); err != nil {
+	if result.Dependencies, err = orderDependencies(e.environment, cfg, e.path); err != nil {
 		return nil, err
 	}
 	return result, nil

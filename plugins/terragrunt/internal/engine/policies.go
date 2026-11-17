@@ -15,6 +15,15 @@ import (
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
+var (
+	errTerraformSource     = errors.New("native adapter requires terraform.source")
+	errStateEncryption     = errors.New("native adaptation of remote_state.encryption is not implemented")
+	errTerraformBinary     = errors.New("native adaptation of terraform_binary is not implemented")
+	errTerraformHooks      = errors.New("native adaptation of hooks/extra_arguments is not implemented")
+	errPreventDestroy      = errors.New("native adaptation of prevent_destroy is not implemented")
+	errUnsupportedSettings = errors.New("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
+)
+
 // ErrVersionRejected reports a terraform or terragrunt version that violates a
 // declared version constraint.
 var ErrVersionRejected = errors.New("version constraint rejected")
@@ -33,7 +42,7 @@ func plainLocalSource(source string) bool {
 	return !strings.ContainsAny(path, "?:") && !strings.Contains(filepath.ToSlash(path), "//")
 }
 
-func checkVersions(ctx context.Context, request model.Request, terraform, terragrunt string) error {
+func checkVersions(ctx context.Context, request *model.Request, terraform, terragrunt string) error {
 	check := func(name, constraint, actual string) error {
 		if constraint == "" {
 			return nil
@@ -57,7 +66,8 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 	if terraform == "" {
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, request.Tofu, "version", "-json")
+	// The configured Terraform executable is selected deliberately; arguments are fixed and no shell is used.
+	cmd := exec.CommandContext(ctx, request.Tofu, "version", "-json") //nolint:gosec // G204: query the explicitly selected engine version.
 	cmd.Env = make([]string, 0, len(request.Environment))
 	for key, value := range request.Environment {
 		cmd.Env = append(cmd.Env, key+"="+value)
@@ -78,9 +88,9 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 // checkUnitPolicies rejects Terragrunt semantics that the native adapter cannot
 // represent faithfully. Backend reads skip the version probe, which may execute
 // the selected binary.
-func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.TerragruntConfig) error {
-	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
-		return fmt.Errorf("native adapter requires terraform.source")
+func checkUnitPolicies(ctx context.Context, request *model.Request, cfg *config.TerragruntConfig) error {
+	if missingTerraformSource(cfg) {
+		return errTerraformSource
 	}
 	if request.Phase != "backend" {
 		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
@@ -88,16 +98,16 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 		}
 	}
 	if cfg.RemoteState != nil && len(cfg.RemoteState.Encryption) > 0 {
-		return fmt.Errorf("native adaptation of remote_state.encryption is not implemented")
+		return errStateEncryption
 	}
 	if cfg.TerraformBinary != "" {
-		return fmt.Errorf("native adaptation of terraform_binary is not implemented")
+		return errTerraformBinary
 	}
-	if len(cfg.Terraform.BeforeHooks)+len(cfg.Terraform.AfterHooks)+len(cfg.Terraform.ErrorHooks)+len(cfg.Terraform.ExtraArgs) > 0 {
-		return fmt.Errorf("native adaptation of hooks/extra_arguments is not implemented")
+	if hasTerraformHooks(cfg.Terraform) {
+		return errTerraformHooks
 	}
 	if cfg.PreventDestroy != nil && *cfg.PreventDestroy {
-		return fmt.Errorf("native adaptation of prevent_destroy is not implemented")
+		return errPreventDestroy
 	}
 	return checkUnsupportedSettings(cfg)
 }
@@ -106,7 +116,22 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 // IAM settings, which have no native equivalent.
 func checkUnsupportedSettings(cfg *config.TerragruntConfig) error {
 	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
-		return fmt.Errorf("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
+		return errUnsupportedSettings
 	}
 	return nil
+}
+
+// hasTerraformHooks identifies customization that native execution cannot represent.
+func hasTerraformHooks(terraform *config.TerraformConfig) bool {
+	return len(terraform.BeforeHooks)+len(terraform.AfterHooks)+len(terraform.ErrorHooks)+len(terraform.ExtraArgs) > 0
+}
+
+// unsupportedDependencyWorkspace preserves the existing output-dependency workspace guard.
+func unsupportedDependencyWorkspace(request *model.Request, cfg *config.TerragruntConfig) bool {
+	workspace := request.Environment["TF_WORKSPACE"]
+	return workspace != "" && workspace != "default" && len(cfg.TerragruntDependencies) > 0 && cfg.Dependencies != nil && len(cfg.Dependencies.Paths) > 0
+}
+
+func missingTerraformSource(cfg *config.TerragruntConfig) bool {
+	return cfg.Terraform == nil || cfg.Terraform.Source == nil
 }

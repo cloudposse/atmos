@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,12 +25,24 @@ import (
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
+var (
+	errPlainLocalSource = errors.New("native adapter only adapts plain local directory sources")
+	errSourceDirectory  = errors.New("native adapter source must be an existing local directory")
+	errLocalBackend     = errors.New("native adapter only adapts the local backend")
+	errGeneratedPath    = errors.New("unsupported generated path")
+	errGenerationPolicy = errors.New("native adapter generation requires overwrite and disable_signature")
+)
+
 // Resolve evaluates HCL using the pinned Terragrunt parser.
+//
+// The public value API isolates invocation fields; this SDK-only plugin has no host tracker dependency.
+//
+//nolint:gocritic,lintroller // Preserve the public value API and standalone plugin boundary.
 func Resolve(ctx context.Context, request model.Request) (*model.Resolution, error) {
-	return resolve(ctx, request, nil)
+	return resolve(ctx, &request, nil)
 }
 
-func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
+func resolve(ctx context.Context, request *model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
@@ -50,29 +63,46 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if err != nil {
 		return nil, err
 	}
-	pctx := parsingContext(request, path)
-	if filepath.Base(path) == stackFile {
-		return resolveStack(ctx, logger, environment, pctx, request, path)
+	evaluator := unitEvaluator{logger: logger, environment: environment, pctx: parsingContext(request, path), request: request, path: path}
+	return evaluator.resolve(ctx)
+}
+
+// unitEvaluator groups the invocation-local parser dependencies without changing request fields.
+type unitEvaluator struct {
+	logger      log.Logger
+	environment *atmosbridge.Venv
+	pctx        *config.ParsingContext
+	request     *model.Request
+	path        string
+}
+
+func (e *unitEvaluator) resolve(ctx context.Context) (*model.Resolution, error) {
+	if filepath.Base(e.path) == stackFile {
+		return e.resolveStack(ctx)
 	}
-	if discovering(request) {
-		return resolveUnitInventory(ctx, logger, environment, pctx, request, path)
+	if discovering(e.request) {
+		return e.resolveUnitInventory(ctx)
 	}
-	cfg, err := parseUnit(ctx, logger, environment, pctx, request, path)
+	return e.resolveUnit(ctx)
+}
+
+func (e *unitEvaluator) resolveUnit(ctx context.Context) (*model.Resolution, error) {
+	cfg, err := e.parseUnit(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnitPolicies(ctx, request, cfg); err != nil {
+	if err := checkUnitPolicies(ctx, e.request, cfg); err != nil {
 		return nil, err
 	}
-	result, err := unitResolution(logger, environment, pctx, request, cfg, path)
+	result, err := e.unitResolution(cfg)
 	if err != nil {
 		return nil, err
 	}
 	if err := resolveBackend(result, cfg); err != nil {
 		return nil, err
 	}
-	if request.Phase != phaseBackend {
-		result.Overlay, result.OverlayModes, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
+	if e.request.Phase != phaseBackend {
+		result.Overlay, result.OverlayModes, err = atmosbridge.UnitOverlay(e.logger, e.environment, filepath.Dir(e.path), cfg.Terraform)
 		if err != nil {
 			return nil, err
 		}
@@ -97,14 +127,14 @@ const (
 // backendGenerationOverlay generates the owning stack into an invocation-local
 // copy-on-write overlay before a backend read of a stack-generated unit. The
 // returned filesystem is the one the unit is then parsed from.
-func backendGenerationOverlay(ctx context.Context, request model.Request, filesystem afero.Fs) (afero.Fs, error) {
+func backendGenerationOverlay(ctx context.Context, request *model.Request, filesystem afero.Fs) (afero.Fs, error) {
 	if request.Phase != phaseBackend || request.GenerationRoot == "" {
 		return filesystem, nil
 	}
 	filesystem = afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs())
-	generation := request
+	generation := *request
 	generation.Path, generation.Phase, generation.Command = request.GenerationRoot, phaseDiscover, "generate"
-	if _, err := resolve(ctx, generation, filesystem); err != nil {
+	if _, err := resolve(ctx, &generation, filesystem); err != nil {
 		return nil, err
 	}
 	return filesystem, nil
@@ -132,18 +162,18 @@ func evaluationLogger(level string) (log.Logger, error) {
 	return logger, nil
 }
 
-func discovering(request model.Request) bool {
+func discovering(request *model.Request) bool {
 	return request.Phase == phaseDiscover || request.Command == phaseDiscover
 }
 
-func generating(request model.Request) bool {
+func generating(request *model.Request) bool {
 	return request.Command == "generate" && request.Phase != phaseBackend
 }
 
 // evaluationEnvironment uses the local maintained facade, which exposes the
 // pinned upstream virtual environment and scoped stack generation without
 // modifying upstream source.
-func evaluationEnvironment(request model.Request, filesystem afero.Fs, path string) (*atmosbridge.Venv, error) {
+func evaluationEnvironment(request *model.Request, filesystem afero.Fs, path string) (*atmosbridge.Venv, error) {
 	environment := atmosbridge.Environment(request.Environment, io.Discard, io.Discard)
 	if filesystem != nil {
 		environment = environment.WithFS(filesystem)
@@ -157,7 +187,7 @@ func evaluationEnvironment(request model.Request, filesystem afero.Fs, path stri
 	return environment, nil
 }
 
-func parsingContext(request model.Request, path string) *config.ParsingContext {
+func parsingContext(request *model.Request, path string) *config.ParsingContext {
 	command := request.Command
 	if command == "" || command == phaseDiscover || command == "generate" {
 		command = "plan"
@@ -177,19 +207,20 @@ func parsingContext(request model.Request, path string) *config.ParsingContext {
 	return pctx
 }
 
-func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*config.TerragruntConfig, error) {
-	if request.Phase == phaseBackend {
-		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(path)})
-		cfg, err := config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
+func (e *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig, error) {
+	environment := e.environment
+	if e.request.Phase == phaseBackend {
+		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(e.path)})
+		cfg, err := config.PartialParseConfigFile(ctx, e.logger, environment, e.pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), e.path, nil)
 		if err != nil {
 			return nil, err
 		}
-		if request.Environment[downloadDirEnv] == "" {
-			cfg.DownloadDir, err = downloadDir(ctx, logger, environment, pctx)
+		if e.request.Environment[downloadDirEnv] == "" {
+			cfg.DownloadDir, err = downloadDir(ctx, e.logger, environment, e.pctx)
 		}
 		return cfg, err
 	}
-	return config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
+	return config.ParseConfigFile(ctx, e.logger, environment, e.pctx, e.path, nil)
 }
 
 // downloadDir restores download_dir on a partially parsed unit. Partial
@@ -220,11 +251,15 @@ type withoutInputsFS struct {
 }
 
 // Open reads through OpenFile so every read path strips inputs.
+//
+//nolint:lintroller // Pure afero delegation in a standalone plugin; no host tracker dependency.
 func (f withoutInputsFS) Open(name string) (afero.File, error) {
 	return f.OpenFile(name, os.O_RDONLY, 0)
 }
 
 // OpenFile returns the stripped content for read-only opens of HCL files.
+//
+//nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (f withoutInputsFS) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
 	file, err := f.Fs.OpenFile(name, flag, perm)
 	if err != nil || flag != os.O_RDONLY || !strings.HasSuffix(name, ".hcl") {
@@ -407,32 +442,32 @@ func traversalName(step hcl.Traverser) (string, bool) {
 }
 
 // unitResolution converts the parsed unit into its local module identity.
-func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Resolution, error) {
-	result := &model.Resolution{Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
+func (e *unitEvaluator) unitResolution(cfg *config.TerragruntConfig) (*model.Resolution, error) {
+	result := &model.Resolution{Path: e.path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(e.pctx.FilesRead.Paths(), e.path)}
 	if !plainLocalSource(result.Source) {
-		return nil, fmt.Errorf("native adapter only adapts plain local directory sources")
+		return nil, errPlainLocalSource
 	}
 	if !filepath.IsAbs(result.Source) {
-		result.Source = filepath.Join(filepath.Dir(path), result.Source)
+		result.Source = filepath.Join(filepath.Dir(e.path), result.Source)
 	}
 	if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
+		return nil, fmt.Errorf("%w: %s", errSourceDirectory, result.Source)
 	}
-	download := pctx.DownloadDir
-	if cfg.DownloadDir != "" && request.Environment[downloadDirEnv] == "" {
-		download = localPath(filepath.Dir(path), cfg.DownloadDir)
+	download := e.pctx.DownloadDir
+	if cfg.DownloadDir != "" && e.request.Environment[downloadDirEnv] == "" {
+		download = localPath(filepath.Dir(e.path), cfg.DownloadDir)
 	}
-	if configured := request.Environment[downloadDirEnv]; configured != "" {
-		download = localPath(filepath.Dir(path), configured)
+	if configured := e.request.Environment[downloadDirEnv]; configured != "" {
+		download = localPath(filepath.Dir(e.path), configured)
 	}
-	workingDir, err := atmosbridge.WorkingDir(logger, environment, result.Source, download, filepath.Dir(path))
+	workingDir, err := atmosbridge.WorkingDir(e.logger, e.environment, result.Source, download, filepath.Dir(e.path))
 	if err != nil {
 		return nil, err
 	}
 	result.WorkingDir = workingDir
 	result.Folders = []string{result.Source}
-	result.Files = append(result.Files, request.OriginFiles...)
-	result.Folders = append(result.Folders, request.OriginFolders...)
+	result.Files = append(result.Files, e.request.OriginFiles...)
+	result.Folders = append(result.Folders, e.request.OriginFolders...)
 	return result, nil
 }
 
@@ -446,7 +481,7 @@ func resolveBackend(result *model.Resolution, cfg *config.TerragruntConfig) erro
 	result.BackendType = cfg.RemoteState.BackendName
 	result.Backend = cfg.RemoteState.BackendConfig
 	if result.BackendType != "local" {
-		return fmt.Errorf("native adapter only adapts the local backend")
+		return errLocalBackend
 	}
 	for key, fallback := range map[string]string{"path": "terraform.tfstate", "workspace_dir": "terraform.tfstate.d"} {
 		value, _ := result.Backend[key].(string)
@@ -465,10 +500,10 @@ func convertGeneration(result *model.Resolution, cfg *config.TerragruntConfig) e
 			continue
 		}
 		if filepath.Base(generated.Path) != generated.Path || !strings.HasSuffix(generated.Path, ".tf") {
-			return fmt.Errorf("unsupported generated path: %s", generated.Path)
+			return fmt.Errorf("%w: %s", errGeneratedPath, generated.Path)
 		}
 		if generated.IfExistsStr != "overwrite" || !generated.DisableSignature {
-			return fmt.Errorf("native adapter generation requires overwrite and disable_signature")
+			return errGenerationPolicy
 		}
 		result.Generated[generated.Path] = generated.Contents
 	}
