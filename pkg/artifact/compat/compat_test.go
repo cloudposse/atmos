@@ -121,6 +121,7 @@ func TestLegacyCIFixtureStillReadsThroughCurrentStore(t *testing.T) {
 	require.Len(t, files, 2)
 	bodies := map[string]string{}
 	for _, file := range files {
+		t.Cleanup(func() { _ = file.Data.Close() })
 		body, readErr := io.ReadAll(file.Data)
 		require.NoError(t, readErr)
 		require.NoError(t, file.Data.Close())

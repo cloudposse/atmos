@@ -145,6 +145,7 @@ func TestLocks_HeldByAnotherOwnerBlocksUntilCanceledAndLeaksNothing(t *testing.T
 	e := newEnv(t, envConfig{})
 	other, err := e.repos["dst"].Lock(context.Background(), artifact.LockRequest{Resource: exampleRef.String(), Owner: "someone-else"})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = other.Release(context.Background()) })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
 	defer cancel()

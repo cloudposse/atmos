@@ -40,8 +40,8 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	if err := checkSigningCapability(request.Repository, &info, s.signer, subject); err != nil {
 		return err
 	}
-	resource := subjectLockResource(request.Ref.Name)
-	locks, err := s.acquireLocks(ctx, op, opSign, []lockTarget{{alias: request.Repository, repo: repo, info: &info, resource: resource}})
+	targets, writerResource := signLockTargets(request, repo, &info, inspection)
+	locks, err := s.acquireLocks(ctx, op, opSign, targets)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	if err := verifyLockedSubject(ctx, repo, request.Ref, &pinned); err != nil {
 		return err
 	}
-	evidence, err := repo.Sign(ctx, subject, s.signer, artifact.SignOptions{OperationID: op.id, Lock: locks.handleForResource(request.Repository, resource)})
+	evidence, err := repo.Sign(ctx, subject, s.signer, artifact.SignOptions{OperationID: op.id, Lock: locks.handleForResource(request.Repository, writerResource)})
 	if err != nil {
 		return fmt.Errorf("sign %s in repository %q: %w", request.Ref, request.Repository, err)
 	}
@@ -59,6 +59,22 @@ func (s *Service) sign(ctx context.Context, op *operation, request *artifact.Sig
 	op.result.LockScope = locks.scope()
 	op.info("signed-not-verified", "the subject is signed; signing alone does not verify it against trust policy, use verify")
 	return nil
+}
+
+// signLockTargets returns the locks signing holds and the resource whose handle is passed to the
+// repository as the writer lock. Signing takes the same two locks as a delete: the subject lock,
+// which serializes every operation on the artifact name, and the reference lock of the Record,
+// which publish, delete and a repository's own internal locking all honor. They are acquired in
+// canonical order by [Service.acquireLocks], so signing and deleting never deadlock. A subject
+// without a Record (an OCI root) has no reference lock to hold and uses the subject lock alone.
+func signLockTargets(request *artifact.SignRequest, repo artifact.Repository, info *RepositoryInfo, inspection *artifact.Inspection) (targets []lockTarget, writerResource string) {
+	subjectResource := subjectLockResource(request.Ref.Name)
+	targets = []lockTarget{{alias: request.Repository, repo: repo, info: info, resource: subjectResource}}
+	if inspection.Record == nil {
+		return targets, subjectResource
+	}
+	writerResource = artifact.Ref{Name: inspection.Record.Name, Version: inspection.Record.Version}.String()
+	return append(targets, lockTarget{alias: request.Repository, repo: repo, info: info, resource: writerResource}), writerResource
 }
 
 func verifyLockedSubject(ctx context.Context, repo artifact.Repository, ref artifact.Ref, pinned *artifact.PinnedReference) error {

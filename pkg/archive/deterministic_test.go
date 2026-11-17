@@ -104,6 +104,7 @@ func TestWriteDeterministic_ZipEntries(t *testing.T) {
 	assert.NotZero(t, byName["link"].Mode()&fs.ModeSymlink)
 	rc, err := byName["link"].Open()
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = rc.Close() })
 	target, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())

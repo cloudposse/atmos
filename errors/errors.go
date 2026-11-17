@@ -2131,6 +2131,10 @@ var (
 	// reconciled: the completed reference could not be proven to hold, or to lack, the expected content.
 	ErrArtifactPublicationAmbiguous = errors.New("artifact publication outcome is ambiguous")
 
+	// ErrArtifactEvidenceMalformed is returned when a subject's evidence directory holds more malformed
+	// entries than the repository is willing to read, so valid evidence may be hidden behind them.
+	ErrArtifactEvidenceMalformed = errors.New("too many malformed evidence files")
+
 	// ErrSymlinkLoop is returned when resolving a path follows more symlinks than the bound allows, which
 	// means the links form a loop.
 	ErrSymlinkLoop = errors.New("symlink loop")
@@ -2138,6 +2142,50 @@ var (
 	// ErrArtifactStreamFailed is returned when reading or closing an artifact stream fails. The
 	// underlying I/O error is wrapped alongside it for diagnostics.
 	ErrArtifactStreamFailed = errors.New("artifact stream failed")
+)
+
+// Blob transport sentinels. They classify outcomes of the transport-only object I/O in
+// pkg/artifact/blob so callers can branch with errors.Is without depending on a backend SDK.
+var (
+	// ErrBlobNotFound is returned when the addressed object does not exist.
+	ErrBlobNotFound = errors.New("blob object not found")
+
+	// ErrBlobPreconditionFailed is returned when a conditional write or delete (if-absent or if-match) lost its race.
+	ErrBlobPreconditionFailed = errors.New("blob precondition failed")
+
+	// ErrBlobConditionalUnsupported is returned when the endpoint cannot enforce a required condition.
+	// The operation is rejected instead of silently overwriting.
+	ErrBlobConditionalUnsupported = errors.New("blob endpoint cannot enforce the required condition")
+
+	// ErrBlobOutcomeUnknown is returned when a mutation was sent but its result was not observed
+	// (timeout, connection reset, server error). Callers must reconcile by reading the object.
+	ErrBlobOutcomeUnknown = errors.New("blob mutation outcome is unknown")
+
+	// ErrBlobInvalid is returned for malformed keys, tags, options, sizes, or ranges.
+	ErrBlobInvalid = errors.New("invalid blob request")
+
+	// ErrBlobIdentityUnresolved is returned when a configured identity cannot be resolved to credentials.
+	// The generic blob transport fails closed instead of falling back to ambient credentials.
+	ErrBlobIdentityUnresolved = errors.New("blob identity could not be resolved")
+
+	// ErrBlobOperationFailed is the sentinel for blob failures without a more specific class, such as
+	// local I/O errors or an SDK failure with no mapped meaning. The underlying cause stays in the chain.
+	ErrBlobOperationFailed = errors.New("blob operation failed")
+
+	// ErrBlobTaggingDenied is returned by tests that simulate a version-specific object tagging denial.
+	ErrBlobTaggingDenied = errors.New("blob tagging denied")
+
+	// ErrBlobInvalidChunk is returned by the S3 test endpoint when an aws-chunked request body cannot
+	// be decoded: an unreadable or non-hex chunk size, or a chunk cut short.
+	ErrBlobInvalidChunk = errors.New("invalid aws-chunked body")
+
+	// ErrBlobTooManyTags is returned by the S3 test endpoint when a request carries more object tags
+	// than S3 allows.
+	ErrBlobTooManyTags = errors.New("object tags cannot be greater than 10")
+
+	// ErrBlobInvalidChunkTerminator is returned by the S3 test endpoint when an aws-chunked request
+	// body has a chunk that is not followed by the required CRLF terminator.
+	ErrBlobInvalidChunkTerminator = errors.New("invalid aws-chunked chunk terminator")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
