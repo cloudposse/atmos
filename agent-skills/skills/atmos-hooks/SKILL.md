@@ -247,14 +247,16 @@ docs:
 
 - Publishing to a wiki or portal is a generic `http` step, or a `kind: command` hook that reads
   `ATMOS_DOCS_OUTPUT_PATH`. Atmos has no wiki-specific integration.
-- `events:` omitted means the hook fires on both events. Hooks run in name order, with the project root (not `base-dir`) as the working directory.
-- A failing `before.docs.generate` hook aborts before any file is written. `after.docs.generate`
+- `events:` omitted means the hook fires on both events. Hooks run in name order, in the process working directory where `atmos docs generate` starts (or the `--chdir` target), not `base-dir`.
+- A `before.docs.generate` hook whose failure propagates (`on_failure: fail`, the default, or a policy
+  denial) aborts before any file is written; with `on_failure: warn` or `ignore` generation continues. `after.docs.generate`
   hooks run on success and on failure, filtered by `when:` (default is success only; use
   `failure` or `always` to react to failures). A failing after-hook fails the command unless it
   sets `on_failure: warn` or `ignore`.
 - Hook context: env vars `ATMOS_DOCS_TYPE`, `ATMOS_DOCS_OUTPUT_PATH`, `ATMOS_DOCS_BASE_DIR`, and
   template values `{{ .docs.type }}`, `{{ .docs.output_path }}`, `{{ .docs.base_dir }}`. There is
-  no component or stack, so those values are empty.
+  no infrastructure component or stack: the stack is empty, and `ATMOS_COMPONENT` holds the
+  generator name (for example `readme`).
 - `atmos docs generate --skip-hooks` skips all hooks, `--skip-hooks=name1,name2` skips named
   hooks, and `ATMOS_SKIP_HOOKS` is honored.
 - Governing policies with `on: operation` and `action: hooks` also apply; see

@@ -1,13 +1,11 @@
 package docs
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -25,10 +23,10 @@ func ExecuteGenerate(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return errUtils.ErrMissingDocType
 	}
-	// Parsing merges the parent's persistent flags (--base-path, --config, ...) into cmd.Flags().
-	if err := cmd.ParseFlags(args); err != nil && !errors.Is(err, pflag.ErrHelp) {
-		return err
-	}
+	// Cobra already parsed the flags and stripped any "--" separator, so args are positional only
+	// (a doc type named like a flag must not be parsed again). InheritedFlags merges the parent's
+	// persistent flags (--base-path, --config, ...) into cmd.Flags() without parsing.
+	_ = cmd.InheritedFlags()
 	info, err := globalFlagsInfo(cmd)
 	if err != nil {
 		return err

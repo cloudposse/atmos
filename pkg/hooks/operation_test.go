@@ -234,8 +234,9 @@ func TestOperationHooksExportEnvironment(t *testing.T) {
 }
 
 // docsPolicyHooks attaches a governing policy requiring a callback hook for event.
-func docsPolicyHooks(t *testing.T, event HookEvent, url string, deny bool) *Hooks {
+func docsPolicyHooks(t *testing.T, url string, deny bool) *Hooks {
 	t.Helper()
+	event := BeforeDocsGenerate
 	definition, err := json.Marshal(map[string]any{"kind": "step", "type": "http", "with": map[string]any{"url": url + "/policy", "method": "POST"}})
 	require.NoError(t, err)
 	h, err := NewOperationHooks(&schema.AtmosConfiguration{}, nil, docsTestOperation())
@@ -254,9 +255,25 @@ func docsPolicyHooks(t *testing.T, event HookEvent, url string, deny bool) *Hook
 	return h
 }
 
+func TestOperationPolicyMatchSelectorOnStacklessDocsOperation(t *testing.T) {
+	recorder, url := newRecorderServer(t)
+	h := docsPolicyHooks(t, url, false)
+	h.policyBundle.Rules[0].Match = &policy.Selector{Components: []string{"readme"}, ComponentTypes: []string{"docs"}}
+
+	require.NoError(t, h.RunOperation(BeforeDocsGenerate, nil))
+	assert.Equal(t, []string{"/policy"}, recorder.seen(), "a matching selector must attach the rule")
+
+	// Negative path: a selector that does not match the generator excludes the rule without erroring.
+	recorder, url = newRecorderServer(t)
+	h = docsPolicyHooks(t, url, false)
+	h.policyBundle.Rules[0].Match = &policy.Selector{Components: []string{"release-notes"}}
+	require.NoError(t, h.RunOperation(BeforeDocsGenerate, nil))
+	assert.Empty(t, recorder.seen())
+}
+
 func TestOperationPolicyHooksFireOnDocsEvents(t *testing.T) {
 	recorder, url := newRecorderServer(t)
-	h := docsPolicyHooks(t, BeforeDocsGenerate, url, false)
+	h := docsPolicyHooks(t, url, false)
 	assert.True(t, h.HasHooks(), "a governing policy counts as hooks even with no user hooks")
 
 	// Policy input carries the docs operation with an empty stack.
@@ -270,7 +287,7 @@ func TestOperationPolicyHooksFireOnDocsEvents(t *testing.T) {
 
 func TestOperationPolicyDenialBlocks(t *testing.T) {
 	recorder, url := newRecorderServer(t)
-	h := docsPolicyHooks(t, BeforeDocsGenerate, url, true)
+	h := docsPolicyHooks(t, url, true)
 	require.ErrorIs(t, h.RunOperation(BeforeDocsGenerate, nil), errUtils.ErrPolicyDenied)
 	assert.Empty(t, recorder.seen(), "a denial must prevent policy hooks from running")
 }

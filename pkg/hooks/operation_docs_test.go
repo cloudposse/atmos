@@ -79,7 +79,7 @@ func TestGenerateWithHooksPolicyDenialBlocksGeneration(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		runner.(*docsHookRunner).hooks = docsPolicyHooks(t, BeforeDocsGenerate, url, true)
+		runner.(*docsHookRunner).hooks = docsPolicyHooks(t, url, true)
 		return runner, nil
 	})
 	dg := docsGenerateFixture(t, nil)

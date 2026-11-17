@@ -80,6 +80,8 @@ func (h *Hooks) runPolicyHooks(run *hookRunContext) error {
 		if err != nil {
 			return err
 		}
+		// Operations such as `atmos docs generate` have no stack; selectors must still evaluate.
+		request.Subject.Stackless = h.operation && run.info.Stack == ""
 	}
 	engine := admission.NewEngine()
 	decision, err := engine.Evaluate(ctx, request, h.policyBundle.Rules)

@@ -24,7 +24,7 @@ Once a document is generated, something has to move it. In practice that somethi
 
 Hooks can now run before and after `atmos docs generate`. You declare them under the generator in `atmos.yaml`, using the same hook kinds you already use around Terraform and other component operations, so a step you run in a workflow works here unchanged.
 
-Two new events, `before.docs.generate` and `after.docs.generate`, mark the edges. A before-hook that fails stops the command before any file is written. An after-hook runs once the file exists, and its `when:` setting decides whether it runs on success, on failure, or both. Steps receive the document type, the output path, and the base directory, so a hook never has to parse configuration to find the file it is supposed to publish.
+Two new events, `before.docs.generate` and `after.docs.generate`, mark the edges. A before-hook that fails stops the command before any file is written. An after-hook runs after the generation attempt, so a failure hook must not assume a new file was written, and its `when:` setting decides whether it runs on success, on failure, or both. Steps receive the document type, the output path, and the base directory, so a hook never has to parse configuration to find the file it is supposed to publish.
 
 Governing policies reach documentation generation too. A rule with `on: operation` and `action: hooks` can require a hook for a specific generator, or block generation on the before-event, exactly as it does for component operations.
 

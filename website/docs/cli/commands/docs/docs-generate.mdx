@@ -301,8 +301,9 @@ generated file's contents instead of fixed text, use a `kind: command` hook or a
 
 ### Ordering and failure
 
-1. `before.docs.generate` hooks run first. A failing before-hook aborts the command before any
-   file is written.
+1. `before.docs.generate` hooks run first. A before-hook whose failure propagates (`on_failure: fail`, the default,
+   or a policy denial) aborts the command before any file is written; with `on_failure: warn` or
+   `ignore`, generation continues.
 2. The document is generated.
 3. `after.docs.generate` hooks run with the outcome. By default an after-hook runs only on success;
    set `when: failure` or `when: always` to run it on failure too. See
@@ -313,8 +314,8 @@ generated file's contents instead of fixed text, use a `kind: command` hook or a
 A hook with no `events` list runs on both events. Hooks belong to one generator: hooks under
 `readme` do not run for `release-notes`.
 
-Within one event, hooks run in order of hook name. Hooks run with the project root (the directory
-Atmos was started from, where `atmos.yaml` is found) as the working directory, not `base-dir`. Use
+Within one event, hooks run in order of hook name. Hooks run in the process working directory (the
+directory where `atmos docs generate` starts, or the `--chdir` target) rather than `base-dir`. Use
 `ATMOS_DOCS_BASE_DIR` or `ATMOS_DOCS_OUTPUT_PATH` to reach the generator's files.
 
 ### Hook context
@@ -331,7 +332,8 @@ Atmos was started from, where `atmos.yaml` is found) as the working directory, n
 </dl>
 
 Step templates can use the same values as `{{ .docs.type }}`, `{{ .docs.output_path }}`, and
-`{{ .docs.base_dir }}`. Documentation hooks have no component or stack, so those values are empty.
+`{{ .docs.base_dir }}`. Documentation hooks have no infrastructure component or stack: the stack is empty, and
+`ATMOS_COMPONENT` holds the generator name (for example `readme`).
 
 ### Policy
 

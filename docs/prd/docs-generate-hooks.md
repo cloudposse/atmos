@@ -94,7 +94,7 @@ behavior.
 
 ### Ordering and failure
 
-1. `before.docs.generate` hooks run first. If one fails, generation is aborted and no output
+1. `before.docs.generate` hooks run first. If one fails with `on_failure: fail` (the default) or a policy denies it, generation is aborted and no output
     file is written or modified.
 2. Generation runs.
 3. `after.docs.generate` hooks run with the outcome of generation. Each hook's `when:` decides
@@ -105,7 +105,8 @@ behavior.
     `when: failure` or `when: always` still run.
 
 Within one event, hooks run in a deterministic order (sorted by hook name). Hooks run with the
-project root (the directory Atmos was started from) as the working directory, not `base-dir`;
+process working directory (where `atmos docs generate` starts, or the `--chdir` target), not
+`base-dir`;
 `ATMOS_DOCS_BASE_DIR` and `ATMOS_DOCS_OUTPUT_PATH` locate the generator's files.
 
 ### Context available to steps
@@ -121,7 +122,8 @@ Hook steps receive these environment variables:
 The same values are available to step templates as `{{ .docs.type }}`,
 `{{ .docs.output_path }}`, and `{{ .docs.base_dir }}`. After-hooks also see the operation
 outcome through the existing `{{ .status }}` and `{{ .error }}` values and `ATMOS_HOOK_*`
-variables. Documentation hooks have no component and no stack, so those values are empty.
+variables. Documentation hooks have no infrastructure component and no stack: the stack is empty and
+`ATMOS_COMPONENT` holds the generator name (for example `readme`).
 
 ### Skipping hooks
 

@@ -44,6 +44,13 @@ func TestExecuteGenerate(t *testing.T) {
 		require.NoError(t, ExecuteGenerate(newGenerateCmd(), []string{"readme"}))
 		assert.FileExists(t, filepath.Join(dir, "OUT.md"))
 	})
+	t.Run("flag-shaped doc type stays positional", func(t *testing.T) {
+		cmd := newGenerateCmd()
+		cmd.Flags().StringSlice("skip-hooks", nil, "")
+		err := ExecuteGenerate(cmd, []string{"--skip-hooks"})
+		require.ErrorIs(t, err, errUtils.ErrNoDocsGenerateEntry)
+		assert.False(t, cmd.Flags().Changed("skip-hooks"), "args must not be parsed as flags again")
+	})
 	t.Run("missing flag definitions", func(t *testing.T) {
 		require.Error(t, ExecuteGenerate(&cobra.Command{}, []string{"readme"}))
 	})
