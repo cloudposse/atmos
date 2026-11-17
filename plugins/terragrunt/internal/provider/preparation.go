@@ -78,7 +78,7 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 	}
 	// All provider processes generating the same stack must retain the lock
 	// until the subsequent unit parse has finished.
-	unlock, err := p.generateLocked(ctx, req)
+	unlock, err := p.generateLocked(ctx, &req)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -87,7 +87,7 @@ func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentReque
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	response, err := preparedResponse(req, result)
+	response, err := preparedResponse(&req, result)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -100,7 +100,7 @@ func preparationEffects(effects *pluginv1.ComponentEffects) bool {
 
 // generateLocked generates the owning stack under a cross-process lock and
 // returns the function that releases it. Units outside a stack need no lock.
-func (p *Provider) generateLocked(ctx context.Context, req model.Request) (func(), error) {
+func (p *Provider) generateLocked(ctx context.Context, req *model.Request) (func(), error) {
 	if req.GenerationRoot == "" {
 		return func() {}, nil
 	}
@@ -108,7 +108,7 @@ func (p *Provider) generateLocked(ctx context.Context, req model.Request) (func(
 	if err != nil {
 		return nil, err
 	}
-	generation := req
+	generation := *req
 	generation.Path, generation.Phase, generation.Command = req.GenerationRoot, "discover", "generate"
 	if _, err := p.evaluate(ctx, generation); err != nil {
 		_ = lock.Unlock()
@@ -119,7 +119,7 @@ func (p *Provider) generateLocked(ctx context.Context, req model.Request) (func(
 
 // generationLock keys the lock by the physical generation root, so processes
 // that spell the project root differently still serialize.
-func generationLock(ctx context.Context, req model.Request) (*flock.Flock, error) {
+func generationLock(ctx context.Context, req *model.Request) (*flock.Flock, error) {
 	root, err := filepath.EvalSymlinks(req.BasePath)
 	if err != nil {
 		return nil, err
@@ -144,7 +144,7 @@ func generationLock(ctx context.Context, req model.Request) (*flock.Flock, error
 	return lock, nil
 }
 
-func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.PrepareComponentResponse, error) {
+func preparedResponse(req *model.Request, result *model.Resolution) (*pluginv1.PrepareComponentResponse, error) {
 	values := result.Inputs
 	if values == nil {
 		values = map[string]any{}
@@ -175,6 +175,14 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		return nil, rpcError(err)
 	}
 	response.Diagnostics = unitWarnings(req.BasePath, result.Warnings)
+	response.Files = preparedFiles(result)
+
+	return response, nil
+}
+
+// preparedFiles merges generated files over the overlay and preserves stable ordering.
+func preparedFiles(result *model.Resolution) []*pluginv1.ComponentGeneratedFile {
+	var filesOut []*pluginv1.ComponentGeneratedFile
 	files := maps.Clone(result.Overlay)
 	if files == nil {
 		files = map[string][]byte{}
@@ -192,9 +200,9 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		if _, generated := result.Generated[name]; generated {
 			mode = 0
 		}
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name], Mode: mode})
+		filesOut = append(filesOut, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: policy, Sensitive: result.SensitiveGenerated[name], UnitFileCopy: result.UnitFileCopies[name], Mode: mode})
 	}
-	return response, nil
+	return filesOut
 }
 
 func encodeRegistryAuth(response *pluginv1.PrepareComponentResponse, auth *model.RegistryAuth) error {
@@ -222,7 +230,7 @@ func (p *Provider) probeIAM(ctx context.Context, req *model.Request) (*pluginv1.
 	return &pluginv1.PrepareComponentResponse{Iam: iam, Diagnostics: unitWarnings(req.BasePath, result.Warnings)}, nil
 }
 
-func stateIdentity(req model.Request, result *model.Resolution) (*pluginv1.ComponentStateIdentity, error) {
+func stateIdentity(req *model.Request, result *model.Resolution) (*pluginv1.ComponentStateIdentity, error) {
 	backend := result.Backend
 	if backend == nil {
 		backend = map[string]any{}
@@ -258,7 +266,7 @@ func (p *Provider) resolveState(ctx context.Context, request *pluginv1.Component
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	state, err := stateIdentity(req, result)
+	state, err := stateIdentity(&req, result)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -387,7 +395,7 @@ func withFeatures(req *model.Request, configuration *pluginv1.ComponentValue) er
 
 // unitEngine is the engine a unit runs with: its terraform_binary when it sets one, otherwise the
 // host's selection.
-func unitEngine(req model.Request, resolved *model.Resolution) string {
+func unitEngine(req *model.Request, resolved *model.Resolution) string {
 	if resolved != nil && resolved.TerraformBinary != "" {
 		return engineName(resolved.TerraformBinary)
 	}
@@ -420,7 +428,7 @@ func operationCommand(command string, arguments []string) string {
 // parityResponse adds the evaluated terraform_binary, errors, exclude, and feature flags to a
 // Prepare response. Exclude carries only the outcome for this operation: the block's no_run
 // semantics are applied here, so it is set exactly when the host must not run the command.
-func parityResponse(response *pluginv1.PrepareComponentResponse, req model.Request, resolved *model.Resolution) error {
+func parityResponse(response *pluginv1.PrepareComponentResponse, req *model.Request, resolved *model.Resolution) error {
 	response.TerraformBinary = resolved.TerraformBinary
 	response.FeatureFlags = maps.Clone(resolved.FeatureFlags)
 	errorsResponse, err := errorsResponse(resolved.Errors)

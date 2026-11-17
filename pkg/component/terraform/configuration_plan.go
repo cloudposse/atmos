@@ -280,6 +280,17 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
+	if snapshot.publicFiles != "" {
+		var observed map[string][]byte
+		if err := json.Unmarshal([]byte(snapshot.publicFiles), &observed); err != nil {
+			return nil, err
+		}
+		for i := range stored.Files {
+			if content, ok := observed[stored.Files[i].Path]; ok && !stored.Files[i].Sensitive {
+				stored.Files[i].Content = content
+			}
+		}
+	}
 	return &configurationPlan{WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: &stored}, nil
 }
 

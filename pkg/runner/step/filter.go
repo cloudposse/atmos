@@ -75,15 +75,7 @@ func (h *FilterHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 		return nil, err
 	}
 
-	// Check if multiple selection is allowed.
-	limit := step.Limit
-	if step.Multiple && limit <= 0 {
-		// When multiple selection is enabled with no limit, allow selecting all options.
-		limit = len(options)
-	} else if limit <= 0 {
-		// Default to single selection.
-		limit = 1
-	}
+	limit := filterSelectionLimit(step, len(options))
 
 	if limit > 1 || step.Multiple {
 		return h.executeMultiSelect(step.Name, prompt, options, limit)
@@ -137,8 +129,8 @@ func splitFilterDefaults(defaultVal string) []string {
 	return values
 }
 
-// createFilterKeyMap creates a keymap with ESC added to quit keys.
-func (h *FilterHandler) createFilterKeyMap() *huh.KeyMap {
+// interactiveKeyMap creates a keymap with ESC added to quit keys.
+func interactiveKeyMap() *huh.KeyMap {
 	keyMap := huh.NewDefaultKeyMap()
 	keyMap.Quit = key.NewBinding(
 		key.WithKeys("ctrl+c", "esc"),
@@ -200,3 +192,16 @@ func (h *FilterHandler) executeSingleSelect(stepName, prompt string, options []s
 
 	return NewStepResult(choice), nil
 }
+
+// filterSelectionLimit computes the effective selection limit.
+func filterSelectionLimit(step *schema.WorkflowStep, optionCount int) int {
+	if step.Limit > 0 {
+		return step.Limit
+	}
+	if step.Multiple {
+		return optionCount
+	}
+	return 1
+}
+
+func (h *FilterHandler) createFilterKeyMap() *huh.KeyMap { return interactiveKeyMap() }

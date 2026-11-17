@@ -208,7 +208,11 @@ func (s *session) runTask(ctx context.Context, prefix string, t *task, library a
 	parent := ctx
 	if t.timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, t.timeout)
+		arm := s.engine.taskDeadline
+		if arm == nil {
+			arm = context.WithTimeout
+		}
+		ctx, cancel = arm(ctx, t.timeout)
 		defer cancel()
 	}
 	s.event(TaskEvent{Name: t.name, Status: "running"})

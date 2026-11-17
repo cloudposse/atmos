@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/cloudposse/atmos/cmd"
@@ -13,10 +14,12 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/panics"
 	"github.com/cloudposse/atmos/pkg/signals"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // main runs Atmos and coordinates signal-driven credential and process cleanup.
 func main() {
+	installSignalExitNotice()
 	// Set up signal handling for graceful shutdown.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -47,6 +50,29 @@ func main() {
 	// Run the application and exit with the appropriate code.
 	// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
 	errUtils.OsExit(signals.ResolveExitCode(run()))
+}
+
+const signalExitCodeBase = 128
+
+// installSignalExitNotice covers direct error exits as well as the main return path.
+func installSignalExitNotice() {
+	exit := errUtils.OsExit
+	var notice sync.Once
+	errUtils.OsExit = func(code int) {
+		code = signals.ResolveExitCode(code)
+		// Script sessions own SIGINT and may return 130 without the global handler.
+		if signals.ExitRequested() || code == signalExitCodeBase+int(syscall.SIGINT) || code == signalExitCodeBase+int(syscall.SIGTERM) {
+			notice.Do(func() {
+				signals.RunExitCleanups()
+				if code == signalExitCodeBase+int(syscall.SIGINT) {
+					ui.Warning("Interrupted.")
+				} else {
+					ui.Warning("Terminated.")
+				}
+			})
+		}
+		exit(code)
+	}
 }
 
 // run executes the main application logic and returns an exit code.

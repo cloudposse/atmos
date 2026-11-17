@@ -55,7 +55,8 @@ var goModDownloadSleep = time.Sleep
 // "macos", or "macos-intel"), embedding version (and the current commit, when
 // building from a git checkout) via -ldflags. This is the Go implementation
 // backing the `atmos build binary` custom command. ATMOS_BUILD_NO_CACHE=true
-// forces recompilation of all packages without deleting the shared Go cache.
+// forces recompilation of all packages without deleting the shared Go cache, and
+// ATMOS_BUILD_OUTPUT overrides the output path.
 func (Build) Binary(target, version string) error {
 	if target == "" {
 		target = "default"
@@ -73,6 +74,7 @@ func (Build) Binary(target, version string) error {
 	if err != nil {
 		return err
 	}
+	applyOutputOverride(&targetConfig)
 
 	baseEnv := buildBaseEnv(root)
 
@@ -103,6 +105,16 @@ func (Build) Binary(target, version string) error {
 		args = append(args, "-a")
 	}
 	return mageutil.RunIn(root, buildEnv, "go", args...)
+}
+
+// applyOutputOverride points the build at ATMOS_BUILD_OUTPUT when it is set, so a
+// cross-compiled binary (for example a Linux runner binary built on macOS) does not
+// overwrite the host's build/atmos. A relative path resolves against the repository root,
+// and go build creates any missing parent directory.
+func applyOutputOverride(config *buildTarget) {
+	if output := strings.TrimSpace(os.Getenv("ATMOS_BUILD_OUTPUT")); output != "" {
+		config.Output = output
+	}
 }
 
 // buildTarget is the GOOS/GOARCH/output-path a build target resolves to.

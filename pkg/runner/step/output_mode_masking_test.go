@@ -160,7 +160,7 @@ func TestShellHandler_SecretSplitAcrossBuiltinWritesIsMasked(t *testing.T) {
 			handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
 			writer := NewOutputModeWriter(mode, "shell", nil, noLabels())
 			command := fmt.Sprintf("printf 'pre %s'; printf '%s post\\n'", streamedSecret[:7], streamedSecret[7:])
-			stdout, _, err := handler.runInterpreter(context.Background(), writer, shellRunSpec{
+			stdout, _, err := handler.runInterpreter(context.Background(), writer, &shellRunSpec{
 				stepName: "shell",
 				command:  command,
 				env:      os.Environ(),

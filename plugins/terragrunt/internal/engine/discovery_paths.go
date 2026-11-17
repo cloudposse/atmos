@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -53,11 +54,11 @@ func validatePatterns(includes, excludes []string) ([]string, []string, error) {
 		result := make([]string, 0, len(patterns))
 		for _, pattern := range patterns {
 			if pattern == "" || filepath.IsAbs(pattern) || strings.Contains(pattern, "\\") || !doublestar.ValidatePattern(pattern) {
-				return nil, fmt.Errorf("invalid %s pattern: %q", key, pattern)
+				return nil, fmt.Errorf("%w: %s pattern %q", errInvalidDiscoveryPattern, key, pattern)
 			}
 			for _, part := range strings.Split(pattern, "/") {
 				if part == ".." {
-					return nil, fmt.Errorf("%s patterns must stay within the Atmos base path: %q", key, pattern)
+					return nil, fmt.Errorf("%w: %s patterns must stay within the Atmos base path: %q", errInvalidDiscoveryPattern, key, pattern)
 				}
 			}
 			result = append(result, normalizePattern(pattern))
@@ -97,69 +98,14 @@ func discoveryPaths(root string, includes, excludes []string) (pathScan, error) 
 	if err != nil {
 		return pathScan{}, err
 	}
-	var scan pathScan
-	seen := map[string]bool{}
-	matched := map[string]int{}
+	walker := &discoveryWalker{root: root, includes: includes, excludes: excludes, seen: map[string]bool{}, matched: map[string]int{}}
 	for _, pattern := range includes {
-		start := walkStart(root, pattern)
-		// Do not follow a configured root symlink outside the project.
-		resolved, err := canonicalPath(start)
-		if err != nil || !within(resolved, root) {
-			return pathScan{}, fmt.Errorf("discovery root is outside the Atmos base path or unavailable: %s", start)
-		}
-		err = filepath.WalkDir(start, func(path string, entry fs.DirEntry, walkErr error) error {
-			if os.IsNotExist(walkErr) && path == start {
-				return nil
-			}
-			if walkErr != nil {
-				return walkErr
-			}
-			rel, _ := filepath.Rel(root, path)
-			rel = filepath.ToSlash(rel)
-			if selectsAny(excludes, rel) {
-				if entry.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if entry.Type()&fs.ModeSymlink != 0 {
-				if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
-					scan.Warnings = append(scan.Warnings, symlinkWarning(rel))
-					return nil
-				}
-			}
-			if entry.IsDir() {
-				if path != root && (strings.HasPrefix(entry.Name(), ".") || entry.Name() == "node_modules") {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			// Only Terragrunt configuration files count, so a pattern that selects ordinary files
-			// still gets the unmatched-pattern warning.
-			if !isTerragruntFile(entry.Name()) || !selectsAny(includes, rel) {
-				return nil
-			}
-			for _, candidate := range includes {
-				if selects(candidate, rel) {
-					matched[candidate]++
-				}
-			}
-			if seen[path] {
-				return nil
-			}
-			seen[path] = true
-			switch entry.Name() {
-			case "terragrunt.stack.hcl":
-				scan.Stacks = append(scan.Stacks, path)
-			case "terragrunt.hcl":
-				scan.Units = append(scan.Units, path)
-			}
-			return nil
-		})
-		if err != nil {
+		if err := walker.walk(pattern); err != nil {
 			return pathScan{}, err
 		}
 	}
+	scan := walker.scan
+	matched := walker.matched
 	slices.Sort(scan.Stacks)
 	slices.Sort(scan.Units)
 	scan.Warnings = append(scan.Warnings, unmatchedWarnings(includes, matched)...)
@@ -193,5 +139,82 @@ func symlinkWarning(rel string) model.Warning {
 	return model.Warning{
 		Code: model.WarningSymlinkedDirectory, Path: rel,
 		Message: fmt.Sprintf("symlinked directory %s was not followed, so units below it are not discovered; like Terragrunt, Atmos follows only a symlinked terragrunt.hcl or terragrunt.stack.hcl file", rel),
+	}
+}
+
+var (
+	errInvalidDiscoveryPattern = errors.New("invalid discovery pattern")
+	errDiscoveryRoot           = errors.New("discovery root is outside the Atmos base path or unavailable")
+)
+
+type discoveryWalker struct {
+	root               string
+	includes, excludes []string
+	seen               map[string]bool
+	matched            map[string]int
+	scan               pathScan
+}
+
+func (w *discoveryWalker) walk(pattern string) error {
+	start := walkStart(w.root, pattern)
+	resolved, err := canonicalPath(start)
+	if err != nil || !within(resolved, w.root) {
+		return fmt.Errorf("%w: %s", errDiscoveryRoot, start)
+	}
+	return filepath.WalkDir(start, func(path string, entry fs.DirEntry, walkErr error) error {
+		if os.IsNotExist(walkErr) && path == start {
+			return nil
+		}
+		if walkErr != nil {
+			return walkErr
+		}
+		return w.visit(path, entry)
+	})
+}
+
+func (w *discoveryWalker) visit(path string, entry fs.DirEntry) error {
+	rel, _ := filepath.Rel(w.root, path)
+	rel = filepath.ToSlash(rel)
+	if selectsAny(w.excludes, rel) {
+		if entry.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	}
+	if entry.Type()&fs.ModeSymlink != 0 {
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			w.scan.Warnings = append(w.scan.Warnings, symlinkWarning(rel))
+			return nil
+		}
+	}
+	if entry.IsDir() {
+		if path != w.root && (strings.HasPrefix(entry.Name(), ".") || entry.Name() == "node_modules") {
+			return filepath.SkipDir
+		}
+		return nil
+	}
+	w.record(path, rel, entry.Name())
+	return nil
+}
+
+func (w *discoveryWalker) record(path, rel, name string) {
+	// Only configuration files count toward matched-pattern warnings.
+	if !isTerragruntFile(name) || !selectsAny(w.includes, rel) {
+		return
+	}
+	for _, candidate := range w.includes {
+		if selects(candidate, rel) {
+			w.matched[candidate]++
+		}
+	}
+	if w.seen[path] {
+		return
+	}
+	w.seen[path] = true
+	switch name {
+	case "terragrunt.stack.hcl":
+		w.scan.Stacks = append(w.scan.Stacks, path)
+	case "terragrunt.hcl":
+		w.scan.Units = append(w.scan.Units, path)
 	}
 }

@@ -78,7 +78,7 @@ func TestNestedShellCIRedirectionPreservesManifestOutput(t *testing.T) {
 			var destination bytes.Buffer
 			writer := NewOutputModeWriter(OutputModeRaw, "manifest", nil, noLabels())
 			writer.writers = OutputWriters{Stdout: &destination, Stderr: &destination}
-			_, _, err := (&ShellHandler{}).runInterpreter(context.Background(), writer, shellRunSpec{
+			_, _, err := (&ShellHandler{}).runInterpreter(context.Background(), writer, &shellRunSpec{
 				command: fmt.Sprintf("%q -test.run=^TestNestedManifestChild$ > %q", executable, path),
 				env:     append(os.Environ(), "_ATMOS_NESTED_MANIFEST_HELPER=1"), stdin: strings.NewReader(""),
 			})
@@ -141,7 +141,7 @@ func TestNestedShellErrorsPreserveRenderingMaskingAndExitCode(t *testing.T) {
 			}
 			writer := NewOutputModeWriter(OutputModeRaw, "nested", nil, noLabels())
 			writer.writers = OutputWriters{Stdout: destination, Stderr: destination}
-			_, captured, err := (&ShellHandler{}).runInterpreter(context.Background(), writer, shellRunSpec{
+			_, captured, err := (&ShellHandler{}).runInterpreter(context.Background(), writer, &shellRunSpec{
 				command: fmt.Sprintf("%q -test.run=^TestNestedErrorChild$", executable),
 				env:     append(os.Environ(), "_ATMOS_NESTED_ERROR_HELPER=1"), stdin: strings.NewReader(""),
 			})

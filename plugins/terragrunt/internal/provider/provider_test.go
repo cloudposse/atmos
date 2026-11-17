@@ -42,7 +42,7 @@ func TestPreparationAndStateUseSeparatePhases(t *testing.T) {
 		phases = append(phases, req.Phase)
 		if req.Phase == "discover" {
 			require.Equal(t, "generate", req.Command)
-			require.Equal(t, filepath.Join(request.RootDirectory, "live/terragrunt.stack.hcl"), req.Path)
+			require.Equal(t, filepath.Join(request.RootDirectory, "live", "terragrunt.stack.hcl"), req.Path)
 		}
 		return &model.Resolution{Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: filepath.Join(request.RootDirectory, "cache"), Inputs: map[string]any{"payload": "fresh"}, BackendType: "local", Backend: map[string]any{"path": "relative.tfstate"}, Generated: map[string]string{"z.tf": "{{ literal }}", "a.tf": "${expression}"}, Files: []string{filepath.Join(request.RootDirectory, "root.hcl")}}, nil
 	})
@@ -423,9 +423,9 @@ func TestDiscoveryPublishesCommandAndExclude(t *testing.T) {
 	require.Equal(t, "tofu", config["command"])
 	require.Equal(t, map[string]any{"actions": []string{"plan"}, "exclude_dependencies": true}, config["settings"].(map[string]any)["terragrunt"].(map[string]any)["exclude"])
 
-	require.Equal(t, "opentofu", unitEngine(model.Request{Tofu: "terraform"}, &model.Resolution{TerraformBinary: "/opt/bin/tofu"}))
-	require.Equal(t, "terraform", unitEngine(model.Request{Tofu: "terraform"}, &model.Resolution{}))
-	require.Equal(t, "opentofu", unitEngine(model.Request{Tofu: "tofu"}, nil))
+	require.Equal(t, "opentofu", unitEngine(&model.Request{Tofu: "terraform"}, &model.Resolution{TerraformBinary: "/opt/bin/tofu"}))
+	require.Equal(t, "terraform", unitEngine(&model.Request{Tofu: "terraform"}, &model.Resolution{}))
+	require.Equal(t, "opentofu", unitEngine(&model.Request{Tofu: "tofu"}, nil))
 }
 
 func TestPreparationTransmitsUnitFileCopyProvenance(t *testing.T) {
@@ -540,8 +540,8 @@ dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDepe
 				require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
 			}
 			config := "terraform { source = \"../../module\" }\n"
-			require.NoError(t, os.WriteFile(filepath.Join(root, "live/network/terragrunt.hcl"), []byte(config), 0o600))
-			require.NoError(t, os.WriteFile(filepath.Join(root, "live/app/terragrunt.hcl"), []byte(config+test.blocks+"\ninputs = { deferred = run_cmd(\"must-not-execute\") }\n"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live", "network", "terragrunt.hcl"), []byte(config), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live", "app", "terragrunt.hcl"), []byte(config+test.blocks+"\ninputs = { deferred = run_cmd(\"must-not-execute\") }\n"), 0o600))
 			opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true}})
 			require.NoError(t, err)
 			var phases []string
@@ -568,7 +568,7 @@ dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDepe
 				require.Equal(t, network.Address, app.Dependencies[i].Target)
 			}
 			require.Empty(t, network.Dependencies)
-			require.NoDirExists(t, filepath.Join(root, "live/app/.terragrunt-cache"))
+			require.NoDirExists(t, filepath.Join(root, "live", "app", ".terragrunt-cache"))
 		})
 	}
 }

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -30,6 +31,8 @@ type watchEvaluator struct {
 	root string
 	// unit is the directory of the unit configuration (get_terragrunt_dir).
 	unit string
+	// original is the caller directory retained across nested configuration reads.
+	original string
 	// parent is the directory of the first include; empty when not statically known.
 	parent string
 }
@@ -100,7 +103,7 @@ func (e *watchEvaluator) functions() map[string]function.Function {
 			return filepath.Join(e.unit, path)
 		}),
 		"get_terragrunt_dir":          constantFunction(func() (string, error) { return e.unit, nil }),
-		"get_original_terragrunt_dir": constantFunction(func() (string, error) { return e.unit, nil }),
+		"get_original_terragrunt_dir": constantFunction(func() (string, error) { return cmp.Or(e.original, e.unit), nil }),
 		"get_parent_terragrunt_dir":   constantFunction(e.parentDirectory),
 		"path_relative_to_include":    constantFunction(func() (string, error) { return e.relativeToParent(false) }),
 		"path_relative_from_include":  constantFunction(func() (string, error) { return e.relativeToParent(true) }),

@@ -27,7 +27,7 @@ import (
 // applyParity copies the settings that select how a unit runs from the evaluated configuration:
 // terraform_binary, the errors block, the exclude block, and feature flags. Everything it returns
 // is data; the host owns executable selection, retries, and unit exclusion.
-func applyParity(cfg *config.TerragruntConfig, request model.Request, path string, result *model.Resolution) error {
+func applyParity(cfg *config.TerragruntConfig, request *model.Request, path string, result *model.Resolution) error {
 	result.TerraformBinary = terraformBinary(cfg.TerraformBinary, path)
 	policies, err := errorsFromConfig(cfg.Errors, path)
 	if err != nil {
@@ -98,7 +98,7 @@ func checkPatterns(key, path string, patterns []string) error {
 }
 
 func errorsProblem(key, file, summary, detail, hint string) *model.Problem {
-	return setting(model.CodeEvaluationError, key, file, summary, detail, hint)
+	return evaluationSetting(key, file, summary, detail, hint)
 }
 
 // signalValues converts the cty values of an ignore block to plain JSON values.
@@ -142,6 +142,8 @@ func excludeFromConfig(block *config.ExcludeConfig) *model.Exclude {
 
 // ExcludeListsAction reports whether the actions name the command. "all" matches every command and
 // "all_except_output" every command but output; other entries match case-insensitively.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func ExcludeListsAction(actions []string, command string) bool {
 	command = strings.ToLower(command)
 	for _, action := range actions {
@@ -160,6 +162,8 @@ func ExcludeListsAction(actions []string, command string) bool {
 // PreventsRun reports whether the exclude block makes a direct run of the command a no-op. Without
 // no_run only an exact action match prevents the run; no_run = true also honors "all" and
 // "all_except_output"; no_run = false never prevents it.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func PreventsRun(exclude *model.Exclude, command string) bool {
 	if exclude == nil {
 		return false
@@ -176,6 +180,8 @@ func PreventsRun(exclude *model.Exclude, command string) bool {
 
 // OperationCommand is the command name Terragrunt matches exclude actions against: destroy for
 // `apply -destroy`, apply for deploy, otherwise the command itself.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func OperationCommand(command string, arguments []string) string {
 	if command == "deploy" {
 		command = "apply"
@@ -217,7 +223,7 @@ func featureFlagValues(flags []*config.FeatureFlag, overrides map[string]string,
 		case overridden:
 			if flag.Default != nil && flag.Default.Type() == cty.Bool {
 				if _, err := strconv.ParseBool(override); err != nil {
-					return nil, setting(model.CodeEvaluationError, "feature "+flag.Name, path,
+					return nil, evaluationSetting("feature "+flag.Name, path,
 						fmt.Sprintf("Invalid value for the `%s` feature", flag.Name),
 						fmt.Sprintf("The `%s` feature is a boolean, but its override is not `true` or `false`.", flag.Name),
 						"Set the override to `true` or `false`, in `components.terraform.terragrunt.features` or in `TG_FEATURE`.")
@@ -252,6 +258,8 @@ func ctyString(value cty.Value) string {
 
 // ParseFeatureEnvironment reads the comma-separated name=value list that Terragrunt accepts in
 // TG_FEATURE.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func ParseFeatureEnvironment(value string) (map[string]string, error) {
 	result := map[string]string{}
 	for _, entry := range strings.Split(value, ",") {
@@ -262,7 +270,7 @@ func ParseFeatureEnvironment(value string) (map[string]string, error) {
 		name, raw, found := strings.Cut(entry, "=")
 		name = strings.TrimSpace(name)
 		if !found || name == "" {
-			return nil, setting(model.CodeEvaluationError, "TG_FEATURE", "",
+			return nil, evaluationSetting("TG_FEATURE", "",
 				fmt.Sprintf("Invalid feature override %q in TG_FEATURE", name),
 				"Each entry of TG_FEATURE must look like `name=value`.",
 				"Set `TG_FEATURE=name=value[,name2=value2]`.")
@@ -340,7 +348,7 @@ func lifecycleWarnings(terraform *config.TerraformConfig, path string) []model.W
 // validateEngine checks that the executable a unit selected with terraform_binary answers
 // `version -json` the way Terraform and OpenTofu do, so a wrong path fails with the unit's name
 // instead of as an obscure error from the first command that runs.
-func validateEngine(ctx context.Context, request model.Request, binary, path string) error {
+func validateEngine(ctx context.Context, request *model.Request, binary, path string) error {
 	var version struct {
 		Version string `json:"terraform_version"`
 	}
@@ -359,7 +367,7 @@ func validateEngine(ctx context.Context, request model.Request, binary, path str
 	if err == nil && version.Version != "" {
 		return nil
 	}
-	return setting(model.CodeEvaluationError, "terraform_binary", path,
+	return evaluationSetting("terraform_binary", path,
 		"`terraform_binary` is not a Terraform or OpenTofu executable",
 		"The selected executable does not answer `version -json` the way Terraform and OpenTofu do.",
 		"Point `terraform_binary` at `tofu`, `terraform`, or a wrapper that forwards to one of them, or remove it to use `components.terraform.command`.")
@@ -422,7 +430,7 @@ func checkFeatureOverrides(path string, overrides map[string]string, declared fu
 
 // applyUnitSettings applies the parity settings of a fully evaluated unit and checks the
 // executable it selected.
-func applyUnitSettings(ctx context.Context, cfg *config.TerragruntConfig, request model.Request, path string, result *model.Resolution) error {
+func applyUnitSettings(ctx context.Context, cfg *config.TerragruntConfig, request *model.Request, path string, result *model.Resolution) error {
 	if err := applyParity(cfg, request, path, result); err != nil {
 		return err
 	}

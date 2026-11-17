@@ -188,7 +188,8 @@ func TestValidateHookRequiresRunnableExecuteList(t *testing.T) {
 }
 
 // fixtureEngine returns a request whose executable is a fake OpenTofu that answers `version`.
-func fixtureEngine(t *testing.T, request model.Request) model.Request {
+func fixtureEngine(t *testing.T, original *model.Request) model.Request {
+	request := *original
 	t.Helper()
 	request.Tofu = installFixtureExecutable(t, t.TempDir(), toolchainTofuName)
 	request.Environment = map[string]string{toolchainChildEnv: "1"}
@@ -582,7 +583,7 @@ func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
 	body, err := os.ReadFile(request.Path)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(request.Path, append(body, []byte("inputs = { name = \"web\", count = 2 }\n")...), 0o644))
-	request = fixtureEngine(t, request)
+	request = fixtureEngine(t, &request)
 
 	result, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
