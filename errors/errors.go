@@ -258,6 +258,7 @@ var (
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncTemplateEmbedding        = errors.New("a YAML function value cannot be used in this template expression")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
+	ErrYamlAliasExpansionLimit          = errors.New("YAML aliases expand to more values than the configuration loader allows")
 	ErrComponentFuncDuringManifestLoad  = errors.New("atmos.Component cannot be evaluated while stack manifests are being loaded")
 	ErrDeferredTemplateContextMissing   = errors.New("cannot resolve deferred !template value: template context is unavailable because template processing was disabled for this invocation")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
@@ -2078,6 +2079,47 @@ var (
 	ErrPolicyDenied           = errors.New("policy denied execution")
 	ErrPolicyRequirements     = errors.New("policy requirements are not satisfied")
 	ErrPolicyPlan             = errors.New("saved plan policy enforcement failed")
+)
+
+// Generic artifact domain sentinels. They describe repository-independent outcomes of the
+// pkg/artifact contracts; backend adapters wrap them and keep their SDK causes for diagnostics.
+// Missing artifacts use ErrArtifactNotFound and integrity mismatches use ErrArtifactIntegrityFailed.
+var (
+	// ErrArtifactConfigInvalid is returned when artifact repository or verification configuration is invalid.
+	ErrArtifactConfigInvalid = errors.New("invalid artifact configuration")
+
+	// ErrArtifactRefInvalid is returned when an artifact name, version, digest, or reference is malformed.
+	ErrArtifactRefInvalid = errors.New("invalid artifact reference")
+
+	// ErrArtifactConflict is returned when a publication, copy, or delete conflicts with existing state.
+	ErrArtifactConflict = errors.New("artifact conflict")
+
+	// ErrArtifactPublicationUnavailable is returned when a reference exists but cannot currently be
+	// published to or read, for example while another operation is pending or after an interrupted replacement.
+	ErrArtifactPublicationUnavailable = errors.New("artifact publication is unavailable")
+
+	// ErrArtifactUnsupportedCapability is returned when a repository does not provide a requested
+	// guarantee. It is never a successful no-op.
+	ErrArtifactUnsupportedCapability = errors.New("artifact repository capability is not supported")
+
+	// ErrArtifactDocumentMissing is returned when a requested package document (README or CHANGELOG) does not exist.
+	ErrArtifactDocumentMissing = errors.New("artifact document not found")
+
+	// ErrArtifactPackagingInvalid is returned when source content cannot be packaged as an artifact.
+	ErrArtifactPackagingInvalid = errors.New("invalid artifact packaging")
+
+	// ErrArtifactUnsafePath is returned for absolute, escaping, empty-segment, or reserved paths.
+	ErrArtifactUnsafePath = errors.New("unsafe artifact path")
+
+	// ErrArtifactRecordInvalid is returned when an artifact record fails validation or is not canonical.
+	ErrArtifactRecordInvalid = errors.New("invalid artifact record")
+
+	// ErrArtifactTooLarge is returned when a record, document, or evidence blob exceeds its bounded-read limit.
+	ErrArtifactTooLarge = errors.New("artifact data exceeds the size limit")
+
+	// ErrArtifactStreamFailed is returned when reading or closing an artifact stream fails. The
+	// underlying I/O error is wrapped alongside it for diagnostics.
+	ErrArtifactStreamFailed = errors.New("artifact stream failed")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
