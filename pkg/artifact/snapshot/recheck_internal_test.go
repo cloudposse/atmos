@@ -153,6 +153,9 @@ func TestCheckLinkContainment_UsesTheCapturedLinkTargets(t *testing.T) {
 }
 
 func TestCapture_RejectsPathReplacementDuringTheFinalHash(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows denies replacement while the source descriptor is open")
+	}
 	src := t.TempDir()
 	file := filepath.Join(src, "data.txt")
 	require.NoError(t, os.WriteFile(file, []byte("original"), 0o644))
