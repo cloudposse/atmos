@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	starjson "go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
@@ -48,6 +49,9 @@ type Engine struct {
 	executable func() (string, error)
 	logger     Logger
 	commands   *flags.CommandCatalog
+	// taskDeadline arms a task's timeout; nil means context.WithTimeout. Tests replace it so a
+	// deadline can start counting at a deterministic point rather than at task creation.
+	taskDeadline func(context.Context, time.Duration) (context.Context, context.CancelFunc)
 }
 
 // Option configures the host services. Injected services must be concurrency safe.

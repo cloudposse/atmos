@@ -59,11 +59,13 @@ func TestTerraformRegistryDispatch(t *testing.T) {
 		require.NotNil(t, options.ProcessEnv)
 		assert.Empty(t, options.ProcessEnv)
 		require.Same(t, invoking, options.InvokingCmd)
-		assert.Equal(t, "plan:changes", options.ExecMetadataParser("plan", 2, "changes"))
+		assert.Equal(t, "plan:dev/app:changes", options.ExecMetadataParser("plan", "dev/app", 2, "changes"))
 		return errUtils.ErrPlanHasDiff
 	})
 	err := ExecuteTerraform(info, WithProcessContext(t.Context()), WithStdoutCapture(&stdout), WithStderrCapture(&stderr),
-		WithEnvironment([]string{}), WithInvokingCommand(invoking), WithExecMetadataParser(func(command string, _ int, output string) any { return command + ":" + output }))
+		WithEnvironment([]string{}), WithInvokingCommand(invoking), WithExecMetadataParser(func(command, component string, _ int, output string) any {
+			return command + ":" + component + ":" + output
+		}))
 	require.ErrorIs(t, err, errUtils.ErrPlanHasDiff)
 }
 

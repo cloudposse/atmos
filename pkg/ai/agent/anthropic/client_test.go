@@ -1423,6 +1423,8 @@ func TestParseAnthropicResponse_NoUsage(t *testing.T) {
 	assert.Nil(t, result.Usage)
 }
 
+// TestParseAnthropicResponse_WithCacheTokens checks that cache reads and writes are counted in InputTokens,
+// because the Anthropic API reports them outside input_tokens.
 func TestParseAnthropicResponse_WithCacheTokens(t *testing.T) {
 	response := &anthropic.Message{
 		StopReason: "end_turn",
@@ -1439,9 +1441,27 @@ func TestParseAnthropicResponse_WithCacheTokens(t *testing.T) {
 	require.NotNil(t, result.Usage)
 	assert.Equal(t, int64(30), result.Usage.CacheReadTokens)
 	assert.Equal(t, int64(20), result.Usage.CacheCreationTokens)
-	assert.Equal(t, int64(100), result.Usage.InputTokens)
+	assert.Equal(t, int64(150), result.Usage.InputTokens)
 	assert.Equal(t, int64(50), result.Usage.OutputTokens)
-	assert.Equal(t, int64(150), result.Usage.TotalTokens)
+	assert.Equal(t, int64(200), result.Usage.TotalTokens)
+}
+
+// TestParseAnthropicResponse_OnlyCacheReadTokens checks that usage is kept when the whole prompt was read
+// from the cache and input_tokens is 0.
+func TestParseAnthropicResponse_OnlyCacheReadTokens(t *testing.T) {
+	response := &anthropic.Message{
+		StopReason: "end_turn",
+		Usage: anthropic.Usage{
+			CacheReadInputTokens: 2048,
+		},
+	}
+
+	result, err := parseAnthropicResponse(response)
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(2048), result.Usage.InputTokens)
+	assert.Equal(t, int64(2048), result.Usage.TotalTokens)
+	assert.Equal(t, int64(2048), result.Usage.CacheReadTokens)
 }
 
 func TestParseAnthropicResponse_EmptyContent(t *testing.T) {
@@ -1812,6 +1832,7 @@ func TestUsageCalculations(t *testing.T) {
 		outputTokens   int64
 		cacheRead      int64
 		cacheCreate    int64
+		expectedInput  int64
 		expectedTotal  int64
 		expectUsageNil bool
 	}{
@@ -1821,6 +1842,7 @@ func TestUsageCalculations(t *testing.T) {
 			outputTokens:   50,
 			cacheRead:      0,
 			cacheCreate:    0,
+			expectedInput:  100,
 			expectedTotal:  150,
 			expectUsageNil: false,
 		},
@@ -1830,6 +1852,7 @@ func TestUsageCalculations(t *testing.T) {
 			outputTokens:   0,
 			cacheRead:      0,
 			cacheCreate:    0,
+			expectedInput:  0,
 			expectedTotal:  0,
 			expectUsageNil: true,
 		},
@@ -1839,7 +1862,8 @@ func TestUsageCalculations(t *testing.T) {
 			outputTokens:   200,
 			cacheRead:      300,
 			cacheCreate:    100,
-			expectedTotal:  700,
+			expectedInput:  900, // Cache reads and writes are part of the prompt.
+			expectedTotal:  1100,
 			expectUsageNil: false,
 		},
 		{
@@ -1848,6 +1872,7 @@ func TestUsageCalculations(t *testing.T) {
 			outputTokens:   0,
 			cacheRead:      0,
 			cacheCreate:    0,
+			expectedInput:  1000,
 			expectedTotal:  1000,
 			expectUsageNil: false,
 		},
@@ -1857,6 +1882,7 @@ func TestUsageCalculations(t *testing.T) {
 			outputTokens:   500,
 			cacheRead:      0,
 			cacheCreate:    0,
+			expectedInput:  0,
 			expectedTotal:  500,
 			expectUsageNil: false,
 		},
@@ -1882,7 +1908,7 @@ func TestUsageCalculations(t *testing.T) {
 			} else {
 				require.NotNil(t, result.Usage)
 				assert.Equal(t, tt.expectedTotal, result.Usage.TotalTokens)
-				assert.Equal(t, tt.inputTokens, result.Usage.InputTokens)
+				assert.Equal(t, tt.expectedInput, result.Usage.InputTokens)
 				assert.Equal(t, tt.outputTokens, result.Usage.OutputTokens)
 				assert.Equal(t, tt.cacheRead, result.Usage.CacheReadTokens)
 				assert.Equal(t, tt.cacheCreate, result.Usage.CacheCreationTokens)

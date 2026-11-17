@@ -402,77 +402,9 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if runtimeBasePath := resolveRuntimeBasePath(configAndStacksInfo); runtimeBasePath != "" {
 		v.Set(runtimeBasePathOverrideKey, runtimeBasePath)
 	}
-	// Fall back to --config/--config-path/--base-path parsed directly from os.Args/env when
-	// the caller passed a ConfigAndStacksInfo that didn't carry a selection at all. This
-	// mirrors the profile fallback below (getProfilesFromFlagsOrEnv) and fixes
-	// cloudposse/atmos#2868: many internal call sites across the codebase call
-	// InitCliConfig(schema.ConfigAndStacksInfo{}, ...) with an empty struct, which otherwise
-	// silently drops a --config/--config-path/--base-path selection that a prior, correctly-
-	// populated InitCliConfig call in the same process already honored.
-	if len(configAndStacksInfo.AtmosConfigFilesFromArg) == 0 &&
-		len(configAndStacksInfo.AtmosConfigDirsFromArg) == 0 &&
-		configAndStacksInfo.AtmosBasePath == "" {
-		if sel := getConfigSelectionFromFlagsOrEnv(); len(sel.Config) > 0 || len(sel.ConfigPath) > 0 || sel.BasePath != "" {
-			configAndStacksInfo.AtmosConfigFilesFromArg = sel.Config
-			configAndStacksInfo.AtmosConfigDirsFromArg = sel.ConfigPath
-			configAndStacksInfo.AtmosBasePath = sel.BasePath
-			log.Debug("Config selection loaded from os.Args/env fallback",
-				"config", sel.Config, "config_path", sel.ConfigPath, "base_path", sel.BasePath)
-		}
-	}
-	// Whether config was selected via --config/--config-path: merge it and fall through into
-	// the same profile-loading/edition/final-unmarshal tail every other config source uses
-	// below, instead of returning immediately (see mergeConfigFromCLIArgs' doc comment).
-	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
-		configPaths, dirs, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
-		if err != nil {
-			return atmosConfig, err
-		}
-		atmosConfig.CliConfigPath = connectPaths(configPaths)
-		atmosConfig.BasePathConfigDir = dirs.basePath
-		atmosConfig.ProfilesBasePathConfigDir = dirs.profilesBasePath
-	} else {
-		// Load configuration from different sources.
-		if err := loadConfigSources(v, configAndStacksInfo); err != nil {
-			return atmosConfig, err
-		}
-		// If no config file is used, fall back to the default CLI config.
-		if v.ConfigFileUsed() == "" {
-			log.Debug("'atmos.yaml' CLI config was not found", "paths", "system dir, home dir, current dir, parent dirs, ENV vars")
-			log.Debug("Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'")
-			log.Debug("Using the default CLI config")
-
-			if err := mergeDefaultConfig(v); err != nil {
-				return atmosConfig, err
-			}
-
-			// Also search git root for .atmos.d even with default config.
-			// This enables custom commands defined in .atmos.d at the repo root
-			// to work when running from any subdirectory.
-			if gitRoot := defaultConfigGitRootDir(""); gitRoot != "" {
-				log.Debug("Loading .atmos.d from git root", "path", gitRoot)
-				if err := mergeDefaultImports(gitRoot, v); err != nil {
-					if !errors.Is(err, errUtils.ErrAtmosDirConfigNotFound) {
-						return atmosConfig, err
-					}
-					log.Trace("Failed to load .atmos.d from git root", "path", gitRoot, "error", err)
-					// Non-fatal: directory doesn't exist, continue with default config.
-				}
-			}
-		}
-		if v.ConfigFileUsed() != "" {
-			// get dir of atmosConfigFilePath
-			atmosConfigDir := filepath.Dir(v.ConfigFileUsed())
-			atmosConfig.CliConfigPath = atmosConfigDir
-			// Set the CLI config path in the atmosConfig struct
-			if !filepath.IsAbs(atmosConfig.CliConfigPath) {
-				absPath, err := filepath.Abs(atmosConfig.CliConfigPath)
-				if err != nil {
-					return atmosConfig, err
-				}
-				atmosConfig.CliConfigPath = absPath
-			}
-		}
+	applyConfigSelectionFallback(configAndStacksInfo)
+	if err := loadSelectedConfig(v, configAndStacksInfo, &atmosConfig); err != nil {
+		return atmosConfig, err
 	}
 	setEnv(v)
 
@@ -498,57 +430,10 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// The `profiles.default` field is read from the LOCAL viper `v`, which has the base
 	// atmos.yaml loaded at this point. A default profile's own `profiles.default` is
 	// ignored to avoid cycles and surprise (see PRD: interactive-profile-suggestion).
-	if len(configAndStacksInfo.ProfilesFromArg) == 0 {
-		profiles, source := getProfilesFromFlagsOrEnv()
-		if len(profiles) > 0 {
-			configAndStacksInfo.ProfilesFromArg = profiles
-			log.Debug("Profiles loaded from CLI "+source, "profiles", profiles)
-		} else if defaultProfile := strings.TrimSpace(v.GetString("profiles.default")); defaultProfile != "" {
-			configAndStacksInfo.ProfilesFromArg = []string{defaultProfile}
-			log.Debug("Profile loaded from profiles.default in atmos.yaml", "profile", defaultProfile)
-		}
-	}
+	applyProfileSelectionFallback(v, configAndStacksInfo)
 
-	if len(configAndStacksInfo.ProfilesFromArg) > 0 {
-		// First, do a temporary unmarshal to get CliConfigPath and Profiles config.
-		// We need these to discover and load profile directories.
-		var tempConfig schema.AtmosConfiguration
-		if err := v.Unmarshal(&tempConfig, atmosDecodeHook(v)); err != nil {
-			return atmosConfig, err
-		}
-
-		// Copy the already-computed CLI config directory into tempConfig.
-		// This ensures relative profile paths resolve against the actual CLI config directory
-		// rather than the current working directory.
-		tempConfig.CliConfigPath = atmosConfig.CliConfigPath
-		// Same for the directory that declared profiles.base_path (if any), so
-		// discoverProfileLocations resolves it against the correct --config file's directory
-		// rather than always the first one (cloudposse/atmos#2867).
-		tempConfig.ProfilesBasePathConfigDir = atmosConfig.ProfilesBasePathConfigDir
-
-		// Resolve the bare `--profile` interactive-selection sentinel, if present.
-		// This runs regardless of whether ProfilesFromArg came from the fallback above or
-		// was already populated by the caller (e.g. internal/exec.ProcessCommandLineArgs,
-		// cmd/describe_component.go's buildConfigAndStacksInfoFromFlags, or
-		// flags.BuildConfigAndStacksInfo), since those callers read the raw --profile flag
-		// directly and may hand LoadConfig a ProfilesFromArg that still contains the sentinel.
-		resolvedProfiles, err := resolveProfileSelectionSentinel(&tempConfig, configAndStacksInfo.ProfilesFromArg)
-		if err != nil {
-			return atmosConfig, err
-		}
-		// Normalize before activation so repeated profiles cannot reapply overrides or side effects.
-		configAndStacksInfo.ProfilesFromArg = uniqueProfileNames(resolvedProfiles)
-
-		if len(configAndStacksInfo.ProfilesFromArg) > 0 {
-			// Load each profile in order (left-to-right precedence).
-			if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
-				return atmosConfig, err
-			}
-
-			log.Debug("Profiles loaded successfully",
-				"profiles", configAndStacksInfo.ProfilesFromArg,
-				"count", len(configAndStacksInfo.ProfilesFromArg))
-		}
+	if err := loadSelectedProfiles(v, configAndStacksInfo, &atmosConfig); err != nil {
+		return atmosConfig, err
 	}
 
 	// Apply the edition pin (if any) as a rollback overlay on the defaults layer.
@@ -577,52 +462,40 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 
 	atmosConfig.ActiveProfiles = append([]string{}, configAndStacksInfo.ProfilesFromArg...)
 
-	if err := applyPluginPolicy(v, &atmosConfig); err != nil {
+	if err := validateLoadedConfig(v, &atmosConfig); err != nil {
 		return atmosConfig, err
 	}
 
-	if err := validateSkillSources(&atmosConfig); err != nil {
+	if err := finalizeLoadedConfig(v, &atmosConfig); err != nil {
 		return atmosConfig, err
 	}
 
-	// Validate components.terraform.flags against its raw viper map, not the just-unmarshalled
-	// atmosConfig.Components.Terraform.Flags: the typed TerraformFlags decode above silently
-	// drops any unrecognized key (e.g. a typo like `lock_timout`), so a global-level typo would
-	// otherwise never surface. Stack-level and component-level `flags:` typos are already caught
-	// later, once a component is resolved, by validateFlagsKeys in
-	// internal/exec/terraform_execute_helpers_args.go — this is the equivalent check for the
-	// fleet-wide default.
-	if err := schema.ValidateTerraformFlagsKeys(v.GetStringMap("components.terraform.flags")); err != nil {
-		return atmosConfig, fmt.Errorf("atmos.yaml components.terraform.flags: %w", err)
-	}
-	if err := atmosConfig.Components.Terraform.PlanDiff.Validate(); err != nil {
-		return atmosConfig, errUtils.Build(err).
-			WithHint("Each entry names one top-level attribute on every resource of a type, such as `aws_db_instance.latest_restorable_time`; resource addresses, module paths, and wildcards are not supported.").
-			Err()
-	}
+	return atmosConfig, nil
+}
 
-	extractEnvMapsFromViper(v, &atmosConfig)
+func finalizeLoadedConfig(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
+	extractEnvMapsFromViper(v, atmosConfig)
 
 	// Fix auth.identities after Viper unmarshal.
 	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
 	// We need to re-parse identities directly from YAML to preserve dots in keys.
-	if err := fixAuthIdentities(v, &atmosConfig); err != nil {
-		return atmosConfig, err
+	if err := fixAuthIdentities(v, atmosConfig); err != nil {
+		return err
 	}
-	if err := resolveScaffoldConfig(v, &atmosConfig); err != nil {
-		return atmosConfig, err
+	if err := resolveScaffoldConfig(v, atmosConfig); err != nil {
+		return err
 	}
 
 	// Post-process to preserve case-sensitive map keys.
 	// Viper lowercases all YAML map keys, but we need to preserve original case
 	// for identity names and environment variables.
-	preserveCaseSensitiveMaps(v, &atmosConfig)
-	restoreCaseSensitiveEnvMaps(&atmosConfig)
-	restoreCaseSensitiveCommandEnvMaps(&atmosConfig)
+	preserveCaseSensitiveMaps(v, atmosConfig)
+	restoreCaseSensitiveEnvMaps(atmosConfig)
+	restoreCaseSensitiveCommandEnvMaps(atmosConfig)
 
 	// Apply git root discovery for default base path.
 	// This enables running Atmos from any subdirectory, similar to Git.
-	if err := applyGitRootBasePath(&atmosConfig); err != nil {
+	if err := applyGitRootBasePath(atmosConfig); err != nil {
 		log.Debug("Failed to apply git root base path", "error", err)
 		// Don't fail config loading if this step fails, just log it.
 	}
@@ -652,7 +525,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// groups, execution/batching mode, PR title/body/labels/draft/reviewers/assignees, summary
 	// enablement) is silently ignored and the command always falls back to its hardcoded
 	// defaults, regardless of what atmos.yaml declares.
-	bridgeVendorUpdaterConfig(&atmosConfig)
+	bridgeVendorUpdaterConfig(atmosConfig)
 
 	// Bridge the first-class `container.runtime.auto_start` YAML setting to the env
 	// var that container runtime detection reads (pkg/container). PromoteAtmosEnv
@@ -662,7 +535,203 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		envpkg.PromoteAtmosEnv(map[string]string{"ATMOS_CONTAINER_RUNTIME_AUTO_START": "true"})
 	}
 
-	return atmosConfig, nil
+	return nil
+}
+
+func validateLoadedConfig(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
+	if err := applyPluginPolicy(v, atmosConfig); err != nil {
+		return err
+	}
+
+	if err := validateSkillSources(atmosConfig); err != nil {
+		return err
+	}
+
+	// Validate components.terraform.flags against its raw viper map, not the just-unmarshalled
+	// atmosConfig.Components.Terraform.Flags: the typed TerraformFlags decode above silently
+	// drops any unrecognized key (e.g. a typo like `lock_timout`), so a global-level typo would
+	// otherwise never surface. Stack-level and component-level `flags:` typos are already caught
+	// later, once a component is resolved, by validateFlagsKeys in
+	// internal/exec/terraform_execute_helpers_args.go — this is the equivalent check for the
+	// fleet-wide default.
+	if err := schema.ValidateTerraformFlagsKeys(v.GetStringMap("components.terraform.flags")); err != nil {
+		return fmt.Errorf("atmos.yaml components.terraform.flags: %w", err)
+	}
+	if err := atmosConfig.Components.Terraform.PlanDiff.Validate(); err != nil {
+		return errUtils.Build(err).
+			WithHint("Each entry names one top-level attribute on every resource of a type, such as `aws_db_instance.latest_restorable_time`; resource addresses, module paths, and wildcards are not supported.").
+			Err()
+	}
+
+	return nil
+}
+
+func applyConfigSelectionFallback(configAndStacksInfo *schema.ConfigAndStacksInfo) {
+	// Fall back to --config/--config-path/--base-path parsed directly from os.Args/env when
+	// the caller passed a ConfigAndStacksInfo that didn't carry a selection at all. This
+	// mirrors the profile fallback below (getProfilesFromFlagsOrEnv) and fixes
+	// cloudposse/atmos#2868: many internal call sites across the codebase call
+	// InitCliConfig(schema.ConfigAndStacksInfo{}, ...) with an empty struct, which otherwise
+	// silently drops a --config/--config-path/--base-path selection that a prior, correctly-
+	// populated InitCliConfig call in the same process already honored.
+	if len(configAndStacksInfo.AtmosConfigFilesFromArg) == 0 &&
+		len(configAndStacksInfo.AtmosConfigDirsFromArg) == 0 &&
+		configAndStacksInfo.AtmosBasePath == "" {
+		if sel := getConfigSelectionFromFlagsOrEnv(); len(sel.Config) > 0 || len(sel.ConfigPath) > 0 || sel.BasePath != "" {
+			configAndStacksInfo.AtmosConfigFilesFromArg = sel.Config
+			configAndStacksInfo.AtmosConfigDirsFromArg = sel.ConfigPath
+			configAndStacksInfo.AtmosBasePath = sel.BasePath
+			log.Debug("Config selection loaded from os.Args/env fallback",
+				"config", sel.Config, "config_path", sel.ConfigPath, "base_path", sel.BasePath)
+		}
+	}
+}
+
+func loadSelectedConfig(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) error {
+	// Whether config was selected via --config/--config-path: merge it and fall through into
+	// the same profile-loading/edition/final-unmarshal tail every other config source uses
+	// below, instead of returning immediately (see mergeConfigFromCLIArgs' doc comment).
+	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
+		configPaths, dirs, err := mergeConfigFromCLIArgs(v, configAndStacksInfo)
+		if err != nil {
+			return err
+		}
+		atmosConfig.CliConfigPath = connectPaths(configPaths)
+		atmosConfig.BasePathConfigDir = dirs.basePath
+		atmosConfig.ProfilesBasePathConfigDir = dirs.profilesBasePath
+		return nil
+	}
+	return loadConventionalConfig(v, configAndStacksInfo, atmosConfig)
+}
+
+func loadConventionalConfig(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) error {
+	// Load configuration from different sources.
+	if err := loadConfigSources(v, configAndStacksInfo); err != nil {
+		return err
+	}
+	if err := loadMissingConfigDefaults(v); err != nil {
+		return err
+	}
+	if v.ConfigFileUsed() != "" {
+		// get dir of atmosConfigFilePath
+		atmosConfigDir := filepath.Dir(v.ConfigFileUsed())
+		atmosConfig.CliConfigPath = atmosConfigDir
+		// Set the CLI config path in the atmosConfig struct
+		if !filepath.IsAbs(atmosConfig.CliConfigPath) {
+			absPath, err := filepath.Abs(atmosConfig.CliConfigPath)
+			if err != nil {
+				return err
+			}
+			atmosConfig.CliConfigPath = absPath
+		}
+	}
+	return nil
+}
+
+func loadMissingConfigDefaults(v *viper.Viper) error {
+	// If no config file is used, fall back to the default CLI config.
+	if v.ConfigFileUsed() != "" {
+		return nil
+	}
+
+	log.Debug("'atmos.yaml' CLI config was not found", "paths", "system dir, home dir, current dir, parent dirs, ENV vars")
+	log.Debug("Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'")
+	log.Debug("Using the default CLI config")
+
+	if err := mergeDefaultConfig(v); err != nil {
+		return err
+	}
+
+	// Also search git root for .atmos.d even with default config.
+	// This enables custom commands defined in .atmos.d at the repo root
+	// to work when running from any subdirectory.
+	if gitRoot := defaultConfigGitRootDir(""); gitRoot != "" {
+		log.Debug("Loading .atmos.d from git root", "path", gitRoot)
+		if err := mergeDefaultImports(gitRoot, v); err != nil {
+			if !errors.Is(err, errUtils.ErrAtmosDirConfigNotFound) {
+				return err
+			}
+			log.Trace("Failed to load .atmos.d from git root", "path", gitRoot, "error", err)
+			// Non-fatal: directory doesn't exist, continue with default config.
+		}
+	}
+
+	return nil
+}
+
+func applyProfileSelectionFallback(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) {
+	if len(configAndStacksInfo.ProfilesFromArg) == 0 {
+		profiles, source := getProfilesFromFlagsOrEnv()
+		if len(profiles) > 0 {
+			configAndStacksInfo.ProfilesFromArg = profiles
+			log.Debug("Profiles loaded from CLI "+source, "profiles", profiles)
+		} else if defaultProfile := strings.TrimSpace(v.GetString("profiles.default")); defaultProfile != "" {
+			configAndStacksInfo.ProfilesFromArg = []string{defaultProfile}
+			log.Debug("Profile loaded from profiles.default in atmos.yaml", "profile", defaultProfile)
+		}
+	}
+}
+
+func loadSelectedProfiles(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) error {
+	if len(configAndStacksInfo.ProfilesFromArg) == 0 {
+		return nil
+	}
+
+	// First, do a temporary unmarshal to get CliConfigPath and Profiles config.
+	// We need these to discover and load profile directories.
+	var tempConfig schema.AtmosConfiguration
+	if err := v.Unmarshal(&tempConfig, atmosDecodeHook(v)); err != nil {
+		return err
+	}
+
+	// Copy the already-computed CLI config directory into tempConfig.
+	// This ensures relative profile paths resolve against the actual CLI config directory
+	// rather than the current working directory.
+	tempConfig.CliConfigPath = atmosConfig.CliConfigPath
+	// Same for the directory that declared profiles.base_path (if any), so
+	// discoverProfileLocations resolves it against the correct --config file's directory
+	// rather than always the first one (cloudposse/atmos#2867).
+	tempConfig.ProfilesBasePathConfigDir = atmosConfig.ProfilesBasePathConfigDir
+
+	// Resolve the bare `--profile` interactive-selection sentinel, if present.
+	// This runs regardless of whether ProfilesFromArg came from the fallback above or
+	// was already populated by the caller (e.g. internal/exec.ProcessCommandLineArgs,
+	// cmd/describe_component.go's buildConfigAndStacksInfoFromFlags, or
+	// flags.BuildConfigAndStacksInfo), since those callers read the raw --profile flag
+	// directly and may hand LoadConfig a ProfilesFromArg that still contains the sentinel.
+	resolvedProfiles, err := resolveProfileSelectionSentinel(&tempConfig, configAndStacksInfo.ProfilesFromArg)
+	if err != nil {
+		return err
+	}
+	// Normalize before activation so repeated profiles cannot reapply overrides or side effects.
+	configAndStacksInfo.ProfilesFromArg = uniqueProfileNames(resolvedProfiles)
+
+	if len(configAndStacksInfo.ProfilesFromArg) > 0 {
+		// Load each profile in order (left-to-right precedence).
+		if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
+			return err
+		}
+
+		log.Debug("Profiles loaded successfully",
+			"profiles", configAndStacksInfo.ProfilesFromArg,
+			"count", len(configAndStacksInfo.ProfilesFromArg))
+	}
+
+	return nil
+}
+
+func mergeMainImportContext(tempViper *viper.Viper, content []byte) error {
+	// Now load the main config temporarily to process explicit imports.
+	// We need this because the import paths are defined in the main config.
+	importContent, err := importContextYAML(content)
+	if err != nil {
+		return fmt.Errorf("%w: prepare import context: %w", errUtils.ErrMergeConfiguration, err)
+	}
+	if err := tempViper.MergeConfig(bytes.NewReader(importContent)); err != nil {
+		return fmt.Errorf("%w: merge main config: %w", errUtils.ErrMergeConfiguration, err)
+	}
+
+	return nil
 }
 
 // bridgeVendorUpdaterConfig mirrors atmosConfig.Vendor.Update and atmosConfig.Vendor.CI into the
@@ -686,6 +755,10 @@ func bridgeVendorUpdaterConfig(atmosConfig *schema.AtmosConfiguration) {
 		v.Set(prefix+".exclude", group.Exclude)
 	}
 
+	bridgeVendorCIConfig(v, atmosConfig)
+}
+
+func bridgeVendorCIConfig(v *SafeViper, atmosConfig *schema.AtmosConfiguration) {
 	pr := atmosConfig.Vendor.CI.PullRequest
 	if pr.Provider != "" {
 		v.Set("vendor.ci.pull_request.provider", pr.Provider)
@@ -780,6 +853,10 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "describe.provenance", "ATMOS_DESCRIBE_PROVENANCE")
 	bindEnv(v, "describe.component.filter", "ATMOS_DESCRIBE_COMPONENT_FILTER")
 
+	setServiceEnv(v)
+}
+
+func setServiceEnv(v *viper.Viper) {
 	// Atmos Pro settings
 	bindEnv(v, "settings.pro.enabled", "ATMOS_PRO_ENABLED")
 	bindEnv(v, "settings.pro.errors.enabled", "ATMOS_PRO_ERRORS_ENABLED")
@@ -919,6 +996,10 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_bitbucket_token", true)
 	v.SetDefault("settings.inject_gitlab_token", true)
 
+	setRuntimeDefaults(v)
+}
+
+func setRuntimeDefaults(v *viper.Viper) {
 	// Both logging defaults are journaled in pkg/edition (stderr since PR #1050,
 	// Warning since PR #1430). The embedded atmos.yaml must never set them — it
 	// would shadow these values and break edition rollback (test-enforced).
@@ -1194,6 +1275,20 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	return err
 }
 
+func recoverConfigRead(v *viper.Viper, path, fileName string, readErr error) (bool, error) {
+	if !canRetryWithResolvedDotenvMergeIncludes(readErr) {
+		return false, nil
+	}
+	err := readConfigWithResolvedDotenvMergeIncludes(v, path, fileName)
+	if err == nil {
+		return true, nil
+	}
+	if guard.IsPolicyError(err) {
+		return false, err
+	}
+	return false, nil
+}
+
 // loadConfigFile reads a configuration file and returns a temporary Viper instance with its contents.
 func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 	tempViper := viper.New()
@@ -1201,25 +1296,24 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 	tempViper.SetConfigName(fileName)
 	tempViper.SetConfigType(yamlType)
 
-	if err := tempViper.ReadInConfig(); err != nil {
-		if canRetryWithResolvedDotenvMergeIncludes(err) {
-			if retryErr := readConfigWithResolvedDotenvMergeIncludes(tempViper, path, fileName); retryErr == nil {
-				return tempViper, nil
-			} else if guard.IsPolicyError(retryErr) {
-				return nil, retryErr
-			}
-		}
-		// Return sentinel error unwrapped for type checking
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
-			return nil, err
-		}
-		// Wrap error with context using proper chaining.
-		// This preserves the full error chain for debugging while adding our sentinel error.
-		return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrReadConfig, path, fileName, err)
+	err := tempViper.ReadInConfig()
+	if err == nil {
+		return tempViper, nil
 	}
-
-	return tempViper, nil
+	if recovered, retryErr := recoverConfigRead(tempViper, path, fileName, err); recovered || retryErr != nil {
+		if retryErr != nil {
+			return nil, retryErr
+		}
+		return tempViper, nil
+	}
+	// Return sentinel error unwrapped for type checking
+	var configFileNotFoundError viper.ConfigFileNotFoundError
+	if errors.As(err, &configFileNotFoundError) {
+		return nil, err
+	}
+	// Wrap error with context using proper chaining.
+	// This preserves the full error chain for debugging while adding our sentinel error.
+	return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrReadConfig, path, fileName, err)
 }
 
 func canRetryWithResolvedDotenvMergeIncludes(err error) bool {
@@ -1231,7 +1325,7 @@ func readConfigWithResolvedDotenvMergeIncludes(v *viper.Viper, path, fileName st
 	if err != nil {
 		return err
 	}
-	content, err := os.ReadFile(configFile) //nolint:gosec // configFile is resolved from Atmos config search paths.
+	content, err := os.ReadFile(configFile) // configFile is resolved from Atmos config search paths.
 	if err != nil {
 		return err
 	}
@@ -1250,7 +1344,7 @@ func findConfigFile(path, fileName string) (string, error) {
 	}
 	for _, candidate := range candidates {
 		configFile := filepath.Join(path, candidate)
-		info, err := os.Stat(configFile) //nolint:gosec // configFile is resolved from Atmos config search paths.
+		info, err := os.Stat(configFile) // configFile is resolved from Atmos config search paths.
 		if err == nil && !info.IsDir() {
 			return configFile, nil
 		}
@@ -1379,7 +1473,7 @@ func readConfigFileContent(configFilePath string) ([]byte, error) {
 func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte, runtimeBasePath string) (interface{}, error) {
 	configDir := path
 	configFileForIncludes := path
-	if info, err := os.Stat(path); err == nil && !info.IsDir() { //nolint:gosec // path is an Atmos config path selected by the loader or tests.
+	if info, err := os.Stat(path); err == nil && !info.IsDir() { // path is an Atmos config path selected by the loader or tests.
 		configDir = filepath.Dir(path)
 	} else {
 		configFileForIncludes = filepath.Join(path, AtmosConfigFileName)
@@ -1408,14 +1502,8 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	}
 	defaultCommands := tempViper.Get(commandsKey)
 
-	// Now load the main config temporarily to process explicit imports.
-	// We need this because the import paths are defined in the main config.
-	importContent, err := importContextYAML(content)
-	if err != nil {
-		return nil, fmt.Errorf("%w: prepare import context: %w", errUtils.ErrMergeConfiguration, err)
-	}
-	if err := tempViper.MergeConfig(bytes.NewReader(importContent)); err != nil {
-		return nil, fmt.Errorf("%w: merge main config: %w", errUtils.ErrMergeConfiguration, err)
+	if err := mergeMainImportContext(tempViper, content); err != nil {
+		return nil, err
 	}
 
 	// Process imports against the defaults so an imported !unset clears them too.
@@ -2076,7 +2164,7 @@ func extractCommandsWithYamlFunctionsForFile(content []byte, sourceFile string) 
 }
 
 func mergeConfigFileWithImports(path string, v *viper.Viper) error {
-	//nolint:gosec // path is a resolved Atmos configuration/profile file path selected by the loader.
+	// path is a resolved Atmos configuration/profile file path selected by the loader.
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -2100,35 +2188,45 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 	if err != nil {
 		return err
 	}
-	if len(imports) > 0 {
-		var importConfig schema.AtmosConfiguration
-		if err = v.UnmarshalKey("settings", &importConfig.Settings, atmosDecodeHook(v)); err != nil {
-			return err
-		}
-		importConfig.Import = imports
-		importConfig.Edition = resolveEditionPin(v)
-		_, basePathSource, sourceErr := parseBasePathDeclaration(content)
-		if sourceErr != nil {
-			return fmt.Errorf("%w: parse config base path: %w", errUtils.ErrMergeConfiguration, sourceErr)
-		}
-		basePath, basePathSource := effectiveImportBasePath(v.GetString(runtimeBasePathOverrideKey), tempViper.GetString("base_path"), basePathSource)
-		importConfig.BasePath, err = resolveAbsolutePath(basePath, filepath.Dir(path), basePathSource)
-		if err != nil {
-			return err
-		}
-		if err = processConfigImports(&importConfig, v); err != nil {
-			return err
-		}
+	if err := applyProfileImports(v, tempViper, path, content, imports); err != nil {
+		return err
 	}
 
 	if err = mergeConfigFile(path, v); err != nil {
 		return err
 	}
-	if len(imports) > 0 {
-		if err = preprocessAtmosYamlFuncExceptCommands(content, tempViper, path); err != nil {
-			return err
-		}
-		overlayProfileSettings(v, tempViper.AllSettings(), "")
+	if len(imports) == 0 {
+		return nil
+	}
+	if err = preprocessAtmosYamlFuncExceptCommands(content, tempViper, path); err != nil {
+		return err
+	}
+	overlayProfileSettings(v, tempViper.AllSettings(), "")
+	return nil
+}
+
+func applyProfileImports(v, tempViper *viper.Viper, path string, content []byte, imports schema.ConfigImports) error {
+	if len(imports) == 0 {
+		return nil
+	}
+	var importConfig schema.AtmosConfiguration
+	if err := v.UnmarshalKey("settings", &importConfig.Settings, atmosDecodeHook(v)); err != nil {
+		return err
+	}
+	importConfig.Import = imports
+	importConfig.Edition = resolveEditionPin(v)
+	_, basePathSource, sourceErr := parseBasePathDeclaration(content)
+	if sourceErr != nil {
+		return fmt.Errorf("%w: parse config base path: %w", errUtils.ErrMergeConfiguration, sourceErr)
+	}
+	basePath, basePathSource := effectiveImportBasePath(v.GetString(runtimeBasePathOverrideKey), tempViper.GetString("base_path"), basePathSource)
+	var err error
+	importConfig.BasePath, err = resolveAbsolutePath(basePath, filepath.Dir(path), basePathSource)
+	if err != nil {
+		return err
+	}
+	if err = processConfigImports(&importConfig, v); err != nil {
+		return err
 	}
 	return nil
 }
@@ -2523,6 +2621,7 @@ func atmosDecodeHook(configs ...*viper.Viper) viper.DecoderConfigOption {
 func getAtmosDecodeHookFunc(strict ...bool) mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		duration.DecodeHook(),
+		schema.RetryConfigDecodeHook(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		commandEnvMapDecodeHook(),
 		schema.SkillRefDecodeHook(),
