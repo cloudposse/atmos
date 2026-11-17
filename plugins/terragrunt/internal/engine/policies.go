@@ -95,7 +95,7 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 	if terraform == "" {
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, request.Tofu, "version", "-json")
+	cmd := exec.CommandContext(ctx, request.Tofu, "version", "-json") //nolint:gosec // G204: the invocation explicitly selects its Terraform executable; arguments are fixed and no shell is used.
 	cmd.Env = make([]string, 0, len(request.Environment))
 	for key, value := range request.Environment {
 		cmd.Env = append(cmd.Env, key+"="+value)

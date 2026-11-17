@@ -22,9 +22,12 @@ type rpcFailure struct {
 	code    codes.Code
 }
 
+//nolint:lintroller // This standalone plugin cannot import the host perf runtime; error formatting must remain side-effect free.
 func (f *rpcFailure) Error() string { return f.failure.Proto().Summary }
 
 // GRPCStatus implements the interface the gRPC server uses to build the response status.
+//
+//nolint:lintroller // Standalone plugin gRPC conversion has no host perf runtime.
 func (f *rpcFailure) GRPCStatus() *status.Status {
 	return status.Convert(f.failure.Err(f.code))
 }

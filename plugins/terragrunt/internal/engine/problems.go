@@ -233,24 +233,6 @@ func dependencyProblem(file, _ string, err error) *model.Problem {
 	return &model.Problem{Code: model.CodeDependency, Summary: summary, Detail: "The dependency target could not be read.", Hints: []string{hint}, File: file, Key: "dependency", Safe: true, Err: err}
 }
 
-// localSubdirSourceProblem checks a local `dir//subdir` module source. Terragrunt copies the tree
-// before `//` and runs the subdirectory, so both must exist; each is reported like a plain local
-// source. A source without a local copied tree has nothing to check.
-func localSubdirSourceProblem(filesystem afero.Fs, path, source string) *model.Problem {
-	root, ok := copiedSourceRoot(filepath.Dir(path), source)
-	if !ok {
-		return nil
-	}
-	if problem := localSourceProblem(filesystem, path, source, root); problem != nil {
-		return problem
-	}
-	_, subdirectory, _ := strings.Cut(filepath.ToSlash(source), "//")
-	if subdirectory == "" {
-		return nil
-	}
-	return localSourceProblem(filesystem, path, source, filepath.Join(root, filepath.FromSlash(subdirectory)))
-}
-
 // WarningTerraformBinaryOverridden is reported for a unit whose terraform_binary is not the
 // executable Atmos will run because a stack `command` or the command line selected another one.
 const WarningTerraformBinaryOverridden = "terraform_binary_overridden"

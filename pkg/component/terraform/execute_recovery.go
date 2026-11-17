@@ -138,8 +138,7 @@ func skipExcluded(info *schema.ConfigAndStacksInfo) {
 }
 
 // endIgnoredRun ends the unit's run successfully after an ignore policy matched a failure that left it
-// without a resolved source. It announces the decision as an ignored source fetch does, and leaves no
-// signals file because no source directory exists to hold it.
+// without a resolved source. It announces the decision as an ignored source fetch does.
 func endIgnoredRun(info *schema.ConfigAndStacksInfo, ignored *schema.ComponentIgnoredRun) error {
 	(&recoveryReporter{info: info}).Ignored(ignored.Policy, ignored.Message)
 	return errUtils.ErrComponentRunIgnored

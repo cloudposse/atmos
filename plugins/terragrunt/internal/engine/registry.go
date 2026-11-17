@@ -57,7 +57,9 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	if err != nil {
 		return registryProblem(result.Source, err)
 	}
-	result.RegistryResolutionNanos = uint64(time.Since(started))
+	if elapsed := time.Since(started); elapsed > 0 {
+		result.RegistryResolutionNanos = uint64(elapsed)
+	}
 	original := result.Source
 	resolved = normalizeGetterURL(resolved)
 	if err := validateRemoteSource(resolved); err != nil {
