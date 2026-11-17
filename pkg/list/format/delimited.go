@@ -180,13 +180,9 @@ func (f *DelimitedFormatter) generatePropertyKeyRows(keys []string, valueKeys []
 // Any other delimiter (multi-character or reserved by encoding/csv) falls back to joining the fields as is.
 func (f *DelimitedFormatter) buildOutput(header []string, rows [][]string, delimiter string) string {
 	if comma, ok := csvDelimiter(delimiter); ok {
-		var output bytes.Buffer
-		writer := csv.NewWriter(&output)
-		writer.Comma = comma
-		writer.UseCRLF = utils.GetLineEnding() == "\r\n"
 		records := append([][]string{header}, rows...)
-		if err := writer.WriteAll(records); err == nil {
-			return output.String()
+		if out, err := writeCSV(records, comma, utils.GetLineEnding() == "\r\n"); err == nil {
+			return out
 		}
 	}
 
@@ -196,6 +192,28 @@ func (f *DelimitedFormatter) buildOutput(header []string, rows [][]string, delim
 		output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
 	}
 	return output.String()
+}
+
+// writeCSV encodes records with encoding/csv.
+// csv.Writer with UseCRLF set silently drops a lone '\r' inside a field, so CRLF output is
+// only requested when no field contains '\r'; otherwise '\n' is used so the value round-trips.
+func writeCSV(records [][]string, comma rune, crlf bool) (string, error) {
+	for _, record := range records {
+		for _, field := range record {
+			if strings.Contains(field, "\r") {
+				crlf = false
+			}
+		}
+	}
+
+	var output bytes.Buffer
+	writer := csv.NewWriter(&output)
+	writer.Comma = comma
+	writer.UseCRLF = crlf
+	if err := writer.WriteAll(records); err != nil {
+		return "", err
+	}
+	return output.String(), nil
 }
 
 // csvDelimiter returns the delimiter as a rune when encoding/csv can use it.
