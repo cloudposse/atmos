@@ -42,7 +42,7 @@ func (p *Provider) postComment(ctx context.Context, opts *provider.PostCommentOp
 	maskedOpts := *opts
 	maskedOpts.Body = provider.MaskPublishedContent(opts.Body)
 	maskedOpts.Marker = provider.MaskPublishedContent(opts.Marker)
-	limitedBody, err := limitIssueCommentBody(maskedOpts.Body, maskedOpts.Marker)
+	limitedBody, err := limitIssueCommentBody(maskedOpts.Body, maskedOpts.Marker, opts.RunURL)
 	if err != nil {
 		return nil, err
 	}
