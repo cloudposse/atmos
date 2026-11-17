@@ -39,8 +39,7 @@ func TestErrorBuilderDiagnostics(t *testing.T) {
 	assert.True(t, errUtils.HasContext(err, "attempt", "2"))
 	details := strings.Join(cockroach.GetAllDetails(err), "\n")
 	assert.Contains(t, details, "The component has no owner.")
-	assert.Contains(t, details, "test.star")
-	assert.Contains(t, details, "<toplevel>")
+	assert.NotContains(t, details, "Traceback")
 }
 
 func TestErrorBuilderTemplateIsImmutable(t *testing.T) {
@@ -88,7 +87,7 @@ steps.parallel(tasks = [steps.task(name=n, function=reject, args=[n]) for n in [
 	assert.Contains(t, err.Error(), "2 tasks failed")
 	assert.ElementsMatch(t, []string{"fix api", "fix web"}, cockroach.GetAllHints(err))
 	details := strings.Join(cockroach.GetAllDetails(err), "\n")
-	for _, text := range []string{"reason api", "reason web", `Traceback for task "api"`, `Traceback for task "web"`} {
+	for _, text := range []string{"reason api", "reason web"} {
 		assert.Contains(t, details, text)
 	}
 }

@@ -647,29 +647,21 @@ errors are reported, and runs nothing: no code, no processes. Script steps insid
 
 ### Errors
 
-A script failure is reported under a `# Workflow Error` heading. The message comes first, the Starlark traceback
-follows it, and an explanation and a hint end the report.
-For example, `fail("missing generated config")` in the `plan` step of a workflow produces:
+Intentional failures raised with `fail("message")` or `errors.build(...).fail()`
+use Atmos's native error presentation. The message appears once, without an
+interpreter traceback. Error-builder explanations, hints, context, and exit codes
+are preserved, including for failures in loaded modules and parallel tasks.
+
+For example, `fail("Already in an Atmos development shell")` displays:
 
 ```text
-# Workflow Error
-
-**Error:** workflow step execution failed: max attempts (1) exceeded, last error: missing generated config
-
- Traceback (most recent call last):
-   plan:1:5: in <toplevel>
- Error in fail: missing generated config
-
-The script step plan (interpreter: starlark) failed to execute.
-
-💡 To resume the workflow from this step, run:
-
- atmos workflow build -f deploy --from-step 'plan'
+Error: Already in an Atmos development shell
 ```
 
-The traceback names the step, the line, and the column. The last traceback line, `Error in fail:`, repeats the reason
-you passed to `fail()`. The explanation names the step and its interpreter, and the hint shows how to resume the
-workflow from the failed step.
+Use `--logs-level Debug` to include the Starlark traceback in debug logs when
+investigating an intentional failure. Interpreter errors, such as a missing
+dictionary key or division by zero, still include their traceback in the error
+report. Workflow failures also retain their step context and resume guidance.
 
 A failed `exec.run` adds the last lines of the command's stderr, and a task that
 exceeds its `timeout` reads `task "<name>" timed out after <duration>`.

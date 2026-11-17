@@ -251,7 +251,7 @@ func (e *Executor) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 		)
 	}
 
-	ui.Successf("Pushed %s to %s/%s.", opts.Workdir, opts.Remote, opts.Branch)
+	ui.Successf("Pushed `%s` to `%s/%s`.", opts.Workdir, opts.Remote, opts.Branch)
 	return nil
 }
 

@@ -1,0 +1,12 @@
+*
+!Dockerfile
+!atmos.yaml
+!backstage/**
+!catalog/**
+!templates/**
+!stacks/**
+!components/**
+!scripts/**
+!scaffolds/**
+!runner/**
+!.atmos/bin/atmos

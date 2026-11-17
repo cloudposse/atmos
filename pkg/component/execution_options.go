@@ -39,7 +39,7 @@ type ExecutionOptions struct {
 	// import cycle (research.md Decision 18). The output parameter is the
 	// scoped exec-metadata output text executeCommandPipeline captured for
 	// just the main plan/apply/deploy subprocess (FR-006f).
-	ExecMetadataParser func(subCommand string, exitCode int, output string) any
+	ExecMetadataParser func(subCommand, component string, exitCode int, output string) any
 
 	// ExecMetadataStdoutCapture/ExecMetadataStderrCapture, when set, additionally
 	// tee this specific ExecuteShellCommand call's stdout/stderr into these
@@ -87,7 +87,7 @@ func InvokingCommandFromOptions(opts ...ExecutionOption) *cobra.Command {
 }
 
 // WithExecMetadataParser provides a closure that, given the invoking
-// subcommand name and the command's own exit code, returns command-specific
+// subcommand name, resolved component name, and command's own exit code, returns command-specific
 // structured data (FR-006) for the execution record — or nil if there is
 // none to report. The exitCode parameter is the terraform/tofu subprocess's
 // own exit code (research.md Decision 27), supplied by
@@ -96,7 +96,7 @@ func InvokingCommandFromOptions(opts ...ExecutionOption) *cobra.Command {
 // supplies this closure so ExecuteTerraform's exec-metadata sync capture can
 // obtain parsed terraform plan/apply/deploy output without internal/exec
 // itself importing the CI plugin's parser (research.md Decision 18).
-func WithExecMetadataParser(fn func(subCommand string, exitCode int, output string) any) ExecutionOption {
+func WithExecMetadataParser(fn func(subCommand, component string, exitCode int, output string) any) ExecutionOption {
 	defer perf.Track(nil, "component.WithExecMetadataParser")()
 
 	return func(c *ExecutionOptions) {
@@ -106,7 +106,7 @@ func WithExecMetadataParser(fn func(subCommand string, exitCode int, output stri
 
 // MetadataParserFromOptions extracts the parser closure (if any) set via
 // WithExecMetadataParser among opts.
-func MetadataParserFromOptions(opts ...ExecutionOption) func(subCommand string, exitCode int, output string) any {
+func MetadataParserFromOptions(opts ...ExecutionOption) func(subCommand, component string, exitCode int, output string) any {
 	defer perf.Track(nil, "component.MetadataParserFromOptions")()
 
 	var cfg ExecutionOptions

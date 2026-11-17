@@ -194,7 +194,10 @@ func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetr
 		}
 
 		// Calculate delay for next attempt
-		delay := e.calculateDelay(attempt)
+		delay, delayErr := e.nextDelay(attempt, startTime, err)
+		if delayErr != nil {
+			return delayErr
+		}
 
 		// Start the timer before announcing backoff so observers can synchronize cancellation.
 		wait := e.clock.After(delay)
@@ -207,6 +210,21 @@ func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetr
 		}
 	}
 	return UnexpectedError
+}
+
+// nextDelay applies a server cooldown after the configured cap and jitter.
+// Refuse to retry early when that minimum cannot fit the remaining budget.
+func (e *Executor) nextDelay(attempt int, startTime time.Time, err error) (time.Duration, error) {
+	delay := e.calculateDelay(attempt)
+	var retryAfter interface{ RetryAfter() time.Duration }
+	if !errors.As(err, &retryAfter) {
+		return delay, nil
+	}
+	delay = max(delay, retryAfter.RetryAfter())
+	if e.config.MaxElapsedTime != nil && delay >= *e.config.MaxElapsedTime-e.clock.Now().Sub(startTime) {
+		return 0, errors.Join(MaxElapsedTimeError{MaxElapsedTime: *e.config.MaxElapsedTime}, err)
+	}
+	return delay, nil
 }
 
 const jitterFlipChance = 0.5
