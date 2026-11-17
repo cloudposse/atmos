@@ -66,29 +66,28 @@ var commandFunctions = [][]byte{[]byte("get_terraform_command"), []byte("get_ter
 // evaluates the configuration again for apply; without this, a hook enabled only for apply
 // (for example `if = get_terraform_command() == "apply"`) would silently never run.
 // Configuration that cannot observe the command evaluates identically, so it is not parsed twice.
-func applyTimeExecution(request model.Request, path string, planned *model.Execution, filesystem afero.Fs, read []string,
-	parse func(*config.ParsingContext) (*config.TerragruntConfig, error),
-) (*model.Execution, []string, error) {
-	if request.Command != "plan" || !observesCommand(filesystem, append(slices.Clone(read), path)) {
+func (e *unitEvaluator) applyTimeExecution(planned *model.Execution, parse func(*config.ParsingContext) (*config.TerragruntConfig, error)) (*model.Execution, []string, error) {
+	read := e.pctx.FilesRead.Paths()
+	if e.request.Command != "plan" || !observesCommand(e.environment.FS, append(slices.Clone(read), e.path)) {
 		return planned, nil, nil
 	}
-	if err := rejectArgumentDependentExecution(filesystem, append(slices.Clone(read), path)); err != nil {
+	if err := rejectArgumentDependentExecution(e.environment.FS, append(slices.Clone(read), e.path)); err != nil {
 		return nil, nil, err
 	}
 	// Apply is evaluated with the request's own download directory, so the working directory
 	// matches the plan-time evaluation.
-	applyRequest := request
+	applyRequest := *e.request
 	applyRequest.Command, applyRequest.Arguments = "apply", nil
-	apply := requestParsingContext(applyRequest, path)
+	apply := requestParsingContext(&applyRequest, e.path)
 	// Dependency mock eligibility belongs to the plan being prepared; hook expressions see apply.
-	apply.OriginalTerraformCommand = request.Command
+	apply.OriginalTerraformCommand = e.request.Command
 	cfg, err := parse(apply)
 	if err != nil {
 		return nil, nil, err
 	}
 	// Configuration read only when evaluating for apply also shapes the reviewed plan.
 	files := apply.FilesRead.Paths()
-	if err := rejectArgumentDependentExecution(filesystem, files); err != nil {
+	if err := rejectArgumentDependentExecution(e.environment.FS, files); err != nil {
 		return nil, nil, err
 	}
 	applied, err := executionFromConfig(cfg.Terraform)

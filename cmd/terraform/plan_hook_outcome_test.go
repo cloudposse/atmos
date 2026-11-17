@@ -32,6 +32,7 @@ func TestTerraformHookOutcomePreservesDetailedPlanStatus(t *testing.T) {
 		{"policy evaluation after changes", h.AfterTerraformPlan, errors.Join(errUtils.ExitCodeError{Code: 2}, errUtils.ErrPolicyEvaluation), h.RunFailure, 2},
 		{"exit two from init", h.AfterTerraformPlan, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2}), h.RunFailure, 2},
 		{"exit two from wrapped workspace selection", h.AfterTerraformPlan, fmt.Errorf("workspace: %w", errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})), h.RunFailure, 2},
+		{"exit two from before hook", h.AfterTerraformPlan, fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})), h.RunFailure, 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			actual := terraformHookOutcome(test.event, test.err)
@@ -82,6 +83,9 @@ components:
 	require.ErrorContains(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", errUtils.ExitCodeError{Code: 2}), "required-after-plan-was-enforced")
 	// A failed engine plan must not run this success-only hook.
 	require.NoError(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", errUtils.ExitCodeError{Code: 1}))
+	// A before-hook exit 2 must not run success hooks for a plan that never executed.
+	beforeErr := fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2}))
+	require.NoError(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", beforeErr))
 }
 
 // Exercise planCmd's deferred dispatch with a real child process returning Terraform's

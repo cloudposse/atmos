@@ -21,8 +21,8 @@ func TestDiscoveryScopeAndPruning(t *testing.T) {
 	}
 	stacks, units, err := discoveryPaths(root, []string{"live/**", "live/unit/**"}, []string{"live/excluded/**"})
 	require.NoError(t, err)
-	require.Equal(t, []string{filepath.Join(root, "live/terragrunt.stack.hcl")}, stacks)
-	require.Equal(t, []string{filepath.Join(root, "live/unit/terragrunt.hcl")}, units)
+	require.Equal(t, []string{filepath.Join(root, "live", "terragrunt.stack.hcl")}, stacks)
+	require.Equal(t, []string{filepath.Join(root, "live", "unit", "terragrunt.hcl")}, units)
 	_, _, err = discoveryPaths(root, []string{"absent/**"}, nil)
 	require.NoError(t, err)
 	for _, pattern := range []string{"", "[", "../**", `live\**`, filepath.Join(root, "**")} {
@@ -31,7 +31,7 @@ func TestDiscoveryScopeAndPruning(t *testing.T) {
 	}
 	_, units, err = discoveryPaths(root, nil, nil)
 	require.NoError(t, err)
-	require.Contains(t, units, filepath.Join(root, "catalog/terragrunt.hcl"))
+	require.Contains(t, units, filepath.Join(root, "catalog", "terragrunt.hcl"))
 }
 
 func TestDiscoveryRejectsOutsideSymlink(t *testing.T) {
@@ -135,7 +135,8 @@ func stackProject(t *testing.T, files map[string]string) string {
 func inventoryNames(t *testing.T, result *model.Resolution) []string {
 	t.Helper()
 	names := make([]string, 0, len(result.Inventory))
-	for _, unit := range result.Inventory {
+	for i := range result.Inventory {
+		unit := &result.Inventory[i]
 		names = append(names, unit.Stack+"/"+unit.Name)
 	}
 	return names
@@ -168,7 +169,8 @@ unit "vpc" {
 	require.NoError(t, err)
 	require.Equal(t, []string{"live/aurora/api", "live/aurora/web", "live/shard/0", "live/shard/1", "live/vpc"}, inventoryNames(t, result))
 	paths := map[string]bool{}
-	for _, unit := range result.Inventory {
+	for i := range result.Inventory {
+		unit := &result.Inventory[i]
 		paths[unit.Config.Path] = true
 	}
 	require.Len(t, paths, 5, "each expansion element keeps its own generated unit")
@@ -242,4 +244,14 @@ unit "app" {
 	require.Equal(t, []string{"live/app", "live/standalone"}, inventoryNames(t, result))
 	require.Equal(t, filepath.Join(root, "live", "terragrunt.stack.hcl"), result.Inventory[0].GenerationRoot, "the stack owns the generated unit")
 	require.Empty(t, result.Inventory[1].GenerationRoot)
+}
+
+func TestDiscoveryParsePreservesCallerRequest(t *testing.T) {
+	request := nativeUnit(t, "")
+	request.Phase = "inventory"
+	original := request
+	discovery := projectDiscovery{ctx: t.Context(), request: &request, root: request.BasePath}
+	_, err := discovery.parse(filepath.Join(request.BasePath, "missing", stackFile), true)
+	require.Error(t, err)
+	require.Equal(t, original, request)
 }

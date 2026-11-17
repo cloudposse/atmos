@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/cgi"
@@ -11,16 +12,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Measure a real Retry-After interval through the public Push path without
+// coupling the timing assertion to twelve competing Git subprocesses.
+func TestHTTPRetryAfterWallClockCooldown(t *testing.T) {
+	testHTTPPublishers(t, 1, false)
+}
+
 // Exercise twelve independent publishers against the same branch over smart HTTP.
 // Each receives a 429 before contending for the ref; no lock serializes publication.
-func TestIndependentPublishersHonorHTTPCooldown(t *testing.T) {
+// Only retry scheduling is virtual: Git, HTTP, recovery, and the execution deadline
+// remain real. TestHTTPRetryAfterWallClockCooldown separately checks elapsed time.
+func TestHTTPConcurrentPublishersRecoverFromThrottling(t *testing.T) {
+	testHTTPPublishers(t, 12, true)
+}
+
+func testHTTPPublishers(t *testing.T, publishers int, virtualScheduling bool) {
+	t.Helper()
 	requireGitBinary(t)
 	env := gitTestEnv(t)
 	root := t.TempDir()
@@ -56,7 +72,6 @@ func TestIndependentPublishersHonorHTTPCooldown(t *testing.T) {
 		backend.ServeHTTP(w, r)
 	}))
 	defer server.Close()
-	const publishers = 12
 	workdirs := make([]string, publishers)
 	for i := range workdirs {
 		workdirs[i] = t.TempDir()
@@ -66,22 +81,45 @@ func TestIndependentPublishersHonorHTTPCooldown(t *testing.T) {
 		gitRun(t, env, workdirs[i], "commit", "-m", fmt.Sprintf("publish app %d", i))
 	}
 	start := make(chan struct{})
-	results := make(chan error, publishers)
+	type result struct {
+		publisher int
+		err       error
+		waits     []time.Duration
+	}
+	results := make(chan result, publishers)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
 	for i, dir := range workdirs {
 		go func() {
 			<-start
-			results <- New().Push(t.Context(), &atmosgit.PushOptions{RepoContext: atmosgit.RepoContext{Workdir: dir, Env: env, Remote: fmt.Sprintf("%s/client-%d/repo.git", server.URL, i), Branch: "main"}, Retry: &schema.RetryConfig{MaxAttempts: new(16), MaxElapsedTime: new(30 * time.Second), RandomJitter: new(0.5), BackoffStrategy: schema.BackoffExponential, InitialDelay: new(50 * time.Millisecond), MaxDelay: new(time.Second)}})
+			opts := &atmosgit.PushOptions{RepoContext: atmosgit.RepoContext{Workdir: dir, Env: env, Remote: fmt.Sprintf("%s/client-%d/repo.git", server.URL, i), Branch: "main"}, Retry: &schema.RetryConfig{MaxAttempts: new(16), MaxElapsedTime: new(30 * time.Second), RandomJitter: new(0.5), BackoffStrategy: schema.BackoffExponential, InitialDelay: new(50 * time.Millisecond), MaxDelay: new(time.Second)}}
+			outcome := result{publisher: i}
+			if virtualScheduling {
+				clock := &advancingPushClock{}
+				outcome.err = New().pushWithRetry(ctx, opts, opts.Retry, retry.WithClock(clock))
+				outcome.waits = clock.waits
+			} else {
+				outcome.err = New().Push(ctx, opts)
+			}
+			results <- outcome
 		}()
 	}
 	close(start)
 	for range publishers {
-		require.NoError(t, <-results)
+		outcome := <-results
+		assert.NoError(t, outcome.err, "publisher %d; scheduled waits %v", outcome.publisher, outcome.waits)
+		if virtualScheduling && assert.NotEmpty(t, outcome.waits, "publisher %d", outcome.publisher) {
+			assert.GreaterOrEqual(t, outcome.waits[0], time.Second, "publisher %d", outcome.publisher)
+			assert.LessOrEqual(t, outcome.waits[0], 1500*time.Millisecond, "publisher %d", outcome.publisher)
+		}
 	}
 	mu.Lock()
 	defer mu.Unlock()
 	require.Len(t, second, publishers)
-	for client, elapsed := range second {
-		require.GreaterOrEqual(t, elapsed, time.Second, client)
+	if !virtualScheduling {
+		for client, elapsed := range second {
+			require.GreaterOrEqual(t, elapsed, time.Second, client)
+		}
 	}
 	for i := range publishers {
 		require.Equal(t, "image: v2\n", gitRun(t, env, bare, "show", fmt.Sprintf("main:app-%d.yaml", i)))

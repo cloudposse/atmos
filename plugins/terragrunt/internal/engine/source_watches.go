@@ -16,6 +16,8 @@ import (
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
+var errTrackSources = errors.New("cannot track configuration sources in")
+
 // trackInputSources inspects syntax, not values. Partial discovery intentionally
 // leaves inputs unevaluated; syntax watches include conditional and optional reads
 // without reading state, decrypting secrets, or invoking user commands.
@@ -40,29 +42,37 @@ func trackInputSources(fs afero.Fs, root string, result *model.Resolution) error
 			}
 			return fmt.Errorf("track configuration sources %s: %w", path, err)
 		}
-		file, diagnostics := hclsyntax.ParseConfig(contents, path, hcl.InitialPos)
-		if diagnostics.HasErrors() {
-			// Files also lists data files that functions read, and a data file may be named
-			// *.hcl without being HCL. Every configuration file already parsed during
-			// evaluation, so one that does not parse is data: it stays a file watch.
-			continue
-		}
-		inputs := file.Body.(*hclsyntax.Body).Attributes["inputs"]
-		if inputs == nil {
-			continue
-		}
-		walk := hclsyntax.VisitAll(inputs.Expr, func(node hclsyntax.Node) hcl.Diagnostics {
-			if call, ok := node.(*hclsyntax.FunctionCallExpr); ok {
-				trackSourceCall(root, filepath.Dir(path), call, result)
-			}
-			return nil
-		})
-		if walk.HasErrors() {
-			return fmt.Errorf("cannot track configuration sources in %s", path)
+		if err := scanInputSources(root, path, contents, result); err != nil {
+			return err
 		}
 	}
 	result.Files = slices.Compact(slices.Sorted(slices.Values(result.Files)))
 	result.Folders = slices.Compact(slices.Sorted(slices.Values(result.Folders)))
+	return nil
+}
+
+// scanInputSources adds syntax-derived watches while retaining non-HCL data files.
+func scanInputSources(root, path string, contents []byte, result *model.Resolution) error {
+	file, diagnostics := hclsyntax.ParseConfig(contents, path, hcl.InitialPos)
+	if diagnostics.HasErrors() {
+		// Files also lists data files that functions read, and a data file may be named
+		// *.hcl without being HCL. Every configuration file already parsed during
+		// evaluation, so one that does not parse is data: it stays a file watch.
+		return nil
+	}
+	inputs := file.Body.(*hclsyntax.Body).Attributes["inputs"]
+	if inputs == nil {
+		return nil
+	}
+	walk := hclsyntax.VisitAll(inputs.Expr, func(node hclsyntax.Node) hcl.Diagnostics {
+		if call, ok := node.(*hclsyntax.FunctionCallExpr); ok {
+			trackSourceCall(root, filepath.Dir(path), call, result)
+		}
+		return nil
+	})
+	if walk.HasErrors() {
+		return fmt.Errorf("%w %s", errTrackSources, path)
+	}
 	return nil
 }
 
