@@ -17999,10 +17999,13 @@
               "type": "object"
             },
             {
-              "type": "null"
+              "type": "string"
             },
             {
               "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "null"
             }
           ],
           "description": "Query-string parameters (supports templates)."

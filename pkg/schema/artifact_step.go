@@ -39,6 +39,7 @@ func decodeStepQuery(node *yaml.Node, stepType string, params *map[string]string
 	}
 	if node.Kind == yaml.ScalarNode {
 		if node.Tag == "!!null" {
+			*params = nil
 			return nil
 		}
 		if stepType != TaskTypeArtifact || node.Tag != "!!str" {

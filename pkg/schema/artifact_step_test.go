@@ -90,6 +90,12 @@ func TestWorkflowStep_UnmarshalYAML_ArtifactStepOtherActions(t *testing.T) {
 			assert.Equal(t, map[string]string{"page": "2"}, s.Query)
 			assert.Empty(t, s.SearchQuery)
 		}},
+		{"explicit null query clears merged defaults", "{type: http, <<: &defaults {query: {page: '1'}}, query: null}", func(t *testing.T, s WorkflowStep) {
+			assert.Empty(t, s.Query)
+		}},
+		{"absent query preserves merged defaults", "{type: http, <<: &defaults {query: {page: '1'}}}", func(t *testing.T, s WorkflowStep) {
+			assert.Equal(t, map[string]string{"page": "1"}, s.Query)
+		}},
 		{"explicit empty query replaces merged defaults", "{type: http, url: 'https://example.com', <<: {query: {page: '2'}}, query: {}}", func(t *testing.T, s WorkflowStep) {
 			assert.Empty(t, s.Query)
 		}},
