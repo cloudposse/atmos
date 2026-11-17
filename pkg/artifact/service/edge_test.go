@@ -407,7 +407,7 @@ func TestCopy_EvidenceCarryFailuresAreReported(t *testing.T) {
 	assert.True(t, warned)
 }
 
-func TestSign_RejectsADigestThatIsNotTheSignableSubject(t *testing.T) {
+func TestSign_RejectsADigestThatNamesNoIdentityOfTheResolvedArtifact(t *testing.T) {
 	caps := artifacttest.DefaultCapabilities()
 	record, recordDigest := sealedRecord(t)
 	// An OCI-style repository resolves the digest to a manifest that is not the Record digest.
@@ -416,7 +416,7 @@ func TestSign_RejectsADigestThatIsNotTheSignableSubject(t *testing.T) {
 	m := newMockSetup(t, &caps, service.WithSigner(releaseSigner))
 	m.repo.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(pinned, nil)
 	m.repo.EXPECT().Inspect(gomock.Any(), pinned).Return(&artifact.Inspection{Pinned: pinned, Record: &record}, nil)
-	_, err := m.svc.Sign(context.Background(), artifact.SignRequest{Repository: "dst", Ref: artifact.Ref{Name: "tools/example", Digest: manifest}})
+	_, err := m.svc.Sign(context.Background(), artifact.SignRequest{Repository: "dst", Ref: artifact.Ref{Name: "tools/example", Digest: digest.FromString("unrelated")}})
 	require.ErrorIs(t, err, errUtils.ErrArtifactRefInvalid)
 }
 

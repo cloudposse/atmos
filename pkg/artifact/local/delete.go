@@ -37,11 +37,9 @@ func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference
 	if err != nil {
 		return nil, err
 	}
-	var held *fileLock
-	if options.Lock == nil {
-		if held, err = r.acquire(ctx, record.Name+":"+record.Version, r.settings.owner, ""); err != nil {
-			return nil, err
-		}
+	held, err := r.lockReference(ctx, record.Name+":"+record.Version, options.Lock)
+	if err != nil {
+		return nil, err
 	}
 	result, err := r.deleteLocked(ctx, t, &pinned, &options)
 	if held != nil {

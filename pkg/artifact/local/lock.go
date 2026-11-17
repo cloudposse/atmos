@@ -69,9 +69,81 @@ func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (ar
 	return r.acquire(ctx, request.Resource, owner, request.OperationID)
 }
 
+// LockNamespace implements [artifact.LockNamespacer]: the repository root identifies the collection.
+func (r *Repository) LockNamespace() string {
+	defer perf.Track(nil, "local.Repository.LockNamespace")()
+
+	root := r.root
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	return filepath.ToSlash(root)
+}
+
+// coversReference reports whether lock protects reference (name:version) in this repository. A
+// direct lock names the reference itself. A lock taken through locking.repository delegation names
+// it scoped by this repository's collection namespace, or by its alias when it reports none, as
+// built by the service when it resolves the delegate. A lock for any other reference never matches.
+func (r *Repository) coversReference(lock *fileLock, reference string) bool {
+	resource := lock.Resource()
+	// The namespace is the symlink-resolved root once it exists and the literal root before, so a
+	// handle taken before the first publish names the literal form.
+	return resource == reference ||
+		resource == r.LockNamespace()+"/"+reference ||
+		resource == filepath.ToSlash(r.root)+"/"+reference ||
+		resource == r.alias+"/"+reference
+}
+
+// holdsTargetLock reports whether lock already holds the physical lock file this repository uses
+// for reference. A matching namespace is not enough: a delegate repository with another root
+// acquires its lock file under its own root, so direct writers of this repository would not be
+// excluded by it. Only a handle on the target's own lock file can stand in for acquiring it.
+//
+// Path equality is the fast path. Two spellings of one root (a symlink alias) name the same
+// physical lock file, so a mismatch falls back to comparing file identity: acquiring a lock the
+// caller already holds through another alias would otherwise block until the context ends. A lock
+// file that cannot be inspected is treated as a different file, so the handle is never reused on a
+// guess.
+func (r *Repository) holdsTargetLock(lock *fileLock, reference string) bool {
+	target := r.referenceLockPath(reference)
+	if lock.path == target {
+		return true
+	}
+	held, err := os.Stat(lock.path)
+	if err != nil {
+		return false
+	}
+	want, err := os.Stat(target)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(held, want)
+}
+
+// lockReference returns the lock a mutation of reference must hold. A caller handle that holds this
+// repository's own lock file is reused (nil is returned: nothing to release). A handle that covers
+// the reference but holds another repository's file, and a missing handle, make the repository
+// acquire its own lock, which the caller releases. A local handle for another reference is a conflict.
+func (r *Repository) lockReference(ctx context.Context, reference string, lock artifact.LockHandle) (*fileLock, error) {
+	if localLock, ok := lock.(*fileLock); ok {
+		if !r.coversReference(localLock, reference) {
+			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, reference)
+		}
+		if r.holdsTargetLock(localLock, reference) {
+			return nil, nil
+		}
+	}
+	return r.acquire(ctx, reference, r.settings.owner, "")
+}
+
+// referenceLockPath returns the lock file this repository uses for reference (name:version).
+func (r *Repository) referenceLockPath(reference string) string {
+	return filepath.Join(r.root, native(layout.LockPath(reference)))
+}
+
 // acquire takes the OS lock for resource.
 func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*fileLock, error) {
-	lockPath := filepath.Join(r.root, native(layout.LockPath(resource)))
+	lockPath := r.referenceLockPath(resource)
 	if err := os.MkdirAll(filepath.Dir(lockPath), dirMode); err != nil {
 		return nil, fmt.Errorf("%w: create lock directory for %q: %w", errUtils.ErrArtifactConfigInvalid, resource, err)
 	}

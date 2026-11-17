@@ -19,10 +19,10 @@ import (
 // Names of the reserved distribution paths.
 const (
 	// The hidden directory that holds the reserved distribution directory.
-	reservedParent = ".atmos"
+	reservedParent = artifact.DistributionParent
 
 	// The source directory reserved for README and CHANGELOG distribution documents.
-	reservedDir = ".atmos/artifact"
+	reservedDir = artifact.DistributionDir
 
 	// The generated manifest, written only inside the packaged representation.
 	manifestName = "manifest.json"

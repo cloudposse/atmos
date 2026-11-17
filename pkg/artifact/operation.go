@@ -46,6 +46,10 @@ const (
 
 	// OutcomeDryRun means the operation was validated and planned but nothing was written.
 	OutcomeDryRun Outcome = "dry-run"
+
+	// OutcomeFailed means the operation did not complete. The service leaves the outcome empty on
+	// failure so that a failure is never mistaken for success; command envelopes report this value.
+	OutcomeFailed Outcome = "failed"
 )
 
 // Severity classifies a diagnostic.
