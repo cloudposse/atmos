@@ -54,6 +54,9 @@ type chartSpec struct {
 	Values map[string]any
 	// IncludeCRDs includes CRDs from the chart's crds/ directory in the output.
 	IncludeCRDs bool
+	// planCRDs appends only missing install-only CRDs during a live install plan.
+	// It is nil for upgrades, offline renders, and actual release actions.
+	planCRDs func(context.Context, helmchart.Charter) (string, error)
 	// DependencyUpdate fetches missing dependencies before loading the chart.
 	DependencyUpdate bool
 	// Repositories lists declarative chart repositories for "repo/name" refs.
@@ -192,7 +195,15 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 	if !ok {
 		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
-	return renderReleaseManifest(rendered), nil
+	manifest := renderReleaseManifest(rendered)
+	if spec.planCRDs != nil {
+		crds, err := spec.planCRDs(operationCtx, loaded)
+		if err != nil {
+			return "", err
+		}
+		manifest += crds
+	}
+	return manifest, nil
 }
 
 // loadChart loads a chart and verifies that every declared dependency is present.

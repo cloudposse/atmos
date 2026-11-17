@@ -1148,6 +1148,13 @@ func executeCustomCommand(
 		return
 	}
 
+	// Copy final flag values after interactive prompting and validation, before env rendering.
+	for name, value := range flagsData {
+		stepVars.SetFlag(name, fmt.Sprint(value))
+	}
+	// The resolved identity also includes inherited identity selection.
+	stepVars.SetFlag("identity", commandIdentity)
+
 	// Execute custom command's steps
 	var commandErr error
 	commandErrorsReported := true

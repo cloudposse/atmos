@@ -467,7 +467,7 @@ func secretEnvForDeclaredTypes(componentSection map[string]any, secret map[strin
 		if declared && terraformParsesAsHCL(typeText) {
 			literal, err := encodeHCLLiteral(value)
 			if err != nil {
-				return nil, fmt.Errorf("encoding secret variable %q for TF_VAR_ injection: %w", name, err)
+				return nil, fmt.Errorf("%w: encoding secret variable %q for TF_VAR_ injection: %w", errUtils.ErrInvalidComponentVars, name, err)
 			}
 			literals = append(literals, terraformVarEnvPrefix+name+"="+literal)
 			continue

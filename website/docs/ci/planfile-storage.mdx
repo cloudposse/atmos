@@ -221,7 +221,8 @@ on a PR can fail to apply on merge). (To replay the stored binary directly, use 
 
 ### Deploying across pull requests and merge queues {#deploying-after-a-pull-request-merges}
 
-Stored plans are keyed by the commit that was checked out when they were created. That may be a PR
+Stored plans are keyed by the commit that was checked out when they were created, using the fixed
+layout `<stack>/<component>/<sha>.tfplan.tar`. That commit may be a PR
 head, a synthetic PR merge commit, or a merge-queue commit. A subsequent deploy can check out a
 different SHA even when the source files are identical. This applies to ordinary GitHub Actions
 workflows as well as workflows dispatched by Atmos Pro.

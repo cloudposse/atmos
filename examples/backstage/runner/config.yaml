@@ -1,0 +1,9 @@
+runner:
+  file: /runner-data/.runner
+  capacity: 1
+  timeout: 20m
+  labels: [atmos-local:host]
+cache:
+  enabled: false
+host:
+  workdir_parent: /runner-data/jobs
