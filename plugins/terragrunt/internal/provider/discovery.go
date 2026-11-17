@@ -12,6 +12,8 @@ import (
 )
 
 // Discover expands local stacks in an isolated overlay without preparing units.
+//
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
 func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
 	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetProviderConfiguration())
 	response, err := p.discover(ctx, request)

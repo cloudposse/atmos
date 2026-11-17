@@ -264,6 +264,8 @@ func sources(root string, resolved *model.Resolution) ([]*pluginv1.ComponentSour
 }
 
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
+//
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
 func (p *Provider) Validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
 	if err := validate(ctx, request); err != nil {
 		return nil, scoped(rpcError(err), "validate", request.GetRootDirectory(), request.GetAddress())
