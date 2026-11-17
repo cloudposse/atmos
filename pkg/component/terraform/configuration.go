@@ -418,7 +418,8 @@ func retainedBackendError(path string) error {
 
 func terraformConfigurationPath(path string) bool {
 	lower := strings.ToLower(path)
-	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json")
+	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json") ||
+		strings.HasSuffix(lower, ".tofu") || strings.HasSuffix(lower, ".tofu.json")
 }
 
 // configurationHasBackend also returns true for unparseable configuration: absence

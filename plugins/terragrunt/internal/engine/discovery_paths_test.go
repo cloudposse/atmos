@@ -452,7 +452,7 @@ func TestDiscoveryEvaluationErrors(t *testing.T) {
 					child = filepath.Join(root, "generated", "terragrunt.stack.hcl")
 				}
 				failed, continued := false, false
-				evaluate := func(_ context.Context, req model.Request, _ afero.Fs) (*model.Resolution, error) {
+				evaluate := func(_ context.Context, req *model.Request, _ afero.Fs) (*model.Resolution, error) {
 					if req.Path == later {
 						continued = true
 						return &model.Resolution{Path: later, Source: "module"}, nil
@@ -499,7 +499,7 @@ func TestDiscoveryContextCanceledDuringEvaluation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "terragrunt.hcl"), nil, 0o644))
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	result, err := discoverProjectWithResolver(ctx, &model.Request{BasePath: root}, func(context.Context, model.Request, afero.Fs) (*model.Resolution, error) {
+	result, err := discoverProjectWithResolver(ctx, &model.Request{BasePath: root}, func(context.Context, *model.Request, afero.Fs) (*model.Resolution, error) {
 		cancel()
 		return &model.Resolution{}, nil
 	})

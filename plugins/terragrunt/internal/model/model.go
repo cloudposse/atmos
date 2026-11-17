@@ -249,7 +249,7 @@ type Problem struct {
 // Error returns the headline and detail for local diagnostics and tests. The provider never sends it
 // to the host: it sends only the structured fields, honoring Safe.
 //
-//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+//nolint:lintroller // Standalone plugin diagnostic formatting; importing host perf would break the SDK-only boundary.
 func (p *Problem) Error() string {
 	if p.Detail == "" {
 		return p.Summary
@@ -259,5 +259,5 @@ func (p *Problem) Error() string {
 
 // Unwrap exposes the cause for classification.
 //
-//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+//nolint:lintroller // Pure cause delegation in a standalone plugin; no host tracker dependency.
 func (p *Problem) Unwrap() error { return p.Err }

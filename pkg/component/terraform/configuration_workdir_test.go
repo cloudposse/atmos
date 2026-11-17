@@ -143,8 +143,8 @@ func TestPrepareComponentExecutionHonorsExclusionAndReadConfigHooks(t *testing.T
 	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
 		Engine: "terraform", Source: "./module", Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}, Workspace: "default", Execution: hooks,
 	}, nil)
-	shell := &fakeShell{run: func(*shellCall) error { return errors.New("hook failed") }}
-	executor := NewExecutor(Services{ExecuteShellCommand: shell.execute})
+	shell := newShellFixture(t, func(*shellCall) error { return errors.New("hook failed") })
+	executor := NewExecutor(Services{ExecuteShellCommand: shell.mock.Execute})
 	_, err = executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, newInfo(), false)
 	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
 	require.Equal(t, []string{"failing-hook"}, shell.names())

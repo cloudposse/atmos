@@ -58,6 +58,8 @@ func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.Compo
 
 // Prepare resolves current inputs after dependencies and returns literal files.
 // Terraform execution remains owned by Atmos.
+//
+//nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
 	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetConfiguration(), request.GetProviderConfiguration())
 	response, err := p.prepare(ctx, request)
@@ -263,6 +265,8 @@ func stateIdentity(req *model.Request, result *model.Resolution) (*pluginv1.Comp
 }
 
 // Resolve reads backend identity in an overlay, independently of dependency outputs.
+//
+//nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (p *Provider) Resolve(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
 	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetConfiguration(), request.GetProviderConfiguration())
 	response, err := p.resolveState(ctx, request)

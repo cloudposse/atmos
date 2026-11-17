@@ -102,3 +102,8 @@ func environMap(environ []string) map[string]string {
 	}
 	return env
 }
+
+// invocationEnvironmentKeys applies SDK alias precedence without changing the invocation map.
+func invocationEnvironmentKeys(env map[string]string) (string, string) {
+	return cmp.Or(env["AWS_ACCESS_KEY_ID"], env["AWS_ACCESS_KEY"]), cmp.Or(env["AWS_SECRET_ACCESS_KEY"], env["AWS_SECRET_KEY"])
+}

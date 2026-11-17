@@ -35,6 +35,8 @@ type Provider struct {
 }
 
 // New constructs a provider with the pinned evaluator when none is supplied.
+//
+//nolint:lintroller // This SDK-only factory cannot import the host performance tracker.
 func New(evaluate Evaluator) *Provider {
 	if evaluate == nil {
 		evaluate = engine.Resolve
@@ -178,7 +180,7 @@ func optionProblem(name, hint string) *model.Problem {
 }
 
 func operation(root, name string, op *pluginv1.ComponentOperation, invocation *pluginv1.Invocation) (model.Request, error) {
-	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || (op.Mode != ModeNative && op.Mode != ModeExecutable && op.Mode != "iam-probe") {
+	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || !supportedOperationMode(op.Mode) {
 		return model.Request{}, ErrUnsupported
 	}
 	env := maps.Clone(invocation.GetEnvironment())
@@ -198,6 +200,10 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 		request.Phase = "iam"
 	}
 	return request, nil
+}
+
+func supportedOperationMode(mode string) bool {
+	return mode == ModeNative || mode == ModeExecutable || mode == "iam-probe"
 }
 
 // engineName names the engine of an executable with the rule the engine package shares with the host.
@@ -244,6 +250,8 @@ func sources(root string, resolved *model.Resolution) ([]*pluginv1.ComponentSour
 }
 
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
+//
+//nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (p *Provider) Validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
 	if err := validate(ctx, request); err != nil {
 		return nil, scoped(rpcError(err), "validate", request.GetRootDirectory(), request.GetAddress())

@@ -56,10 +56,11 @@ func readPlanRecord(t *testing.T, planPath string) configurationPlan {
 	return record
 }
 
-// moduleGetter is a fake shell that stands in for `terraform get`: it installs the given module content into
+// moduleGetter uses the generated shell mock for `terraform get`: it installs the given module content into
 // the directory it runs in, or fails.
-func moduleGetter(content string, failure error) *fakeShell {
-	return &fakeShell{run: func(call *shellCall) error {
+func moduleGetter(t *testing.T, content string, failure error) *shellFixture {
+	t.Helper()
+	return newShellFixture(t, func(call *shellCall) error {
 		if !slices.Equal(call.args, []string{"get"}) {
 			return errUnexpectedCommand
 		}
@@ -71,11 +72,11 @@ func moduleGetter(content string, failure error) *fakeShell {
 			return err
 		}
 		return os.WriteFile(module, []byte(content), 0o600)
-	}}
+	})
 }
 
 // callDirs lists the directory of every call.
-func callDirs(shell *fakeShell) []string {
+func callDirs(shell *shellFixture) []string {
 	dirs := make([]string, 0, len(shell.calls))
 	for i := range shell.calls {
 		dirs = append(dirs, shell.calls[i].dir)
@@ -89,8 +90,8 @@ func TestApplyOfRestoredPlanDownloadsPinnedModulesBeforeVerification(t *testing.
 	planPath := project.reviewWithModules(t, "# vpc v1.2.3")
 	require.True(t, readPlanRecord(t, planPath).Modules, "the record notes the downloaded modules")
 	project.freshRunner(t, planPath)
-	getter := moduleGetter("# vpc v1.2.3", nil)
-	testExecutor(t).services.ExecuteShellCommand = getter.execute
+	getter := moduleGetter(t, "# vpc v1.2.3", nil)
+	testExecutor(t).services.ExecuteShellCommand = getter.mock.Execute
 
 	_, execution, err := project.freshApply(t, planPath, project.prepared())
 
@@ -104,7 +105,7 @@ func TestApplyOfRestoredPlanRejectsChangedModules(t *testing.T) {
 	project := newReviewedPlanProject(t)
 	planPath := project.reviewWithModules(t, "# vpc reviewed")
 	project.freshRunner(t, planPath)
-	testExecutor(t).services.ExecuteShellCommand = moduleGetter("# vpc moved branch", nil).execute
+	testExecutor(t).services.ExecuteShellCommand = moduleGetter(t, "# vpc moved branch", nil).mock.Execute
 
 	_, _, err := project.freshApply(t, planPath, project.prepared())
 
@@ -116,7 +117,7 @@ func TestApplyOfRestoredPlanRejectsUnreachableModules(t *testing.T) {
 	project := newReviewedPlanProject(t)
 	planPath := project.reviewWithModules(t, "# vpc reviewed")
 	project.freshRunner(t, planPath)
-	testExecutor(t).services.ExecuteShellCommand = moduleGetter("", errModuleDownload).execute
+	testExecutor(t).services.ExecuteShellCommand = moduleGetter(t, "", errModuleDownload).mock.Execute
 
 	_, _, err := project.freshApply(t, planPath, project.prepared())
 
@@ -130,8 +131,8 @@ func TestApplyOfRestoredPlanWithoutModulesDoesNotDownload(t *testing.T) {
 	planPath := project.reviewInDefaultWorkdir(t)
 	require.False(t, readPlanRecord(t, planPath).Modules)
 	project.freshRunner(t, planPath)
-	getter := moduleGetter("", nil)
-	testExecutor(t).services.ExecuteShellCommand = getter.execute
+	getter := moduleGetter(t, "", nil)
+	testExecutor(t).services.ExecuteShellCommand = getter.mock.Execute
 
 	_, _, err := project.freshApply(t, planPath, project.prepared())
 
@@ -144,9 +145,9 @@ func TestInstallReviewedModulesUsesSanitizedEnvironment(t *testing.T) {
 	rebuild := &reviewedRebuild{plan: &configurationPlan{Modules: true}}
 	for name, env := range map[string][]string{"sanitized": {"PATH=/sanitized", "TF_VAR_x=1"}, "unset": nil} {
 		t.Run(name, func(t *testing.T) {
-			getter := moduleGetter("# vpc", nil)
+			getter := moduleGetter(t, "# vpc", nil)
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = getter.execute
+			executor.services.ExecuteShellCommand = getter.mock.Execute
 			info := &schema.ConfigAndStacksInfo{Command: "terraform", SanitizedEnv: env}
 
 			require.NoError(t, executor.installReviewedModules(&schema.AtmosConfiguration{}, info, rebuild, t.TempDir()))

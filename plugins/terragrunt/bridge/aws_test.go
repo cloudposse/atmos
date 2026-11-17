@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -287,8 +288,9 @@ func TestAWSTransportSignsEndpointPathPrefix(t *testing.T) {
 		endpoints:   map[string]*url.URL{"sts": {Scheme: "https", Host: "proxy.example", Path: "/aws/sts"}},
 		next:        next,
 	}
-	_, err = transport.RoundTrip(req)
+	response, err := transport.RoundTrip(req)
 	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
 	require.Equal(t, "/aws/sts/action", sent.URL.Path)
 	require.Equal(t, "version=1", sent.URL.RawQuery)
 	require.Equal(t, "sts.us-east-1.amazonaws.com", sent.Host)
@@ -297,6 +299,47 @@ func TestAWSTransportSignsEndpointPathPrefix(t *testing.T) {
 	sent.Header.Del("Authorization")
 	require.NoError(t, v4.NewSigner().SignHTTP(t.Context(), credentials, sent, hash, "sts", "us-east-1", stamp))
 	require.Equal(t, actualSignature, sent.Header.Get("Authorization"), "the signature covers the final path")
+}
+
+func TestAWSTransportRejectsInvalidPrefixedSigning(t *testing.T) {
+	const authorization = "AWS4-HMAC-SHA256 Credential=AKIATEST/20261112/us-east-1/sts/aws4_request, SignedHeaders=host;x-amz-date, Signature=old"
+	bodyFailure := errors.New("request body unavailable")
+	for _, test := range []struct {
+		name, authorization, stamp string
+		bodyFailure                bool
+	}{
+		{name: "malformed authorization", authorization: "malformed", stamp: "20261112T120000Z"},
+		{name: "different signing credentials", authorization: strings.ReplaceAll(authorization, "AKIATEST", "AKIACHANGED"), stamp: "20261112T120000Z"},
+		{name: "missing signing time", authorization: authorization},
+		{name: "unreadable body", authorization: authorization, stamp: "20261112T120000Z", bodyFailure: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodPost, "https://sts.us-east-1.amazonaws.com/action", strings.NewReader("Action=GetCallerIdentity"))
+			require.NoError(t, err)
+			req.Header.Set("Authorization", test.authorization)
+			req.Header.Set("X-Amz-Date", test.stamp)
+			if test.bodyFailure {
+				req.Body = io.NopCloser(iotest.ErrReader(bodyFailure))
+			}
+			transport := &awsTransport{
+				credentials: aws.Credentials{AccessKeyID: "AKIATEST", SecretAccessKey: "secret"},
+				endpoints:   map[string]*url.URL{"sts": {Scheme: "https", Host: "proxy.example", Path: "/aws/sts"}},
+				next:        NewMockRoundTripper(gomock.NewController(t)), // No request may reach the next transport.
+			}
+			response, err := transport.RoundTrip(req)
+			if response != nil && response.Body != nil {
+				require.NoError(t, response.Body.Close())
+			}
+			require.Nil(t, response)
+			if test.bodyFailure {
+				require.ErrorIs(t, err, bodyFailure)
+			} else {
+				require.ErrorIs(t, err, ErrAWSCredentials)
+			}
+			require.Equal(t, test.authorization, req.Header.Get("Authorization"))
+			require.Equal(t, "https://sts.us-east-1.amazonaws.com/action", req.URL.String())
+		})
+	}
 }
 
 // A profile that assumes a role from a source profile signs its STS call with the source credentials, which

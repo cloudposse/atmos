@@ -472,33 +472,33 @@ func validateRetryBlock(retry *config.RetryBlock, path string) error {
 
 // resolveIAM resolves the role before the full parse evaluates AWS functions. The host
 // assumes it and supplies the resulting session on the second call.
-func (r *inventoryReader) resolveIAM(pctx *config.ParsingContext, request *model.Request, path string) (*model.Resolution, error) {
-	flags, err := config.PartialParseConfigFile(r.ctx, r.logger, r.environment,
-		pctx.WithDecodeList(config.TerragruntFlags, config.FeatureFlagsBlock, config.ExcludeBlock), path, nil)
+func (e *unitEvaluator) resolveIAM(ctx context.Context) (*model.Resolution, error) {
+	flags, err := config.PartialParseConfigFile(ctx, e.logger, e.environment,
+		e.pctx.WithDecodeList(config.TerragruntFlags, config.FeatureFlagsBlock, config.ExcludeBlock), e.path, nil)
 	if err != nil {
 		return nil, err
 	}
-	if PreventsRun(excludeFromConfig(flags.Exclude), OperationCommand(request.Command, request.Arguments)) {
-		return &model.Resolution{Path: path}, nil
+	if PreventsRun(excludeFromConfig(flags.Exclude), OperationCommand(e.request.Command, e.request.Arguments)) {
+		return &model.Resolution{Path: e.path}, nil
 	}
-	iam, warnings, err := iamSettings(flags, request, path)
+	iam, warnings, err := iamSettings(flags, e.request, e.path)
 	if err != nil {
 		return nil, err
 	}
-	return &model.Resolution{Path: path, IAM: iam, Warnings: warnings}, nil
+	return &model.Resolution{Path: e.path, IAM: iam, Warnings: warnings}, nil
 }
 
 // checkRequestFeatureOverrides rejects feature overrides the unit does not declare. Backend
 // reads do not evaluate feature flags.
-func (r *inventoryReader) checkRequestFeatureOverrides(pctx *config.ParsingContext, request *model.Request, path string) error {
-	if request.Phase == "backend" {
+func (e *unitEvaluator) checkRequestFeatureOverrides(ctx context.Context) error {
+	if e.request.Phase == "backend" {
 		return nil
 	}
-	return checkFeatureOverrides(path, request.Features, func() (*config.TerragruntConfig, error) {
+	return checkFeatureOverrides(e.path, e.request.Features, func() (*config.TerragruntConfig, error) {
 		// Read the declarations without the overrides, which are what is being checked.
-		declarations := pctx.WithDecodeList(config.FeatureFlagsBlock)
+		declarations := e.pctx.WithDecodeList(config.FeatureFlagsBlock)
 		declarations.FeatureFlags = nil
-		return config.PartialParseConfigFile(r.ctx, r.logger, r.environment, declarations, path, nil)
+		return config.PartialParseConfigFile(ctx, e.logger, e.environment, declarations, e.path, nil)
 	})
 }
 

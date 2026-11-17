@@ -41,8 +41,9 @@ import (
 // options, hands them to upstream as static keys, and routes endpoint overrides through the client.
 
 const (
-	awsDefaultRegion  = "us-east-1"
-	awsResolveTimeout = 30 * time.Second
+	awsSigningScopeParts = 5
+	awsDefaultRegion     = "us-east-1"
+	awsResolveTimeout    = 30 * time.Second
 	// Placeholder for credentials that could not be resolved. Upstream then pins static
 	// credentials and signs with them, and the transport answers every AWS request with the real reason.
 	awsUnresolvedKey = "ATMOS_UNRESOLVED_AWS_CREDENTIALS"
@@ -389,28 +390,37 @@ func (t *awsTransport) signPrefixedRequest(req *http.Request) error {
 		return fmt.Errorf("%w: cannot re-sign AWS request with endpoint path prefix", ErrAWSCredentials)
 	}
 	scope := strings.Split(parts[0], "/")
-	if len(scope) != 5 || scope[4] != "aws4_request" || scope[0] != t.credentials.AccessKeyID || t.credentials.SecretAccessKey == "" {
+	if len(scope) != awsSigningScopeParts || scope[awsSigningScopeParts-1] != "aws4_request" || scope[0] != t.credentials.AccessKeyID || t.credentials.SecretAccessKey == "" {
 		return fmt.Errorf("%w: AWS signing scope or credentials changed", ErrAWSCredentials)
 	}
 	stamp, err := time.Parse("20060102T150405Z", req.Header.Get("X-Amz-Date"))
 	if err != nil {
 		return fmt.Errorf("%w: AWS signing time is missing: %w", ErrAWSCredentials, err)
 	}
-	payloadHash := req.Header.Get("X-Amz-Content-Sha256")
-	if payloadHash == "" {
-		var body []byte
-		if req.Body != nil {
-			body, err = io.ReadAll(req.Body)
-			if err != nil {
-				return err
-			}
-			req.Body = io.NopCloser(bytes.NewReader(body))
-		}
-		digest := sha256.Sum256(body)
-		payloadHash = hex.EncodeToString(digest[:])
+	payloadHash, err := requestPayloadHash(req)
+	if err != nil {
+		return err
 	}
 	req.Header.Del("Authorization")
 	return v4.NewSigner().SignHTTP(req.Context(), t.credentials, req, payloadHash, scope[3], scope[2], stamp)
+}
+
+// requestPayloadHash preserves an existing hash or hashes and restores the request body.
+func requestPayloadHash(req *http.Request) (string, error) {
+	if hash := req.Header.Get("X-Amz-Content-Sha256"); hash != "" {
+		return hash, nil
+	}
+	var body []byte
+	if req.Body != nil {
+		var err error
+		body, err = io.ReadAll(req.Body)
+		if err != nil {
+			return "", err
+		}
+		req.Body = io.NopCloser(bytes.NewReader(body))
+	}
+	digest := sha256.Sum256(body)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func isAWSHost(host string) bool {
