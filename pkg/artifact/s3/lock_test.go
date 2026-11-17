@@ -459,3 +459,39 @@ func TestLock_RefusesAClaimLargerThanItCanBeRead(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactTooLarge)
 	assert.Empty(t, lockObjects(spec.fake), "no claim object was created")
 }
+
+// A canceled client cannot establish that a request already received by S3 has stopped.
+func TestLock_CanceledContenderMayCreateClaimAfterForeignRelease(t *testing.T) {
+	spec := noneSpec().fresh(t)
+	repo := newRepo(t, spec)
+	ctx := context.Background()
+	held, err := repo.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "holder"})
+	require.NoError(t, err)
+	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+	spec.fake.Inject(s3test.Fault{Op: s3test.OpPutObject, KeyPrefix: layout.LockPath(lockResource), Action: s3test.Gate, Entered: entered, Release: release, Done: done})
+	attemptCtx, cancel := context.WithCancel(ctx)
+	result := make(chan error, 1)
+	go func() {
+		_, err := repo.Lock(attemptCtx, artifact.LockRequest{Resource: lockResource, Owner: "contender"})
+		result <- err
+	}()
+	<-entered
+	cancel()
+	err = <-result
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+	require.NoError(t, held.Release(ctx))
+	unblock()
+	<-done
+	keys := lockObjects(spec.fake)
+	require.Len(t, keys, 1, "the late request can create its claim after release")
+	object, ok := spec.fake.Object(keys[0])
+	require.True(t, ok)
+	var doc claimDoc
+	require.NoError(t, json.Unmarshal(object.Data, &doc))
+	assert.Equal(t, "contender", doc.Owner)
+	assert.Contains(t, err.Error(), doc.Token, "the ambiguity diagnostic identifies the late claim")
+}
