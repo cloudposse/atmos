@@ -355,9 +355,9 @@ func TestPlanOutputFlagsUseEffectiveArguments(t *testing.T) {
 			// A permissive CI exit mapping must not turn a preflight rejection into success.
 			config.CI.Enabled = true
 			config.Components.Terraform.CI.ExitCodes = map[int]bool{0: true, 1: true, 2: true}
-			shell := &fakeShell{}
+			shell := newShellFixture(t, nil)
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
 			if test.output != "" {
 				require.NoError(t, os.WriteFile(filepath.Join(execCtx.componentPath, test.output), []byte("plan"), 0o600))
@@ -584,15 +584,15 @@ func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 	require.NoError(t, os.WriteFile(plan, []byte("reviewed"), 0o600))
 	info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: []string{"--out=" + plan}}}}
 	attempts := 0
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		attempts++
 		if attempts == 1 {
 			return errors.New("Backend configuration changed")
 		}
 		return nil
-	}}
+	})
 	executor := testExecutor(t)
-	executor.services.ExecuteShellCommand = shell.execute
+	executor.services.ExecuteShellCommand = shell.mock.Execute
 	executor.executeTerraformInitForcedFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
 		return nil
 	}
@@ -623,7 +623,7 @@ func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 			if test.extra {
 				info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: []string{"-detailed-exitcode"}}}}
 			}
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				if err := os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("changes"), 0o600); err != nil {
 					return err
 				}
@@ -632,9 +632,9 @@ func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 					return fmt.Errorf("%w: after %q: %w", errUtils.ErrComponentHookFailed, "notify", errUtils.ExitCodeError{Code: test.code})
 				}
 				return errUtils.ExitCodeError{Code: test.code}
-			}}
+			})
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			err := executor.runMainCommandPhase(config, info, execCtx, test.args, execCtx.componentPath, false)
 			require.Equal(t, test.code, resolveExitCode(err), "the plan status is returned unchanged")
 			if test.hook {
@@ -669,14 +669,14 @@ func newPlanShowRunner(t *testing.T) process.Runner {
 func TestPlanBindingIgnoresChangesAfterTerraformRan(t *testing.T) {
 	config, info, execCtx, _, path := planFixture(t)
 	info.ComponentExecution = &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{execHook("after", "plan")}}
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command != info.Command {
 			return os.WriteFile(filepath.Join(execCtx.workingDir, "main.tf"), []byte("rewritten by the hook"), 0o600)
 		}
 		return os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed plan"), 0o600)
-	}}
+	})
 	executor := testExecutor(t)
-	executor.services.ExecuteShellCommand = shell.execute
+	executor.services.ExecuteShellCommand = shell.mock.Execute
 	require.NoError(t, executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false))
 	require.Len(t, shell.calls, 2, "Terraform and the after hook both ran")
 	require.FileExists(t, path+configurationPlanSuffix)
@@ -694,7 +694,7 @@ func TestPlanBindingRejectsConfigurationChangedWhileTerraformRan(t *testing.T) {
 	for _, change := range []string{"module", "provider identity"} {
 		t.Run(change, func(t *testing.T) {
 			config, info, execCtx, runtime, path := planFixture(t)
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				switch change {
 				case "module":
 					if err := os.WriteFile(filepath.Join(execCtx.workingDir, "main.tf"), []byte("changed during plan"), 0o600); err != nil {
@@ -704,9 +704,9 @@ func TestPlanBindingRejectsConfigurationChangedWhileTerraformRan(t *testing.T) {
 					runtime.identity = "changed during plan"
 				}
 				return os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed plan"), 0o600)
-			}}
+			})
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false)
 			require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 			require.NoFileExists(t, path+configurationPlanSuffix)
@@ -718,14 +718,14 @@ func TestPlanBindingRejectsConfigurationChangedWhileTerraformRan(t *testing.T) {
 // so an ordinary run that writes them is not rejected.
 func TestPlanBindingAllowsFilesTerraformWrites(t *testing.T) {
 	config, info, execCtx, _, path := planFixture(t)
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if err := os.WriteFile(filepath.Join(execCtx.workingDir, "terraform.tfstate"), []byte("state"), 0o600); err != nil {
 			return err
 		}
 		return os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("new plan bytes"), 0o600)
-	}}
+	})
 	executor := testExecutor(t)
-	executor.services.ExecuteShellCommand = shell.execute
+	executor.services.ExecuteShellCommand = shell.mock.Execute
 	require.NoError(t, executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false))
 	require.FileExists(t, path+configurationPlanSuffix)
 }
@@ -735,12 +735,12 @@ func TestPolicyPlanBindsPublishedOutput(t *testing.T) {
 	var engine policy.Engine
 	require.NoError(t, engine.Register(policy.CELEngine, &policy.CEL{}))
 	execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: newPlanShowRunner(t), Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		path := plannedOutputPath(execCtx.componentPath, call.args)
 		return os.WriteFile(path, []byte("reviewed"), 0o600)
-	}}
+	})
 	executor := testExecutor(t)
-	executor.services.ExecuteShellCommand = shell.execute
+	executor.services.ExecuteShellCommand = shell.mock.Execute
 	path := filepath.Join(execCtx.componentPath, "approved.plan")
 	require.NoError(t, executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false))
 	require.FileExists(t, path+configurationPlanSuffix)
@@ -775,7 +775,7 @@ func TestDetailedExitCodePlanBinding(t *testing.T) {
 				runtime.err = bindingErr
 			}
 			attempts, initCalls, hookCalls := 0, 0, 0
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command == "hook-after" {
 					hookCalls++
 					if test.hookFailure {
@@ -788,9 +788,9 @@ func TestDetailedExitCodePlanBinding(t *testing.T) {
 					return errors.New("Backend configuration changed")
 				}
 				return exitCodeError(test.code)
-			}}
+			})
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			executor.executeTerraformInitForcedFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
 				initCalls++
 				return nil
@@ -866,9 +866,9 @@ func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
 			if test.provider != nil {
 				info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: test.commands, Environment: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
 			}
-			shell := &fakeShell{}
+			shell := newShellFixture(t, nil)
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}, execCtx.componentPath, false)
 			if test.reject {
 				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
@@ -901,14 +901,14 @@ func TestDetailedExitCodeBindingUsesSubprocessEnvironment(t *testing.T) {
 			config, info, execCtx, _, path := planFixture(t)
 			info.ComponentExecution = detailedExitCodeInfo().ComponentExecution
 			info.ComponentEnvList = test.componentEnv
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command == info.Command {
 					return exitCodeError(2)
 				}
 				return nil
-			}}
+			})
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false, component.WithEnvironment(test.processEnv))
 			require.Equal(t, 2, errUtils.GetExitCode(err))
 			require.Len(t, shell.calls, 2)
@@ -931,12 +931,12 @@ func TestDetailedExitCodePolicyPlanBinding(t *testing.T) {
 			require.NoError(t, engine.Register(policy.CELEngine, &policy.CEL{}))
 			execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: newPlanShowRunner(t), Rules: []policy.Rule{{ID: "guard", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: fmt.Sprint(deny), Effects: policy.Effects{Deny: true}}}}
 			require.NoError(t, os.Remove(path))
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				require.NoError(t, os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed"), 0o600))
 				return exitCodeError(2)
-			}}
+			})
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path, "-detailed-exitcode"}, execCtx.componentPath, false)
 			if deny {
 				require.Error(t, err)
