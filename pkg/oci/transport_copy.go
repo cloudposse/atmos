@@ -344,6 +344,8 @@ func (g guardedStore) Exists(ctx context.Context, target ocispec.Descriptor) (bo
 }
 
 func (g guardedStore) Push(ctx context.Context, expected ocispec.Descriptor, content io.Reader) error {
+	defer perf.Track(nil, "oci.guardedStore.Push")()
+
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -364,6 +366,8 @@ func (g guardedStore) Push(ctx context.Context, expected ocispec.Descriptor, con
 // PushReference forwards to the wrapped store when it can push a manifest under a reference,
 // which lets registry destinations write the root manifest directly under its tag.
 func (g guardedStore) PushReference(ctx context.Context, expected ocispec.Descriptor, content io.Reader, reference string) error {
+	defer perf.Track(nil, "oci.guardedStore.PushReference")()
+
 	if err := ctx.Err(); err != nil {
 		return err
 	}
