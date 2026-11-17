@@ -162,3 +162,21 @@ func problemFor(err error, file string) error {
 		Hints: []string{"Check that the unit's `terraform.source` and its dependencies are inside the project root."},
 	}
 }
+
+// warningDiagnostics turns discovery and preparation findings into diagnostics the host prints without
+// failing the command. The messages never contain evaluated values: only paths and patterns.
+func warningDiagnostics(warnings []model.Warning) []*pluginv1.Diagnostic {
+	diagnostics := make([]*pluginv1.Diagnostic, 0, len(warnings))
+	for _, warning := range warnings {
+		diagnostics = append(diagnostics, &pluginv1.Diagnostic{
+			Field:   warning.Path,
+			Message: warning.Message,
+			Detail: &pluginv1.ErrorDetail{
+				Code: warning.Code, Summary: warning.Message, UserSafe: true,
+				Severity: pluginv1.Severity_SEVERITY_WARNING, Operation: "discover",
+				Location: &pluginv1.SourceLocation{File: warning.Path},
+			},
+		})
+	}
+	return diagnostics
+}
