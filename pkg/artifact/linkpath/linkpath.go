@@ -130,7 +130,7 @@ func followRecorded(links map[string]string, from string, visit func(string)) ([
 		case ".":
 		case parentComponent:
 			if len(resolved) == 0 {
-				return true
+				return nil, recordedEscaped
 			}
 			resolved = resolved[:len(resolved)-1]
 		default:
@@ -143,12 +143,12 @@ func followRecorded(links map[string]string, from string, visit func(string)) ([
 			}
 			hops++
 			if hops > maxLinkHops {
-				return false
+				return nil, recordedLooped
 			}
 			pending = append(splitComponents(target), pending...)
 		}
 	}
-	return false
+	return resolved, recordedInside
 }
 
 // walker resolves a path one component at a time.

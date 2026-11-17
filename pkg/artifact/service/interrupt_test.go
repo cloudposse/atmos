@@ -144,6 +144,35 @@ func TestPublish_TemporaryFailureExhaustsAttempts(t *testing.T) {
 	assert.Equal(t, 3, e.repos["dst"].Calls("Publish"))
 }
 
+func TestPublish_CancellationDuringUncommittedWriteIsPreserved(t *testing.T) {
+	caps := artifacttest.DefaultCapabilities()
+	m := newMockSetup(t, &caps)
+	m.expectLock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	gomock.InOrder(
+		m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(artifact.PinnedReference{}, errUtils.ErrArtifactNotFound),
+		m.repo.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *artifact.PreparedArtifact, artifact.PublishOptions) (*artifact.PublishResult, error) {
+			cancel()
+			return nil, errTransport
+		}),
+		m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(artifact.PinnedReference{}, errUtils.ErrArtifactNotFound),
+	)
+	_, err := m.svc.Publish(ctx, m.e.publishRequest("dst", m.e.source("hello")))
+	require.ErrorIs(t, err, errTransport)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestPublish_ExecutionAttemptLimitIsHonored(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	e.repos["dst"].InjectFailure(artifacttest.FailBeforePayload, &temporaryError{"throttled"}, 10)
+	request := e.publishRequest("dst", e.source("hello"))
+	request.Execution.MaxAttempts = 1
+	_, err := e.svc.PublishDetailed(context.Background(), request)
+	require.Error(t, err)
+	assert.Equal(t, 1, e.repos["dst"].Calls("Publish"))
+}
+
 func TestPublish_TemporaryFailureAfterCommitIsReconciledWithoutRetry(t *testing.T) {
 	e := newEnv(t, envConfig{})
 	e.repos["dst"].InjectFailure(artifacttest.FailAfterCommit, &temporaryError{"timeout"}, 5)
@@ -322,4 +351,63 @@ func TestPublish_DelegatedLockIsTakenFromTheProvider(t *testing.T) {
 	_, err = e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("other")))
 	require.Error(t, err, "the second publish conflicts, but only after locking")
 	assert.Equal(t, 1, e.repos["dst"].Calls("Lock"), "without delegation the target repository locks for itself")
+}
+
+// A listing over the default repositories may be a partial success, and is then marked incomplete.
+// Cancellation is never that: the marker stays set, and the error says the listing did not finish.
+func TestList_CancellationIsNeverASuccessfulPartialListing(t *testing.T) {
+	tests := []struct {
+		name           string
+		beta           func(ctx context.Context, cancel context.CancelFunc) error
+		wantErr        error
+		wantIncomplete bool
+	}{
+		{"canceled while one repository was still listing", func(ctx context.Context, cancel context.CancelFunc) error {
+			cancel()
+			return ctx.Err()
+		}, context.Canceled, true},
+		{"canceled while one repository failed for another reason", func(_ context.Context, cancel context.CancelFunc) error {
+			cancel()
+			return errTransport
+		}, context.Canceled, true},
+		{"one repository failed without cancellation", func(context.Context, context.CancelFunc) error {
+			return errTransport
+		}, nil, true},
+		{"every repository listed", nil, nil, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, envConfig{repos: map[string]artifacttest.Options{"alpha": {}, "beta": {}}})
+			seedList(t, e, "alpha", map[string]string{"app/a:1": "a1"}, nil)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			// Alpha completes first, so the failure of beta always meets one repository that succeeded.
+			alphaDone := make(chan struct{})
+			var once sync.Once
+			e.static.Repositories["alpha"] = delegatingRepository(t, e.repos["alpha"], repoHooks{list: func(ctx context.Context, query artifact.ListQuery) (*artifact.ListPage, error) {
+				page, err := e.repos["alpha"].List(ctx, query)
+				once.Do(func() { close(alphaDone) })
+				return page, err
+			}})
+			if tc.beta != nil {
+				e.static.Repositories["beta"] = delegatingRepository(t, e.repos["beta"], repoHooks{list: func(ctx context.Context, _ artifact.ListQuery) (*artifact.ListPage, error) {
+					<-alphaDone
+					return nil, tc.beta(ctx, cancel)
+				}})
+			}
+
+			result, err := e.svc.List(ctx, artifact.ListRequest{})
+
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr, "a canceled listing must not be reported as a success")
+			} else {
+				require.NoError(t, err)
+			}
+			require.NotNil(t, result)
+			assert.Equal(t, tc.wantIncomplete, result.Incomplete)
+			require.Len(t, result.Artifacts, 1, "what alpha returned stays visible")
+			assert.Equal(t, "app/a", result.Artifacts[0].Name)
+		})
+	}
 }

@@ -67,18 +67,23 @@ func extractZipSkipping(reader io.Reader, extractPath string, skip func(name str
 	defer root.Close()
 
 	for _, file := range zipReader.File {
-		if _, err := filesystem.SafeJoin(extractPath, file.Name); err != nil {
-			return fmt.Errorf("%w: %s", ErrInvalidFilePath, file.Name)
-		}
-		if skip != nil && skip(file.Name) {
-			continue
-		}
-		if err := processZipFile(root, file, extractPath); err != nil {
+		if err := processZipEntry(root, file, extractPath, skip); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// processZipEntry validates names before applying the optional skip rule.
+func processZipEntry(root *os.Root, file *zip.File, extractPath string, skip func(string) bool) error {
+	if _, err := filesystem.SafeJoin(extractPath, file.Name); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidFilePath, file.Name)
+	}
+	if skip != nil && skip(file.Name) {
+		return nil
+	}
+	return processZipFile(root, file, extractPath)
 }
 
 // processZipFile processes a zip.File entry and writes the corresponding file
