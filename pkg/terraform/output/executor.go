@@ -500,15 +500,19 @@ func (e *Executor) execute(
 	if err != nil {
 		return nil, err
 	}
+	skipInit := opts != nil && opts.SkipInit
 	if state != nil {
+		// A plugin state reader must reuse initialized state when init is disabled.
+		// Ordinary components retain their existing mode and workspace behavior.
+		skipInit = skipInit || config.InitMode == schema.TerraformInitModeNever
 		config.BaseEnvironment = configurationEnvironment(authManagers)
-		cleanup, err := configurationStateReader(config, state, opts, component, stack)
+		cleanup, err := configurationStateReader(config, state, skipInit, component, stack)
 		if err != nil {
 			return nil, err
 		}
 		defer cleanup()
 		// Only the scratch reader regenerates its backend; the initialized unit is read as it is.
-		processYamlFunctions = opts == nil || !opts.SkipInit
+		processYamlFunctions = !skipInit
 	}
 
 	// Step 2.5: Auto-provision JIT workdir if needed before toolchain resolution and init.
@@ -600,7 +604,6 @@ func (e *Executor) execute(
 	// SkipInit is set: the component was just applied and .terraform/ state is
 	// already correct — re-initializing would require auth credentials that
 	// may not be available in PostRunE context.
-	skipInit := opts != nil && opts.SkipInit
 	if err := e.ensureInitialized(ctx, atmosConfig, runner, config, component, stack, stderrCapture, pluginCache, environMap, skipInit); err != nil {
 		return nil, err
 	}

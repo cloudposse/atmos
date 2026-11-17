@@ -222,60 +222,86 @@ func TestConfigurationStateSectionsNamedWorkspaceWithoutBackendSettings(t *testi
 	require.Nil(t, state.Backend)
 }
 
-// TestPluginOutputSkipInitReadsTheInitializedUnit verifies that skipping init is honored for a
+// TestPluginOutputSkipInitReadsTheInitializedUnit verifies that skip-init and init.mode: never honor a
 // plugin-owned component: outputs are read from the unit's initialized directory as it is, with no
 // init, no workspace selection, and no generated files.
 func TestPluginOutputSkipInitReadsTheInitializedUnit(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	runner := NewMockTerraformRunner(ctrl)
-	runner.EXPECT().SetEnv(gomock.Any()).Return(nil)
-	runner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{"result": {Type: json.RawMessage(`"string"`), Value: json.RawMessage(`"applied"`)}}, nil)
-	config := validAtmosConfig(t)
-	unit := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(unit, ".terraform"), 0o700))
-	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-		return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
-	})
-	sections := validSections()
-	sections["settings"] = map[string]any{"configuration": true}
-	sections["providers"] = map[string]any{"aws": map[string]any{"region": "us-east-2"}}
-	binary, err := os.Executable()
-	require.NoError(t, err)
-	sections["command"] = binary
-	executor := NewExecutor(nil, WithRunnerFactory(func(dir, _ string) (TerraformRunner, error) {
-		require.Equal(t, unit, dir, "skipping init must read the unit's own initialized directory")
-		return runner, nil
-	}))
-
-	result, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true)
-	require.NoError(t, err)
-	require.Equal(t, "applied", result["result"])
-	files, err := os.ReadDir(unit)
-	require.NoError(t, err)
-	require.Len(t, files, 1, "no backend, provider, or marker file may be written into the unit")
-	require.Equal(t, ".terraform", files[0].Name())
-}
-
-// TestPluginOutputSkipInitRejectsAnUninitializedUnit verifies that skipping init never falls back
-// to initializing anything: a unit that was never initialized fails with a clear error.
-func TestPluginOutputSkipInitRejectsAnUninitializedUnit(t *testing.T) {
-	for name, state := range map[string]*schema.ComponentConfigurationState{
-		"no working directory": {BackendType: "local", Workspace: "prod"},
-		"not initialized":      {BackendType: "local", Workspace: "prod", WorkingDirectory: t.TempDir()},
+	for _, policy := range []struct {
+		name string
+		mode schema.TerraformInitMode
+		opts *OutputOptions
+	}{
+		{name: "explicit skip", opts: &OutputOptions{SkipInit: true}},
+		{name: "mode never without options", mode: schema.TerraformInitModeNever},
+		{name: "mode never with options", mode: schema.TerraformInitModeNever, opts: &OutputOptions{}},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(policy.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			runner := NewMockTerraformRunner(ctrl)
+			runner.EXPECT().SetEnv(gomock.Any()).Return(nil)
+			runner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{"result": {Type: json.RawMessage(`"string"`), Value: json.RawMessage(`"applied"`)}}, nil)
 			config := validAtmosConfig(t)
+			config.Components.Terraform.Init.Mode = policy.mode
+			unit := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(unit, ".terraform"), 0o700))
 			config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
-				return state, nil
+				return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
 			})
 			sections := validSections()
 			sections["settings"] = map[string]any{"configuration": true}
-			executor := NewExecutor(nil, WithRunnerFactory(func(string, string) (TerraformRunner, error) {
-				t.Fatal("no Terraform process may start")
-				return nil, nil
+			sections["providers"] = map[string]any{"aws": map[string]any{"region": "us-east-2"}}
+			binary, err := os.Executable()
+			require.NoError(t, err)
+			sections["command"] = binary
+			executor := NewExecutor(nil, WithRunnerFactory(func(dir, _ string) (TerraformRunner, error) {
+				require.Equal(t, unit, dir, "skipping init must read the unit's own initialized directory")
+				return runner, nil
 			}))
-			_, err := executor.execute(t.Context(), config, "network", "live", sections, nil, &OutputOptions{SkipInit: true}, true)
-			require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
+
+			result, err := executor.execute(t.Context(), config, "network", "live", sections, nil, policy.opts, true)
+			require.NoError(t, err)
+			require.Equal(t, "applied", result["result"])
+			files, err := os.ReadDir(unit)
+			require.NoError(t, err)
+			require.Len(t, files, 1, "no backend, provider, or marker file may be written into the unit")
+			require.Equal(t, ".terraform", files[0].Name())
+		})
+	}
+}
+
+// TestPluginOutputSkipInitRejectsAnUninitializedUnit verifies that disabling init never falls back
+// to initializing anything: a unit that was never initialized fails with a clear error.
+func TestPluginOutputSkipInitRejectsAnUninitializedUnit(t *testing.T) {
+	for _, policy := range []struct {
+		name string
+		mode schema.TerraformInitMode
+		opts *OutputOptions
+	}{
+		{name: "explicit skip", opts: &OutputOptions{SkipInit: true}},
+		{name: "mode never without options", mode: schema.TerraformInitModeNever},
+		{name: "mode never with options", mode: schema.TerraformInitModeNever, opts: &OutputOptions{}},
+	} {
+		t.Run(policy.name, func(t *testing.T) {
+			for name, state := range map[string]*schema.ComponentConfigurationState{
+				"no working directory": {BackendType: "local", Workspace: "prod"},
+				"not initialized":      {BackendType: "local", Workspace: "prod", WorkingDirectory: t.TempDir()},
+			} {
+				t.Run(name, func(t *testing.T) {
+					config := validAtmosConfig(t)
+					config.Components.Terraform.Init.Mode = policy.mode
+					config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+						return state, nil
+					})
+					sections := validSections()
+					sections["settings"] = map[string]any{"configuration": true}
+					executor := NewExecutor(nil, WithRunnerFactory(func(string, string) (TerraformRunner, error) {
+						t.Fatal("no Terraform process may start")
+						return nil, nil
+					}))
+					_, err := executor.execute(t.Context(), config, "network", "live", sections, nil, policy.opts, true)
+					require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
+				})
+			}
 		})
 	}
 }

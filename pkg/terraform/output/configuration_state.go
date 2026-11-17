@@ -170,7 +170,7 @@ func configurationInitializedOutputConfig(config *ComponentConfig, state *schema
 	if state.WorkingDirectory == "" {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithExplanationf("Component '%s' in stack '%s' reported no working directory to read outputs from without init.", component, stack).
-			WithHint("Run the command without --skip-init so Atmos can initialize a temporary state reader").
+			WithHint("Allow initialization with init.mode: auto and without --skip-init so Atmos can initialize a temporary state reader").
 			Err()
 	}
 	dataDir := configurationDataDir(config)
@@ -180,7 +180,7 @@ func configurationInitializedOutputConfig(config *ComponentConfig, state *schema
 	if info, err := os.Stat(dataDir); err != nil || !info.IsDir() {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithExplanationf("Component '%s' in stack '%s' has not been initialized in %s.", component, stack, state.WorkingDirectory).
-			WithHint("Run the command without --skip-init so Atmos can initialize a temporary state reader").
+			WithHint("Allow initialization with init.mode: auto and without --skip-init so Atmos can initialize a temporary state reader").
 			Err()
 	}
 	config.ComponentPath = state.WorkingDirectory
@@ -221,8 +221,8 @@ func remoteStateOverrides(remote map[string]any, remoteType, placeholderType str
 // configurationStateReader points config at the directory a plugin-owned state read runs in and
 // returns its cleanup. Skipping init reads the unit's already-initialized directory as it is;
 // otherwise a disposable backend-only scratch directory is initialized.
-func configurationStateReader(config *ComponentConfig, state *schema.ComponentConfigurationState, opts *OutputOptions, component, stack string) (func(), error) {
-	if opts != nil && opts.SkipInit {
+func configurationStateReader(config *ComponentConfig, state *schema.ComponentConfigurationState, skipInit bool, component, stack string) (func(), error) {
+	if skipInit {
 		return func() {}, configurationInitializedOutputConfig(config, state, component, stack)
 	}
 	return configurationOutputConfig(config, state)
