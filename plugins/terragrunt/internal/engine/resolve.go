@@ -58,8 +58,10 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 	if err != nil {
 		return nil, err
 	}
-	// The sink buffers the unit path until configuration values can be redacted.
+	// Only static, path-free progress is safe before evaluation discovers secrets.
+	// The sink buffers the detailed event until configuration values can be redacted.
 	if sink := logSinkFrom(ctx); sink != nil {
+		sink.Event(log.InfoLevel, "Starting unit evaluation", "")
 		sink.Event(log.InfoLevel, "Evaluating unit", filepath.Dir(path))
 	}
 	ctx = config.WithCaches(ctx)

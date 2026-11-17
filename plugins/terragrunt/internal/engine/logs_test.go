@@ -530,3 +530,31 @@ func TestLogSinkBuffersUnitPathsUntilSensitiveValuesAreRegistered(t *testing.T) 
 	assert.Empty(t, entries[0].Unit)
 	assert.Contains(t, entries[0].Message, "withheld")
 }
+
+func TestResolveForwardsPathFreeProgressAndBuffersRedactedDetails(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	request := nativeUnitAt(t, filepath.Join(root, "private-unit"), "locals { token = sensitive(\"private-unit\") }\n")
+	request.BasePath = root
+	sink := NewLogSink("debug", root)
+	var forwarded []model.LogEntry
+	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, *entry) })
+
+	_, err = Resolve(WithLogSink(t.Context(), sink), request)
+
+	require.NoError(t, err)
+	require.Len(t, forwarded, 1)
+	assert.Equal(t, "Starting unit evaluation", forwarded[0].Message)
+	assert.Equal(t, "info", forwarded[0].Level)
+	assert.Empty(t, forwarded[0].Unit)
+	assert.Empty(t, forwarded[0].Fields)
+	var detailed []model.LogEntry
+	for _, entry := range sink.Entries() {
+		assert.NotContains(t, entry.Unit, "private-unit")
+		if entry.Message == "Evaluating unit" {
+			detailed = append(detailed, entry)
+		}
+	}
+	require.Len(t, detailed, 1)
+	assert.Equal(t, "<MASKED>", detailed[0].Unit)
+}

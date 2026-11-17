@@ -116,13 +116,15 @@ func buildGateTool(t *testing.T) string {
 // A unit whose inputs run a command that stays open until the test releases it, like a slow run_cmd, a
 // registry fetch, or an STS exchange does in real use.
 const slowUnit = `terraform { source = "../../../modules/unit" }
+locals { path_token = sensitive("live") }
 inputs = { greeting = run_cmd("--terragrunt-quiet", "%s", "--wait-for", "%s") }
 `
 
 // TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating runs the real CLI, the real plugin, and
 // real OpenTofu. A unit's evaluation is held open by a command; the test watches stderr as the process
-// writes it and releases the command only after the earlier log line of that unit is visible. If the plugin
-// returned its log events with the result, the line could not appear first, the command would never be
+// writes it and releases the command only after path-free progress is visible. Detailed unit paths must
+// wait until evaluation registers sensitive values. If the plugin returned all its log events with the
+// result, the progress line could not appear first, the command would never be
 // released, and the unit would fail on the helper's own time limit.
 func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T) {
 	if testing.Short() {
@@ -172,19 +174,22 @@ func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T)
 		defer func() { _ = os.WriteFile(gate, nil, 0o600) }()
 
 		require.Eventually(t, func() bool {
-			_, seen := stderr.find("Evaluating unit", "component=slow", "stack=dev")
+			_, seen := stderr.find("Starting unit evaluation", "component=slow", "stack=dev")
 			return seen
 		}, 2*time.Minute, 10*time.Millisecond, "the unit's log line never appeared while its command was open:\n%s", stderr.text())
 		// Only preparing the unit scopes an event to its component and stack, and preparing is the call that
 		// runs the held command right after logging this line.
-		early, _ := stderr.find("Evaluating unit", "component=slow", "stack=dev")
+		early, _ := stderr.find("Starting unit evaluation", "component=slow", "stack=dev")
 		select {
 		case <-cli.done:
 			t.Fatalf("the command finished before it was released (%v), so the line was not delivered live:\n%s", cli.err, stderr.text())
 		default:
 		}
-		assert.Contains(t, early.Text, "unit=live/dev/slow")
+		assert.NotContains(t, early.Text, "unit=", "paths may contain secrets not yet discovered")
+		assert.NotContains(t, early.Text, "live/dev/slow")
 		assert.Contains(t, early.Text, "plugin=terragrunt")
+		_, detailed := stderr.find("Evaluating unit", "component=slow", "stack=dev")
+		assert.False(t, detailed, "unit details must wait for sensitivity registration")
 
 		released := time.Now()
 		require.NoError(t, os.WriteFile(gate, nil, 0o600))
@@ -193,6 +198,13 @@ func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T)
 		require.NoError(t, err, "stderr:\n%s", stderr.text())
 		assert.True(t, early.At.Before(released), "line at %s, release at %s", early.At, released)
 		assert.True(t, released.Before(finished))
+		late, found := stderr.find("Evaluating unit", "component=slow", "stack=dev")
+		require.True(t, found, "the completed evaluation must deliver redacted details:\n%s", stderr.text())
+		assert.Contains(t, late.Text, "unit=<MASKED>/dev/slow")
+		assert.NotContains(t, late.Text, "unit=live/dev/slow")
+		assert.Contains(t, late.Text, "plugin=terragrunt")
+		assert.True(t, released.Before(late.At), "detailed event must arrive after the gate opens")
+		assert.NotContains(t, stdout.text(), "Starting unit evaluation", "progress never reaches the data channel")
 		assert.NotContains(t, stdout.text(), "Evaluating unit", "log events never reach the data channel")
 	})
 
@@ -201,6 +213,8 @@ func TestTerragruntLogsReachTheTerminalWhileAUnitIsStillEvaluating(t *testing.T)
 		cli := run(t, "terraform", "plan", "slow", "-s", "dev")
 		stdout, stderr := cli.stdout, cli.stderr
 		require.NoError(t, cli.wait(), "stderr:\n%s", stderr.text())
+		assert.NotContains(t, stderr.text(), "Starting unit evaluation")
+		assert.NotContains(t, stdout.text(), "Starting unit evaluation")
 		assert.NotContains(t, stderr.text(), "Evaluating unit")
 		assert.NotContains(t, stdout.text(), "Evaluating unit")
 	})
