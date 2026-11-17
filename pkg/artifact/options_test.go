@@ -77,6 +77,11 @@ func TestOptionsValidate(t *testing.T) {
 		{name: "s3 empty tag key", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{"": "v"}}, wantErr: "must be 1-128 characters"},
 		{name: "s3 too many tags", options: &S3Options{Bucket: "acme-artifacts", Tags: elevenTags()}, wantErr: "exceed the S3 limit"},
 		{name: "s3 bad key pattern", options: &S3Options{Bucket: "acme-artifacts", KeyPattern: "../x"}, wantErr: "segment"},
+		{name: "s3 emulator endpoint", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "http://localhost:4566"}},
+		{name: "s3 endpoint without scheme", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "localhost:4566"}, wantErr: "http or https"},
+		{name: "s3 endpoint with file scheme", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "file:///tmp/x"}, wantErr: "http or https"},
+		{name: "s3 endpoint without host", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "https://"}, wantErr: "no host"},
+		{name: "s3 endpoint with credentials", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "https://user:pass@example.com"}, wantErr: "credentials"},
 		{name: "registry ok", options: &OCIRegistryOptions{Registry: "ghcr.io", Prefix: "acme/atmos"}},
 		{name: "registry with port", options: &OCIRegistryOptions{Registry: "localhost:5000"}},
 		{name: "registry max port", options: &OCIRegistryOptions{Registry: "localhost:65535"}},
@@ -210,4 +215,81 @@ func TestValidationCreatesNothing(t *testing.T) {
 	entries, err := os.ReadDir(root)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "validation must not create destination directories")
+}
+
+func TestDecodeOptions_S3EndpointAndPathStyle(t *testing.T) {
+	var options S3Options
+	require.NoError(t, DecodeOptions(map[string]any{"bucket": "acme-artifacts", "endpoint": "http://localhost:4566", "path_style": true}, &options))
+	assert.Equal(t, "http://localhost:4566", options.Endpoint)
+	require.NotNil(t, options.PathStyle)
+	assert.True(t, *options.PathStyle)
+
+	var defaults S3Options
+	require.NoError(t, DecodeOptions(map[string]any{"bucket": "acme-artifacts"}, &defaults))
+	assert.Nil(t, defaults.PathStyle, "an omitted path_style keeps the endpoint-dependent default")
+
+	err := DecodeOptions(map[string]any{"bucket": "acme-artifacts", "path_style": "yes please"}, &S3Options{})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+}
+
+// TestValidateEndpoint_NeverEchoesCredentials guards that no endpoint diagnostic, including scheme
+// and parse failures, repeats credentials embedded in the configured endpoint.
+func TestValidateEndpoint_NeverEchoesCredentials(t *testing.T) {
+	const secret = "s3cr3t-password"
+	tests := []struct {
+		name     string
+		endpoint string
+		wantErr  string
+	}{
+		{name: "wrong scheme with credentials", endpoint: "ftp://user:" + secret + "@example.com", wantErr: "credentials"},
+		{name: "parse failure with credentials", endpoint: "http://user:" + secret + "@exa mple.com", wantErr: "not a valid URL"},
+		{name: "bad port with credentials", endpoint: "http://user:" + secret + "@example.com:port", wantErr: "not a valid URL"},
+		{name: "no host with credentials", endpoint: "https://user:" + secret + "@", wantErr: "credentials"},
+		{name: "valid scheme with credentials", endpoint: "https://user:" + secret + "@example.com", wantErr: "credentials"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEndpoint(tt.endpoint)
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.NotContains(t, err.Error(), secret)
+		})
+	}
+}
+
+// TestOCIRegistryOptionsValidate_NeverEchoesCredentials guards that a registry diagnostic repeats
+// the configured value only with any embedded userinfo redacted.
+func TestOCIRegistryOptionsValidate_NeverEchoesCredentials(t *testing.T) {
+	const (
+		secret = "s3cr3t-password"
+		user   = "svc-deploy"
+	)
+	tests := []struct {
+		name     string
+		registry string
+		wantErr  string
+	}{
+		{name: "userinfo only", registry: user + ":" + secret + "@registry.example.com", wantErr: RedactedValue},
+		{name: "scheme and userinfo", registry: "https://" + user + ":" + secret + "@registry.example.com", wantErr: "https://registry.example.com"},
+		{name: "userinfo and path", registry: "https://" + user + ":" + secret + "@registry.example.com/acme/atmos", wantErr: "https://registry.example.com/acme/atmos"},
+		{name: "token without password", registry: secret + "@registry.example.com:5000", wantErr: RedactedValue},
+		{name: "scheme-relative userinfo", registry: "//" + user + ":" + secret + "@registry.example.com", wantErr: "//registry.example.com"},
+		{name: "scheme-relative userinfo and path", registry: "//" + user + ":" + secret + "@registry.example.com/acme/atmos", wantErr: "//registry.example.com/acme/atmos"},
+		{name: "scheme-relative token without password", registry: "//" + secret + "@registry.example.com:5000", wantErr: "//registry.example.com:5000"},
+		{name: "malformed escape with userinfo", registry: "https://" + user + ":" + secret + "@registry.example.com/%zz", wantErr: RedactedValue},
+		{name: "unparsable host with userinfo", registry: "https://" + user + ":" + secret + "@exa mple.com", wantErr: RedactedValue},
+		{name: "scheme-relative without credentials stays visible", registry: "//registry.example.com", wantErr: "//registry.example.com"},
+		{name: "scheme without credentials stays visible", registry: "https://registry.example.com", wantErr: "https://registry.example.com"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := (&OCIRegistryOptions{Registry: tt.registry}).Validate()
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			// The security property holds whatever the redacted format is: neither the secret nor
+			// the user name appears anywhere in the error text.
+			assert.False(t, strings.Contains(err.Error(), secret), "the secret must never be echoed: %q", err.Error())
+			assert.False(t, strings.Contains(err.Error(), user), "the user name must never be echoed: %q", err.Error())
+		})
+	}
 }

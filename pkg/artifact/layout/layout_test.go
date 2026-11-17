@@ -550,3 +550,28 @@ func TestOperationRejectsUnsafePriorLocation(t *testing.T) {
 	op := &Operation{SchemaVersion: SchemaVersion, RepositoryKind: artifact.RepositoryKindLocalDir, OperationID: "op", Name: "team/app", Version: "1", CapturedAt: artifact.NewTimestamp(time.Now()), Location: "safe", Payload: []ocispec.Descriptor{}, Documents: []ocispec.Descriptor{}, Prior: &Prior{RecordDigest: digestA, Location: artifact.ReservedNamespace + "/unsafe"}}
 	require.Error(t, op.Validate())
 }
+
+func TestOperation_AbandonedPayloadsAreJournaledAndValidated(t *testing.T) {
+	op := sampleOperation()
+	op.Abandoned = []Retired{
+		{Packaging: artifact.PackagingTgz, Location: "team/app/1.0.0.tgz"},
+		{Packaging: artifact.PackagingNone, Location: "team/app/1.0.0", Files: []string{"a.txt", "dir/b.txt"}, Docs: []string{"README.md"}},
+	}
+	raw, err := op.Marshal()
+	require.NoError(t, err)
+	decoded, err := DecodeOperation(raw)
+	require.NoError(t, err)
+	assert.Equal(t, op.Abandoned, decoded.Abandoned, "every abandoned payload survives the journal")
+
+	plain := sampleOperation()
+	raw, err = plain.Marshal()
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "abandoned", "a journal without abandoned payloads is unchanged on disk")
+
+	for _, location := range []string{"", "../escape", "/absolute", "a/../../b"} {
+		broken := sampleOperation()
+		broken.Abandoned = []Retired{{Packaging: artifact.PackagingTgz, Location: location}}
+		_, err = broken.Marshal()
+		require.ErrorIs(t, err, errUtils.ErrArtifactRecordInvalid, "abandoned location %q", location)
+	}
+}

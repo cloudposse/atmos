@@ -23,14 +23,16 @@ const probeOperation = "probe"
 
 const probeCleanupTimeout = 5 * time.Second
 
-// ensureConditional makes sure a conditional operation is safe to send. In probe mode it first
-// proves, once per store, that the endpoint enforces If-None-Match and If-Match; an endpoint that silently
-// ignores the header would otherwise turn create-if-absent into an unconditional overwrite.
-func (s *Store) ensureConditional(ctx context.Context, key string, cond blob.Condition) error {
+// ensureConditional makes sure a conditional operation is safe to send through api. In probe mode
+// it first proves, once per endpoint, that the endpoint enforces If-None-Match and If-Match; an
+// endpoint that silently ignores the header would otherwise turn create-if-absent into an
+// unconditional overwrite. The verdict covers the endpoint of api, the client the operation is
+// about to use, so a named identity that now resolves to another endpoint is probed again.
+func (s *Store) ensureConditional(ctx context.Context, api API, key string, cond blob.Condition) error {
 	if !cond.IsConditional() || s.cfg.conditional != ConditionalProbe {
 		return nil
 	}
-	if err := s.ProbeConditionalWrites(ctx); err != nil {
+	if err := s.probeConditional(ctx, api); err != nil {
 		return unsupportedConditionalFrom(key, err)
 	}
 	return nil
@@ -48,13 +50,26 @@ func unsupportedConditionalFrom(key string, probeErr error) error {
 // object twice: the second create must be rejected. It then checks that stale If-Match validators
 // are rejected on PutObject and DeleteObject. The guarantee covers those single-object requests
 // only; conditional enforcement on CompleteMultipartUpload is not probed. A definite answer is
-// cached for the life of the store; a transient failure is returned without being cached. It
+// cached for the endpoint it probed; a different endpoint, which a named identity can resolve to
+// at any time, is probed again. A transient failure is returned without being cached. It
 // returns an error matching ErrBlobConditionalUnsupported when the endpoint ignores or rejects the
 // condition.
 func (s *Store) ProbeConditionalWrites(ctx context.Context) error {
 	defer perf.Track(nil, "blob.s3.ProbeConditionalWrites")()
 
-	if verdict, cached := s.cachedProbe(); cached {
+	api, err := s.client(ctx)
+	if err != nil {
+		return err
+	}
+	return s.probeConditional(ctx, api)
+}
+
+// probeConditional probes the endpoint of api unless its verdict is already cached. One probe runs
+// at a time; a waiting operation gives up when its context ends instead of blocking on the probe
+// in flight.
+func (s *Store) probeConditional(ctx context.Context, api API) error {
+	endpoint := endpointOf(api)
+	if verdict, cached := s.cachedProbe(endpoint); cached {
 		return verdict
 	}
 	select {
@@ -64,12 +79,8 @@ func (s *Store) ProbeConditionalWrites(ctx context.Context) error {
 		return blob.NewError(blob.KindOther, probeOperation, "", ctx.Err())
 	}
 	// Another operation may have finished the probe while this one waited for the slot.
-	if verdict, cached := s.cachedProbe(); cached {
+	if verdict, cached := s.cachedProbe(endpoint); cached {
 		return verdict
-	}
-	api, err := s.client(ctx)
-	if err != nil {
-		return err
 	}
 	verdict, cleanupErr := s.runProbe(ctx, api)
 	if cleanupErr != nil {
@@ -79,17 +90,35 @@ func (s *Store) ProbeConditionalWrites(ctx context.Context) error {
 	}
 	if verdict == nil || blob.IsConditionalUnsupported(verdict) {
 		s.probeMu.Lock()
-		s.probed, s.probeError = true, verdict
+		s.probed, s.probedEndpoint, s.probeError = true, endpoint, verdict
 		s.probeMu.Unlock()
 	}
 	return verdict
 }
 
-// cachedProbe returns the cached probe verdict, when a definite one exists.
-func (s *Store) cachedProbe() (verdict error, cached bool) {
+// cachedProbe returns the cached probe verdict, when a definite one exists for endpoint.
+func (s *Store) cachedProbe(endpoint string) (verdict error, cached bool) {
 	s.probeMu.Lock()
 	defer s.probeMu.Unlock()
-	return s.probeError, s.probed
+	if !s.probed || s.probedEndpoint != endpoint {
+		return nil, false
+	}
+	return s.probeError, true
+}
+
+// endpointOf names the endpoint a client targets: its base endpoint override, or its region for
+// the standard AWS endpoint. A client that does not expose its options, such as a test double or
+// an injected wrapper, has one fixed endpoint for the life of the store.
+func endpointOf(api API) string {
+	reporter, ok := api.(interface{ Options() s3.Options })
+	if !ok {
+		return ""
+	}
+	options := reporter.Options()
+	if options.BaseEndpoint != nil && *options.BaseEndpoint != "" {
+		return *options.BaseEndpoint
+	}
+	return "region:" + options.Region
 }
 
 // runProbe performs the double create and removes the probe object. The verdict is the probe

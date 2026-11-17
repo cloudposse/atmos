@@ -83,11 +83,11 @@ func (s *Store) planPut(ctx context.Context, key string, opts blob.PutOptions) (
 	if err := s.Capabilities().CheckPut(storeName, key, opts.Condition); err != nil {
 		return nil, err
 	}
-	if err := s.ensureConditional(ctx, key, opts.Condition); err != nil {
-		return nil, err
-	}
 	api, err := s.client(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureConditional(ctx, api, key, opts.Condition); err != nil {
 		return nil, err
 	}
 	return &putPlan{

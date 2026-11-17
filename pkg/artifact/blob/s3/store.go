@@ -24,10 +24,11 @@ type Store struct {
 	// lets a waiting operation give up when its context ends.
 	probeSlot chan struct{}
 
-	// probeMu guards the cached verdict below.
-	probeMu    sync.Mutex
-	probed     bool
-	probeError error
+	// probeMu guards the cached verdict below, which is bound to the endpoint it probed.
+	probeMu        sync.Mutex
+	probed         bool
+	probedEndpoint string
+	probeError     error
 }
 
 // New returns a Store for bucket. No network or credential work happens until the first operation.
@@ -82,8 +83,8 @@ func (s *Store) Capabilities() blob.Capabilities {
 	}
 }
 
-// client returns the S3 client, building it on first use. A failed build is not cached, so a
-// transient identity failure can be retried by the next operation.
+// client builds named-identity clients per operation so refreshed identity files and endpoint
+// configuration are observed. Injected clients and the default credential chain stay cached.
 func (s *Store) client(ctx context.Context) (API, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -94,8 +95,10 @@ func (s *Store) client(ctx context.Context) (API, error) {
 	if err != nil {
 		return nil, blob.NewError(blob.KindIdentity, "client", "", err)
 	}
-	s.api = client
-	return s.api, nil
+	if s.cfg.client.Identity == "" {
+		s.api = client
+	}
+	return client, nil
 }
 
 // validateKey applies the configured key rules.

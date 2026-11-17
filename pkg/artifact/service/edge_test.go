@@ -399,7 +399,7 @@ func TestCopy_EvidenceCarryFailuresAreReported(t *testing.T) {
 	}{e.repos["src"], reader}
 
 	result, err := e.svc.Copy(context.Background(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst"})
-	require.NoError(t, err)
+	require.Error(t, err)
 	var warned bool
 	for _, diagnostic := range result.Diagnostics {
 		warned = warned || diagnostic.Code == "evidence-read-failed"

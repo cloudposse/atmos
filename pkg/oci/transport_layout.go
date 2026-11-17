@@ -347,6 +347,46 @@ func withReference(entries []ocispec.Descriptor, named ocispec.Descriptor) []oci
 	return append(entries, named)
 }
 
+// Untag removes a named root from index.json without touching blobs, which may be shared by
+// other references. Digest references are implicit and cannot be untagged.
+func (l *Layout) Untag(ctx context.Context, reference string) error {
+	defer perf.Track(nil, "oci.Layout.Untag")()
+
+	// Reject an empty reference before filtering: it would match every unnamed root, including
+	// attachment roots, and index.json would be rewritten before the store refused the call.
+	if reference == "" {
+		return layoutError(errdef.ErrMissingReference)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	kept := l.index[:0:0]
+	var removed []ocispec.Descriptor
+	for i := range l.index {
+		if l.index[i].Annotations[ocispec.AnnotationRefName] != reference {
+			kept = append(kept, l.index[i])
+		} else {
+			removed = append(removed, l.index[i])
+		}
+	}
+	// A root that loses its only name stays listed when it is an attachment, as when a tag moves away
+	// from it: without its own entry it would no longer be a referrer of its subject after a reopen.
+	for i := range removed {
+		var err error
+		if kept, err = l.keepDisplacedAttachment(ctx, kept, removed[i]); err != nil {
+			return err
+		}
+	}
+	// Persist index.json before touching the store: a failed write leaves the handle and the file
+	// unchanged, so the same call can be retried.
+	if err := l.commitIndex(kept); err != nil {
+		return err
+	}
+	if err := l.store.Untag(ctx, reference); err != nil {
+		return layoutError(err)
+	}
+	return nil
+}
+
 // References returns the named roots in index.json in insertion order.
 func (l *Layout) References() []string {
 	defer perf.Track(nil, "oci.Layout.References")()

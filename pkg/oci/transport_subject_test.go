@@ -81,6 +81,42 @@ func TestLayoutPush_RecordsOnlyManifestsThatNameASubject(t *testing.T) {
 	}
 }
 
+// An empty reference is rejected before index.json is filtered: it would otherwise drop every
+// unnamed root, including attachment roots, and persist that before the store refuses the call.
+func TestLayoutUntag_EmptyReferenceLeavesTheIndexUnchanged(t *testing.T) {
+	ctx := t.Context()
+	directory := filepath.Join(t.TempDir(), "layout")
+	layout, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	attachment := `{"schemaVersion":2,"subject":` + subject + `}`
+	attachmentDescriptor := oci.Descriptor(ocispec.MediaTypeImageManifest, []byte(attachment))
+	require.NoError(t, layout.Push(ctx, attachmentDescriptor, strings.NewReader(attachment)))
+	named := `{"schemaVersion":2,"layers":[]}`
+	namedDescriptor := oci.Descriptor(ocispec.MediaTypeImageManifest, []byte(named))
+	require.NoError(t, layout.Push(ctx, namedDescriptor, strings.NewReader(named)))
+	require.NoError(t, layout.Tag(ctx, namedDescriptor, "app:1"))
+	wantRoots := []string{attachmentDescriptor.Digest.String(), namedDescriptor.Digest.String()}
+	require.Equal(t, wantRoots, layoutRoots(t, directory), "the unnamed attachment root and the named root are listed")
+	before, err := os.ReadFile(filepath.Join(directory, ocispec.ImageIndexFile))
+	require.NoError(t, err)
+
+	err = layout.Untag(ctx, "")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrOCILayout)
+
+	after, err := os.ReadFile(filepath.Join(directory, ocispec.ImageIndexFile))
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "the persisted index is untouched")
+	assert.Equal(t, wantRoots, layoutRoots(t, directory))
+	assert.Equal(t, []string{"app:1"}, layout.References())
+
+	reopened, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"app:1"}, reopened.References())
+}
+
 // pushSubjectManifest pushes an image manifest that optionally names a subject and returns its descriptor.
 func pushSubjectManifest(t *testing.T, layout *oci.Layout, subject *ocispec.Descriptor, note string) ocispec.Descriptor {
 	t.Helper()
@@ -151,6 +187,31 @@ func TestResolveDoesNotTrustATagThatWasNotPersisted(t *testing.T) {
 	resolved, err := layout.Resolve(ctx, root.Digest.String())
 	require.NoError(t, err, "a digest reference still resolves")
 	assert.Equal(t, root.Digest, resolved.Digest)
+}
+
+// Removing an attachment's last name must not drop the attachment from the layout: it stays an unnamed
+// root, so reopening the layout still finds it as a referrer of its subject.
+func TestUntagPreservesTheAttachmentRoot(t *testing.T) {
+	ctx := t.Context()
+	directory := filepath.Join(t.TempDir(), "layout")
+	layout, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	subject := pushSubjectManifest(t, layout, nil, "subject")
+	attachment := pushSubjectManifest(t, layout, &subject, "attachment")
+	require.NoError(t, layout.Tag(ctx, attachment, "named"))
+
+	require.NoError(t, layout.Untag(ctx, "named"))
+
+	reopened, err := oci.OpenLayout(ctx, directory)
+	require.NoError(t, err)
+	assert.NotContains(t, reopened.References(), "named", "the name is gone")
+	referrers, err := reopened.Predecessors(ctx, subject)
+	require.NoError(t, err)
+	digests := make([]string, 0, len(referrers))
+	for _, referrer := range referrers {
+		digests = append(digests, referrer.Digest.String())
+	}
+	assert.Contains(t, digests, attachment.Digest.String(), "the attachment is still discoverable after reopening")
 }
 
 // A relative layout root is anchored when the layout is opened: changing the working directory afterwards
