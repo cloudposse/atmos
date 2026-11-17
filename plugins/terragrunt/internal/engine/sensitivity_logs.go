@@ -1,11 +1,16 @@
 package engine
 
 import (
+	"context"
 	"path/filepath"
 
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
 // sensitivityScan records what the evaluation of a request told the log sink, so the files it read can be
@@ -279,4 +284,59 @@ func callsSensitive(node hclsyntax.Node) bool {
 		return nil
 	})
 	return found
+}
+
+// resolve evaluates one unit: it guards destroy, parses the unit, applies
+// policies, and assembles the resolution with its execution data, backend, overlay,
+// and generated files.
+func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
+	environment, pctx, request, path := u.environment, u.pctx, &u.request, u.path
+	if err := u.checkDestroyGuard(ctx); err != nil {
+		return nil, err
+	}
+	cfg, err := u.parseUnit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var sensitiveInputs [][]string
+	if request.Phase != phaseBackend {
+		sensitiveInputs = redactUnitInputs(logSinkFrom(ctx), environment.FS, append(pctx.FilesRead.Paths(), path), path, cfg.Inputs)
+		redactLocals(logSinkFrom(ctx), environment.FS, path, cfg.Locals)
+		scan.registered = true
+	}
+	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
+		return nil, err
+	}
+	return u.buildResolution(ctx, cfg, &unitSensitivity{inputs: sensitiveInputs, scan: scan})
+}
+
+// buildResolution assembles the resolution of a parsed unit. The execution is
+// set before the backend resolves so the backend step sees the final result.
+func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.TerragruntConfig, sensitivity *unitSensitivity) (*model.Resolution, error) {
+	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, u.request, u.path
+	execution, applyFiles, err := u.unitExecution(ctx, cfg)
+	sensitivity.scan.applyFiles = applyFiles
+	if err != nil {
+		return nil, err
+	}
+	result, err := (&inventoryReader{ctx: ctx, logger: logger, environment: environment}).unitResolution(pctx, &request, cfg, path)
+	if err != nil {
+		return nil, err
+	}
+	result.Execution = execution
+	result.SensitiveInputs = sensitivity.inputs
+	result.Files = append(result.Files, applyFiles...)
+	if err := resolveBackend(cfg, result, &request); err != nil {
+		return nil, err
+	}
+	if request.Phase != phaseBackend {
+		result.Overlay, result.OverlayModes, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := generatedFiles(ctx, logger, cfg, result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
