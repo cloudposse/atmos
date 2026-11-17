@@ -30,15 +30,17 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 		return nil, rpcError(err)
 	}
 	addresses := map[string]*pluginv1.ComponentAddress{}
-	for _, unit := range result.Inventory {
+	for i := range result.Inventory {
+		unit := &result.Inventory[i]
 		addresses[unit.Config.Path] = &pluginv1.ComponentAddress{Stack: unit.Stack, Component: unit.Name, ComponentType: "terraform"}
 	}
 	response := &pluginv1.DiscoverComponentsResponse{}
 	for _, failure := range result.Failures {
 		response.Diagnostics = append(response.Diagnostics, unitDiagnostic(req.BasePath, failure))
 	}
-	for _, unit := range result.Inventory {
-		discovered, err := discoveredUnit(req, unit, addresses)
+	for i := range result.Inventory {
+		unit := &result.Inventory[i]
+		discovered, err := discoveredUnit(&req, unit, addresses)
 		if err != nil {
 			// One unit that cannot be described must not hide the others.
 			response.Diagnostics = append(response.Diagnostics, unitDiagnostic(req.BasePath, model.UnitFailure{Stack: unit.Stack, Name: unit.Name, Err: problemFor(err, unit.Config.Path)}))
@@ -50,25 +52,14 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 	return response, nil
 }
 
-func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[string]*pluginv1.ComponentAddress) (*pluginv1.DiscoveredComponent, error) {
+func discoveredUnit(req *model.Request, unit *model.DiscoveredUnit, addresses map[string]*pluginv1.ComponentAddress) (*pluginv1.DiscoveredComponent, error) {
 	source, err := relative(req.BasePath, unit.Config.Path)
 	if err != nil {
 		return nil, err
 	}
-	module := unit.Config.Source
-	if len(unit.Config.Folders) > 0 && (module == "" || filepath.IsAbs(module)) {
-		path := module
-		if path == "" {
-			path = unit.Config.Folders[0]
-		}
-		local, err := relative(req.BasePath, path)
-		if err != nil {
-			return nil, err
-		}
-		module = "./" + local
-	}
-	if module == "" {
-		return nil, ErrUnsupported
+	module, err := discoveredModule(req.BasePath, &unit.Config)
+	if err != nil {
+		return nil, err
 	}
 	generation := ""
 	if unit.GenerationRoot != "" {
@@ -99,23 +90,53 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 		return nil, err
 	}
 	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: engineName(req.Tofu), Source: source, Configuration: config, Sources: watched}
-	for _, path := range unit.Config.Dependencies {
+	instance.Dependencies, err = discoveredDependencies(req.BasePath, &unit.Config, addresses)
+	if err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
+// discoveredModule resolves local module identities relative to the project.
+func discoveredModule(root string, cfg *model.Resolution) (string, error) {
+	module := cfg.Source
+	if len(cfg.Folders) > 0 && (module == "" || filepath.IsAbs(module)) {
+		path := module
+		if path == "" {
+			path = cfg.Folders[0]
+		}
+		local, err := relative(root, path)
+		if err != nil {
+			return "", err
+		}
+		module = "./" + local
+	}
+	if module == "" {
+		return "", ErrUnsupported
+	}
+	return module, nil
+}
+
+// discoveredDependencies binds evaluated dependency paths to discovered addresses.
+func discoveredDependencies(root string, cfg *model.Resolution, addresses map[string]*pluginv1.ComponentAddress) ([]*pluginv1.ComponentDependency, error) {
+	var dependencies []*pluginv1.ComponentDependency
+	for _, path := range cfg.Dependencies {
 		target := addresses[path]
 		if target == nil {
 			// The target is outside this evaluation (not discovered, or imported on its own).
 			// Name it the way discovery would, so the host can decide whether it exists.
 			var err error
-			if target, err = derivedAddress(req.BasePath, path); err != nil {
+			if target, err = derivedAddress(root, path); err != nil {
 				return nil, err
 			}
 		}
 		kind := pluginv1.ComponentDependency_ORDER
-		if slices.Contains(unit.Config.OutputDependencies, path) {
+		if slices.Contains(cfg.OutputDependencies, path) {
 			kind = pluginv1.ComponentDependency_OUTPUT
 		}
-		instance.Dependencies = append(instance.Dependencies, &pluginv1.ComponentDependency{Target: target, Kind: kind})
+		dependencies = append(dependencies, &pluginv1.ComponentDependency{Target: target, Kind: kind})
 	}
-	return instance, nil
+	return dependencies, nil
 }
 
 // importPaths adds explicit files or directory roots to the same scoped inventory.

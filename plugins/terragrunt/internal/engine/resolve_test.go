@@ -46,7 +46,7 @@ inputs = { large = 9007199254740993, nested = { nullable = null, enabled = false
 `)
 	result, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
-	require.Equal(t, filepath.Join(result.WorkingDir, "relative/state.tfstate"), result.Backend["path"])
+	require.Equal(t, filepath.Join(result.WorkingDir, "relative", "state.tfstate"), result.Backend["path"])
 	require.Equal(t, "# {{ keep }} ${literal}\n", result.Generated["literal.tf"])
 	require.Equal(t, json.Number("9007199254740993"), result.Inputs["large"])
 	require.NoFileExists(t, filepath.Join(filepath.Dir(request.Path), "literal.tf"))

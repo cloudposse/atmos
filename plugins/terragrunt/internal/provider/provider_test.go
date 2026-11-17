@@ -42,7 +42,7 @@ func TestPreparationAndStateUseSeparatePhases(t *testing.T) {
 		phases = append(phases, req.Phase)
 		if req.Phase == "discover" {
 			require.Equal(t, "generate", req.Command)
-			require.Equal(t, filepath.Join(request.RootDirectory, "live/terragrunt.stack.hcl"), req.Path)
+			require.Equal(t, filepath.Join(request.RootDirectory, "live", "terragrunt.stack.hcl"), req.Path)
 		}
 		return &model.Resolution{Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: filepath.Join(request.RootDirectory, "cache"), Inputs: map[string]any{"payload": "fresh"}, BackendType: "local", Backend: map[string]any{"path": "relative.tfstate"}, Generated: map[string]string{"z.tf": "{{ literal }}", "a.tf": "${expression}"}, Files: []string{filepath.Join(request.RootDirectory, "root.hcl")}}, nil
 	})
