@@ -1185,11 +1185,14 @@ type TerraformPlan struct {
 }
 
 // PlanfilesConfig contains configuration for planfile storage backends.
+//
+// The storage key layout is intentionally not configurable: stored plans are always keyed
+// `{stack}/{component}/{sha}.tfplan.tar`. Listing (S3 prefix queries), source-tree
+// references (`tree-` keys), and the `atmos terraform planfile` commands all rely on that shape.
 type PlanfilesConfig struct {
-	Default    string                       `yaml:"default" json:"default" mapstructure:"default"`
-	Priority   []string                     `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
-	KeyPattern string                       `yaml:"key_pattern,omitempty" json:"key_pattern,omitempty" mapstructure:"key_pattern"`
-	Stores     map[string]PlanfileStoreSpec `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	Default  string                       `yaml:"default" json:"default" mapstructure:"default"`
+	Priority []string                     `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
+	Stores   map[string]PlanfileStoreSpec `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	// Verify controls drift verification of the stored planfile on `deploy`.
 	// One of: fail | warn | off. Empty means unset (defaults to fail under CI
 	// when planfile storage is configured, otherwise off).

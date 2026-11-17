@@ -204,7 +204,7 @@ func (s *Session) dependencyState(ctx context.Context, discovery *pluginv1.Disco
 		Provider: target.Provider, Address: target.Address, Source: target.Source, RootDirectory: s.root,
 		Configuration: target.Configuration, ProviderConfiguration: discovery.ProviderConfiguration,
 		Invocation: &pluginv1.Invocation{Environment: env},
-		Operation:  &pluginv1.ComponentOperation{Command: command, Mode: "native"},
+		Operation:  &pluginv1.ComponentOperation{Command: command, Mode: "native", Options: discovery.GetOperation().GetOptions()},
 	})
 	if err != nil {
 		return nil, err

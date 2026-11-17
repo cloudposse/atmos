@@ -90,21 +90,14 @@ func staticallyNonBackendGeneration(body hcl.Body) bool {
 	if diagnostics.HasErrors() {
 		return false
 	}
-	if attr, ok := content.Attributes["disable"]; ok {
-		value, diags := attr.Expr.Value(nil)
-		if diags.HasErrors() || !value.IsKnown() || value.IsNull() || value.Type() != cty.Bool {
-			return false
-		}
-		if value.True() {
-			return true
-		}
+	if disabled, known := literalGenerateDisabled(content.Attributes["disable"]); !known || disabled {
+		return known && disabled
 	}
 	path, ok := literalGenerateString(content.Attributes["path"])
 	if !ok || !filepath.IsLocal(path) || path == "." {
 		return false
 	}
-	lower := strings.ToLower(path)
-	if !strings.HasSuffix(lower, ".tf") && !strings.HasSuffix(lower, ".tf.json") {
+	if !terraformConfigurationFile(path) {
 		return true
 	}
 	text, ok := literalGenerateString(content.Attributes["contents"])
@@ -120,4 +113,21 @@ func literalGenerateString(attr *hcl.Attribute) (string, bool) {
 		return "", false
 	}
 	return value.AsString(), true
+}
+
+func literalGenerateDisabled(attr *hcl.Attribute) (bool, bool) {
+	if attr == nil {
+		return false, true
+	}
+	value, diags := attr.Expr.Value(nil)
+	if diags.HasErrors() || !value.IsKnown() || value.IsNull() || value.Type() != cty.Bool {
+		return false, false
+	}
+	return value.True(), true
+}
+
+// terraformConfigurationFile identifies generated files Terraform can load.
+func terraformConfigurationFile(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json")
 }

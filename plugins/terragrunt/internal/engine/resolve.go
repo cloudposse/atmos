@@ -17,7 +17,6 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/options"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
@@ -34,7 +33,7 @@ var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
 
 // resolve evaluates one request and describes any rejection as a model.Problem the user can act on.
 func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
-	result, err := resolveRequest(ctx, request, filesystem)
+	result, err := resolveRequest(ctx, &request, filesystem)
 	if err != nil {
 		return nil, problemFor(err, request.Path)
 	}
@@ -43,11 +42,11 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 
 // resolveRequest evaluates one request: it generates any owning stack, parses the path, and
 // dispatches to the stack, inventory, or unit evaluation.
-func resolveRequest(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
+func resolveRequest(ctx context.Context, request *model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
-	filesystem, err := backendGenerationOverlay(ctx, request, filesystem)
+	filesystem, err := backendGenerationOverlay(ctx, *request, filesystem)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +67,8 @@ func resolveRequest(ctx context.Context, request model.Request, filesystem afero
 	if err != nil {
 		return nil, err
 	}
-	pctx := requestParsingContext(request, path)
+	reader := &inventoryReader{ctx: ctx, logger: logger, environment: environment}
+	pctx := requestParsingContext(*request, path)
 	scan := &sensitivityScan{}
 	defer func() {
 		files := append(append(pctx.FilesRead.Paths(), path), scan.applyFiles...)
@@ -77,24 +77,35 @@ func resolveRequest(ctx context.Context, request model.Request, filesystem afero
 		}
 	}()
 	if request.Phase == "iam" {
-		return resolveIAM(ctx, logger, environment, pctx, request, path)
+		return reader.resolveIAM(pctx, request, path)
 	}
 	if filepath.Base(path) == stackFile {
-		return resolveStack(ctx, logger, environment, pctx, request, path)
+		return reader.resolveStack(pctx, request, path)
 	}
-	if err := checkRequestFeatureOverrides(ctx, logger, environment, pctx, request, path); err != nil {
+	if err := reader.checkRequestFeatureOverrides(pctx, request, path); err != nil {
 		return nil, err
 	}
-	if discovering(request) {
-		return resolveUnitInventory(ctx, logger, environment, pctx, request, path)
+	if discovering(*request) {
+		return reader.resolveUnitInventory(pctx, request, path)
 	}
-	return resolveUnit(ctx, logger, environment, pctx, request, path, scan)
+	unit := unitEvaluator{logger: logger, environment: environment, pctx: pctx, request: *request, path: path}
+	return unit.resolve(ctx, scan)
 }
 
-// resolveUnit evaluates one unit: it guards destroy, parses the unit, applies
+// unitEvaluator carries the parser dependencies shared by unit resolution stages.
+type unitEvaluator struct {
+	logger      log.Logger
+	environment *atmosbridge.Venv
+	pctx        *config.ParsingContext
+	request     model.Request
+	path        string
+}
+
+// resolve evaluates one unit: it guards destroy, parses the unit, applies
 // policies, and assembles the resolution with its execution data, backend, overlay,
 // and generated files.
-func resolveUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string, scan *sensitivityScan) (*model.Resolution, error) {
+func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
+	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, u.request, u.path
 	if err := checkDestroyGuard(ctx, logger, environment, pctx, request, path); err != nil {
 		return nil, err
 	}
@@ -103,27 +114,27 @@ func resolveUnit(ctx context.Context, logger log.Logger, environment *atmosbridg
 		return nil, err
 	}
 	var sensitiveInputs [][]string
-	if request.Phase != "backend" {
-		sensitiveInputs = SensitiveInputs(environment.FS, append(pctx.FilesRead.Paths(), path), cfg.Inputs)
-		redactInputs(logSinkFrom(ctx), cfg.Inputs, sensitiveInputs)
+	if request.Phase != phaseBackend {
+		sensitiveInputs = redactUnitInputs(logSinkFrom(ctx), environment.FS, append(pctx.FilesRead.Paths(), path), path, cfg.Inputs)
 		redactLocals(logSinkFrom(ctx), environment.FS, path, cfg.Locals)
 		scan.registered = true
 	}
-	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
+	if err := checkUnitPolicies(ctx, &request, cfg, path); err != nil {
 		return nil, err
 	}
-	return buildUnitResolution(ctx, logger, environment, pctx, request, cfg, path, &unitSensitivity{inputs: sensitiveInputs, scan: scan})
+	return u.buildResolution(ctx, cfg, &unitSensitivity{inputs: sensitiveInputs, scan: scan})
 }
 
-// buildUnitResolution assembles the resolution of a parsed unit. The execution is
+// buildResolution assembles the resolution of a parsed unit. The execution is
 // set before the backend resolves so the backend step sees the final result.
-func buildUnitResolution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string, sensitivity *unitSensitivity) (*model.Resolution, error) {
+func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.TerragruntConfig, sensitivity *unitSensitivity) (*model.Resolution, error) {
+	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, u.request, u.path
 	execution, applyFiles, err := unitExecution(ctx, logger, environment, pctx, request, cfg, path)
 	sensitivity.scan.applyFiles = applyFiles
 	if err != nil {
 		return nil, err
 	}
-	result, err := unitResolution(ctx, logger, environment, pctx, request, cfg, path)
+	result, err := (&inventoryReader{ctx: ctx, logger: logger, environment: environment}).unitResolution(pctx, &request, cfg, path)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +144,7 @@ func buildUnitResolution(ctx context.Context, logger log.Logger, environment *at
 	if err := resolveBackend(cfg, result, &request); err != nil {
 		return nil, err
 	}
-	if request.Phase != "backend" {
+	if request.Phase != phaseBackend {
 		result.Overlay, result.OverlayModes, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
 		if err != nil {
 			return nil, err
@@ -146,8 +157,12 @@ func buildUnitResolution(ctx context.Context, logger log.Logger, environment *at
 }
 
 const (
-	stackFile = "terragrunt.stack.hcl"
-	unitFile  = "terragrunt.hcl"
+	downloadDirEnv = "TG_DOWNLOAD_DIR"
+	phaseBackend   = "backend"
+	phaseDiscover  = "discover"
+	probeFileMode  = 0o644
+	stackFile      = "terragrunt.stack.hcl"
+	unitFile       = "terragrunt.hcl"
 	// Nested-stack recursion for generation and discovery stops at maxStackDepth.
 	maxStackDepth = 32
 )
@@ -157,12 +172,12 @@ const (
 // host probes IAM before the provider generates the stack, so on a clean checkout the unit
 // exists only in this overlay. The returned filesystem is the one the unit is then parsed from.
 func backendGenerationOverlay(ctx context.Context, request model.Request, filesystem afero.Fs) (afero.Fs, error) {
-	if (request.Phase != "backend" && request.Phase != "iam") || request.GenerationRoot == "" {
+	if (request.Phase != phaseBackend && request.Phase != "iam") || request.GenerationRoot == "" {
 		return filesystem, nil
 	}
 	filesystem = afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs())
 	generation := request
-	generation.Path, generation.Phase, generation.Command = request.GenerationRoot, "discover", "generate"
+	generation.Path, generation.Phase, generation.Command = request.GenerationRoot, phaseDiscover, "generate"
 	if _, err := resolve(ctx, generation, filesystem); err != nil {
 		return nil, err
 	}
@@ -198,17 +213,17 @@ func evaluationLogger(ctx context.Context, level string) (log.Logger, error) {
 }
 
 func discovering(request model.Request) bool {
-	return request.Phase == "discover" || request.Command == "discover"
+	return request.Phase == phaseDiscover || request.Command == phaseDiscover
 }
 
 func generating(request model.Request) bool {
-	return request.Command == "generate" && request.Phase != "backend"
+	return request.Command == "generate" && request.Phase != phaseBackend
 }
 
 // evaluationEnvironment uses the local maintained facade, which exposes the
 // pinned upstream virtual environment and scoped stack generation without
 // modifying upstream source.
-func evaluationEnvironment(ctx context.Context, request model.Request, filesystem afero.Fs, path string) (*atmosbridge.Venv, error) {
+func evaluationEnvironment(ctx context.Context, request *model.Request, filesystem afero.Fs, path string) (*atmosbridge.Venv, error) {
 	environment := atmosbridge.Environment(request.Environment, io.Discard, io.Discard)
 	if filesystem != nil {
 		environment = environment.WithFS(filesystem)
@@ -216,8 +231,8 @@ func evaluationEnvironment(ctx context.Context, request model.Request, filesyste
 	if _, err := environment.FS.Stat(path); err != nil {
 		return nil, err
 	}
-	if discovering(request) || request.Phase == "backend" || generating(request) {
-		environment = atmosbridge.Discovery(environment, generating(request))
+	if discovering(*request) || request.Phase == phaseBackend || generating(*request) {
+		environment = atmosbridge.Discovery(environment, generating(*request))
 	} else {
 		environment = atmosbridge.AWS(ctx, environment)
 	}
@@ -228,11 +243,11 @@ func evaluationEnvironment(ctx context.Context, request model.Request, filesyste
 // discovery and generation evaluate as plan.
 func requestParsingContext(request model.Request, path string) *config.ParsingContext {
 	command := request.Command
-	if command == "" || command == "discover" || command == "generate" {
+	if command == "" || command == phaseDiscover || command == "generate" {
 		command = "plan"
 	}
 	pctx := parsingContext(path, request.Tofu, command, request.Arguments)
-	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
+	if configured := request.Environment[downloadDirEnv]; configured != "" {
 		pctx.DownloadDir = localPath(filepath.Dir(path), configured)
 	}
 	// Explicit feature overrides apply to every unit, as Terragrunt's --feature flag does.
@@ -242,8 +257,8 @@ func requestParsingContext(request model.Request, path string) *config.ParsingCo
 
 // resolveIAM resolves the role before the full parse evaluates AWS functions. The host
 // assumes it and supplies the resulting session on the second call.
-func resolveIAM(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*model.Resolution, error) {
-	flags, err := config.PartialParseConfigFile(ctx, logger, environment,
+func (r *inventoryReader) resolveIAM(pctx *config.ParsingContext, request *model.Request, path string) (*model.Resolution, error) {
+	flags, err := config.PartialParseConfigFile(r.ctx, r.logger, r.environment,
 		pctx.WithDecodeList(config.TerragruntFlags, config.FeatureFlagsBlock, config.ExcludeBlock), path, nil)
 	if err != nil {
 		return nil, err
@@ -251,7 +266,7 @@ func resolveIAM(ctx context.Context, logger log.Logger, environment *atmosbridge
 	if PreventsRun(excludeFromConfig(flags.Exclude), OperationCommand(request.Command, request.Arguments)) {
 		return &model.Resolution{Path: path}, nil
 	}
-	iam, warnings, err := iamSettings(flags, &request, path)
+	iam, warnings, err := iamSettings(flags, request, path)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +275,7 @@ func resolveIAM(ctx context.Context, logger log.Logger, environment *atmosbridge
 
 // checkRequestFeatureOverrides rejects feature overrides the unit does not declare. Backend
 // reads do not evaluate feature flags.
-func checkRequestFeatureOverrides(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) error {
+func (r *inventoryReader) checkRequestFeatureOverrides(pctx *config.ParsingContext, request *model.Request, path string) error {
 	if request.Phase == "backend" {
 		return nil
 	}
@@ -268,7 +283,7 @@ func checkRequestFeatureOverrides(ctx context.Context, logger log.Logger, enviro
 		// Read the declarations without the overrides, which are what is being checked.
 		declarations := pctx.WithDecodeList(config.FeatureFlagsBlock)
 		declarations.FeatureFlags = nil
-		return config.PartialParseConfigFile(ctx, logger, environment, declarations, path, nil)
+		return config.PartialParseConfigFile(r.ctx, r.logger, r.environment, declarations, path, nil)
 	})
 }
 
@@ -289,17 +304,28 @@ func parsingContext(path, tofu, command string, arguments []string) *config.Pars
 // checkDestroyGuard rejects destroy before a full parse can evaluate HCL functions
 // for a unit that sets prevent_destroy. Backend reads never destroy.
 func checkDestroyGuard(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) error {
-	if request.Phase == "backend" || !atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+	if request.Phase == phaseBackend || (request.Command != "plan" && request.Command != "apply" && request.Command != "destroy") {
 		return nil
 	}
 	guard, err := config.PartialParseConfigFile(ctx, logger, atmosbridge.Discovery(environment, false),
-		pctx.WithDecodeList(config.TerragruntFlags), path, nil)
+		pctx.WithDecodeList(config.TerragruntFlags, config.TerraformExtraArgs), path, nil)
 	if err != nil {
-		return staticDestroyGuard(environment.FS, path, err)
+		return failedDestroyGuard(&request, environment.FS, path, err)
 	}
-	if guard.PreventDestroy != nil && *guard.PreventDestroy {
-		return ErrPreventDestroy
+	return checkPreventDestroy(&request, guard)
+}
+
+// failedDestroyGuard preserves syntax-only decisions for known destroy requests.
+func failedDestroyGuard(request *model.Request, fs afero.Fs, path string, parseErr error) error {
+	args, err := effectivePolicyArguments(request, &config.TerragruntConfig{})
+	if err != nil {
+		return err
 	}
+	if atmosbridge.IsDestroyOperation(request.Command, args) {
+		return staticDestroyGuard(fs, path, parseErr)
+	}
+	// A full parse may evaluate locals unavailable to the read-only guard.
+	// Its policy check still inspects every expanded argument and environment.
 	return nil
 }
 
@@ -342,7 +368,7 @@ func staticDestroyGuard(fs afero.Fs, path string, parseErr error) error {
 // evaluation never executes them. Backend identity is read from a partial parse
 // that does not decode them.
 func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Execution, []string, error) {
-	if request.Phase == "backend" {
+	if request.Phase == phaseBackend {
 		return nil, nil, nil
 	}
 	execution, err := executionFromConfig(cfg.Terraform)
@@ -363,54 +389,53 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 		}
 		// Apply-time values can differ from the ones planned, so register them before any event is returned.
 		sink := logSinkFrom(ctx)
-		redactInputs(sink, parsed.Inputs, SensitiveInputs(environment.FS, append(apply.FilesRead.Paths(), path), parsed.Inputs))
+		redactUnitInputs(sink, environment.FS, append(apply.FilesRead.Paths(), path), path, parsed.Inputs)
 		redactLocals(sink, environment.FS, path, parsed.Locals)
 		return parsed, nil
 	}
-	return applyTimeExecution(request, path, execution, environment.FS, pctx.FilesRead.Paths(), reparse)
+	return applyTimeExecution(&request, path, execution, executionReads{filesystem: environment.FS, paths: pctx.FilesRead.Paths()}, reparse)
 }
 
 func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*config.TerragruntConfig, error) {
-	if request.Phase == "backend" {
+	if request.Phase == phaseBackend {
+		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(path)})
 		cfg, err := config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
 		if err != nil {
 			return nil, err
 		}
-		// Fail closed on unverifiable backend generation before the download_dir probe, which
-		// parses the whole unit and would evaluate inputs, hooks and commands.
+		// Reject unverifiable backend generation before the full download_dir probe.
 		if err := checkBackendGeneration(environment.FS, append(pctx.FilesRead.Paths(), path)); err != nil {
 			return nil, err
 		}
-		return withDownloadDir(ctx, logger, environment, pctx, request, cfg, path)
+		if request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, append(pctx.FilesRead.Paths(), path)) {
+			cfg.DownloadDir, err = downloadDir(ctx, logger, environment, pctx)
+		}
+		return cfg, err
 	}
 	return config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
 }
 
-// withDownloadDir restores download_dir on a partially parsed unit. Partial
+// downloadDir restores download_dir on a partially parsed unit. Partial
 // decoding has no section for that attribute, but the working directory (and so
 // every relative local-state path) depends on it. The extra parse skips
 // dependency output resolution (an unknown placeholder replaces every
 // dependency), so backend reads still never read outputs, and it reads every
-// configuration file without its top-level inputs attribute so unrelated input
+// configuration file with only the referenced inputs so unrelated input
 // expressions, such as command calls, are never evaluated.
-func withDownloadDir(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*config.TerragruntConfig, error) {
-	if request.Environment["TG_DOWNLOAD_DIR"] != "" || !mentionsDownloadDir(environment.FS, append(pctx.FilesRead.Paths(), path)) {
-		return cfg, nil
-	}
+func downloadDir(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext) (string, error) {
 	placeholder := cty.DynamicVal
 	probe := pctx.WithSkipOutputsResolution()
 	probe.DecodedDependencies = &placeholder
 	// Fresh caches keep the stripped files apart from the partial parse's cached ones.
-	full, err := config.ParseConfigFile(config.WithCaches(ctx), logger, environment.WithFS(withoutInputsFS{Fs: environment.FS}), probe, path, nil)
+	full, err := config.ParseConfigFile(config.WithCaches(ctx), logger, environment, probe, pctx.TerragruntConfigPath, nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	cfg.DownloadDir = full.DownloadDir
-	return cfg, nil
+	return full.DownloadDir, nil
 }
 
 // mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
-// in withDownloadDir parses the whole unit, so a unit that never sets it skips the probe and its
+// in downloadDir parses the whole unit, so a unit that never sets it skips the probe and its
 // inputs stay unevaluated during backend reads.
 func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
 	for _, path := range paths {
@@ -421,11 +446,12 @@ func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
 	return false
 }
 
-// withoutInputsFS serves HCL configuration files without their top-level inputs
-// attribute. Reading download_dir needs the locals, includes and functions that
-// attribute might use, but never the inputs themselves.
+// withoutInputsFS projects inputs to the keys referenced by the configuration.
+// References are shared across reads so read_terragrunt_config can supply inputs
+// needed by download_dir without evaluating unrelated input expressions.
 type withoutInputsFS struct {
 	afero.Fs
+	inputs *inputReferences
 }
 
 // Open reads through OpenFile so every read path strips inputs.
@@ -439,7 +465,17 @@ func (f withoutInputsFS) OpenFile(name string, flag int, perm os.FileMode) (afer
 	if err != nil || flag != os.O_RDONLY || !strings.HasSuffix(name, ".hcl") {
 		return file, err
 	}
-	if info, err := file.Stat(); err != nil || info.IsDir() {
+	return f.projectFile(file, name)
+}
+
+// projectFile closes failed reads and preserves directory handles for callers.
+func (f withoutInputsFS) projectFile(file afero.File, name string) (afero.File, error) {
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if info.IsDir() {
 		return file, nil
 	}
 	data, err := io.ReadAll(file)
@@ -448,52 +484,41 @@ func (f withoutInputsFS) OpenFile(name string, flag int, perm os.FileMode) (afer
 		return nil, err
 	}
 	memory := afero.NewMemMapFs()
-	if err := afero.WriteFile(memory, name, withoutInputs(name, data), 0o644); err != nil {
+	if err := afero.WriteFile(memory, name, f.inputs.project(name, data), probeFileMode); err != nil {
 		return nil, err
 	}
 	return memory.Open(name)
 }
 
-// withoutInputs removes the top-level inputs attribute. Content that does not
-// parse is returned unchanged so upstream reports its own syntax errors.
-func withoutInputs(name string, data []byte) []byte {
-	file, diags := hclwrite.ParseConfig(data, name, hcl.InitialPos)
-	if diags.HasErrors() {
-		return data
-	}
-	file.Body().RemoveAttribute("inputs")
-	return file.Bytes()
-}
-
 // unitResolution converts the parsed unit into its module identity. Local sources
 // must be existing directories; remote sources keep the identity they were written with.
-func unitResolution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Resolution, error) {
+func (r *inventoryReader) unitResolution(pctx *config.ParsingContext, request *model.Request, cfg *config.TerragruntConfig, path string) (*model.Resolution, error) {
 	result := &model.Resolution{Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
-	if err := unitSettings(ctx, cfg, request, path, result); err != nil {
+	if err := unitSettings(r.ctx, cfg, request, path, result); err != nil {
 		return nil, err
 	}
 	// A remote source keeps the identity it was written with, exactly as Terragrunt names its working
 	// copy; resolving a registry source below only changes where the module is fetched from.
 	identity := result.Source
-	if resolved, root, local, problem := resolveLocalModuleSource(environment.FS, path, result.Source); problem != nil {
+	if local, problem := resolveLocalModuleSource(r.environment.FS, path, result.Source); problem != nil {
 		return nil, problem
-	} else if local {
-		result.Source = resolved
-		identity, result.Folders = result.Source, []string{root}
+	} else if local != nil {
+		result.Source = local.source
+		identity, result.Folders = result.Source, []string{local.root}
 	} else if !PreventsRun(result.Exclude, OperationCommand(request.Command, request.Arguments)) {
 		// An operation the exclude block prevents never runs, so its registry source is not resolved.
-		if err := prepareRemoteSource(ctx, logger, &request, cfg, result); err != nil {
+		if err := prepareRemoteSource(r.ctx, r.logger, request, cfg, result); err != nil {
 			return nil, err
 		}
 	}
 	download := pctx.DownloadDir
-	if cfg.DownloadDir != "" && request.Environment["TG_DOWNLOAD_DIR"] == "" {
+	if cfg.DownloadDir != "" && request.Environment[downloadDirEnv] == "" {
 		download = localPath(filepath.Dir(path), cfg.DownloadDir)
 	}
-	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
+	if configured := request.Environment[downloadDirEnv]; configured != "" {
 		download = localPath(filepath.Dir(path), configured)
 	}
-	workingDir, err := atmosbridge.WorkingDir(logger, environment, identity, download, filepath.Dir(path))
+	workingDir, err := atmosbridge.WorkingDir(r.logger, r.environment, identity, download, filepath.Dir(path))
 	if err != nil {
 		return nil, err
 	}
@@ -505,14 +530,14 @@ func unitResolution(ctx context.Context, logger log.Logger, environment *atmosbr
 
 // unitSettings applies the parity and IAM settings of a fully evaluated unit. Backend reads
 // evaluate only the backend identity, so they skip them.
-func unitSettings(ctx context.Context, cfg *config.TerragruntConfig, request model.Request, path string, result *model.Resolution) error {
+func unitSettings(ctx context.Context, cfg *config.TerragruntConfig, request *model.Request, path string, result *model.Resolution) error {
 	if request.Phase == "backend" {
 		return nil
 	}
 	if err := applyUnitSettings(ctx, cfg, request, path, result); err != nil {
 		return err
 	}
-	iam, warnings, err := iamSettings(cfg, &request, path)
+	iam, warnings, err := iamSettings(cfg, request, path)
 	if err != nil {
 		return err
 	}

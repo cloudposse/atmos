@@ -10,6 +10,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -529,4 +530,67 @@ func TestLogSinkBuffersUnitPathsUntilSensitiveValuesAreRegistered(t *testing.T) 
 	require.Len(t, entries, 1)
 	assert.Empty(t, entries[0].Unit)
 	assert.Contains(t, entries[0].Message, "withheld")
+}
+
+func TestResolveWithholdsTransformedSensitiveInputCommandOutput(t *testing.T) {
+	for _, test := range []struct {
+		name, expression string
+		withheld         bool
+	}{
+		{"direct call", "sensitive(%s)", false},
+		{"transform inside", "sensitive(upper(%s))", true},
+		{"transform outside", "upper(sensitive(%s))", true},
+		{"nested input", "{ key = sensitive(upper(%s)) }", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			call := effectCommand(t, "raw-secret-73ea")
+			request := nativeUnit(t, "inputs = { token = "+fmt.Sprintf(test.expression, call)+", public = upper(\"visible\") }\n")
+			request.Environment[effectChildEnv] = "1"
+			sink := NewLogSink("debug", request.BasePath)
+			logger(t, sink).Debug("before raw-secret-73ea")
+			result, err := Resolve(WithLogSink(t.Context(), sink), request)
+			require.NoError(t, err)
+			require.NotEmpty(t, result.SensitiveInputs)
+			effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+			require.NoError(t, err, "the Go subprocess must actually execute")
+			assert.Contains(t, string(effects), "raw-secret-73ea")
+			entries := sink.Entries()
+			require.NotEmpty(t, entries)
+			for _, entry := range entries {
+				assert.NotContains(t, entry.Message, "raw-secret-73ea")
+			}
+			if test.withheld {
+				require.Len(t, entries, 1)
+				assert.Contains(t, entries[0].Message, "withheld")
+			} else {
+				assert.Equal(t, "before <MASKED>", entries[0].Message)
+			}
+		})
+	}
+}
+
+func TestApplyTimeReparseWithholdsTransformedSensitiveInput(t *testing.T) {
+	request := nativeUnit(t, `inputs = { token = "plan-input", phase = get_terraform_command() }`)
+	request.Environment[effectChildEnv] = "1"
+	sink := NewLogSink("debug", request.BasePath)
+	ctx := config.WithCaches(WithLogSink(t.Context(), sink))
+	l, err := evaluationLogger(ctx, "debug")
+	require.NoError(t, err)
+	environment, err := evaluationEnvironment(ctx, &request, nil, request.Path)
+	require.NoError(t, err)
+	pctx := requestParsingContext(request, request.Path)
+	cfg, err := parseUnit(ctx, l, environment, pctx, request, request.Path)
+	require.NoError(t, err)
+	body, err := os.ReadFile(request.Path)
+	require.NoError(t, err)
+	body = []byte(strings.ReplaceAll(string(body), `"plan-input"`, "sensitive(upper("+effectCommand(t, "apply-raw-secret")+"))"))
+	require.NoError(t, os.WriteFile(request.Path, body, 0o600))
+	l.Debug("before apply-raw-secret")
+	require.NotContains(t, sink.Entries()[0].Message, "withheld")
+	_, _, err = unitExecution(ctx, l, environment, pctx, request, cfg, request.Path)
+	require.NoError(t, err)
+	entries := sink.Entries()
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0].Message, "withheld")
+	assert.NotContains(t, entries[0].Message, "apply-raw-secret")
 }

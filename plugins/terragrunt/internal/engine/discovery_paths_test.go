@@ -26,8 +26,8 @@ func TestDiscoveryScopeAndPruning(t *testing.T) {
 	}
 	scan, err := discoveryPaths(root, []string{"live/**", "live/unit/**"}, []string{"live/excluded/**"})
 	require.NoError(t, err)
-	require.Equal(t, []string{filepath.Join(root, "live/terragrunt.stack.hcl")}, scan.Stacks)
-	require.Equal(t, []string{filepath.Join(root, "live/unit/terragrunt.hcl")}, scan.Units)
+	require.Equal(t, []string{filepath.Join(root, "live", "terragrunt.stack.hcl")}, scan.Stacks)
+	require.Equal(t, []string{filepath.Join(root, "live", "unit", "terragrunt.hcl")}, scan.Units)
 	scan, err = discoveryPaths(root, []string{"absent/**"}, nil)
 	require.NoError(t, err)
 	require.Len(t, scan.Warnings, 1)
@@ -40,7 +40,7 @@ func TestDiscoveryScopeAndPruning(t *testing.T) {
 	require.ErrorContains(t, err, "excluded_paths")
 	scan, err = discoveryPaths(root, nil, nil)
 	require.NoError(t, err)
-	require.Contains(t, scan.Units, filepath.Join(root, "catalog/terragrunt.hcl"))
+	require.Contains(t, scan.Units, filepath.Join(root, "catalog", "terragrunt.hcl"))
 }
 
 func TestDiscoveryRejectsOutsideSymlink(t *testing.T) {
@@ -316,7 +316,8 @@ func stackProject(t *testing.T, files map[string]string) string {
 func inventoryNames(t *testing.T, result *model.Resolution) []string {
 	t.Helper()
 	names := make([]string, 0, len(result.Inventory))
-	for _, unit := range result.Inventory {
+	for i := range result.Inventory {
+		unit := &result.Inventory[i]
 		names = append(names, unit.Stack+"/"+unit.Name)
 	}
 	return names
@@ -349,7 +350,8 @@ unit "vpc" {
 	require.NoError(t, err)
 	require.Equal(t, []string{"live/aurora/api", "live/aurora/web", "live/shard/0", "live/shard/1", "live/vpc"}, inventoryNames(t, result))
 	paths := map[string]bool{}
-	for _, unit := range result.Inventory {
+	for i := range result.Inventory {
+		unit := &result.Inventory[i]
 		paths[unit.Config.Path] = true
 	}
 	require.Len(t, paths, 5, "each expansion element keeps its own generated unit")
@@ -462,18 +464,19 @@ func TestDiscoveryEvaluationErrors(t *testing.T) {
 					}
 					result := &model.Resolution{}
 					if req.Command != "generate" {
-						if stage == "child stack" {
+						switch stage {
+						case "child stack":
 							result.StackConfigs = map[string]string{"child": child}
 							result.StackSources = map[string]string{"child": filepath.Join(root, "catalog")}
 							result.Stacks = map[string]string{"child": "child"}
-						} else if stage == "child unit" {
+						case "child unit":
 							result.UnitConfigs = map[string]string{"child": child}
 							result.UnitSources = map[string]string{"child": filepath.Join(root, "catalog")}
 						}
 					}
 					return result, nil
 				}
-				result, err := discoverProjectWithResolver(t.Context(), model.Request{BasePath: root}, evaluate)
+				result, err := discoverProjectWithResolver(t.Context(), &model.Request{BasePath: root}, evaluate)
 				require.True(t, failed, "must reach the intended evaluation failure")
 				if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
 					require.ErrorIs(t, err, cause)
@@ -496,7 +499,7 @@ func TestDiscoveryContextCanceledDuringEvaluation(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "terragrunt.hcl"), nil, 0o644))
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	result, err := discoverProjectWithResolver(ctx, model.Request{BasePath: root}, func(context.Context, model.Request, afero.Fs) (*model.Resolution, error) {
+	result, err := discoverProjectWithResolver(ctx, &model.Request{BasePath: root}, func(context.Context, model.Request, afero.Fs) (*model.Resolution, error) {
 		cancel()
 		return &model.Resolution{}, nil
 	})

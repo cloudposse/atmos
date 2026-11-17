@@ -60,18 +60,18 @@ var commandFunctions = [][]byte{[]byte("get_terraform_command"), []byte("get_ter
 // evaluates the configuration again for apply; without this, a hook enabled only for apply
 // (for example `if = get_terraform_command() == "apply"`) would silently never run.
 // Configuration that cannot observe the command evaluates identically, so it is not parsed twice.
-func applyTimeExecution(request model.Request, path string, planned *model.Execution, filesystem afero.Fs, read []string,
+func applyTimeExecution(request *model.Request, path string, planned *model.Execution, read executionReads,
 	parse func(*config.ParsingContext) (*config.TerragruntConfig, error),
 ) (*model.Execution, []string, error) {
-	if request.Command != "plan" || !observesCommand(filesystem, append(slices.Clone(read), path)) {
+	if request.Command != "plan" || !observesCommand(read.filesystem, append(slices.Clone(read.paths), path)) {
 		return planned, nil, nil
 	}
-	if err := rejectArgumentDependentExecution(filesystem, append(slices.Clone(read), path)); err != nil {
+	if err := rejectArgumentDependentExecution(read.filesystem, append(slices.Clone(read.paths), path)); err != nil {
 		return nil, nil, err
 	}
 	// Apply is evaluated with the request's own download directory, so the working directory
 	// matches the plan-time evaluation. requestParsingContext also carries the feature flags.
-	applyRequest := request
+	applyRequest := *request
 	applyRequest.Command, applyRequest.Arguments = "apply", nil
 	apply := requestParsingContext(applyRequest, path)
 	// Dependency mock eligibility belongs to the plan being prepared; hook expressions see apply.
@@ -82,7 +82,7 @@ func applyTimeExecution(request model.Request, path string, planned *model.Execu
 	}
 	// Configuration read only when evaluating for apply also shapes the reviewed plan.
 	files := apply.FilesRead.Paths()
-	if err := rejectArgumentDependentExecution(filesystem, files); err != nil {
+	if err := rejectArgumentDependentExecution(read.filesystem, files); err != nil {
 		return nil, nil, err
 	}
 	applied, err := executionFromConfig(cfg.Terraform)
@@ -187,7 +187,7 @@ func errorHooksFromConfig(source []config.ErrorHook) ([]model.Hook, error) {
 		}
 		for _, pattern := range converted.OnErrors {
 			if _, err := regexp.Compile(pattern); err != nil {
-				return nil, setting(model.CodeUnsupportedHook, fmt.Sprintf("error_hook %q", converted.Name), "", fmt.Sprintf("Invalid `on_errors` pattern in error_hook %q", converted.Name),
+				return nil, unsupportedHook(fmt.Sprintf("error_hook %q", converted.Name), fmt.Sprintf("Invalid `on_errors` pattern in error_hook %q", converted.Name),
 					"An `on_errors` entry is not a valid regular expression.", "Fix the pattern; Atmos matches `on_errors` entries as Go regular expressions.")
 			}
 		}
@@ -198,7 +198,7 @@ func errorHooksFromConfig(source []config.ErrorHook) ([]model.Hook, error) {
 
 func validateHook(kind string, hook *model.Hook) error {
 	if len(hook.Execute) == 0 || hook.Execute[0] == "" {
-		return setting(model.CodeUnsupportedHook, fmt.Sprintf("%s %q", kind, hook.Name), "", fmt.Sprintf("%s %q has no command to run", kind, hook.Name),
+		return unsupportedHook(fmt.Sprintf("%s %q", kind, hook.Name), fmt.Sprintf("%s %q has no command to run", kind, hook.Name),
 			"The hook sets no `execute` list or its first entry is empty.", "Set `execute = [\"program\", \"argument\"]` on the hook.")
 	}
 	return nil
@@ -318,38 +318,16 @@ func effectiveExecutionBlocks(filesystem afero.Fs, paths []string) ([]executionD
 	var order []string
 	effective := map[string]executionDeclaration{}
 	for _, path := range paths {
-		data, err := afero.ReadFile(filesystem, path)
+		blocks, err := executionDeclarations(filesystem, path)
 		if err != nil {
 			return nil, err
 		}
-		parser := hclparse.NewParser()
-		var file *hcl.File
-		var diagnostics hcl.Diagnostics
-		if strings.HasSuffix(path, ".json") {
-			file, diagnostics = parser.ParseJSON(data, path)
-		} else {
-			file, diagnostics = parser.ParseHCL(data, path)
-		}
-		if diagnostics.HasErrors() {
-			return nil, diagnostics
-		}
-		content, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}}})
-		if diagnostics.HasErrors() {
-			return nil, diagnostics
-		}
-		for _, terraform := range content.Blocks {
-			schema, _ := gohcl.ImpliedBodySchema(&config.TerraformConfig{})
-			declarations, diagnostics := terraform.Body.Content(schema)
-			if diagnostics.HasErrors() {
-				return nil, diagnostics
+		for _, block := range blocks {
+			key := block.Type + "\x00" + strings.Join(block.Labels, "\x00")
+			if _, seen := effective[key]; !seen {
+				order = append(order, key)
 			}
-			for _, block := range declarations.Blocks {
-				key := block.Type + "\x00" + strings.Join(block.Labels, "\x00")
-				if _, seen := effective[key]; !seen {
-					order = append(order, key)
-				}
-				effective[key] = executionDeclaration{block: block, path: path}
-			}
+			effective[key] = executionDeclaration{block: block, path: path}
 		}
 	}
 	result := make([]executionDeclaration, 0, len(order))
@@ -438,4 +416,42 @@ func rejectArgumentDependentExecution(filesystem afero.Fs, paths []string) error
 		}
 	}
 	return nil
+}
+
+func executionDeclarations(filesystem afero.Fs, path string) ([]*hcl.Block, error) {
+	data, err := afero.ReadFile(filesystem, path)
+	if err != nil {
+		return nil, err
+	}
+	parser := hclparse.NewParser()
+	var file *hcl.File
+	var diagnostics hcl.Diagnostics
+	if strings.HasSuffix(path, ".json") {
+		file, diagnostics = parser.ParseJSON(data, path)
+	} else {
+		file, diagnostics = parser.ParseHCL(data, path)
+	}
+	if diagnostics.HasErrors() {
+		return nil, diagnostics
+	}
+	content, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "terraform"}}})
+	if diagnostics.HasErrors() {
+		return nil, diagnostics
+	}
+	var blocks []*hcl.Block
+	schema, _ := gohcl.ImpliedBodySchema(&config.TerraformConfig{})
+	for _, terraform := range content.Blocks {
+		declarations, diagnostics := terraform.Body.Content(schema)
+		if diagnostics.HasErrors() {
+			return nil, diagnostics
+		}
+		blocks = append(blocks, declarations.Blocks...)
+	}
+	return blocks, nil
+}
+
+// executionReads identifies the configuration files already read in an evaluation filesystem.
+type executionReads struct {
+	filesystem afero.Fs
+	paths      []string
 }

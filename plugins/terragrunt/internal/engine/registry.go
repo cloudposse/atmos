@@ -33,10 +33,7 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	if !strings.HasPrefix(result.Source, registryScheme) || request.Phase == "backend" {
 		return nil
 	}
-	constraint := ""
-	if cfg.Terraform != nil && cfg.Terraform.Version != nil {
-		constraint = *cfg.Terraform.Version
-	}
+	constraint := registryVersionConstraint(cfg)
 	var auth *model.RegistryAuth
 	started := time.Now()
 	resolved, ignored, err := retryRegistryResolution(ctx, result.Errors, func() (string, error) {
@@ -57,7 +54,9 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	if err != nil {
 		return registryProblem(result.Source, err)
 	}
-	result.RegistryResolutionNanos = uint64(time.Since(started))
+	if elapsed := time.Since(started); elapsed > 0 {
+		result.RegistryResolutionNanos = uint64(elapsed)
+	}
 	original := result.Source
 	resolved = normalizeGetterURL(resolved)
 	if err := validateRemoteSource(resolved); err != nil {
@@ -82,13 +81,7 @@ func retryRegistryResolution(ctx context.Context, policies *model.Errors, resolv
 		if ignore := matchingRegistryIgnore(policies.Ignore, text); ignore != nil {
 			return "", ignore, err
 		}
-		var retry *model.RetryPolicy
-		for i := range policies.Retry {
-			if registryErrorMatches(text, policies.Retry[i].Patterns) {
-				retry = &policies.Retry[i]
-				break
-			}
-		}
+		retry := matchingRegistryRetry(policies.Retry, text)
 		if retry == nil || attempt >= retry.MaxAttempts {
 			return "", nil, err
 		}
@@ -141,6 +134,8 @@ func registryErrorMatches(message string, patterns []string) bool {
 // IsOpenTofu reports whether the selected executable is OpenTofu. It is the one rule of the host and the
 // plugin: any executable whose name contains "tofu", in any case, is OpenTofu, whichever separator its
 // path uses. Everything else is Terraform.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func IsOpenTofu(binary string) bool {
 	name := binary
 	if index := strings.LastIndexAny(name, `/\`); index >= 0 {
@@ -214,4 +209,20 @@ func rejectedResolvedSource(original, resolved string, err error) error {
 	annotated := *problem
 	annotated.Detail = fmt.Sprintf("%s The registry source %q resolved to %q.", problem.Detail, original, redactURLCredentials(resolved))
 	return &annotated
+}
+
+func registryVersionConstraint(cfg *config.TerragruntConfig) string {
+	if cfg.Terraform != nil && cfg.Terraform.Version != nil {
+		return *cfg.Terraform.Version
+	}
+	return ""
+}
+
+func matchingRegistryRetry(policies []model.RetryPolicy, text string) *model.RetryPolicy {
+	for i := range policies {
+		if registryErrorMatches(text, policies[i].Patterns) {
+			return &policies[i]
+		}
+	}
+	return nil
 }

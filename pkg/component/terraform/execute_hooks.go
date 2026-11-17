@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/execution"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
@@ -99,6 +100,7 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 	}
 	return e.runExecutionPhase(atmosConfig, info, phase, opts, func(phaseInfo *schema.ConfigAndStacksInfo, phaseArgs []string, phaseOpts []component.ExecutionOption) error {
 		ctx := component.ContextFromOptions(phaseOpts...)
+		env := slices.Concat(envpkg.ConvertMapToSlice(atmosConfig.Env), phaseInfo.ComponentEnvList)
 		if captured, ok := ctx.Value(mainCommandArgsKey{}).(*[]string); ok {
 			*captured = slices.Clone(phaseArgs)
 		}
@@ -119,7 +121,7 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 					})
 					// Classify with the effective arguments and environment before legacy
 					// output matching can retry a plan that already succeeded.
-					if isDetailedExitCodeChanges(phase.command, phaseArgs, phaseInfo.ComponentEnvList, err, o...) {
+					if isDetailedExitCodeChanges(phase.command, phaseArgs, env, err, o...) {
 						changesPresent = err
 						return nil
 					}
@@ -137,7 +139,7 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		}
 		err := run()
 		// A plan that reports changes completed; only a real failure is given to init recovery.
-		if err == nil || !lifecycleOwnsRecovery(info) || isDetailedExitCodeChanges(phase.command, phaseArgs, phaseInfo.ComponentEnvList, err, phaseOpts...) {
+		if err == nil || !lifecycleOwnsRecovery(info) || isDetailedExitCodeChanges(phase.command, phaseArgs, env, err, phaseOpts...) {
 			return err
 		}
 		if recovery, ok := ctx.Value(mainCommandRecoveryKey{}).(*mainCommandRecovery); ok {
@@ -207,11 +209,12 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts), capture: capture}
 	// With -detailed-exitcode, exit status 2 reports a plan with changes. Hooks must not see that
 	// as a failure, but the status still has to reach the caller once the hooks are done.
+	env := slices.Concat(envpkg.ConvertMapToSlice(atmosConfig.Env), phaseInfo.ComponentEnvList)
 	attempt := func(attemptOpts []component.ExecutionOption, hookStderr io.Writer) (changesPresent, runErr error) {
 		runner.recoveryStderr = hookStderr
 		runErr = execution.Run(component.ContextFromOptions(attemptOpts...), config, phase.command, runner, func() (execution.Output, error) {
 			output, actionErr := runPhaseAction(&phaseInfo, applied.Args, attemptOpts, capture, action)
-			if isDetailedExitCodeChanges(phase.command, applied.Args, phaseInfo.ComponentEnvList, actionErr, attemptOpts...) {
+			if isDetailedExitCodeChanges(phase.command, applied.Args, env, actionErr, attemptOpts...) {
 				// Mark the completed plan here, so the recovery path reports it the same way.
 				changesPresent = &successfulPlanChanges{error: actionErr}
 				return output, nil

@@ -89,7 +89,22 @@ func TestProviderCallsPreserveValuesAndIsolateInvocations(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, discovery.Components, 1)
 	require.Equal(t, "dev/app", discovery.Components[0].Address.Component)
+	// Unknown values survive transport, but cannot become prepared Terraform inputs.
 	prepared, err := p.Prepare(t.Context(), request)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.Nil(t, prepared)
+	require.True(t, proto.Equal(before, request), "rejection must not mutate caller input")
+	unknownSeen := &pluginv1.ComponentRequest{}
+	unknownRaw, err := os.ReadFile(filepath.Join(root, "preparation.pb"))
+	require.NoError(t, err)
+	require.NoError(t, proto.Unmarshal(unknownRaw, unknownSeen))
+	require.True(t, proto.Equal(request.Configuration, unknownSeen.Configuration))
+
+	request = proto.Clone(request).(*pluginv1.ComponentRequest)
+	request.Configuration = wireValue(t, cty.ObjectVal(map[string]cty.Value{"exact": number, "known": cty.StringVal("ready")}))
+	request.Configuration.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	before = proto.Clone(request)
+	prepared, err = p.Prepare(t.Context(), request)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(request.Configuration, prepared.Inputs))
 	require.Len(t, prepared.Files, 1)

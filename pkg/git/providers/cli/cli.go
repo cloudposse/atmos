@@ -70,11 +70,11 @@ func (p *Provider) SwapStderr(w io.Writer) func() {
 
 // run invokes git with the repository context applied.
 func (p *Provider) run(ctx context.Context, dir string, env []string, args ...string) (atmosgit.RunResult, error) {
-	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
+	return p.runner.Run(ctx, gitCommand, args, &atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
 }
 
 func (p *Provider) runQuiet(ctx context.Context, dir string, env []string, args ...string) (atmosgit.RunResult, error) {
-	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
+	return p.runner.Run(ctx, gitCommand, args, &atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
 }
 
 // Clone reconciles a repository workdir: a fresh clone when the workdir is
@@ -125,6 +125,18 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 		return fmt.Errorf("creating workdir parent for %q: %w", opts.Workdir, err)
 	}
 
+	result, err := p.run(ctx, "", opts.Env, cloneArgs(opts)...)
+	if err != nil {
+		return classify(err, result, "clone")
+	}
+	if opts.Ref != "" {
+		return p.checkoutRef(ctx, opts)
+	}
+	return nil
+}
+
+// cloneArgs builds clone flags before the URI and workdir positional arguments.
+func cloneArgs(opts *atmosgit.CloneOptions) []string {
 	args := []string{"clone"}
 	if opts.Depth > 0 {
 		args = append(args, "--depth", fmt.Sprintf("%d", opts.Depth))
@@ -154,14 +166,7 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 	}
 	args = append(args, "--", opts.URI, opts.Workdir)
 
-	result, err := p.run(ctx, "", opts.Env, args...)
-	if err != nil {
-		return classify(err, result, "clone")
-	}
-	if opts.Ref != "" {
-		return p.checkoutRef(ctx, opts)
-	}
-	return nil
+	return args
 }
 
 // reconcile brings an existing workdir up to date: sync the remote URL with

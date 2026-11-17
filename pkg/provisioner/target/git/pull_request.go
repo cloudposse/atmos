@@ -131,7 +131,7 @@ func checkoutHead(ctx context.Context, s *repoSession, b pullRequestBranches) er
 		return nil
 	}
 	// -B also resets a stale local head left behind by an earlier, already-merged pull request.
-	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"checkout", "-B", b.Head}, atmosgit.RunOptions{Dir: s.rc.Workdir, Env: s.rc.Env})
+	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"checkout", "-B", b.Head}, &atmosgit.RunOptions{Dir: s.rc.Workdir, Env: s.rc.Env})
 	if err != nil {
 		return atmosgit.WrapOperationError("create pull request branch", s.rc.Workdir, result.StderrTail, err, "")
 	}
@@ -141,7 +141,7 @@ func checkoutHead(ctx context.Context, s *repoSession, b pullRequestBranches) er
 
 // remoteBranchExists reports whether branch exists on the repository's remote.
 func remoteBranchExists(ctx context.Context, s *repoSession, branch string) (bool, error) {
-	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"ls-remote", "--exit-code", "--heads", s.resolved.URI, branch}, atmosgit.RunOptions{Env: s.rc.Env})
+	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"ls-remote", "--exit-code", "--heads", s.resolved.URI, branch}, &atmosgit.RunOptions{Env: s.rc.Env})
 	if err == nil {
 		return true, nil
 	}

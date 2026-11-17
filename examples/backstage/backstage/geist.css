@@ -1,0 +1,43 @@
+/* Match newer Backstage UI components to the MUI themes in themes.tsx. */
+@layer theme {
+  :root,
+  [data-theme-mode] {
+    --bui-font-regular: 'Geist Variable', -apple-system, BlinkMacSystemFont, sans-serif;
+    --bui-font-monospace: 'Geist Mono Variable', ui-monospace, monospace;
+  }
+
+  :root,
+  [data-theme-mode='light'] {
+    --bui-bg-app: #fafafa;
+    --bui-bg-neutral-1: #ffffff;
+    --bui-bg-neutral-2: #fafafa;
+    --bui-bg-neutral-3: #ffffff;
+    --bui-bg-neutral-4: #f2f2f2;
+    --bui-fg-primary: #171717;
+    --bui-fg-secondary: #666666;
+    --bui-border-1: #e5e5e5;
+    --bui-border-2: #cccccc;
+    --bui-bg-solid: #171717;
+    --bui-bg-solid-hover: #333333;
+    --bui-bg-solid-pressed: #444444;
+    --bui-fg-solid: #ffffff;
+    --bui-ring: #0068d6;
+  }
+
+  [data-theme-mode='dark'] {
+    --bui-bg-app: #0a0a0a;
+    --bui-bg-neutral-1: #111111;
+    --bui-bg-neutral-2: #171717;
+    --bui-bg-neutral-3: #1f1f1f;
+    --bui-bg-neutral-4: #242424;
+    --bui-fg-primary: #ededed;
+    --bui-fg-secondary: #a1a1a1;
+    --bui-border-1: #333333;
+    --bui-border-2: #444444;
+    --bui-bg-solid: #ededed;
+    --bui-bg-solid-hover: #d4d4d4;
+    --bui-bg-solid-pressed: #bbbbbb;
+    --bui-fg-solid: #111111;
+    --bui-ring: #52a8ff;
+  }
+}

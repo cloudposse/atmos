@@ -87,9 +87,9 @@ func parserDiagnostic(diagnostic *hcl.Diagnostic) bool {
 	return diagnostic.Expression == nil && diagnostic.EvalContext == nil && diagnostic.Subject != nil && diagnostic.Subject.Filename != ""
 }
 
-// setting builds a rejection that names a Terragrunt setting, with a custom summary and hint.
-func setting(code, key, file, summary, detail string, hints ...string) *model.Problem {
-	return &model.Problem{Code: code, Summary: summary, Detail: detail, Hints: hints, File: file, Key: key, Safe: true, Err: ErrUnsupportedExecution}
+// unsupportedHook names a rejected hook, with a custom summary and remedy.
+func unsupportedHook(key, summary, detail string, hints ...string) *model.Problem {
+	return &model.Problem{Code: model.CodeUnsupportedHook, Summary: summary, Detail: detail, Hints: hints, Key: key, Safe: true, Err: ErrUnsupportedExecution}
 }
 
 // rejectUnsupported fails a unit that uses a setting the native adaptation does not implement. It
@@ -118,7 +118,7 @@ func missingSourceProblem(path string) *model.Problem {
 		Code: model.CodeMissingSource, Summary: "The unit has no `terraform.source`",
 		Detail: "Native Terragrunt support runs units that name a module with `terraform { source = ... }`. A unit with inline Terraform files is not supported.",
 		Hints:  []string{"Add `terraform { source = \"...\" }` to the unit, or move the inline Terraform files into a module directory and reference it."},
-		File:   path, Key: "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
+		File:   path, Key: terraformSourceKey, Safe: true, Err: ErrUnsupportedExecution,
 	}
 }
 
@@ -129,7 +129,7 @@ func sourceDirectoryProblem(path, source string) *model.Problem {
 		Code: model.CodeInvalidSource, Summary: "The module `source` is not an existing local directory",
 		Detail: "`terraform.source` resolves to a local path that does not exist or is not a directory.",
 		Hints:  []string{"Point `terraform.source` at a module directory relative to the unit, or use a Git or HTTPS module source."},
-		File:   path, Key: "terraform.source", Safe: true, Err: fmt.Errorf("%w: local source %q is not a directory", ErrUnsupportedExecution, source),
+		File:   path, Key: terraformSourceKey, Safe: true, Err: fmt.Errorf("%w: local source %q is not a directory", ErrUnsupportedExecution, source),
 	}
 }
 
@@ -165,7 +165,7 @@ func localSourceProblem(filesystem afero.Fs, path, source, resolved string) *mod
 			Code: model.CodeInvalidSource, Summary: "The module `source` directory cannot be read",
 			Detail: "Checking the local `terraform.source` directory failed with a filesystem error other than a missing path.",
 			Hints:  []string{"Check the permissions of the module directory and its parent directories."},
-			File:   path, Key: "terraform.source", Safe: true, Err: err,
+			File:   path, Key: terraformSourceKey, Safe: true, Err: err,
 		}
 	}
 	return nil
@@ -173,52 +173,37 @@ func localSourceProblem(filesystem afero.Fs, path, source, resolved string) *mod
 
 // resolveLocalModuleSource validates both the repository root and selected
 // module while retaining // in the source identity passed to the provisioner.
-func resolveLocalModuleSource(filesystem afero.Fs, unit, source string) (resolved, root string, handled bool, problem *model.Problem) {
+func resolveLocalModuleSource(filesystem afero.Fs, unit, source string) (*localModuleSource, *model.Problem) {
 	base, subdir, hasSubdir := localModuleSubdir(source, func(candidate string) bool {
 		exists, err := afero.DirExists(filesystem, localPath(filepath.Dir(unit), candidate))
 		return err == nil && exists
 	})
 	if !hasSubdir && !plainLocalSource(source) {
-		return "", "", false, nil
+		return nil, nil
 	}
 	if hasSubdir && !safeModuleSubdir(subdir) {
-		return "", "", true, &model.Problem{
+		return nil, &model.Problem{
 			Code: model.CodeInvalidSource, Summary: "The local module subdirectory is invalid",
 			Detail: "A local `terraform.source` subdirectory must stay inside its source root.",
 			Hints:  []string{"Use `root//modules/name` without parent (`..`) or absolute subdirectory segments."},
-			File:   unit, Key: "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
+			File:   unit, Key: terraformSourceKey, Safe: true, Err: ErrUnsupportedExecution,
 		}
 	}
 	if !hasSubdir {
 		base = source
 	}
-	root = localPath(filepath.Dir(unit), base)
+	root := localPath(filepath.Dir(unit), base)
 	module := root
 	if hasSubdir {
 		module = filepath.Join(root, filepath.FromSlash(subdir))
 	}
-	if problem := localSourceProblem(filesystem, unit, source, root); problem != nil {
-		return "", "", true, problem
-	}
-	if problem := localSourceProblem(filesystem, unit, source, module); problem != nil {
-		return "", "", true, problem
+	if problem := validateLocalModuleDirectories(filesystem, unit, source, root, module); problem != nil {
+		return nil, problem
 	}
 	if hasSubdir {
-		canonicalRoot, rootErr := canonicalPath(root)
-		canonicalModule, moduleErr := canonicalPath(module)
-		if rootErr == nil && moduleErr == nil && !within(canonicalModule, canonicalRoot) {
-			return "", "", true, &model.Problem{
-				Code: model.CodeInvalidSource, Summary: "The local module subdirectory escapes its source root",
-				Detail: "The selected module resolves outside the local source root.",
-				Hints:  []string{"Select a module directory inside the source root."},
-				File:   unit, Key: "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
-			}
-		}
+		return &localModuleSource{source: root + "//" + filepath.ToSlash(filepath.FromSlash(subdir)), root: root}, nil
 	}
-	if hasSubdir {
-		return root + "//" + filepath.ToSlash(filepath.FromSlash(subdir)), root, true, nil
-	}
-	return root, root, true, nil
+	return &localModuleSource{source: root, root: root}, nil
 }
 
 // dependencyProblem keeps evaluated target paths out of safe details; the cause remains available
@@ -231,24 +216,6 @@ func dependencyProblem(file, _ string, err error) *model.Problem {
 		hint = "The target may have been deleted or renamed. Fix `config_path` in the `dependency` or `dependencies` block, or remove the dependency."
 	}
 	return &model.Problem{Code: model.CodeDependency, Summary: summary, Detail: "The dependency target could not be read.", Hints: []string{hint}, File: file, Key: "dependency", Safe: true, Err: err}
-}
-
-// localSubdirSourceProblem checks a local `dir//subdir` module source. Terragrunt copies the tree
-// before `//` and runs the subdirectory, so both must exist; each is reported like a plain local
-// source. A source without a local copied tree has nothing to check.
-func localSubdirSourceProblem(filesystem afero.Fs, path, source string) *model.Problem {
-	root, ok := copiedSourceRoot(filepath.Dir(path), source)
-	if !ok {
-		return nil
-	}
-	if problem := localSourceProblem(filesystem, path, source, root); problem != nil {
-		return problem
-	}
-	_, subdirectory, _ := strings.Cut(filepath.ToSlash(source), "//")
-	if subdirectory == "" {
-		return nil
-	}
-	return localSourceProblem(filesystem, path, source, filepath.Join(root, filepath.FromSlash(subdirectory)))
 }
 
 // WarningTerraformBinaryOverridden is reported for a unit whose terraform_binary is not the
@@ -270,7 +237,7 @@ const effectiveBinaryEnvironment = "ATMOS_TERRAFORM_BINARY"
 // override, because the host already refused to run when the unit's binary was the effective one and
 // was missing. The host and this plugin may see different PATHs; a false "override" only skips an
 // advisory probe and adds a warning, so the check fails open.
-func binaryOverrideWarning(request model.Request, binary, path string) (model.Warning, bool) {
+func binaryOverrideWarning(request *model.Request, binary, path string) (model.Warning, bool) {
 	effective := environmentValue(request.Environment, effectiveBinaryEnvironment)
 	if effective == "" {
 		return model.Warning{}, false
@@ -304,3 +271,37 @@ func evalSymlinksOrClean(path string) string {
 	}
 	return filepath.Clean(path)
 }
+
+// evaluationSetting describes an invalid native setting without exposing evaluated values.
+func evaluationSetting(key, file, summary, detail string, hints ...string) *model.Problem {
+	return &model.Problem{Code: model.CodeEvaluationError, Key: key, File: file, Summary: summary, Detail: detail, Hints: hints, Safe: true, Err: ErrUnsupportedExecution}
+}
+
+// terraformSourceKey identifies module-source diagnostics.
+const terraformSourceKey = "terraform.source"
+
+func validateLocalModuleDirectories(filesystem afero.Fs, unit, source, root, module string) *model.Problem {
+	if problem := localSourceProblem(filesystem, unit, source, root); problem != nil {
+		return problem
+	}
+	if problem := localSourceProblem(filesystem, unit, source, module); problem != nil {
+		return problem
+	}
+	if root != module {
+		canonicalRoot, rootErr := canonicalPath(root)
+		canonicalModule, moduleErr := canonicalPath(module)
+		if rootErr == nil && moduleErr == nil && !within(canonicalModule, canonicalRoot) {
+			return &model.Problem{
+				Code: model.CodeInvalidSource, Summary: "The local module subdirectory escapes its source root",
+				Detail: "The selected module resolves outside the local source root.",
+				Hints:  []string{"Select a module directory inside the source root."},
+				File:   unit, Key: terraformSourceKey, Safe: true, Err: ErrUnsupportedExecution,
+			}
+		}
+	}
+
+	return nil
+}
+
+// localModuleSource retains the selected source identity and its watched repository root.
+type localModuleSource struct{ source, root string }

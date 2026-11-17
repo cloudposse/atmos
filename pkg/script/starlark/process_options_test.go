@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -100,20 +101,22 @@ func TestProcessOptionValidation(t *testing.T) {
 func TestProcessViewportOutput(t *testing.T) {
 	t.Parallel()
 	type viewportCall struct{ title string }
+	binary := filepath.Join(t.TempDir(), "custom atmos")
 	for _, tc := range []struct {
-		name, source string
-		options      []Option
+		name, source, title, command string
+		options                      []Option
 	}{
 		{"exec.run", `r = exec.run(["tool", "arg"], output = "viewport")
-output = r.stdout`, nil},
+output = r.stdout`, "tool arg", "tool", nil},
 		{"atmos.run", `r = atmos.run(["version"], output = "viewport")
-output = r.stdout`, []Option{WithAtmosExecutable(func() (string, error) { return "tool", nil })}},
+output = r.stdout`, "atmos version", binary, []Option{WithAtmosExecutable(func() (string, error) { return binary, nil })}},
 	} {
 		t.Run(tc.name+" uses the host viewport", func(t *testing.T) {
 			t.Parallel()
 			runner := NewMockRunner(gomock.NewController(t))
 			var streamed bytes.Buffer
 			runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+				assert.Equal(t, tc.command, spec.Command, "the display label must not change the executable")
 				_, _ = io.WriteString(spec.Streams.Stdout, "child output")
 				return process.Result{Started: true}
 			})
@@ -128,7 +131,7 @@ output = r.stdout`, []Option{WithAtmosExecutable(func() (string, error) { return
 			})
 			require.NoError(t, err)
 			require.Len(t, calls, 1)
-			assert.Contains(t, calls[0].title, "tool")
+			assert.Equal(t, tc.title, calls[0].title)
 			assert.Equal(t, "child output", streamed.String(), "the viewport receives the live output")
 			assert.Empty(t, stdout.String(), "the session stream is not written twice")
 			assert.Equal(t, "child output", result.Value, "the full output is still captured")
@@ -137,6 +140,7 @@ output = r.stdout`, []Option{WithAtmosExecutable(func() (string, error) { return
 			t.Parallel()
 			runner := NewMockRunner(gomock.NewController(t))
 			runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+				assert.Equal(t, tc.command, spec.Command, "the display label must not change the executable")
 				_, _ = io.WriteString(spec.Streams.Stdout, "child output")
 				return process.Result{Started: true}
 			})

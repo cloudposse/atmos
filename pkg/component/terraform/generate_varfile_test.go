@@ -3,6 +3,7 @@ package terraform
 import (
 	bytes "bytes"
 	context "context"
+	json "encoding/json"
 	fmt "fmt"
 	os "os"
 	filepath "path/filepath"
@@ -810,4 +811,18 @@ func ctyToGeneric(t *testing.T, value cty.Value) any {
 		t.Fatalf("unsupported value type %s", value.Type().FriendlyName())
 		return nil
 	}
+}
+
+// A secret value that cannot be encoded fails with the vars-section sentinel and keeps the encoder's
+// error in the chain, so the cause stays visible to the caller.
+func TestSecretEnvForDeclaredTypesWrapsEncodingFailures(t *testing.T) {
+	module := &tfconfig.Module{Variables: map[string]*tfconfig.Variable{"typed_any": {Name: "typed_any", Type: "any"}}}
+	section := map[string]any{"component_info": map[string]any{"terraform_config": module}}
+
+	_, err := secretEnvForDeclaredTypes(section, map[string]any{"typed_any": map[string]any{"callback": func() {}}})
+
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponentVars)
+	var unsupported *json.UnsupportedTypeError
+	require.ErrorAs(t, err, &unsupported, "the JSON encoding error stays in the chain")
+	assert.Contains(t, err.Error(), `"typed_any"`)
 }

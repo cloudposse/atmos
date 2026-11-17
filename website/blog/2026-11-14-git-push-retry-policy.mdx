@@ -1,0 +1,57 @@
+---
+slug: git-push-retry-policy
+title: "GitOps at Scale: Pushes That Keep Up With Concurrent Publishers"
+authors: [osterman]
+tags: [feature]
+---
+
+GitOps ships at the speed of version control. Flux and Argo CD deploy whatever lands on a branch, so every deployment starts as a push, whether you run hundreds of repositories, a few dozen, or one monorepo.
+
+Git is distributed, which is its strength and its weakness here: it has no locks, so when two teams push to the same branch, one of them is rejected. The faster teams move, the more often that happens, and without a retry story it means constantly failed deployments. Atmos now retries rejected and throttled pushes for you.
+
+<!--truncate-->
+
+## The Problem
+
+Contention is not a sign of a badly run pipeline. Any team sees it once it moves quickly enough, whatever its repository layout, and without a retry story the effects pile up:
+
+- A publisher that loses the race fails its deployment even though a rebase and a second attempt would have succeeded, and someone reruns it by hand.
+- Retrying immediately collides with the same competing pushes again, so the retry only adds load.
+- A remote cap such as HTTP `429` or a rate-limited `403` is a request to slow down, and answering it right away makes the throttling last longer.
+- Pipelines differ in what they can afford. Some can wait several minutes for a clear branch, while others should fail fast and let the next run pick the change up.
+
+Git offers no way to reserve a branch, so the practical answer is for every publisher to expect contention and to back off in a way that spreads the writers out.
+
+## The Fix
+
+Pushes now follow a retry policy with the same settings as the rest of Atmos: attempts, backoff, jitter, an elapsed-time budget, and optional message conditions. Only a rejected push triggers a rebase, and Atmos never adds force-push options.
+
+Remote rate limits are recognized separately. Atmos honors `Retry-After` and `X-RateLimit-Reset` when the server sends them, waits at least one minute when it doesn't, and doesn't rebase while it waits, because the push never reached the branch.
+
+## How to Use It
+
+Set the policy per repository under [`git.repositories`](/cli/configuration/git):
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      push:
+        retry:
+          max_attempts: 4
+          backoff_strategy: exponential
+          initial_delay: 250ms
+          max_delay: 5s
+          random_jitter: 0.5
+          max_elapsed_time: 10m
+```
+
+The elapsed-time budget has to be long enough for the server's cooldown. When a server gives no hint, Atmos waits at least a minute, so a budget shorter than that, including the 30-second default, makes a throttled push fail immediately instead of waiting.
+
+Without a `push.retry` block, the existing `push.retries` count keeps working exactly as before. An explicit `retry: {}` means a single attempt, which is useful when you would rather fail fast than wait.
+
+For the full behavior, see [`atmos git push`](/cli/commands/git/push#push-contention) and its section on [remote rate limits](/cli/commands/git/push#remote-rate-limits). The [high-concurrency publishing guide](/best-practices/concurrent-git-publishing) explains how to size the budget for your pipeline.
+
+## Get Involved
+
+If a publishing pattern still loses pushes in your pipeline, open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) with the policy you used and the error Atmos reported.

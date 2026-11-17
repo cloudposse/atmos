@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/signals"
@@ -78,4 +81,30 @@ func TestSilentExitCode(t *testing.T) {
 	// Plain errors are not silent.
 	_, ok = silentExitCode(errors.New("boom"))
 	assert.False(t, ok)
+}
+
+func TestSignalExitNoticeCoversDirectExit(t *testing.T) {
+	const helperEnv = "_ATMOS_TEST_SIGNAL_EXIT_NOTICE"
+	if os.Getenv(helperEnv) == "1" {
+		var codes []int
+		errUtils.OsExit = func(code int) { codes = append(codes, code) }
+		installSignalExitNotice()
+		errUtils.OsExit(0)
+		cleaned := 0
+		unregister := signals.RegisterExitCleanup(func() { cleaned++ })
+		defer unregister()
+		errUtils.OsExit(130)
+		signals.RequestExit(os.Interrupt)
+		errUtils.OsExit(0)
+		assert.Equal(t, []int{0, 130, 130}, codes)
+		assert.Equal(t, 1, cleaned)
+		return
+	}
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	child := exec.CommandContext(t.Context(), executable, "-test.run=^TestSignalExitNoticeCoversDirectExit$")
+	child.Env = append(os.Environ(), helperEnv+"=1")
+	output, err := child.CombinedOutput()
+	require.NoError(t, err, "%s", output)
+	assert.Equal(t, 1, strings.Count(string(output), "Interrupted."), "%s", output)
 }

@@ -12,6 +12,8 @@ commands:
         value: "{{ .Flags.version }}"
       - key: ATMOS_BUILD_NO_CACHE
         value: '{{ index .Flags "no-cache" }}'
+      - key: ATMOS_BUILD_OUTPUT
+        value: '{{ index .Flags "output" }}'
     flags:
       - name: target
         description: "Build target: default, linux, windows, macos, or macos-intel"
@@ -24,6 +26,10 @@ commands:
         type: bool
         description: Force rebuilding all Go packages, including dependencies
         default: false
+      - &build_output_flag
+        name: output
+        description: Write the binary to this path instead of build/atmos (relative paths resolve against the repository root)
+        default: ""
     steps:
       - type: toast
         level: info
@@ -74,6 +80,7 @@ commands:
             description: Version string to embed in the binary
             default: test
           - *build_no_cache_flag
+          - *build_output_flag
         steps:
           - type: toast
             level: info

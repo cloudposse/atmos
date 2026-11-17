@@ -25,6 +25,62 @@ type unitSensitivity struct {
 	scan   *sensitivityScan
 }
 
+// redactUnitInputs registers final values and withholds logs when a sensitive input transforms
+// a raw value that Terragrunt may already have logged while evaluating the unit.
+func redactUnitInputs(sink *LogSink, fsys afero.Fs, files []string, unit string, inputs map[string]any) [][]string {
+	paths := SensitiveInputs(fsys, files, inputs)
+	redactInputs(sink, inputs, paths)
+	if sink.collecting() && transformsSensitiveInputs(fsys, unit) {
+		sink.Withhold()
+	}
+	return paths
+}
+
+func transformsSensitiveInputs(fsys afero.Fs, unit string) bool {
+	body, ok := parseBody(fsys, unit)
+	if !ok || body.Attributes[inputsName] == nil {
+		return false
+	}
+	scanner := &sensitivityScanner{locals: localExpressions(body)}
+	return scanner.transformsSensitiveInput(body.Attributes[inputsName].Expr)
+}
+
+// transformsSensitiveInput checks object members separately so a non-sensitive sibling's
+// transformation does not cause an otherwise maskable sensitive input to withhold logs.
+func (s *sensitivityScanner) transformsSensitiveInput(expression hclsyntax.Expression) bool {
+	if object, ok := unwrapParentheses(expression).(*hclsyntax.ObjectConsExpr); ok {
+		for _, item := range object.Items {
+			if s.transformsSensitiveInput(item.KeyExpr) || s.transformsSensitiveInput(item.ValueExpr) {
+				return true
+			}
+		}
+		return false
+	}
+	before := len(s.paths)
+	s.walk(expression, nil, 0)
+	return len(s.paths) > before && s.inputTransformsRaw(expression)
+}
+
+// inputTransformsRaw treats selecting a branch as preserving its raw value. A sensitive
+// condition itself is unknown to the sink because only the selected result is registered.
+func (s *sensitivityScanner) inputTransformsRaw(expression hclsyntax.Expression) bool {
+	expression = unwrapParentheses(expression)
+	if conditional, ok := expression.(*hclsyntax.ConditionalExpr); ok {
+		return s.containsSensitive(conditional.Condition, 0) ||
+			s.inputTransformsRaw(conditional.TrueResult) || s.inputTransformsRaw(conditional.FalseResult)
+	}
+	if call, ok := expression.(*hclsyntax.FunctionCallExpr); ok && call.Name == "sensitive" && len(call.Args) == 1 {
+		if conditional, ok := unwrapParentheses(call.Args[0]).(*hclsyntax.ConditionalExpr); ok {
+			selected := *call
+			selected.Args = []hclsyntax.Expression{conditional.TrueResult}
+			other := *call
+			other.Args = []hclsyntax.Expression{conditional.FalseResult}
+			return s.containsSensitive(conditional.Condition, 0) || s.inputTransformsRaw(&selected) || s.inputTransformsRaw(&other)
+		}
+	}
+	return s.transformsRaw(expression, 0)
+}
+
 // sensitiveLocals returns the paths, from the top of the unit's own locals, of the values its locals block
 // declares sensitive. Terragrunt logs a value as it evaluates it, for example the output of
 // sensitive(run_cmd(...)), even when the value never reaches the inputs, so these values are redacted too.
@@ -70,8 +126,8 @@ func transformsSensitiveLocal(fsys afero.Fs, unit string) bool {
 	return false
 }
 
-// transformsRaw reports whether the value of expression is derived from other values by anything other than
-// selecting them: a function that is not sensitive(...) or merge(...) and does not directly wrap the value, a
+// TransformsRaw reports whether the value of expression is derived from other values by anything other than
+// selecting them: a function that is not `sensitive` or `merge` and does not directly wrap the value, a
 // template, a for expression, or an operator. It follows local references, and fails closed on a reference
 // it cannot follow and at the depth bound.
 func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, depth int) bool {
@@ -86,15 +142,7 @@ func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, dept
 		}
 		switch typed := node.(type) {
 		case *hclsyntax.FunctionCallExpr:
-			switch typed.Name {
-			case "sensitive":
-				for _, argument := range typed.Args {
-					wrapped[unwrapParentheses(argument)] = true
-				}
-			case "merge":
-			default:
-				transformed = !wrapped[typed]
-			}
+			transformed = callTransformsRaw(typed, wrapped)
 		case *hclsyntax.TemplateExpr:
 			transformed = !isLiteralTemplate(typed)
 		case *hclsyntax.ForExpr, *hclsyntax.BinaryOpExpr, *hclsyntax.UnaryOpExpr:
@@ -107,6 +155,20 @@ func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, dept
 	return transformed
 }
 
+// callTransformsRaw records sensitive wrappers and identifies transforming calls.
+func callTransformsRaw(call *hclsyntax.FunctionCallExpr, wrapped map[hclsyntax.Node]bool) bool {
+	switch call.Name {
+	case "sensitive":
+		for _, argument := range call.Args {
+			wrapped[unwrapParentheses(argument)] = true
+		}
+	case "merge":
+	default:
+		return !wrapped[call]
+	}
+	return false
+}
+
 // referenceTransformsRaw follows a local reference to the expression that defines it.
 func (s *sensitivityScanner) referenceTransformsRaw(traversal *hclsyntax.ScopeTraversalExpr, depth int) bool {
 	switch traversal.Traversal.RootName() {
@@ -114,15 +176,15 @@ func (s *sensitivityScanner) referenceTransformsRaw(traversal *hclsyntax.ScopeTr
 	default:
 		return false
 	}
-	current, locals, _, found := s.reference(traversal.Traversal)
+	reference, found := s.reference(traversal.Traversal)
 	if !found {
 		// A local of an included file, or an unknown one, cannot be inspected.
 		return true
 	}
 	previous := s.locals
-	s.locals = locals
+	s.locals = reference.locals
 	defer func() { s.locals = previous }()
-	return s.transformsRaw(current, depth+1)
+	return s.transformsRaw(reference.expression, depth+1)
 }
 
 // unwrapParentheses returns the expression inside any number of parentheses.
@@ -146,7 +208,7 @@ func isLiteralTemplate(template *hclsyntax.TemplateExpr) bool {
 	return true
 }
 
-// unredactedSensitivity reports whether any of the files calls sensitive(...) where the sink cannot learn
+// UnredactedSensitivity reports whether any of the files calls `sensitive` where the sink cannot learn
 // the value. When the unit was resolved, the values of its inputs and of its own locals are known and
 // registered, so only calls elsewhere count: the locals or inputs of an included file, or another attribute
 // or block. An included file's inputs count because a child can override them, so only the merged value is
@@ -165,21 +227,29 @@ func unredactedSensitivity(fsys afero.Fs, files []string, unit string, resolved 
 		if !ok {
 			return true
 		}
-		for name, attribute := range body.Attributes {
-			if resolved && name == inputsName && file == unit {
-				continue
-			}
-			if callsSensitive(attribute.Expr) {
-				return true
-			}
+		if bodyHasUnredactedSensitivity(body, resolved && file == unit) {
+			return true
 		}
-		for _, block := range body.Blocks {
-			if resolved && block.Type == "locals" && file == unit {
-				continue
-			}
-			if callsSensitive(block.Body) {
-				return true
-			}
+	}
+	return false
+}
+
+// bodyHasUnredactedSensitivity skips only the resolved unit's registered values.
+func bodyHasUnredactedSensitivity(body *hclsyntax.Body, registered bool) bool {
+	for name, attribute := range body.Attributes {
+		if registered && name == inputsName {
+			continue
+		}
+		if callsSensitive(attribute.Expr) {
+			return true
+		}
+	}
+	for _, block := range body.Blocks {
+		if registered && block.Type == "locals" {
+			continue
+		}
+		if callsSensitive(block.Body) {
+			return true
 		}
 	}
 	return false
@@ -199,7 +269,7 @@ func parseBody(fsys afero.Fs, file string) (*hclsyntax.Body, bool) {
 	return body, ok
 }
 
-// callsSensitive reports whether node calls sensitive(...) anywhere below it.
+// CallsSensitive reports whether node calls `sensitive` anywhere below it.
 func callsSensitive(node hclsyntax.Node) bool {
 	found := false
 	_ = hclsyntax.VisitAll(node, func(node hclsyntax.Node) hcl.Diagnostics {
