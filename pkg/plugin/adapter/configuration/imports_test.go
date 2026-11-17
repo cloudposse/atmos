@@ -604,13 +604,22 @@ func TestImportedDependencyUsesItsPreparedStateInTheImportingStack(t *testing.T)
 			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil).AnyTimes()
 			provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
 				require.Equal(t, "dependent", request.Invocation.Environment["IDENTITY"], "a prepared dependency must not be re-resolved")
+				require.Equal(t, "apply", request.Operation.Command)
+				require.Equal(t, "native", request.Operation.Mode)
+				feature, err := adapter.DecodeValue(request.Operation.Options["feature"])
+				require.NoError(t, err)
+				require.Equal(t, map[string]any{"backend": "alternate"}, feature)
 				return &pluginv1.ResolveComponentStateResponse{State: test.dependent}, nil
 			}).MinTimes(1)
 			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: stateAt("network.tfstate")}, nil)
 			if test.want == nil {
 				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: stateAt("app.tfstate")}, nil)
 			}
-			session, err := New(t.Context(), importOnlyConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+			config := importOnlyConfig(t)
+			config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+				"feature": {Value: map[string]any{"backend": "alternate"}},
+			}}
+			session, err := New(t.Context(), config, "apply", func(context.Context, []string) (map[string]Provider, error) {
 				return map[string]Provider{"terragrunt": provider}, nil
 			})
 			require.NoError(t, err)

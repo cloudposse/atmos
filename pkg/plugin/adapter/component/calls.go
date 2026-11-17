@@ -151,12 +151,14 @@ func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode st
 		// The sensitive inputs are registered for masking before anything else touches the response.
 		// Warnings are not printed while the response is checked: the configuration session prints
 		// them once per invocation through its deduper, and printing them here as well would repeat
-		// every warning, on the first preparation and on each later one. Inputs that cannot be
-		// decoded register nothing, and the caller rejects those inputs.
+		// every warning, on the first preparation and on each later one. Invalid inputs return
+		// their decode error before diagnostics can expose values that were not registered.
 		if result == nil {
 			return errUtils.ErrPluginProtocol
 		}
-		_ = registerResponseInputs(result)
+		if err := registerResponseInputs(result); err != nil {
+			return err
+		}
 		failures := proto.Clone(result).(*pluginv1.PrepareComponentResponse)
 		failures.Diagnostics = errorDiagnostics(failures.Diagnostics)
 		return checkPreparation(failures)

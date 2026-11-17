@@ -111,8 +111,7 @@ func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*mo
 	}
 	var sensitiveInputs [][]string
 	if request.Phase != phaseBackend {
-		sensitiveInputs = SensitiveInputs(environment.FS, append(pctx.FilesRead.Paths(), path), cfg.Inputs)
-		redactInputs(logSinkFrom(ctx), cfg.Inputs, sensitiveInputs)
+		sensitiveInputs = redactUnitInputs(logSinkFrom(ctx), environment.FS, append(pctx.FilesRead.Paths(), path), path, cfg.Inputs)
 		redactLocals(logSinkFrom(ctx), environment.FS, path, cfg.Locals)
 		scan.registered = true
 	}
@@ -386,7 +385,7 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 		}
 		// Apply-time values can differ from the ones planned, so register them before any event is returned.
 		sink := logSinkFrom(ctx)
-		redactInputs(sink, parsed.Inputs, SensitiveInputs(environment.FS, append(apply.FilesRead.Paths(), path), parsed.Inputs))
+		redactUnitInputs(sink, environment.FS, append(apply.FilesRead.Paths(), path), path, parsed.Inputs)
 		redactLocals(sink, environment.FS, path, parsed.Locals)
 		return parsed, nil
 	}

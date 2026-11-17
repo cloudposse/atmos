@@ -275,7 +275,7 @@ func TestPreparationCheckRegistersInputsAndLeavesWarningsToTheCaller(t *testing.
 }
 
 // Inputs that cannot be decoded register nothing, so no warning of that response is printed, while the
-// failures it carries still fail the call.
+// input decode error takes precedence over any diagnostics it carries.
 func TestPreparationWarningsAreNotPrintedWhenTheInputsCannotBeRegistered(t *testing.T) {
 	captureLogs(t, charm.WarnLevel)
 	ioCtx, err := atmosio.NewContext()
@@ -287,16 +287,20 @@ func TestPreparationWarningsAreNotPrintedWhenTheInputsCannotBeRegistered(t *test
 	t.Cleanup(restore)
 
 	root := t.TempDir()
-	inputs := objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"pending": cty.UnknownVal(cty.String)}))
+	inputs := objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"pending": cty.UnknownVal(cty.String), "password": cty.StringVal("unregistered-secret-73ea")}))
+	inputs.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
 	warning := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "deprecated_setting", Summary: "Deprecated setting", Unit: "app", Stack: "dev", Severity: pluginv1.Severity_SEVERITY_WARNING}}
 	result := &pluginv1.PrepareComponentResponse{Engine: "terraform", WorkingDirectory: root, ModuleSource: "./module", State: fixtureState(root), Inputs: inputs, Diagnostics: []*pluginv1.Diagnostic{warning}}
 
-	require.NoError(t, checkPreparationResponse(result, ""))
+	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginProtocol)
 	assert.Empty(t, ansi.Strip(output.String()), "the caller rejects the inputs before any warning matters")
 	assert.Len(t, result.Diagnostics, 1, "the response itself is not modified")
 
-	result.Diagnostics = append(result.Diagnostics, &pluginv1.Diagnostic{Field: "x", Message: "legacy failure"})
-	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginInvalidConfig)
+	result.Diagnostics = append(result.Diagnostics, &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "evaluation_error", Summary: "Evaluation failed", Detail: "unregistered-secret-73ea", UserSafe: true, Severity: pluginv1.Severity_SEVERITY_ERROR}})
+	err = checkPreparationResponse(result, "")
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	assert.NotContains(t, err.Error(), "unregistered-secret-73ea")
+	assert.NotContains(t, strings.Join(errUtils.AllDetails(err), "\n"), "unregistered-secret-73ea")
 	assert.Empty(t, ansi.Strip(output.String()))
 }
 

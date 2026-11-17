@@ -25,6 +25,62 @@ type unitSensitivity struct {
 	scan   *sensitivityScan
 }
 
+// redactUnitInputs registers final values and withholds logs when a sensitive input transforms
+// a raw value that Terragrunt may already have logged while evaluating the unit.
+func redactUnitInputs(sink *LogSink, fsys afero.Fs, files []string, unit string, inputs map[string]any) [][]string {
+	paths := SensitiveInputs(fsys, files, inputs)
+	redactInputs(sink, inputs, paths)
+	if sink.collecting() && transformsSensitiveInputs(fsys, unit) {
+		sink.Withhold()
+	}
+	return paths
+}
+
+func transformsSensitiveInputs(fsys afero.Fs, unit string) bool {
+	body, ok := parseBody(fsys, unit)
+	if !ok || body.Attributes[inputsName] == nil {
+		return false
+	}
+	scanner := &sensitivityScanner{locals: localExpressions(body)}
+	return scanner.transformsSensitiveInput(body.Attributes[inputsName].Expr)
+}
+
+// transformsSensitiveInput checks object members separately so a non-sensitive sibling's
+// transformation does not cause an otherwise maskable sensitive input to withhold logs.
+func (s *sensitivityScanner) transformsSensitiveInput(expression hclsyntax.Expression) bool {
+	if object, ok := unwrapParentheses(expression).(*hclsyntax.ObjectConsExpr); ok {
+		for _, item := range object.Items {
+			if s.transformsSensitiveInput(item.KeyExpr) || s.transformsSensitiveInput(item.ValueExpr) {
+				return true
+			}
+		}
+		return false
+	}
+	before := len(s.paths)
+	s.walk(expression, nil, 0)
+	return len(s.paths) > before && s.inputTransformsRaw(expression)
+}
+
+// inputTransformsRaw treats selecting a branch as preserving its raw value. A sensitive
+// condition itself is unknown to the sink because only the selected result is registered.
+func (s *sensitivityScanner) inputTransformsRaw(expression hclsyntax.Expression) bool {
+	expression = unwrapParentheses(expression)
+	if conditional, ok := expression.(*hclsyntax.ConditionalExpr); ok {
+		return s.containsSensitive(conditional.Condition, 0) ||
+			s.inputTransformsRaw(conditional.TrueResult) || s.inputTransformsRaw(conditional.FalseResult)
+	}
+	if call, ok := expression.(*hclsyntax.FunctionCallExpr); ok && call.Name == "sensitive" && len(call.Args) == 1 {
+		if conditional, ok := unwrapParentheses(call.Args[0]).(*hclsyntax.ConditionalExpr); ok {
+			selected := *call
+			selected.Args = []hclsyntax.Expression{conditional.TrueResult}
+			other := *call
+			other.Args = []hclsyntax.Expression{conditional.FalseResult}
+			return s.containsSensitive(conditional.Condition, 0) || s.inputTransformsRaw(&selected) || s.inputTransformsRaw(&other)
+		}
+	}
+	return s.transformsRaw(expression, 0)
+}
+
 // sensitiveLocals returns the paths, from the top of the unit's own locals, of the values its locals block
 // declares sensitive. Terragrunt logs a value as it evaluates it, for example the output of
 // sensitive(run_cmd(...)), even when the value never reaches the inputs, so these values are redacted too.
