@@ -469,3 +469,52 @@ func validateRetryBlock(retry *config.RetryBlock, path string) error {
 	}
 	return nil
 }
+
+// resolveIAM resolves the role before the full parse evaluates AWS functions. The host
+// assumes it and supplies the resulting session on the second call.
+func (r *inventoryReader) resolveIAM(pctx *config.ParsingContext, request *model.Request, path string) (*model.Resolution, error) {
+	flags, err := config.PartialParseConfigFile(r.ctx, r.logger, r.environment,
+		pctx.WithDecodeList(config.TerragruntFlags, config.FeatureFlagsBlock, config.ExcludeBlock), path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if PreventsRun(excludeFromConfig(flags.Exclude), OperationCommand(request.Command, request.Arguments)) {
+		return &model.Resolution{Path: path}, nil
+	}
+	iam, warnings, err := iamSettings(flags, request, path)
+	if err != nil {
+		return nil, err
+	}
+	return &model.Resolution{Path: path, IAM: iam, Warnings: warnings}, nil
+}
+
+// checkRequestFeatureOverrides rejects feature overrides the unit does not declare. Backend
+// reads do not evaluate feature flags.
+func (r *inventoryReader) checkRequestFeatureOverrides(pctx *config.ParsingContext, request *model.Request, path string) error {
+	if request.Phase == "backend" {
+		return nil
+	}
+	return checkFeatureOverrides(path, request.Features, func() (*config.TerragruntConfig, error) {
+		// Read the declarations without the overrides, which are what is being checked.
+		declarations := pctx.WithDecodeList(config.FeatureFlagsBlock)
+		declarations.FeatureFlags = nil
+		return config.PartialParseConfigFile(r.ctx, r.logger, r.environment, declarations, path, nil)
+	})
+}
+
+// unitSettings applies the parity and IAM settings of a fully evaluated unit. Backend reads
+// evaluate only the backend identity, so they skip them.
+func unitSettings(ctx context.Context, cfg *config.TerragruntConfig, request *model.Request, path string, result *model.Resolution) error {
+	if request.Phase == "backend" {
+		return nil
+	}
+	if err := applyUnitSettings(ctx, cfg, request, path, result); err != nil {
+		return err
+	}
+	iam, warnings, err := iamSettings(cfg, request, path)
+	if err != nil {
+		return err
+	}
+	result.IAM, result.Warnings = iam, append(result.Warnings, warnings...)
+	return nil
+}
